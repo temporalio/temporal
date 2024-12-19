@@ -32,6 +32,7 @@ import (
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -40,30 +41,32 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	updatespb "go.temporal.io/server/api/update/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// TransactionPolicy indicates whether a mutable state transaction is happening for an active namespace or passive namespace.
 type TransactionPolicy int
 
 const (
 	TransactionPolicyActive  TransactionPolicy = 0
 	TransactionPolicyPassive TransactionPolicy = 1
+	// Mutable state is a top-level state machine in the state machines framework.
+	StateMachineType = "workflow.MutableState"
 )
 
 func (policy TransactionPolicy) Ptr() *TransactionPolicy {
@@ -72,13 +75,12 @@ func (policy TransactionPolicy) Ptr() *TransactionPolicy {
 
 var emptyTasks = []tasks.Task{}
 
-// Mutable state is a top-level state machine in the state machines framework.
-var StateMachineType = hsm.MachineType{
-	ID:   1,
-	Name: "workflow.MutableState",
-}
-
 type stateMachineDefinition struct{}
+
+// TODO: Remove this implementation once transition history is fully implemented.
+func (s stateMachineDefinition) CompareState(any, any) (int, error) {
+	return 0, serviceerror.NewUnimplemented("CompareState not implemented for workflow mutable state")
+}
 
 func (stateMachineDefinition) Deserialize([]byte) (any, error) {
 	return nil, serviceerror.NewUnimplemented("workflow mutable state persistence is not supported in the HSM framework")
@@ -89,7 +91,7 @@ func (stateMachineDefinition) Serialize(any) ([]byte, error) {
 	return nil, nil
 }
 
-func (stateMachineDefinition) Type() hsm.MachineType {
+func (stateMachineDefinition) Type() string {
 	return StateMachineType
 }
 
@@ -129,6 +131,16 @@ type (
 		// in history.
 		SuggestContinueAsNew bool
 		HistorySizeBytes     int64
+		// BuildIdRedirectCounter tracks the started build ID redirect counter for transient/speculative WFT. This
+		// info is to make sure the right redirect counter is used in the WFT started event created later
+		// for a transient/speculative WFT.
+		// Deprecated.
+		BuildIdRedirectCounter int64
+		// BuildId tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
+		// - verify WFT completes by the same Build ID that started in the latest attempt
+		// - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
+		// Deprecated.
+		BuildId string
 	}
 
 	WorkflowTaskCompletionLimits struct {
@@ -136,15 +148,28 @@ type (
 		MaxSearchAttributeValueSize int
 	}
 
+	ActivityUpdater func(*persistencespb.ActivityInfo, MutableState) error
+
 	MutableState interface {
 		callbacks.CanGetNexusCompletion
+		callbacks.CanGetHSMCompletionCallbackArg
+		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)
 		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, enumspb.RetryState, string, *commonpb.WorkerVersionStamp) (*historypb.HistoryEvent, error)
 		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes, bool) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
-		AddActivityTaskStartedEvent(*persistencespb.ActivityInfo, int64, string, string, *commonpb.WorkerVersionStamp) (*historypb.HistoryEvent, error)
+		AddActivityTaskStartedEvent(
+			*persistencespb.ActivityInfo,
+			int64,
+			string,
+			string,
+			*commonpb.WorkerVersionStamp,
+			*deploymentpb.Deployment,
+			*taskqueuespb.BuildIdRedirectInfo,
+		) (*historypb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCanceledEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCanceledEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCompletedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCompletedEventAttributes) (*historypb.HistoryEvent, error)
@@ -160,7 +185,7 @@ type (
 		AddFirstWorkflowTaskScheduled(parentClock *clockspb.VectorClock, event *historypb.HistoryEvent, bypassTaskGeneration bool) (int64, error)
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *timestamppb.Timestamp, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
+		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo, bool) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
 		AddWorkflowTaskTimedOutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, namespace.Name, namespace.ID, string, string) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionSignaled(int64, namespace.Name, namespace.ID, string, string, string) (*historypb.HistoryEvent, error)
@@ -181,30 +206,42 @@ type (
 		AddWorkflowPropertiesModifiedEvent(int64, *commandpb.ModifyWorkflowPropertiesCommandAttributes) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(*historyservice.RequestCancelWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *commandpb.CancelWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string, header *commonpb.Header, skipGenerateWorkflowTask bool) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionSignaled(
+			signalName string,
+			input *commonpb.Payloads,
+			identity string,
+			header *commonpb.Header,
+			links []*commonpb.Link,
+		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionSignaledEvent(
 			signalName string,
 			input *commonpb.Payloads,
 			identity string,
 			header *commonpb.Header,
-			skipGenerateWorkflowTask bool,
 			externalWorkflowExecution *commonpb.WorkflowExecution,
+			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool) (*historypb.HistoryEvent, error)
-
+		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool, links []*commonpb.Link) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflowpb.VersioningOverride) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
 		AddWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
-		VisitUpdates(visitor func(updID string, updInfo *updatespb.UpdateInfo))
+		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
-
 		CheckResettable() error
+		// UpdateResetRunID saves the runID that resulted when this execution was reset.
+		UpdateResetRunID(runID string)
+		// IsResetRun returns true if this run is result of a reset operation.
+		IsResetRun() bool
+
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
+		RecordLastActivityCompleteTime(ai *persistencespb.ActivityInfo)
+		RegenerateActivityRetryTask(ai *persistencespb.ActivityInfo, newScheduledTime time.Time) error
 		GetTransientWorkflowTaskInfo(workflowTask *WorkflowTaskInfo, identity string) *historyspb.TransientWorkflowTaskInfo
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()
@@ -227,24 +264,27 @@ type (
 		GetFirstRunID(ctx context.Context) (string, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetCurrentVersion() int64
+		GetStartVersion() (int64, error)
+		GetCloseVersion() (int64, error)
+		GetLastWriteVersion() (int64, error)
+		GetLastEventVersion() (int64, error)
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetStartedWorkflowTask() *WorkflowTaskInfo
 		GetPendingWorkflowTask() *WorkflowTaskInfo
 		GetLastFirstEventIDTxnID() (int64, int64)
-		GetLastWriteVersion() (int64, error)
 		GetNextEventID() int64
-		GetLastWorkflowTaskStartedEventID() int64
+		GetLastCompletedWorkflowTaskStartedEventId() int64
 		GetPendingActivityInfos() map[int64]*persistencespb.ActivityInfo
 		GetPendingTimerInfos() map[string]*persistencespb.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo
 		GetPendingRequestCancelExternalInfos() map[int64]*persistencespb.RequestCancelInfo
 		GetPendingSignalExternalInfos() map[int64]*persistencespb.SignalInfo
+		GetPendingSignalRequestedIds() []string
 		GetRequestCancelInfo(int64) (*persistencespb.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(failure *failurepb.Failure) (time.Duration, enumspb.RetryState)
 		GetCronBackoffDuration() time.Duration
 		GetSignalInfo(int64) (*persistencespb.SignalInfo, bool)
-		GetStartVersion() (int64, error)
 		GetUserTimerInfoByEventID(int64) (*persistencespb.TimerInfo, bool)
 		GetUserTimerInfo(string) (*persistencespb.TimerInfo, bool)
 		GetWorkflowType() *commonpb.WorkflowType
@@ -279,6 +319,8 @@ type (
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
 		UpdateActivityInfo(*historyservice.ActivitySyncInfo, bool) error
+		ApplyMutation(mutation *persistencespb.WorkflowMutableStateMutation) error
+		ApplySnapshot(snapshot *persistencespb.WorkflowMutableState) error
 		ApplyActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
 		ApplyActivityTaskCanceledEvent(*historypb.HistoryEvent) error
 		ApplyActivityTaskCompletedEvent(*historypb.HistoryEvent) error
@@ -295,7 +337,7 @@ type (
 		ApplyWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
 		ApplyWorkflowTaskFailedEvent() error
 		ApplyWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, *durationpb.Duration, int32, *timestamppb.Timestamp, *timestamppb.Timestamp, enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		ApplyWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time, bool, int64, *commonpb.WorkerVersionStamp) (*WorkflowTaskInfo, error)
+		ApplyWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time, bool, int64, *commonpb.WorkerVersionStamp, int64) (*WorkflowTaskInfo, error)
 		ApplyWorkflowTaskTimedOutEvent(enumspb.TimeoutType) error
 		ApplyExternalWorkflowExecutionCancelRequested(*historypb.HistoryEvent) error
 		ApplyExternalWorkflowExecutionSignaled(*historypb.HistoryEvent) error
@@ -319,6 +361,7 @@ type (
 		ApplyWorkflowExecutionSignaled(*historypb.HistoryEvent) error
 		ApplyWorkflowExecutionStartedEvent(*clockspb.VectorClock, *commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
@@ -330,13 +373,16 @@ type (
 			baseRunLowestCommonAncestorEventID int64,
 			baseRunLowestCommonAncestorEventVersion int64,
 		)
-		UpdateActivity(*persistencespb.ActivityInfo) error
-		UpdateActivityWithTimerHeartbeat(*persistencespb.ActivityInfo, time.Time) error
+		UpdateActivity(int64, ActivityUpdater) error
+		UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventId int64, timerTaskStatus int32, heartbeatTimeoutVisibility *time.Time) error
 		UpdateActivityProgress(ai *persistencespb.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
 		UpdateUserTimer(*persistencespb.TimerInfo) error
+		UpdateUserTimerTaskStatus(timerId string, status int64) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 		UpdateBuildIdAssignment(buildId string) error
+		ApplyBuildIdRedirect(startingTaskScheduledEventId int64, buildId string, redirectCounter int64) error
+		RefreshExpirationTimeoutTask(ctx context.Context) error
 
 		GetHistorySize() int64
 		AddHistorySize(size int64)
@@ -351,8 +397,14 @@ type (
 		RemoveSpeculativeWorkflowTaskTimeoutTask()
 
 		IsDirty() bool
+		IsTransitionHistoryEnabled() bool
+		// StartTransaction sets up the mutable state for transacting.
 		StartTransaction(entry *namespace.Namespace) (bool, error)
+		// CloseTransactionAsMutation closes the mutable state transaction (different from DB transaction) and prepares the whole state mutation to be persisted and bumps the DBRecordVersion.
+		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsMutation(transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
+		// CloseTransactionAsSnapshot closes the mutable state transaction (different from DB transaction) and prepares the current snapshot of the state to be persisted and bumps the DBRecordVersion.
+		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsSnapshot(transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 		GenerateMigrationTasks() ([]tasks.Task, int64, error)
 
@@ -361,7 +413,42 @@ type (
 		// If current backoff comply with minimal ContinueAsNew interval requirement, current backoff will be returned.
 		// Current backoff could be nil which means it does not have a backoff.
 		ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration
+		HasCompletedAnyWorkflowTask() bool
 
 		HSM() *hsm.Node
+
+		// NextTransitionCount returns the next state transition count from the state transition history.
+		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
+		NextTransitionCount() int64
+
+		InitTransitionHistory()
+
+		ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool
+		// GetEffectiveDeployment returns the effective deployment in the following order:
+		//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a
+		//     new deployment
+		//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
+		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+		//  3. Deployment: this is returned when there is no transition and no override (the most
+		//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
+		//     completion. Exception: if Deployment is set but the workflow's effective behavior is
+		//     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
+		// Note: Deployment objects are immutable, never change their fields.
+		GetEffectiveDeployment() *deploymentpb.Deployment
+		// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
+		// order:
+		//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+		//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+		//     set based on the worker-sent deployment in the latest WFT completion.
+		GetEffectiveVersioningBehavior() enumspb.VersioningBehavior
+		GetDeploymentTransition() *workflowpb.DeploymentTransition
+		// StartDeploymentTransition starts a transition to the given deployment which must be
+		// different from workflows effective deployment. Will fail if the workflow is pinned.
+		// Starting a new transition replaces current transition, if present, without rescheduling
+		// activities.
+		// If there is a pending workflow task that is not started yet, it'll be rescheduled after
+		// transition start.
+		StartDeploymentTransition(deployment *deploymentpb.Deployment) error
 	}
 )

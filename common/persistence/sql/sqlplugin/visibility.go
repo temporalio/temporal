@@ -36,7 +36,6 @@ import (
 	"time"
 
 	"github.com/iancoleman/strcase"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/searchattribute"
@@ -71,6 +70,8 @@ type (
 		SearchAttributes     *VisibilitySearchAttributes
 		ParentWorkflowID     *string
 		ParentRunID          *string
+		RootWorkflowID       string
+		RootRunID            string
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that

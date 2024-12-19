@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )

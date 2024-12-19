@@ -31,7 +31,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
@@ -94,8 +93,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		)
 	}
 
-	targetExecutionInfo := targetWorkflow.GetMutableState().GetExecutionInfo()
-	targetExecutionState := targetWorkflow.GetMutableState().GetExecutionState()
+	mutableState := targetWorkflow.GetMutableState()
+	targetExecutionInfo := mutableState.GetExecutionInfo()
+	targetExecutionState := mutableState.GetExecutionState()
 	namespaceID := namespace.ID(targetExecutionInfo.NamespaceId)
 	workflowID := targetExecutionInfo.WorkflowId
 	targetRunID := targetExecutionState.RunId
@@ -116,7 +116,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	}
 
 	if currentRunID == targetRunID {
-		if !isWorkflowRebuilt {
+		if !mutableState.IsTransitionHistoryEnabled() && !isWorkflowRebuilt {
 			return serviceerror.NewInternal("transactionMgr: encountered workflow not rebuilt & current workflow not guaranteed")
 		}
 

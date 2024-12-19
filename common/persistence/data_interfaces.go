@@ -34,16 +34,14 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // CreateWorkflowMode workflow creation mode
@@ -130,6 +128,7 @@ type (
 		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus
 		LastWriteVersion int64
+		StartTime        *time.Time
 	}
 
 	// WorkflowConditionFailedError represents a failed conditional update for workflow record
@@ -877,6 +876,8 @@ type (
 		ForkNodeID int64
 		// the info for clean up data in background
 		Info string
+		// the new run ID
+		NewRunID string
 	}
 
 	// ForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
@@ -1019,34 +1020,34 @@ type (
 		MaxRecordsPruned int
 	}
 
-	GetNexusIncomingServiceRequest struct {
-		ServiceID string
+	GetNexusEndpointRequest struct {
+		ID string
 	}
 
-	ListNexusIncomingServicesRequest struct {
+	ListNexusEndpointsRequest struct {
 		LastKnownTableVersion int64
 		NextPageToken         []byte
 		PageSize              int
 	}
 
-	ListNexusIncomingServicesResponse struct {
+	ListNexusEndpointsResponse struct {
 		TableVersion  int64
 		NextPageToken []byte
-		Entries       []*persistencespb.NexusIncomingServiceEntry
+		Entries       []*persistencespb.NexusEndpointEntry
 	}
 
-	CreateOrUpdateNexusIncomingServiceRequest struct {
+	CreateOrUpdateNexusEndpointRequest struct {
 		LastKnownTableVersion int64
-		Entry                 *persistencespb.NexusIncomingServiceEntry
+		Entry                 *persistencespb.NexusEndpointEntry
 	}
 
-	CreateOrUpdateNexusIncomingServiceResponse struct {
+	CreateOrUpdateNexusEndpointResponse struct {
 		Version int64
 	}
 
-	DeleteNexusIncomingServiceRequest struct {
+	DeleteNexusEndpointRequest struct {
 		LastKnownTableVersion int64
-		ServiceID             string
+		ID                    string
 	}
 
 	// Closeable is an interface for any entity that supports a close operation to release resources
@@ -1190,21 +1191,21 @@ type (
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 
-	// NexusIncomingServiceManager is used to manage CRUD for Nexus services
-	NexusIncomingServiceManager interface {
+	// NexusEndpointManager is used to manage CRUD for Nexus endpoints.
+	NexusEndpointManager interface {
 		Closeable
 		GetName() string
-		GetNexusIncomingServicesTableVersion(ctx context.Context) (int64, error)
-		GetNexusIncomingService(ctx context.Context, request *GetNexusIncomingServiceRequest) (*persistencespb.NexusIncomingServiceEntry, error)
-		ListNexusIncomingServices(ctx context.Context, request *ListNexusIncomingServicesRequest) (*ListNexusIncomingServicesResponse, error)
-		CreateOrUpdateNexusIncomingService(ctx context.Context, request *CreateOrUpdateNexusIncomingServiceRequest) (*CreateOrUpdateNexusIncomingServiceResponse, error)
-		DeleteNexusIncomingService(ctx context.Context, request *DeleteNexusIncomingServiceRequest) error
+		GetNexusEndpoint(ctx context.Context, request *GetNexusEndpointRequest) (*persistencespb.NexusEndpointEntry, error)
+		ListNexusEndpoints(ctx context.Context, request *ListNexusEndpointsRequest) (*ListNexusEndpointsResponse, error)
+		CreateOrUpdateNexusEndpoint(ctx context.Context, request *CreateOrUpdateNexusEndpointRequest) (*CreateOrUpdateNexusEndpointResponse, error)
+		DeleteNexusEndpoint(ctx context.Context, request *DeleteNexusEndpointRequest) error
 	}
 
 	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. This is called a history
 	// task queue manager, but the actual history task queues are not managed by this object. Instead, this object is
 	// responsible for managing a generic queue of history tasks (which is what the history task DLQ is).
 	HistoryTaskQueueManager interface {
+		Closeable
 		EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error)
 		ReadRawTasks(
 			ctx context.Context,

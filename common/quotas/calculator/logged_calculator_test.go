@@ -27,9 +27,9 @@ package calculator
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -106,18 +106,18 @@ func TestLoggedNamespaceCalculator(t *testing.T) {
 
 	loggedCalculator := NewLoggedNamespaceCalculator(mockCalculator, mockLogger)
 
-	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 	actualQuota := loggedCalculator.GetQuota(namespace1)
 	require.Equal(t, quota1, actualQuota)
 
-	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 	actualQuota = loggedCalculator.GetQuota(namespace2)
 	require.Equal(t, quota2, actualQuota)
 
 	quota2 = 3.0
 	mockCalculator.updateQuota(namespace2, quota2)
 
-	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+	mockLogger.EXPECT().Info(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 	actualQuota = loggedCalculator.GetQuota(namespace2)
 	require.Equal(t, quota2, actualQuota)
 

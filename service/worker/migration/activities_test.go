@@ -29,9 +29,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservicemock/v1"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
@@ -40,19 +40,18 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protomock"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/suite"
 )
 
 type activitiesSuite struct {
@@ -102,16 +101,16 @@ var (
 	}
 
 	completeState = historyservice.DescribeMutableStateResponse{
-		DatabaseMutableState: &persistencepb.WorkflowMutableState{
-			ExecutionState: &persistencepb.WorkflowExecutionState{
+		DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			},
 		},
 	}
 
 	zombieState = historyservice.DescribeMutableStateResponse{
-		DatabaseMutableState: &persistencepb.WorkflowMutableState{
-			ExecutionState: &persistencepb.WorkflowExecutionState{
+		DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				State: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 			},
 		},
@@ -590,23 +589,23 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 			NamespaceId: mockedNamespaceID,
 			Execution:   &execution1,
 		})).Return(&historyservice.DescribeMutableStateResponse{
-			DatabaseMutableState: &persistencepb.WorkflowMutableState{
-				ExecutionState: &persistencepb.WorkflowExecutionState{
+			DatabaseMutableState: &persistencespb.WorkflowMutableState{
+				ExecutionState: &persistencespb.WorkflowExecutionState{
 					State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				},
-				ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
+				ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 					CloseTime: timestamppb.New(closeTime),
 				},
 			},
 		}, nil).Times(1)
 
 		ns := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-			Namespace: &persistencepb.NamespaceDetail{
-				Info: &persistencepb.NamespaceInfo{},
-				Config: &persistencepb.NamespaceConfig{
+			Namespace: &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{},
+				Config: &persistencespb.NamespaceConfig{
 					Retention: durationpb.New(retention),
 				},
-				ReplicationConfig: &persistencepb.NamespaceReplicationConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 			},
 		})
 

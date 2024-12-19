@@ -26,26 +26,33 @@ package replication
 
 import (
 	"context"
+	"math/rand"
+	"strconv"
 
+	"github.com/dgryski/go-farm"
 	historypb "go.temporal.io/api/history/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/replication/eventhandler"
-	"go.uber.org/fx"
-
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
-
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
+	"go.uber.org/fx"
+)
+
+type (
+	ClusterChannelKey struct {
+		ClusterName string
+	}
 )
 
 var Module = fx.Provide(
@@ -56,7 +63,14 @@ var Module = fx.Provide(
 	NewExecutionManagerDLQWriter,
 	replicationTaskConverterFactoryProvider,
 	replicationTaskExecutorProvider,
-	replicationStreamSchedulerProvider,
+	fx.Annotated{
+		Name:   "HighPriorityTaskScheduler",
+		Target: replicationStreamHighPrioritySchedulerProvider,
+	},
+	fx.Annotated{
+		Name:   "LowPriorityTaskScheduler",
+		Target: replicationStreamLowPrioritySchedulerProvider,
+	},
 	executableTaskConverterProvider,
 	streamReceiverMonitorProvider,
 	ndcHistoryResenderProvider,
@@ -65,8 +79,8 @@ var Module = fx.Provide(
 	dlqWriterAdapterProvider,
 	newDLQWriterToggle,
 	historyPaginatedFetcherProvider,
-	remoteEventHandlerProvider,
-	localEventHandlerProvider,
+	resendHandlerProvider,
+	eventImporterProvider,
 	historyEventsHandlerProvider,
 )
 
@@ -93,20 +107,20 @@ func eagerNamespaceRefresherProvider(
 	)
 }
 
-func replicationTaskConverterFactoryProvider() SourceTaskConverterProvider {
+func replicationTaskConverterFactoryProvider(
+	config *configs.Config,
+) SourceTaskConverterProvider {
 	return func(
 		historyEngine shard.Engine,
 		shardContext shard.Context,
-		clientClusterShardCount int32,
 		clientClusterName string,
-		clientShardKey ClusterShardKey,
+		serializer serialization.Serializer,
 	) SourceTaskConverter {
 		return NewSourceTaskConverter(
 			historyEngine,
 			shardContext.GetNamespaceRegistry(),
-			clientClusterShardCount,
-			clientClusterName,
-			clientShardKey)
+			serializer,
+			config)
 	}
 }
 
@@ -122,12 +136,14 @@ func replicationTaskExecutorProvider() TaskExecutorProvider {
 	}
 }
 
-func replicationStreamSchedulerProvider(
+func replicationStreamHighPrioritySchedulerProvider(
 	config *configs.Config,
 	logger log.Logger,
 	queueFactory ctasks.SequentialTaskQueueFactory[TrackableExecutableTask],
 	lc fx.Lifecycle,
 ) ctasks.Scheduler[TrackableExecutableTask] {
+	// SequentialScheduler has panic wrapper when executing task,
+	// if changing the executor, please make sure other executor has panic wrapper
 	scheduler := ctasks.NewSequentialScheduler[TrackableExecutableTask](
 		&ctasks.SequentialSchedulerOptions{
 			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
@@ -137,8 +153,76 @@ func replicationStreamSchedulerProvider(
 		queueFactory,
 		logger,
 	)
-	lc.Append(fx.StartStopHook(scheduler.Start, scheduler.Stop))
-	return scheduler
+	taskChannelKeyFn := func(e TrackableExecutableTask) ClusterChannelKey {
+		return ClusterChannelKey{
+			ClusterName: e.SourceClusterName(),
+		}
+	}
+	channelWeightFn := func(key ClusterChannelKey) int {
+		return 1
+	}
+	// This creates a per cluster channel.
+	// They share the same weight so it just does a round-robin on all clusters' tasks.
+	rrScheduler := ctasks.NewInterleavedWeightedRoundRobinScheduler(
+		ctasks.InterleavedWeightedRoundRobinSchedulerOptions[TrackableExecutableTask, ClusterChannelKey]{
+			TaskChannelKeyFn: taskChannelKeyFn,
+			ChannelWeightFn:  channelWeightFn,
+		},
+		scheduler,
+		logger,
+	)
+	lc.Append(fx.StartStopHook(rrScheduler.Start, rrScheduler.Stop))
+	return rrScheduler
+}
+
+func replicationStreamLowPrioritySchedulerProvider(
+	config *configs.Config,
+	logger log.Logger,
+	lc fx.Lifecycle,
+) ctasks.Scheduler[TrackableExecutableTask] {
+	queueFactory := func(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
+		return NewSequentialTaskQueue(task)
+	}
+	taskQueueHashFunc := func(item interface{}) uint32 {
+		workflowKey, ok := item.(definition.WorkflowKey)
+		if !ok {
+			return 0
+		}
+
+		idBytes := []byte(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID + "_" + strconv.Itoa(rand.Intn(config.ReplicationLowPriorityTaskParallelism())))
+		return farm.Fingerprint32(idBytes)
+	}
+	// SequentialScheduler has panic wrapper when executing task,
+	// if changing the executor, please make sure other executor has panic wrapper
+	scheduler := ctasks.NewSequentialScheduler[TrackableExecutableTask](
+		&ctasks.SequentialSchedulerOptions{
+			QueueSize:   config.ReplicationProcessorSchedulerQueueSize(),
+			WorkerCount: config.ReplicationLowPriorityProcessorSchedulerWorkerCount,
+		},
+		taskQueueHashFunc,
+		queueFactory,
+		logger,
+	)
+	taskChannelKeyFn := func(e TrackableExecutableTask) ClusterChannelKey {
+		return ClusterChannelKey{
+			ClusterName: e.SourceClusterName(),
+		}
+	}
+	channelWeightFn := func(key ClusterChannelKey) int {
+		return 1
+	}
+	// This creates a per cluster channel.
+	// They share the same weight so it just does a round-robin on all clusters' tasks.
+	rrScheduler := ctasks.NewInterleavedWeightedRoundRobinScheduler(
+		ctasks.InterleavedWeightedRoundRobinSchedulerOptions[TrackableExecutableTask, ClusterChannelKey]{
+			TaskChannelKeyFn: taskChannelKeyFn,
+			ChannelWeightFn:  channelWeightFn,
+		},
+		scheduler,
+		logger,
+	)
+	lc.Append(fx.StartStopHook(rrScheduler.Start, rrScheduler.Stop))
+	return rrScheduler
 }
 
 func sequentialTaskQueueFactoryProvider(
@@ -189,7 +273,7 @@ func ndcHistoryResenderProvider(
 			namespaceId namespace.ID,
 			workflowId string,
 			runId string,
-			events []*historypb.HistoryEvent,
+			events [][]*historypb.HistoryEvent,
 			versionHistory []*historyspb.VersionHistoryItem,
 		) error {
 			if config.EnableReplicateLocalGeneratedEvent() {
@@ -203,7 +287,7 @@ func ndcHistoryResenderProvider(
 					},
 					nil,
 					versionHistory,
-					[][]*historypb.HistoryEvent{events},
+					events,
 					nil,
 					"",
 				)
@@ -229,13 +313,70 @@ func ndcHistoryResenderProvider(
 				},
 				nil,
 				versionHistory,
-				[][]*historypb.HistoryEvent{events},
+				events,
 				nil,
 				"",
 			)
 		},
 		serializer,
 		config.StandbyTaskReReplicationContextTimeout,
+		logger,
+		config,
+	)
+}
+
+func resendHandlerProvider(
+	namespaceRegistry namespace.Registry,
+	clientBean client.Bean,
+	serializer serialization.Serializer,
+	clusterMetadata cluster.Metadata,
+	shardController shard.Controller,
+	config *configs.Config,
+	remoteHistoryFetcher eventhandler.HistoryPaginatedFetcher,
+	logger log.Logger,
+	importer eventhandler.EventImporter,
+) eventhandler.ResendHandler {
+	return eventhandler.NewResendHandler(
+		namespaceRegistry,
+		clientBean,
+		serializer,
+		clusterMetadata,
+		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error) {
+			shardContext, err := shardController.GetShardByNamespaceWorkflow(
+				namespaceId,
+				workflowId,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return shardContext.GetEngine(ctx)
+		},
+		remoteHistoryFetcher,
+		importer,
+		logger,
+		config,
+	)
+}
+
+func eventImporterProvider(
+	historyFetcher eventhandler.HistoryPaginatedFetcher,
+	shardController shard.Controller,
+	serializer serialization.Serializer,
+	logger log.Logger,
+) eventhandler.EventImporter {
+	return eventhandler.NewEventImporter(
+		historyFetcher,
+		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error) {
+			shardContext, err := shardController.GetShardByNamespaceWorkflow(
+				namespaceId,
+				workflowId,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return shardContext.GetEngine(ctx)
+		},
+		serializer,
 		logger,
 	)
 }
@@ -247,37 +388,18 @@ func dlqWriterAdapterProvider(
 ) *DLQWriterAdapter {
 	return NewDLQWriterAdapter(dlqWriter, taskSerializer, clusterMetadata.GetCurrentClusterName())
 }
-func remoteEventHandlerProvider(
-	shardController shard.Controller,
-) eventhandler.RemoteGeneratedEventsHandler {
-	return eventhandler.NewRemoteGeneratedEventsHandler(shardController)
-}
-
-func localEventHandlerProvider(
-	clusterMetadata cluster.Metadata,
-	shardController shard.Controller,
-	logger log.Logger,
-	eventSerializer serialization.Serializer,
-	historyPaginatedFetcher eventhandler.HistoryPaginatedFetcher,
-) eventhandler.LocalGeneratedEventsHandler {
-	return eventhandler.NewLocalEventsHandler(
-		clusterMetadata,
-		shardController,
-		logger,
-		eventSerializer,
-		historyPaginatedFetcher,
-	)
-}
 
 func historyEventsHandlerProvider(
 	clusterMetadata cluster.Metadata,
-	localHandler eventhandler.LocalGeneratedEventsHandler,
-	remoteHandler eventhandler.RemoteGeneratedEventsHandler,
+	importer eventhandler.EventImporter,
+	shardController shard.Controller,
+	logger log.Logger,
 ) eventhandler.HistoryEventsHandler {
 	return eventhandler.NewHistoryEventsHandler(
 		clusterMetadata,
-		localHandler,
-		remoteHandler,
+		importer,
+		shardController,
+		logger,
 	)
 }
 
@@ -285,14 +407,12 @@ func historyPaginatedFetcherProvider(
 	namespaceRegistry namespace.Registry,
 	clientBean client.Bean,
 	serializer serialization.Serializer,
-	config *configs.Config,
 	logger log.Logger,
 ) eventhandler.HistoryPaginatedFetcher {
 	return eventhandler.NewHistoryPaginatedFetcher(
 		namespaceRegistry,
 		clientBean,
 		serializer,
-		config.StandbyTaskReReplicationContextTimeout,
 		logger,
 	)
 }

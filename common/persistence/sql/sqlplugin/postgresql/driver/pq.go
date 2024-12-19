@@ -44,3 +44,11 @@ func (p *PQDriver) IsDupDatabaseError(err error) bool {
 	pqErr, ok := err.(*pq.Error)
 	return ok && pqErr.Code == dupDatabaseCode
 }
+
+func (p *PQDriver) IsConnNeedsRefreshError(err error) bool {
+	pqErr, ok := err.(*pq.Error)
+	if !ok {
+		return false
+	}
+	return isConnNeedsRefreshError(string(pqErr.Code), pqErr.Message)
+}

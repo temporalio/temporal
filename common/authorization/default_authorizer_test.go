@@ -29,10 +29,11 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/config"
+	"go.uber.org/mock/gomock"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var (
@@ -79,7 +80,7 @@ var (
 		Namespace: testNamespace,
 	}
 	targetGrpcHealthCheck = CallTarget{
-		APIName:   "/grpc.health.v1.Health/Check",
+		APIName:   healthpb.Health_Check_FullMethodName,
 		Namespace: "",
 	}
 	targetGetSystemInfo = CallTarget{

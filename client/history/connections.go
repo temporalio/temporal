@@ -29,10 +29,9 @@ package history
 import (
 	"sync"
 
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/membership"
+	"google.golang.org/grpc"
 )
 
 type (

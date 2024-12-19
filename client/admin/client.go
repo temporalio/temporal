@@ -23,7 +23,7 @@
 // THE SOFTWARE.
 
 // Generates all three generated files in this package:
-//go:generate go run ../../cmd/tools/rpcwrappers -service admin
+//go:generate go run ../../cmd/tools/genrpcwrappers -service admin
 
 package admin
 
@@ -31,10 +31,9 @@ import (
 	"context"
 	"time"
 
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/debug"
+	"google.golang.org/grpc"
 )
 
 var _ adminservice.AdminServiceClient = (*clientImpl)(nil)

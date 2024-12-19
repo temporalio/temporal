@@ -6,7 +6,7 @@ historyconfig:
 workerconfig:
   enablearchiver: false
   enablereplicator: false
-faultinjection:
+faultInjection:
   targets:
     dataStores:
       ShardStore:

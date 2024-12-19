@@ -30,15 +30,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/namespace/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/api/workflowservicemock/v1"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
@@ -46,6 +44,8 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.uber.org/mock/gomock"
 )
 
 func TestForceReplicationWorkflow(t *testing.T) {
@@ -460,7 +460,7 @@ func TestSeedReplicationQueueWithUserDataEntries_Heartbeats(t *testing.T) {
 	}
 
 	// Once per attempt
-	mockFrontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Times(2).Return(&workflowservice.DescribeNamespaceResponse{NamespaceInfo: &namespace.NamespaceInfo{Id: namespaceID}}, nil)
+	mockFrontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Times(2).Return(&workflowservice.DescribeNamespaceResponse{NamespaceInfo: &namespacepb.NamespaceInfo{Id: namespaceID}}, nil)
 	// Twice for the first page due to expected failure of the first activity attempt, once for the second page
 	mockTaskManager.EXPECT().ListTaskQueueUserDataEntries(gomock.Any(), gomock.Any()).Times(3).DoAndReturn(
 		func(ctx context.Context, request *persistence.ListTaskQueueUserDataEntriesRequest) (*persistence.ListTaskQueueUserDataEntriesResponse, error) {

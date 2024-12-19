@@ -31,9 +31,11 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -47,9 +49,16 @@ type (
 		an       Any
 		kv       sync.Map
 	}
+	testNamer interface {
+		Name() string
+	}
 )
 
-func New(testName string) *TestVars {
+func New(testNamer testNamer) *TestVars {
+	return newFromName(testNamer.Name())
+}
+
+func newFromName(testName string) *TestVars {
 	th := hash(testName)
 	return &TestVars{
 		testName: testName,
@@ -87,7 +96,7 @@ func (tv *TestVars) set(typ string, key []string, val any) {
 }
 
 func (tv *TestVars) clone() *TestVars {
-	tv2 := New(tv.testName)
+	tv2 := newFromName(tv.testName)
 	tv.kv.Range(func(key, value any) bool {
 		tv2.kv.Store(key, value)
 		return true
@@ -144,12 +153,38 @@ func (tv *TestVars) WorkflowID(key ...string) string {
 	return tv.getOrCreate("workflow_id", key).(string)
 }
 
+func (tv *TestVars) BuildId(key ...string) string {
+	//revive:disable-next-line:unchecked-type-assertion
+	return tv.getOrCreate("build_id", key).(string)
+}
+
+func (tv *TestVars) WithBuildId(buildId string, key ...string) *TestVars {
+	return tv.cloneSet("build_id", key, buildId)
+}
+
+func (tv *TestVars) DeploymentSeries(key ...string) string {
+	//revive:disable-next-line:unchecked-type-assertion
+	return tv.getOrCreate("deployment_series", key).(string)
+}
+
+func (tv *TestVars) WithDeploymentSeries(series string, key ...string) *TestVars {
+	return tv.cloneSet("deployment_series", key, series)
+}
+
+func (tv *TestVars) Deployment(key ...string) *deploymentpb.Deployment {
+	//revive:disable-next-line:unchecked-type-assertion
+	return &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(key...),
+		BuildId:    tv.BuildId(key...),
+	}
+}
+
 func (tv *TestVars) WithWorkflowID(workflowID string, key ...string) *TestVars {
 	return tv.cloneSet("workflow_id", key, workflowID)
 }
 
 func (tv *TestVars) RunID(key ...string) string {
-	return tv.getOrCreate("run_id", key, uuid.New()).(string)
+	return tv.getOrCreate("run_id", key, "").(string)
 }
 
 func (tv *TestVars) WithRunID(runID string, key ...string) *TestVars {
@@ -160,6 +195,13 @@ func (tv *TestVars) WorkflowExecution(key ...string) *commonpb.WorkflowExecution
 	return &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(key...),
 		RunId:      tv.RunID(key...),
+	}
+}
+
+func (tv *TestVars) UpdateRef(key ...string) *updatepb.UpdateRef {
+	return &updatepb.UpdateRef{
+		UpdateId:          tv.UpdateID(key...),
+		WorkflowExecution: tv.WorkflowExecution(),
 	}
 }
 
@@ -179,6 +221,13 @@ func (tv *TestVars) StickyTaskQueue(key ...string) *taskqueuepb.TaskQueue {
 		Name:       tv.getOrCreate("sticky_task_queue", key).(string),
 		Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 		NormalName: tv.getOrCreate("task_queue", key).(string),
+	}
+}
+
+func (tv *TestVars) StickyExecutionAttributes(timeout time.Duration, key ...string) *taskqueuepb.StickyExecutionAttributes {
+	return &taskqueuepb.StickyExecutionAttributes{
+		WorkerTaskQueue:        tv.StickyTaskQueue(key...),
+		ScheduleToStartTimeout: durationpb.New(timeout),
 	}
 }
 
@@ -238,6 +287,15 @@ func (tv *TestVars) WithHandlerName(handlerName string, key ...string) *TestVars
 	return tv.cloneSet("handler_name", key, handlerName)
 }
 
+//revive:disable:unchecked-type-assertion
+func (tv *TestVars) ClientIdentity(key ...string) string {
+	return tv.getOrCreate("client_identity", key).(string)
+}
+
+func (tv *TestVars) WithClientIdentity(identity string, key ...string) *TestVars {
+	return tv.cloneSet("client_identity", key, identity)
+}
+
 func (tv *TestVars) WorkerIdentity(key ...string) string {
 	return tv.getOrCreate("worker_identity", key).(string)
 }
@@ -252,6 +310,22 @@ func (tv *TestVars) TimerID(key ...string) string {
 
 func (tv *TestVars) WithTimerID(timerID string, key ...string) *TestVars {
 	return tv.cloneSet("timer_id", key, timerID)
+}
+
+func (tv *TestVars) QueryType(key ...string) string {
+	return tv.getOrCreate("query_type", key).(string)
+}
+
+func (tv *TestVars) WithQueryType(queryType string, key ...string) *TestVars {
+	return tv.cloneSet("query_type", key, queryType)
+}
+
+func (tv *TestVars) IndexName(key ...string) string {
+	return tv.getOrCreate("index_name", key).(string)
+}
+
+func (tv *TestVars) WithIndexName(indexName string, key ...string) *TestVars {
+	return tv.cloneSet("index_name", key, indexName)
 }
 
 // ----------- Generic methods ------------

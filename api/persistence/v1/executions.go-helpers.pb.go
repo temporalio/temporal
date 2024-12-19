@@ -399,6 +399,80 @@ func (this *OutboundTaskInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type NexusInvocationTaskInfo to the protobuf v3 wire format
+func (val *NexusInvocationTaskInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusInvocationTaskInfo from the protobuf v3 wire format
+func (val *NexusInvocationTaskInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusInvocationTaskInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusInvocationTaskInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusInvocationTaskInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusInvocationTaskInfo
+	switch t := that.(type) {
+	case *NexusInvocationTaskInfo:
+		that1 = t
+	case NexusInvocationTaskInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type NexusCancelationTaskInfo to the protobuf v3 wire format
+func (val *NexusCancelationTaskInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusCancelationTaskInfo from the protobuf v3 wire format
+func (val *NexusCancelationTaskInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusCancelationTaskInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusCancelationTaskInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusCancelationTaskInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusCancelationTaskInfo
+	switch t := that.(type) {
+	case *NexusCancelationTaskInfo:
+		that1 = t
+	case NexusCancelationTaskInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type ActivityInfo to the protobuf v3 wire format
 func (val *ActivityInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -621,6 +695,80 @@ func (this *Checksum) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type Callback to the protobuf v3 wire format
+func (val *Callback) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type Callback from the protobuf v3 wire format
+func (val *Callback) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *Callback) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two Callback values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *Callback) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *Callback
+	switch t := that.(type) {
+	case *Callback:
+		that1 = t
+	case Callback:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type HSMCompletionCallbackArg to the protobuf v3 wire format
+func (val *HSMCompletionCallbackArg) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type HSMCompletionCallbackArg from the protobuf v3 wire format
+func (val *HSMCompletionCallbackArg) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *HSMCompletionCallbackArg) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two HSMCompletionCallbackArg values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *HSMCompletionCallbackArg) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *HSMCompletionCallbackArg
+	switch t := that.(type) {
+	case *HSMCompletionCallbackArg:
+		that1 = t
+	case HSMCompletionCallbackArg:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type CallbackInfo to the protobuf v3 wire format
 func (val *CallbackInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -650,6 +798,80 @@ func (this *CallbackInfo) Equal(that interface{}) bool {
 	case *CallbackInfo:
 		that1 = t
 	case CallbackInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type NexusOperationInfo to the protobuf v3 wire format
+func (val *NexusOperationInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusOperationInfo from the protobuf v3 wire format
+func (val *NexusOperationInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusOperationInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusOperationInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusOperationInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusOperationInfo
+	switch t := that.(type) {
+	case *NexusOperationInfo:
+		that1 = t
+	case NexusOperationInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type NexusOperationCancellationInfo to the protobuf v3 wire format
+func (val *NexusOperationCancellationInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusOperationCancellationInfo from the protobuf v3 wire format
+func (val *NexusOperationCancellationInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusOperationCancellationInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusOperationCancellationInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusOperationCancellationInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusOperationCancellationInfo
+	switch t := that.(type) {
+	case *NexusOperationCancellationInfo:
+		that1 = t
+	case NexusOperationCancellationInfo:
 		that1 = &t
 	default:
 		return false

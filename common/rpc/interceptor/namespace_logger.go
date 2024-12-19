@@ -29,13 +29,12 @@ import (
 	"crypto/md5"
 	"fmt"
 
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc"
 )
 
 type (

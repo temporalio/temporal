@@ -32,7 +32,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"

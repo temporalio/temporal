@@ -31,11 +31,11 @@ import (
 )
 
 type (
-	// Status describes current status of update from registry.
+	// Status describes the current status of Update from Registry.
 	Status struct {
-		// The most advanced stage reached by update.
+		// The most advanced stage reached by Update.
 		Stage enumspb.UpdateWorkflowExecutionLifecycleStage
-		// Outcome of update if it is completed or rejected.
+		// Outcome of Update if it is completed or rejected.
 		Outcome *updatepb.Outcome
 	}
 )

@@ -57,6 +57,8 @@ type (
 		maxSize        int
 		currSize       int
 		pinnedSize     int
+		onPut          func(val any)
+		onEvict        func(val any)
 		ttl            time.Duration
 		pin            bool
 		timeSource     clock.TimeSource
@@ -151,7 +153,13 @@ func (entry *entryImpl) CreateTime() time.Time {
 }
 
 // New creates a new cache with the given options
-func New(maxSize int, opts *Options, handler metrics.Handler) Cache {
+func New(maxSize int, opts *Options) Cache {
+	return NewWithMetrics(maxSize, opts, metrics.NoopMetricsHandler)
+}
+
+// NewWithMetrics creates a new cache that will emit capacity and ttl metrics.
+// handler should be tagged with metrics.CacheTypeTag.
+func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Cache {
 	if opts == nil {
 		opts = &Options{}
 	}
@@ -169,6 +177,8 @@ func New(maxSize int, opts *Options, handler metrics.Handler) Cache {
 		maxSize:        maxSize,
 		currSize:       0,
 		pin:            opts.Pin,
+		onPut:          opts.OnPut,
+		onEvict:        opts.OnEvict,
 		timeSource:     timeSource,
 		metricsHandler: handler,
 	}
@@ -177,7 +187,7 @@ func New(maxSize int, opts *Options, handler metrics.Handler) Cache {
 // NewLRU creates a new LRU cache of the given size, setting initial capacity
 // to the max size
 func NewLRU(maxSize int, handler metrics.Handler) Cache {
-	return New(maxSize, nil, handler)
+	return New(maxSize, nil)
 }
 
 // Get retrieves the value stored under the given key
@@ -303,8 +313,9 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	// If the entry exists, check if it has expired or update the value
 	if elt != nil {
 		existingEntry := elt.Value.(*entryImpl)
-		if !c.isEntryExpired(existingEntry, time.Now().UTC()) {
+		if !c.isEntryExpired(existingEntry, c.timeSource.Now().UTC()) {
 			existingVal := existingEntry.value
+
 			if allowUpdate {
 				newCacheSize := c.calculateNewCacheSize(newEntrySize, existingEntry.Size())
 				if newCacheSize > c.maxSize {
@@ -324,6 +335,10 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 				c.currSize = newCacheSize
 				metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
 				c.updateEntryTTL(existingEntry)
+
+				if c.onPut != nil {
+					c.onPut(value)
+				}
 			}
 
 			c.updateEntryRefCount(existingEntry)
@@ -348,13 +363,17 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 		value: value,
 		size:  newEntrySize,
 	}
-
 	c.updateEntryTTL(entry)
 	c.updateEntryRefCount(entry)
 	element := c.byAccess.PushFront(entry)
 	c.byKey[key] = element
 	c.currSize = newCacheSize
 	metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
+
+	if c.onPut != nil {
+		c.onPut(value)
+	}
+
 	return nil, nil
 }
 
@@ -368,6 +387,10 @@ func (c *lru) deleteInternal(element *list.Element) {
 	metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
 	metrics.CacheEntryAgeOnEviction.With(c.metricsHandler).Record(c.timeSource.Now().UTC().Sub(entry.createTime))
 	delete(c.byKey, entry.key)
+
+	if c.onEvict != nil {
+		c.onEvict(entry.value)
+	}
 }
 
 // tryEvictUntilCacheSizeUnderLimit tries to evict entries until c.currSize is less than c.maxSize.

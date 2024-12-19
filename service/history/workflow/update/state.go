@@ -26,8 +26,6 @@ package update
 
 import (
 	"fmt"
-
-	enumspb "go.temporal.io/api/enums/v1"
 )
 
 type (
@@ -39,12 +37,15 @@ const (
 	stateCreated state = 1 << iota
 	stateProvisionallyAdmitted
 	stateAdmitted
-	stateProvisionallySent
 	stateSent
 	stateProvisionallyAccepted
 	stateAccepted
 	stateProvisionallyCompleted
+	stateProvisionallyCompletedAfterAccepted
 	stateCompleted
+	stateProvisionallyAborted
+	stateAborted
+	lastState
 )
 
 func (s state) String() string {
@@ -55,8 +56,6 @@ func (s state) String() string {
 		return "ProvisionallyAdmitted"
 	case stateAdmitted:
 		return "Admitted"
-	case stateProvisionallySent:
-		return "ProvisionallySent"
 	case stateSent:
 		return "Sent"
 	case stateProvisionallyAccepted:
@@ -65,39 +64,18 @@ func (s state) String() string {
 		return "Accepted"
 	case stateProvisionallyCompleted:
 		return "ProvisionallyCompleted"
+	case stateProvisionallyCompletedAfterAccepted:
+		return "ProvisionallyCompletedAfterAccepted"
 	case stateCompleted:
 		return "Completed"
+	case stateProvisionallyAborted:
+		return "ProvisionallyAborted"
+	case stateAborted:
+		return "Aborted"
+	case lastState:
+		return fmt.Sprintf("invalid state %d", s)
 	}
-	return "unrecognized state"
-}
-
-// LifecycleStage maps the states of the Update state machine to the values of
-// enumspb.UpdateWorkflowExecutionLifecycleStage.
-func (s state) LifecycleStage() (enumspb.UpdateWorkflowExecutionLifecycleStage, error) {
-	switch s {
-	case stateCreated:
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
-	case stateProvisionallyAdmitted:
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
-	case stateAdmitted:
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
-	case stateProvisionallySent:
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
-	case stateSent:
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
-	case stateProvisionallyAccepted:
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
-	case stateAccepted:
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, nil
-	case stateProvisionallyCompleted:
-		// Transition could be due to either validation rejection or completion
-		// of Update, so Admitted is the most advanced stage known to have been
-		// reached.
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, nil
-	case stateCompleted:
-		return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, nil
-	}
-	return enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, fmt.Errorf("unrecognized state: %v", s) // nolint:goerr113
+	return fmt.Sprintf("unrecognized state %d", s)
 }
 
 func (s state) Matches(mask stateSet) bool {

@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -38,56 +37,85 @@ import (
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/mock"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/quotas"
+	"go.uber.org/mock/gomock"
 )
 
 func TestRateLimitedPersistenceClients(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name            string
-		err             error
-		numRequests     int
-		namespaceRPS    int
-		systemRPS       int
-		expectRateLimit bool
-		expectedScope   enumspb.ResourceExhaustedScope
+		name              string
+		err               error
+		numRequests       int
+		namespaceRPS      int
+		systemRPS         int
+		namespaceShardRPS int
+		expectRateLimit   bool
+		expectedScope     enumspb.ResourceExhaustedScope
+		expectedMessage   string
 	}{
 		{
-			name:            "Namespace limit allow",
-			err:             nil,
-			numRequests:     10,
-			namespaceRPS:    10,
-			systemRPS:       100,
-			expectRateLimit: false,
+			name:              "Namespace limit allow",
+			err:               nil,
+			numRequests:       10,
+			namespaceRPS:      10,
+			namespaceShardRPS: 100,
+			systemRPS:         100,
+			expectRateLimit:   false,
 		},
 		{
-			name:            "Namespace limit hit",
-			err:             nil,
-			numRequests:     11,
-			namespaceRPS:    10,
-			systemRPS:       100,
-			expectRateLimit: true,
-			expectedScope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			name:              "Namespace limit hit",
+			err:               nil,
+			numRequests:       11,
+			namespaceRPS:      10,
+			namespaceShardRPS: 100,
+			systemRPS:         100,
+			expectRateLimit:   true,
+			expectedScope:     enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			expectedMessage:   "Namespace Persistence Max QPS Reached.",
 		},
 		{
-			name:            "System limit allow",
-			err:             nil,
-			numRequests:     10,
-			namespaceRPS:    100,
-			systemRPS:       10,
-			expectRateLimit: false,
+			name:              "System limit allow",
+			err:               nil,
+			numRequests:       10,
+			namespaceRPS:      100,
+			namespaceShardRPS: 100,
+			systemRPS:         10,
+			expectRateLimit:   false,
 		},
 		{
-			name:            "System limit hit",
-			err:             nil,
-			numRequests:     11,
-			namespaceRPS:    100,
-			systemRPS:       10,
-			expectRateLimit: true,
-			expectedScope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			name:              "System limit hit",
+			err:               nil,
+			numRequests:       11,
+			namespaceRPS:      100,
+			namespaceShardRPS: 100,
+			systemRPS:         10,
+			expectRateLimit:   true,
+			expectedScope:     enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			expectedMessage:   "System Persistence Max QPS Reached.",
+		},
+		{
+			name:              "Shard limit allow",
+			err:               nil,
+			numRequests:       10,
+			namespaceRPS:      100,
+			namespaceShardRPS: 10,
+			systemRPS:         100,
+			expectRateLimit:   false,
+		},
+		{
+			name:              "Shard limit hit",
+			err:               nil,
+			numRequests:       11,
+			namespaceRPS:      100,
+			namespaceShardRPS: 10,
+			systemRPS:         100,
+			expectRateLimit:   true,
+			expectedScope:     enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			expectedMessage:   "Namespace Per-Shard Persistence Max QPS Reached.",
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -117,10 +145,10 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			clusterMetadataStore.EXPECT().GetClusterMetadata(gomock.Any(), gomock.Any()).AnyTimes().Return(nil, nil)
 			dataStoreFactory.EXPECT().NewClusterMetadataStore().AnyTimes().Return(clusterMetadataStore, nil)
 
-			nexusStore := mock.NewMockNexusIncomingServiceStore(ctr)
-			nexusStore.EXPECT().DeleteNexusIncomingService(gomock.Any(), gomock.Any()).AnyTimes().Return(nil)
-			nexusStore.EXPECT().ListNexusIncomingServices(gomock.Any(), gomock.Any()).AnyTimes().Return(nil, nil)
-			dataStoreFactory.EXPECT().NewNexusIncomingServiceStore().AnyTimes().Return(nexusStore, nil)
+			nexusStore := mock.NewMockNexusEndpointStore(ctr)
+			nexusStore.EXPECT().DeleteNexusEndpoint(gomock.Any(), gomock.Any()).AnyTimes().Return(nil)
+			nexusStore.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).AnyTimes().Return(nil, nil)
+			dataStoreFactory.EXPECT().NewNexusEndpointStore().AnyTimes().Return(nexusStore, nil)
 
 			taskStore := mock.NewMockTaskStore(ctr)
 			taskStore.EXPECT().GetTasks(gomock.Any(), gomock.Any()).AnyTimes().Return(nil, nil)
@@ -129,12 +157,24 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			burstRatioFn := func() float64 {
 				return 1.0
 			}
-			systemRequestRateLimiter := client.NewNoopPriorityRateLimiter(func() int {
-				return tc.systemRPS
-			}, burstRatioFn)
-			namespaceRequestRateLimiter := client.NewNoopPriorityRateLimiter(func() int {
-				return tc.namespaceRPS
-			}, burstRatioFn)
+			systemRequestRateLimiter := quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultRateLimiter(
+					func() float64 { return float64(tc.systemRPS) },
+					burstRatioFn,
+				),
+			)
+			namespaceRequestRateLimiter := quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultRateLimiter(
+					func() float64 { return float64(tc.namespaceRPS) },
+					burstRatioFn,
+				),
+			)
+			shardRequestRateLimiter := quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultRateLimiter(
+					func() float64 { return float64(tc.namespaceShardRPS) },
+					burstRatioFn,
+				),
+			)
 			factory := client.NewFactory(
 				dataStoreFactory,
 				&config.Persistence{
@@ -142,6 +182,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 				},
 				systemRequestRateLimiter,
 				namespaceRequestRateLimiter,
+				shardRequestRateLimiter,
 				serialization.NewSerializer(),
 				nil,
 				"",
@@ -153,7 +194,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 			executionManager, _ := factory.NewExecutionManager()
 			metadataManager, _ := factory.NewMetadataManager()
 			clusterMetadataManager, _ := factory.NewClusterMetadataManager()
-			nexusManager, _ := factory.NewNexusIncomingServiceManager()
+			nexusManager, _ := factory.NewNexusEndpointManager()
 			namespaceQueue, _ := factory.NewNamespaceReplicationQueue()
 
 			// Make calls to different manager objects to verify that RPS is enforced.
@@ -186,9 +227,9 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 					},
 				},
 				{
-					name: "DeleteNexusIncomingService",
+					name: "DeleteNexusEndpoint",
 					call: func() error {
-						return nexusManager.DeleteNexusIncomingService(context.Background(), &persistence.DeleteNexusIncomingServiceRequest{})
+						return nexusManager.DeleteNexusEndpoint(context.Background(), &persistence.DeleteNexusEndpointRequest{})
 					},
 				},
 				{
@@ -212,11 +253,11 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 					}
 					// Check if the rate limit is hit.
 					if tc.expectRateLimit {
-						assert.ErrorContains(t, err, fmt.Sprintf("%s Persistence Max QPS Reached", tc.expectedScope.String()))
 						var resourceExhausted *serviceerror.ResourceExhausted
 						errors.As(err, &resourceExhausted)
 						assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, resourceExhausted.Cause)
 						assert.Equal(t, tc.expectedScope, resourceExhausted.Scope)
+						assert.Equal(t, tc.expectedMessage, resourceExhausted.Message)
 					} else {
 						assert.NoError(t, err)
 					}

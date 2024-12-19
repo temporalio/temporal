@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -45,21 +45,27 @@ type visibilityManagerMetrics struct {
 	logger        log.Logger
 	delegate      manager.VisibilityManager
 
+	slowQueryThreshold             dynamicconfig.DurationPropertyFn
 	visibilityPluginNameMetricsTag metrics.Tag
+	visibilityIndexNameMetricsTag  metrics.Tag
 }
 
 func NewVisibilityManagerMetrics(
 	delegate manager.VisibilityManager,
 	metricHandler metrics.Handler,
 	logger log.Logger,
+	slowQueryThreshold dynamicconfig.DurationPropertyFn,
 	visibilityPluginNameMetricsTag metrics.Tag,
+	visibilityIndexNameMetricsTag metrics.Tag,
 ) *visibilityManagerMetrics {
 	return &visibilityManagerMetrics{
 		metricHandler: metricHandler,
 		logger:        logger,
 		delegate:      delegate,
 
+		slowQueryThreshold:             slowQueryThreshold,
 		visibilityPluginNameMetricsTag: visibilityPluginNameMetricsTag,
+		visibilityIndexNameMetricsTag:  visibilityIndexNameMetricsTag,
 	}
 }
 
@@ -129,83 +135,21 @@ func (m *visibilityManagerMetrics) DeleteWorkflowExecution(
 	return m.updateErrorMetric(handler, err)
 }
 
-func (m *visibilityManagerMetrics) ListOpenWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsScope)
-	response, err := m.delegate.ListOpenWorkflowExecutions(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
-	return response, m.updateErrorMetric(handler, err)
-}
-
-func (m *visibilityManagerMetrics) ListClosedWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsScope)
-	response, err := m.delegate.ListClosedWorkflowExecutions(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
-	return response, m.updateErrorMetric(handler, err)
-}
-
-func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope)
-	response, err := m.delegate.ListOpenWorkflowExecutionsByType(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
-	return response, m.updateErrorMetric(handler, err)
-}
-
-func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope)
-	response, err := m.delegate.ListClosedWorkflowExecutionsByType(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
-	return response, m.updateErrorMetric(handler, err)
-}
-
-func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope)
-	response, err := m.delegate.ListOpenWorkflowExecutionsByWorkflowID(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
-	return response, m.updateErrorMetric(handler, err)
-}
-
-func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope)
-	response, err := m.delegate.ListClosedWorkflowExecutionsByWorkflowID(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
-	return response, m.updateErrorMetric(handler, err)
-}
-
-func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByStatus(
-	ctx context.Context,
-	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope)
-	response, err := m.delegate.ListClosedWorkflowExecutionsByStatus(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
-	return response, m.updateErrorMetric(handler, err)
-}
-
 func (m *visibilityManagerMetrics) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceListWorkflowExecutionsScope)
 	response, err := m.delegate.ListWorkflowExecutions(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	if elapsed > m.slowQueryThreshold() {
+		m.logger.Warn("List query exceeded threshold",
+			tag.NewDurationTag("duration", elapsed),
+			tag.NewStringTag("visibility-query", request.Query),
+			tag.NewStringTag("namepsace", request.Namespace.String()),
+		)
+	}
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
 	return response, m.updateErrorMetric(handler, err)
 }
 
@@ -215,7 +159,15 @@ func (m *visibilityManagerMetrics) ScanWorkflowExecutions(
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceScanWorkflowExecutionsScope)
 	response, err := m.delegate.ScanWorkflowExecutions(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	if elapsed > m.slowQueryThreshold() {
+		m.logger.Warn("Count query exceeded threshold",
+			tag.NewDurationTag("duration", elapsed),
+			tag.NewStringTag("visibility-query", request.Query),
+			tag.NewStringTag("namepsace", request.Namespace.String()),
+		)
+	}
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
 	return response, m.updateErrorMetric(handler, err)
 }
 
@@ -240,7 +192,7 @@ func (m *visibilityManagerMetrics) GetWorkflowExecution(
 }
 
 func (m *visibilityManagerMetrics) tagScope(operation string) (metrics.Handler, time.Time) {
-	taggedHandler := m.metricHandler.WithTags(metrics.OperationTag(operation), m.visibilityPluginNameMetricsTag)
+	taggedHandler := m.metricHandler.WithTags(metrics.OperationTag(operation), m.visibilityPluginNameMetricsTag, m.visibilityIndexNameMetricsTag)
 	metrics.VisibilityPersistenceRequests.With(taggedHandler).Record(1)
 	return taggedHandler, time.Now().UTC()
 }
@@ -259,7 +211,8 @@ func (m *visibilityManagerMetrics) updateErrorMetric(handler metrics.Handler, er
 		// no-op
 
 	case *serviceerror.ResourceExhausted:
-		metrics.VisibilityPersistenceResourceExhausted.With(handler).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+		metrics.VisibilityPersistenceResourceExhausted.With(handler).Record(
+			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
 	default:
 		m.logger.Error("Operation failed with an error.", tag.Error(err))
 		metrics.VisibilityPersistenceFailures.With(handler).Record(1)

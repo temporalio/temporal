@@ -114,10 +114,9 @@ func NewBoolTag(key string, value bool) ZapTag {
 	}
 }
 
-func NewErrorTag(value error) ZapTag {
-	// NOTE: zap already chosen "error" as key
+func NewErrorTag(key string, value error) ZapTag {
 	return ZapTag{
-		field: zap.Error(value),
+		field: zap.NamedError(key, value),
 	}
 }
 

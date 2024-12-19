@@ -27,11 +27,10 @@
 package replication
 
 import (
+	"maps"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"

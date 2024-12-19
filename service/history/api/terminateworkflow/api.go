@@ -61,7 +61,6 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
@@ -89,12 +88,13 @@ func Invoke(
 				}
 			}
 
-			return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+			return api.UpdateWorkflowTerminate, workflow.TerminateWorkflow(
 				mutableState,
 				request.GetReason(),
 				request.GetDetails(),
 				request.GetIdentity(),
 				false,
+				request.GetLinks(),
 			)
 		},
 		nil,

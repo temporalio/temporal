@@ -28,12 +28,13 @@ import (
 	"fmt"
 	"time"
 
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
+	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // All logging tags are defined in this file.
@@ -46,6 +47,8 @@ import (
 // LoggingCallAtKey is reserved tag
 const (
 	LoggingCallAtKey = "logging-call-at"
+	WorkflowIDKey    = "wf-id"
+	WorkflowRunIDKey = "wf-run-id"
 )
 
 // ==========  Common tags defined here ==========
@@ -57,7 +60,10 @@ func Operation(operation string) ZapTag {
 
 // Error returns tag for Error
 func Error(err error) ZapTag {
-	return NewErrorTag(err)
+	return ZapTag{
+		// NOTE: zap already chosen "error" as key
+		field: zap.Error(err),
+	}
 }
 
 // ServiceErrorType returns tag for ServiceErrorType
@@ -111,7 +117,7 @@ func WorkflowHandlerName(handlerName string) ZapTag {
 
 // WorkflowID returns tag for WorkflowID
 func WorkflowID(workflowID string) ZapTag {
-	return NewStringTag("wf-id", workflowID)
+	return NewStringTag(WorkflowIDKey, workflowID)
 }
 
 // WorkflowType returns tag for WorkflowType
@@ -126,7 +132,7 @@ func WorkflowState(s enumsspb.WorkflowExecutionState) ZapTag {
 
 // WorkflowRunID returns tag for WorkflowRunID
 func WorkflowRunID(runID string) ZapTag {
-	return NewStringTag("wf-run-id", runID)
+	return NewStringTag(WorkflowRunIDKey, runID)
 }
 
 // WorkflowNewRunID returns tag for WorkflowNewRunID
@@ -310,6 +316,16 @@ func WorkerBuildId(buildId string) ZapTag {
 	return NewStringTag("worker-build-id", buildId)
 }
 
+// ReachabilityExitPointTag returns tag for reachabilityExitPoint
+func ReachabilityExitPointTag(reachabilityExitPoint string) ZapTag {
+	return NewStringTag("reachability-exit-point", reachabilityExitPoint)
+}
+
+// BuildIdTaskReachabilityTag returns tag for build id task reachability
+func BuildIdTaskReachabilityTag(buildIdReachability string) ZapTag {
+	return NewStringTag("build-id-reachability", buildIdReachability)
+}
+
 // size limit
 
 // BlobSize returns tag for BlobSize
@@ -345,6 +361,21 @@ func WorkflowMutableStateSize(mutableStateSize int) ZapTag {
 // WorkflowEventCount returns tag for EventCount
 func WorkflowEventCount(eventCount int) ZapTag {
 	return NewInt("wf-event-count", eventCount)
+}
+
+// WorkerVersioningAssignmentRuleCount returns tag for AssignmentRuleCount
+func WorkerVersioningAssignmentRuleCount(assignmentRuleCount int) ZapTag {
+	return NewInt("worker-versioning-assignment-rule-count", assignmentRuleCount)
+}
+
+// WorkerVersioningRedirectRuleCount returns tag for RedirectRuleCount
+func WorkerVersioningRedirectRuleCount(redirectRuleCount int) ZapTag {
+	return NewInt("worker-versioning-redirect-rule-count", redirectRuleCount)
+}
+
+// WorkerVersioningMaxUpstreamBuildIDs returns tag for RedirectRuleCount
+func WorkerVersioningMaxUpstreamBuildIDs(maxUpstreamBuildIDs int) ZapTag {
+	return NewInt("worker-versioning-max-upstream-build-ids", maxUpstreamBuildIDs)
 }
 
 // ScheduleID returns tag for ScheduleID
@@ -620,6 +651,10 @@ func TaskType(taskType enumsspb.TaskType) ZapTag {
 	return NewStringTag("queue-task-type", taskType.String())
 }
 
+func TaskCategoryID(taskCategoryID int) ZapTag {
+	return NewInt("queue-task-category-id", taskCategoryID)
+}
+
 // TaskVisibilityTimestamp returns tag for task visibilityTimestamp
 func TaskVisibilityTimestamp(timestamp time.Time) ZapTag {
 	return NewTimeTag("queue-task-visibility-timestamp", timestamp)
@@ -768,6 +803,9 @@ func SourceShardID(shardID int32) ZapTag {
 
 func TargetShardID(shardID int32) ZapTag {
 	return NewInt32("xdc-target-shard-id", shardID)
+}
+func ReplicationTask(replicationTask interface{}) ZapTag {
+	return NewAnyTag("xdc-replication-task", replicationTask)
 }
 
 // PrevActiveCluster returns tag for PrevActiveCluster
@@ -947,6 +985,21 @@ func Endpoint(endpoint string) ZapTag {
 
 func BuildId(buildId string) ZapTag {
 	return NewStringTag("build-id", buildId)
+}
+
+func VersioningBehavior(behavior enumspb.VersioningBehavior) ZapTag {
+	return NewStringTag("versioning-behavior", behavior.String())
+}
+
+func Deployment(d *deploymentpb.Deployment) ZapTag {
+	if d != nil {
+		return NewAnyTag("deployment", d.SeriesName+":"+d.BuildId)
+	}
+	return NewAnyTag("deployment", "unversioned")
+}
+
+func UserDataVersion(v int64) ZapTag {
+	return NewInt64("user-data-version", v)
 }
 
 func Cause(cause string) ZapTag {

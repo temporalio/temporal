@@ -24,21 +24,18 @@ package history
 
 import (
 	"context"
-	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type outboundQueueActiveTaskExecutor struct {
-	taskExecutor
+	stateMachineEnvironment
 }
 
 var _ queues.Executor = &outboundQueueActiveTaskExecutor{}
@@ -50,11 +47,13 @@ func newOutboundQueueActiveTaskExecutor(
 	metricsHandler metrics.Handler,
 ) *outboundQueueActiveTaskExecutor {
 	return &outboundQueueActiveTaskExecutor{
-		taskExecutor: taskExecutor{
-			shardContext:   shardCtx,
-			cache:          workflowCache,
-			logger:         logger,
-			metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope)),
+		stateMachineEnvironment: stateMachineEnvironment{
+			shardContext: shardCtx,
+			cache:        workflowCache,
+			logger:       logger,
+			metricsHandler: metricsHandler.WithTags(
+				metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope),
+			),
 		},
 	}
 }
@@ -64,22 +63,27 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	var taskType string
-	ref, smt, err := e.stateMachineTask(task)
-	if err != nil {
-		taskType = "ActiveUnknownOutbound"
-	} else {
-		taskType = "Active." + smt.Type().Name
-	}
-
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		e.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
 	)
-	metricsTags := []metrics.Tag{
-		namespaceTag,
-		metrics.TaskTypeTag(taskType),
-		metrics.OperationTag(taskType),
+	taskType := queues.GetOutboundTaskTypeTagValue(task, true)
+	respond := func(err error) queues.ExecuteResponse {
+		metricsTags := []metrics.Tag{
+			namespaceTag,
+			metrics.TaskTypeTag(taskType),
+			metrics.OperationTag(taskType),
+		}
+		return queues.ExecuteResponse{
+			ExecutionMetricTags: metricsTags,
+			ExecutedAsActive:    true,
+			ExecutionErr:        err,
+		}
+	}
+
+	ref, smt, err := StateMachineTask(e.shardContext.StateMachineRegistry(), task)
+	if err != nil {
+		return respond(err)
 	}
 
 	// We don't want to execute outbound tasks when handing over a namespace to avoid starting work that may not be
@@ -88,44 +92,16 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 	// seconds (by default), but we avoid checking again later, before committing the result, to attempt to commit
 	// results of inflight tasks and not lose the progress.
 	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
-		// TODO: Move this logic to queues.Executable when metrics tags don't need to be returned from task executor.
-		return queues.ExecuteResponse{
-			ExecutionMetricTags: metricsTags,
-			ExecutedAsActive:    true,
-			ExecutionErr:        consts.ErrNamespaceHandover,
-		}
+		// TODO: Move this logic to queues.Executable when metrics tags don't need
+		// to be returned from task executor. Also check the standby queue logic.
+		return respond(consts.ErrNamespaceHandover)
 	}
 
-	if err == nil {
-		err = hsm.Execute(ctx, e.shardContext.StateMachineRegistry(), e, ref, smt)
+	if err := validateTaskByClock(e.shardContext, task); err != nil {
+		return respond(err)
 	}
 
-	return queues.ExecuteResponse{
-		ExecutionMetricTags: metricsTags,
-		ExecutedAsActive:    true,
-		ExecutionErr:        err,
-	}
-}
-
-func (e *outboundQueueActiveTaskExecutor) stateMachineTask(task tasks.Task) (hsm.Ref, hsm.Task, error) {
-	cbt, ok := task.(*tasks.StateMachineOutboundTask)
-	if !ok {
-		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError("unknown task type")
-	}
-	def, ok := e.shardContext.StateMachineRegistry().TaskSerializer(cbt.Info.Type)
-	if !ok {
-		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type))
-	}
-	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskKindOutbound{Destination: cbt.Destination})
-	if err != nil {
-		return hsm.Ref{}, nil, fmt.Errorf(
-			"%w: %w",
-			queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.Type)),
-			err,
-		)
-	}
-	return hsm.Ref{
-		WorkflowKey:     taskWorkflowKey(task),
-		StateMachineRef: cbt.Info.Ref,
-	}, smt, nil
+	smRegistry := e.shardContext.StateMachineRegistry()
+	err = smRegistry.ExecuteImmediateTask(ctx, e, ref, smt)
+	return respond(err)
 }

@@ -30,14 +30,15 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 func GetAndUpdateWorkflowWithNew(
 	ctx context.Context,
 	reqClock *clockspb.VectorClock,
-	consistencyCheckFn MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
 	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
@@ -47,9 +48,8 @@ func GetAndUpdateWorkflowWithNew(
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		reqClock,
-		consistencyCheckFn,
 		workflowKey,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -57,6 +57,31 @@ func GetAndUpdateWorkflowWithNew(
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	return UpdateWorkflowWithNew(shard, ctx, workflowLease, action, newWorkflowFn)
+}
+
+func GetAndUpdateWorkflowWithConsistencyCheck(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	consistencyCheckFn MutableStateConsistencyPredicate,
+	workflowKey definition.WorkflowKey,
+	action UpdateWorkflowActionFunc,
+	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
+	shardContext shard.Context,
+	workflowConsistencyChecker WorkflowConsistencyChecker,
+) (retError error) {
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
+		ctx,
+		reqClock,
+		consistencyCheckFn,
+		workflowKey,
+		locks.PriorityHigh,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
+
+	return UpdateWorkflowWithNew(shardContext, ctx, workflowLease, action, newWorkflowFn)
 }
 
 func UpdateWorkflowWithNew(
@@ -113,5 +138,13 @@ func UpdateWorkflowWithNew(
 		updateErr = workflowLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext)
 	}
 
-	return updateErr
+	if updateErr != nil {
+		return updateErr
+	}
+
+	if postActions.AbortUpdates {
+		workflowLease.GetContext().UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
+	}
+
+	return nil
 }

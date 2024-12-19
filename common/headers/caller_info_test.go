@@ -126,9 +126,9 @@ func (s *callerInfoSuite) TestSetCallerInfo_PreserveOtherValues() {
 	md, ok := metadata.FromIncomingContext(ctx)
 	s.True(ok)
 	s.Equal(existingValue, md.Get(existingKey)[0])
-	s.Equal(callerName, md.Get(callerNameHeaderName)[0])
+	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
 	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Equal(callOrigin, md.Get(callOriginHeaderName)[0])
+	s.Equal(callOrigin, md.Get(CallOriginHeaderName)[0])
 	s.Len(md, 4)
 }
 
@@ -145,9 +145,9 @@ func (s *callerInfoSuite) TestSetCallerInfo_NoExistingCallerInfo() {
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	s.True(ok)
-	s.Equal(callerName, md.Get(callerNameHeaderName)[0])
+	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
 	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Equal(callOrigin, md.Get(callOriginHeaderName)[0])
+	s.Equal(callOrigin, md.Get(CallOriginHeaderName)[0])
 	s.Len(md, 3)
 }
 
@@ -168,9 +168,9 @@ func (s *callerInfoSuite) TestSetCallerInfo_WithExistingCallerInfo() {
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	s.True(ok)
-	s.Equal(callerName, md.Get(callerNameHeaderName)[0])
+	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
 	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Equal(callOrigin, md.Get(callOriginHeaderName)[0])
+	s.Equal(callOrigin, md.Get(CallOriginHeaderName)[0])
 	s.Len(md, 3)
 }
 
@@ -186,8 +186,8 @@ func (s *callerInfoSuite) TestSetCallerInfo_WithPartialCallerInfo() {
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	s.True(ok)
-	s.Equal(callerName, md.Get(callerNameHeaderName)[0])
+	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
 	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Empty(md.Get(callOriginHeaderName))
+	s.Empty(md.Get(CallOriginHeaderName))
 	s.Len(md, 2)
 }

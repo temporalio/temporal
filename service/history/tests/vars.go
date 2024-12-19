@@ -28,9 +28,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	namespacepb "go.temporal.io/api/namespace/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -183,15 +181,12 @@ var (
 func NewDynamicConfig() *configs.Config {
 	dc := dynamicconfig.NewNoopCollection()
 	config := configs.NewConfig(dc, 1)
-	// reduce the duration of long poll to increase test speed
-	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
 	config.EnableActivityEagerExecution = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.EnableEagerWorkflowStart = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NamespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(time.Second)
-	config.FrontendAccessHistoryFraction = dynamicconfig.GetFloatPropertyFn(1.0)
-	config.EnableMutableStateTransitionHistory = dynamicconfig.GetBoolPropertyFn(true)
+	config.EnableNexus = dynamicconfig.GetBoolPropertyFn(true)
 	config.ReplicationEnableUpdateWithNewTaskMerge = dynamicconfig.GetBoolPropertyFn(true)
-	config.ShardOwnershipAssertionEnabled = dynamicconfig.GetBoolPropertyFn(true)
 	config.EnableWorkflowExecutionTimeoutTimer = dynamicconfig.GetBoolPropertyFn(true)
+	config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	return config
 }

@@ -30,6 +30,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/tqid"
 )
@@ -41,43 +42,69 @@ func TestParsePhysicalTaskQueueKey(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily(ns, "my-basic-tq-name")
 	assert.NoError(t, err)
 
-	dbq, err := ParsePhysicalTaskQueueKey("my-basic-tq-name", ns, tt)
+	key, err := ParsePhysicalTaskQueueKey("my-basic-tq-name", ns, tt)
 	a.NoError(err)
-	a.Equal(f.TaskQueue(tt).RootPartition().Key(), dbq.Partition().Key())
-	a.Equal("", dbq.VersionSet())
-	a.Equal("", dbq.BuildId())
-	a.Equal("my-basic-tq-name", dbq.PersistenceName())
+	a.Equal(f.TaskQueue(tt).RootPartition().Key(), key.Partition().Key())
+	a.Equal("", key.Version().VersionSet())
+	a.Equal("", key.Version().BuildId())
+	a.Nil(key.Version().Deployment())
+	a.Equal("my-basic-tq-name", key.PersistenceName())
 
-	dbq, err = ParsePhysicalTaskQueueKey("/_sys/my-basic-tq-name/23", ns, tt)
+	key, err = ParsePhysicalTaskQueueKey("/_sys/my-basic-tq-name/23", ns, tt)
 	a.NoError(err)
-	a.Equal(f.TaskQueue(tt).NormalPartition(23).Key(), dbq.Partition().Key())
-	a.Equal("", dbq.VersionSet())
-	a.Equal("", dbq.BuildId())
-	a.Equal("/_sys/my-basic-tq-name/23", dbq.PersistenceName())
+	a.Equal(f.TaskQueue(tt).NormalPartition(23).Key(), key.Partition().Key())
+	a.Equal("", key.Version().VersionSet())
+	a.Equal("", key.Version().BuildId())
+	a.Nil(key.Version().Deployment())
+	a.Equal("/_sys/my-basic-tq-name/23", key.PersistenceName())
 
-	dbq, err = ParsePhysicalTaskQueueKey("/_sys/my-basic-tq-name/verxyz:23", ns, tt)
+	key, err = ParsePhysicalTaskQueueKey("/_sys/my-basic-tq-name/verxyz:23", ns, tt)
 	a.NoError(err)
-	a.Equal("my-basic-tq-name", dbq.TaskQueueFamily().Name())
-	a.Equal(f.TaskQueue(tt).NormalPartition(23).Key(), dbq.Partition().Key())
-	a.Equal("verxyz", dbq.VersionSet())
-	a.Equal("", dbq.BuildId())
-	a.Equal("/_sys/my-basic-tq-name/verxyz:23", dbq.PersistenceName())
+	a.Equal("my-basic-tq-name", key.TaskQueueFamily().Name())
+	a.Equal(f.TaskQueue(tt).NormalPartition(23).Key(), key.Partition().Key())
+	a.Equal("verxyz", key.Version().VersionSet())
+	a.Equal("", key.Version().BuildId())
+	a.Nil(key.Version().Deployment())
+	a.Equal("/_sys/my-basic-tq-name/verxyz:23", key.PersistenceName())
 
 	buildID := "verxyz"
 	encodedBuildID := base64.URLEncoding.EncodeToString([]byte(buildID))
-	dbq, err = ParsePhysicalTaskQueueKey("/_sys/my-basic-tq-name/"+encodedBuildID+"#23", ns, tt)
+	key, err = ParsePhysicalTaskQueueKey("/_sys/my-basic-tq-name/"+encodedBuildID+"#23", ns, tt)
 	a.NoError(err)
-	a.Equal("my-basic-tq-name", dbq.TaskQueueFamily().Name())
-	a.Equal(f.TaskQueue(tt).NormalPartition(23).Key(), dbq.Partition().Key())
-	a.Equal("", dbq.VersionSet())
-	a.Equal("verxyz", dbq.BuildId())
-	a.Equal("/_sys/my-basic-tq-name/"+encodedBuildID+"#23", dbq.PersistenceName())
+	a.Equal("my-basic-tq-name", key.TaskQueueFamily().Name())
+	a.Equal(f.TaskQueue(tt).NormalPartition(23).Key(), key.Partition().Key())
+	a.Equal("", key.Version().VersionSet())
+	a.Equal("verxyz", key.Version().BuildId())
+	a.Nil(key.Version().Deployment())
+	a.Equal("/_sys/my-basic-tq-name/"+encodedBuildID+"#23", key.PersistenceName())
+
+	seriesName := "?deployment-ABC|ad/sf:98"
+	encodedSeriesName := base64.URLEncoding.EncodeToString([]byte(seriesName))
+	deployment := &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
+	}
+	key, err = ParsePhysicalTaskQueueKey("/_sys/my-basic-tq-name/"+encodedSeriesName+"|"+encodedBuildID+"#23", ns, tt)
+	a.NoError(err)
+	a.Equal("my-basic-tq-name", key.TaskQueueFamily().Name())
+	a.Equal(f.TaskQueue(tt).NormalPartition(23).Key(), key.Partition().Key())
+	a.Equal("", key.Version().VersionSet())
+	a.Equal("", key.Version().BuildId())
+	a.True(deployment.Equal(key.Version().Deployment()))
+	a.Equal("/_sys/my-basic-tq-name/"+encodedSeriesName+"|"+encodedBuildID+"#23", key.PersistenceName())
 }
 
 func TestValidPersistenceNames(t *testing.T) {
 	versionSet := "asdf89SD-lks_="
 	buildID := "build-ABC/adsf:98"
-	encodedBuildID := base64.URLEncoding.EncodeToString([]byte(buildID))
+	seriesName := "?deployment-ABC|ad/sf:98"
+	v2EncodedBuildID := base64.URLEncoding.EncodeToString([]byte(buildID))
+	encodedBuildID := base64.RawURLEncoding.EncodeToString([]byte(buildID))
+	encodedSeriesName := base64.RawURLEncoding.EncodeToString([]byte(seriesName))
+	deployment := &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
+	}
 
 	testCases := []struct {
 		input      string
@@ -85,31 +112,35 @@ func TestValidPersistenceNames(t *testing.T) {
 		partition  int
 		versionSet string
 		buildId    string
+		deployment *deploymentpb.Deployment
 	}{
-		{"0", "0", 0, "", ""},
-		{"list0", "list0", 0, "", ""},
-		{"/list0", "/list0", 0, "", ""},
-		{"/list0/", "/list0/", 0, "", ""},
-		{"__temporal_sys/list0", "__temporal_sys/list0", 0, "", ""},
-		{"__temporal_sys/list0/", "__temporal_sys/list0/", 0, "", ""},
-		{"/__temporal_sys_list0", "/__temporal_sys_list0", 0, "", ""},
-		{"/_sys/list0/1", "list0", 1, "", ""},
-		{"/_sys//list0//41", "/list0/", 41, "", ""},
-		{"/_sys/list0/" + versionSet + ":1", "list0", 1, versionSet, ""},
-		{"/_sys//list0//" + versionSet + ":41", "/list0/", 41, versionSet, ""},
-		{"/_sys/list0/" + encodedBuildID + "#1", "list0", 1, "", buildID},
-		{"/_sys//list0//" + encodedBuildID + "#41", "/list0/", 41, "", buildID},
+		{"0", "0", 0, "", "", nil},
+		{"list0", "list0", 0, "", "", nil},
+		{"/list0", "/list0", 0, "", "", nil},
+		{"/list0/", "/list0/", 0, "", "", nil},
+		{"__temporal_sys/list0", "__temporal_sys/list0", 0, "", "", nil},
+		{"__temporal_sys/list0/", "__temporal_sys/list0/", 0, "", "", nil},
+		{"/__temporal_sys_list0", "/__temporal_sys_list0", 0, "", "", nil},
+		{"/_sys/list0/1", "list0", 1, "", "", nil},
+		{"/_sys//list0//41", "/list0/", 41, "", "", nil},
+		{"/_sys/list0/" + versionSet + ":1", "list0", 1, versionSet, "", nil},
+		{"/_sys//list0//" + versionSet + ":41", "/list0/", 41, versionSet, "", nil},
+		{"/_sys/list0/" + v2EncodedBuildID + "#1", "list0", 1, "", buildID, nil},
+		{"/_sys//list0//" + v2EncodedBuildID + "#41", "/list0/", 41, "", buildID, nil},
+		{"/_sys/list0/" + encodedSeriesName + "|" + encodedBuildID + "#1", "list0", 1, "", "", deployment},
+		{"/_sys//list0//" + encodedSeriesName + "|" + encodedBuildID + "#41", "/list0/", 41, "", "", deployment},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
-			dbq, err := ParsePhysicalTaskQueueKey(tc.input, "", 0)
+			key, err := ParsePhysicalTaskQueueKey(tc.input, "", 0)
 			require.NoError(t, err)
-			require.Equal(t, tc.partition, dbq.Partition().(*tqid.NormalPartition).PartitionId())
-			require.Equal(t, tc.baseName, dbq.TaskQueueFamily().Name())
-			require.Equal(t, tc.versionSet, dbq.VersionSet())
-			require.Equal(t, tc.buildId, dbq.BuildId())
-			require.Equal(t, tc.input, dbq.PersistenceName())
+			require.Equal(t, tc.partition, key.Partition().(*tqid.NormalPartition).PartitionId())
+			require.Equal(t, tc.baseName, key.TaskQueueFamily().Name())
+			require.Equal(t, tc.versionSet, key.Version().VersionSet())
+			require.Equal(t, tc.buildId, key.Version().BuildId())
+			require.True(t, tc.deployment.Equal(key.Version().Deployment()))
+			require.Equal(t, tc.input, key.PersistenceName())
 		})
 	}
 }
@@ -128,6 +159,10 @@ func TestInvalidPersistenceNames(t *testing.T) {
 		"/_sys/list0:verxyz:23",
 		"/_sys/list0/ve$xyz#23",
 		"/_sys/list0:verxyz#23",
+		"/_sys/list0/|verxyz#23",   // empty deployment name
+		"/_sys/list0/verxyz|#23",   // empty build id
+		"/_sys/list0/c|ver$xyz#23", // invalid char in deployment name
+		"/_sys/list0/ver$xyz|x#23", // invalid char in build id
 	}
 	for _, name := range inputs {
 		t.Run(name, func(t *testing.T) {
@@ -143,10 +178,11 @@ func TestVersionSetQueueKey(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("", "tq")
 	assert.NoError(t, err)
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
-	dbq := VersionSetQueueKey(p, "abc3")
-	a.Equal(p, dbq.Partition())
-	a.Equal("abc3", dbq.VersionSet())
-	a.Equal("", dbq.BuildId())
+	key := VersionSetQueueKey(p, "abc3")
+	a.Equal(p, key.Partition())
+	a.Equal("abc3", key.Version().VersionSet())
+	a.Equal("", key.Version().BuildId())
+	a.Nil(key.Version().Deployment())
 }
 
 func TestBuildIDQueueKey(t *testing.T) {
@@ -155,10 +191,28 @@ func TestBuildIDQueueKey(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("", "tq")
 	assert.NoError(t, err)
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
-	dbq := BuildIdQueueKey(p, "abc3")
-	a.Equal(p, dbq.Partition())
-	a.Equal("", dbq.VersionSet())
-	a.Equal("abc3", dbq.BuildId())
+	key := BuildIdQueueKey(p, "abc3")
+	a.Equal(p, key.Partition())
+	a.Equal("", key.Version().VersionSet())
+	a.Equal("abc3", key.Version().BuildId())
+	a.Nil(key.Version().Deployment())
+}
+
+func TestDeploymentQueueKey(t *testing.T) {
+	a := assert.New(t)
+
+	f, err := tqid.NewTaskQueueFamily("", "tq")
+	assert.NoError(t, err)
+	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
+	d := &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "abc",
+	}
+	key := DeploymentQueueKey(p, d)
+	a.Equal(p, key.Partition())
+	a.Equal("", key.Version().VersionSet())
+	a.Equal("", key.Version().BuildId())
+	a.True(d.Equal(key.Version().Deployment()))
 }
 
 func TestUnversionedQueueKey(t *testing.T) {
@@ -167,8 +221,9 @@ func TestUnversionedQueueKey(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("", "tq")
 	assert.NoError(t, err)
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
-	dbq := UnversionedQueueKey(p)
-	a.Equal(p, dbq.Partition())
-	a.Equal("", dbq.VersionSet())
-	a.Equal("", dbq.BuildId())
+	key := UnversionedQueueKey(p)
+	a.Equal(p, key.Partition())
+	a.Equal("", key.Version().VersionSet())
+	a.Equal("", key.Version().BuildId())
+	a.Nil(key.Version().Deployment())
 }

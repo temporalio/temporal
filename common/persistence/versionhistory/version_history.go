@@ -28,7 +28,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common"
 )
@@ -46,12 +45,17 @@ func CopyVersionHistory(v *historyspb.VersionHistory) *historyspb.VersionHistory
 	token := make([]byte, len(v.BranchToken))
 	copy(token, v.BranchToken)
 
-	var items []*historyspb.VersionHistoryItem
-	for _, item := range v.Items {
-		items = append(items, CopyVersionHistoryItem(item))
-	}
+	items := CopyVersionHistoryItems(v.Items)
 
 	return NewVersionHistory(token, items)
+}
+
+func CopyVersionHistoryItems(items []*historyspb.VersionHistoryItem) []*historyspb.VersionHistoryItem {
+	var result []*historyspb.VersionHistoryItem
+	for _, item := range items {
+		result = append(result, CopyVersionHistoryItem(item))
+	}
+	return result
 }
 
 // CopyVersionHistoryUntilLCAVersionHistoryItem returns copy of VersionHistory up until LCA item.
@@ -156,6 +160,32 @@ func FindLCAVersionHistoryItemFromItemSlice(versionHistoryItemsA []*historyspb.V
 	return nil, serviceerror.NewInternal("version history is malformed. No joint point found.")
 }
 
+func FindLCAVersionHistoryItemFromItems(versionHistoryItemsA [][]*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) (*historyspb.VersionHistoryItem, int32, error) {
+	var versionHistoryIndex int32
+	var versionHistoryLength int32
+	var versionHistoryItem *historyspb.VersionHistoryItem
+
+	for index, localHistory := range versionHistoryItemsA {
+		item, err := FindLCAVersionHistoryItemFromItemSlice(localHistory, versionHistoryItemsB)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		// if not set
+		if versionHistoryItem == nil ||
+			// if seeing LCA item with higher event ID
+			item.GetEventId() > versionHistoryItem.GetEventId() ||
+			// if seeing LCA item with equal event ID but shorter history
+			(item.GetEventId() == versionHistoryItem.GetEventId() && int32(len(localHistory)) < versionHistoryLength) {
+
+			versionHistoryIndex = int32(index)
+			versionHistoryLength = int32(len(localHistory))
+			versionHistoryItem = item
+		}
+	}
+	return CopyVersionHistoryItem(versionHistoryItem), versionHistoryIndex, nil
+}
+
 // IsVersionHistoryItemsInSameBranch checks if two version history items are in the same branch
 func IsVersionHistoryItemsInSameBranch(versionHistoryItemsA []*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) bool {
 	lowestCommonAncestor, err := FindLCAVersionHistoryItemFromItemSlice(versionHistoryItemsA, versionHistoryItemsB)
@@ -228,7 +258,7 @@ func GetVersionHistoryEventVersion(v *historyspb.VersionHistory, eventID int64) 
 		return 0, err
 	}
 	if eventID < common.FirstEventID || eventID > lastItem.GetEventId() {
-		return 0, serviceerror.NewInternal("input event ID is not in range.")
+		return 0, serviceerror.NewInternal(fmt.Sprintf("input event ID is not in range, eventID: %v", eventID))
 	}
 
 	// items are sorted by eventID & version
@@ -239,7 +269,7 @@ func GetVersionHistoryEventVersion(v *historyspb.VersionHistory, eventID int64) 
 			return currentItem.GetVersion(), nil
 		}
 	}
-	return 0, serviceerror.NewInternal("input event ID is not in range.")
+	return 0, serviceerror.NewInternal(fmt.Sprintf("input event ID is not in range, eventID: %v", eventID))
 }
 
 // IsEmptyVersionHistory indicate whether version history is empty

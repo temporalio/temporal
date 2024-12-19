@@ -1,0 +1,53 @@
+#frontend.enableClientVersionCheck:
+#- value: true
+#  constraints: {}
+#history.persistenceMaxQPS:
+#- value: 3000
+#  constraints: {}
+#frontend.persistenceMaxQPS:
+#- value: 3000
+#  constraints: {}
+#frontend.throttledLogRPS:
+#- value: 20
+#  constraints: {}
+#history.defaultActivityRetryPolicy:
+#- value:
+#    InitialIntervalInSeconds: 1
+#    MaximumIntervalCoefficient: 100.0
+#    BackoffCoefficient: 2.0
+#    MaximumAttempts: 0
+#history.defaultWorkflowRetryPolicy:
+#- value:
+#    InitialIntervalInSeconds: 1
+#    MaximumIntervalCoefficient: 100.0
+#    BackoffCoefficient: 2.0
+#    MaximumAttempts: 0
+#system.secondaryVisibilityWritingMode:
+#  - value: "off"
+#    constraints: {}
+#system.enableReadFromSecondaryVisibility:
+#  - value: false
+#    constraints: {}
+#system.enableParentClosePolicyWorker:
+#  - value: true
+system.enableEagerWorkflowStart:
+  - value: true
+frontend.workerVersioningDataAPIs:
+  - value: true
+frontend.workerVersioningWorkflowAPIs:
+  - value: true
+system.enableNexus:
+  # enableNexus also controls transition history which can't be enabled now
+  - value: false 
+component.nexusoperations.callback.endpoint.template:
+  - value: http://localhost:7243/api/v1/namespaces/{{.NamespaceName}}/nexus/callback
+component.callbacks.allowedAddresses:
+  - value:
+      - Pattern: "*"
+        AllowInsecure: true
+matching.queryWorkflowTaskTimeoutLogRate:
+  - value: 1.0
+history.ReplicationEnableUpdateWithNewTaskMerge:
+  - value: true
+history.enableWorkflowExecutionTimeoutTimer:
+  - value: true

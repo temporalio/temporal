@@ -38,6 +38,8 @@ import (
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_task_tracker_mock.go
 
+const MarkPoisonPillMaxAttempts = 3
+
 type (
 	TrackableExecutableTask interface {
 		ctasks.Task
@@ -45,6 +47,7 @@ type (
 		TaskID() int64
 		TaskCreationTime() time.Time
 		MarkPoisonPill() error
+		SourceClusterName() string
 	}
 	WatermarkInfo struct {
 		Watermark int64
@@ -64,7 +67,6 @@ type (
 		cancelled                  bool
 		exclusiveHighWatermarkInfo *WatermarkInfo // this is exclusive, i.e. source need to resend with this watermark / task ID
 		taskQueue                  *list.List     // sorted by task ID
-		taskIDs                    map[int64]struct{}
 	}
 )
 
@@ -80,7 +82,6 @@ func NewExecutableTaskTracker(
 
 		exclusiveHighWatermarkInfo: nil,
 		taskQueue:                  list.New(),
-		taskIDs:                    make(map[int64]struct{}),
 	}
 }
 
@@ -112,7 +113,6 @@ Loop:
 			continue Loop
 		}
 		t.taskQueue.PushBack(task)
-		t.taskIDs[task.TaskID()] = struct{}{}
 		filteredTasks = append(filteredTasks, task)
 		lastTaskID = task.TaskID()
 	}
@@ -144,7 +144,6 @@ Loop:
 		switch taskState {
 		case ctasks.TaskStateAcked:
 			nextElement := element.Next()
-			delete(t.taskIDs, task.TaskID())
 			t.taskQueue.Remove(element)
 			element = nextElement
 		case ctasks.TaskStateNacked:
@@ -159,7 +158,6 @@ Loop:
 				continue Loop
 			}
 			nextElement := element.Next()
-			delete(t.taskIDs, task.TaskID())
 			t.taskQueue.Remove(element)
 			element = nextElement
 		case ctasks.TaskStateAborted:

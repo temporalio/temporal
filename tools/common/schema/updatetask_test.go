@@ -31,11 +31,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap/zaptest"
-
 	"go.temporal.io/server/common/log"
 	dbschemas "go.temporal.io/server/schema"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/zap/zaptest"
 )
 
 type UpdateTaskTestSuite struct {

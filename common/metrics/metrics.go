@@ -27,6 +27,7 @@
 package metrics
 
 import (
+	"io"
 	"time"
 
 	"go.temporal.io/server/common/log"
@@ -58,6 +59,15 @@ type (
 		Histogram(string, MetricUnit) HistogramIface
 
 		Stop(log.Logger)
+
+		// StartBatch returns a BatchHandler that can emit a series of metrics as a single "wide event".
+		// If wide events aren't supported in the underlying implementation, metrics can still be sent individually.
+		StartBatch(string) BatchHandler
+	}
+
+	BatchHandler interface {
+		Handler
+		io.Closer
 	}
 
 	// CounterIface is an ever-increasing counter.
@@ -66,7 +76,7 @@ type (
 		// Tags provided are merged with the source MetricsHandler
 		Record(int64, ...Tag)
 	}
-	// GaugeIface can be set to any float and repesents a latest value instrument.
+	// GaugeIface can be set to any float and represents a latest value instrument.
 	GaugeIface interface {
 		// Record updates the gauge value.
 		// Tags provided are merged with the source MetricsHandler

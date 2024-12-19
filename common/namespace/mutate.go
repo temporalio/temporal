@@ -26,9 +26,8 @@ package namespace
 
 import (
 	namespacepb "go.temporal.io/api/namespace/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/persistence"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type mutationFunc func(*persistence.GetNamespaceResponse)

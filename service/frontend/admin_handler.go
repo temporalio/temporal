@@ -29,52 +29,41 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
-	historypb "go.temporal.io/api/history/v1"
-	replicationpb "go.temporal.io/api/replication/v1"
-	commonspb "go.temporal.io/server/api/common/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client/history"
-	"go.temporal.io/server/common/channel"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/utf8validator"
-	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/worker/dlq"
-
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
+	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
+	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/channel"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -83,14 +72,23 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/utf8validator"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
+	"go.temporal.io/server/service/worker/dlq"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -113,6 +111,7 @@ type (
 		namespaceDLQHandler        namespace.DLQMessageHandler
 		eventSerializer            serialization.Serializer
 		visibilityMgr              manager.VisibilityManager
+		persistenceExecutionName   string
 		namespaceReplicationQueue  persistence.NamespaceReplicationQueue
 		taskManager                persistence.TaskManager
 		clusterMetadataManager     persistence.ClusterMetadataManager
@@ -127,13 +126,16 @@ type (
 		namespaceRegistry          namespace.Registry
 		saProvider                 searchattribute.Provider
 		saManager                  searchattribute.Manager
+		saMapperProvider           searchattribute.MapperProvider
+		saValidator                *searchattribute.Validator
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
+		historyHealthChecker       HealthChecker
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
-		persistenceExecutionManager persistence.ExecutionManager
-		taskCategoryRegistry        tasks.TaskCategoryRegistry
+		taskCategoryRegistry tasks.TaskCategoryRegistry
+		matchingClient       matchingservice.MatchingServiceClient
 	}
 
 	NewAdminHandlerArgs struct {
@@ -145,6 +147,7 @@ type (
 		visibilityMgr                       manager.VisibilityManager
 		Logger                              log.Logger
 		TaskManager                         persistence.TaskManager
+		PersistenceExecutionManager         persistence.ExecutionManager
 		ClusterMetadataManager              persistence.ClusterMetadataManager
 		PersistenceMetadataManager          persistence.MetadataManager
 		ClientFactory                       serverClient.Factory
@@ -157,6 +160,7 @@ type (
 		NamespaceRegistry                   namespace.Registry
 		SaProvider                          searchattribute.Provider
 		SaManager                           searchattribute.Manager
+		SaMapperProvider                    searchattribute.MapperProvider
 		ClusterMetadata                     cluster.Metadata
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
@@ -164,8 +168,8 @@ type (
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
-		PersistenceExecutionManager persistence.ExecutionManager
-		CategoryRegistry            tasks.TaskCategoryRegistry
+		CategoryRegistry tasks.TaskCategoryRegistry
+		matchingClient   matchingservice.MatchingServiceClient
 	}
 )
 
@@ -185,6 +189,20 @@ func NewAdminHandler(
 		args.Logger,
 	)
 
+	historyHealthChecker := NewHealthChecker(
+		primitives.HistoryService,
+		args.MembershipMonitor,
+		args.Config.HistoryHostErrorPercentage,
+		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
+			resp, err := args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
+			if err != nil {
+				return enumsspb.HEALTH_STATE_NOT_SERVING, err
+			}
+			return resp.GetState(), nil
+		},
+		args.Logger,
+	)
+
 	return &AdminHandler{
 		logger:                args.Logger,
 		status:                common.DaemonStatusInitialized,
@@ -195,27 +213,43 @@ func NewAdminHandler(
 			args.NamespaceReplicationQueue,
 			args.Logger,
 		),
-		eventSerializer:             args.EventSerializer,
-		visibilityMgr:               args.visibilityMgr,
-		ESClient:                    args.EsClient,
-		persistenceExecutionManager: args.PersistenceExecutionManager,
-		namespaceReplicationQueue:   args.NamespaceReplicationQueue,
-		taskManager:                 args.TaskManager,
-		clusterMetadataManager:      args.ClusterMetadataManager,
-		persistenceMetadataManager:  args.PersistenceMetadataManager,
-		clientFactory:               args.ClientFactory,
-		clientBean:                  args.ClientBean,
-		historyClient:               args.HistoryClient,
-		sdkClientFactory:            args.sdkClientFactory,
-		membershipMonitor:           args.MembershipMonitor,
-		hostInfoProvider:            args.HostInfoProvider,
-		metricsHandler:              args.MetricsHandler,
-		namespaceRegistry:           args.NamespaceRegistry,
-		saProvider:                  args.SaProvider,
-		saManager:                   args.SaManager,
-		clusterMetadata:             args.ClusterMetadata,
-		healthServer:                args.HealthServer,
-		taskCategoryRegistry:        args.CategoryRegistry,
+		eventSerializer:            args.EventSerializer,
+		visibilityMgr:              args.visibilityMgr,
+		ESClient:                   args.EsClient,
+		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
+		namespaceReplicationQueue:  args.NamespaceReplicationQueue,
+		taskManager:                args.TaskManager,
+		clusterMetadataManager:     args.ClusterMetadataManager,
+		persistenceMetadataManager: args.PersistenceMetadataManager,
+		clientFactory:              args.ClientFactory,
+		clientBean:                 args.ClientBean,
+		historyClient:              args.HistoryClient,
+		sdkClientFactory:           args.sdkClientFactory,
+		membershipMonitor:          args.MembershipMonitor,
+		hostInfoProvider:           args.HostInfoProvider,
+		metricsHandler:             args.MetricsHandler,
+		namespaceRegistry:          args.NamespaceRegistry,
+		saProvider:                 args.SaProvider,
+		saManager:                  args.SaManager,
+		saMapperProvider:           args.SaMapperProvider,
+		saValidator: searchattribute.NewValidator(
+			args.SaProvider,
+			args.SaMapperProvider,
+			args.Config.SearchAttributesNumberOfKeysLimit,
+			args.Config.SearchAttributesSizeOfValueLimit,
+			args.Config.SearchAttributesTotalSizeLimit,
+			args.visibilityMgr,
+			visibility.AllowListForValidation(
+				args.visibilityMgr.GetStoreNames(),
+				args.Config.VisibilityAllowList,
+			),
+			args.Config.SuppressErrorSetSystemSearchAttribute,
+		),
+		clusterMetadata:      args.ClusterMetadata,
+		healthServer:         args.HealthServer,
+		historyHealthChecker: historyHealthChecker,
+		taskCategoryRegistry: args.CategoryRegistry,
+		matchingClient:       args.matchingClient,
 	}
 }
 
@@ -228,10 +262,6 @@ func (adh *AdminHandler) Start() {
 	) {
 		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_SERVING)
 	}
-
-	// Start namespace replication queue cleanup
-	// If the queue does not start, we can still call stop()
-	adh.namespaceReplicationQueue.Start()
 }
 
 // Stop stops the handler
@@ -243,9 +273,19 @@ func (adh *AdminHandler) Stop() {
 	) {
 		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
+}
 
-	// Calling stop if the queue does not start is ok
-	adh.namespaceReplicationQueue.Stop()
+func (adh *AdminHandler) DeepHealthCheck(
+	ctx context.Context,
+	_ *adminservice.DeepHealthCheckRequest,
+) (_ *adminservice.DeepHealthCheckResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	healthStatus, err := adh.historyHealthChecker.Check(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.DeepHealthCheckResponse{State: healthStatus}, nil
 }
 
 // AddSearchAttributes add search attribute to the cluster.
@@ -693,10 +733,14 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 		return nil, err
 	}
 
+	unaliasedBatches, err := adh.unaliasAndValidateSearchAttributes(request.HistoryBatches, namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
 	resp, err := adh.historyClient.ImportWorkflowExecution(ctx, &historyservice.ImportWorkflowExecutionRequest{
 		NamespaceId:    namespaceID.String(),
 		Execution:      request.Execution,
-		HistoryBatches: request.HistoryBatches,
+		HistoryBatches: unaliasedBatches,
 		VersionHistory: request.VersionHistory,
 		Token:          request.Token,
 	})
@@ -706,6 +750,54 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 	return &adminservice.ImportWorkflowExecutionResponse{
 		Token: resp.Token,
 	}, nil
+}
+
+func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*commonpb.DataBlob, nsName namespace.Name) ([]*commonpb.DataBlob, error) {
+	var unaliasedBatches []*commonpb.DataBlob
+	for _, historyBatch := range historyBatches {
+		events, err := adh.eventSerializer.DeserializeEvents(historyBatch)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument(err.Error())
+		}
+		hasSas := false
+		for _, event := range events {
+			sas, _ := searchattribute.GetFromEvent(event)
+			if sas == nil {
+				continue
+			}
+			hasSas = true
+
+			unaliasedSas, err := searchattribute.UnaliasFields(adh.saMapperProvider, sas, nsName.String())
+			if err != nil {
+				var invArgErr *serviceerror.InvalidArgument
+				if !errors.As(err, &invArgErr) {
+					return nil, err
+				}
+				// Mapper returns InvalidArgument if alias is not found. It means that history has field names, not aliases.
+				// Ignore the error and proceed with the original search attributes.
+				unaliasedSas = sas
+			}
+			// Now validate that search attributes are valid.
+			err = adh.saValidator.Validate(unaliasedSas, nsName.String())
+			if err != nil {
+				return nil, err
+			}
+
+			_ = searchattribute.SetToEvent(event, unaliasedSas)
+		}
+		// If blob doesn't have search attributes, it can be used as is w/o serialization.
+		if !hasSas {
+			unaliasedBatches = append(unaliasedBatches, historyBatch)
+			continue
+		}
+
+		unaliasedBatch, err := adh.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument(err.Error())
+		}
+		unaliasedBatches = append(unaliasedBatches, unaliasedBatch)
+	}
+	return unaliasedBatches, nil
 }
 
 // DescribeMutableState returns information about the specified workflow execution.
@@ -903,21 +995,45 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		return nil, err
 	}
 
-	if dynamicconfig.AccessHistory(
-		adh.config.AccessHistoryFraction,
-		adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Tag)),
-	) {
-		response, err := adh.historyClient.GetWorkflowExecutionRawHistoryV2(ctx,
-			&historyservice.GetWorkflowExecutionRawHistoryV2Request{
-				NamespaceId: request.NamespaceId,
-				Request:     request,
-			})
-		if err != nil {
-			return nil, err
-		}
-		return response.Response, nil
+	response, err := adh.historyClient.GetWorkflowExecutionRawHistoryV2(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryV2Request{
+			NamespaceId: request.NamespaceId,
+			Request:     request,
+		})
+	if err != nil {
+		return nil, err
 	}
-	return adh.getWorkflowExecutionRawHistoryV2(ctx, request)
+	return response.Response, nil
+}
+
+func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
+	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
+) error {
+
+	execution := request.Execution
+	if execution.GetWorkflowId() == "" {
+		return errWorkflowIDNotSet
+	}
+	// TODO currently, this API is only going to be used by re-send history events
+	// to remote cluster if kafka is lossy again, in the future, this API can be used
+	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
+	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
+		return errInvalidRunID
+	}
+
+	pageSize := int(request.GetMaximumPageSize())
+	if pageSize <= 0 {
+		return errInvalidPageSize
+	}
+
+	if request.GetStartEventId() == common.EmptyEventID &&
+		request.GetStartEventVersion() == common.EmptyVersion &&
+		request.GetEndEventId() == common.EmptyEventID &&
+		request.GetEndEventVersion() == common.EmptyVersion {
+		return errInvalidEventQueryRange
+	}
+
+	return nil
 }
 
 // DescribeCluster return information about a temporal cluster
@@ -990,13 +1106,14 @@ func (adh *AdminHandler) DescribeCluster(
 		ClusterId:                metadata.GetClusterId(),
 		ClusterName:              metadata.GetClusterName(),
 		HistoryShardCount:        metadata.GetHistoryShardCount(),
-		PersistenceStore:         adh.persistenceExecutionManager.GetName(),
+		PersistenceStore:         adh.persistenceExecutionName,
 		VisibilityStore:          strings.Join(adh.visibilityMgr.GetStoreNames(), ","),
 		VersionInfo:              metadata.GetVersionInfo(),
 		FailoverVersionIncrement: metadata.GetFailoverVersionIncrement(),
 		InitialFailoverVersion:   metadata.GetInitialFailoverVersion(),
 		IsGlobalNamespaceEnabled: metadata.GetIsGlobalNamespaceEnabled(),
 		Tags:                     metadata.GetTags(),
+		HttpAddress:              metadata.GetHttpAddress(),
 	}, nil
 }
 
@@ -1007,7 +1124,6 @@ func (adh *AdminHandler) ListClusters(
 	request *adminservice.ListClustersRequest,
 ) (_ *adminservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1136,7 +1252,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
-			HttpAddress:              request.GetFrontendHttpAddress(),
+			HttpAddress:              resp.GetHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
@@ -1302,7 +1418,7 @@ func (adh *AdminHandler) GetDLQMessages(
 	}
 
 	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = common.ReadDLQMessagesPageSize
+		request.MaximumPageSize = primitives.ReadDLQMessagesPageSize
 	}
 
 	if request.GetInclusiveEndMessageId() <= 0 {
@@ -1486,28 +1602,34 @@ func (adh *AdminHandler) ResendReplicationTasks(
 			namespaceId namespace.ID,
 			workflowId string,
 			runId string,
-			events []*historypb.HistoryEvent,
+			events [][]*historypb.HistoryEvent,
 			versionHistory []*historyspb.VersionHistoryItem,
 		) error {
-			historyBlob, err1 := adh.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
-			if err1 != nil {
-				return err1
+			for _, event := range events {
+				historyBlob, err1 := adh.eventSerializer.SerializeEvents(event, enumspb.ENCODING_TYPE_PROTO3)
+				if err1 != nil {
+					return err1
+				}
+				replicateRequest := &historyservice.ReplicateEventsV2Request{
+					NamespaceId: namespaceId.String(),
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: workflowId,
+						RunId:      runId,
+					},
+					Events:              historyBlob,
+					VersionHistoryItems: versionHistory,
+				}
+				_, err1 = adh.historyClient.ReplicateEventsV2(ctx, replicateRequest)
+				if err1 != nil {
+					return err1
+				}
 			}
-			replicateRequest := &historyservice.ReplicateEventsV2Request{
-				NamespaceId: namespaceId.String(),
-				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: workflowId,
-					RunId:      runId,
-				},
-				Events:              historyBlob,
-				VersionHistoryItems: versionHistory,
-			}
-			_, err1 = adh.historyClient.ReplicateEventsV2(ctx, replicateRequest)
-			return err1
+			return nil
 		},
 		adh.eventSerializer,
 		nil,
 		adh.logger,
+		nil,
 	)
 	if err := resender.SendSingleWorkflowHistory(
 		ctx,
@@ -1560,6 +1682,79 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 	}, nil
 }
 
+// DescribeTaskQueuePartition returns information for a given task queue partition of the task queue
+func (adh *AdminHandler) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.DescribeTaskQueuePartitionRequest,
+) (_ *adminservice.DescribeTaskQueuePartitionResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	// validate request
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.matchingClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
+		NamespaceId:                   namespaceID.String(),
+		TaskQueuePartition:            request.GetTaskQueuePartition(),
+		Versions:                      request.GetBuildIds(),
+		ReportStats:                   true,
+		ReportPollers:                 true,
+		ReportInternalTaskQueueStatus: true,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &adminservice.DescribeTaskQueuePartitionResponse{
+		VersionsInfoInternal: resp.VersionsInfoInternal,
+	}, nil
+}
+
+// ForceUnloadTaskQueuePartition forcefully unloads a given task queue partition
+func (adh *AdminHandler) ForceUnloadTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.ForceUnloadTaskQueuePartitionRequest,
+) (_ *adminservice.ForceUnloadTaskQueuePartitionResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	// validate request
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId:        namespaceID.String(),
+		TaskQueuePartition: request.GetTaskQueuePartition(),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// The response returned is for multiple build Id's
+	return &adminservice.ForceUnloadTaskQueuePartitionResponse{
+		WasLoaded: resp.WasLoaded,
+	}, nil
+}
+
 func (adh *AdminHandler) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DeleteWorkflowExecutionRequest,
@@ -1579,21 +1774,15 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
-	if dynamicconfig.AccessHistory(
-		adh.config.AdminDeleteAccessHistoryFraction,
-		adh.metricsHandler.WithTags(metrics.OperationTag(metrics.AdminDeleteWorkflowExecutionTag)),
-	) {
-		response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
-			&historyservice.ForceDeleteWorkflowExecutionRequest{
-				NamespaceId: namespaceID.String(),
-				Request:     request,
-			})
-		if err != nil {
-			return nil, err
-		}
-		return response.Response, nil
+	response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
+		&historyservice.ForceDeleteWorkflowExecutionRequest{
+			NamespaceId: namespaceID.String(),
+			Request:     request,
+		})
+	if err != nil {
+		return nil, err
 	}
-	return adh.deleteWorkflowExecution(ctx, request)
+	return response.Response, nil
 }
 
 func (adh *AdminHandler) validateRemoteClusterMetadata(metadata *adminservice.DescribeClusterResponse) error {
@@ -1637,11 +1826,7 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 ) (retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	ctxMetadata, ok := metadata.FromIncomingContext(clientCluster.Context())
-	if !ok {
-		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
-	}
-	_, serverClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
+	_, serverClusterShardID, err := history.DecodeClusterShardMD(headers.NewGRPCHeaderGetter(clientCluster.Context()))
 	if err != nil {
 		return err
 	}
@@ -1650,15 +1835,24 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 	logger.Info("AdminStreamReplicationMessages started.")
 	defer logger.Info("AdminStreamReplicationMessages stopped.")
 
-	ctx := clientCluster.Context()
-	serverCluster, err := adh.historyClient.StreamWorkflowReplicationMessages(ctx)
+	historyStreamCtx, cancel := context.WithCancel(clientCluster.Context())
+	defer cancel()
+
+	serverCluster, err := adh.historyClient.StreamWorkflowReplicationMessages(historyStreamCtx)
 	if err != nil {
 		return err
 	}
 
 	shutdownChan := channel.NewShutdownOnce()
 	go func() {
-		defer shutdownChan.Shutdown()
+		defer func() {
+			shutdownChan.Shutdown()
+			err = serverCluster.CloseSend()
+			if err != nil {
+				logger.Error("Failed to close AdminStreamReplicationMessages server", tag.Error(err))
+			}
+
+		}()
 
 		for !shutdownChan.IsShutdown() {
 			req, err := clientCluster.Recv()
@@ -1691,6 +1885,17 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 			resp, err := serverCluster.Recv()
 			if err != nil {
 				logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
+				var solErr *serviceerrors.ShardOwnershipLost
+				var suErr *serviceerror.Unavailable
+				if errors.As(err, &solErr) || errors.As(err, &suErr) {
+					ctx, cl := context.WithTimeout(context.Background(), 2*time.Second)
+					// getShard here to make sure we will talk to correct host when stream is retrying
+					_, err := adh.historyClient.GetShard(ctx, &historyservice.GetShardRequest{ShardId: serverClusterShardID.ShardID})
+					if err != nil {
+						logger.Error("failed to get shard", tag.Error(err))
+					}
+					cl()
+				}
 				return
 			}
 			switch attr := resp.GetAttributes().(type) {
@@ -1762,7 +1967,6 @@ func (adh *AdminHandler) GetNamespace(ctx context.Context, request *adminservice
 		FailoverVersion:   resp.Namespace.GetFailoverVersion(),
 		IsGlobalNamespace: resp.IsGlobalNamespace,
 		FailoverHistory:   convertFailoverHistoryToReplicationProto(resp.Namespace.GetReplicationConfig().GetFailoverHistory()),
-		OutgoingServices:  resp.Namespace.GetOutgoingServices(),
 	}
 	return nsResponse, nil
 }
@@ -1991,6 +2195,67 @@ func (adh *AdminHandler) ListQueues(
 	return &adminservice.ListQueuesResponse{
 		Queues:        queues,
 		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
+func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminservice.SyncWorkflowStateRequest) (_ *adminservice.SyncWorkflowStateResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, err
+	}
+
+	res, err := adh.historyClient.SyncWorkflowState(ctx, &historyservice.SyncWorkflowStateRequest{
+		NamespaceId:         request.NamespaceId,
+		Execution:           request.Execution,
+		VersionHistories:    request.VersionHistories,
+		VersionedTransition: request.VersionedTransition,
+		TargetClusterId:     request.TargetClusterId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.SyncWorkflowStateResponse{
+		VersionedTransitionArtifact: res.VersionedTransitionArtifact,
+	}, nil
+}
+
+func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
+	ctx context.Context,
+	request *adminservice.GenerateLastHistoryReplicationTasksRequest,
+) (_ *adminservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, err
+	}
+
+	namespaceEntry, err := adh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.historyClient.GenerateLastHistoryReplicationTasks(
+		ctx,
+		&historyservice.GenerateLastHistoryReplicationTasksRequest{
+			NamespaceId: namespaceEntry.ID().String(),
+			Execution:   request.Execution,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.GenerateLastHistoryReplicationTasksResponse{
+		StateTransitionCount: resp.StateTransitionCount,
+		HistoryLength:        resp.HistoryLength,
 	}, nil
 }
 

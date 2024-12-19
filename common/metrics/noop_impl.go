@@ -68,6 +68,14 @@ func (*noopMetricsHandler) Histogram(string, MetricUnit) HistogramIface {
 
 func (*noopMetricsHandler) Stop(log.Logger) {}
 
+func (*noopMetricsHandler) Close() error {
+	return nil
+}
+
+func (n *noopMetricsHandler) StartBatch(_ string) BatchHandler {
+	return n
+}
+
 var NoopCounterMetricFunc = CounterFunc(func(i int64, t ...Tag) {})
 var NoopGaugeMetricFunc = GaugeFunc(func(f float64, t ...Tag) {})
 var NoopTimerMetricFunc = TimerFunc(func(d time.Duration, t ...Tag) {})

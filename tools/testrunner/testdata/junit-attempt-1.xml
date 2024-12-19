@@ -1,0 +1,30 @@
+<testsuites time="14.760843" tests="7" failures="2">
+    <testsuite name="go.temporal.io/server/tests" tests="7" failures="2" errors="0" id="0" time="9.426000" timestamp="2024-11-18T14:05:44-08:00">
+        <properties>
+            <property name="go.version" value="go1.23.2 darwin/arm64"></property>
+        </properties>
+        <testcase name="TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument" classname="go.temporal.io/server/tests" time="0.000000">
+            <failure message="Failed"><![CDATA[=== RUN   TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument
+    callbacks_test.go:99: 
+        	Error Trace:	/Users/me/temporal/temporal/tests/callbacks_test.go:99
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 2
+        	Test:       	TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument
+    --- FAIL: TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument (0.00s)
+]]></failure>
+        </testcase>
+        <testcase name="TestCallbacksSuite" classname="go.temporal.io/server/tests" time="8.330000">
+            <failure message="Failed"><![CDATA[=== RUN   TestCallbacksSuite
+=== PAUSE TestCallbacksSuite
+=== CONT  TestCallbacksSuite
+--- FAIL: TestCallbacksSuite (8.33s)
+]]></failure>
+        </testcase>
+        <testcase name="TestCallbacksSuite/TestNexusResetWorkflowWithCallback" classname="go.temporal.io/server/tests" time="0.020000"></testcase>
+        <testcase name="TestCallbacksSuite/TestWorkflowNexusCallbacks_CarriedOver/ContinueAsNew" classname="go.temporal.io/server/tests" time="2.029000"></testcase>
+        <testcase name="TestCallbacksSuite/TestWorkflowNexusCallbacks_CarriedOver/WorkflowRunTimeout" classname="go.temporal.io/server/tests" time="3.030000"></testcase>
+        <testcase name="TestCallbacksSuite/TestWorkflowNexusCallbacks_CarriedOver/WorkflowFailureRetry" classname="go.temporal.io/server/tests" time="2.040000"></testcase>
+        <testcase name="TestCallbacksSuite/TestWorkflowNexusCallbacks_CarriedOver" classname="go.temporal.io/server/tests" time="7.100000"></testcase>
+    </testsuite>
+</testsuites>

@@ -27,12 +27,12 @@ package elasticsearch
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -60,7 +60,6 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
-		searchattribute.NewTestMapperProvider(nil),
 	)
 
 	cases := []struct {
@@ -83,7 +82,7 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 	}
 
 	for i, testCase := range cases {
-		v, err := vi.Values(testCase.key, testCase.value)
+		v, err := vi.Values(testCase.key, testCase.key, testCase.value)
 		if expected[i].returnErr {
 			s.Error(err)
 			continue
@@ -98,7 +97,6 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
-		searchattribute.NewTestMapperProvider(nil),
 	)
 
 	cases := []struct {
@@ -127,7 +125,7 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 	}
 
 	for i, testCase := range cases {
-		v, err := vi.Values(testCase.key, testCase.value)
+		v, err := vi.Values(testCase.key, testCase.key, testCase.value)
 		if expected[i].returnErr {
 			s.Error(err)
 			continue
@@ -142,7 +140,6 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
-		searchattribute.NewTestMapperProvider(nil),
 	)
 
 	cases := []struct {
@@ -171,7 +168,7 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 	}
 
 	for i, testCase := range cases {
-		v, err := vi.Values(testCase.key, testCase.value)
+		v, err := vi.Values(testCase.key, testCase.key, testCase.value)
 		if expected[i].returnErr {
 			s.Error(err)
 			var converterErr *query.ConverterError
@@ -181,5 +178,67 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 		s.NoError(err)
 		s.Len(v, 1)
 		s.Equal(expected[i].value, v[0])
+	}
+}
+
+// Verifies the nameInterceptor correctly transforms ScheduleID to WorkflowID
+func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
+	ni := s.createMockNameInterceptor(nil)
+
+	fieldName, err := ni.Name(searchattribute.ScheduleID, query.FieldNameFilter)
+	s.NoError(err)
+	s.Equal(searchattribute.WorkflowID, fieldName)
+}
+
+// Ensures the valuesInterceptor applies the ScheduleID to WorkflowID transformation,
+// including prepending the WorkflowIDPrefix.
+func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
+	vi := NewValuesInterceptor(
+		"test-namespace",
+		searchattribute.TestNameTypeMap,
+	)
+
+	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.WorkflowID, "test-schedule-id")
+	s.NoError(err)
+	s.Len(values, 1)
+	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id", values[0])
+
+	values, err = vi.Values(searchattribute.ScheduleID,
+		searchattribute.WorkflowID,
+		"test-schedule-id-1",
+		"test-schedule-id-2")
+	s.NoError(err)
+	s.Len(values, 2)
+	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id-1", values[0])
+	s.Equal(primitives.ScheduleWorkflowIDPrefix+"test-schedule-id-2", values[1])
+}
+
+// Ensures the valuesInterceptor doesn't modify values when no transformation is needed.
+func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
+	vi := NewValuesInterceptor(
+		"test-namespace",
+		searchattribute.TestNameTypeMapWithScheduleId,
+	)
+
+	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.ScheduleID, "test-workflow-id")
+	s.NoError(err)
+	s.Len(values, 1)
+	s.Equal("test-workflow-id", values[0])
+
+	values, err = vi.Values(searchattribute.ScheduleID,
+		searchattribute.ScheduleID,
+		"test-workflow-id-1",
+		"test-workflow-id-2")
+	s.NoError(err)
+	s.Len(values, 2)
+	s.Equal("test-workflow-id-1", values[0])
+	s.Equal("test-workflow-id-2", values[1])
+}
+
+func (s *QueryInterceptorSuite) createMockNameInterceptor(mapper searchattribute.Mapper) *nameInterceptor {
+	return &nameInterceptor{
+		namespace:                      "test-namespace",
+		searchAttributesTypeMap:        searchattribute.TestNameTypeMap,
+		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(mapper),
 	}
 }

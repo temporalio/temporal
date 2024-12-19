@@ -27,6 +27,8 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "temporal/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/executions.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
+import "temporal/server/api/persistence/v1/update.proto";
 
 message WorkflowMutableState{
     map<int64, ActivityInfo> activity_infos = 1;
@@ -40,4 +42,45 @@ message WorkflowMutableState{
     int64 next_event_id = 9;
     repeated temporal.api.history.v1.HistoryEvent buffered_events = 10;
     Checksum checksum = 11;
+}
+
+message WorkflowMutableStateMutation{
+
+    message StateMachineNodeMutation{
+        StateMachinePath path = 1;
+        bytes data = 2;
+        VersionedTransition initial_versioned_transition = 3;
+        VersionedTransition last_update_versioned_transition = 4;
+    }
+
+    // The following updated_* fields are computed based on the 
+    // lastUpdateVersionedTransition field of each sub state machine.
+    map<int64, ActivityInfo> updated_activity_infos = 1;
+    map<string, TimerInfo> updated_timer_infos = 2;
+    map<int64, ChildExecutionInfo> updated_child_execution_infos = 3;
+    map<int64, RequestCancelInfo> updated_request_cancel_infos = 4;
+    map<int64, SignalInfo> updated_signal_infos = 5;
+    map<string, UpdateInfo> updated_update_infos = 6;
+    repeated StateMachineNodeMutation updated_sub_state_machines = 7;
+
+    reserved 8;
+    reserved 9;
+    reserved 10;
+    reserved 11;
+    reserved 12;
+    reserved 13;
+    reserved 14;
+
+    repeated string signal_requested_ids = 15;
+    // Partial WorkflowExecutionInfo. Some fields, such as
+    // update_infos and sub_state_machines_by_type, are not populated here.
+    // Instead, only diffs are synced in the deleted_* and updated_* fields above.
+    WorkflowExecutionInfo execution_info = 16;
+    WorkflowExecutionState execution_state = 17;
+
+    repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 18;
+
+    // TODO: uncomment buffered_events field when we are ready to replicate
+    // mutable state as well.
+    // repeated temporal.api.history.v1.HistoryEvent buffered_events = 18;
 }

@@ -29,8 +29,6 @@ import (
 
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -42,12 +40,13 @@ import (
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/reclaimresources"
+	"go.uber.org/fx"
 )
 
 type (
 	// deleteNamespaceComponent represent background work needed for delete namespace.
 	deleteNamespaceComponent struct {
-		atWorkerCfg       workercommon.ActivityWorkerLimitsConfig
+		atWorkerCfg       sdkworker.Options
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
 		historyClient     resource.HistoryClient
@@ -71,11 +70,7 @@ func newComponent(
 	params componentParams,
 ) workercommon.WorkerComponent {
 	return &deleteNamespaceComponent{
-		atWorkerCfg: workercommon.NewActivityWorkerConcurrencyConfig(
-			params.DynamicCollection,
-			dynamicconfig.WorkerDeleteNamespaceActivityLimitsConfig,
-			map[string]any{},
-		),
+		atWorkerCfg:       dynamicconfig.WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
 		visibilityManager: params.VisibilityManager,
 		metadataManager:   params.MetadataManager,
 		historyClient:     params.HistoryClient,
@@ -119,15 +114,15 @@ func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercomm
 }
 
 func (wc *deleteNamespaceComponent) deleteNamespaceLocalActivities() *localActivities {
-	return NewLocalActivities(wc.metadataManager, wc.metricsHandler, wc.logger)
+	return newLocalActivities(wc.metadataManager, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) reclaimResourcesActivities() *reclaimresources.Activities {
-	return reclaimresources.NewActivities(wc.visibilityManager, wc.metricsHandler, wc.logger)
+	return reclaimresources.NewActivities(wc.visibilityManager, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) reclaimResourcesLocalActivities() *reclaimresources.LocalActivities {
-	return reclaimresources.NewLocalActivities(wc.visibilityManager, wc.metadataManager, wc.metricsHandler, wc.logger)
+	return reclaimresources.NewLocalActivities(wc.visibilityManager, wc.metadataManager, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) deleteExecutionsActivities() *deleteexecutions.Activities {

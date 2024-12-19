@@ -33,54 +33,107 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
-
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cache"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 )
 
+const (
+	reachabilityCacheMaxSize = 10000
+)
+
+type reachabilityExitPoint int32
+
+const (
+	checkedRuleSourcesForInput                     reachabilityExitPoint = 0
+	checkedRuleTargetsForUpstream                  reachabilityExitPoint = 1
+	checkedBacklogForUpstream                      reachabilityExitPoint = 2
+	checkedOpenWorkflowExecutionsForUpstreamHit    reachabilityExitPoint = 3
+	checkedOpenWorkflowExecutionsForUpstreamMiss   reachabilityExitPoint = 4
+	checkedClosedWorkflowExecutionsForUpstreamHit  reachabilityExitPoint = 5
+	checkedClosedWorkflowExecutionsForUpstreamMiss reachabilityExitPoint = 6
+	reachabilityExitPointTagName                                         = "reachability_exit_point"
+)
+
+var (
+	reachabilityExitPoint2TagValue = map[reachabilityExitPoint]string{
+		checkedRuleSourcesForInput:                     "checked_rule_sources_for_input",
+		checkedRuleTargetsForUpstream:                  "checked_rule_targets_for_upstream",
+		checkedBacklogForUpstream:                      "checked_backlog_for_upstream",
+		checkedOpenWorkflowExecutionsForUpstreamHit:    "checked_open_wf_executions_for_upstream_hit",
+		checkedOpenWorkflowExecutionsForUpstreamMiss:   "checked_open_wf_executions_for_upstream_miss",
+		checkedClosedWorkflowExecutionsForUpstreamHit:  "checked_closed_wf_executions_for_upstream_hit",
+		checkedClosedWorkflowExecutionsForUpstreamMiss: "checked_closed_wf_executions_for_upstream_miss",
+	}
+)
+
 type reachabilityCalculator struct {
-	visibilityMgr                manager.VisibilityManager
+	cache                        reachabilityCache
 	nsID                         namespace.ID
 	nsName                       namespace.Name
-	taskQueue                    string
+	taskQueue                    *tqid.TaskQueueFamily
 	assignmentRules              []*persistencespb.AssignmentRule
 	redirectRules                []*persistencespb.RedirectRule
 	buildIdVisibilityGracePeriod time.Duration
+	tqConfig                     *taskQueueConfig
 }
 
-func getBuildIdTaskReachability(
-	ctx context.Context,
+func newReachabilityCalculator(
 	data *persistencespb.VersioningData,
-	visibilityMgr manager.VisibilityManager,
-	nsID,
-	nsName,
-	taskQueue,
-	buildId string,
+	rCache reachabilityCache,
+	nsID, nsName string,
+	taskQueue *tqid.TaskQueueFamily,
 	buildIdVisibilityGracePeriod time.Duration,
-) (enumspb.BuildIdTaskReachability, error) {
-	rc := &reachabilityCalculator{
-		visibilityMgr:                visibilityMgr,
+	tqConfig *taskQueueConfig,
+) *reachabilityCalculator {
+	return &reachabilityCalculator{
+		cache:                        rCache,
 		nsID:                         namespace.ID(nsID),
 		nsName:                       namespace.Name(nsName),
 		taskQueue:                    taskQueue,
 		assignmentRules:              data.GetAssignmentRules(),
 		redirectRules:                data.GetRedirectRules(),
 		buildIdVisibilityGracePeriod: buildIdVisibilityGracePeriod,
+		tqConfig:                     tqConfig,
 	}
-
-	return rc.run(ctx, buildId)
 }
 
-func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enumspb.BuildIdTaskReachability, error) {
+func getBuildIdTaskReachability(
+	ctx context.Context,
+	rc *reachabilityCalculator,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+	buildId string,
+) (enumspb.BuildIdTaskReachability, error) {
+	reachability, exitPoint, err := rc.run(ctx, buildId)
+	handler := metrics.GetPerTaskQueueFamilyScope(metricsHandler, rc.nsName.String(), rc.taskQueue, rc.tqConfig.BreakdownMetricsByTaskQueue())
+	metrics.ReachabilityExitPointCounter.With(handler).Record(1,
+		metrics.WorkerBuildIdTag(buildId, rc.tqConfig.BreakdownMetricsByBuildID()),
+		metrics.StringTag(reachabilityExitPointTagName, reachabilityExitPoint2TagValue[exitPoint]))
+	logger.Info("Calculated reachability for build id",
+		tag.WorkerBuildId(buildId),
+		tag.BuildIdTaskReachabilityTag(reachability.String()),
+		tag.ReachabilityExitPointTag(reachabilityExitPoint2TagValue[exitPoint]),
+		tag.WorkflowNamespace(rc.nsName.String()),
+		tag.WorkflowTaskQueueName(rc.taskQueue.Name()),
+	)
+	return reachability, err
+}
+
+func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enumspb.BuildIdTaskReachability, reachabilityExitPoint, error) {
 	// 1. Easy UNREACHABLE case
 	if isActiveRedirectRuleSource(buildId, rc.redirectRules) {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedRuleSourcesForInput, nil
 	}
 
 	// Gather list of all build ids that could point to buildId
@@ -90,15 +143,15 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	// 2a. If buildId is assignable to new tasks
 	for _, bid := range buildIdsOfInterest {
 		if rc.isReachableActiveAssignmentRuleTargetOrDefault(bid) {
-			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream, nil
 		}
 	}
 
 	// 2b. If buildId could be reached from the backlog
 	if existsBacklog, err := rc.existsBackloggedActivityOrWFTaskAssignedToAny(ctx, buildIdsOfInterest); err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, checkedBacklogForUpstream, err
 	} else if existsBacklog {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedBacklogForUpstream, nil
 	}
 
 	// Note: The below cases are not applicable to activity-only task queues, since we don't record those in visibility
@@ -107,35 +160,48 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 	buildIdsOfInterest = rc.getBuildIdsOfInterest(buildId, rc.buildIdVisibilityGracePeriod)
 
 	// 2c. If buildId is assignable to tasks from open workflows
-	existsOpenWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, rc.makeBuildIdCountRequest(buildIdsOfInterest, true))
+	existsOpenWFAssignedToBuildId, hit, err := rc.existsWFAssignedToAny(ctx, buildIdsOfInterest, true)
 	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, checkedOpenWorkflowExecutionsForUpstreamMiss, err
 	}
 	if existsOpenWFAssignedToBuildId {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, nil
+		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, getCacheExitPoint(true, hit), nil
 	}
 
 	// 3. Cases for CLOSED_WORKFLOWS_ONLY
-	existsClosedWFAssignedToBuildId, err := rc.existsWFAssignedToAny(ctx, rc.makeBuildIdCountRequest(buildIdsOfInterest, false))
+	existsClosedWFAssignedToBuildId, hit, err := rc.existsWFAssignedToAny(ctx, buildIdsOfInterest, false)
 	if err != nil {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, err
+		return enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, checkedClosedWorkflowExecutionsForUpstreamMiss, err
 	}
 	if existsClosedWFAssignedToBuildId {
-		return enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, nil
+		return enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, getCacheExitPoint(false, hit), nil
 	}
 
 	// 4. Otherwise, UNREACHABLE
-	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, nil
+	return enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, getCacheExitPoint(false, hit), nil
+}
+
+func getCacheExitPoint(open, hit bool) reachabilityExitPoint {
+	if open {
+		if hit {
+			return checkedOpenWorkflowExecutionsForUpstreamHit
+		}
+		return checkedOpenWorkflowExecutionsForUpstreamMiss
+	}
+	if hit {
+		return checkedClosedWorkflowExecutionsForUpstreamHit
+	}
+	return checkedClosedWorkflowExecutionsForUpstreamMiss
 }
 
 // getBuildIdsOfInterest returns a list of build ids that point to the given buildId in the graph
-// of redirect rules and adds the given build id to that list.
+// of redirect rules and adds the given build ID to that list.
 // It considers rules if the deletion time is nil or within the given deletedRuleInclusionPeriod.
 func (rc *reachabilityCalculator) getBuildIdsOfInterest(
 	buildId string,
 	deletedRuleInclusionPeriod time.Duration) []string {
 
-	withinRuleInclusionPeriod := func(clk *clock.HybridLogicalClock) bool {
+	withinRuleInclusionPeriod := func(clk *clockspb.HybridLogicalClock) bool {
 		if clk == nil {
 			return true
 		}
@@ -155,18 +221,18 @@ func (rc *reachabilityCalculator) existsBackloggedActivityOrWFTaskAssignedToAny(
 }
 
 func (rc *reachabilityCalculator) isReachableActiveAssignmentRuleTargetOrDefault(buildId string) bool {
-	foundUnconditionalRule := false
+	foundFullyRampedRule := false
 	for _, r := range getActiveAssignmentRules(rc.assignmentRules) {
 		if r.GetRule().GetTargetBuildId() == buildId {
 			return true
 		}
-		if r.GetRule().GetPercentageRamp() == nil {
-			// rules after an unconditional rule will not be reached
-			foundUnconditionalRule = true
+		if isFullyRamped(r.GetRule()) {
+			// rules after a fully-ramped rule will not be reached
+			foundFullyRampedRule = true
 			break
 		}
 	}
-	if !foundUnconditionalRule && buildId == "" {
+	if !foundFullyRampedRule && buildId == "" {
 		// unversioned is the default, and is reachable
 		return true
 	}
@@ -175,24 +241,18 @@ func (rc *reachabilityCalculator) isReachableActiveAssignmentRuleTargetOrDefault
 
 func (rc *reachabilityCalculator) existsWFAssignedToAny(
 	ctx context.Context,
-	countRequest *manager.CountWorkflowExecutionsRequest,
-) (bool, error) {
-	countResponse, err := rc.visibilityMgr.CountWorkflowExecutions(ctx, countRequest)
-	if err != nil {
-		return false, err
-	}
-	return countResponse.Count > 0, nil
-}
-
-func (rc *reachabilityCalculator) makeBuildIdCountRequest(
 	buildIdsOfInterest []string,
 	open bool,
-) *manager.CountWorkflowExecutionsRequest {
-	slices.Sort(buildIdsOfInterest)
+) (exists, hit bool, err error) {
+	query := rc.makeBuildIdQuery(buildIdsOfInterest, open)
+	return rc.cache.Get(ctx, *rc.makeBuildIdCountRequest(query), open)
+}
+
+func (rc *reachabilityCalculator) makeBuildIdCountRequest(query string) *manager.CountWorkflowExecutionsRequest {
 	return &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: rc.nsID,
 		Namespace:   rc.nsName,
-		Query:       rc.makeBuildIdQuery(buildIdsOfInterest, open),
+		Query:       query,
 	}
 }
 
@@ -200,7 +260,8 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 	buildIdsOfInterest []string,
 	open bool,
 ) string {
-	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(rc.taskQueue)))
+	slices.Sort(buildIdsOfInterest)
+	escapedTaskQueue := sqlparser.String(sqlparser.NewStrVal([]byte(rc.taskQueue.Name())))
 	var statusFilter string
 	var escapedBuildIds []string
 	var includeNull bool
@@ -220,7 +281,7 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 		}
 	} else {
 		statusFilter = fmt.Sprintf(` AND %s != "Running"`, searchattribute.ExecutionStatus)
-		// want: closed AT that build id, and once used that build id
+		// want: closed AT that build ID, and once used that build ID
 		// (b1, b2) --> (versioned:b1, versioned:b2)
 		// (b1, b2, "") --> (versioned:b1, versioned:b2, unversioned, null)
 		// ("") --> (unversioned, null)
@@ -240,14 +301,75 @@ func (rc *reachabilityCalculator) makeBuildIdQuery(
 	return fmt.Sprintf("%s = %s AND %s%s", searchattribute.TaskQueue, escapedTaskQueue, buildIdsFilter, statusFilter)
 }
 
-// getDefaultBuildId gets the build id mentioned in the first unconditional Assignment Rule.
+// getDefaultBuildId gets the build ID mentioned in the first fully-ramped Assignment Rule.
 // If there is no default Build ID, the result for the unversioned queue will be returned.
 // This should only be called on the root.
 func getDefaultBuildId(assignmentRules []*persistencespb.AssignmentRule) string {
 	for _, ar := range getActiveAssignmentRules(assignmentRules) {
-		if isUnconditional(ar.GetRule()) {
+		if isFullyRamped(ar.GetRule()) {
 			return ar.GetRule().GetTargetBuildId()
 		}
 	}
 	return ""
+}
+
+/*
+In-memory Reachability Cache of Visibility Queries and Results
+*/
+
+type reachabilityCache struct {
+	openWFCache    cache.Cache
+	closedWFCache  cache.Cache // these are separate due to allow for different TTL
+	metricsHandler metrics.Handler
+	visibilityMgr  manager.VisibilityManager
+}
+
+func newReachabilityCache(
+	handler metrics.Handler,
+	visibilityMgr manager.VisibilityManager,
+	reachabilityCacheOpenWFExecutionTTL,
+	reachabilityCacheClosedWFExecutionTTL time.Duration,
+) reachabilityCache {
+	return reachabilityCache{
+		openWFCache:    cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheOpenWFExecutionTTL}),
+		closedWFCache:  cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheClosedWFExecutionTTL}),
+		metricsHandler: handler,
+		visibilityMgr:  visibilityMgr,
+	}
+}
+
+// Get retrieves the Workflow Count existence value based on the query-string key.
+func (c *reachabilityCache) Get(ctx context.Context, countRequest manager.CountWorkflowExecutionsRequest, open bool) (exists, hit bool, err error) {
+	// try cache
+	var result interface{}
+	if open {
+		result = c.openWFCache.Get(countRequest)
+	} else {
+		result = c.closedWFCache.Get(countRequest)
+	}
+	if result != nil {
+		// there's no reason that the cache would ever contain a non-bool, but just in case, treat non-bool as a miss
+		exists, ok := result.(bool)
+		if ok {
+			return exists, true, nil
+		}
+	}
+
+	// cache was cold, ask visibility and put result in cache
+	countResponse, err := c.visibilityMgr.CountWorkflowExecutions(ctx, &countRequest)
+	if err != nil {
+		return false, false, err
+	}
+	exists = countResponse.Count > 0
+	c.Put(countRequest, exists, open)
+	return exists, false, nil
+}
+
+// Put adds an element to the cache.
+func (c *reachabilityCache) Put(countRequest manager.CountWorkflowExecutionsRequest, exists, open bool) {
+	if open {
+		c.openWFCache.Put(countRequest, exists)
+	} else {
+		c.closedWFCache.Put(countRequest, exists)
+	}
 }

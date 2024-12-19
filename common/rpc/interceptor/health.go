@@ -30,9 +30,8 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common/api"
+	"google.golang.org/grpc"
 )
 
 type (

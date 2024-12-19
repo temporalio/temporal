@@ -50,33 +50,35 @@ func TaskSourceFromString(s string) (TaskSource, error) {
 
 var (
 	TaskType_shorthandValue = map[string]int32{
-		"Unspecified":                  0,
-		"ReplicationHistory":           1,
-		"ReplicationSyncActivity":      2,
-		"TransferWorkflowTask":         3,
-		"TransferActivityTask":         4,
-		"TransferCloseExecution":       5,
-		"TransferCancelExecution":      6,
-		"TransferStartChildExecution":  7,
-		"TransferSignalExecution":      8,
-		"TransferResetWorkflow":        10,
-		"WorkflowTaskTimeout":          12,
-		"ActivityTimeout":              13,
-		"UserTimer":                    14,
-		"WorkflowRunTimeout":           15,
-		"DeleteHistoryEvent":           16,
-		"ActivityRetryTimer":           17,
-		"WorkflowBackoffTimer":         18,
-		"VisibilityStartExecution":     19,
-		"VisibilityUpsertExecution":    20,
-		"VisibilityCloseExecution":     21,
-		"VisibilityDeleteExecution":    22,
-		"TransferDeleteExecution":      24,
-		"ReplicationSyncWorkflowState": 25,
-		"ArchivalArchiveExecution":     26,
-		"StateMachineOutbound":         27,
-		"StateMachineTimer":            28,
-		"WorkflowExecutionTimeout":     29,
+		"Unspecified":                        0,
+		"ReplicationHistory":                 1,
+		"ReplicationSyncActivity":            2,
+		"TransferWorkflowTask":               3,
+		"TransferActivityTask":               4,
+		"TransferCloseExecution":             5,
+		"TransferCancelExecution":            6,
+		"TransferStartChildExecution":        7,
+		"TransferSignalExecution":            8,
+		"TransferResetWorkflow":              10,
+		"WorkflowTaskTimeout":                12,
+		"ActivityTimeout":                    13,
+		"UserTimer":                          14,
+		"WorkflowRunTimeout":                 15,
+		"DeleteHistoryEvent":                 16,
+		"ActivityRetryTimer":                 17,
+		"WorkflowBackoffTimer":               18,
+		"VisibilityStartExecution":           19,
+		"VisibilityUpsertExecution":          20,
+		"VisibilityCloseExecution":           21,
+		"VisibilityDeleteExecution":          22,
+		"TransferDeleteExecution":            24,
+		"ReplicationSyncWorkflowState":       25,
+		"ArchivalArchiveExecution":           26,
+		"StateMachineOutbound":               27,
+		"StateMachineTimer":                  28,
+		"WorkflowExecutionTimeout":           29,
+		"ReplicationSyncHsm":                 30,
+		"ReplicationSyncVersionedTransition": 31,
 	}
 )
 
@@ -89,4 +91,23 @@ func TaskTypeFromString(s string) (TaskType, error) {
 		return TaskType(v), nil
 	}
 	return TaskType(0), fmt.Errorf("%s is not a valid TaskType", s)
+}
+
+var (
+	TaskPriority_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"High":        1,
+		"Low":         10,
+	}
+)
+
+// TaskPriorityFromString parses a TaskPriority value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to TaskPriority
+func TaskPriorityFromString(s string) (TaskPriority, error) {
+	if v, ok := TaskPriority_value[s]; ok {
+		return TaskPriority(v), nil
+	} else if v, ok := TaskPriority_shorthandValue[s]; ok {
+		return TaskPriority(v), nil
+	}
+	return TaskPriority(0), fmt.Errorf("%s is not a valid TaskPriority", s)
 }

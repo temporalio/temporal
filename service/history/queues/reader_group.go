@@ -27,10 +27,9 @@ package queues
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 	"sync/atomic"
-
-	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common"
 )

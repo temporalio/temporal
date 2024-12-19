@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -42,6 +43,7 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -327,11 +329,11 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	// DeleteAfterClose is set to true when this close execution task was generated as part of delete open workflow execution procedure.
 	// Delete workflow execution is started by user API call and should be done regardless of current workflow version.
 	if !task.DeleteAfterClose {
-		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		closeVersion, err := mutableState.GetCloseVersion()
 		if err != nil {
 			return err
 		}
-		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, task.Version, task)
 		if err != nil {
 			return err
 		}
@@ -398,16 +400,19 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		}
 	}
 
-	err = t.processParentClosePolicy(
-		ctx,
-		namespaceName.String(),
-		&workflowExecution,
-		children,
-	)
-
-	if err != nil {
-		// This is some retryable error, not NotFound or NamespaceNotFound.
-		return err
+	// process parentClosePolicy except when the execution was reset. In case of reset, we need to keep the children around so that we can reconnect to them.
+	// We know an execution was reset when ResetRunId was populated in it.
+	// TODO (Chetan): update this condition as new reset policies are added. For now we keep all children since "Reconnect" is the only policy available.
+	if executionInfo.GetResetRunId() == "" {
+		if err := t.processParentClosePolicy(
+			ctx,
+			namespaceName.String(),
+			&workflowExecution,
+			children,
+		); err != nil {
+			// This is some retryable error, not NotFound or NamespaceNotFound.
+			return err
+		}
 	}
 
 	if task.DeleteAfterClose {
@@ -800,7 +805,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 
 	var targetNamespaceName namespace.Name
-	if namespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(task.TargetNamespaceID)); err != nil {
+	var targetNamespaceEntry *namespace.Namespace
+	if targetNamespaceEntry, err = t.registry.GetNamespaceByID(namespace.ID(task.TargetNamespaceID)); err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
 			return err
 		}
@@ -815,7 +821,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		)
 		return err
 	} else {
-		targetNamespaceName = namespaceEntry.Name()
+		targetNamespaceName = targetNamespaceEntry.Name()
 	}
 
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
@@ -831,6 +837,43 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			// - using versioning
 			sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp())
 		}
+	}
+
+	// Note: childStarted flag above is computed from the parent's history. When this is TRUE it's guaranteed that the child was succesfully started.
+	// But if it's FALSE then the child *may or maynot* be started (ex: we failed to record ChildExecutionStarted event previously.)
+	// Hence we need to check the child workflow ID and attempt to reconnect before proceeding to start a new instance of the child.
+	if mutableState.IsResetRun() {
+		childRunID, err := t.verifyChildWorkflow(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
+		if err != nil {
+			return err
+		}
+		if childRunID != "" {
+			childExecution := &commonpb.WorkflowExecution{
+				WorkflowId: childInfo.StartedWorkflowId,
+				RunId:      childRunID,
+			}
+			childClock := childInfo.Clock
+			// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
+			err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
+			if err != nil {
+				return err
+			}
+			// NOTE: do not access anything related mutable state after this lock release
+			// release the context lock since we no longer need mutable state and
+			// the rest of logic is making RPC call, which takes time.
+			release(nil)
+
+			parentClock, err := t.shardContext.NewVectorClock()
+			if err != nil {
+				return err
+			}
+			return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
+		}
+		// now if there was no child found after reset then it could mean one of the following.
+		// 1. The parent never got a chance to start the child. So we should go ahead and start one (below)
+		// 2. The child was started, but may be terminated from someone external or timedout.
+		// 3. There was a running workflow that is not related to the current run.
+		// In all these cases it's ok to proceed to start a new instance of child (below) and accept the result of that operation.
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
@@ -851,6 +894,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		sourceVersionStamp,
 		rootExecutionInfo,
 		inheritedBuildId,
+		initiatedEvent.GetUserMetadata(),
+		mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(),
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -899,6 +944,75 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		WorkflowId: task.TargetWorkflowID,
 		RunId:      childRunID,
 	}, parentClock, childClock)
+}
+
+// verifyChildWorkflow describes the childWorkflowID and identifies its parent. It then checks if the current run was derived from that parent by comparing the OriginalRunID value.
+// It returns the child's runID if the checks pass. Empty runID is returned if the check doesn't pass.
+func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
+	ctx context.Context,
+	mutableState workflow.MutableState,
+	childNamespace *namespace.Namespace,
+	childWorkflowID string,
+) (childID string, retError error) {
+	childDescribeReq := &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: childNamespace.ID().String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: childNamespace.Name().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: childWorkflowID,
+			},
+		},
+	}
+	response, err := t.historyRawClient.DescribeWorkflowExecution(ctx, childDescribeReq)
+	if err != nil {
+		// It's not an error if the child is not found. Return empty childID so that the child is created.
+		if common.IsNotFoundError(err) {
+			return "", nil
+		}
+		return "", err
+	}
+
+	if response.WorkflowExecutionInfo.ParentExecution == nil {
+		// The child doesn't have a parent. Maybe it was started by some client.
+		return "", nil
+	}
+	// Verify if the WorkflowIDs match first.
+	if response.WorkflowExecutionInfo.ParentExecution.WorkflowId != mutableState.GetExecutionInfo().WorkflowId {
+		return "", nil
+	}
+
+	childsParentRunID := response.WorkflowExecutionInfo.ParentExecution.RunId
+	// Check if the child's parent was the base run for the current run.
+	if childsParentRunID == mutableState.GetExecutionInfo().OriginalExecutionRunId {
+		return response.WorkflowExecutionInfo.Execution.RunId, nil
+	}
+
+	// load the child's parent mutable state.
+	wfKey := mutableState.GetWorkflowKey()
+	wfKey.RunID = childsParentRunID
+	wfContext, release, err := getWorkflowExecutionContext(
+		ctx,
+		t.shardContext,
+		t.cache,
+		wfKey,
+		locks.PriorityLow,
+	)
+	if err != nil {
+		return "", err
+	}
+	defer func() { release(retError) }()
+
+	childsParentMutableState, err := wfContext.LoadMutableState(ctx, t.shardContext)
+	if err != nil {
+		return "", err
+	}
+
+	// now check if the child's parent's original run id and the current run's original run ID are the same.
+	if childsParentMutableState.GetExecutionInfo().OriginalExecutionRunId == mutableState.GetExecutionInfo().OriginalExecutionRunId {
+		return response.WorkflowExecutionInfo.Execution.RunId, nil
+	}
+
+	return "", nil
 }
 
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
@@ -951,6 +1065,8 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		return nil
 	}
 
+	// TODO: why we are comparing task version to workflow start version here?
+	// GenerateWorkflowResetTasks uses currentVersion
 	currentStartVersion, err := currentMutableState.GetStartVersion()
 	if err != nil {
 		return err
@@ -994,7 +1110,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			t.shardContext,
 			t.cache,
 			definition.NewWorkflowKey(task.NamespaceID, task.WorkflowID, resetPoint.GetRunId()),
-			workflow.LockPriorityLow,
+			locks.PriorityLow,
 		)
 		if err != nil {
 			return err
@@ -1016,6 +1132,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		task,
 		reason,
 		resetPoint,
+		baseContext,
 		baseMutableState,
 		currentContext,
 		currentMutableState,
@@ -1034,7 +1151,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
@@ -1067,7 +1184,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
@@ -1115,7 +1232,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedEventID)
@@ -1147,7 +1264,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			_, ok := mutableState.GetSignalInfo(task.InitiatedEventID)
@@ -1180,7 +1297,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedEventID)
@@ -1337,6 +1454,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	sourceVersionStamp *commonpb.WorkerVersionStamp,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	inheritedBuildId string,
+	userMetadata *sdkpb.UserMetadata,
+	inheritedOverride *workflowpb.VersioningOverride,
 ) (string, *clockspb.VectorClock, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
@@ -1358,6 +1477,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			CronSchedule:          attributes.CronSchedule,
 			Memo:                  attributes.Memo,
 			SearchAttributes:      attributes.SearchAttributes,
+			UserMetadata:          userMetadata,
+			VersioningOverride:    inheritedOverride,
 		},
 		&workflowspb.ParentExecutionInfo{
 			NamespaceId: task.NamespaceID,
@@ -1389,6 +1510,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	task *tasks.ResetWorkflowTask,
 	reason string,
 	resetPoint *workflowpb.ResetPointInfo,
+	baseContext workflow.Context,
 	baseMutableState workflow.MutableState,
 	currentContext workflow.Context,
 	currentMutableState workflow.MutableState,
@@ -1418,6 +1540,17 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 	baseNextEventID := baseMutableState.GetNextEventID()
 
+	namespaceName, err := t.shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+	if err != nil {
+		return err
+	}
+	allowResetWithPendingChildren := t.shardContext.GetConfig().AllowResetWithPendingChildren(namespaceName.String())
+	baseWorkflow := ndc.NewWorkflow(
+		t.shardContext.GetClusterMetadata(),
+		baseContext,
+		baseMutableState,
+		wcache.NoopReleaseFn, // this is fine since caller will defer on release
+	)
 	err = t.workflowResetter.ResetWorkflow(
 		resetWorkflowCtx,
 		namespaceID,
@@ -1429,6 +1562,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseNextEventID,
 		resetRunID,
 		uuid.New(),
+		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),
 			currentContext,
@@ -1438,6 +1572,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		reason,
 		nil,
 		nil,
+		allowResetWithPendingChildren,
 	)
 
 	switch err.(type) {

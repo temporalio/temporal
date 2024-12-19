@@ -26,15 +26,13 @@ package namespace
 
 import (
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
-
-	"golang.org/x/exp/maps"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	nexuspb "go.temporal.io/api/nexus/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -77,18 +75,27 @@ type (
 		notificationVersion         int64
 
 		customSearchAttributesMapper CustomSearchAttributesMapper
-		outgoingNexusServicesByName  map[string]*nexuspb.OutgoingServiceSpec
 	}
 
 	CustomSearchAttributesMapper struct {
 		fieldToAlias map[string]string
 		aliasToField map[string]string
 	}
+
+	// ReplicationPolicy is the namespace's replication policy,
+	// derived from namespace's replication config
+	ReplicationPolicy int
 )
 
 const (
 	EmptyName Name = ""
 	EmptyID   ID   = ""
+
+	// ReplicationPolicyOneCluster indicate that workflows does not need to be replicated
+	// applicable to local namespace & global namespace with one cluster
+	ReplicationPolicyOneCluster ReplicationPolicy = 0
+	// ReplicationPolicyMultiCluster indicate that workflows need to be replicated
+	ReplicationPolicyMultiCluster ReplicationPolicy = 1
 )
 
 func NewID() ID {
@@ -96,10 +103,6 @@ func NewID() ID {
 }
 
 func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
-	outgoingNexusServicesByName := make(map[string]*nexuspb.OutgoingServiceSpec, len(record.Namespace.OutgoingServices))
-	for _, svc := range record.Namespace.OutgoingServices {
-		outgoingNexusServicesByName[svc.Name] = svc.Spec
-	}
 	return &Namespace{
 		info:                        record.Namespace.Info,
 		config:                      record.Namespace.Config,
@@ -113,16 +116,10 @@ func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
 			fieldToAlias: record.Namespace.Config.CustomSearchAttributeAliases,
 			aliasToField: util.InverseMap(record.Namespace.Config.CustomSearchAttributeAliases),
 		},
-		outgoingNexusServicesByName: outgoingNexusServicesByName,
 	}
 }
 
 func FromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *Namespace {
-	outgoingNexusServicesByName := make(map[string]*nexuspb.OutgoingServiceSpec, len(response.OutgoingServices))
-	for _, svc := range response.OutgoingServices {
-		outgoingNexusServicesByName[svc.Name] = svc.Spec
-	}
-
 	info := &persistencespb.NamespaceInfo{
 		Id:          response.GetInfo().GetId(),
 		Name:        response.GetInfo().GetName(),
@@ -146,13 +143,12 @@ func FromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *Na
 		FailoverHistory:   convertFailoverHistoryToPersistenceProto(response.GetFailoverHistory()),
 	}
 	return &Namespace{
-		info:                        info,
-		config:                      config,
-		replicationConfig:           replicationConfig,
-		configVersion:               response.GetConfigVersion(),
-		failoverVersion:             response.GetFailoverVersion(),
-		isGlobalNamespace:           response.GetIsGlobalNamespace(),
-		outgoingNexusServicesByName: outgoingNexusServicesByName,
+		info:              info,
+		config:            config,
+		replicationConfig: replicationConfig,
+		configVersion:     response.GetConfigVersion(),
+		failoverVersion:   response.GetFailoverVersion(),
+		isGlobalNamespace: response.GetIsGlobalNamespace(),
 	}
 }
 
@@ -266,6 +262,13 @@ func (ns *Namespace) IsOnCluster(clusterName string) bool {
 	return false
 }
 
+// FailoverHistory returns the a copy of failover history for this namespace.
+func (ns *Namespace) FailoverHistory() []*replicationpb.FailoverStatus {
+	return convertFailoverHistoryToReplicationProto(
+		ns.replicationConfig.GetFailoverHistory(),
+	)
+}
+
 // ConfigVersion return the namespace config version
 func (ns *Namespace) ConfigVersion() int64 {
 	return ns.configVersion
@@ -333,11 +336,6 @@ func (ns *Namespace) Retention() time.Duration {
 
 func (ns *Namespace) CustomSearchAttributesMapper() CustomSearchAttributesMapper {
 	return ns.customSearchAttributesMapper
-}
-
-func (ns *Namespace) NexusOutgoingService(name string) (spec *nexuspb.OutgoingServiceSpec, ok bool) {
-	spec, ok = ns.outgoingNexusServicesByName[name]
-	return
 }
 
 // Error returns the reason associated with this bad binary.

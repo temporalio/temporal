@@ -29,27 +29,30 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/history/v1"
+	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -236,7 +239,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			}
 			mutableState.EXPECT().GetExecutionState().Return(execState).AnyTimes()
 			mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
-			mutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
+			mutableState.EXPECT().GetCloseVersion().Return(int64(0), nil).AnyTimes()
 			mutableState.EXPECT().GetExecutionInfo().DoAndReturn(func() *persistencespb.WorkflowExecutionInfo {
 				return &persistencespb.WorkflowExecutionInfo{
 					NamespaceId: namespaceEntry.ID().String(),
@@ -331,18 +334,25 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
-	subStateMachinesByType := map[int32]*persistencespb.StateMachineMap{}
+
+	mutableState := NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetCurrentVersion().Return(int64(3)).AnyTimes()
+	mutableState.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
+
+	subStateMachinesByType := map[string]*persistencespb.StateMachineMap{}
 	reg := hsm.NewRegistry()
 	require.NoError(t, RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
-	require.NoError(t, callbacks.RegisterTaskSerializer(reg))
-	node, err := hsm.NewRoot(reg, StateMachineType.ID, nil, subStateMachinesByType)
+	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
+	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
+	require.NoError(t, nexusoperations.RegisterTaskSerializers(reg))
+	node, err := hsm.NewRoot(reg, StateMachineType, nil, subStateMachinesByType, mutableState)
 	require.NoError(t, err)
 	coll := callbacks.MachineCollection(node)
 
-	callbackToSchedule := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &common.Callback{
-		Variant: &common.Callback_Nexus_{
-			Nexus: &common.Callback_Nexus{
+	callbackToSchedule := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
+		Variant: &persistencespb.Callback_Nexus_{
+			Nexus: &persistencespb.Callback_Nexus{
 				Url: "http://localhost?foo=bar",
 			},
 		},
@@ -354,32 +364,32 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	callbackToBackoff := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &common.Callback{
-		Variant: &common.Callback_Nexus_{
-			Nexus: &common.Callback_Nexus{
+	callbackToBackoff := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
+		Variant: &persistencespb.Callback_Nexus_{
+			Nexus: &persistencespb.Callback_Nexus{
 				Url: "http://localhost?foo=bar",
 			},
 		},
 	})
-	callbackToBackoff.PublicInfo.State = enumspb.CALLBACK_STATE_SCHEDULED
+	callbackToBackoff.CallbackInfo.State = enumsspb.CALLBACK_STATE_SCHEDULED
 	_, err = coll.Add("backoff", callbackToBackoff)
 	require.NoError(t, err)
 	err = coll.Transition("backoff", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
-		return callbacks.TransitionAttemptFailed.Apply(cb, callbacks.EventAttemptFailed{Time: time.Now(), Err: fmt.Errorf("test")}) // nolint:goerr113
+		return callbacks.TransitionAttemptFailed.Apply(cb, callbacks.EventAttemptFailed{
+			Time:        time.Now(),
+			Err:         fmt.Errorf("test"),
+			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
+		})
 	})
 	require.NoError(t, err)
 
-	mutableState := NewMockMutableState(ctrl)
-	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node })
+	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node }).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		TransitionHistory: []*persistencespb.VersionedTransition{
-			{
-				NamespaceFailoverVersion: 3,
-				MaxTransitionCount:       2,
-			},
+			{NamespaceFailoverVersion: 3, TransitionCount: 3},
 		},
-	})
-	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).Times(2)
+	}).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 
 	cfg := &configs.Config{}
 	archivalMetadata := archiver.NewMockArchivalMetadata(ctrl)
@@ -404,38 +414,122 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	}
 	require.Equal(t, tests.WorkflowKey, invocationTask.WorkflowKey)
 	require.Equal(t, "http://localhost", invocationTask.Destination)
-	require.Equal(t, &persistencespb.StateMachineTaskInfo{
+	protorequire.ProtoEqual(t, &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
 			Path: []*persistencespb.StateMachineKey{
 				{
-					Type: callbacks.StateMachineType.ID,
+					Type: callbacks.StateMachineType,
 					Id:   "sched",
 				},
 			},
-			MutableStateNamespaceFailoverVersion: 3,
-			MutableStateTransitionCount:          2,
-			MachineTransitionCount:               1,
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineTransitionCount: 1,
 		},
-		Type: callbacks.TaskTypeInvocation.ID,
+		Type: callbacks.TaskTypeInvocation,
 		Data: nil,
 	}, invocationTask.Info)
 
 	require.Equal(t, tests.WorkflowKey, backoffTask.WorkflowKey)
-	require.Equal(t, &persistencespb.StateMachineTaskInfo{
+	require.Equal(t, int64(3), backoffTask.Version)
+
+	timers := mutableState.GetExecutionInfo().StateMachineTimers
+	require.Equal(t, 1, len(timers))
+	protorequire.ProtoEqual(t, &persistencespb.StateMachineTimerGroup{
+		Deadline:  callbackToBackoff.NextAttemptScheduleTime,
+		Scheduled: true,
+		Infos: []*persistencespb.StateMachineTaskInfo{
+			{
+				Ref: &persistencespb.StateMachineRef{
+					Path: []*persistencespb.StateMachineKey{
+						{
+							Type: callbacks.StateMachineType,
+							Id:   "backoff",
+						},
+					},
+					MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: 3,
+						TransitionCount:          3,
+					},
+					MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: 3,
+						TransitionCount:          3,
+					},
+					MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: 3,
+						TransitionCount:          3,
+					},
+					MachineTransitionCount: 1,
+				},
+				Type: callbacks.TaskTypeBackoff,
+				Data: nil,
+			},
+		},
+	}, timers[0])
+
+	// Reset and test another timer task (nexusoperations.TimeoutTask)
+	node.ClearTransactionState()
+	genTasks = nil
+	opNode, err := nexusoperations.AddChild(node, "ID", &historypb.HistoryEvent{
+		EventTime: timestamppb.Now(),
+		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
+				Endpoint:               "endpoint",
+				EndpointId:             "endpoint-id",
+				Service:                "some-service",
+				Operation:              "some-op",
+				ScheduleToCloseTimeout: durationpb.New(time.Hour),
+			},
+		},
+	}, []byte("token"), false)
+	require.NoError(t, err)
+	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
+	require.NoError(t, err)
+
+	// No new timer tasks are generated they are collapsed.
+	// Only an outbound task is expected here.
+	require.Equal(t, 1, len(genTasks))
+	_, ok = genTasks[0].(*tasks.StateMachineOutboundTask)
+	require.True(t, ok)
+
+	timers = mutableState.GetExecutionInfo().StateMachineTimers
+	require.Equal(t, 2, len(timers))
+
+	protorequire.ProtoEqual(t, &persistencespb.StateMachineTaskInfo{
 		Ref: &persistencespb.StateMachineRef{
 			Path: []*persistencespb.StateMachineKey{
 				{
-					Type: callbacks.StateMachineType.ID,
-					Id:   "backoff",
+					Type: opNode.Key.Type,
+					Id:   opNode.Key.ID,
 				},
 			},
-			MutableStateNamespaceFailoverVersion: 3,
-			MutableStateTransitionCount:          2,
-			MachineTransitionCount:               1,
+			MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineTransitionCount: 1,
 		},
-		Type: callbacks.TaskTypeBackoff.ID,
+		Type: nexusoperations.TaskTypeTimeout,
 		Data: nil,
-	}, backoffTask.Info)
+	}, timers[1].Infos[0])
 }
 
 func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
@@ -608,14 +702,14 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 				mockShard.GetArchivalMetadata(),
 			)
 
-			actualExecutionTimerTaskStatus, err := taskGenerator.GenerateWorkflowStartTasks(&history.HistoryEvent{
+			actualExecutionTimerTaskStatus, err := taskGenerator.GenerateWorkflowStartTasks(&historypb.HistoryEvent{
 				EventId:   1,
 				EventTime: timestamppb.Now(),
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Version:   1,
 				TaskId:    123,
-				Attributes: &history.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-					WorkflowExecutionStartedEventAttributes: &history.WorkflowExecutionStartedEventAttributes{
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						WorkflowExecutionExpirationTime: timestamppb.New(tc.executionExpirationTime),
 					},
 				},
@@ -623,6 +717,133 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedExecutionTimerStatus, actualExecutionTimerTaskStatus)
 			require.ElementsMatch(t, tc.expectedTaskTypes, generatedTaskTypes)
+		})
+	}
+}
+
+func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
+	testCases := []struct {
+		name                        string
+		workflowState               enumsspb.WorkflowExecutionState
+		transitionHistoryEnabled    bool
+		pendingActivityInfo         map[int64]*persistencespb.ActivityInfo
+		expectedTaskTypes           []enumsspb.TaskType
+		expectedTaskEquivalentTypes []enumsspb.TaskType
+	}{
+		{
+			name:                     "transition history disabled, execution completed",
+			transitionHistoryEnabled: false,
+			workflowState:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			pendingActivityInfo:      map[int64]*persistencespb.ActivityInfo{},
+			expectedTaskTypes:        []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE},
+		},
+		{
+			name:                        "transition history enabled, execution completed",
+			transitionHistoryEnabled:    true,
+			workflowState:               enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			pendingActivityInfo:         map[int64]*persistencespb.ActivityInfo{},
+			expectedTaskTypes:           []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION},
+			expectedTaskEquivalentTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE},
+		},
+		{
+			name:                     "transition history enabled, execution running",
+			transitionHistoryEnabled: true,
+			workflowState:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			pendingActivityInfo: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					Version:          1,
+					ScheduledEventId: 1,
+				},
+				2: {
+					Version:          1,
+					ScheduledEventId: 2,
+				},
+			},
+			expectedTaskTypes:           []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION},
+			expectedTaskEquivalentTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_HISTORY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM},
+		},
+		{
+			name:                     "transition history disabled, execution running",
+			transitionHistoryEnabled: false,
+			workflowState:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			pendingActivityInfo: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					Version:          1,
+					ScheduledEventId: 1,
+				},
+				2: {
+					Version:          1,
+					ScheduledEventId: 2,
+				},
+			},
+			expectedTaskTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_HISTORY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			controller := gomock.NewController(t)
+			mockMutableState := NewMockMutableState(controller)
+			executionInfo := &persistencespb.WorkflowExecutionInfo{
+				VersionHistories: &historyspb.VersionHistories{
+					CurrentVersionHistoryIndex: 0,
+					Histories: []*historyspb.VersionHistory{
+						{
+							BranchToken: []byte{1},
+							Items: []*historyspb.VersionHistoryItem{
+								{
+									EventId: 10,
+									Version: 1,
+								},
+							},
+						},
+					},
+				},
+				TransitionHistory: []*persistencespb.VersionedTransition{
+					{
+						NamespaceFailoverVersion: 1,
+						TransitionCount:          5,
+					},
+				},
+			}
+			mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+			mockMutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+			mockMutableState.EXPECT().GetPendingActivityInfos().Return(tc.pendingActivityInfo).AnyTimes()
+			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+				State: tc.workflowState,
+			}).AnyTimes()
+			mockMutableState.EXPECT().IsTransitionHistoryEnabled().Return(tc.transitionHistoryEnabled).AnyTimes()
+			mockShard := shard.NewTestContext(
+				controller,
+				&persistencespb.ShardInfo{
+					ShardId: 1,
+					RangeId: 1,
+				},
+				tests.NewDynamicConfig(),
+			)
+			taskGenerator := NewTaskGenerator(
+				mockShard.GetNamespaceRegistry(),
+				mockMutableState,
+				mockShard.GetConfig(),
+				mockShard.GetArchivalMetadata(),
+			)
+			resultTasks, _, err := taskGenerator.GenerateMigrationTasks()
+			require.NoError(t, err)
+			require.Equal(t, len(tc.expectedTaskTypes), len(resultTasks))
+			if tc.transitionHistoryEnabled {
+				require.Equal(t, 1, len(resultTasks))
+				require.Equal(t, tc.expectedTaskTypes[0].String(), resultTasks[0].GetType().String())
+				syncVersionTask, ok := resultTasks[0].(*tasks.SyncVersionedTransitionTask)
+				require.True(t, ok)
+				taskEquivalent := syncVersionTask.TaskEquivalents
+				require.Equal(t, len(tc.expectedTaskEquivalentTypes), len(taskEquivalent))
+				for i, equivalent := range taskEquivalent {
+					require.Equal(t, tc.expectedTaskEquivalentTypes[i], equivalent.GetType())
+				}
+			} else {
+				for i, task := range resultTasks {
+					require.Equal(t, tc.expectedTaskTypes[i], task.GetType())
+				}
+			}
 		})
 	}
 }

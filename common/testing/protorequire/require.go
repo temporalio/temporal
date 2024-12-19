@@ -26,9 +26,8 @@ package protorequire
 
 import (
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
-
 	"go.temporal.io/server/common/testing/protoassert"
+	"google.golang.org/protobuf/proto"
 )
 
 type helper interface {

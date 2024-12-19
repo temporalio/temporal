@@ -30,10 +30,9 @@ import (
 	"io"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"google.golang.org/protobuf/proto"
-
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/temporalproto"
+	"google.golang.org/protobuf/proto"
 )
 
 var _ runtime.Marshaler = temporalProtoMarshaler{}

@@ -67,7 +67,9 @@ const (
 const (
 	WorkflowServicePrefix = "/temporal.api.workflowservice.v1.WorkflowService/"
 	OperatorServicePrefix = "/temporal.api.operatorservice.v1.OperatorService/"
+	HistoryServicePrefix  = "/temporal.server.api.historyservice.v1.HistoryService/"
 	AdminServicePrefix    = "/temporal.server.api.adminservice.v1.AdminService/"
+	MatchingServicePrefix = "/temporal.server.api.matchingservice.v1.MatchingService/"
 	// Technically not a gRPC service, but still using this format for metadata.
 	NexusServicePrefix = "/temporal.api.nexusservice.v1.NexusService/"
 )
@@ -112,6 +114,7 @@ var (
 		"GetSearchAttributes":                {Scope: ScopeCluster, Access: AccessReadOnly},
 		"RespondQueryTaskCompleted":          {Scope: ScopeNamespace, Access: AccessWrite},
 		"ResetStickyTaskQueue":               {Scope: ScopeNamespace, Access: AccessWrite},
+		"ShutdownWorker":                     {Scope: ScopeNamespace, Access: AccessWrite},
 		"ExecuteMultiOperation":              {Scope: ScopeNamespace, Access: AccessWrite},
 		"QueryWorkflow":                      {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"DescribeWorkflowExecution":          {Scope: ScopeNamespace, Access: AccessReadOnly},
@@ -137,25 +140,30 @@ var (
 		"StopBatchOperation":                 {Scope: ScopeNamespace, Access: AccessWrite},
 		"DescribeBatchOperation":             {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"ListBatchOperations":                {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"UpdateActivityOptionsById":          {Scope: ScopeNamespace, Access: AccessWrite},
+		"PauseActivityById":                  {Scope: ScopeNamespace, Access: AccessWrite},
+		"UnpauseActivityById":                {Scope: ScopeNamespace, Access: AccessWrite},
+		"ResetActivityById":                  {Scope: ScopeNamespace, Access: AccessWrite},
+		"UpdateWorkflowExecutionOptions":     {Scope: ScopeNamespace, Access: AccessWrite},
+		"DescribeDeployment":                 {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"ListDeployments":                    {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"GetDeploymentReachability":          {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"GetCurrentDeployment":               {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"SetCurrentDeployment":               {Scope: ScopeNamespace, Access: AccessWrite},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
-		"AddSearchAttributes":        {Scope: ScopeNamespace, Access: AccessAdmin},
-		"RemoveSearchAttributes":     {Scope: ScopeNamespace, Access: AccessAdmin},
-		"ListSearchAttributes":       {Scope: ScopeNamespace, Access: AccessReadOnly},
-		"DeleteNamespace":            {Scope: ScopeNamespace, Access: AccessAdmin},
-		"AddOrUpdateRemoteCluster":   {Scope: ScopeCluster, Access: AccessAdmin},
-		"RemoveRemoteCluster":        {Scope: ScopeCluster, Access: AccessAdmin},
-		"ListClusters":               {Scope: ScopeCluster, Access: AccessAdmin},
-		"CreateNexusIncomingService": {Scope: ScopeCluster, Access: AccessAdmin},
-		"UpdateNexusIncomingService": {Scope: ScopeCluster, Access: AccessAdmin},
-		"DeleteNexusIncomingService": {Scope: ScopeCluster, Access: AccessAdmin},
-		"GetNexusIncomingService":    {Scope: ScopeCluster, Access: AccessAdmin},
-		"ListNexusIncomingServices":  {Scope: ScopeCluster, Access: AccessAdmin},
-		"GetNexusOutgoingService":    {Scope: ScopeNamespace, Access: AccessAdmin},
-		"CreateNexusOutgoingService": {Scope: ScopeNamespace, Access: AccessAdmin},
-		"UpdateNexusOutgoingService": {Scope: ScopeNamespace, Access: AccessAdmin},
-		"DeleteNexusOutgoingService": {Scope: ScopeNamespace, Access: AccessAdmin},
-		"ListNexusOutgoingServices":  {Scope: ScopeNamespace, Access: AccessAdmin},
+		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},
+		"RemoveSearchAttributes":   {Scope: ScopeNamespace, Access: AccessAdmin},
+		"ListSearchAttributes":     {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"DeleteNamespace":          {Scope: ScopeNamespace, Access: AccessAdmin},
+		"AddOrUpdateRemoteCluster": {Scope: ScopeCluster, Access: AccessAdmin},
+		"RemoveRemoteCluster":      {Scope: ScopeCluster, Access: AccessAdmin},
+		"ListClusters":             {Scope: ScopeCluster, Access: AccessAdmin},
+		"CreateNexusEndpoint":      {Scope: ScopeCluster, Access: AccessAdmin},
+		"UpdateNexusEndpoint":      {Scope: ScopeCluster, Access: AccessAdmin},
+		"DeleteNexusEndpoint":      {Scope: ScopeCluster, Access: AccessAdmin},
+		"GetNexusEndpoint":         {Scope: ScopeCluster, Access: AccessAdmin},
+		"ListNexusEndpoints":       {Scope: ScopeCluster, Access: AccessAdmin},
 	}
 	nexusServiceMetadata = map[string]MethodMetadata{
 		"DispatchNexusTask": {Scope: ScopeNamespace, Access: AccessWrite},
@@ -179,11 +187,19 @@ func GetMethodMetadata(fullApiName string) MethodMetadata {
 	}
 }
 
-// BaseName returns just the method name from a fullly qualified name.
+// MethodName returns just the method name from a fully qualified name.
 func MethodName(fullApiName string) string {
 	index := strings.LastIndex(fullApiName, "/")
 	if index > -1 {
 		return fullApiName[index+1:]
 	}
 	return fullApiName
+}
+
+func ServiceName(fullApiName string) string {
+	index := strings.LastIndex(fullApiName, "/")
+	if index > -1 {
+		return fullApiName[:index+1]
+	}
+	return ""
 }

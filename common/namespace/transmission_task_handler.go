@@ -30,7 +30,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -49,7 +48,6 @@ type (
 			info *persistencespb.NamespaceInfo,
 			config *persistencespb.NamespaceConfig,
 			replicationConfig *persistencespb.NamespaceReplicationConfig,
-			nexusOutgoingServices []*persistencespb.NexusOutgoingService,
 			replicationClusterListUpdated bool,
 			configVersion int64,
 			failoverVersion int64,
@@ -82,7 +80,6 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
-	nexusOutgoingServices []*persistencespb.NexusOutgoingService,
 	replicationClusterListUpdated bool,
 	configVersion int64,
 	failoverVersion int64,
@@ -126,10 +123,9 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 				ActiveClusterName: replicationConfig.ActiveClusterName,
 				Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 			},
-			NexusOutgoingServices: nexusOutgoingServices,
-			ConfigVersion:         configVersion,
-			FailoverVersion:       failoverVersion,
-			FailoverHistory:       convertFailoverHistoryToReplicationProto(failoverHistoy),
+			ConfigVersion:   configVersion,
+			FailoverVersion: failoverVersion,
+			FailoverHistory: convertFailoverHistoryToReplicationProto(failoverHistoy),
 		},
 	}
 

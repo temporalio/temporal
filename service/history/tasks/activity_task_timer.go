@@ -28,7 +28,6 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
@@ -43,20 +42,12 @@ type (
 		TimeoutType         enumspb.TimeoutType
 		EventID             int64
 		Attempt             int32
-		Version             int64
+		Stamp               int32
 	}
 )
 
 func (a *ActivityTimeoutTask) GetKey() Key {
 	return NewKey(a.VisibilityTimestamp, a.TaskID)
-}
-
-func (a *ActivityTimeoutTask) GetVersion() int64 {
-	return a.Version
-}
-
-func (a *ActivityTimeoutTask) SetVersion(version int64) {
-	a.Version = version
 }
 
 func (a *ActivityTimeoutTask) GetTaskID() int64 {
@@ -81,4 +72,12 @@ func (a *ActivityTimeoutTask) GetCategory() Category {
 
 func (a *ActivityTimeoutTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT
+}
+
+func (a *ActivityTimeoutTask) GetStamp() int32 {
+	return a.Stamp
+}
+
+func (a *ActivityTimeoutTask) SetStamp(stamp int32) {
+	a.Stamp = stamp
 }

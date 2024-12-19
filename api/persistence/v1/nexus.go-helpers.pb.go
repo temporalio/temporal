@@ -29,35 +29,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type NexusIncomingService to the protobuf v3 wire format
-func (val *NexusIncomingService) Marshal() ([]byte, error) {
+// Marshal an object of type NexusEndpointSpec to the protobuf v3 wire format
+func (val *NexusEndpointSpec) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type NexusIncomingService from the protobuf v3 wire format
-func (val *NexusIncomingService) Unmarshal(buf []byte) error {
+// Unmarshal an object of type NexusEndpointSpec from the protobuf v3 wire format
+func (val *NexusEndpointSpec) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *NexusIncomingService) Size() int {
+func (val *NexusEndpointSpec) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two NexusIncomingService values are equivalent by recursively
+// Equal returns whether two NexusEndpointSpec values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *NexusIncomingService) Equal(that interface{}) bool {
+func (this *NexusEndpointSpec) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *NexusIncomingService
+	var that1 *NexusEndpointSpec
 	switch t := that.(type) {
-	case *NexusIncomingService:
+	case *NexusEndpointSpec:
 		that1 = t
-	case NexusIncomingService:
+	case NexusEndpointSpec:
 		that1 = &t
 	default:
 		return false
@@ -66,35 +66,35 @@ func (this *NexusIncomingService) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type NexusIncomingServiceEntry to the protobuf v3 wire format
-func (val *NexusIncomingServiceEntry) Marshal() ([]byte, error) {
+// Marshal an object of type NexusEndpointTarget to the protobuf v3 wire format
+func (val *NexusEndpointTarget) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type NexusIncomingServiceEntry from the protobuf v3 wire format
-func (val *NexusIncomingServiceEntry) Unmarshal(buf []byte) error {
+// Unmarshal an object of type NexusEndpointTarget from the protobuf v3 wire format
+func (val *NexusEndpointTarget) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *NexusIncomingServiceEntry) Size() int {
+func (val *NexusEndpointTarget) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two NexusIncomingServiceEntry values are equivalent by recursively
+// Equal returns whether two NexusEndpointTarget values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *NexusIncomingServiceEntry) Equal(that interface{}) bool {
+func (this *NexusEndpointTarget) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *NexusIncomingServiceEntry
+	var that1 *NexusEndpointTarget
 	switch t := that.(type) {
-	case *NexusIncomingServiceEntry:
+	case *NexusEndpointTarget:
 		that1 = t
-	case NexusIncomingServiceEntry:
+	case NexusEndpointTarget:
 		that1 = &t
 	default:
 		return false
@@ -103,35 +103,72 @@ func (this *NexusIncomingServiceEntry) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type NexusOutgoingService to the protobuf v3 wire format
-func (val *NexusOutgoingService) Marshal() ([]byte, error) {
+// Marshal an object of type NexusEndpoint to the protobuf v3 wire format
+func (val *NexusEndpoint) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type NexusOutgoingService from the protobuf v3 wire format
-func (val *NexusOutgoingService) Unmarshal(buf []byte) error {
+// Unmarshal an object of type NexusEndpoint from the protobuf v3 wire format
+func (val *NexusEndpoint) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *NexusOutgoingService) Size() int {
+func (val *NexusEndpoint) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two NexusOutgoingService values are equivalent by recursively
+// Equal returns whether two NexusEndpoint values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *NexusOutgoingService) Equal(that interface{}) bool {
+func (this *NexusEndpoint) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *NexusOutgoingService
+	var that1 *NexusEndpoint
 	switch t := that.(type) {
-	case *NexusOutgoingService:
+	case *NexusEndpoint:
 		that1 = t
-	case NexusOutgoingService:
+	case NexusEndpoint:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type NexusEndpointEntry to the protobuf v3 wire format
+func (val *NexusEndpointEntry) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusEndpointEntry from the protobuf v3 wire format
+func (val *NexusEndpointEntry) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusEndpointEntry) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusEndpointEntry values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusEndpointEntry) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusEndpointEntry
+	switch t := that.(type) {
+	case *NexusEndpointEntry:
+		that1 = t
+	case NexusEndpointEntry:
 		that1 = &t
 	default:
 		return false

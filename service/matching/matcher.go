@@ -170,6 +170,11 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			metrics.SyncThrottlePerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 			return false, err
 		}
+		// because we waited on the rate limiter to offer this task,
+		// attach the rate limiter's RecycleToken func to the task
+		// so that if the task is later determined to be invalid,
+		// we can recycle the token it used.
+		task.recycleToken = tm.rateLimiter.RecycleToken
 	}
 
 	select {
@@ -234,6 +239,7 @@ func syncOfferTask[T any](
 	task *internalTask,
 	taskChan chan *internalTask,
 	forwardFunc func(context.Context, *internalTask) (T, error),
+	returnNoPollerErr bool,
 ) (T, error) {
 	var t T
 	select {
@@ -244,18 +250,21 @@ func syncOfferTask[T any](
 	}
 
 	fwdrTokenC := tm.fwdrAddReqTokenC()
-	var noPollerCtxC <-chan struct{}
-
-	if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
-		// Reserving 1sec to customize the timeout error if user is querying a workflow
-		// without having started the workers.
-		noPollerTimeout := time.Until(deadline) - time.Second
-		noPollerCtx, cancel := context.WithTimeout(ctx, noPollerTimeout)
-		noPollerCtxC = noPollerCtx.Done()
-		defer cancel()
-	}
+	var noPollerC <-chan time.Time
 
 	for {
+		if returnNoPollerErr {
+			returnNoPollerErr = false // only do this once
+			if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
+				// Reserving 1sec to customize the timeout error if user is querying a workflow
+				// without having started the workers.
+				noPollerTimeout := time.Until(deadline) - returnEmptyTaskTimeBudget
+				t := time.NewTimer(noPollerTimeout)
+				noPollerC = t.C
+				defer t.Stop()
+			}
+		}
+
 		select {
 		case taskChan <- task:
 			<-task.responseC
@@ -273,10 +282,9 @@ func syncOfferTask[T any](
 				continue
 			}
 			return t, err
-		case <-noPollerCtxC:
+		case <-noPollerC:
 			// only error if there has not been a recent poller. Otherwise, let it wait for the remaining time
 			// hopping for a match, or ultimately returning the default CDE error.
-			// TODO: rename this to clarify it applies to nexus tasks and queries.
 			if tm.timeSinceLastPoll() > tm.config.QueryPollerUnavailableWindow() {
 				return t, errNoRecentPoller
 			}
@@ -291,14 +299,14 @@ func syncOfferTask[T any](
 // Local match is always attempted before forwarding is attempted. If local match occurs
 // response and error are both nil, if forwarding occurs then response or error is returned.
 func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error) {
-	return syncOfferTask(ctx, tm, task, tm.queryTaskC, tm.fwdr.ForwardQueryTask)
+	return syncOfferTask(ctx, tm, task, tm.queryTaskC, tm.fwdr.ForwardQueryTask, true)
 }
 
 // OfferNexusTask either matchs a task to a local poller or forwards it if no local pollers available.
 // Local match is always attempted before forwarding. If local match occurs response and error are both nil, if
 // forwarding occurs then response or error is returned.
 func (tm *TaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
-	return syncOfferTask(ctx, tm, task, tm.taskC, tm.fwdr.ForwardNexusTask)
+	return syncOfferTask(ctx, tm, task, tm.taskC, tm.fwdr.ForwardNexusTask, false)
 }
 
 // MustOffer blocks until a consumer is found to handle this task
@@ -313,6 +321,12 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interr
 	if err := tm.rateLimiter.Wait(ctx); err != nil {
 		return err
 	}
+
+	// because we waited on the rate limiter to offer this task,
+	// attach the rate limiter's RecycleToken func to the task
+	// so that if the task is later determined to be invalid,
+	// we can recycle the token it used.
+	task.recycleToken = tm.rateLimiter.RecycleToken
 
 	// attempt a match with local poller first. When that
 	// doesn't succeed, try both local match and remote match
@@ -390,9 +404,9 @@ forLoop:
 			}
 			cancel()
 			// at this point, we forwarded the task to a parent partition which
-			// in turn dispatched the task to a poller. Make sure we delete the
-			// task from the database
-			task.finish(nil)
+			// in turn dispatched the task to a poller, because there was no error.
+			// Make sure we delete the task from the database.
+			task.finish(nil, true)
 			tm.emitDispatchLatency(task, true)
 			return nil
 		case <-ctx.Done():
@@ -410,15 +424,9 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 		return // should not happen but for safety
 	}
 
-	source := task.source
-	if source == enumsspb.TASK_SOURCE_UNSPECIFIED {
-		// history may not specify the source
-		source = enumsspb.TASK_SOURCE_HISTORY
-	}
-
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
 		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
-		metrics.StringTag("source", source.String()),
+		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
 	)
 }
@@ -635,6 +643,8 @@ func (tm *TaskMatcher) unregisterBacklogTask(task *internalTask) {
 	}
 }
 
+// getBacklogAge is the latest age across all backlogs re-directing to this matcher; may momentarily
+// be 0 cause of race conditions when no reader pushes a task into the matcher at this moment
 func (tm *TaskMatcher) getBacklogAge() time.Duration {
 	tm.backlogTasksLock.Lock()
 	defer tm.backlogTasksLock.Unlock()
@@ -645,9 +655,7 @@ func (tm *TaskMatcher) getBacklogAge() time.Duration {
 
 	oldest := int64(math.MaxInt64)
 	for createTime := range tm.backlogTasksCreateTime {
-		if createTime < oldest {
-			oldest = createTime
-		}
+		oldest = min(oldest, createTime)
 	}
 
 	return time.Since(time.Unix(0, oldest))

@@ -66,22 +66,10 @@ var (
 )
 
 // register adds a metric definition to the list of pending metric definitions. This method is thread-safe.
-func (c *registry) register(name string, opts ...Option) metricDefinition {
+func (c *registry) register(d metricDefinition) {
 	c.Lock()
 	defer c.Unlock()
-
-	d := metricDefinition{
-		name:        name,
-		description: "",
-		unit:        "",
-	}
-	for _, opt := range opts {
-		opt.apply(&d)
-	}
-
 	c.definitions = append(c.definitions, d)
-
-	return d
 }
 
 // buildCatalog builds a catalog from the list of pending metric definitions. It is safe to call this method multiple

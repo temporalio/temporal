@@ -28,7 +28,6 @@ package common
 
 import (
 	sdkworker "go.temporal.io/sdk/worker"
-
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -58,19 +57,13 @@ type (
 		Options sdkworker.Options
 	}
 
-	ActivityWorkerLimitsConfig struct {
-		// copy of relevant remote activity controls from sdkworker.Options
-		MaxConcurrentActivityExecutionSize int
-		TaskQueueActivitiesPerSecond       float64
-		WorkerActivitiesPerSecond          float64
-		MaxConcurrentActivityTaskPollers   int
-	}
-
 	// PerNSWorkerComponent represents a per-namespace worker needed for worker role
 	PerNSWorkerComponent interface {
 		// Register registers Workflow and Activity types provided by this worker component.
 		// The namespace that this worker is running in is also provided.
-		Register(sdkworker.Registry, *namespace.Namespace, RegistrationDetails)
+		// If Register returns a function, that function will be called when the worker is
+		// stopped. This can be used to clean up any state.
+		Register(sdkworker.Registry, *namespace.Namespace, RegistrationDetails) func()
 		// DedicatedWorkerOptions returns a PerNSDedicatedWorkerOptions for this worker component.
 		DedicatedWorkerOptions(*namespace.Namespace) *PerNSDedicatedWorkerOptions
 	}

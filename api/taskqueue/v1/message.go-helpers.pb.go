@@ -66,6 +66,43 @@ func (this *TaskVersionDirective) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type InternalTaskQueueStatus to the protobuf v3 wire format
+func (val *InternalTaskQueueStatus) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type InternalTaskQueueStatus from the protobuf v3 wire format
+func (val *InternalTaskQueueStatus) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *InternalTaskQueueStatus) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two InternalTaskQueueStatus values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *InternalTaskQueueStatus) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *InternalTaskQueueStatus
+	switch t := that.(type) {
+	case *InternalTaskQueueStatus:
+		that1 = t
+	case InternalTaskQueueStatus:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type TaskQueueVersionInfoInternal to the protobuf v3 wire format
 func (val *TaskQueueVersionInfoInternal) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -169,6 +206,80 @@ func (this *TaskQueuePartition) Equal(that interface{}) bool {
 	case *TaskQueuePartition:
 		that1 = t
 	case TaskQueuePartition:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type BuildIdRedirectInfo to the protobuf v3 wire format
+func (val *BuildIdRedirectInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type BuildIdRedirectInfo from the protobuf v3 wire format
+func (val *BuildIdRedirectInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *BuildIdRedirectInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two BuildIdRedirectInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *BuildIdRedirectInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *BuildIdRedirectInfo
+	switch t := that.(type) {
+	case *BuildIdRedirectInfo:
+		that1 = t
+	case BuildIdRedirectInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type TaskForwardInfo to the protobuf v3 wire format
+func (val *TaskForwardInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TaskForwardInfo from the protobuf v3 wire format
+func (val *TaskForwardInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TaskForwardInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TaskForwardInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TaskForwardInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TaskForwardInfo
+	switch t := that.(type) {
+	case *TaskForwardInfo:
+		that1 = t
+	case TaskForwardInfo:
 		that1 = &t
 	default:
 		return false

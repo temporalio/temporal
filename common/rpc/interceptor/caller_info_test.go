@@ -28,14 +28,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 )
 
 type (

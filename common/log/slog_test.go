@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -68,5 +69,5 @@ func TestSlogFromLayeredLogger(t *testing.T) {
 	require.Equal(t, "wp", record["hey.go.gg"])
 	require.Equal(t, "wow", record["msg"])
 	require.Equal(t, "corn", record["cluster-name"])
-	require.Equal(t, "slog_test.go:61", record["logging-call-at"])
+	require.True(t, strings.HasSuffix(record["logging-call-at"].(string), "slog_test.go:62"))
 }

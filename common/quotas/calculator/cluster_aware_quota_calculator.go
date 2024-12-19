@@ -32,7 +32,7 @@ var (
 type (
 	// MemberCounter returns the total number of instances there are for a given service.
 	MemberCounter interface {
-		MemberCount() int
+		AvailableMemberCount() int
 	}
 	// ClusterAwareQuotaCalculator calculates the available quota for the current host based on the per instance and per
 	// cluster quota. The quota could represent requests per second, total number of active requests, etc. It works by
@@ -57,7 +57,7 @@ type (
 // the memberCounter reports is greater than zero. Otherwise, the per-instance limit is used.
 func getQuota(memberCounter MemberCounter, instanceLimit, clusterLimit int) float64 {
 	if clusterLimit > 0 && memberCounter != nil {
-		if clusterSize := memberCounter.MemberCount(); clusterSize > 0 {
+		if clusterSize := memberCounter.AvailableMemberCount(); clusterSize > 0 {
 			return float64(clusterLimit) / float64(clusterSize)
 		}
 	}

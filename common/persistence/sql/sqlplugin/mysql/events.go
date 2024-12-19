@@ -82,7 +82,7 @@ func (mdb *db) InsertIntoHistoryNode(
 ) (sql.Result, error) {
 	// NOTE: txn_id is *= -1 within DB
 	row.TxnID = -row.TxnID
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		addHistoryNodesQuery,
 		row,
 	)
@@ -95,7 +95,7 @@ func (mdb *db) DeleteFromHistoryNode(
 ) (sql.Result, error) {
 	// NOTE: txn_id is *= -1 within DB
 	row.TxnID = -row.TxnID
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		deleteHistoryNodeQuery,
 		row.ShardID,
 		row.TreeID,
@@ -145,7 +145,7 @@ func (mdb *db) RangeSelectFromHistoryNode(
 	}
 
 	var rows []sqlplugin.HistoryNodeRow
-	if err := mdb.conn.SelectContext(ctx, &rows, query, args...); err != nil {
+	if err := mdb.SelectContext(ctx, &rows, query, args...); err != nil {
 		return nil, err
 	}
 
@@ -161,7 +161,7 @@ func (mdb *db) RangeDeleteFromHistoryNode(
 	ctx context.Context,
 	filter sqlplugin.HistoryNodeDeleteFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		deleteHistoryNodesQuery,
 		filter.ShardID,
 		filter.TreeID,
@@ -177,7 +177,7 @@ func (mdb *db) InsertIntoHistoryTree(
 	ctx context.Context,
 	row *sqlplugin.HistoryTreeRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		addHistoryTreeQuery,
 		row,
 	)
@@ -189,7 +189,7 @@ func (mdb *db) SelectFromHistoryTree(
 	filter sqlplugin.HistoryTreeSelectFilter,
 ) ([]sqlplugin.HistoryTreeRow, error) {
 	var rows []sqlplugin.HistoryTreeRow
-	err := mdb.conn.SelectContext(ctx,
+	err := mdb.SelectContext(ctx,
 		&rows,
 		getHistoryTreeQuery,
 		filter.ShardID,
@@ -205,7 +205,7 @@ func (mdb *db) PaginateBranchesFromHistoryTree(
 	page sqlplugin.HistoryTreeBranchPage,
 ) ([]sqlplugin.HistoryTreeRow, error) {
 	var rows []sqlplugin.HistoryTreeRow
-	err := mdb.conn.SelectContext(
+	err := mdb.SelectContext(
 		ctx,
 		&rows,
 		paginateBranchesQuery,
@@ -224,7 +224,7 @@ func (mdb *db) DeleteFromHistoryTree(
 	ctx context.Context,
 	filter sqlplugin.HistoryTreeDeleteFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		deleteHistoryTreeQuery,
 		filter.ShardID,
 		filter.TreeID,

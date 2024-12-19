@@ -26,16 +26,15 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"math"
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -48,8 +47,8 @@ const (
 type (
 	HealthRequestRateLimiterImpl struct {
 		enabled    atomic.Bool
-		params     DynamicRateLimitingParams                  // dynamic config map
-		curOptions atomic.Pointer[dynamicRateLimitingOptions] // current dynamic config values (updated on refresh)
+		params     DynamicRateLimitingParams                               // dynamic config struct
+		curOptions atomic.Pointer[dynamicconfig.DynamicRateLimitingParams] // current dynamic config values (updated on refresh)
 
 		rateLimiter   *quotas.RateLimiterImpl
 		healthSignals persistence.HealthSignalAggregator
@@ -62,25 +61,6 @@ type (
 
 		metricsHandler metrics.Handler
 		logger         log.Logger
-	}
-
-	dynamicRateLimitingOptions struct {
-		Enabled bool
-
-		RefreshInterval string // string returned by json.Unmarshal will be parsed into a duration
-
-		// thresholds which should trigger backoff if exceeded
-		LatencyThreshold float64
-		ErrorThreshold   float64
-
-		// if either threshold is exceeded, the current rate multiplier will be reduced by this amount
-		RateBackoffStepSize float64
-		// when the system is healthy and current rate < max rate, the current rate multiplier will be
-		// increased by this amount
-		RateIncreaseStepSize float64
-
-		RateMultiMax float64
-		RateMultiMin float64
 	}
 )
 
@@ -183,34 +163,13 @@ func (rl *HealthRequestRateLimiterImpl) refreshRate() {
 }
 
 func (rl *HealthRequestRateLimiterImpl) refreshDynamicParams() {
-	var options dynamicRateLimitingOptions
-	b, err := json.Marshal(rl.params())
-	if err != nil {
-		rl.logger.Warn("Error marshalling dynamic rate limiting params. Dynamic rate limiting is disabled.", tag.Error(err))
-		rl.enabled.Store(false)
-		return
-	}
-
-	err = json.Unmarshal(b, &options)
-	if err != nil {
-		rl.logger.Warn("Error unmarshalling dynamic rate limiting params. Dynamic rate limiting is disabled.", tag.Error(err))
-		rl.enabled.Store(false)
-		return
-	}
-
+	options := rl.params()
 	rl.enabled.Store(options.Enabled)
 	rl.curOptions.Store(&options)
 }
 
 func (rl *HealthRequestRateLimiterImpl) updateRefreshTimer() {
-	curOptions := *rl.curOptions.Load()
-	if len(curOptions.RefreshInterval) > 0 {
-		if refreshDuration, err := timestamp.ParseDurationDefaultSeconds(curOptions.RefreshInterval); err != nil {
-			rl.logger.Warn("Error parsing dynamic rate limit refreshInterval timestamp. Using previous value.", tag.Error(err))
-		} else {
-			rl.refreshTimer.Reset(refreshDuration)
-		}
-	}
+	rl.refreshTimer.Reset(rl.curOptions.Load().RefreshInterval)
 }
 
 func (rl *HealthRequestRateLimiterImpl) latencyThresholdExceeded() bool {

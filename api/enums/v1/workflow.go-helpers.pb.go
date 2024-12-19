@@ -71,3 +71,22 @@ func WorkflowBackoffTypeFromString(s string) (WorkflowBackoffType, error) {
 	}
 	return WorkflowBackoffType(0), fmt.Errorf("%s is not a valid WorkflowBackoffType", s)
 }
+
+var (
+	PausedWorkflowEntityType_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Activity":    1,
+		"Workflow":    2,
+	}
+)
+
+// PausedWorkflowEntityTypeFromString parses a PausedWorkflowEntityType value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to PausedWorkflowEntityType
+func PausedWorkflowEntityTypeFromString(s string) (PausedWorkflowEntityType, error) {
+	if v, ok := PausedWorkflowEntityType_value[s]; ok {
+		return PausedWorkflowEntityType(v), nil
+	} else if v, ok := PausedWorkflowEntityType_shorthandValue[s]; ok {
+		return PausedWorkflowEntityType(v), nil
+	}
+	return PausedWorkflowEntityType(0), fmt.Errorf("%s is not a valid PausedWorkflowEntityType", s)
+}

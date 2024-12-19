@@ -30,7 +30,6 @@ import (
 	"sync"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"

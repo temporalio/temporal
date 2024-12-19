@@ -28,7 +28,6 @@ import (
 	"errors"
 
 	"github.com/gocql/gocql"
-
 	"go.temporal.io/server/common/config"
 )
 

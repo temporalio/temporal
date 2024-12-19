@@ -30,13 +30,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/common/testing/protoassert"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (

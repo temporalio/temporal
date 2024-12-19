@@ -23,7 +23,7 @@
 // THE SOFTWARE.
 
 // Generates all three generated files in this package:
-//go:generate go run ../../cmd/tools/rpcwrappers -service matching
+//go:generate go run ../../cmd/tools/genrpcwrappers -service matching
 
 package matching
 
@@ -33,15 +33,14 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
-
-	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/debug"
 )
 
 var _ matchingservice.MatchingServiceClient = (*clientImpl)(nil)
@@ -89,7 +88,7 @@ func (c *clientImpl) AddActivityTask(
 		request.GetTaskQueue(),
 		request.GetNamespaceId(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		request.GetForwardedSource())
+		request.GetForwardInfo().GetSourcePartition())
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +105,7 @@ func (c *clientImpl) AddWorkflowTask(
 		request.GetTaskQueue(),
 		request.GetNamespaceId(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		request.GetForwardedSource())
+		request.GetForwardInfo().GetSourcePartition())
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +155,7 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 }
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.GetForwardedSource())
+	client, err := c.pickClientForWrite(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.GetForwardInfo().GetSourcePartition())
 	if err != nil {
 		return nil, err
 	}

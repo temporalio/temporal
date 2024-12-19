@@ -32,11 +32,11 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -117,7 +116,8 @@ func (e *taskExecutorImpl) Execute(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		err = e.handleSyncWorkflowStateTask(ctx, replicationTask, forceApply)
 	default:
-		e.logger.Error("Unknown task type.")
+		// NOTE: not handling SyncHSMTask in this deprecated code path, task will go to DLQ
+		e.logger.Error("Unknown replication task type.", tag.ReplicationTask(replicationTask))
 		err = ErrUnknownReplicationTask
 	}
 
@@ -145,22 +145,25 @@ func (e *taskExecutorImpl) handleActivityTask(
 	}()
 
 	request := &historyservice.SyncActivityRequest{
-		NamespaceId:        attr.NamespaceId,
-		WorkflowId:         attr.WorkflowId,
-		RunId:              attr.RunId,
-		Version:            attr.Version,
-		ScheduledEventId:   attr.ScheduledEventId,
-		ScheduledTime:      attr.ScheduledTime,
-		StartedEventId:     attr.StartedEventId,
-		StartedTime:        attr.StartedTime,
-		LastHeartbeatTime:  attr.LastHeartbeatTime,
-		Details:            attr.Details,
-		Attempt:            attr.Attempt,
-		LastFailure:        attr.LastFailure,
-		LastWorkerIdentity: attr.LastWorkerIdentity,
-		VersionHistory:     attr.GetVersionHistory(),
+		NamespaceId:                attr.NamespaceId,
+		WorkflowId:                 attr.WorkflowId,
+		RunId:                      attr.RunId,
+		Version:                    attr.Version,
+		ScheduledEventId:           attr.ScheduledEventId,
+		ScheduledTime:              attr.ScheduledTime,
+		StartedEventId:             attr.StartedEventId,
+		StartedTime:                attr.StartedTime,
+		LastHeartbeatTime:          attr.LastHeartbeatTime,
+		Details:                    attr.Details,
+		Attempt:                    attr.Attempt,
+		LastFailure:                attr.LastFailure,
+		LastWorkerIdentity:         attr.LastWorkerIdentity,
+		LastStartedBuildId:         attr.LastStartedBuildId,
+		LastStartedRedirectCounter: attr.LastStartedRedirectCounter,
+		VersionHistory:             attr.GetVersionHistory(),
 	}
-	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
@@ -174,12 +177,16 @@ func (e *taskExecutorImpl) handleActivityTask(
 		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
+			metrics.NamespaceTag(namespaceName.String()),
+			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
 			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
+				metrics.NamespaceTag(namespaceName.String()),
+				metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 			)
 		}()
 
@@ -246,7 +253,8 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		NewRunEvents: attr.NewRunEvents,
 		NewRunId:     attr.NewRunId,
 	}
-	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
@@ -260,12 +268,16 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
+			metrics.NamespaceTag(namespaceName.String()),
+			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
 			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
+				metrics.NamespaceTag(namespaceName.String()),
+				metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 			)
 		}()
 
@@ -316,7 +328,8 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		return err
 	}
 
-	ctx, cancel := e.newTaskContext(ctx, executionInfo.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(executionInfo.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
@@ -393,7 +406,7 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, e.shardContext, nsID, &ex, workflow.LockPriorityLow)
+	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, e.shardContext, nsID, &ex, locks.PriorityLow)
 	if err != nil {
 		return err
 	}
@@ -416,12 +429,10 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 
 func (e *taskExecutorImpl) newTaskContext(
 	parentCtx context.Context,
-	namespaceID string,
+	namespaceName namespace.Name,
 ) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(parentCtx, replicationTimeout)
-
-	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
-	ctx = headers.SetCallerName(ctx, namespace.String())
+	ctx = headers.SetCallerName(ctx, namespaceName.String())
 
 	return ctx, cancel
 }

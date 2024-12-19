@@ -31,14 +31,13 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/fx"
-	"google.golang.org/grpc/metadata"
-
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -49,27 +48,34 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/api/listqueues"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/fx"
 )
 
 type (
@@ -89,6 +95,7 @@ type (
 		persistenceExecutionManager  persistence.ExecutionManager
 		persistenceShardManager      persistence.ShardManager
 		persistenceVisibilityManager manager.VisibilityManager
+		persistenceHealthSignal      persistence.HealthSignalAggregator
 		historyServiceResolver       membership.ServiceResolver
 		metricsHandler               metrics.Handler
 		payloadSerializer            serialization.Serializer
@@ -102,6 +109,7 @@ type (
 		tracer                       trace.Tracer
 		taskQueueManager             persistence.HistoryTaskQueueManager
 		taskCategoryRegistry         tasks.TaskCategoryRegistry
+		dlqMetricsEmitter            *persistence.DLQMetricsEmitter
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -116,6 +124,7 @@ type (
 		ThrottledLogger              log.ThrottledLogger
 		PersistenceExecutionManager  persistence.ExecutionManager
 		PersistenceShardManager      persistence.ShardManager
+		PersistenceHealthSignal      persistence.HealthSignalAggregator
 		PersistenceVisibilityManager manager.VisibilityManager
 		HistoryServiceResolver       membership.ServiceResolver
 		MetricsHandler               metrics.Handler
@@ -131,6 +140,7 @@ type (
 		TracerProvider               trace.TracerProvider
 		TaskQueueManager             persistence.HistoryTaskQueueManager
 		TaskCategoryRegistry         tasks.TaskCategoryRegistry
+		DLQMetricsEmitter            *persistence.DLQMetricsEmitter
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -154,8 +164,6 @@ var (
 	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
 	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
 
-	errDeserializeTaskTokenMessage = "Error to deserialize task token. Error: %v."
-
 	errShuttingDown = serviceerror.NewUnavailable("Shutting down")
 )
 
@@ -174,6 +182,7 @@ func (h *Handler) Start() {
 	// events notifier must starts before controller
 	h.eventNotifier.Start()
 	h.controller.Start()
+	h.dlqMetricsEmitter.Start()
 
 	h.startWG.Done()
 }
@@ -192,10 +201,27 @@ func (h *Handler) Stop() {
 	h.replicationTaskFetcherFactory.Stop()
 	h.controller.Stop()
 	h.eventNotifier.Stop()
+	h.dlqMetricsEmitter.Stop()
 }
 
 func (h *Handler) isStopped() bool {
 	return atomic.LoadInt32(&h.status) == common.DaemonStatusStopped
+}
+
+func (h *Handler) DeepHealthCheck(
+	_ context.Context,
+	_ *historyservice.DeepHealthCheckRequest,
+) (_ *historyservice.DeepHealthCheckResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	latency := h.persistenceHealthSignal.AverageLatency()
+	errRatio := h.persistenceHealthSignal.ErrorRatio()
+
+	if latency > h.config.HealthPersistenceLatencyFailure() || errRatio > h.config.HealthPersistenceErrorRatio() {
+		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
+	}
+	return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 }
 
 // IsWorkflowTaskValid - whether workflow task is still valid
@@ -264,7 +290,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 	heartbeatRequest := request.HeartbeatRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(heartbeatRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	err0 = validateTaskToken(taskToken)
@@ -377,7 +403,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 	completeRequest := request.CompleteRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	err0 = validateTaskToken(taskToken)
@@ -416,7 +442,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	failRequest := request.FailedRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(failRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	err0 = validateTaskToken(taskToken)
@@ -455,7 +481,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	cancelRequest := request.CancelRequest
 	taskToken, err0 := h.tokenSerializer.Deserialize(cancelRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	err0 = validateTaskToken(taskToken)
@@ -494,7 +520,7 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 	completeRequest := request.CompleteRequest
 	token, err0 := h.tokenSerializer.Deserialize(completeRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	h.logger.Debug("RespondWorkflowTaskCompleted",
@@ -539,7 +565,7 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 	failedRequest := request.FailedRequest
 	token, err0 := h.tokenSerializer.Deserialize(failedRequest.TaskToken)
 	if err0 != nil {
-		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
+		return nil, consts.ErrDeserializingToken
 	}
 
 	h.logger.Debug("RespondWorkflowTaskFailed",
@@ -632,7 +658,18 @@ func (h *Handler) ExecuteMultiOperation(
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	// TODO: shardContext.NewVectorClock()
+
+	for _, opResp := range response.Responses {
+		if startResp := opResp.GetStartWorkflow(); startResp != nil {
+			if startResp.Clock == nil {
+				startResp.Clock, err = shardContext.NewVectorClock()
+				if err != nil {
+					return nil, h.convertError(err)
+				}
+			}
+		}
+	}
+
 	return response, nil
 }
 
@@ -1129,6 +1166,11 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 		return nil, h.convertError(err)
 	}
 
+	h.logger.Info("DeleteWorkflowExecution requested",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(workflowExecution.GetWorkflowId()),
+		tag.WorkflowRunID(workflowExecution.GetRunId()))
+
 	resp, err := engine.DeleteWorkflowExecution(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -1163,6 +1205,40 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 	}
 
 	resp, err2 := engine.ResetWorkflowExecution(ctx, request)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return resp, nil
+}
+
+// UpdateWorkflowExecutionOptions updates the options of a workflow execution.
+// Can be used to set and unset versioning behavior override.
+func (h *Handler) UpdateWorkflowExecutionOptions(ctx context.Context, request *historyservice.UpdateWorkflowExecutionOptionsRequest) (_ *historyservice.UpdateWorkflowExecutionOptionsResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowExecution := request.UpdateRequest.WorkflowExecution
+	workflowID := workflowExecution.GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err2 := engine.UpdateWorkflowExecutionOptions(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
@@ -2003,11 +2079,8 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		return errShuttingDown
 	}
 
-	ctxMetadata, ok := metadata.FromIncomingContext(server.Context())
-	if !ok {
-		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
-	}
-	clientClusterShardID, serverClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
+	getter := headers.NewGRPCHeaderGetter(server.Context())
+	clientClusterShardID, serverClusterShardID, err := history.DecodeClusterShardMD(getter)
 	if err != nil {
 		return err
 	}
@@ -2046,13 +2119,14 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		h.replicationTaskConverterProvider(
 			engine,
 			shardContext,
-			clientShardCount,
 			clientClusterName,
-			replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
+			serialization.NewSerializer(),
 		),
 		clientClusterName,
+		clientShardCount,
 		replication.NewClusterShardKey(clientClusterShardID.ClusterID, clientClusterShardID.ShardID),
 		replication.NewClusterShardKey(serverClusterShardID.ClusterID, serverClusterShardID.ShardID),
+		h.config,
 	)
 	h.streamReceiverMonitor.RegisterInboundStream(streamSender)
 	streamSender.Start()
@@ -2183,6 +2257,13 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 		request.Request.Execution.WorkflowId,
 		h.config.NumberOfShards,
 	)
+
+	workflowExecution := request.GetRequest().GetExecution()
+	h.logger.Info("ForceDeleteWorkflowExecution requested",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(workflowExecution.GetWorkflowId()),
+		tag.WorkflowRunID(workflowExecution.GetRunId()))
+
 	return forcedeleteworkflowexecution.Invoke(
 		ctx,
 		request,
@@ -2259,6 +2340,54 @@ func (h *Handler) ListTasks(
 	return resp, nil
 }
 
+func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyservice.CompleteNexusOperationRequest) (_ *historyservice.CompleteNexusOperationResponse, retErr error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.Completion.NamespaceId), request.Completion.WorkflowId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	ref := hsm.Ref{
+		WorkflowKey:     definition.NewWorkflowKey(request.Completion.NamespaceId, request.Completion.WorkflowId, request.Completion.RunId),
+		StateMachineRef: request.Completion.Ref,
+	}
+	var opErr *nexus.UnsuccessfulOperationError
+	if request.State != string(nexus.OperationStateSucceeded) {
+		opErr = &nexus.UnsuccessfulOperationError{
+			State: nexus.OperationState(request.GetState()),
+			Cause: &nexus.FailureError{
+				Failure: commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
+			},
+		}
+	}
+	err = nexusoperations.CompletionHandler(
+		ctx,
+		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
+		ref,
+		request.Completion.RequestId,
+		request.OperationId,
+		request.StartTime,
+		request.Links,
+		request.GetSuccess(),
+		opErr,
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return &historyservice.CompleteNexusOperationResponse{}, nil
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.
@@ -2288,4 +2417,182 @@ func validateTaskToken(taskToken *tokenspb.Task) error {
 		return errWorkflowIDNotSet
 	}
 	return nil
+}
+
+func (h *Handler) InvokeStateMachineMethod(ctx context.Context, request *historyservice.InvokeStateMachineMethodRequest) (_ *historyservice.InvokeStateMachineMethodResponse, retErr error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.NamespaceId), request.WorkflowId)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	registry := shardContext.StateMachineRegistry()
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	ref := hsm.Ref{
+		WorkflowKey:     definition.NewWorkflowKey(request.NamespaceId, request.WorkflowId, request.RunId),
+		StateMachineRef: request.Ref,
+	}
+
+	bytes, err := registry.ExecuteRemoteMethod(
+		ctx,
+		engine.StateMachineEnvironment(metrics.OperationTag(request.MethodName)),
+		ref,
+		request.MethodName,
+		request.Input,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.InvokeStateMachineMethodResponse{
+		Output: bytes,
+	}, nil
+}
+
+func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+	workflowID := request.Execution.WorkflowId
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err := engine.SyncWorkflowState(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+func (h *Handler) UpdateActivityOptions(
+	ctx context.Context, request *historyservice.UpdateActivityOptionsRequest,
+) (response *historyservice.UpdateActivityOptionsResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	workflowID := request.GetUpdateRequest().WorkflowId
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err = engine.UpdateActivityOptions(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+func (h *Handler) PauseActivity(
+	ctx context.Context, request *historyservice.PauseActivityRequest,
+) (response *historyservice.PauseActivityResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	workflowID := request.GetFrontendRequest().WorkflowId
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err = engine.PauseActivity(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+func (h *Handler) UnpauseActivity(
+	ctx context.Context, request *historyservice.UnpauseActivityRequest,
+) (response *historyservice.UnpauseActivityResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	workflowID := request.GetFrontendRequest().WorkflowId
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err = engine.UnpauseActivity(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+func (h *Handler) ResetActivity(
+	ctx context.Context, request *historyservice.ResetActivityRequest,
+) (response *historyservice.ResetActivityResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	workflowID := request.GetFrontendRequest().WorkflowId
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err = engine.ResetActivity(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
 }

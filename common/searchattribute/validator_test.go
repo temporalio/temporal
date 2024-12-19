@@ -27,13 +27,12 @@ package searchattribute
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.uber.org/mock/gomock"
 )
 
 type searchAttributesValidatorSuite struct {
@@ -67,9 +66,9 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	saValidator := NewValidator(
 		NewTestProvider(),
 		NewTestMapperProvider(nil),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
@@ -145,9 +144,9 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressEr
 	saValidator := NewValidator(
 		NewTestProvider(),
 		NewTestMapperProvider(nil),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
@@ -172,9 +171,9 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	saValidator := NewValidator(
 		NewTestProvider(),
 		NewTestMapperProvider(&TestMapper{}),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
@@ -236,9 +235,9 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 	saValidator := NewValidator(
 		NewTestProvider(),
 		NewTestMapperProvider(nil),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
@@ -276,9 +275,9 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 	saValidator := NewValidator(
 		NewTestProvider(),
 		NewTestMapperProvider(&TestMapper{}),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),

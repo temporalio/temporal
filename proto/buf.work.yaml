@@ -5,5 +5,4 @@
 # previous "buf.yaml" configuration.
 version: v1
 directories:
-  - api
   - internal

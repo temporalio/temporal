@@ -25,57 +25,63 @@
 package frontend
 
 import (
+	"fmt"
 	"net"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/reflection"
-
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/components/callbacks"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
+)
+
+var (
+	matchAny     = regexp.MustCompile(".*")
+	matchNothing = regexp.MustCompile(".^")
 )
 
 // Config represents configuration for frontend service
 type Config struct {
-	NumHistoryShards                      int32
-	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
-	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistenceGlobalNamespaceMaxQPS      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	PersistencePerShardNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
-	PersistenceDynamicRateLimitingParams  dynamicconfig.MapPropertyFn
-	PersistenceQPSBurstRatio              dynamicconfig.FloatPropertyFn
+	NumHistoryShards                     int32
+	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceGlobalNamespaceMaxQPS     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
+	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
-	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
-	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableReadFromSecondaryVisibility     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityDisableOrderByClause        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityEnableManualPagination      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityAllowList                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	SuppressErrorSetSystemSearchAttribute dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
+	VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
+	VisibilityPersistenceSlowQueryThreshold dynamicconfig.DurationPropertyFn
+	VisibilityMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableReadFromSecondaryVisibility       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
+	VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HistoryMaxPageSize                                                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RPS                                                               dynamicconfig.IntPropertyFn
-	GlobalRPS                                                         dynamicconfig.IntPropertyFn
-	OperatorRPSRatio                                                  dynamicconfig.FloatPropertyFn
+	HistoryMaxPageSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RPS                dynamicconfig.IntPropertyFn
+	GlobalRPS          dynamicconfig.IntPropertyFn
+	OperatorRPSRatio   dynamicconfig.FloatPropertyFn
+
 	NamespaceReplicationInducingAPIsRPS                               dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -94,6 +100,8 @@ type Config struct {
 	WorkerBuildIdSizeLimit                                            dynamicconfig.IntPropertyFn
 	ReachabilityTaskQueueScanLimit                                    dynamicconfig.IntPropertyFn
 	ReachabilityQueryBuildIdLimit                                     dynamicconfig.IntPropertyFn
+	ReachabilityCacheOpenWFsTTL                                       dynamicconfig.DurationPropertyFn
+	ReachabilityCacheClosedWFsTTL                                     dynamicconfig.DurationPropertyFn
 	ReachabilityQuerySetDurationSinceDefault                          dynamicconfig.DurationPropertyFn
 	DisallowQuery                                                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration                                             dynamicconfig.DurationPropertyFn
@@ -119,7 +127,7 @@ type Config struct {
 
 	// DefaultWorkflowRetryPolicy represents default values for unset fields on a Workflow's
 	// specified RetryPolicy
-	DefaultWorkflowRetryPolicy dynamicconfig.MapPropertyFnWithNamespaceFilter
+	DefaultWorkflowRetryPolicy dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 
 	// VisibilityArchival system protection
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
@@ -174,13 +182,14 @@ type Config struct {
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	// Enable deployment RPCs
+	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
 	// Enable batcher RPCs
 	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Batch operation dynamic configs
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
-
-	EnableWorkflowIdConflictPolicy dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EnableUpdateWorkflowExecution              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWorkflowExecutionAsyncAccepted dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -191,17 +200,35 @@ type Config struct {
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningRules    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	// AccessHistoryFraction are interim flags across 2 minor releases and will be removed once fully enabled.
-	AccessHistoryFraction            dynamicconfig.FloatPropertyFn
-	AdminDeleteAccessHistoryFraction dynamicconfig.FloatPropertyFn
-
-	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs and whether to register a handler for Nexus
-	// HTTP requests.
+	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs.
 	EnableNexusAPIs dynamicconfig.BoolPropertyFn
 
-	// EnableCallbackAttachment enables attaching callbacks to workflows.
-	EnableCallbackAttachment    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	AllowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn
+
+	CallbackURLMaxLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
+
+	NexusRequestHeadersBlacklist *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+
+	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
+
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
+
+	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// Health check
+	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
+
+	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	EnableEagerWorkflowStart dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	ActivityAPIsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	HTTPAllowedHosts *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
 }
 
 // NewConfig returns new service config with default values
@@ -210,106 +237,139 @@ func NewConfig(
 	numHistoryShards int32,
 ) *Config {
 	return &Config{
-		NumHistoryShards:                      numHistoryShards,
-		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
-		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
-		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceNamespaceMaxQPS, 0),
-		PersistenceGlobalNamespaceMaxQPS:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceGlobalNamespaceMaxQPS, 0),
-		PersistencePerShardNamespaceMaxQPS:    dynamicconfig.DefaultPerShardNamespaceRPSMax,
-		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.FrontendEnablePersistencePriorityRateLimiting, true),
-		PersistenceDynamicRateLimitingParams:  dc.GetMapProperty(dynamicconfig.FrontendPersistenceDynamicRateLimitingParams, dynamicconfig.DefaultDynamicRateLimitingParams),
-		PersistenceQPSBurstRatio:              dc.GetFloat64Property(dynamicconfig.PersistenceQPSBurstRatio, 1),
+		NumHistoryShards:                     numHistoryShards,
+		PersistenceMaxQPS:                    dynamicconfig.FrontendPersistenceMaxQPS.Get(dc),
+		PersistenceGlobalMaxQPS:              dynamicconfig.FrontendPersistenceGlobalMaxQPS.Get(dc),
+		PersistenceNamespaceMaxQPS:           dynamicconfig.FrontendPersistenceNamespaceMaxQPS.Get(dc),
+		PersistenceGlobalNamespaceMaxQPS:     dynamicconfig.FrontendPersistenceGlobalNamespaceMaxQPS.Get(dc),
+		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.DefaultPerShardNamespaceRPSMax,
+		PersistenceDynamicRateLimitingParams: dynamicconfig.FrontendPersistenceDynamicRateLimitingParams.Get(dc),
+		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
 
-		VisibilityPersistenceMaxReadQPS:       visibility.GetVisibilityPersistenceMaxReadQPS(dc),
-		VisibilityPersistenceMaxWriteQPS:      visibility.GetVisibilityPersistenceMaxWriteQPS(dc),
-		VisibilityMaxPageSize:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
-		EnableReadFromSecondaryVisibility:     visibility.GetEnableReadFromSecondaryVisibilityConfig(dc),
-		VisibilityDisableOrderByClause:        dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityDisableOrderByClause, true),
-		VisibilityEnableManualPagination:      dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityEnableManualPagination, true),
-		VisibilityAllowList:                   dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityAllowList, true),
-		SuppressErrorSetSystemSearchAttribute: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SuppressErrorSetSystemSearchAttribute, false),
+		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
+		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
+		VisibilityPersistenceSlowQueryThreshold: dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Get(dc),
+		VisibilityMaxPageSize:                   dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		EnableReadFromSecondaryVisibility:       dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
+		VisibilityEnableShadowReadMode:          dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
+		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
+		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
+		VisibilityAllowList:                     dynamicconfig.VisibilityAllowList.Get(dc),
+		SuppressErrorSetSystemSearchAttribute:   dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
 
-		HistoryMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
-		RPS:                                 dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
-		GlobalRPS:                           dc.GetIntProperty(dynamicconfig.FrontendGlobalRPS, 0),
-		OperatorRPSRatio:                    dc.GetFloat64Property(dynamicconfig.OperatorRPSRatio, common.DefaultOperatorRPSRatio),
-		NamespaceReplicationInducingAPIsRPS: dc.GetIntProperty(dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS, 20),
+		HistoryMaxPageSize:                  dynamicconfig.FrontendHistoryMaxPageSize.Get(dc),
+		RPS:                                 dynamicconfig.FrontendRPS.Get(dc),
+		GlobalRPS:                           dynamicconfig.FrontendGlobalRPS.Get(dc),
+		OperatorRPSRatio:                    dynamicconfig.OperatorRPSRatio.Get(dc),
+		NamespaceReplicationInducingAPIsRPS: dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Get(dc),
 
-		MaxNamespaceRPSPerInstance:                                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
-		MaxNamespaceBurstRatioPerInstance:                                 dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance, 2),
-		MaxConcurrentLongRunningRequestsPerInstance:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance, 1200),
-		MaxGlobalConcurrentLongRunningRequests:                            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests, 0),
-		MaxNamespaceVisibilityRPSPerInstance:                              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
-		MaxNamespaceVisibilityBurstRatioPerInstance:                       dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance, 1),
-		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance, 1),
-		MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance, 10),
+		MaxNamespaceRPSPerInstance:                                        dynamicconfig.FrontendMaxNamespaceRPSPerInstance.Get(dc),
+		MaxNamespaceBurstRatioPerInstance:                                 dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance.Get(dc),
+		MaxConcurrentLongRunningRequestsPerInstance:                       dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
+		MaxGlobalConcurrentLongRunningRequests:                            dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests.Get(dc),
+		MaxNamespaceVisibilityRPSPerInstance:                              dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Get(dc),
+		MaxNamespaceVisibilityBurstRatioPerInstance:                       dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Get(dc),
+		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance.Get(dc),
+		MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Get(dc),
 
-		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
-		InternalFEGlobalNamespaceRPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.InternalFrontendGlobalNamespaceRPS, 0),
-		GlobalNamespaceVisibilityRPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceVisibilityRPS, 0),
-		InternalFEGlobalNamespaceVisibilityRPS: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.InternalFrontendGlobalNamespaceVisibilityRPS, 0),
+		GlobalNamespaceRPS:                     dynamicconfig.FrontendGlobalNamespaceRPS.Get(dc),
+		InternalFEGlobalNamespaceRPS:           dynamicconfig.InternalFrontendGlobalNamespaceRPS.Get(dc),
+		GlobalNamespaceVisibilityRPS:           dynamicconfig.FrontendGlobalNamespaceVisibilityRPS.Get(dc),
+		InternalFEGlobalNamespaceVisibilityRPS: dynamicconfig.InternalFrontendGlobalNamespaceVisibilityRPS.Get(dc),
 		// Overshoot since these low rate limits don't work well in an uncoordinated global limiter.
-		GlobalNamespaceNamespaceReplicationInducingAPIsRPS: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 10),
-		MaxIDLengthLimit:                         dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
-		WorkerBuildIdSizeLimit:                   dc.GetIntProperty(dynamicconfig.WorkerBuildIdSizeLimit, 255),
-		ReachabilityTaskQueueScanLimit:           dc.GetIntProperty(dynamicconfig.ReachabilityTaskQueueScanLimit, 20),
-		ReachabilityQueryBuildIdLimit:            dc.GetIntProperty(dynamicconfig.ReachabilityQueryBuildIdLimit, 5),
-		ReachabilityQuerySetDurationSinceDefault: dc.GetDurationProperty(dynamicconfig.ReachabilityQuerySetDurationSinceDefault, 5*time.Minute),
-		MaxBadBinaries:                           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
-		DisableListVisibilityByFilter:            dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisableListVisibilityByFilter, false),
-		BlobSizeLimitError:                       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
-		BlobSizeLimitWarn:                        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 256*1024),
-		ThrottledLogRPS:                          dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
-		ShutdownDrainDuration:                    dc.GetDurationProperty(dynamicconfig.FrontendShutdownDrainDuration, 0*time.Second),
-		ShutdownFailHealthCheckDuration:          dc.GetDurationProperty(dynamicconfig.FrontendShutdownFailHealthCheckDuration, 0*time.Second),
-		EnableNamespaceNotActiveAutoForwarding:   dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableNamespaceNotActiveAutoForwarding, true),
-		SearchAttributesNumberOfKeysLimit:        dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
-		SearchAttributesSizeOfValueLimit:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
-		SearchAttributesTotalSizeLimit:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
-		VisibilityArchivalQueryMaxPageSize:       dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
-		DisallowQuery:                            dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisallowQuery, false),
-		SendRawWorkflowHistory:                   dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),
-		DefaultWorkflowRetryPolicy:               dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
-		DefaultWorkflowTaskTimeout:               dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
-		EnableServerVersionCheck:                 dc.GetBoolProperty(dynamicconfig.EnableServerVersionCheck, os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == ""),
-		EnableTokenNamespaceEnforcement:          dc.GetBoolProperty(dynamicconfig.EnableTokenNamespaceEnforcement, true),
-		KeepAliveMinTime:                         dc.GetDurationProperty(dynamicconfig.KeepAliveMinTime, 10*time.Second),
-		KeepAlivePermitWithoutStream:             dc.GetBoolProperty(dynamicconfig.KeepAlivePermitWithoutStream, true),
-		KeepAliveMaxConnectionIdle:               dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionIdle, 2*time.Minute),
-		KeepAliveMaxConnectionAge:                dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionAge, 5*time.Minute),
-		KeepAliveMaxConnectionAgeGrace:           dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionAgeGrace, 70*time.Second),
-		KeepAliveTime:                            dc.GetDurationProperty(dynamicconfig.KeepAliveTime, 1*time.Minute),
-		KeepAliveTimeout:                         dc.GetDurationProperty(dynamicconfig.KeepAliveTimeout, 10*time.Second),
+		GlobalNamespaceNamespaceReplicationInducingAPIsRPS: dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Get(dc),
+		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
+		WorkerBuildIdSizeLimit:                   dynamicconfig.WorkerBuildIdSizeLimit.Get(dc),
+		ReachabilityTaskQueueScanLimit:           dynamicconfig.ReachabilityTaskQueueScanLimit.Get(dc),
+		ReachabilityQueryBuildIdLimit:            dynamicconfig.ReachabilityQueryBuildIdLimit.Get(dc),
+		ReachabilityCacheOpenWFsTTL:              dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc),
+		ReachabilityCacheClosedWFsTTL:            dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc),
+		ReachabilityQuerySetDurationSinceDefault: dynamicconfig.ReachabilityQuerySetDurationSinceDefault.Get(dc),
+		MaxBadBinaries:                           dynamicconfig.FrontendMaxBadBinaries.Get(dc),
+		DisableListVisibilityByFilter:            dynamicconfig.DisableListVisibilityByFilter.Get(dc),
+		BlobSizeLimitError:                       dynamicconfig.BlobSizeLimitError.Get(dc),
+		BlobSizeLimitWarn:                        dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		ThrottledLogRPS:                          dynamicconfig.FrontendThrottledLogRPS.Get(dc),
+		ShutdownDrainDuration:                    dynamicconfig.FrontendShutdownDrainDuration.Get(dc),
+		ShutdownFailHealthCheckDuration:          dynamicconfig.FrontendShutdownFailHealthCheckDuration.Get(dc),
+		EnableNamespaceNotActiveAutoForwarding:   dynamicconfig.EnableNamespaceNotActiveAutoForwarding.Get(dc),
+		SearchAttributesNumberOfKeysLimit:        dynamicconfig.SearchAttributesNumberOfKeysLimit.Get(dc),
+		SearchAttributesSizeOfValueLimit:         dynamicconfig.SearchAttributesSizeOfValueLimit.Get(dc),
+		SearchAttributesTotalSizeLimit:           dynamicconfig.SearchAttributesTotalSizeLimit.Get(dc),
+		VisibilityArchivalQueryMaxPageSize:       dynamicconfig.VisibilityArchivalQueryMaxPageSize.Get(dc),
+		DisallowQuery:                            dynamicconfig.DisallowQuery.Get(dc),
+		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
+		DefaultWorkflowRetryPolicy:               dynamicconfig.DefaultWorkflowRetryPolicy.Get(dc),
+		DefaultWorkflowTaskTimeout:               dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
+		EnableServerVersionCheck:                 dynamicconfig.EnableServerVersionCheck.Get(dc),
+		EnableTokenNamespaceEnforcement:          dynamicconfig.EnableTokenNamespaceEnforcement.Get(dc),
+		KeepAliveMinTime:                         dynamicconfig.KeepAliveMinTime.Get(dc),
+		KeepAlivePermitWithoutStream:             dynamicconfig.KeepAlivePermitWithoutStream.Get(dc),
+		KeepAliveMaxConnectionIdle:               dynamicconfig.KeepAliveMaxConnectionIdle.Get(dc),
+		KeepAliveMaxConnectionAge:                dynamicconfig.KeepAliveMaxConnectionAge.Get(dc),
+		KeepAliveMaxConnectionAgeGrace:           dynamicconfig.KeepAliveMaxConnectionAgeGrace.Get(dc),
+		KeepAliveTime:                            dynamicconfig.KeepAliveTime.Get(dc),
+		KeepAliveTimeout:                         dynamicconfig.KeepAliveTimeout.Get(dc),
 
-		DeleteNamespaceDeleteActivityRPS:                    dc.GetIntProperty(dynamicconfig.DeleteNamespaceDeleteActivityRPS, 100),
-		DeleteNamespacePageSize:                             dc.GetIntProperty(dynamicconfig.DeleteNamespacePageSize, 1000),
-		DeleteNamespacePagesPerExecution:                    dc.GetIntProperty(dynamicconfig.DeleteNamespacePagesPerExecution, 256),
-		DeleteNamespaceConcurrentDeleteExecutionsActivities: dc.GetIntProperty(dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities, 4),
-		DeleteNamespaceNamespaceDeleteDelay:                 dc.GetDurationProperty(dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, 0*time.Hour),
+		DeleteNamespaceDeleteActivityRPS:                    dynamicconfig.DeleteNamespaceDeleteActivityRPS.Get(dc),
+		DeleteNamespacePageSize:                             dynamicconfig.DeleteNamespacePageSize.Get(dc),
+		DeleteNamespacePagesPerExecution:                    dynamicconfig.DeleteNamespacePagesPerExecution.Get(dc),
+		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities.Get(dc),
+		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.DeleteNamespaceNamespaceDeleteDelay.Get(dc),
 
-		EnableSchedules: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableSchedules, true),
+		EnableSchedules: dynamicconfig.FrontendEnableSchedules.Get(dc),
 
-		EnableBatcher:                   dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableBatcher, true),
-		MaxConcurrentBatchOperation:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
-		MaxExecutionCountBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace, 1000),
+		EnableDeployments: dynamicconfig.EnableDeployments.Get(dc),
 
-		EnableWorkflowIdConflictPolicy: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableWorkflowIdConflictPolicy, false),
+		EnableBatcher:                   dynamicconfig.FrontendEnableBatcher.Get(dc),
+		MaxConcurrentBatchOperation:     dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
+		MaxExecutionCountBatchOperation: dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
 
-		EnableExecuteMultiOperation: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableExecuteMultiOperation, false),
+		EnableExecuteMultiOperation: dynamicconfig.FrontendEnableExecuteMultiOperation.Get(dc),
 
-		EnableUpdateWorkflowExecution:              dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecution, false),
-		EnableUpdateWorkflowExecutionAsyncAccepted: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted, false),
+		EnableUpdateWorkflowExecution:              dynamicconfig.FrontendEnableUpdateWorkflowExecution.Get(dc),
+		EnableUpdateWorkflowExecutionAsyncAccepted: dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Get(dc),
 
-		EnableWorkerVersioningData:     dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningDataAPIs, false),
-		EnableWorkerVersioningWorkflow: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, false),
-		EnableWorkerVersioningRules:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs, false),
+		EnableWorkerVersioningData:     dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Get(dc),
+		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
+		EnableWorkerVersioningRules:    dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Get(dc),
 
-		AccessHistoryFraction:            dc.GetFloat64Property(dynamicconfig.FrontendAccessHistoryFraction, 0.0),
-		AdminDeleteAccessHistoryFraction: dc.GetFloat64Property(dynamicconfig.FrontendAdminDeleteAccessHistoryFraction, 0.0),
+		EnableNexusAPIs: dynamicconfig.EnableNexus.Get(dc),
+		AllowDeleteNamespaceIfNexusEndpointTarget: dynamicconfig.AllowDeleteNamespaceIfNexusEndpointTarget.Get(dc),
+		CallbackURLMaxLength:                      dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		CallbackHeaderMaxSize:                     dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		MaxCallbacksPerWorkflow:                   dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 
-		EnableNexusAPIs:             dc.GetBoolProperty(dynamicconfig.FrontendEnableNexusAPIs, false),
-		EnableCallbackAttachment:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableCallbackAttachment, false),
-		AdminEnableListHistoryTasks: dc.GetBoolProperty(dynamicconfig.AdminEnableListHistoryTasks, true),
+		NexusRequestHeadersBlacklist: dynamicconfig.NewGlobalCachedTypedValue(
+			dc,
+			dynamicconfig.FrontendNexusRequestHeadersBlacklist,
+			func(patterns []string) (*regexp.Regexp, error) {
+				if len(patterns) == 0 {
+					return matchNothing, nil
+				}
+				return util.WildCardStringsToRegexp(patterns)
+			},
+		),
+
+		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
+		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
+
+		CallbackEndpointConfigs:     callbacks.AllowedAddresses.Get(dc),
+		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
+
+		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
+
+		HistoryHostErrorPercentage: dynamicconfig.HistoryHostErrorPercentage.Get(dc),
+		LogAllReqErrors:            dynamicconfig.LogAllReqErrors.Get(dc),
+		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		ActivityAPIsEnabled:        dynamicconfig.ActivityAPIsEnabled.Get(dc),
+
+		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, func(patterns []string) (*regexp.Regexp, error) {
+			if len(patterns) == 0 {
+				return matchAny, nil
+			}
+			return util.WildCardStringsToRegexp(patterns)
+		}),
 	}
 }
 
@@ -326,11 +386,10 @@ type Service struct {
 	server            *grpc.Server
 	httpAPIServer     *HTTPAPIServer
 
-	logger                         log.Logger
-	grpcListener                   net.Listener
-	metricsHandler                 metrics.Handler
-	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
-	membershipMonitor              membership.Monitor
+	logger            log.Logger
+	grpcListener      net.Listener
+	metricsHandler    metrics.Handler
+	membershipMonitor membership.Monitor
 }
 
 func NewService(
@@ -346,24 +405,22 @@ func NewService(
 	logger log.Logger,
 	grpcListener net.Listener,
 	metricsHandler metrics.Handler,
-	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 	membershipMonitor membership.Monitor,
 ) *Service {
 	return &Service{
-		config:                         serviceConfig,
-		server:                         server,
-		healthServer:                   healthServer,
-		httpAPIServer:                  httpAPIServer,
-		handler:                        handler,
-		adminHandler:                   adminHandler,
-		operatorHandler:                operatorHandler,
-		versionChecker:                 versionChecker,
-		visibilityManager:              visibilityMgr,
-		logger:                         logger,
-		grpcListener:                   grpcListener,
-		metricsHandler:                 metricsHandler,
-		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
-		membershipMonitor:              membershipMonitor,
+		config:            serviceConfig,
+		server:            server,
+		healthServer:      healthServer,
+		httpAPIServer:     httpAPIServer,
+		handler:           handler,
+		adminHandler:      adminHandler,
+		operatorHandler:   operatorHandler,
+		versionChecker:    versionChecker,
+		visibilityManager: visibilityMgr,
+		logger:            logger,
+		grpcListener:      grpcListener,
+		metricsHandler:    metricsHandler,
+		membershipMonitor: membershipMonitor,
 	}
 }
 
@@ -399,6 +456,15 @@ func (s *Service) Start() {
 				s.logger.Fatal("Failed to serve HTTP API server", tag.Error(err))
 			}
 		}()
+	} else if s.config.EnableNexusAPIs() {
+		var action string
+		if os.Args[0] == "temporal" {
+			action = "To enable Nexus, start the server with: `temporal server start-dev --http-port 7243 --dynamic-config-value system.enableNexus=true`."
+		} else {
+			action = "To enable Nexus, follow these instructions: https://github.com/temporalio/temporal/blob/main/docs/architecture/nexus.md#enabling-nexus."
+		}
+
+		s.logger.Warn(fmt.Sprintf("system.enableNexus dynamic config is enabled but the HTTP API port has not been set. Starting with Nexus disabled. %s", action))
 	}
 
 	go s.membershipMonitor.Start()
@@ -456,8 +522,4 @@ func (s *Service) Stop() {
 	}
 
 	s.logger.Info("frontend stopped")
-}
-
-func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
-	return s.faultInjectionDataStoreFactory
 }

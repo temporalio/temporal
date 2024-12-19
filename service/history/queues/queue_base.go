@@ -193,7 +193,7 @@ func newQueueBase(
 
 		slices := make([]Slice, 0, len(scopes))
 		for _, scope := range scopes {
-			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper))
+			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper, options.ReaderOptions.MaxPredicateSize))
 		}
 		readerGroup.NewReader(readerID, slices...)
 
@@ -234,7 +234,7 @@ func newQueueBase(
 		// pollTimer and checkpointTimer are initialized on Start()
 		checkpointRetrier: backoff.NewRetrier(
 			createCheckpointRetryPolicy(),
-			backoff.SystemClock,
+			clock.NewRealTimeSource(),
 		),
 
 		alertCh: monitor.AlertCh(),
@@ -281,6 +281,7 @@ func (p *queueBase) processNewRange() {
 			p.monitor,
 			newReadScope,
 			p.grouper,
+			p.options.ReaderOptions.MaxPredicateSize,
 		))
 	}
 
@@ -413,8 +414,8 @@ func (p *queueBase) updateQueueState(
 
 func (p *queueBase) resetCheckpointTimer(checkPointErr error) {
 	if checkPointErr != nil {
-		backoff := p.checkpointRetrier.NextBackOff()
-		p.checkpointTimer.Reset(backoff)
+		delay := p.checkpointRetrier.NextBackOff(checkPointErr)
+		p.checkpointTimer.Reset(delay)
 		return
 	}
 

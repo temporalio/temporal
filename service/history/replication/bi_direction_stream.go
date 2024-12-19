@@ -31,9 +31,8 @@ import (
 	"sync"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log/tag"
-
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -194,10 +193,6 @@ func (s *BiDirectionStreamImpl[Req, Resp]) recvLoop() {
 		case io.EOF:
 			return
 		default:
-			s.logger.Error(fmt.Sprintf(
-				"BiDirectionStream encountered unexpected error, closing: %T %s",
-				err, err,
-			))
 			var errResp Resp
 			s.channel <- StreamResp[Resp]{
 				Resp: errResp,

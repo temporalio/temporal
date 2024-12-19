@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -35,12 +36,8 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/exp/maps"
-	"golang.org/x/sync/semaphore"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -57,8 +54,10 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -66,6 +65,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
@@ -76,6 +76,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -89,7 +90,6 @@ const (
 )
 
 const (
-	shardIOTimeout = 5 * time.Second * debug.TimeoutMultiplier
 	// ShardUpdateQueueMetricsInterval is the minimum amount of time between updates to a shard's queue metrics
 	queueMetricUpdateInterval = 5 * time.Minute
 
@@ -118,6 +118,7 @@ type (
 		engineFactory       EngineFactory
 		engineFuture        *future.FutureImpl[Engine]
 		queueMetricEmitter  sync.Once
+		finalizer           *finalizer.Finalizer
 
 		persistenceShardManager persistence.ShardManager
 		clientBean              client.Bean
@@ -142,7 +143,7 @@ type (
 		// For cassandra, this basically means requests that use LWT.
 		// It's ok to use semaphore by its own or lock rwLock within the semaphore.
 		// But DO NOT try to acquire ioSemaphore while holding rwLock, as it may cause deadlock.
-		ioSemaphore *semaphore.Weighted
+		ioSemaphore locks.PrioritySemaphore
 
 		// state is protected by stateLock
 		stateLock  sync.Mutex
@@ -243,14 +244,14 @@ func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
 }
 
-func (s *ContextImpl) GetPingChecks() []common.PingCheck {
-	return []common.PingCheck{
+func (s *ContextImpl) GetPingChecks() []pingable.Check {
+	return []pingable.Check{
 		{
 			Name: s.String() + "-shard-lock",
 			// rwLock may be held for the duration of renewing shard rangeID, which are called with a
-			// timeout of shardIOTimeout. add a few more seconds for reliability.
-			Timeout: shardIOTimeout + 5*time.Second,
-			Ping: func() []common.Pingable {
+			// timeout of shardIOTimeout.
+			Timeout: s.config.ShardIOTimeout() + 30*time.Second,
+			Ping: func() []pingable.Pingable {
 				// call rwLock.Lock directly to bypass metrics since this isn't a real request
 				s.rwLock.Lock()
 				//nolint:staticcheck // SA2001 just checking if we can acquire the lock
@@ -263,9 +264,9 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			Name: s.String() + "-io-semaphore",
 			// ioSemaphore is for the duration of a persistence op which has a persistence connection timeout
 			// of 10 sec.
-			Timeout: 10 * time.Second,
-			Ping: func() []common.Pingable {
-				_ = s.ioSemaphore.Acquire(context.Background(), 1)
+			Timeout: 10*time.Second + 30*time.Second,
+			Ping: func() []pingable.Pingable {
+				_ = s.ioSemaphore.Acquire(context.Background(), locks.PriorityHigh, 1)
 				s.ioSemaphore.Release(1)
 				return nil
 			},
@@ -337,6 +338,10 @@ func (s *ContextImpl) GenerateTaskID() (int64, error) {
 	defer s.wUnlock()
 
 	return s.generateTaskIDLocked()
+}
+
+func (s *ContextImpl) GetFinalizer() *finalizer.Finalizer {
+	return s.finalizer
 }
 
 func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
@@ -491,7 +496,7 @@ func (s *ContextImpl) UpdateHandoverNamespace(ns *namespace.Namespace, deletedFr
 	// it here to be more safe in case above assumption no longer holds in the future.
 	isHandoverNamespace := ns.IsGlobalNamespace() &&
 		ns.ActiveInCluster(s.GetClusterMetadata().GetCurrentClusterName()) &&
-		ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER
+		ns.ReplicationState() == enumspb.REPLICATION_STATE_HANDOVER
 
 	s.wLock()
 	if deletedFromDb || !isHandoverNamespace {
@@ -564,7 +569,7 @@ func (s *ContextImpl) AddSpeculativeWorkflowTaskTimeoutTask(
 		return err
 	}
 
-	engine.AddSpeculativeWorkflowTaskTimeoutTask(task)
+	engine.NotifyNewTasks(map[tasks.Category][]tasks.Task{task.GetCategory(): []tasks.Task{task}})
 
 	return nil
 }
@@ -918,10 +923,12 @@ func (s *ContextImpl) AppendHistoryEvents(
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
 		handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.SessionStatsScope))
-		metrics.HistorySize.With(handler).Record(int64(size))
 		if entry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil && entry != nil {
 			metrics.HistorySize.With(handler).
 				Record(int64(size), metrics.NamespaceTag(entry.Name().String()))
+		} else {
+			metrics.HistorySize.With(handler).
+				Record(int64(size), metrics.NamespaceUnknownTag())
 		}
 		if size >= historySizeLogThreshold {
 			s.throttledLogger.Warn("history size threshold breached",
@@ -943,6 +950,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	key definition.WorkflowKey,
 	branchToken []byte,
 	closeVisibilityTaskId int64,
+	workflowCloseTime time.Time,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
@@ -1019,6 +1027,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							WorkflowKey:                    key,
 							VisibilityTimestamp:            s.timeSource.Now(),
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
+							CloseTime:                      workflowCloseTime,
 						},
 					},
 				}
@@ -1248,6 +1257,7 @@ func (s *ContextImpl) updateShardInfo(
 
 	// update lastUpdate here so that we don't have to grab shard lock again if UpdateShard is successful
 	previousLastUpdate := s.lastUpdated
+	prevTasksCompletedSinceLastUpdate := s.tasksCompletedSinceLastUpdate
 	metrics.TasksCompletedPerShardInfoUpdate.With(s.metricsHandler).Record(int64(s.tasksCompletedSinceLastUpdate))
 	metrics.TimeBetweenShardInfoUpdates.With(s.metricsHandler).Record(now.Sub(previousLastUpdate))
 
@@ -1273,8 +1283,9 @@ func (s *ContextImpl) updateShardInfo(
 	if err != nil {
 		s.wLock()
 		defer s.wUnlock()
-		// revert lastUpdated time so that operation can be retried
-		s.lastUpdated = util.MaxTime(previousLastUpdate, s.lastUpdated)
+		// revert update shard properties so that operation can be retried
+		s.lastUpdated = previousLastUpdate
+		s.tasksCompletedSinceLastUpdate = prevTasksCompletedSinceLastUpdate
 		return s.handleWriteErrorLocked(request.PreviousRangeID, err)
 	}
 
@@ -1472,14 +1483,19 @@ func (s *ContextImpl) FinishStop() {
 	// an Engine here, we won't ever have one.
 	_ = s.transition(contextRequestFinishStop{})
 
-	// use a context that we know is cancelled so that this doesn't block
+	// Use a context that we know is cancelled so that this doesn't block.
 	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
 
-	// Stop the engine if it was running (outside the lock but before returning)
+	// Stop the engine if it was running (outside the lock but before returning).
 	if engine != nil {
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardEngine)
 		engine.Stop()
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
+	}
+
+	// Run finalizer to cleanup any of the shard's associated resources that are registered.
+	if s.finalizer != nil {
+		s.finalizer.Run(s.config.ShardFinalizerTimeout())
 	}
 }
 
@@ -1524,7 +1540,13 @@ func (s *ContextImpl) rUnlock() {
 func (s *ContextImpl) ioSemaphoreAcquire(
 	ctx context.Context,
 ) (retErr error) {
-	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	priority := locks.PriorityHigh
+	callerInfo := headers.GetCallerInfo(ctx)
+	if callerInfo.CallerType == headers.CallerTypePreemptable {
+		priority = locks.PriorityLow
+	}
+
+	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope), metrics.PriorityTag(priority))
 	metrics.SemaphoreRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() {
@@ -1534,7 +1556,7 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 		}
 	}()
 
-	return s.ioSemaphore.Acquire(ctx, 1)
+	return s.ioSemaphore.Acquire(ctx, priority, 1)
 }
 
 func (s *ContextImpl) ioSemaphoreRelease() {
@@ -1910,7 +1932,7 @@ func (s *ContextImpl) getOrUpdateRemoteClusterInfoLocked(clusterName string) *re
 func (s *ContextImpl) acquireShard() {
 	// This is called in two contexts: initially acquiring the rangeid lock, and trying to
 	// re-acquire it after a persistence error. In both cases, we retry the acquire operation
-	// (renewRangeLocked) for 5 minutes. Each individual attempt uses shardIOTimeout (5s) as
+	// (renewRangeLocked) for 5 minutes. Each individual attempt uses shardIOTimeout (by default, 5s) as
 	// the timeout. This lets us handle a few minutes of persistence unavailability without
 	// dropping and reloading the whole shard context, which is relatively expensive (includes
 	// caches that would have to be refilled, etc.).
@@ -2069,6 +2091,7 @@ func newContext(
 		ioConcurrency = 1
 	}
 
+	taggedLogger := log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity))
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
@@ -2078,7 +2101,8 @@ func newContext(
 		metricsHandler:          metricsHandler,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
-		contextTaggedLogger:     log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity)),
+		finalizer:               finalizer.New(taggedLogger, metricsHandler),
+		contextTaggedLogger:     taggedLogger,
 		throttledLogger:         log.With(throttledLogger, tag.ShardID(shardID), tag.Address(hostIdentity)),
 		engineFactory:           factory,
 		persistenceShardManager: persistenceShardManager,
@@ -2098,7 +2122,7 @@ func newContext(
 		lifecycleCancel:         lifecycleCancel,
 		engineFuture:            future.NewFuture[Engine](),
 		queueMetricEmitter:      sync.Once{},
-		ioSemaphore:             semaphore.NewWeighted(int64(ioConcurrency)),
+		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
@@ -2121,7 +2145,20 @@ func newContext(
 			false,
 		)
 	}
+	shardContext.initLastUpdatesTime()
 	return shardContext, nil
+}
+
+func (s *ContextImpl) initLastUpdatesTime() {
+	// We need to set lastUpdate time to "now" - "wait between shard updates time" +  "first update interval".
+	// This is done to make sure that first shard update` will happen around "first update interval" after "now".
+	// The idea is to allow queue to persist even in the case of (relativly) constantly
+	// moving shards between hosts.
+	// Note: it still may prevent queue from progressing if shard moving rate is too high
+	lastUpdated := s.timeSource.Now()
+	lastUpdated = lastUpdated.Add(-1 * s.config.ShardUpdateMinInterval())
+	lastUpdated = lastUpdated.Add(s.config.ShardFirstUpdateInterval())
+	s.lastUpdated = lastUpdated
 }
 
 // TODO: why do we need a deep copy here?
@@ -2220,7 +2257,7 @@ func (s *ContextImpl) newDetachedContext(
 }
 
 func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(s.lifecycleCtx, shardIOTimeout)
+	ctx, cancel := context.WithTimeout(s.lifecycleCtx, s.config.ShardIOTimeout())
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
 	return ctx, cancel

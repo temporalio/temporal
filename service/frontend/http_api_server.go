@@ -32,22 +32,17 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -57,17 +52,26 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/utf8validator"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // HTTPAPIServer is an HTTP API server that forwards requests to gRPC via the
 // gRPC interceptors.
 type HTTPAPIServer struct {
-	server                 http.Server
-	listener               net.Listener
-	logger                 log.Logger
-	serveMux               *runtime.ServeMux
-	stopped                chan struct{}
-	matchAdditionalHeaders map[string]bool
+	server                        http.Server
+	listener                      net.Listener
+	logger                        log.Logger
+	serveMux                      *runtime.ServeMux
+	stopped                       chan struct{}
+	allowedHosts                  *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	matchAdditionalHeaders        map[string]bool
+	matchAdditionalHeaderPrefixes []string
 }
 
 var defaultForwardedHeaders = []string{
@@ -96,7 +100,7 @@ func NewHTTPAPIServer(
 	operatorHandler *OperatorHandlerImpl,
 	interceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
-	additionalRouteRegistrationFuncs []func(*mux.Router),
+	router *mux.Router,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
@@ -130,9 +134,10 @@ func NewHTTPAPIServer(
 	}
 
 	h := &HTTPAPIServer{
-		listener: listener,
-		logger:   logger,
-		stopped:  make(chan struct{}),
+		listener:     listener,
+		logger:       logger,
+		stopped:      make(chan struct{}),
+		allowedHosts: serviceConfig.HTTPAllowedHosts,
 	}
 
 	// Build 4 possible marshalers in order based on content type
@@ -152,8 +157,14 @@ func NewHTTPAPIServer(
 		h.matchAdditionalHeaders[v] = true
 	}
 	for _, v := range rpcConfig.HTTPAdditionalForwardedHeaders {
-		h.matchAdditionalHeaders[http.CanonicalHeaderKey(v)] = true
+		if strings.HasSuffix(v, "*") {
+			h.matchAdditionalHeaderPrefixes = append(h.matchAdditionalHeaderPrefixes, http.CanonicalHeaderKey(strings.TrimSuffix(v, "*")))
+		} else {
+			h.matchAdditionalHeaders[http.CanonicalHeaderKey(v)] = true
+		}
 	}
+
+	opts = append(opts, runtime.WithMiddlewares(h.allowedHostsMiddleware))
 	opts = append(opts, runtime.WithIncomingHeaderMatcher(h.incomingHeaderMatcher))
 
 	// Create inline client connection
@@ -188,16 +199,10 @@ func NewHTTPAPIServer(
 		return nil, fmt.Errorf("failed registering operatorservice HTTP API handler: %w", err)
 	}
 
-	// Instantiate a router to support additional route prefixes.
-	r := mux.NewRouter().UseEncodedPath()
-	for _, f := range additionalRouteRegistrationFuncs {
-		f(r)
-	}
-
 	// Set the / handler as our function that wraps serve mux.
-	r.PathPrefix("/").HandlerFunc(h.serveHTTP)
+	router.PathPrefix("/").HandlerFunc(h.serveHTTP)
 	// Register the router as the HTTP server handler.
-	h.server.Handler = r
+	h.server.Handler = router
 
 	// Put the remote address on the context
 	h.server.ConnContext = func(ctx context.Context, c net.Conn) context.Context {
@@ -291,6 +296,19 @@ func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	h.serveMux.ServeHTTP(w, r)
 }
 
+func (h *HTTPAPIServer) allowedHostsMiddleware(hf runtime.HandlerFunc) runtime.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
+		allowedHosts := h.allowedHosts.Get()
+		if allowedHosts.MatchString(r.Host) {
+			hf(w, r, pathParams)
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+		// PermissionDenied gRPC code is 7.
+		_, _ = w.Write([]byte(`{"code": 7, "message": "Host not allowed"}`))
+	}
+}
+
 func (h *HTTPAPIServer) errorHandler(
 	ctx context.Context,
 	mux *runtime.ServeMux,
@@ -332,6 +350,11 @@ func (h *HTTPAPIServer) incomingHeaderMatcher(headerName string) (string, bool) 
 	// Try ours before falling back to default
 	if h.matchAdditionalHeaders[headerName] {
 		return headerName, true
+	}
+	for _, prefix := range h.matchAdditionalHeaderPrefixes {
+		if strings.HasPrefix(headerName, prefix) {
+			return headerName, true
+		}
 	}
 	return runtime.DefaultHeaderMatcher(headerName)
 }

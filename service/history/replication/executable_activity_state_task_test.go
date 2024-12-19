@@ -30,19 +30,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/tests"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -55,7 +50,11 @@ import (
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -78,6 +77,7 @@ type (
 
 		replicationTask   *replicationspb.SyncActivityTaskAttributes
 		sourceClusterName string
+		sourceShardKey    ClusterShardKey
 
 		taskID int64
 		task   *ExecutableActivityStateTask
@@ -124,9 +124,13 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		LastFailure:        &failurepb.Failure{},
 		LastWorkerIdentity: uuid.NewString(),
 		BaseExecutionInfo:  &workflowspb.BaseExecutionInfo{},
-		VersionHistory:     &history.VersionHistory{},
+		VersionHistory:     &historyspb.VersionHistory{},
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 	s.taskID = rand.Int63()
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.task = NewExecutableActivityStateTask(
@@ -145,6 +149,9 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
+		s.sourceShardKey,
+		enumsspb.TASK_PRIORITY_HIGH,
+		nil,
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
@@ -293,29 +300,29 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Other() {
 }
 
 func (s *executableActivityStateTaskSuite) TestMarkPoisonPill() {
-	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(s.task.NamespaceID),
-		s.task.WorkflowID,
-	).Return(shardContext, nil).AnyTimes()
-	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: s.sourceClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
-			NamespaceId:      s.task.NamespaceID,
-			WorkflowId:       s.task.WorkflowID,
-			RunId:            s.task.RunID,
-			TaskId:           s.task.ExecutableTask.TaskID(),
-			TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-			ScheduledEventId: s.task.req.ScheduledEventId,
-			Version:          s.task.req.Version,
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		SourceTaskId: s.taskID,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: s.replicationTask,
 		},
-	}).Return(nil)
+		RawTaskInfo: nil,
+	}
+	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
+	s.executableTask.EXPECT().MarkPoisonPill().Times(1)
 
 	err := s.task.MarkPoisonPill()
 	s.NoError(err)
+
+	s.Equal(&persistencespb.ReplicationTaskInfo{
+		NamespaceId:      s.task.NamespaceID,
+		WorkflowId:       s.task.WorkflowID,
+		RunId:            s.task.RunID,
+		TaskId:           s.task.ExecutableTask.TaskID(),
+		TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		ScheduledEventId: s.task.req.ScheduledEventId,
+		Version:          s.task.req.Version,
+	}, replicationTask.RawTaskInfo)
 }
 
 func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_AndExecute() {
@@ -343,6 +350,9 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		time.Unix(0, rand.Int63()),
 		replicationAttribute1,
 		s.sourceClusterName,
+		s.sourceShardKey,
+		enumsspb.TASK_PRIORITY_HIGH,
+		nil,
 	)
 	task1.ExecutableTask = s.executableTask
 
@@ -363,6 +373,9 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		time.Unix(0, rand.Int63()),
 		replicationAttribute2,
 		s.sourceClusterName,
+		s.sourceShardKey,
+		enumsspb.TASK_PRIORITY_HIGH,
+		nil,
 	)
 	task2.ExecutableTask = s.executableTask
 
@@ -415,6 +428,9 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 		time.Unix(0, rand.Int63()),
 		replicationAttribute1,
 		s.sourceClusterName,
+		s.sourceShardKey,
+		enumsspb.TASK_PRIORITY_HIGH,
+		nil,
 	)
 
 	replicationAttribute2 := s.generateReplicationAttribute(namespaceId, "wf_2", runId) //
@@ -434,6 +450,9 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 		time.Unix(0, rand.Int63()),
 		replicationAttribute2,
 		s.sourceClusterName,
+		s.sourceShardKey,
+		enumsspb.TASK_PRIORITY_HIGH,
+		nil,
 	)
 	batchResult, batched := task1.BatchWith(task2)
 	s.False(batched)
@@ -460,7 +479,7 @@ func (s *executableActivityStateTaskSuite) generateReplicationAttribute(
 		LastFailure:        &failurepb.Failure{},
 		LastWorkerIdentity: uuid.NewString(),
 		BaseExecutionInfo:  &workflowspb.BaseExecutionInfo{},
-		VersionHistory:     &history.VersionHistory{},
+		VersionHistory:     &historyspb.VersionHistory{},
 	}
 }
 

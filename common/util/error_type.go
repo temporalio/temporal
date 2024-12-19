@@ -25,6 +25,7 @@
 package util
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -55,6 +56,16 @@ func ErrorType(err error) string {
 	if errors.As(err, &typedErr) {
 		return typedErr.ErrorTypeName()
 	}
+
+	// Special case for context.Cancel error. It is of type errorString, which is not very useful.
+	if errors.Is(err, context.Canceled) {
+		return "context.Canceled"
+	}
+	// Special case for context.DeadlineExceeded error. It is of unexported type deadlineExceededError.
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "context.DeadlineExceeded"
+	}
+
 	// Otherwise, do a DFS traversal of the error tree, ignoring wrapper errors.
 	q := []error{err}
 	for len(q) > 0 {

@@ -25,10 +25,9 @@
 package archival
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
+	"go.uber.org/fx"
 )
 
 var Module = fx.Options(

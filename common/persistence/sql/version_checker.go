@@ -26,6 +26,8 @@ package sql
 
 import (
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 )
@@ -73,7 +75,7 @@ func checkCompatibleVersion(
 	r resolver.ServiceResolver,
 	dbKind sqlplugin.DbKind,
 ) error {
-	db, err := NewSQLAdminDB(dbKind, cfg, r)
+	db, err := NewSQLAdminDB(dbKind, cfg, r, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		return err
 	}

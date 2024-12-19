@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -79,36 +78,35 @@ type (
 		DBHost            string
 		DBPort            int `yaml:"-"`
 		ConnectAttributes map[string]string
-		StoreType         string                 `yaml:"-"`
-		SchemaDir         string                 `yaml:"-"`
-		FaultInjection    *config.FaultInjection `yaml:"faultinjection"`
-		Logger            log.Logger             `yaml:"-"`
+		StoreType         string `yaml:"-"`
+		SchemaDir         string `yaml:"-"`
+		FaultInjection    *config.FaultInjection
+		Logger            log.Logger `yaml:"-"`
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
 	TestBase struct {
 		suite.Suite
-		ShardMgr                    persistence.ShardManager
-		AbstractDataStoreFactory    client.AbstractDataStoreFactory
-		VisibilityStoreFactory      visibility.VisibilityStoreFactory
-		FaultInjection              *client.FaultInjectionDataStoreFactory
-		Factory                     client.Factory
-		ExecutionManager            persistence.ExecutionManager
-		TaskMgr                     persistence.TaskManager
-		ClusterMetadataManager      persistence.ClusterMetadataManager
-		MetadataManager             persistence.MetadataManager
-		NamespaceReplicationQueue   persistence.NamespaceReplicationQueue
-		NexusIncomingServiceManager persistence.NexusIncomingServiceManager
-		ShardInfo                   *persistencespb.ShardInfo
-		TaskIDGenerator             TransferTaskIDGenerator
-		ClusterMetadata             cluster.Metadata
-		SearchAttributesManager     searchattribute.Manager
-		PersistenceRateLimiter      quotas.RequestRateLimiter
-		PersistenceHealthSignals    persistence.HealthSignalAggregator
-		ReadLevel                   int64
-		ReplicationReadLevel        int64
-		DefaultTestCluster          PersistenceTestCluster
-		Logger                      log.Logger
+		ShardMgr                  persistence.ShardManager
+		AbstractDataStoreFactory  client.AbstractDataStoreFactory
+		VisibilityStoreFactory    visibility.VisibilityStoreFactory
+		Factory                   client.Factory
+		ExecutionManager          persistence.ExecutionManager
+		TaskMgr                   persistence.TaskManager
+		ClusterMetadataManager    persistence.ClusterMetadataManager
+		MetadataManager           persistence.MetadataManager
+		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
+		NexusEndpointManager      persistence.NexusEndpointManager
+		ShardInfo                 *persistencespb.ShardInfo
+		TaskIDGenerator           TransferTaskIDGenerator
+		ClusterMetadata           cluster.Metadata
+		SearchAttributesManager   searchattribute.Manager
+		PersistenceRateLimiter    quotas.RequestRateLimiter
+		PersistenceHealthSignals  persistence.HealthSignalAggregator
+		ReadLevel                 int64
+		ReplicationReadLevel      int64
+		DefaultTestCluster        PersistenceTestCluster
+		Logger                    log.Logger
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -212,7 +210,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.DefaultTestCluster.SetupTestDatabase()
 
 	cfg := s.DefaultTestCluster.Config()
-	dataStoreFactory, faultInjection := client.DataStoreFactoryProvider(
+	dataStoreFactory := client.DataStoreFactoryProvider(
 		client.ClusterName(clusterName),
 		resolver.NewNoopResolver(),
 		&cfg,
@@ -220,7 +218,19 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.Logger,
 		metrics.NoopMetricsHandler,
 	)
-	factory := client.NewFactory(dataStoreFactory, &cfg, s.PersistenceRateLimiter, quotas.NoopRequestRateLimiter, serialization.NewSerializer(), nil, clusterName, metrics.NoopMetricsHandler, s.Logger, s.PersistenceHealthSignals)
+	factory := client.NewFactory(
+		dataStoreFactory,
+		&cfg,
+		s.PersistenceRateLimiter,
+		quotas.NoopRequestRateLimiter,
+		quotas.NoopRequestRateLimiter,
+		serialization.NewSerializer(),
+		nil,
+		clusterName,
+		metrics.NoopMetricsHandler,
+		s.Logger,
+		s.PersistenceHealthSignals,
+	)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -240,11 +250,10 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ExecutionManager, err = factory.NewExecutionManager()
 	s.fatalOnError("NewExecutionManager", err)
 
-	s.NexusIncomingServiceManager, err = factory.NewNexusIncomingServiceManager()
-	s.fatalOnError("NewNexusIncomingServiceManager", err)
+	s.NexusEndpointManager, err = factory.NewNexusEndpointManager()
+	s.fatalOnError("NewNexusEndpointManager", err)
 
 	s.Factory = factory
-	s.FaultInjection = faultInjection
 
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0
@@ -279,8 +288,8 @@ func (s *TestBase) TearDownWorkflowStore() {
 	s.ExecutionManager.Close()
 	s.ShardMgr.Close()
 	s.ExecutionManager.Close()
-	s.NexusIncomingServiceManager.Close()
-	s.NamespaceReplicationQueue.Stop()
+	s.NexusEndpointManager.Close()
+	s.NamespaceReplicationQueue.Close()
 	s.Factory.Close()
 	s.DefaultTestCluster.TearDownTestDatabase()
 }
@@ -308,7 +317,7 @@ func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
 func (s *TestBase) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond).
 		WithBackoffCoefficient(1.5).
-		WithMaximumAttempts(5)
+		WithMaximumAttempts(20)
 
 	return backoff.ThrottleRetry(
 		func() error {

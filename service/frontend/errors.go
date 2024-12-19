@@ -24,10 +24,13 @@
 
 package frontend
 
-import "go.temporal.io/api/serviceerror"
+import (
+	"go.temporal.io/api/serviceerror"
+)
 
 var (
 	errInvalidTaskToken                                   = serviceerror.NewInvalidArgument("Invalid TaskToken.")
+	errDeserializingToken                                 = serviceerror.NewInvalidArgument("Error deserializing task token.")
 	errTaskQueueNotSet                                    = serviceerror.NewInvalidArgument("TaskQueue is not set on request.")
 	errExecutionNotSet                                    = serviceerror.NewInvalidArgument("Execution is not set on request.")
 	errWorkflowIDNotSet                                   = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
@@ -41,9 +44,9 @@ var (
 	errRequestNotSet                                      = serviceerror.NewInvalidArgument("Request is nil.")
 	errRequestIDNotSet                                    = serviceerror.NewInvalidArgument("RequestId is not set on request.")
 	errWorkflowTypeNotSet                                 = serviceerror.NewInvalidArgument("WorkflowType is not set on request.")
-	errInvalidWorkflowExecutionTimeoutSeconds             = serviceerror.NewInvalidArgument("A negative WorkflowExecutionTimeoutSeconds is set on request.")
-	errInvalidWorkflowRunTimeoutSeconds                   = serviceerror.NewInvalidArgument("A negative WorkflowRunTimeoutSeconds is set on request.")
-	errInvalidWorkflowTaskTimeoutSeconds                  = serviceerror.NewInvalidArgument("A negative WorkflowTaskTimeoutSeconds is set on request.")
+	errInvalidWorkflowExecutionTimeoutSeconds             = serviceerror.NewInvalidArgument("An invalid WorkflowExecutionTimeoutSeconds is set on request.")
+	errInvalidWorkflowRunTimeoutSeconds                   = serviceerror.NewInvalidArgument("An invalid WorkflowRunTimeoutSeconds is set on request.")
+	errInvalidWorkflowTaskTimeoutSeconds                  = serviceerror.NewInvalidArgument("An invalid WorkflowTaskTimeoutSeconds is set on request.")
 	errQueryDisallowedForNamespace                        = serviceerror.NewInvalidArgument("Namespace is not allowed to query, please contact temporal team to re-enable queries.")
 	errClusterNameNotSet                                  = serviceerror.NewInvalidArgument("Cluster name is not set.")
 	errEmptyReplicationInfo                               = serviceerror.NewInvalidArgument("Replication task info is not set.")
@@ -78,8 +81,8 @@ var (
 	errReasonNotSet                                       = serviceerror.NewInvalidArgument("Reason is not set on request.")
 	errBatchOperationNotSet                               = serviceerror.NewInvalidArgument("Batch operation is not set on request.")
 	errCronAndStartDelaySet                               = serviceerror.NewInvalidArgument("CronSchedule and WorkflowStartDelay may not be used together.")
-	errInvalidWorkflowStartDelaySeconds                   = serviceerror.NewInvalidArgument("A negative WorkflowStartDelaySeconds is set on request.")
-	errRaceConditionAddingSearchAttributes                = serviceerror.NewUnavailable("Generated search attributes mapping unavailble.")
+	errInvalidWorkflowStartDelaySeconds                   = serviceerror.NewInvalidArgument("An invalid WorkflowStartDelaySeconds is set on request.")
+	errRaceConditionAddingSearchAttributes                = serviceerror.NewUnavailable("Generated search attributes mapping unavailable.")
 	errUseVersioningWithoutBuildId                        = serviceerror.NewInvalidArgument("WorkerVersionStamp must be present if UseVersioning is true.")
 	errUseVersioningWithoutNormalName                     = serviceerror.NewInvalidArgument("NormalName must be set on sticky queue if UseVersioning is true.")
 	errBuildIdTooLong                                     = serviceerror.NewInvalidArgument("Build ID exceeds configured limit.workerBuildIdSize, use a shorter build ID.")
@@ -87,7 +90,14 @@ var (
 	errUseEnhancedDescribeOnStickyQueue                   = serviceerror.NewInvalidArgument("Enhanced DescribeTaskQueue is not valid for a sticky queue, use api_mode=UNSPECIFIED or a normal queue.")
 	errUseEnhancedDescribeOnNonRootQueue                  = serviceerror.NewInvalidArgument("Enhanced DescribeTaskQueue is not valid for non-root queue partitions, use api_mode=UNSPECIFIED or a normal queue root name.")
 	errTaskQueuePartitionInvalid                          = serviceerror.NewInvalidArgument("Task Queue Partition invalid, use a different Task Queue or Task Queue Type")
-	errMissingOperations                                  = serviceerror.NewInvalidArgument("Missing operations.")
+	errMultiOpWorkflowIdInconsistent                      = serviceerror.NewInvalidArgument("WorkflowId is not consistent with previous operation(s).")
+	errMultiOpStartCronSchedule                           = serviceerror.NewInvalidArgument("CronSchedule is not allowed.")
+	errMultiOpUpdateFirstExecutionRunId                   = serviceerror.NewInvalidArgument("FirstExecutionRunId is not allowed.")
+	errMultiOpUpdateExecutionRunId                        = serviceerror.NewInvalidArgument("RunId is not allowed.")
+	errMultiOpEagerWorkflow                               = serviceerror.NewInvalidArgument("RequestEagerExecution is not supported.")
+	errMultiOpStartDelay                                  = serviceerror.NewInvalidArgument("WorkflowStartDelay is not supported.")
+	errMultiOpNotStartAndUpdate                           = serviceerror.NewInvalidArgument("Operations have to be exactly [Start, Update].")
+	errMultiOpAborted                                     = serviceerror.NewMultiOperationAborted("Operation was aborted.")
 
 	errUpdateMetaNotSet       = serviceerror.NewInvalidArgument("Update meta is not set on request.")
 	errUpdateInputNotSet      = serviceerror.NewInvalidArgument("Update input is not set on request.")
@@ -122,12 +132,13 @@ var (
 	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
 	errSchedulesNotAllowed = serviceerror.NewPermissionDenied("Schedules are disabled on this namespace.", "")
 
+	errDeploymentsNotAllowed = serviceerror.NewPermissionDenied("Deployments are disabled on this namespace.", "")
+
 	errBatchAPINotAllowed                = serviceerror.NewPermissionDenied("Batch operation feature are disabled on this namespace.", "")
 	errBatchOpsWorkflowFilterNotSet      = serviceerror.NewInvalidArgument("Workflow executions and visibility filter are not set on request.")
 	errBatchOpsWorkflowFiltersNotAllowed = serviceerror.NewInvalidArgument("Workflow executions and visibility filter are both set on request. Only one of them is allowed.")
 	errBatchOpsMaxWorkflowExecutionCount = serviceerror.NewInvalidArgument("Workflow executions count exceeded.")
 
-	errWorkflowIdConflictPolicyNotAllowed             = serviceerror.NewPermissionDenied("WorkflowIdConflictPolicy option is disabled on this namespace.", "")
 	errUpdateWorkflowExecutionAPINotAllowed           = serviceerror.NewPermissionDenied("UpdateWorkflowExecution operation is disabled on this namespace.", "")
 	errUpdateWorkflowExecutionAsyncAcceptedNotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution issued asynchronously and waiting on update accepted is disabled on this namespace.", "")
 	errUpdateWorkflowExecutionAsyncAdmittedNotAllowed = serviceerror.NewPermissionDenied("UpdateWorkflowExecution issued asynchronously and waiting on update admitted is not supported.", "")

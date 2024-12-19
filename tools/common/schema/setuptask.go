@@ -30,10 +30,10 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/blang/semver/v4"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -49,7 +49,8 @@ type SetupTask struct {
 	logger log.Logger
 }
 
-func newSetupSchemaTask(db DB, config *SetupConfig, logger log.Logger) *SetupTask {
+// NewSetupSchemaTask returns a new instance of SetupTask
+func NewSetupSchemaTask(db DB, config *SetupConfig, logger log.Logger) *SetupTask {
 	return &SetupTask{
 		db:     db,
 		config: config,
@@ -82,7 +83,7 @@ func (task *SetupTask) Run() error {
 		var schemaFilePath string
 		if len(config.SchemaName) > 0 {
 			fsys := dbschemas.Assets()
-			schemaFilePath = filepath.Join(config.SchemaName, "schema"+schemaFileEnding(config.SchemaName))
+			schemaFilePath = path.Join(config.SchemaName, "schema"+schemaFileEnding(config.SchemaName))
 			schemaBuf, err = fs.ReadFile(fsys, schemaFilePath)
 		} else {
 			schemaFilePath, err = filepath.Abs(config.SchemaFilePath)

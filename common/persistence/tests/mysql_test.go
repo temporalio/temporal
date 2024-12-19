@@ -29,7 +29,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -128,7 +129,7 @@ func TestMySQLTaskQueueSuite(t *testing.T) {
 	}
 	defer func() {
 		testData.Factory.Close()
-		TearDownMySQLDatabase(testData.Cfg)
+		TearDownMySQLDatabase(t, testData.Cfg)
 	}()
 
 	s := NewTaskQueueSuite(t, taskQueueStore, testData.Logger)
@@ -189,15 +190,15 @@ func TestMySQLClusterMetadataPersistence(t *testing.T) {
 
 func TestMySQLNamespaceSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewNamespaceSuite(t, store)
@@ -206,15 +207,15 @@ func TestMySQLNamespaceSuite(t *testing.T) {
 
 func TestMySQLQueueMessageSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewQueueMessageSuite(t, store)
@@ -223,15 +224,15 @@ func TestMySQLQueueMessageSuite(t *testing.T) {
 
 func TestMySQLQueueMetadataSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewQueueMetadataSuite(t, store)
@@ -240,15 +241,15 @@ func TestMySQLQueueMetadataSuite(t *testing.T) {
 
 func TestMySQLMatchingTaskSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewMatchingTaskSuite(t, store)
@@ -257,15 +258,15 @@ func TestMySQLMatchingTaskSuite(t *testing.T) {
 
 func TestMySQLMatchingTaskQueueSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewMatchingTaskQueueSuite(t, store)
@@ -274,15 +275,15 @@ func TestMySQLMatchingTaskQueueSuite(t *testing.T) {
 
 func TestMySQLHistoryShardSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryShardSuite(t, store)
@@ -291,15 +292,15 @@ func TestMySQLHistoryShardSuite(t *testing.T) {
 
 func TestMySQLHistoryNodeSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryNodeSuite(t, store)
@@ -308,15 +309,15 @@ func TestMySQLHistoryNodeSuite(t *testing.T) {
 
 func TestMySQLHistoryTreeSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryTreeSuite(t, store)
@@ -325,15 +326,15 @@ func TestMySQLHistoryTreeSuite(t *testing.T) {
 
 func TestMySQLHistoryCurrentExecutionSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryCurrentExecutionSuite(t, store)
@@ -342,15 +343,15 @@ func TestMySQLHistoryCurrentExecutionSuite(t *testing.T) {
 
 func TestMySQLHistoryExecutionSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryExecutionSuite(t, store)
@@ -359,15 +360,15 @@ func TestMySQLHistoryExecutionSuite(t *testing.T) {
 
 func TestMySQLHistoryTransferTaskSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryTransferTaskSuite(t, store)
@@ -376,15 +377,15 @@ func TestMySQLHistoryTransferTaskSuite(t *testing.T) {
 
 func TestMySQLHistoryTimerTaskSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryTimerTaskSuite(t, store)
@@ -393,15 +394,15 @@ func TestMySQLHistoryTimerTaskSuite(t *testing.T) {
 
 func TestMySQLHistoryReplicationTaskSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryReplicationTaskSuite(t, store)
@@ -410,15 +411,15 @@ func TestMySQLHistoryReplicationTaskSuite(t *testing.T) {
 
 func TestMySQLHistoryVisibilityTaskSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryVisibilityTaskSuite(t, store)
@@ -427,15 +428,15 @@ func TestMySQLHistoryVisibilityTaskSuite(t *testing.T) {
 
 func TestMySQLHistoryReplicationDLQTaskSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryReplicationDLQTaskSuite(t, store)
@@ -444,15 +445,15 @@ func TestMySQLHistoryReplicationDLQTaskSuite(t *testing.T) {
 
 func TestMySQLHistoryExecutionBufferSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryExecutionBufferSuite(t, store)
@@ -461,15 +462,15 @@ func TestMySQLHistoryExecutionBufferSuite(t *testing.T) {
 
 func TestMySQLHistoryExecutionActivitySuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryExecutionActivitySuite(t, store)
@@ -478,15 +479,15 @@ func TestMySQLHistoryExecutionActivitySuite(t *testing.T) {
 
 func TestMySQLHistoryExecutionChildWorkflowSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryExecutionChildWorkflowSuite(t, store)
@@ -495,15 +496,15 @@ func TestMySQLHistoryExecutionChildWorkflowSuite(t *testing.T) {
 
 func TestMySQLHistoryExecutionTimerSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryExecutionTimerSuite(t, store)
@@ -512,15 +513,15 @@ func TestMySQLHistoryExecutionTimerSuite(t *testing.T) {
 
 func TestMySQLHistoryExecutionRequestCancelSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryExecutionRequestCancelSuite(t, store)
@@ -529,15 +530,15 @@ func TestMySQLHistoryExecutionRequestCancelSuite(t *testing.T) {
 
 func TestMySQLHistoryExecutionSignalSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryExecutionSignalSuite(t, store)
@@ -546,15 +547,15 @@ func TestMySQLHistoryExecutionSignalSuite(t *testing.T) {
 
 func TestMySQLHistoryExecutionSignalRequestSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewHistoryExecutionSignalRequestSuite(t, store)
@@ -563,15 +564,15 @@ func TestMySQLHistoryExecutionSignalRequestSuite(t *testing.T) {
 
 func TestMySQLVisibilitySuite(t *testing.T) {
 	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver())
+	SetupMySQLDatabase(t, cfg)
+	SetupMySQLSchema(t, cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindVisibility, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
 		_ = store.Close()
-		TearDownMySQLDatabase(cfg)
+		TearDownMySQLDatabase(t, cfg)
 	}()
 
 	s := sqltests.NewVisibilitySuite(t, store)
@@ -592,17 +593,17 @@ func TestMySQLQueueV2(t *testing.T) {
 	RunQueueV2TestSuiteForSQL(t, testData.Factory)
 }
 
-func TestMySQLNexusIncomingServicePersistence(t *testing.T) {
+func TestMySQLNexusEndpointPersistence(t *testing.T) {
 	testData, tearDown := setUpMySQLTest(t)
 	defer tearDown()
 
-	store, err := testData.Factory.NewNexusIncomingServiceStore()
+	store, err := testData.Factory.NewNexusEndpointStore()
 	if err != nil {
-		t.Fatalf("unable to create MySQL NexusIncomingServiceStore: %v", err)
+		t.Fatalf("unable to create MySQL NexusEndpointStore: %v", err)
 	}
 
 	tableVersion := atomic.Int64{}
 	t.Run("Generic", func(t *testing.T) {
-		RunNexusIncomingServiceTestSuite(t, store, &tableVersion)
+		RunNexusEndpointTestSuite(t, store, &tableVersion)
 	})
 }

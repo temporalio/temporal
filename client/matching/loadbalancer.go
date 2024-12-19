@@ -58,8 +58,8 @@ type (
 
 	defaultLoadBalancer struct {
 		namespaceIDToName   func(id namespace.ID) (namespace.Name, error)
-		nReadPartitions     dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		nWritePartitions    dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		nReadPartitions     dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		nWritePartitions    dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		forceReadPartition  dynamicconfig.IntPropertyFn
 		forceWritePartition dynamicconfig.IntPropertyFn
 
@@ -88,10 +88,10 @@ func NewLoadBalancer(
 ) LoadBalancer {
 	lb := &defaultLoadBalancer{
 		namespaceIDToName:   namespaceIDToName,
-		nReadPartitions:     dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueReadPartitions),
-		nWritePartitions:    dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueWritePartitions),
-		forceReadPartition:  dc.GetIntProperty(dynamicconfig.TestMatchingLBForceReadPartition, -1),
-		forceWritePartition: dc.GetIntProperty(dynamicconfig.TestMatchingLBForceWritePartition, -1),
+		nReadPartitions:     dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
+		nWritePartitions:    dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
+		forceReadPartition:  dynamicconfig.TestMatchingLBForceReadPartition.Get(dc),
+		forceWritePartition: dynamicconfig.TestMatchingLBForceWritePartition.Get(dc),
 		lock:                sync.RWMutex{},
 		taskQueueLBs:        make(map[tqid.TaskQueue]*tqLoadBalancer),
 	}
@@ -105,7 +105,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 		return taskQueue.NormalPartition(n)
 	}
 
-	nsName, err := lb.namespaceIDToName(taskQueue.NamespaceId())
+	nsName, err := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
 	if err != nil {
 		return taskQueue.RootPartition()
 	}
@@ -125,7 +125,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 	// map namespace ID to name.
 	var partitionCount = dynamicconfig.GlobalDefaultNumTaskQueuePartitions
 
-	namespaceName, err := lb.namespaceIDToName(taskQueue.NamespaceId())
+	namespaceName, err := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
 	if err == nil {
 		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
 	}

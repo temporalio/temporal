@@ -33,6 +33,6 @@ type memberCounter struct {
 	numInstances int
 }
 
-func (c memberCounter) MemberCount() int {
+func (c memberCounter) AvailableMemberCount() int {
 	return c.numInstances
 }

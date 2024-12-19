@@ -28,10 +28,8 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/metrics"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -60,7 +58,7 @@ func newPollerHistory() *pollerHistory {
 	}
 
 	return &pollerHistory{
-		history: cache.New(pollerHistoryInitMaxSize, opts, metrics.NoopMetricsHandler),
+		history: cache.New(pollerHistoryInitMaxSize, opts),
 	}
 }
 

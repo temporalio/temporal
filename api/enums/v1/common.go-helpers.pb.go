@@ -65,3 +65,44 @@ func ChecksumFlavorFromString(s string) (ChecksumFlavor, error) {
 	}
 	return ChecksumFlavor(0), fmt.Errorf("%s is not a valid ChecksumFlavor", s)
 }
+
+var (
+	SchedulerState_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Waiting":     1,
+		"Executing":   2,
+	}
+)
+
+// SchedulerStateFromString parses a SchedulerState value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to SchedulerState
+func SchedulerStateFromString(s string) (SchedulerState, error) {
+	if v, ok := SchedulerState_value[s]; ok {
+		return SchedulerState(v), nil
+	} else if v, ok := SchedulerState_shorthandValue[s]; ok {
+		return SchedulerState(v), nil
+	}
+	return SchedulerState(0), fmt.Errorf("%s is not a valid SchedulerState", s)
+}
+
+var (
+	CallbackState_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Standby":     1,
+		"Scheduled":   2,
+		"BackingOff":  3,
+		"Failed":      4,
+		"Succeeded":   5,
+	}
+)
+
+// CallbackStateFromString parses a CallbackState value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to CallbackState
+func CallbackStateFromString(s string) (CallbackState, error) {
+	if v, ok := CallbackState_value[s]; ok {
+		return CallbackState(v), nil
+	} else if v, ok := CallbackState_shorthandValue[s]; ok {
+		return CallbackState(v), nil
+	}
+	return CallbackState(0), fmt.Errorf("%s is not a valid CallbackState", s)
+}

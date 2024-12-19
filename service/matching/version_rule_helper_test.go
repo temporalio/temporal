@@ -30,7 +30,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -41,7 +40,7 @@ func TestFindAssignmentBuildId_NoRules(t *testing.T) {
 
 func TestFindAssignmentBuildId_OneFullRule(t *testing.T) {
 	buildId := "bld"
-	b := FindAssignmentBuildId([]*persistencespb.AssignmentRule{createFullAssignmentRule(buildId)}, "")
+	b := FindAssignmentBuildId([]*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp(buildId)}, "")
 	assert.Equal(t, buildId, b)
 }
 
@@ -50,8 +49,8 @@ func TestFindAssignmentBuildId_TwoFullRules(t *testing.T) {
 	buildId2 := "bld2"
 	b := FindAssignmentBuildId(
 		[]*persistencespb.AssignmentRule{
-			createFullAssignmentRule(buildId),
-			createFullAssignmentRule(buildId2),
+			createAssignmentRuleWithoutRamp(buildId),
+			createAssignmentRuleWithoutRamp(buildId2),
 		},
 		"",
 	)
@@ -69,7 +68,7 @@ func TestFindAssignmentBuildId_WithRamp(t *testing.T) {
 		createAssignmentRuleWithRamp(buildId1, 0),
 		createAssignmentRuleWithRamp(buildId2, 20),
 		createAssignmentRuleWithRamp(buildId3, 70),
-		createFullAssignmentRule(buildId4),
+		createAssignmentRuleWithoutRamp(buildId4),
 		createAssignmentRuleWithRamp(buildId5, 90),
 	}
 
@@ -109,7 +108,7 @@ func TestCalcRampThresholdDeterministic(t *testing.T) {
 	assert.NotEqual(t, calcRampThreshold(""), calcRampThreshold(""))
 }
 
-func createFullAssignmentRule(buildId string) *persistencespb.AssignmentRule {
+func createAssignmentRuleWithoutRamp(buildId string) *persistencespb.AssignmentRule {
 	return &persistencespb.AssignmentRule{Rule: &taskqueuepb.BuildIdAssignmentRule{TargetBuildId: buildId}}
 }
 

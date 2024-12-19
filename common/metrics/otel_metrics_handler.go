@@ -32,7 +32,6 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -203,6 +202,14 @@ func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) Hist
 
 func (omp *otelMetricsHandler) Stop(l log.Logger) {
 	omp.provider.Stop(l)
+}
+
+func (omp *otelMetricsHandler) Close() error {
+	return nil
+}
+
+func (omp *otelMetricsHandler) StartBatch(_ string) BatchHandler {
+	return omp
 }
 
 // makeSet returns an otel attribute.Set with the given tags merged with the

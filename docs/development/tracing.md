@@ -13,6 +13,19 @@ descriptions](https://lightstep.com/opentelemetry/tracing), and the
 [specification
 itself](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#tracing-signal).
 
+## Quickstart
+
+1. Run [`jaeger-all-in-one`](https://www.jaegertracing.io/download/) (either from a binary, or using the docker image).
+2. View the Jaeger UI at http://localhost:16686/search
+3. Set these environment variables:
+    ```
+    export OTEL_TRACES_EXPORTER=otlp
+    export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
+    export TEMPORAL_OTEL_DEBUG=true
+    ```
+4. Start the server using `make start`
+5. Refresh the Jaeger UI. You should see traces from Temporal services.
+
 ## Configuring
 
 No trace exporters are configured by default and thus trace data is neither

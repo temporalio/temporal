@@ -31,17 +31,15 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
 	ctx context.Context,
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
-	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.VerifyChildExecutionCompletionRecordedResponse, retError error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -56,13 +54,12 @@ func Invoke(
 		// the logic will return WorkflowNotReady error and the caller will retry
 		// this can prevent keep reloading mutable state when there's a replication lag
 		// in parent shard.
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
 			request.ParentExecution.WorkflowId,
 			request.ParentExecution.RunId,
 		),
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return nil, err

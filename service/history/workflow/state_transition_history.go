@@ -26,7 +26,20 @@ import (
 	"fmt"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
+)
+
+var (
+	// EmptyVersionedTransition is the zero value for VersionedTransition.
+	// It's not a valid versioned transition for a workflow, and should only
+	// be used for representing the absence of a versioned transition.
+	// EmptyVersionedTransition is also considered less than any non-empty versioned transition.
+	EmptyVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: common.EmptyVersion,
+		TransitionCount:          0,
+	}
 )
 
 // UpdatedTransitionHistory takes a slice of transition history and returns a new slice that includes the max state
@@ -34,13 +47,26 @@ import (
 // If the given version is the version of the last history item, that item will be replaced in the returned slice with
 // an item containing the modified transition count.
 // Does not modify the history slice in place.
-func UpdatedTransitionHistory(history []*persistencespb.VersionedTransition, namespaceFailoverVersion, stateTransitionCount int64) []*persistencespb.VersionedTransition {
-	if len(history) > 0 && history[len(history)-1].NamespaceFailoverVersion == namespaceFailoverVersion {
-		history = history[1:]
+func UpdatedTransitionHistory(
+	history []*persistencespb.VersionedTransition,
+	namespaceFailoverVersion int64,
+) []*persistencespb.VersionedTransition {
+	if len(history) == 0 {
+		return []*persistencespb.VersionedTransition{
+			{
+				NamespaceFailoverVersion: namespaceFailoverVersion,
+				TransitionCount:          1,
+			},
+		}
+	}
+
+	lastTransitionCount := history[len(history)-1].TransitionCount
+	if history[len(history)-1].NamespaceFailoverVersion == namespaceFailoverVersion {
+		history = history[:len(history)-1]
 	}
 	return append(history, &persistencespb.VersionedTransition{
 		NamespaceFailoverVersion: namespaceFailoverVersion,
-		MaxTransitionCount:       stateTransitionCount,
+		TransitionCount:          lastTransitionCount + 1,
 	})
 }
 
@@ -49,39 +75,93 @@ func transitionHistoryRangeForVersion(history []*persistencespb.VersionedTransit
 	prevVersionMaxTransitionCount := int64(-1)
 	for i, item := range history {
 		if item.NamespaceFailoverVersion == version {
-			return i, prevVersionMaxTransitionCount + 1, item.MaxTransitionCount
+			return i, prevVersionMaxTransitionCount + 1, item.TransitionCount
 		}
-		prevVersionMaxTransitionCount = item.MaxTransitionCount
+		prevVersionMaxTransitionCount = item.TransitionCount
 	}
 	return -1, 0, 0
 }
 
-// TransitionHistoryStalenessCheck verifies that task namespace failover version and transition count is contained in
+// TransitionHistoryStalenessCheck verifies that ref namespace failover version and transition count is contained in
 // the given transition history.
 //
-// When a task is being processed, the history is compared with the imprinted task information to verify that a task is
-// not referencing a stale state or that the task itself is not stale. For example, if the state has a history of
+// When a task or API request is being processed, the history is compared with the imprinted state reference to verify
+// that the state is not stale or that the task/request itself is not stale. For example, if the state has a history of
 // `[{v: 1, t: 3}, {v: 2, t: 5}]`, task A `{v: 2, t: 4}` **is not** referencing stale state because for version `2`
 // transitions `4-5` are valid, while task B `{v: 2, t: 6}` **is** referencing stale state because the transition count
 // is out of range for version `2`. Furthermore, task C `{v: 1, t: 4}` itself is stale because it is referencing an
 // impossible state, likely due to post split-brain reconciliation.
-func TransitionHistoryStalenessCheck(history []*persistencespb.VersionedTransition, taskNamespaceFailoverVersion, taskStateTransitionCount int64) error {
+// NOTE: This function should only be used when there is reloading logic on top of it, since the error returned is a
+// terminal error.
+func TransitionHistoryStalenessCheck(
+	history []*persistencespb.VersionedTransition,
+	refVersionedTransition *persistencespb.VersionedTransition,
+) error {
 	if len(history) == 0 {
 		return queues.NewUnprocessableTaskError("state has empty transition history")
 	}
-	idx, min, max := transitionHistoryRangeForVersion(history, taskNamespaceFailoverVersion)
+	idx, min, max := transitionHistoryRangeForVersion(history, refVersionedTransition.NamespaceFailoverVersion)
 	if idx == -1 {
 		lastItem := history[len(history)-1]
-		if lastItem.NamespaceFailoverVersion < taskNamespaceFailoverVersion {
-			return queues.NewStateStaleError(fmt.Sprintf("state namespace failover version < task namespace failover version"))
+		if lastItem.NamespaceFailoverVersion < refVersionedTransition.NamespaceFailoverVersion {
+			return fmt.Errorf("%w: state namespace failover version < ref namespace failover version", consts.ErrStaleState)
 		}
-		return fmt.Errorf("%w: state namespace failover version > task namespace failover version", queues.ErrStaleTask)
+		return fmt.Errorf("%w: state namespace failover version > ref namespace failover version", consts.ErrStaleReference)
 	}
-	if idx == len(history)-1 && taskStateTransitionCount > max {
-		return queues.NewStateStaleError(fmt.Sprintf("state transition count < task transition count"))
+	if idx == len(history)-1 && refVersionedTransition.TransitionCount > max {
+		return fmt.Errorf("%w: state transition count < ref transition count", consts.ErrStaleState)
 	}
-	if min > taskStateTransitionCount || max < taskStateTransitionCount {
-		return fmt.Errorf("%w: task transition count out of range for version %v", queues.ErrStaleTask, taskNamespaceFailoverVersion)
+	if min > refVersionedTransition.TransitionCount || max < refVersionedTransition.TransitionCount {
+		return fmt.Errorf("%w: ref transition count out of range for version %v", consts.ErrStaleReference, refVersionedTransition.NamespaceFailoverVersion)
 	}
 	return nil
+}
+
+// CompareVersionedTransition compares two VersionedTransition structs.
+// Returns -1 if a < b, 0 if a == b, 1 if a > b.
+//
+// A VersionedTransition is considered less than another
+// if its NamespaceFailoverVersion is less than the other's.
+// Or if the NamespaceFailoverVersion is the same, then the TransitionCount is compared.
+// Nil is considered the same as EmptyVersionedTransition, thus smaller than any non-empty versioned transition.
+func CompareVersionedTransition(
+	a, b *persistencespb.VersionedTransition,
+) int {
+	if a.GetNamespaceFailoverVersion() < b.GetNamespaceFailoverVersion() {
+		return -1
+	}
+	if a.GetNamespaceFailoverVersion() > b.GetNamespaceFailoverVersion() {
+		return 1
+	}
+
+	if a.GetTransitionCount() < b.GetTransitionCount() {
+		return -1
+	}
+	if a.GetTransitionCount() > b.GetTransitionCount() {
+		return 1
+	}
+
+	return 0
+}
+
+func CopyVersionedTransitions(
+	transitions []*persistencespb.VersionedTransition,
+) []*persistencespb.VersionedTransition {
+	if transitions == nil {
+		return nil
+	}
+	copied := make([]*persistencespb.VersionedTransition, len(transitions))
+	for i, t := range transitions {
+		copied[i] = CopyVersionedTransition(t)
+	}
+	return copied
+}
+
+func CopyVersionedTransition(
+	transition *persistencespb.VersionedTransition,
+) *persistencespb.VersionedTransition {
+	if transition == nil {
+		return nil
+	}
+	return common.CloneProto(transition)
 }

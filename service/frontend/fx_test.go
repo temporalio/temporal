@@ -31,7 +31,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/internal/nettest"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -207,14 +207,13 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
 				serviceResolver := membership.NewMockServiceResolver(gomock.NewController(tc.t))
-				serviceResolver.EXPECT().MemberCount().Return(0).AnyTimes()
+				serviceResolver.EXPECT().AvailableMemberCount().Return(0).AnyTimes()
 				tc.serviceResolver = serviceResolver
 			},
 		},
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -225,7 +224,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				// This may be overridden by the test case.
 				ctrl := gomock.NewController(t)
 				serviceResolver := membership.NewMockServiceResolver(ctrl)
-				serviceResolver.EXPECT().MemberCount().Return(numHosts).AnyTimes()
+				serviceResolver.EXPECT().AvailableMemberCount().Return(numHosts).AnyTimes()
 				tc.serviceResolver = serviceResolver
 			}
 			tc.configure(&tc)
@@ -249,7 +248,11 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
-			server := grpc.NewServer(grpc.ChainUnaryInterceptor(rpc.NewServiceErrorInterceptor(log.NewTestLogger()), rateLimitInterceptor.Intercept))
+			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
+				rpc.ServiceErrorInterceptor,
+				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				rateLimitInterceptor.Intercept,
+			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
 
 			pipe := nettest.NewPipe()
@@ -270,9 +273,9 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				return pipe.Connect(ctx.Done())
 			})
 			transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
+			conn, err := grpc.NewClient("localhost", dialer, transportCredentials)
 			require.NoError(t, err)
-
+			conn.Connect()
 			defer server.Stop()
 
 			client := workflowservice.NewWorkflowServiceClient(conn)
@@ -378,11 +381,11 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			expectRateLimit:                   false,
 		},
 		{
-			name:                              "namespace burst ratio does not apply for values < 1",
+			name:                              "namespace burst hit when burst ratio is 0.5",
 			maxNamespaceRPSPerInstance:        10,
 			maxNamespaceBurstRatioPerInstance: 0.5,
-			numRequests:                       10,
-			expectRateLimit:                   false,
+			numRequests:                       6,
+			expectRateLimit:                   true,
 		},
 		{
 			name:                              "namespace burst allow when burst ratio is 1 and global limit is set",
@@ -417,7 +420,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			globalNamespaceRPS:                5,
 			maxNamespaceRPSPerInstance:        10,
 			maxNamespaceBurstRatioPerInstance: 1.5,
-			numRequests:                       8,
+			numRequests:                       9,
 			expectRateLimit:                   true,
 		},
 		{
@@ -456,11 +459,11 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			expectRateLimit:                             false,
 		},
 		{
-			name:                                 "visibility burst ratio does not apply for values < 1",
+			name:                                 "visibility burst hit when burst ratio is 0.5",
 			maxNamespaceVisibilityRPSPerInstance: 10,
 			maxNamespaceVisibilityBurstRatioPerInstance: 0.5,
-			numVisibilityRequests:                       10,
-			expectRateLimit:                             false,
+			numVisibilityRequests:                       6,
+			expectRateLimit:                             true,
 		},
 		{
 			name:                                 "visibility burst allow when burst ratio is 1 and global limit is set",
@@ -495,7 +498,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			globalNamespaceVisibilityRPS:         5,
 			maxNamespaceVisibilityRPSPerInstance: 10,
 			maxNamespaceVisibilityBurstRatioPerInstance: 1.5,
-			numVisibilityRequests:                       8,
+			numVisibilityRequests:                       9,
 			expectRateLimit:                             true,
 		},
 		{
@@ -534,11 +537,11 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			expectRateLimit:                                                   false,
 		},
 		{
-			name: "replication inducing op burst ratio does not apply for values < 1",
+			name: "replication inducing op burst hit when burst ratio is 0.5",
 			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
 			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 0.5,
-			numReplicationInducingRequests:                                    10,
-			expectRateLimit:                                                   false,
+			numReplicationInducingRequests:                                    6,
+			expectRateLimit:                                                   true,
 		},
 		{
 			name:                 "replication inducing op burst allow when burst ratio is 1 and global limit is set",
@@ -573,20 +576,20 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			globalNamespaceNamespaceReplicationInducingAPIsRPS:                5,
 			maxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        10,
 			maxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: 1.5,
-			numReplicationInducingRequests:                                    8,
+			numReplicationInducingRequests:                                    9,
 			expectRateLimit:                                                   true,
 		},
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			namespaceName := "test-namespace"
 			mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
-			mockRegistry.EXPECT().GetNamespace(namespace.Name("")).Return(&namespace.Namespace{}, nil).AnyTimes()
+			mockRegistry.EXPECT().GetNamespace(namespace.Name(namespaceName)).Return(&namespace.Namespace{}, nil).AnyTimes()
 			serviceResolver := membership.NewMockServiceResolver(gomock.NewController(t))
-			serviceResolver.EXPECT().MemberCount().Return(tc.frontendServiceCount).AnyTimes()
+			serviceResolver.EXPECT().AvailableMemberCount().Return(tc.frontendServiceCount).AnyTimes()
 
 			config := getTestConfig(tc)
 
@@ -601,7 +604,11 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
-			server := grpc.NewServer(grpc.ChainUnaryInterceptor(rpc.NewServiceErrorInterceptor(log.NewTestLogger()), rateLimitInterceptor.Intercept))
+			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
+				rpc.ServiceErrorInterceptor,
+				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				rateLimitInterceptor.Intercept,
+			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
 
 			pipe := nettest.NewPipe()
@@ -622,7 +629,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				return pipe.Connect(ctx.Done())
 			})
 			transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
+			conn, err := grpc.NewClient("localhost", dialer, transportCredentials)
 			require.NoError(t, err)
 
 			defer server.Stop()
@@ -653,7 +660,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numRequests; i++ {
 				_, err = client.StartWorkflowExecution(
 					context.Background(),
-					&workflowservice.StartWorkflowExecutionRequest{},
+					&workflowservice.StartWorkflowExecutionRequest{
+						Namespace: namespaceName,
+					},
 					grpc.Header(&header),
 				)
 				if err != nil {
@@ -664,7 +673,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numVisibilityRequests; i++ {
 				_, err = client.ListWorkflowExecutions(
 					context.Background(),
-					&workflowservice.ListWorkflowExecutionsRequest{},
+					&workflowservice.ListWorkflowExecutionsRequest{
+						Namespace: namespaceName,
+					},
 					grpc.Header(&header),
 				)
 				if err != nil {
@@ -675,7 +686,9 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			for i := 0; i < tc.numReplicationInducingRequests; i++ {
 				_, err = client.RegisterNamespace(
 					context.Background(),
-					&workflowservice.RegisterNamespaceRequest{},
+					&workflowservice.RegisterNamespaceRequest{
+						Namespace: namespaceName,
+					},
 					grpc.Header(&header),
 				)
 				if err != nil {
@@ -746,7 +759,6 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -754,7 +766,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 			mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
 			mockRegistry.EXPECT().GetNamespace(namespace.Name(testNS)).Return(&namespace.Namespace{}, nil).AnyTimes()
 			serviceResolver := membership.NewMockServiceResolver(gomock.NewController(t))
-			serviceResolver.EXPECT().MemberCount().Return(tc.frontendServiceCount).AnyTimes()
+			serviceResolver.EXPECT().AvailableMemberCount().Return(tc.frontendServiceCount).AnyTimes()
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
 
@@ -779,12 +791,11 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
-			server := grpc.NewServer(
-				grpc.ChainUnaryInterceptor(
-					rpc.NewServiceErrorInterceptor(log.NewTestLogger()),
-					rateLimitInterceptor.Intercept,
-				),
-			)
+			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
+				rpc.ServiceErrorInterceptor,
+				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				rateLimitInterceptor.Intercept,
+			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
 
 			pipe := nettest.NewPipe()
@@ -805,7 +816,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 				return pipe.Connect(ctx.Done())
 			})
 			transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
+			conn, err := grpc.NewClient("localhost", dialer, transportCredentials)
 			require.NoError(t, err)
 
 			defer server.Stop()

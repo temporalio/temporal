@@ -36,7 +36,6 @@ import (
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/internal/temporalite"
@@ -104,6 +103,14 @@ func (ts *TestServer) GetDefaultNamespace() string {
 	return ts.defaultTestNamespace
 }
 
+// GetFrontendHostPort returns the host:port for this server.
+//
+// When constructing a Temporal client from within the same process,
+// GetDefaultClient or NewClientWithOptions should be used instead.
+func (ts *TestServer) GetFrontendHostPort() string {
+	return ts.server.FrontendHostPort()
+}
+
 // NewClientWithOptions returns a new Temporal client configured for making requests to the server.
 //
 // If no namespace option is set it will use a pre-registered test namespace.
@@ -169,7 +176,7 @@ func NewServer(opts ...TestServerOption) *TestServer {
 		Ephemeral:  true,
 		Logger:     log.NewNoopLogger(),
 		DynamicConfig: dynamicconfig.StaticClient{
-			dynamicconfig.ForceSearchAttributesCacheRefreshOnRead: []dynamicconfig.ConstrainedValue{{Value: true}},
+			dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): []dynamicconfig.ConstrainedValue{{Value: true}},
 		},
 		// Disable "accept incoming network connections?" prompt on macOS
 		FrontendIP: "127.0.0.1",

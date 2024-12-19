@@ -27,11 +27,10 @@ package serialization
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"google.golang.org/protobuf/proto"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/utf8validator"
+	"google.golang.org/protobuf/proto"
 )
 
 func HistoryBranchToBlob(info *persistencespb.HistoryBranch) (*commonpb.DataBlob, error) {
@@ -99,6 +98,11 @@ func ArchivalTaskInfoToBlob(info *persistencespb.ArchivalTaskInfo) (*commonpb.Da
 
 func ArchivalTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.ArchivalTaskInfo, error) {
 	result := &persistencespb.ArchivalTaskInfo{}
+	return result, proto3Decode(blob, encoding, result)
+}
+
+func OutboundTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.OutboundTaskInfo, error) {
+	result := &persistencespb.OutboundTaskInfo{}
 	return result, proto3Decode(blob, encoding, result)
 }
 

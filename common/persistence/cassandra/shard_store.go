@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"strings"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -184,7 +185,7 @@ func (d *ShardStore) AssertShardOwnership(
 	ctx context.Context,
 	request *p.AssertShardOwnershipRequest,
 ) error {
-	return nil
+	return serviceerror.NewUnimplemented("AssertShardOwnership is not implemented for cassandra shard store")
 }
 
 func (d *ShardStore) GetName() string {

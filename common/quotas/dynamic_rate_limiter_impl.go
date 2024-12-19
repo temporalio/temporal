@@ -161,3 +161,12 @@ func (d *DynamicRateLimiterImpl) maybeRefresh() {
 		// noop
 	}
 }
+
+func (d *DynamicRateLimiterImpl) TokensAt(t time.Time) int {
+	return d.rateLimiter.TokensAt(t)
+}
+
+// RecycleToken returns a token to the rate limiter
+func (d *DynamicRateLimiterImpl) RecycleToken() {
+	d.rateLimiter.RecycleToken()
+}

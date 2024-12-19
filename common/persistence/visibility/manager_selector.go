@@ -30,7 +30,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -39,6 +38,7 @@ import (
 type (
 	managerSelector interface {
 		readManager(nsName namespace.Name) manager.VisibilityManager
+		readManagers(nsName namespace.Name) ([]manager.VisibilityManager, error)
 		writeManagers() ([]manager.VisibilityManager, error)
 	}
 
@@ -87,4 +87,11 @@ func (v *defaultManagerSelector) readManager(nsName namespace.Name) manager.Visi
 		return v.secondaryVisibilityManager
 	}
 	return v.visibilityManager
+}
+
+func (v *defaultManagerSelector) readManagers(nsName namespace.Name) ([]manager.VisibilityManager, error) {
+	if v.enableReadFromSecondaryVisibility(nsName.String()) {
+		return []manager.VisibilityManager{v.secondaryVisibilityManager, v.visibilityManager}, nil
+	}
+	return []manager.VisibilityManager{v.visibilityManager, v.secondaryVisibilityManager}, nil
 }

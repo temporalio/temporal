@@ -85,6 +85,8 @@ const (
 	CLIOptUser = "user"
 	// CLIOptPassword is the cli option for password
 	CLIOptPassword = "password"
+	// CLIOptAuthenticator is the cli option for allowed authenticator settings
+	CLIOptAllowedAuthenticators = "allowed-authenticators"
 	// CLIOptTimeout is the cli option for timeout
 	CLIOptTimeout = "timeout"
 	// CLIOptKeyspace is the cli option for keyspace
@@ -134,6 +136,8 @@ const (
 	CLIFlagUser = CLIOptUser + ", u"
 	// CLIFlagPassword is the cli flag for password
 	CLIFlagPassword = CLIOptPassword + ", pw"
+	// CLIFlagAllowedAuthenticators is the cli flag for allowed authenticators
+	CLIFlagAllowedAuthenticators = CLIOptAllowedAuthenticators + ", aa"
 	// CLIFlagTimeout is the cli flag for timeout
 	CLIFlagTimeout = CLIOptTimeout + ", t"
 	// CLIFlagKeyspace is the cli flag for keyspace

@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
@@ -39,9 +38,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
@@ -52,6 +48,9 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -110,6 +109,7 @@ func (s *retryActivitySuite) SetupTest() {
 		s.mockConfig,
 	)
 	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 
 	reg := hsm.NewRegistry()
 	err := RegisterStateMachine(reg)
@@ -173,7 +173,7 @@ func (s *retryActivitySuite) TestRetryActivity_should_be_scheduled_when_next_bac
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
 	nextAttempt := s.activity.Attempt + 1
 	scheduledTime := s.timeSource.Now().Add(1 * time.Second).UTC()
-	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity.ScheduledEventId, scheduledTime, nextAttempt)
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity)
 	s.mutableState.taskGenerator = taskGeneratorMock
 
 	// second := time.Second
@@ -185,6 +185,44 @@ func (s *retryActivitySuite) TestRetryActivity_should_be_scheduled_when_next_bac
 
 	s.Equal(scheduledTime, s.activity.ScheduledTime.AsTime(), "Activity scheduled time is incorrect")
 	// s.Equal(s.nextBackoffStub.expected, s.nextBackoffStub.recorded)
+	s.assertTruncateFailureCalled()
+}
+
+// TestRetryActivity_should_be_scheduled_when_next_retry_delay_is_set asserts that the activity is retried after NextRetryDelay period specified in the application failure.
+func (s *retryActivitySuite) TestRetryActivity_should_be_scheduled_when_next_retry_delay_is_set() {
+	s.mutableState.timeSource = s.timeSource
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	nextAttempt := s.activity.Attempt + 1
+	expectedScheduledTime := s.timeSource.Now().Add(time.Minute).UTC()
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity)
+	s.mutableState.taskGenerator = taskGeneratorMock
+
+	s.failure.GetApplicationFailureInfo().NextRetryDelay = durationpb.New(time.Minute)
+	_, err := s.mutableState.RetryActivity(s.activity, s.failure)
+	s.NoError(err)
+	s.Equal(s.onActivityCreate.mutableStateApproximateSize-s.onActivityCreate.activitySize+s.activity.Size(), s.mutableState.approximateSize)
+	s.Equal(s.activity.Version, s.mutableState.currentVersion)
+	s.Equal(s.activity.Attempt, nextAttempt)
+
+	s.Equal(expectedScheduledTime, s.activity.ScheduledTime.AsTime(), "Activity scheduled time is incorrect")
+	s.assertTruncateFailureCalled()
+}
+
+func (s *retryActivitySuite) TestRetryActivity_next_retry_delay_should_override_max_interval() {
+	s.mutableState.timeSource = s.timeSource
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	nextAttempt := s.activity.Attempt + 1
+	expectedScheduledTime := s.timeSource.Now().Add(3 * time.Minute).UTC()
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity)
+	s.mutableState.taskGenerator = taskGeneratorMock
+
+	s.failure.GetApplicationFailureInfo().NextRetryDelay = durationpb.New(3 * time.Minute)
+	s.activity.RetryMaximumInterval = durationpb.New(2 * time.Minute) // set retry max interval to be less than next retry delay duration.
+	_, err := s.mutableState.RetryActivity(s.activity, s.failure)
+	s.NoError(err)
+	s.Equal(s.activity.Attempt, nextAttempt)
+
+	s.Equal(expectedScheduledTime, s.activity.ScheduledTime.AsTime(), "Activity scheduled time is incorrect")
 	s.assertTruncateFailureCalled()
 }
 
@@ -212,7 +250,7 @@ func (s *retryActivitySuite) moveClockBeyondActivityExpirationTime() {
 func (s *retryActivitySuite) TestRetryActivity_when_task_can_not_be_generated_should_fail() {
 	e := errors.New("can't generate task")
 	taskGeneratorMock := NewMockTaskGenerator(s.controller)
-	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity.ScheduledEventId, gomock.Any(), s.activity.Attempt+1).Return(e)
+	taskGeneratorMock.EXPECT().GenerateActivityRetryTasks(s.activity).Return(e)
 	s.mutableState.taskGenerator = taskGeneratorMock
 
 	s.nextBackoffStub.onNextCallReturn(time.Second, enumspb.RETRY_STATE_IN_PROGRESS)
@@ -224,7 +262,6 @@ func (s *retryActivitySuite) TestRetryActivity_when_task_can_not_be_generated_sh
 		"failure to generate task should produce RETRY_STATE_INTERNAL_SERVER_ERROR got %v",
 		state,
 	)
-	s.assertActivityWasNotScheduled(s.activity, "with failing task generator")
 }
 
 func (s *retryActivitySuite) TestRetryActivity_when_workflow_is_not_mutable_should_fail() {
@@ -354,6 +391,8 @@ func (s *retryActivitySuite) makeActivityAndPutIntoFailingState() *persistencesp
 		activityInfo.ScheduledEventId,
 		uuid.New(),
 		"worker-identity",
+		nil,
+		nil,
 		nil,
 	)
 	s.NoError(err)

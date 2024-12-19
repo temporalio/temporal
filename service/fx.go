@@ -27,9 +27,6 @@ package service
 import (
 	"sync/atomic"
 
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -42,6 +39,8 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -55,7 +54,6 @@ type (
 		PersistenceMaxQps                  persistenceClient.PersistenceMaxQps
 		PersistenceNamespaceMaxQps         persistenceClient.PersistenceNamespaceMaxQps
 		PersistencePerShardNamespaceMaxQPS persistenceClient.PersistencePerShardNamespaceMaxQPS
-		EnablePriorityRateLimiting         persistenceClient.EnablePriorityRateLimiting
 		OperatorRPSRatio                   persistenceClient.OperatorRPSRatio
 		PersistenceBurstRatio              persistenceClient.PersistenceBurstRatio
 		DynamicRateLimitingParams          persistenceClient.DynamicRateLimitingParams
@@ -69,7 +67,7 @@ type (
 		RetryableInterceptor   *interceptor.RetryableInterceptor
 		TelemetryInterceptor   *interceptor.TelemetryInterceptor
 		RateLimitInterceptor   *interceptor.RateLimitInterceptor
-		TracingInterceptor     telemetry.ServerTraceInterceptor
+		TracingStatsHandler    telemetry.ServerStatsHandler
 		AdditionalInterceptors []grpc.UnaryServerInterceptor `optional:"true"`
 	}
 )
@@ -93,9 +91,9 @@ func initPersistenceLazyLoadedServiceResolver(
 	logger.Info("Initialized service resolver for persistence rate limiting", tag.Service(serviceName))
 }
 
-func (p PersistenceLazyLoadedServiceResolver) MemberCount() int {
+func (p PersistenceLazyLoadedServiceResolver) AvailableMemberCount() int {
 	if value := p.Load(); value != nil {
-		return value.(membership.ServiceResolver).MemberCount()
+		return value.(membership.ServiceResolver).AvailableMemberCount()
 	}
 	return 0
 }
@@ -106,10 +104,9 @@ func NewPersistenceRateLimitingParams(
 	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	globalNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	perShardNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 	burstRatio dynamicconfig.FloatPropertyFn,
-	dynamicRateLimitingParams dynamicconfig.MapPropertyFn,
+	dynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams],
 	lazyLoadedServiceResolver PersistenceLazyLoadedServiceResolver,
 	logger log.Logger,
 ) PersistenceRateLimitingParams {
@@ -137,7 +134,6 @@ func NewPersistenceRateLimitingParams(
 			return int(namespaceCalculator.GetQuota(namespace))
 		},
 		PersistencePerShardNamespaceMaxQPS: persistenceClient.PersistencePerShardNamespaceMaxQPS(perShardNamespaceMaxQps),
-		EnablePriorityRateLimiting:         persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
 		OperatorRPSRatio:                   persistenceClient.OperatorRPSRatio(operatorRPSRatio),
 		PersistenceBurstRatio:              persistenceClient.PersistenceBurstRatio(burstRatio),
 		DynamicRateLimitingParams:          persistenceClient.DynamicRateLimitingParams(dynamicRateLimitingParams),
@@ -153,17 +149,21 @@ func GrpcServerOptionsProvider(
 		params.Logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 
+	if params.TracingStatsHandler != nil {
+		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(params.TracingStatsHandler))
+	}
+
 	return append(
 		grpcServerOptions,
 		grpc.ChainUnaryInterceptor(getUnaryInterceptors(params)...),
 		grpc.ChainStreamInterceptor(params.TelemetryInterceptor.StreamIntercept),
+		grpc.StreamInterceptor(interceptor.CustomErrorStreamInterceptor),
 	)
 }
 
 func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInterceptor {
 	interceptors := []grpc.UnaryServerInterceptor{
-		rpc.NewServiceErrorInterceptor(params.Logger),
-		grpc.UnaryServerInterceptor(params.TracingInterceptor),
+		rpc.ServiceErrorInterceptor,
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		metrics.NewServerMetricsTrailerPropagatorInterceptor(params.Logger),
 		params.TelemetryInterceptor.UnaryIntercept,

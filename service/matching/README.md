@@ -1,1 +1,1 @@
-See [docs/matching-service.md](../../docs/architecture/matching-service.md).
+See [docs/architecture/matching-service.md](../../docs/architecture/matching-service.md).

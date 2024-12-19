@@ -28,10 +28,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -41,14 +38,18 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/fx"
+	"go.uber.org/mock/gomock"
 )
 
 // TestQueueModule_ArchivalQueue tests that the archival queue is created if and only if the task category exists.
@@ -141,6 +142,8 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	if c.CategoryExists {
 		registry.AddCategory(tasks.CategoryArchival)
 	}
+	serializer := serialization.NewSerializer()
+	historyFetcher := eventhandler.NewMockHistoryPaginatedFetcher(controller)
 	return fx.Supply(
 		unusedDependencies{},
 		cfg,
@@ -149,6 +152,8 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 		fx.Annotate(log.NewTestLogger(), fx.As(new(log.SnTaggedLogger))),
 		fx.Annotate(clusterMetadata, fx.As(new(cluster.Metadata))),
 		lazyLoadedOwnershipBasedQuotaScaler,
+		fx.Annotate(serializer, fx.As(new(serialization.Serializer))),
+		fx.Annotate(historyFetcher, fx.As(new(eventhandler.HistoryPaginatedFetcher))),
 	)
 }
 

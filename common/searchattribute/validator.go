@@ -30,7 +30,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -82,7 +81,7 @@ func NewValidator(
 // Validate search attributes are valid for writing.
 // The search attributes must be unaliased before calling validation.
 func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string) error {
-	if searchAttributes == nil {
+	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil
 	}
 

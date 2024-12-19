@@ -1,6 +1,4 @@
 # Overrides for Windows users.
-version: "3.5"
-
 services:
   prometheus:
     volumes:

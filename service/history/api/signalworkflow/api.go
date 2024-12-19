@@ -54,7 +54,6 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			request.WorkflowExecution.WorkflowId,
@@ -91,7 +90,7 @@ func Invoke(
 			executionInfo := mutableState.GetExecutionInfo()
 
 			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() && !request.GetSkipGenerateWorkflowTask()
+			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff()
 
 			if childWorkflowOnly {
 				parentWorkflowID := executionInfo.ParentWorkflowId
@@ -111,8 +110,8 @@ func Invoke(
 				request.GetInput(),
 				request.GetIdentity(),
 				request.GetHeader(),
-				request.GetSkipGenerateWorkflowTask(),
 				externalWorkflowExecution,
+				request.GetLinks(),
 			)
 			if err != nil {
 				return nil, err

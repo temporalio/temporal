@@ -26,27 +26,40 @@ package describeworkflow
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strconv"
 
+	"github.com/sony/gobreaker"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/plugins/callbacks"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/circuitbreakerpool"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+var (
+	errCallbackStateUnspecified       = errors.New("callback with UNSPECIFIED state")
+	errNexusOperationStateUnspecified = errors.New("Nexus operation with UNSPECIFIED state")
 )
 
 func clonePayloadMap(source map[string]*commonpb.Payload) map[string]*commonpb.Payload {
@@ -70,6 +83,7 @@ func Invoke(
 	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	persistenceVisibilityMgr manager.VisibilityManager,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -80,13 +94,12 @@ func Invoke(
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
 			req.Request.Execution.WorkflowId,
 			req.Request.Execution.RunId,
 		),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -100,6 +113,11 @@ func Invoke(
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 
+	// fetch the start event to get the associated user metadata.
+	startEvent, err := mutableState.GetStartEvent(ctx)
+	if err != nil {
+		return nil, err
+	}
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -109,6 +127,7 @@ func Invoke(
 			WorkflowExecutionTimeout:   executionInfo.WorkflowExecutionTimeout,
 			WorkflowRunTimeout:         executionInfo.WorkflowRunTimeout,
 			DefaultWorkflowTaskTimeout: executionInfo.DefaultWorkflowTaskTimeout,
+			UserMetadata:               startEvent.UserMetadata,
 		},
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 			Execution: &commonpb.WorkflowExecution{
@@ -116,7 +135,7 @@ func Invoke(
 				RunId:      executionState.RunId,
 			},
 			Type:          &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-			StartTime:     executionInfo.StartTime,
+			StartTime:     executionState.StartTime,
 			Status:        executionState.Status,
 			HistoryLength: mutableState.GetNextEventID() - common.FirstEventID,
 			ExecutionTime: executionInfo.ExecutionTime,
@@ -133,6 +152,8 @@ func Invoke(
 			MostRecentWorkerVersionStamp: executionInfo.MostRecentWorkerVersionStamp,
 			AssignedBuildId:              executionInfo.AssignedBuildId,
 			InheritedBuildId:             executionInfo.InheritedBuildId,
+			FirstRunId:                   executionInfo.FirstExecutionRunId,
+			VersioningInfo:               executionInfo.VersioningInfo,
 		},
 	}
 
@@ -159,52 +180,11 @@ func Invoke(
 	}
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
-		p := &workflowpb.PendingActivityInfo{
-			ActivityId: ai.ActivityId,
-		}
-		if ai.GetUseWorkflowBuildId() != nil {
-			p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
-		} else if ai.GetLastIndependentlyAssignedBuildId() != "" {
-			p.AssignedBuildId = &workflowpb.PendingActivityInfo_LastIndependentlyAssignedBuildId{
-				LastIndependentlyAssignedBuildId: ai.GetLastIndependentlyAssignedBuildId(),
-			}
-		}
-		if ai.CancelRequested {
-			p.State = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
-		} else if ai.StartedEventId != common.EmptyEventID {
-			p.State = enumspb.PENDING_ACTIVITY_STATE_STARTED
-		} else {
-			p.State = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-		}
-		if ai.LastHeartbeatUpdateTime != nil && !ai.LastHeartbeatUpdateTime.AsTime().IsZero() {
-			p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
-			p.HeartbeatDetails = ai.LastHeartbeatDetails
-		}
-		p.ActivityType, err = mutableState.GetActivityType(ctx, ai)
+		p, err := workflow.GetPendingActivityInfo(ctx, shard, mutableState, ai)
 		if err != nil {
 			return nil, err
 		}
-		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-			p.ScheduledTime = ai.ScheduledTime
-		} else {
-			p.LastStartedTime = ai.StartedTime
-		}
-		p.LastWorkerIdentity = ai.StartedIdentity
-		if ai.HasRetryPolicy {
-			p.Attempt = ai.Attempt
-			p.ExpirationTime = ai.RetryExpirationTime
-			if ai.RetryMaximumAttempts != 0 {
-				p.MaximumAttempts = ai.RetryMaximumAttempts
-			}
-			if ai.RetryLastFailure != nil {
-				p.LastFailure = ai.RetryLastFailure
-			}
-			if p.LastWorkerIdentity == "" && ai.RetryLastWorkerIdentity != "" {
-				p.LastWorkerIdentity = ai.RetryLastWorkerIdentity
-			}
-		} else {
-			p.Attempt = 1
-		}
+
 		result.PendingActivities = append(result.PendingActivities, p)
 	}
 
@@ -232,7 +212,11 @@ func Invoke(
 		}
 	}
 
-	relocatableAttributes, err := workflow.RelocatableAttributesFetcherProvider(persistenceVisibilityMgr).Fetch(ctx, mutableState)
+	relocatableAttrsFetcher := workflow.RelocatableAttributesFetcherProvider(
+		shard.GetConfig(),
+		persistenceVisibilityMgr,
+	)
+	relocatableAttributes, err := relocatableAttrsFetcher.Fetch(ctx, mutableState)
 	if err != nil {
 		shard.GetLogger().Error(
 			"Failed to fetch relocatable attributes",
@@ -249,11 +233,12 @@ func Invoke(
 	result.WorkflowExecutionInfo.SearchAttributes = &commonpb.SearchAttributes{
 		IndexedFields: clonePayloadMap(relocatableAttributes.SearchAttributes.GetIndexedFields()),
 	}
-	coll := callbacks.MachineCollection(mutableState.HSM())
-	cbs := coll.List()
+
+	cbColl := callbacks.MachineCollection(mutableState.HSM())
+	cbs := cbColl.List()
 	result.Callbacks = make([]*workflowpb.CallbackInfo, 0, len(cbs))
-	for _, entry := range cbs {
-		callback, err := coll.Data(entry.Key.ID)
+	for _, node := range cbs {
+		callback, err := cbColl.Data(node.Key.ID)
 		if err != nil {
 			shard.GetLogger().Error(
 				"failed to load callback data while building describe response",
@@ -264,10 +249,231 @@ func Invoke(
 			)
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
-		// HSM data is mutable and must be cloned to avoid a data race during serialization, which happens after we
-		// release the lock on this workflow.
-		result.Callbacks = append(result.Callbacks, common.CloneProto(callback.PublicInfo))
+
+		callbackInfo, err := buildCallbackInfo(namespaceID, callback, outboundQueueCBPool)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to build callback info while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		if callbackInfo == nil {
+			continue
+		}
+		result.Callbacks = append(result.Callbacks, callbackInfo)
+	}
+
+	opColl := nexusoperations.MachineCollection(mutableState.HSM())
+	ops := opColl.List()
+	result.PendingNexusOperations = make([]*workflowpb.PendingNexusOperationInfo, 0, len(ops))
+	for _, node := range ops {
+		op, err := opColl.Data(node.Key.ID)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to load Nexus operation data while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+
+		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, node, op, outboundQueueCBPool)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to build Nexus operation info while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		if operationInfo == nil {
+			// Operation is not pending
+			continue
+		}
+		result.PendingNexusOperations = append(result.PendingNexusOperations, operationInfo)
 	}
 
 	return result, nil
+}
+
+func buildCallbackInfo(
+	namespaceID namespace.ID,
+	callback callbacks.Callback,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+) (*workflowpb.CallbackInfo, error) {
+	destination := ""
+	cbSpec := &commonpb.Callback{}
+	switch variant := callback.Callback.Variant.(type) {
+	case *persistencespb.Callback_Nexus_:
+		cbSpec.Variant = &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url:    variant.Nexus.GetUrl(),
+				Header: variant.Nexus.GetHeader(),
+			},
+		}
+		destination = variant.Nexus.GetUrl()
+	default:
+		// Ignore non-nexus callbacks for now (there aren't any just yet).
+		return nil, nil
+	}
+
+	var state enumspb.CallbackState
+	switch callback.State() {
+	case enumsspb.CALLBACK_STATE_UNSPECIFIED:
+		return nil, errCallbackStateUnspecified
+	case enumsspb.CALLBACK_STATE_STANDBY:
+		state = enumspb.CALLBACK_STATE_STANDBY
+	case enumsspb.CALLBACK_STATE_SCHEDULED:
+		state = enumspb.CALLBACK_STATE_SCHEDULED
+	case enumsspb.CALLBACK_STATE_BACKING_OFF:
+		state = enumspb.CALLBACK_STATE_BACKING_OFF
+	case enumsspb.CALLBACK_STATE_FAILED:
+		state = enumspb.CALLBACK_STATE_FAILED
+	case enumsspb.CALLBACK_STATE_SUCCEEDED:
+		state = enumspb.CALLBACK_STATE_SUCCEEDED
+	}
+
+	blockedReason := ""
+	if state == enumspb.CALLBACK_STATE_SCHEDULED {
+		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
+			TaskGroup:   callbacks.TaskTypeInvocation,
+			NamespaceID: namespaceID.String(),
+			Destination: destination,
+		})
+		if cb.State() != gobreaker.StateClosed {
+			state = enumspb.CALLBACK_STATE_BLOCKED
+			blockedReason = "The circuit breaker is open."
+		}
+	}
+
+	trigger := &workflowpb.CallbackInfo_Trigger{}
+	switch callback.Trigger.Variant.(type) {
+	case *persistencespb.CallbackInfo_Trigger_WorkflowClosed:
+		trigger.Variant = &workflowpb.CallbackInfo_Trigger_WorkflowClosed{}
+	}
+
+	return &workflowpb.CallbackInfo{
+		Callback:                cbSpec,
+		Trigger:                 trigger,
+		RegistrationTime:        callback.RegistrationTime,
+		State:                   state,
+		Attempt:                 callback.Attempt,
+		LastAttemptCompleteTime: callback.LastAttemptCompleteTime,
+		LastAttemptFailure:      callback.LastAttemptFailure,
+		NextAttemptScheduleTime: callback.NextAttemptScheduleTime,
+		BlockedReason:           blockedReason,
+	}, nil
+}
+
+func buildPendingNexusOperationInfo(
+	namespaceID namespace.ID,
+	node *hsm.Node,
+	op nexusoperations.Operation,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+) (*workflowpb.PendingNexusOperationInfo, error) {
+	var state enumspb.PendingNexusOperationState
+	switch op.State() {
+	case enumsspb.NEXUS_OPERATION_STATE_UNSPECIFIED:
+		return nil, errNexusOperationStateUnspecified
+	case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
+		state = enumspb.PENDING_NEXUS_OPERATION_STATE_BACKING_OFF
+	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
+		state = enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED
+	case enumsspb.NEXUS_OPERATION_STATE_STARTED:
+		state = enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
+	case enumsspb.NEXUS_OPERATION_STATE_CANCELED,
+		enumsspb.NEXUS_OPERATION_STATE_FAILED,
+		enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED,
+		enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT:
+		// Operation is not pending
+		return nil, nil
+	}
+
+	blockedReason := ""
+	if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED {
+		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
+			TaskGroup:   nexusoperations.TaskTypeInvocation,
+			NamespaceID: namespaceID.String(),
+			Destination: op.Endpoint,
+		})
+		if cb.State() != gobreaker.StateClosed {
+			state = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+			blockedReason = "The circuit breaker is open."
+		}
+	}
+
+	cancellationInfo, err := buildNexusOperationCancellationInfo(namespaceID, node, op, outboundQueueCBPool)
+	if err != nil {
+		return nil, err
+	}
+
+	// We store nexus operations in the tree by their string formatted scheduled event ID.
+	scheduledEventID, err := strconv.ParseInt(node.Key.ID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine Nexus operation scheduled event ID: %w", err)
+	}
+
+	return &workflowpb.PendingNexusOperationInfo{
+		Endpoint:                op.Endpoint,
+		Service:                 op.Service,
+		Operation:               op.Operation,
+		OperationId:             op.OperationId,
+		ScheduledEventId:        scheduledEventID,
+		ScheduleToCloseTimeout:  op.ScheduleToCloseTimeout,
+		ScheduledTime:           op.ScheduledTime,
+		State:                   state,
+		Attempt:                 op.Attempt,
+		LastAttemptCompleteTime: op.LastAttemptCompleteTime,
+		LastAttemptFailure:      op.LastAttemptFailure,
+		NextAttemptScheduleTime: op.NextAttemptScheduleTime,
+		CancellationInfo:        cancellationInfo,
+		BlockedReason:           blockedReason,
+	}, nil
+}
+
+func buildNexusOperationCancellationInfo(
+	namespaceID namespace.ID,
+	node *hsm.Node,
+	op nexusoperations.Operation,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+) (*workflowpb.NexusOperationCancellationInfo, error) {
+	cancelation, err := op.Cancelation(node)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load Nexus operation cancelation data: %w", err)
+	}
+	if cancelation == nil {
+		return nil, nil
+	}
+
+	state := cancelation.State()
+	blockedReason := ""
+	if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED {
+		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
+			TaskGroup:   nexusoperations.TaskTypeCancelation,
+			NamespaceID: namespaceID.String(),
+			Destination: op.Endpoint,
+		})
+		if cb.State() != gobreaker.StateClosed {
+			state = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+			blockedReason = "The circuit breaker is open."
+		}
+	}
+
+	return &workflowpb.NexusOperationCancellationInfo{
+		RequestedTime:           cancelation.RequestedTime,
+		State:                   state,
+		Attempt:                 cancelation.Attempt,
+		LastAttemptCompleteTime: cancelation.LastAttemptCompleteTime,
+		LastAttemptFailure:      cancelation.LastAttemptFailure,
+		NextAttemptScheduleTime: cancelation.NextAttemptScheduleTime,
+		BlockedReason:           blockedReason,
+	}, nil
 }

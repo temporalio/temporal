@@ -25,11 +25,13 @@
 package matching
 
 import (
-	commonpb "go.temporal.io/api/common/v1"
+	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -46,8 +48,10 @@ type (
 	}
 	// nexusTaskInfo contains the info for a nexus task
 	nexusTaskInfo struct {
-		taskID  string
-		request *matchingservice.DispatchNexusTaskRequest
+		taskID            string
+		deadline          time.Time
+		operationDeadline time.Time
+		request           *matchingservice.DispatchNexusTaskRequest
 	}
 	// startedTaskInfo contains info for any task received from
 	// another matching host. This type of task is already marked as started
@@ -66,29 +70,56 @@ type (
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
 		namespace        namespace.Name
 		source           enumsspb.TaskSource
-		forwardedFrom    string     // name of the child partition this task is forwarded from (empty if not forwarded)
 		responseC        chan error // non-nil only where there is a caller waiting for response (sync-match)
 		backlogCountHint func() int64
+		// forwardInfo contains information about forward source partition and versioning decisions made by it
+		// a parent partition receiving forwarded tasks makes no versioning decisions and only follows what the source
+		// partition instructed.
+		forwardInfo *taskqueuespb.TaskForwardInfo
+		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks, this is populated
+		// based on forwardInfo.
+		redirectInfo *taskqueuespb.BuildIdRedirectInfo
+		recycleToken func()
 	}
 )
 
-func newInternalTask(
+func newInternalTaskForSyncMatch(
+	info *persistencespb.TaskInfo,
+	forwardInfo *taskqueuespb.TaskForwardInfo,
+) *internalTask {
+	var redirectInfo *taskqueuespb.BuildIdRedirectInfo
+	// if this task is not forwarded, source can only be history
+	source := enumsspb.TASK_SOURCE_HISTORY
+	if forwardInfo != nil {
+		// if task is forwarded, it may be history or backlog. setting based on forward info
+		source = forwardInfo.TaskSource
+		redirectInfo = forwardInfo.GetRedirectInfo()
+	}
+	task := &internalTask{
+		event: &genericTaskInfo{
+			AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
+				Data:   info,
+				TaskId: syncMatchTaskId,
+			},
+		},
+		forwardInfo:  forwardInfo,
+		source:       source,
+		redirectInfo: redirectInfo,
+		responseC:    make(chan error, 1),
+	}
+	return task
+}
+
+func newInternalTaskFromBacklog(
 	info *persistencespb.AllocatedTaskInfo,
 	completionFunc func(*persistencespb.AllocatedTaskInfo, error),
-	source enumsspb.TaskSource,
-	forwardedFrom string,
-	forSyncMatch bool,
 ) *internalTask {
 	task := &internalTask{
 		event: &genericTaskInfo{
 			AllocatedTaskInfo: info,
 			completionFunc:    completionFunc,
 		},
-		source:        source,
-		forwardedFrom: forwardedFrom,
-	}
-	if forSyncMatch {
-		task.responseC = make(chan error, 1)
+		source: enumsspb.TASK_SOURCE_DB_BACKLOG,
 	}
 	return task
 }
@@ -102,27 +133,45 @@ func newInternalQueryTask(
 			taskID:  taskID,
 			request: request,
 		},
-		forwardedFrom: request.GetForwardedSource(),
-		responseC:     make(chan error, 1),
+		forwardInfo: request.GetForwardInfo(),
+		responseC:   make(chan error, 1),
+		source:      enumsspb.TASK_SOURCE_HISTORY,
 	}
 }
 
 func newInternalNexusTask(
 	taskID string,
+	deadline time.Time,
+	operationDeadline time.Time,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) *internalTask {
 	return &internalTask{
 		nexus: &nexusTaskInfo{
-			taskID:  taskID,
-			request: request,
+			taskID:            taskID,
+			deadline:          deadline,
+			operationDeadline: operationDeadline,
+			request:           request,
 		},
-		forwardedFrom: request.GetForwardedSource(),
-		responseC:     make(chan error, 1),
+		forwardInfo: request.GetForwardInfo(),
+		responseC:   make(chan error, 1),
+		source:      enumsspb.TASK_SOURCE_HISTORY,
 	}
 }
 
 func newInternalStartedTask(info *startedTaskInfo) *internalTask {
 	return &internalTask{started: info}
+}
+
+// hasEmptyResponse is true if a task contains an empty response for the appropriate TaskInfo
+func (info *startedTaskInfo) hasEmptyResponse() bool {
+	if info.workflowTaskInfo != nil && len(info.workflowTaskInfo.TaskToken) != 0 {
+		return false
+	} else if info.activityTaskInfo != nil && len(info.activityTaskInfo.TaskToken) != 0 {
+		return false
+	} else if info.nexusTaskInfo != nil && info.nexusTaskInfo.Response != nil {
+		return false
+	}
+	return true
 }
 
 // isQuery returns true if the underlying task is a query task
@@ -138,7 +187,7 @@ func (task *internalTask) isStarted() bool {
 // isForwarded returns true if the underlying task is forwarded by a remote matching host
 // forwarded tasks are already marked as started in history
 func (task *internalTask) isForwarded() bool {
-	return task.forwardedFrom != ""
+	return task.forwardInfo != nil
 }
 
 func (task *internalTask) isSyncMatchTask() bool {
@@ -189,7 +238,16 @@ func (task *internalTask) pollNexusTaskQueueResponse() *matchingservice.PollNexu
 // finish marks a task as finished. Should be called after a poller picks up a task
 // and marks it as started. If the task is unable to marked as started, then this
 // method should be called with a non-nil error argument.
-func (task *internalTask) finish(err error) {
+//
+// If the task took a rate limit token and didn't "use" it by actually dispatching the task,
+// finish will be called with wasValid=false and task.recycleToken=clockedRateLimiter.RecycleToken,
+// so finish will call the rate limiter's RecycleToken to give the unused token back to any process
+// that is waiting on the token, if one exists.
+func (task *internalTask) finish(err error, wasValid bool) {
+	if !wasValid && task.recycleToken != nil {
+		task.recycleToken()
+	}
+
 	switch {
 	case task.responseC != nil:
 		task.responseC <- err

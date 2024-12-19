@@ -29,6 +29,7 @@ import (
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -36,13 +37,12 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type EventFactory struct {
@@ -88,6 +88,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		CompletionCallbacks:             req.CompletionCallbacks,
 		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
 		InheritedBuildId:                request.InheritedBuildId,
+		VersioningOverride:              request.VersioningOverride,
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -131,19 +132,20 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	buildIdRedirectCounter int64,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-			ScheduledEventId:     scheduledEventID,
-			Identity:             identity,
-			RequestId:            requestID,
-			SuggestContinueAsNew: suggestContinueAsNew,
-			HistorySizeBytes:     historySizeBytes,
-			WorkerVersion:        versioningStamp,
+			ScheduledEventId:       scheduledEventID,
+			Identity:               identity,
+			RequestId:              requestID,
+			SuggestContinueAsNew:   suggestContinueAsNew,
+			HistorySizeBytes:       historySizeBytes,
+			WorkerVersion:          versioningStamp,
+			BuildIdRedirectCounter: buildIdRedirectCounter,
 		},
 	}
-
 	return event
 }
 
@@ -155,17 +157,21 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
+	deployment *deploymentpb.Deployment,
+	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId: scheduledEventID,
-			StartedEventId:   startedEventID,
-			Identity:         identity,
-			BinaryChecksum:   checksum,
-			WorkerVersion:    workerVersionStamp,
-			SdkMetadata:      sdkMetadata,
-			MeteringMetadata: meteringMetadata,
+			ScheduledEventId:   scheduledEventID,
+			StartedEventId:     startedEventID,
+			Identity:           identity,
+			BinaryChecksum:     checksum,
+			WorkerVersion:      workerVersionStamp,
+			SdkMetadata:        sdkMetadata,
+			MeteringMetadata:   meteringMetadata,
+			Deployment:         deployment,
+			VersioningBehavior: behavior,
 		},
 	}
 
@@ -248,16 +254,18 @@ func (b *EventFactory) CreateActivityTaskStartedEvent(
 	identity string,
 	lastFailure *failurepb.Failure,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectCounter int64,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
 		ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
-			ScheduledEventId: scheduledEventID,
-			Attempt:          attempt,
-			Identity:         identity,
-			RequestId:        requestID,
-			LastFailure:      lastFailure,
-			WorkerVersion:    versioningStamp,
+			ScheduledEventId:       scheduledEventID,
+			Attempt:                attempt,
+			Identity:               identity,
+			RequestId:              requestID,
+			LastFailure:            lastFailure,
+			WorkerVersion:          versioningStamp,
+			BuildIdRedirectCounter: redirectCounter,
 		},
 	}
 	return event
@@ -371,6 +379,7 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 	reason string,
 	details *commonpb.Payloads,
 	identity string,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
@@ -380,6 +389,20 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 			Identity: identity,
 		},
 	}
+	event.Links = links
+	return event
+}
+
+func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
+	versioningOverride *workflowpb.VersioningOverride,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+		WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			VersioningOverride: versioningOverride,
+		},
+	}
+	event.WorkerMayIgnore = true
 	return event
 }
 
@@ -544,6 +567,7 @@ func (b *EventFactory) CreateWorkflowExecutionCancelRequestedEvent(request *hist
 			ExternalWorkflowExecution: request.ExternalWorkflowExecution,
 		},
 	}
+	event.Links = request.CancelRequest.Links
 	return event
 }
 
@@ -772,8 +796,8 @@ func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
-	skipGenerateWorkflowTask bool,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
@@ -782,10 +806,10 @@ func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 			Input:                     input,
 			Identity:                  identity,
 			Header:                    header,
-			SkipGenerateWorkflowTask:  skipGenerateWorkflowTask,
 			ExternalWorkflowExecution: externalWorkflowExecution,
 		},
 	}
+	event.Links = links
 	return event
 }
 

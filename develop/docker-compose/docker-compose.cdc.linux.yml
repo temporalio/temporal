@@ -1,6 +1,4 @@
 # Overrides for CDC for Linux users.
-version: "3.5"
-
 services:
   temporal-ui-standby:
     environment:

@@ -31,7 +31,7 @@ package mocksdk
 import (
 	"reflect"
 
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 )
 
 // MockEncodedValue is a mock of EncodedValue interface.

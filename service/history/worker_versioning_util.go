@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -119,8 +120,10 @@ func updateIndependentActivityBuildId(
 		return err
 	}
 
-	ai.AssignedBuildId = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
-	err = mutableState.UpdateActivity(ai)
+	err = mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) error {
+		activityInfo.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
@@ -136,7 +139,9 @@ func updateIndependentActivityBuildId(
 	)
 }
 
-func updateWorkflowAssignedBuildId(
+// initializeWorkflowAssignedBuildId sets the wf assigned build ID after scheduling the first workflow task, based on
+// the build ID returned by matching.
+func initializeWorkflowAssignedBuildId(
 	ctx context.Context,
 	transferTask *tasks.WorkflowTask,
 	buildId string,
@@ -195,11 +200,9 @@ func updateWorkflowAssignedBuildId(
 		return err
 	}
 
-	workflowTaskStarted := mutableState.GetLastWorkflowTaskStartedEventID() != common.EmptyEventID
-
-	if workflowTaskStarted {
-		// this scheduled event is stale now, so don't write build ID here.
-		// The build ID should be already updated via RecordWorkflowTaskStarted
+	if mutableState.HasCompletedAnyWorkflowTask() || workflowTask.StartedEventID != common.EmptyEventID {
+		// workflow task is running or already completed. buildId is potentially stale and useless.
+		// workflow's assigned build ID should be already updated via RecordWorkflowTaskStarted
 		return nil
 	}
 
@@ -224,16 +227,21 @@ func MakeDirectiveForWorkflowTask(ms workflow.MutableState) *taskqueuespb.TaskVe
 		ms.GetInheritedBuildId(),
 		ms.GetAssignedBuildId(),
 		ms.GetMostRecentWorkerVersionStamp(),
-		ms.GetLastWorkflowTaskStartedEventID(),
+		ms.HasCompletedAnyWorkflowTask(),
+		ms.GetEffectiveVersioningBehavior(),
+		ms.GetEffectiveDeployment(),
 	)
 }
 
 func MakeDirectiveForActivityTask(mutableState workflow.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {
-	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildId() == nil {
+	if behavior := mutableState.GetEffectiveVersioningBehavior(); behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return &taskqueuespb.TaskVersionDirective{Behavior: behavior, Deployment: mutableState.GetEffectiveDeployment()}
+	}
+	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {
 		return worker_versioning.MakeUseAssignmentRulesDirective()
 	} else if id := mutableState.GetAssignedBuildId(); id != "" {
 		return worker_versioning.MakeBuildIdDirective(id)
-	} else if id := worker_versioning.StampIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp()).GetBuildId(); id != "" {
+	} else if id := worker_versioning.BuildIdIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp()); id != "" {
 		// TODO: old versioning only [cleanup-old-wv]
 		return worker_versioning.MakeBuildIdDirective(id)
 	}

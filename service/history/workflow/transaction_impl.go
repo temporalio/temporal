@@ -30,7 +30,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -605,7 +604,7 @@ func NotifyNewHistorySnapshotEvent(
 	workflowStatus := executionState.Status
 	lastFirstEventID := executionInfo.LastFirstEventId
 	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
-	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartedEventId
+	lastWorkflowTaskStartEventID := executionInfo.LastCompletedWorkflowTaskStartedEventId
 	nextEventID := workflowSnapshot.NextEventID
 
 	engine.NotifyNewHistoryEvent(events.NewNotification(
@@ -644,7 +643,7 @@ func NotifyNewHistoryMutationEvent(
 	workflowStatus := executionState.Status
 	lastFirstEventID := executionInfo.LastFirstEventId
 	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
-	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartedEventId
+	lastWorkflowTaskStartEventID := executionInfo.LastCompletedWorkflowTaskStartedEventId
 	nextEventID := workflowMutation.NextEventID
 
 	engine.NotifyNewHistoryEvent(events.NewNotification(
@@ -742,6 +741,7 @@ func emitCompletionMetrics(
 			completionMetric.namespaceState,
 			completionMetric.taskQueue,
 			completionMetric.status,
+			shard.GetConfig(),
 		)
 	}
 }

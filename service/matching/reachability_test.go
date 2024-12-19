@@ -30,21 +30,36 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/tqid"
+	"go.uber.org/mock/gomock"
 )
 
-const testBuildIdVisibilityGracePeriod = 2 * time.Minute
+const (
+	testBuildIdVisibilityGracePeriod  = 2 * time.Minute
+	testReachabilityCacheOpenWFsTTL   = 2 * time.Millisecond
+	testReachabilityCacheClosedWFsTTL = 4 * time.Millisecond
+)
+
+type testReachabilityCalculator struct {
+	rc      *reachabilityCalculator
+	capture *metricstest.Capture
+}
 
 func TestGetBuildIdsOfInterest(t *testing.T) {
 	t.Parallel()
-	rc := mkTestReachabilityCalculator()
+	trc := mkTestReachabilityCalculatorWithEmptyVisibility(t)
+	rc := trc.rc
 
 	// start time 3x rc.buildIdVisibilityGracePeriod ago
 	timesource := commonclock.NewEventTimeSource().Update(time.Now().Add(-3*rc.buildIdVisibilityGracePeriod + time.Second))
@@ -111,7 +126,7 @@ func TestExistsBackloggedActivityOrWFAssignedTo(t *testing.T) {
 Assignment Rules:
 [ (3, 50%), (2, nil) (1, nil) ]
 
-Expect 3 and 2 are reachable, but not 1 since it is behind an unconditional rule.
+Expect 3 and 2 are reachable, but not 1 since it is behind a fully-ramped rule.
 */
 func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 	t.Parallel()
@@ -119,10 +134,10 @@ func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 	deleteTs := hlc.Next(createTs, commonclock.NewRealTimeSource())
 	rc := &reachabilityCalculator{
 		assignmentRules: []*persistencespb.AssignmentRule{
-			mkAssignmentRulePersistence(mkAssignmentRule("3", mkNewAssignmentPercentageRamp(50)), createTs, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("2.5", nil), createTs, deleteTs),
-			mkAssignmentRulePersistence(mkAssignmentRule("2", nil), createTs, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("1", nil), createTs, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("3", 50), createTs, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("2.5"), createTs, deleteTs),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("2"), createTs, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), createTs, nil),
 		},
 	}
 
@@ -140,10 +155,10 @@ func TestGetDefaultBuildId(t *testing.T) {
 	createTs := hlc.Zero(1)
 	deleteTs := hlc.Next(createTs, commonclock.NewRealTimeSource())
 	assignmentRules := []*persistencespb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("3", mkNewAssignmentPercentageRamp(50)), createTs, nil),
-		mkAssignmentRulePersistence(mkAssignmentRule("2.5", nil), createTs, deleteTs),
-		mkAssignmentRulePersistence(mkAssignmentRule("2", nil), createTs, nil),
-		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("3", 50), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("2.5"), createTs, deleteTs),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("2"), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), createTs, nil),
 	}
 	assert.Equal(t, "2", getDefaultBuildId(assignmentRules))
 }
@@ -151,16 +166,16 @@ func TestGetDefaultBuildId(t *testing.T) {
 func TestMakeBuildIdQuery(t *testing.T) {
 	t.Parallel()
 	rc := &reachabilityCalculator{
-		taskQueue: "test-query-tq",
+		taskQueue: tqid.UnsafeTaskQueueFamily("nsid", "test-query-tq"),
 	}
 
 	buildIdsOfInterest := []string{"0", "1", "2", ""}
 	query := rc.makeBuildIdQuery(buildIdsOfInterest, true)
-	expectedQuery := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('assigned:0','assigned:1','assigned:2','unversioned')) AND ExecutionStatus = \"Running\""
+	expectedQuery := "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('unversioned','assigned:0','assigned:1','assigned:2')) AND ExecutionStatus = \"Running\""
 	assert.Equal(t, expectedQuery, query)
 
 	query = rc.makeBuildIdQuery(buildIdsOfInterest, false)
-	expectedQuery = "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('versioned:0','versioned:1','versioned:2','unversioned')) AND ExecutionStatus != \"Running\""
+	expectedQuery = "TaskQueue = 'test-query-tq' AND (BuildIds IS NULL OR BuildIds IN ('unversioned','versioned:0','versioned:1','versioned:2')) AND ExecutionStatus != \"Running\""
 	assert.Equal(t, expectedQuery, query)
 
 	buildIdsOfInterest = []string{"0", "1", "2"}
@@ -173,29 +188,30 @@ func TestMakeBuildIdQuery(t *testing.T) {
 	assert.Equal(t, expectedQuery, query)
 }
 
-// nothing in assignment rules for this test --> buildIdsOfInterest list will always just contain the original build id
+// nothing in assignment rules for this test --> buildIdsOfInterest list will always just contain the original build ID
 func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	// Visibility: [ (NULL, closed), (A, open) ]
 	t.Parallel()
 	ctx := context.Background()
-	rc := mkTestReachabilityCalculator()
+	trc := mkTestReachabilityCalculatorWithEmptyVisibility(t)
+	rc := trc.rc
 
-	// reachability("") --> reachable (it's the default build id)
-	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	// reachability("") --> reachable (it's the default build ID)
+	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability("") --> closed_workflows_only (now that "" is not default)
-	rc.assignmentRules = []*persistencespb.AssignmentRule{mkAssignmentRulePersistence(mkAssignmentRule("A", nil), nil, nil)}
+	rc.assignmentRules = []*persistencespb.AssignmentRule{mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("A"), nil, nil)}
 	setVisibilityExpect(t, rc, []string{""}, 0, 1)
-	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstreamMiss)
 	rc.assignmentRules = nil // remove rule for rest of test
 
 	// reachability(A) --> reachable (open workflow in visibility)
 	setVisibilityExpect(t, rc, []string{"A"}, 1, 0)
-	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstreamMiss)
 
 	// reachability(B) --> unreachable (not mentioned in rules or visibility)
 	setVisibilityExpect(t, rc, []string{"B"}, 0, 0)
-	checkReachability(ctx, t, rc, "B", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "B", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstreamMiss)
 }
 
 func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
@@ -204,29 +220,29 @@ func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	createTs := hlc.Zero(1)
-	rc := mkTestReachabilityCalculator()
+	trc := mkTestReachabilityCalculatorWithEmptyVisibility(t)
+	rc := trc.rc
 	rc.assignmentRules = []*persistencespb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("D", mkNewAssignmentPercentageRamp(50)), createTs, nil),
-		mkAssignmentRulePersistence(mkAssignmentRule("A", nil), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("D", 50), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("A"), createTs, nil),
 	}
 	rc.redirectRules = []*persistencespb.RedirectRule{
 		mkRedirectRulePersistence(mkRedirectRule("A", "B"), createTs, nil),
 		mkRedirectRulePersistence(mkRedirectRule("B", "C"), createTs, nil),
 		mkRedirectRulePersistence(mkRedirectRule("F", "G"), createTs, nil),
 	}
-	setVisibilityExpectEmptyAlways(t, rc)
 
 	// reachability(A) --> unreachable (assignment rule target, and also redirect rule source)
-	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "A", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedRuleSourcesForInput)
 
 	// reachability(C) --> reachable (redirect rule target of reachable source)
-	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability(D) --> reachable (assignment rule target, nothing else)
-	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability(G) --> unreachable (redirect rule target of unreachable source [F not reachable by rules or visibility])
-	checkReachability(ctx, t, rc, "G", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "G", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstreamMiss)
 }
 
 // test reachability of build ids that are only reachable by the buildIdsOfInterest list + visibility
@@ -236,7 +252,8 @@ func TestGetReachability_WithVisibility_WithRules(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	createTs := hlc.Zero(1)
-	rc := mkTestReachabilityCalculator()
+	trc := mkTestReachabilityCalculatorWithEmptyVisibility(t)
+	rc := trc.rc
 	rc.redirectRules = []*persistencespb.RedirectRule{
 		mkRedirectRulePersistence(mkRedirectRule("A", "C"), createTs, nil),
 		mkRedirectRulePersistence(mkRedirectRule("B", "D"), createTs, nil),
@@ -244,11 +261,11 @@ func TestGetReachability_WithVisibility_WithRules(t *testing.T) {
 
 	// reachability(C) --> closed_workflows_only (via upstream closed wf execution A)
 	setVisibilityExpect(t, rc, []string{"C", "A"}, 0, 1)
-	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstreamMiss)
 
 	// reachability(D) --> reachable (via upstream running wf execution B)
 	setVisibilityExpect(t, rc, []string{"D", "B"}, 1, 0)
-	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstreamMiss)
 }
 
 // test reachability of build ids that are only reachable by buildIdsOfInterest + visibility
@@ -258,7 +275,8 @@ func TestGetReachability_WithVisibility_WithDeletedRules(t *testing.T) {
 	// Redirect: (A->C, recently-deleted), (B->D, recently-deleted), (X->Z, deleted), (Y->ZZ, deleted)
 	t.Parallel()
 	ctx := context.Background()
-	rc := mkTestReachabilityCalculator()
+	trc := mkTestReachabilityCalculatorWithEmptyVisibility(t)
+	rc := trc.rc
 
 	// start time 3x rc.buildIdVisibilityGracePeriod ago
 	timesource := commonclock.NewEventTimeSource().Update(time.Now().Add(-3*rc.buildIdVisibilityGracePeriod + time.Second))
@@ -276,19 +294,19 @@ func TestGetReachability_WithVisibility_WithDeletedRules(t *testing.T) {
 
 	// reachability(C) --> closed_workflows_only (via upstream closed wf execution A, rule included due to recent delete)
 	setVisibilityExpect(t, rc, []string{"C", "A"}, 0, 1)
-	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY)
+	checkReachability(ctx, t, rc, "C", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstreamMiss)
 
 	// reachability(D) --> reachable (via upstream running wf execution B, rule included due to recent delete)
 	setVisibilityExpect(t, rc, []string{"D", "B"}, 1, 0)
-	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE)
+	checkReachability(ctx, t, rc, "D", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedOpenWorkflowExecutionsForUpstreamMiss)
 
 	// reachability(Z) --> unreachable (despite upstream closed wf execution X, rule excluded due to old delete)
 	setVisibilityExpect(t, rc, []string{"Z"}, 0, 0)
-	checkReachability(ctx, t, rc, "Z", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "Z", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstreamMiss)
 
 	// reachability(ZZ) --> unreachable (despite upstream running wf execution Y, rule excluded due to recent delete)
 	setVisibilityExpect(t, rc, []string{"ZZ"}, 0, 0)
-	checkReachability(ctx, t, rc, "ZZ", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE)
+	checkReachability(ctx, t, rc, "ZZ", enumspb.BUILD_ID_TASK_REACHABILITY_UNREACHABLE, checkedClosedWorkflowExecutionsForUpstreamMiss)
 }
 
 // test reachability via deleted rules within the rule propagation delay
@@ -301,27 +319,39 @@ func checkReachability(ctx context.Context,
 	t *testing.T,
 	rc *reachabilityCalculator,
 	buildId string,
-	expectedReachability enumspb.BuildIdTaskReachability) {
-	reachability, err := rc.run(ctx, buildId)
+	expectedReachability enumspb.BuildIdTaskReachability,
+	expectedExitPoint reachabilityExitPoint,
+) {
+	// check that getBuildIdTaskReachability works (generates expected reachability and logs expected exit point)
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	logger := log.NewTestLogger()
+	reachability, err := getBuildIdTaskReachability(ctx, rc, metricsHandler, logger, buildId)
+	assert.Nil(t, err)
+	assert.Equal(t, expectedReachability, reachability)
+	snapshot := metricsCapture.Snapshot()
+	counterRecordings := snapshot[metrics.ReachabilityExitPointCounter.Name()]
+	assert.Equal(t, len(counterRecordings), 1)
+	assert.Equal(t, int64(1), counterRecordings[0].Value.(int64))
+	assert.Equal(t, reachabilityExitPoint2TagValue[expectedExitPoint], counterRecordings[0].Tags[reachabilityExitPointTagName])
+
+	// check that rc.run works (don't check exit point this time because cache will be warm)
+	reachability, _, err = rc.run(ctx, buildId)
 	assert.Nil(t, err)
 	assert.Equal(t, expectedReachability, reachability)
 }
 
+// setVisibilityExpect resets the cache and sets the expected visibility results for the mock visibility inside it
 func setVisibilityExpect(t *testing.T,
 	rc *reachabilityCalculator,
 	buildIdsOfInterest []string,
 	countOpen, countClosed int64) {
+	queryOpen := rc.makeBuildIdQuery(buildIdsOfInterest, true)
+	queryClosed := rc.makeBuildIdQuery(buildIdsOfInterest, false)
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, true)).MaxTimes(1).Return(mkCountResponse(countOpen))
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(buildIdsOfInterest, false)).MaxTimes(1).Return(mkCountResponse(countClosed))
-	rc.visibilityMgr = vm
-}
-
-func setVisibilityExpectEmptyAlways(t *testing.T,
-	rc *reachabilityCalculator) {
-	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
-	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).AnyTimes().Return(mkCountResponse(0))
-	rc.visibilityMgr = vm
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(queryOpen)).MaxTimes(2).Return(mkCountResponse(countOpen))
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), rc.makeBuildIdCountRequest(queryClosed)).MaxTimes(2).Return(mkCountResponse(countClosed))
+	rc.cache.visibilityMgr = vm
 }
 
 func mkCountResponse(count int64) (*manager.CountWorkflowExecutionsResponse, error) {
@@ -331,11 +361,26 @@ func mkCountResponse(count int64) (*manager.CountWorkflowExecutionsResponse, err
 	}, nil
 }
 
-func mkTestReachabilityCalculator() *reachabilityCalculator {
-	return &reachabilityCalculator{
-		nsID:                         "test-namespace-id",
-		nsName:                       "test-namespace",
-		taskQueue:                    "test-reachability-tq",
-		buildIdVisibilityGracePeriod: testBuildIdVisibilityGracePeriod,
+func mkTestReachabilityCalculatorWithEmptyVisibility(t *testing.T) *testReachabilityCalculator {
+	cacheMetricsHandler := metricstest.NewCaptureHandler()
+	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
+	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).AnyTimes().Return(mkCountResponse(0))
+	nsName := namespace.Name("test-namespace")
+	tqf := tqid.UnsafeTaskQueueFamily("nsid", "test-reachability-tq")
+	return &testReachabilityCalculator{
+		rc: &reachabilityCalculator{
+			nsID:                         "test-namespace-id",
+			nsName:                       nsName,
+			taskQueue:                    tqf,
+			buildIdVisibilityGracePeriod: testBuildIdVisibilityGracePeriod,
+			cache: newReachabilityCache(
+				cacheMetricsHandler,
+				vm,
+				testReachabilityCacheOpenWFsTTL,
+				testReachabilityCacheClosedWFsTTL,
+			),
+			tqConfig: newTaskQueueConfig(tqf.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW), NewConfig(dynamicconfig.NewNoopCollection()), nsName),
+		},
+		capture: cacheMetricsHandler.StartCapture(),
 	}
 }

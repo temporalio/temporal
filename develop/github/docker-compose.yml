@@ -1,5 +1,3 @@
-version: "3.5"
-
 services:
   cassandra:
     image: cassandra:3.11
@@ -7,6 +5,8 @@ services:
       - "9042:9042"
     environment:
       CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
+      MAX_HEAP_SIZE: "2G"
+      HEAP_NEWSIZE: "200M"
 
   mysql:
     image: mysql:8.0.29-oracle
@@ -32,12 +32,22 @@ services:
     ports:
       - "9200:9200"
     environment:
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=512mb
+      - cluster.routing.allocation.disk.watermark.high=256mb
+      - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
 
   elasticsearch8:
     image: elasticsearch:8.0.0
     ports:
       - "9200:9200"
     environment:
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=512mb
+      - cluster.routing.allocation.disk.watermark.high=256mb
+      - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g

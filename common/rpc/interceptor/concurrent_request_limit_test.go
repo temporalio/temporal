@@ -28,16 +28,15 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/quotas/calculator"
-	"go.temporal.io/server/common/quotas/quotastest"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas/calculator"
+	"go.temporal.io/server/common/quotas/quotastest"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 )
 
 type nsCountLimitTestCase struct {
@@ -157,7 +156,6 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			expectRateLimit: false,
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			tc.run(t)
@@ -228,8 +226,8 @@ func (tc *nsCountLimitTestCase) createInterceptor(ctrl *gomock.Controller) *Conc
 		registry,
 		tc.memberCounter,
 		log.NewNoopLogger(),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(tc.perInstanceLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(tc.globalLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(tc.perInstanceLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(tc.globalLimit),
 		tc.tokens,
 	)
 

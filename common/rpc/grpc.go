@@ -31,19 +31,19 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/rpc/interceptor"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/rpc/interceptor"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 const (
@@ -59,7 +59,7 @@ const (
 	// can have. This is currently set to the max gRPC request size.
 	MaxHTTPAPIRequestBytes = 4 * 1024 * 1024
 
-	// MaxHTTPAPIRequestBytes is the maximum number of bytes a Nexus HTTP API request can have. Because the body is
+	// MaxNexusAPIRequestBodyBytes is the maximum number of bytes a Nexus HTTP API request can have. Because the body is
 	// read into a Payload object, this is currently set to the max Payload size. Content headers are transformed to
 	// Payload metadata and contribute to the Payload size as well. A separate limit is enforced on top of this.
 	MaxNexusAPIRequestBodyBytes = 2 * 1024 * 1024
@@ -82,8 +82,8 @@ const (
 // Dial creates a client connection to the given target with default options.
 // The hostName syntax is defined in
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
-// e.g. to use dns resolver, a "dns:///" prefix should be applied to the target.
-func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptors ...grpc.UnaryClientInterceptor) (*grpc.ClientConn, error) {
+// dns resolver is used by default
+func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	var grpcSecureOpt grpc.DialOption
 	if tlsConfig == nil {
 		grpcSecureOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
@@ -106,12 +106,9 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptor
 		grpcSecureOpt,
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxInternodeRecvPayloadSize)),
 		grpc.WithChainUnaryInterceptor(
-			append(
-				interceptors,
-				headersInterceptor,
-				metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
-				errorInterceptor,
-			)...,
+			headersInterceptor,
+			metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
+			errorInterceptor,
 		),
 		grpc.WithChainStreamInterceptor(
 			interceptor.StreamErrorInterceptor,
@@ -120,11 +117,9 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptor
 		grpc.WithDisableServiceConfig(),
 		grpc.WithConnectParams(cp),
 	}
+	dialOptions = append(dialOptions, opts...)
 
-	return grpc.Dial(
-		hostName,
-		dialOptions...,
-	)
+	return grpc.NewClient(hostName, dialOptions...)
 }
 
 func errorInterceptor(
@@ -152,20 +147,25 @@ func headersInterceptor(
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
-func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err error) {
-	var reErr *serviceerror.ResourceExhausted
-	if errors.As(err, &reErr) {
-		headerErr := grpc.SetHeader(ctx, metadata.Pairs(
-			ResourceExhaustedCauseHeader, reErr.Cause.String(),
-			ResourceExhaustedScopeHeader, reErr.Scope.String(),
-		))
-		if headerErr != nil {
-			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(err))
-		}
+func ServiceErrorInterceptor(
+	ctx context.Context,
+	req interface{},
+	_ *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+
+	resp, err := handler(ctx, req)
+
+	var deserializationError *serialization.DeserializationError
+	var serializationError *serialization.SerializationError
+	// convert serialization errors to be captured as serviceerrors across gRPC calls
+	if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
+		err = serviceerror.NewDataLoss(err.Error())
 	}
+	return resp, serviceerror.ToStatus(err).Err()
 }
 
-func NewServiceErrorInterceptor(
+func NewFrontendServiceErrorInterceptor(
 	logger log.Logger,
 ) grpc.UnaryServerInterceptor {
 	return func(
@@ -176,25 +176,34 @@ func NewServiceErrorInterceptor(
 	) (interface{}, error) {
 
 		resp, err := handler(ctx, req)
-		if err != nil {
-			addHeadersForResourceExhausted(ctx, logger, err)
-		}
-		return resp, serviceerror.ToStatus(err).Err()
-	}
 
+		if err == nil {
+			return resp, err
+		}
+
+		// mask some internal service errors at frontend
+		switch err.(type) {
+		case *serviceerrors.ShardOwnershipLost:
+			err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
+		case *serviceerror.DataLoss:
+			err = serviceerror.NewUnavailable("internal history service error")
+		}
+
+		addHeadersForResourceExhausted(ctx, logger, err)
+
+		return resp, err
+	}
 }
 
-func FrontendErrorInterceptor(
-	ctx context.Context,
-	req interface{},
-	_ *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	resp, err := handler(ctx, req)
-
-	// mask some internal errors at frontend
-	if _, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
-		err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
+func addHeadersForResourceExhausted(ctx context.Context, logger log.Logger, err error) {
+	var reErr *serviceerror.ResourceExhausted
+	if errors.As(err, &reErr) {
+		headerErr := grpc.SetHeader(ctx, metadata.Pairs(
+			ResourceExhaustedCauseHeader, reErr.Cause.String(),
+			ResourceExhaustedScopeHeader, reErr.Scope.String(),
+		))
+		if headerErr != nil {
+			logger.Error("Failed to add Resource-Exhausted headers to response", tag.Error(headerErr))
+		}
 	}
-	return resp, serviceerror.ToStatus(err).Err()
 }

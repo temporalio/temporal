@@ -33,7 +33,6 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -54,13 +53,6 @@ var (
 )
 
 type (
-	taskQueueManagerOpt func(*physicalTaskQueueManagerImpl)
-
-	idBlockAllocator interface {
-		RenewLease(context.Context) (taskQueueState, error)
-		RangeID() int64
-	}
-
 	// backlogManagerImpl manages the backlog and persistence of a physical task queue
 	backlogManager interface {
 		Start()
@@ -104,22 +96,21 @@ func newBacklogManager(
 	metricsHandler metrics.Handler,
 	contextInfoProvider func(ctx context.Context) context.Context,
 ) *backlogManagerImpl {
-	db := newTaskQueueDB(taskManager, pqMgr.QueueKey(), logger)
 	bmg := &backlogManagerImpl{
 		pqMgr:               pqMgr,
 		matchingClient:      matchingClient,
 		metricsHandler:      metricsHandler,
 		logger:              logger,
 		throttledLogger:     throttledLogger,
-		db:                  db,
-		taskAckManager:      newAckManager(logger),
-		taskGC:              newTaskGC(db, config),
 		config:              config,
 		contextInfoProvider: contextInfoProvider,
 		initializedError:    future.NewFuture[struct{}](),
 	}
+	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
+	bmg.taskAckManager = newAckManager(bmg)
+	bmg.taskGC = newTaskGC(bmg.db, config)
 
 	return bmg
 }
@@ -136,7 +127,7 @@ func (c *backlogManagerImpl) signalIfFatal(err error) bool {
 	if errors.As(err, &condfail) {
 		c.metricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
 		c.skipFinalUpdate.Store(true)
-		c.pqMgr.UnloadFromPartitionManager()
+		c.pqMgr.UnloadFromPartitionManager(unloadCauseConflict)
 		return true
 	}
 	return false
@@ -172,7 +163,7 @@ func (c *backlogManagerImpl) SetInitializedError(err error) {
 		// We can't recover from here without starting over, so unload the whole task queue.
 		// Skip final update since we never initialized.
 		c.skipFinalUpdate.Store(true)
-		c.pqMgr.UnloadFromPartitionManager()
+		c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
 	}
 }
 
@@ -206,7 +197,7 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	return &taskqueuepb.TaskQueueStatus{
 		ReadLevel:        c.taskAckManager.getReadLevel(),
 		AckLevel:         c.taskAckManager.getAckLevel(),
-		BacklogCountHint: c.BacklogCountHint(),
+		BacklogCountHint: c.db.getApproximateBacklogCount(), // use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
@@ -254,7 +245,7 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 				tag.WorkflowTaskQueueType(c.queueKey().TaskType()))
 			// Skip final update since persistence is having problems.
 			c.skipFinalUpdate.Store(true)
-			c.pqMgr.UnloadFromPartitionManager()
+			c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
 			return
 		}
 		c.taskReader.Signal()

@@ -26,23 +26,22 @@ package batcher
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 	"unicode"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	history "go.temporal.io/api/history/v1"
+	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/api/workflowservicemock/v1"
 	"go.temporal.io/sdk/testsuite"
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.uber.org/mock/gomock"
 )
 
 type activitiesSuite struct {
@@ -59,29 +58,30 @@ func (s *activitiesSuite) SetupTest() {
 
 	s.mockFrontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
 }
+
 func TestActivitiesSuite(t *testing.T) {
 	suite.Run(t, new(activitiesSuite))
 }
 
 const NumTotalEvents = 10
 
-// pattern contains either c or f representing completed or failed task
-// Schedule events for each task has id of NumTotalEvents*i + 1 where i is the index of the character
-// eventId for each task has id of NumTotalEvents*i+NumTotalEvents where is the index of the character
-func generateEventHistory(pattern string) *history.History {
-	events := make([]*history.HistoryEvent, 0)
+// Pattern contains either c or f representing completed or failed task.
+// Schedule events for each task has id of NumTotalEvents*i + 1 where i is the index of the character.
+// EventId for each task has id of NumTotalEvents*i+NumTotalEvents where i is the index of the character.
+func generateEventHistory(pattern string) *historypb.History {
+	events := make([]*historypb.HistoryEvent, 0)
 	for i, char := range pattern {
 		// add a Schedule event independent of type of event
 		scheduledEventId := int64(NumTotalEvents*i + 1)
-		scheduledEvent := history.HistoryEvent{EventId: scheduledEventId, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED}
+		scheduledEvent := historypb.HistoryEvent{EventId: scheduledEventId, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED}
 		events = append(events, &scheduledEvent)
 
-		event := history.HistoryEvent{EventId: int64(NumTotalEvents*i + NumTotalEvents)}
+		event := historypb.HistoryEvent{EventId: int64(NumTotalEvents*i + NumTotalEvents)}
 		switch unicode.ToLower(char) {
 		case 'c':
 			event.EventType = enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED
-			event.Attributes = &history.HistoryEvent_WorkflowTaskCompletedEventAttributes{
-				WorkflowTaskCompletedEventAttributes: &history.WorkflowTaskCompletedEventAttributes{ScheduledEventId: scheduledEventId},
+			event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
+				WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{ScheduledEventId: scheduledEventId},
 			}
 		case 'f':
 			event.EventType = enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED
@@ -89,14 +89,14 @@ func generateEventHistory(pattern string) *history.History {
 		events = append(events, &event)
 	}
 
-	return &history.History{Events: events}
+	return &historypb.History{Events: events}
 }
 
 func (s *activitiesSuite) TestGetLastWorkflowTaskEventID() {
 	namespaceStr := "test-namespace"
 	tests := []struct {
 		name                    string
-		history                 *history.History
+		history                 *historypb.History
 		wantWorkflowTaskEventID int64
 		wantErr                 bool
 	}{
@@ -145,7 +145,7 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 	workflowExecution := commonpb.WorkflowExecution{}
 	tests := []struct {
 		name                    string
-		history                 *history.History
+		history                 *historypb.History
 		wantWorkflowTaskEventID int64
 		wantErr                 bool
 	}{
@@ -208,7 +208,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "not found",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,
@@ -221,7 +221,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "found",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,
@@ -234,7 +234,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "not resettable",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,
@@ -247,7 +247,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "from another run",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run0",
 					FirstWorkflowTaskCompletedId: 34,
@@ -261,7 +261,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "from another run but not allowed",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run0",
 					FirstWorkflowTaskCompletedId: 34,
@@ -275,7 +275,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "expired",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,

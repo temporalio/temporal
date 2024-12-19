@@ -73,6 +73,45 @@ func TestToString(t *testing.T) {
 	s.Equal("", result)
 }
 
+func TestEncodeDecode(t *testing.T) {
+	s := assert.New(t)
+
+	var p *commonpb.Payload
+	var err error
+
+	var decodedValueStr string
+	valueStr := "asdf"
+	p, err = Encode(valueStr)
+	s.NoError(err)
+	err = Decode(p, &decodedValueStr)
+	s.NoError(err)
+	s.Equal(valueStr, decodedValueStr)
+
+	var decodedValueInt int64
+	valueInt := int64(1234)
+	p, err = Encode(valueInt)
+	s.NoError(err)
+	err = Decode(p, &decodedValueInt)
+	s.NoError(err)
+	s.Equal(valueInt, decodedValueInt)
+
+	var decodedValueBool bool
+	valueBool := true
+	p, err = Encode(valueBool)
+	s.NoError(err)
+	err = Decode(p, &decodedValueBool)
+	s.NoError(err)
+	s.Equal(valueBool, decodedValueBool)
+
+	var decodedValueAny any
+	var valueAny any = 123.45
+	p, err = Encode(valueAny)
+	s.NoError(err)
+	err = Decode(p, &decodedValueAny)
+	s.NoError(err)
+	s.Equal(valueAny, decodedValueAny)
+}
+
 func TestMergeMapOfPayload(t *testing.T) {
 	s := assert.New(t)
 

@@ -23,57 +23,104 @@
 package history
 
 import (
-	"go.uber.org/fx"
+	"fmt"
 
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/circuitbreakerpool"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
+// outboundQueuePersistenceMaxRPSRatio is meant to ensure queue loading doesn't consume more than 30% of the host's
+// persistence tokens. This is especially important upon host restart when we need to perform a load for all shards.
+// This value was copied from the transfer queue factory.
 const outboundQueuePersistenceMaxRPSRatio = 0.3
 
 type outboundQueueFactoryParams struct {
 	fx.In
 
 	QueueFactoryBaseParams
+	CircuitBreakerPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 }
 
-// TODO: get actual limits from dynamic config.
 type groupLimiter struct {
-	key queues.StateMachineTaskTypeNamespaceIDAndDestination
+	key tasks.TaskGroupNamespaceIDAndDestination
+
+	namespaceRegistry namespace.Registry
+	metricsHandler    metrics.Handler
+
+	bufferSize  dynamicconfig.IntPropertyFnWithDestinationFilter
+	concurrency dynamicconfig.IntPropertyFnWithDestinationFilter
 }
 
-func (groupLimiter) BufferSize() int {
-	return 100
+var _ ctasks.DynamicWorkerPoolLimiter = (*groupLimiter)(nil)
+
+func (l groupLimiter) BufferSize() int {
+	// This is intentionally not failing the function in case of error. The task
+	// scheduler doesn't expect errors to happen, and modifying to handle errors
+	// would make it unnecessarily complex. Also, in this case, if the namespace
+	// registry fails to get the name, then the task itself will fail when it is
+	// processed and tries to get the namespace name.
+	nsName := getNamespaceNameOrDefault(
+		l.namespaceRegistry,
+		l.key.NamespaceID,
+		"",
+		l.metricsHandler,
+	)
+	return l.bufferSize(nsName, l.key.Destination)
 }
 
-func (groupLimiter) Concurrency() int {
-	return 100
+func (l groupLimiter) Concurrency() int {
+	// Ditto comment above.
+	nsName := getNamespaceNameOrDefault(
+		l.namespaceRegistry,
+		l.key.NamespaceID,
+		"",
+		l.metricsHandler,
+	)
+	return l.concurrency(nsName, l.key.Destination)
 }
-
-var _ ctasks.DynamicWorkerPoolLimiter = groupLimiter{}
 
 type outboundQueueFactory struct {
 	outboundQueueFactoryParams
 	hostReaderRateLimiter quotas.RequestRateLimiter
-	// Shared rate limiter pool for all shards in the host.
-	rateLimiterPool *collection.OnceMap[queues.NamespaceIDAndDestination, quotas.RateLimiter]
 	// Shared scheduler across all shards in the host.
 	hostScheduler queues.Scheduler
 }
 
 func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
-	rateLimiterPool := collection.NewOnceMap(func(queues.StateMachineTaskTypeNamespaceIDAndDestination) quotas.RateLimiter {
-		// TODO: get this value from dynamic config.
-		return quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100.0 })
-	})
+	metricsHandler := getOutbountQueueProcessorMetricsHandler(params.MetricsHandler)
+
+	rateLimiterPool := collection.NewOnceMap(
+		func(key tasks.TaskGroupNamespaceIDAndDestination) quotas.RateLimiter {
+			return quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+				// This is intentionally not failing the function in case of error. The task
+				// scheduler doesn't expect errors to happen, and modifying to handle errors
+				// would make it unnecessarily complex. Also, in this case, if the namespace
+				// registry fails to get the name, then the task itself will fail when it is
+				// processed and tries to get the namespace name.
+				nsName := getNamespaceNameOrDefault(
+					params.NamespaceRegistry,
+					key.NamespaceID,
+					"",
+					metricsHandler,
+				)
+				return params.Config.OutboundQueueHostSchedulerMaxTaskRPS(nsName, key.Destination)
+			})
+		},
+	)
+
 	grouper := queues.GrouperStateMachineNamespaceIDAndDestination{}
 	f := &outboundQueueFactory{
 		outboundQueueFactoryParams: params,
@@ -86,20 +133,61 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 			int64(params.Config.OutboundQueueMaxReaderCount()),
 		),
 		hostScheduler: &queues.CommonSchedulerWrapper{
-			Scheduler: ctasks.NewGroupByScheduler[queues.StateMachineTaskTypeNamespaceIDAndDestination, queues.Executable](
-				ctasks.GroupBySchedulerOptions[queues.StateMachineTaskTypeNamespaceIDAndDestination, queues.Executable]{
+			Scheduler: ctasks.NewGroupByScheduler(
+				ctasks.GroupBySchedulerOptions[
+					tasks.TaskGroupNamespaceIDAndDestination,
+					queues.Executable,
+				]{
 					Logger: params.Logger,
-					KeyFn: func(e queues.Executable) queues.StateMachineTaskTypeNamespaceIDAndDestination {
+					KeyFn: func(e queues.Executable) tasks.TaskGroupNamespaceIDAndDestination {
 						return grouper.KeyTyped(e.GetTask())
 					},
 					RunnableFactory: func(e queues.Executable) ctasks.Runnable {
-						return ctasks.RateLimitedTaskRunnable{
-							Limiter:  rateLimiterPool.Get(grouper.KeyTyped(e.GetTask())),
-							Runnable: ctasks.RunnableTask{Task: e},
-						}
+						key := grouper.KeyTyped(e.GetTask())
+						nsName := getNamespaceNameOrDefault(
+							params.NamespaceRegistry,
+							key.NamespaceID,
+							key.NamespaceID,
+							metricsHandler,
+						)
+						taggedMetricsHandler := metricsHandler.WithTags(
+							metrics.NamespaceTag(nsName),
+							metrics.DestinationTag(key.Destination),
+						)
+						return ctasks.NewRateLimitedTaskRunnableFromTask(
+							ctasks.RunnableTask{
+								Task: queues.NewCircuitBreakerExecutable(
+									e,
+									params.CircuitBreakerPool.Get(key),
+									taggedMetricsHandler,
+								),
+							},
+							rateLimiterPool.Get(key),
+							taggedMetricsHandler,
+						)
 					},
-					SchedulerFactory: func(key queues.StateMachineTaskTypeNamespaceIDAndDestination) ctasks.RunnableScheduler {
-						return ctasks.NewDynamicWorkerPoolScheduler(groupLimiter{key})
+					SchedulerFactory: func(
+						key tasks.TaskGroupNamespaceIDAndDestination,
+					) ctasks.RunnableScheduler {
+						nsName := getNamespaceNameOrDefault(
+							params.NamespaceRegistry,
+							key.NamespaceID,
+							key.NamespaceID,
+							metricsHandler,
+						)
+						return ctasks.NewDynamicWorkerPoolScheduler(
+							groupLimiter{
+								key:               key,
+								namespaceRegistry: params.NamespaceRegistry,
+								metricsHandler:    metricsHandler,
+								bufferSize:        params.Config.OutboundQueueGroupLimiterBufferSize,
+								concurrency:       params.Config.OutboundQueueGroupLimiterConcurrency,
+							},
+							metricsHandler.WithTags(
+								metrics.NamespaceTag(nsName),
+								metrics.DestinationTag(key.Destination),
+							),
+						)
 					},
 				},
 			),
@@ -128,7 +216,7 @@ func (f *outboundQueueFactory) CreateQueue(
 	workflowCache wcache.Cache,
 ) queues.Queue {
 	logger := log.With(shardContext.GetLogger(), tag.ComponentOutboundQueue)
-	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope))
+	metricsHandler := getOutbountQueueProcessorMetricsHandler(f.MetricsHandler)
 
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 
@@ -147,7 +235,13 @@ func (f *outboundQueueFactory) CreateQueue(
 	)
 
 	// not implemented yet
-	standbyExecutor := &outboundQueueStandbyTaskExecutor{}
+	standbyExecutor := newOutboundQueueStandbyTaskExecutor(
+		shardContext,
+		workflowCache,
+		currentClusterName,
+		logger,
+		metricsHandler,
+	)
 
 	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,
@@ -185,11 +279,13 @@ func (f *outboundQueueFactory) CreateQueue(
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
 				BatchSize:            f.Config.OutboundTaskBatchSize,
-				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
+				MaxPendingTasksCount: f.Config.OutboundQueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.OutboundProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.OutboundQueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
-				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
+				PendingTasksCriticalCount: f.Config.OutboundQueuePendingTaskCriticalCount,
+				// Shared configuration with other queues.
 				ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
 				SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 			},
@@ -206,4 +302,54 @@ func (f *outboundQueueFactory) CreateQueue(
 		metricsHandler,
 		factory,
 	)
+}
+
+func getOutbountQueueProcessorMetricsHandler(handler metrics.Handler) metrics.Handler {
+	return handler.WithTags(metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope))
+}
+
+func StateMachineTask(smRegistry *hsm.Registry, task tasks.Task) (hsm.Ref, hsm.Task, error) {
+	cbt, ok := task.(*tasks.StateMachineOutboundTask)
+	if !ok {
+		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError("unknown task type")
+	}
+	def, ok := smRegistry.TaskSerializer(cbt.Info.Type)
+	if !ok {
+		return hsm.Ref{},
+			nil,
+			queues.NewUnprocessableTaskError(
+				fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type),
+			)
+	}
+	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskAttributes{Destination: cbt.Destination})
+	if err != nil {
+		return hsm.Ref{},
+			nil,
+			fmt.Errorf(
+				"%w: %w",
+				queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", cbt.Info.Type)),
+				err,
+			)
+	}
+	return hsm.Ref{
+		WorkflowKey:     taskWorkflowKey(task),
+		StateMachineRef: cbt.Info.Ref,
+		TaskID:          task.GetTaskID(),
+		Validate:        smt.Validate,
+	}, smt, nil
+}
+
+func getNamespaceNameOrDefault(
+	registry namespace.Registry,
+	namespaceID string,
+	def string,
+	metricsHandler metrics.Handler,
+) string {
+	nsName, err := registry.GetNamespaceName(namespace.ID(namespaceID))
+	if err != nil {
+		metrics.ReadNamespaceErrors.With(metricsHandler).
+			Record(1, metrics.ReasonTag(metrics.ReasonString(err.Error())))
+		return def
+	}
+	return nsName.String()
 }

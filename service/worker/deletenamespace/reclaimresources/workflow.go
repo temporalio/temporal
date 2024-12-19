@@ -29,11 +29,12 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/primitives"
-
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
@@ -74,20 +75,13 @@ var (
 	}
 
 	deleteExecutionsWorkflowOptions = workflow.ChildWorkflowOptions{
-		RetryPolicy:        retryPolicy,
-		WorkflowRunTimeout: 60 * time.Minute,
+		RetryPolicy: retryPolicy,
 	}
 
 	ensureNoExecutionsActivityRetryPolicy = &temporal.RetryPolicy{
 		InitialInterval:    1 * time.Second,
 		MaximumInterval:    2 * time.Minute,
 		BackoffCoefficient: 2,
-	}
-
-	ensureNoExecutionsStdVisibilityOptionsActivity = workflow.ActivityOptions{
-		RetryPolicy:            ensureNoExecutionsActivityRetryPolicy,
-		StartToCloseTimeout:    30 * time.Second,
-		ScheduleToCloseTimeout: 30 * time.Minute, // ~20 attempts
 	}
 
 	ensureNoExecutionsAdvVisibilityActivityOptions = workflow.ActivityOptions{
@@ -112,31 +106,51 @@ func validateParams(params *ReclaimResourcesParams) error {
 }
 
 func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParams) (ReclaimResourcesResult, error) {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("Workflow started.", tag.WorkflowType(WorkflowName))
+	logger := log.With(
+		workflow.GetLogger(ctx),
+		tag.WorkflowType(WorkflowName),
+		tag.WorkflowNamespace(params.Namespace.String()),
+		tag.WorkflowNamespaceID(params.NamespaceID.String()))
+	logger.Info("Workflow started.")
 
+	var result ReclaimResourcesResult
 	if err := validateParams(&params); err != nil {
-		return ReclaimResourcesResult{}, err
+		return result, err
 	}
+
+	mh := workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": params.Namespace.String()})
+	defer func() {
+		if result.NamespaceDeleted {
+			mh.Counter(metrics.ReclaimResourcesNamespaceDeleteSuccessCount.Name()).Inc(1)
+		} else {
+			mh.Counter(metrics.ReclaimResourcesNamespaceDeleteFailureCount.Name()).Inc(1)
+		}
+		if result.DeleteSuccessCount > 0 {
+			mh.Counter(metrics.ReclaimResourcesDeleteExecutionsSuccessCount.Name()).Inc(int64(result.DeleteSuccessCount))
+		}
+		if result.DeleteErrorCount > 0 {
+			mh.Counter(metrics.ReclaimResourcesDeleteExecutionsFailureCount.Name()).Inc(int64(result.DeleteErrorCount))
+		}
+	}()
 
 	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
 	var la *LocalActivities
 
-	// Step 0. This workflow is started right after namespace is marked as DELETED and renamed.
+	// Step 0. This workflow is started right after the namespace is marked as DELETED and renamed.
 	// Wait for namespace cache refresh to make sure no new executions are created.
 	err := workflow.Sleep(ctx, namespaceCacheRefreshDelay)
-	if err != nil {
-		return ReclaimResourcesResult{}, err
-	}
-
-	// Step 1. Delete workflow executions.
-	result, err := deleteWorkflowExecutions(ctx, params)
 	if err != nil {
 		return result, err
 	}
 
-	// Step 2. Sleep before deleting namespace from database.
+	// Step 1. Delete workflow executions.
+	result, err = deleteWorkflowExecutions(ctx, logger, params)
+	if err != nil {
+		return result, err
+	}
+
+	// Step 2. Sleep before deleting namespace from a database.
 	err = workflow.Sleep(ctx, params.NamespaceDeleteDelay)
 	if err != nil {
 		return result, fmt.Errorf("%w: %v", errors.ErrUnableToSleep, err)
@@ -150,34 +164,39 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	}
 
 	result.NamespaceDeleted = true
-	logger.Info("Workflow finished successfully.", tag.WorkflowType(WorkflowName))
+	logger.Info("Workflow finished successfully.")
 	return result, nil
 }
 
-func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParams) (ReclaimResourcesResult, error) {
+func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params ReclaimResourcesParams) (ReclaimResourcesResult, error) {
 	var a *Activities
 	var la *LocalActivities
 
-	logger := workflow.GetLogger(ctx)
 	var result ReclaimResourcesResult
 
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	var isAdvancedVisibility bool
-	err := workflow.ExecuteLocalActivity(ctx1, la.IsAdvancedVisibilityActivity, params.Namespace).Get(ctx, &isAdvancedVisibility)
-	if err != nil {
-		return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+
+	// TODO: remove this code branch after v1.26 release
+	v := workflow.GetVersion(ctx, "remove-std-vis", workflow.DefaultVersion, 0)
+	if v == workflow.DefaultVersion {
+		// Standard visibility was removed from server codebase since v1.24 release. We don't need to call this local
+		// activity to know if it is advanced visibility, we know it is true. However, we need to keep it here so that
+		// it can replay workflow history generated before this change.
+		var isAdvancedVisibility bool
+		err := workflow.ExecuteLocalActivity(ctx1, la.IsAdvancedVisibilityActivity, params.Namespace).Get(ctx, &isAdvancedVisibility)
+		if err != nil {
+			return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		}
 	}
 
-	if isAdvancedVisibility {
-		ctx4 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-		var executionsCount int64
-		err = workflow.ExecuteLocalActivity(ctx4, la.CountExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsCount)
-		if err != nil {
-			return result, fmt.Errorf("%w: CountExecutionsAdvVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
-		}
-		if executionsCount == 0 {
-			return result, nil
-		}
+	ctx4 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+	var executionsCount int64
+	err := workflow.ExecuteLocalActivity(ctx4, la.CountExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsCount)
+	if err != nil {
+		return result, fmt.Errorf("%w: CountExecutionsAdvVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+	}
+	if executionsCount == 0 {
+		return result, nil
 	}
 
 	ctx2 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
@@ -185,19 +204,14 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 	var der deleteexecutions.DeleteExecutionsResult
 	err = workflow.ExecuteChildWorkflow(ctx2, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
 	if err != nil {
-		logger.Error("Unable to execute child workflow.", tag.WorkflowType(deleteexecutions.WorkflowName), tag.Error(err))
+		logger.Error("Unable to execute child workflow.", tag.Error(err))
 		return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
 	}
 	result.DeleteSuccessCount = der.SuccessCount
 	result.DeleteErrorCount = der.ErrorCount
 
-	if isAdvancedVisibility {
-		ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsAdvVisibilityActivityOptions)
-		err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace, der.ErrorCount).Get(ctx, nil)
-	} else {
-		ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsStdVisibilityOptionsActivity)
-		err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsStdVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
-	}
+	ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsAdvVisibilityActivityOptions)
+	err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace, der.ErrorCount).Get(ctx, nil)
 	if err != nil {
 		var appErr *temporal.ApplicationError
 		if stderrors.As(err, &appErr) {
@@ -209,7 +223,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 					_ = appErr.Details(&notDeletedCount)
 					counterTag = tag.Counter(notDeletedCount)
 				}
-				logger.Info("Unable to delete workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), counterTag)
+				logger.Info("Unable to delete workflow executions.", counterTag)
 				// appErr is not retryable. Convert it to retryable for the server to retry.
 				return result, temporal.NewApplicationError(appErr.Message(), appErr.Type(), notDeletedCount)
 			}

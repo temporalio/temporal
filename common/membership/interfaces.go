@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -103,6 +102,8 @@ type (
 		RemoveListener(name string) error
 		// MemberCount returns the number of known hosts running this service.
 		MemberCount() int
+		// AvailableMemberCount returns the number of hosts running this service that are accepting requests (not draining).
+		AvailableMemberCount() int
 		// Members returns all known hosts available for this service.
 		Members() []HostInfo
 		// AvailableMembers returns all hosts available for this service that are accepting requests (not draining).

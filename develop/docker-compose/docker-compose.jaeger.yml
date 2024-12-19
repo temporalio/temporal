@@ -1,7 +1,5 @@
 # Include this file to run Jaeger as one more dependency:
 # docker-compose -f docker-compose.yml -f docker-compose.linux.yml -f docker-compose.jaeger.yml up
-version: "3.5"
-
 services:
   jaeger:
     image: jaegertracing/all-in-one:latest

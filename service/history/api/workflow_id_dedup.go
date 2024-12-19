@@ -27,13 +27,16 @@ package api
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -49,14 +52,16 @@ var ErrUseCurrentExecution = errors.New("ErrUseCurrentExecution")
 //
 // An action (ie "mitigate and allow"), an error (ie "deny") or neither (ie "allow") is returned.
 func ResolveDuplicateWorkflowID(
-	workflowID,
-	newRunID,
-	currentRunID string,
+	shardContext shard.Context,
+	workflowKey definition.WorkflowKey,
+	namespaceEntry *namespace.Namespace,
+	newRunID string,
 	currentState enumsspb.WorkflowExecutionState,
 	currentStatus enumspb.WorkflowExecutionStatus,
 	currentStartRequestID string,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	wfIDConflictPolicy enumspb.WorkflowIdConflictPolicy,
+	currentWorkflowStartTime time.Time,
 ) (UpdateWorkflowActionFunc, error) {
 
 	switch currentState {
@@ -65,11 +70,11 @@ func ResolveDuplicateWorkflowID(
 		switch wfIDConflictPolicy {
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL:
 			msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
-			return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowID, currentRunID)
+			return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
 			return nil, ErrUseCurrentExecution
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
-			return terminateWorkflowAction(newRunID)
+			return resolveDuplicateWorkflowStart(shardContext, currentWorkflowStartTime, workflowKey, namespaceEntry, newRunID)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id conflict policy: %v.", wfIDConflictPolicy))
 		}
@@ -82,11 +87,11 @@ func ResolveDuplicateWorkflowID(
 		case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:
 			if _, ok := consts.FailedWorkflowStatuses[currentStatus]; !ok {
 				msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: allow duplicate workflow Id if last run failed."
-				return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowID, currentRunID)
+				return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
 			}
 		case enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE:
 			msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
-			return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowID, currentRunID)
+			return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id reuse policy: %v.", wfIDReusePolicy))
 		}
@@ -100,6 +105,46 @@ func ResolveDuplicateWorkflowID(
 	return nil, nil
 }
 
+// A minimal interval between workflow starts is used to prevent multiple starts with the same ID too rapidly.
+// If the new workflow is started before the interval elapsed, the workflow start is aborted.
+func resolveDuplicateWorkflowStart(
+	shardContext shard.Context,
+	currentWorkflowStartTime time.Time,
+	workflowKey definition.WorkflowKey,
+	namespaceEntry *namespace.Namespace,
+	newRunID string,
+) (UpdateWorkflowActionFunc, error) {
+
+	if namespaceEntry == nil {
+		return nil, &serviceerror.Internal{
+			Message: fmt.Sprintf("Unknown namespace entry for %v.", workflowKey),
+		}
+	}
+
+	nsName := namespaceEntry.Name().String()
+	minimalReuseInterval := shardContext.GetConfig().WorkflowIdReuseMinimalInterval(nsName)
+
+	now := shardContext.GetTimeSource().Now()
+	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
+
+	if minimalReuseInterval == 0 || minimalReuseInterval < timeSinceStart {
+		return terminateWorkflowAction(newRunID)
+	}
+
+	// Since there is a grace period, and the current workflow's start time is within that period,
+	// abort the entire request.
+	msg := fmt.Sprintf(
+		"Too many restarts for workflow %s. Time since last start: %d ms",
+		workflowKey.WorkflowID,
+		timeSinceStart.Milliseconds(),
+	)
+	return nil, &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: msg,
+	}
+}
+
 func terminateWorkflowAction(
 	newRunID string,
 ) (UpdateWorkflowActionFunc, error) {
@@ -110,12 +155,13 @@ func terminateWorkflowAction(
 			return nil, consts.ErrWorkflowCompleted
 		}
 
-		return UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+		return UpdateWorkflowTerminate, workflow.TerminateWorkflow(
 			mutableState,
 			"TerminateIfRunning WorkflowIdReusePolicy",
 			payloads.EncodeString(fmt.Sprintf("terminated by new runID: %s", newRunID)),
 			consts.IdentityHistoryService,
 			false,
+			nil, // No links necessary.
 		)
 	}, nil
 }
@@ -123,13 +169,12 @@ func terminateWorkflowAction(
 func generateWorkflowAlreadyStartedError(
 	errMsg string,
 	createRequestID string,
-	workflowID string,
-	runID string,
+	workflowKey definition.WorkflowKey,
 ) error {
 	return serviceerror.NewWorkflowExecutionAlreadyStarted(
-		fmt.Sprintf(errMsg, workflowID, runID),
+		fmt.Sprintf(errMsg, workflowKey.WorkflowID, workflowKey.RunID),
 		createRequestID,
-		runID,
+		workflowKey.RunID,
 	)
 }
 

@@ -31,9 +31,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
@@ -87,7 +89,7 @@ func startAndSignalWorkflow(
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
-	newWorkflowLease, err := api.NewWorkflowWithSignal(
+	newMutableState, err := api.NewWorkflowWithSignal(
 		shard,
 		namespaceEntry,
 		workflowID,
@@ -98,10 +100,16 @@ func startAndSignalWorkflow(
 	if err != nil {
 		return "", false, err
 	}
+
+	newWorkflowLease, err := api.NewWorkflowLeaseAndContext(nil, shard, newMutableState)
+	if err != nil {
+		return "", false, err
+	}
+
 	if err = api.ValidateSignal(
 		ctx,
 		shard,
-		newWorkflowLease.GetMutableState(),
+		newMutableState,
 		signalWithStartRequest.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
@@ -109,7 +117,9 @@ func startAndSignalWorkflow(
 	}
 
 	workflowMutationFn, err := createWorkflowMutationFunction(
+		shard,
 		currentWorkflowLease,
+		namespaceEntry,
 		runID,
 		signalWithStartRequest.GetWorkflowIdReusePolicy(),
 		signalWithStartRequest.GetWorkflowIdConflictPolicy(),
@@ -143,7 +153,9 @@ func startAndSignalWorkflow(
 }
 
 func createWorkflowMutationFunction(
+	shardContext shard.Context,
 	currentWorkflowLease api.WorkflowLease,
+	namespaceEntry *namespace.Namespace,
 	newRunID string,
 	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	workflowIDConflictPolicy enumspb.WorkflowIdConflictPolicy,
@@ -151,16 +163,29 @@ func createWorkflowMutationFunction(
 	if currentWorkflowLease == nil {
 		return nil, nil
 	}
-	currentExecutionState := currentWorkflowLease.GetMutableState().GetExecutionState()
+	currentMutableState := currentWorkflowLease.GetMutableState()
+	currentExecutionState := currentMutableState.GetExecutionState()
+	currentWorkflowStartTime := currentMutableState.GetExecutionState().StartTime.AsTime()
+
+	// It is unclear if currentExecutionState.RunId is the same as
+	// currentWorkflowLease.GetContext().GetWorkflowKey().RunID
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: currentWorkflowLease.GetContext().GetWorkflowKey().NamespaceID,
+		WorkflowID:  currentWorkflowLease.GetContext().GetWorkflowKey().WorkflowID,
+		RunID:       currentExecutionState.RunId,
+	}
+
 	workflowMutationFunc, err := api.ResolveDuplicateWorkflowID(
-		currentWorkflowLease.GetContext().GetWorkflowKey().WorkflowID,
+		shardContext,
+		workflowKey,
+		namespaceEntry,
 		newRunID,
-		currentExecutionState.RunId,
 		currentExecutionState.State,
 		currentExecutionState.Status,
 		currentExecutionState.CreateRequestId,
 		workflowIDReusePolicy,
 		workflowIDConflictPolicy,
+		currentWorkflowStartTime,
 	)
 	return workflowMutationFunc, err
 }
@@ -170,13 +195,15 @@ func createVersionedRunID(currentWorkflowLease api.WorkflowLease) (*api.Versione
 		return nil, nil
 	}
 	currentExecutionState := currentWorkflowLease.GetMutableState().GetExecutionState()
-	currentLastWriteVersion, err := currentWorkflowLease.GetMutableState().GetLastWriteVersion()
+	currentCloseVersion, err := currentWorkflowLease.GetMutableState().GetCloseVersion()
 	if err != nil {
 		return nil, err
 	}
 	id := api.VersionedRunID{
-		RunID:            currentExecutionState.RunId,
-		LastWriteVersion: currentLastWriteVersion,
+		RunID: currentExecutionState.RunId,
+		// we stop updating last write version in the current record after workflow is closed
+		// so workflow close version is the last write version for the current record
+		LastWriteVersion: currentCloseVersion,
 	}
 	return &id, nil
 }
@@ -263,20 +290,20 @@ func startAndSignalWithoutCurrentWorkflow(
 func signalWorkflow(
 	ctx context.Context,
 	shardContext shard.Context,
-	workflowContext api.WorkflowLease,
+	workflowLease api.WorkflowLease,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	mutableState := workflowContext.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	if err := api.ValidateSignal(
 		ctx,
 		shardContext,
-		workflowContext.GetMutableState(),
+		workflowLease.GetMutableState(),
 		request.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
 		// in-memory mutable state is still clean, release the lock with nil error to prevent
 		// clearing and reloading mutable state
-		workflowContext.GetReleaseFn()(nil)
+		workflowLease.GetReleaseFn()(nil)
 		return err
 	}
 
@@ -284,7 +311,7 @@ func signalWorkflow(
 		// duplicate signal
 		// in-memory mutable state is still clean, release the lock with nil error to prevent
 		// clearing and reloading mutable state
-		workflowContext.GetReleaseFn()(nil)
+		workflowLease.GetReleaseFn()(nil)
 		return nil
 	}
 	if request.GetRequestId() != "" {
@@ -295,13 +322,28 @@ func signalWorkflow(
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
-		request.GetSkipGenerateWorkflowTask(),
+		request.GetLinks(),
 	); err != nil {
 		return err
 	}
 
 	// Create a transfer task to schedule a workflow task
-	if !mutableState.HasPendingWorkflowTask() && !request.GetSkipGenerateWorkflowTask() {
+	if !mutableState.HasPendingWorkflowTask() {
+
+		executionInfo := mutableState.GetExecutionInfo()
+		executionState := mutableState.GetExecutionState()
+		if !mutableState.HadOrHasWorkflowTask() && !executionInfo.ExecutionTime.AsTime().Equal(executionState.StartTime.AsTime()) {
+			metrics.SignalWithStartSkipDelayCounter.With(shardContext.GetMetricsHandler()).Record(1, metrics.NamespaceTag(request.GetNamespace()))
+
+			workflowKey := workflowLease.GetContext().GetWorkflowKey()
+			shardContext.GetThrottledLogger().Info(
+				"Skipped workflow start delay for signalWithStart request",
+				tag.WorkflowNamespace(request.GetNamespace()),
+				tag.WorkflowID(workflowKey.WorkflowID),
+				tag.WorkflowRunID(workflowKey.RunID),
+			)
+		}
+
 		_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 		if err != nil {
 			return err
@@ -310,7 +352,7 @@ func signalWorkflow(
 
 	// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 	// the history and try the operation again.
-	return workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
+	return workflowLease.GetContext().UpdateWorkflowExecutionAsActive(
 		ctx,
 		shardContext,
 	)

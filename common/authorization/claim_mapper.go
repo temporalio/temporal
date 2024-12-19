@@ -31,10 +31,9 @@ import (
 	"fmt"
 	"strings"
 
-	"google.golang.org/grpc/credentials"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"google.golang.org/grpc/credentials"
 )
 
 // @@@SNIPSTART temporal-common-authorization-authinfo

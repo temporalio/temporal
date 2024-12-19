@@ -26,11 +26,11 @@ package history
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -55,8 +55,9 @@ type (
 		metricProvider metrics.Handler
 		visibilityMgr  manager.VisibilityManager
 
-		ensureCloseBeforeDelete    dynamicconfig.BoolPropertyFn
-		enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		ensureCloseBeforeDelete       dynamicconfig.BoolPropertyFn
+		enableCloseWorkflowCleanup    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -70,6 +71,7 @@ func newVisibilityQueueTaskExecutor(
 	metricProvider metrics.Handler,
 	ensureCloseBeforeDelete dynamicconfig.BoolPropertyFn,
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
 ) queues.Executor {
 	return &visibilityQueueTaskExecutor{
 		shardContext:   shardContext,
@@ -78,8 +80,9 @@ func newVisibilityQueueTaskExecutor(
 		metricProvider: metricProvider,
 		visibilityMgr:  visibilityMgr,
 
-		ensureCloseBeforeDelete:    ensureCloseBeforeDelete,
-		enableCloseWorkflowCleanup: enableCloseWorkflowCleanup,
+		ensureCloseBeforeDelete:       ensureCloseBeforeDelete,
+		enableCloseWorkflowCleanup:    enableCloseWorkflowCleanup,
+		relocateAttributesMinBlobSize: relocateAttributesMinBlobSize,
 	}
 }
 
@@ -257,11 +260,11 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		return nil
 	}
 
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	closeVersion, err := mutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
-	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -305,10 +308,24 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	// Therefore, ctx timeout might be already expired
 	// and parentCtx (which doesn't have timeout) must be used everywhere bellow.
 
-	if t.enableCloseWorkflowCleanup(namespaceEntry.Name().String()) {
+	if t.needRunCleanUp(requestBase) {
 		return t.cleanupExecutionInfo(parentCtx, task)
 	}
 	return nil
+}
+
+func (t *visibilityQueueTaskExecutor) needRunCleanUp(
+	request *manager.VisibilityRequestBase,
+) bool {
+	if !t.enableCloseWorkflowCleanup(request.Namespace.String()) {
+		return false
+	}
+	// If there are no memo nor search attributes, then no clean up is necessary.
+	if len(request.Memo.GetFields()) == 0 && len(request.SearchAttributes.GetIndexedFields()) == 0 {
+		return false
+	}
+	minSize := t.relocateAttributesMinBlobSize(request.Namespace.String())
+	return request.Memo.Size()+request.SearchAttributes.Size() >= minSize
 }
 
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
@@ -324,6 +341,11 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		RunID:       task.RunID,
 		TaskID:      task.TaskID,
 	}
+
+	if task.CloseTime.After(time.Unix(0, 0)) {
+		request.CloseTime = &task.CloseTime
+	}
+
 	if t.ensureCloseBeforeDelete() {
 		// If visibility delete task is executed before visibility close task then visibility close task
 		// (which change workflow execution status by uploading new visibility record) will resurrect visibility record.
@@ -345,7 +367,7 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 ) *manager.VisibilityRequestBase {
 	var (
 		executionInfo    = mutableState.GetExecutionInfo()
-		startTime        = timestamp.TimeValue(executionInfo.GetStartTime())
+		startTime        = timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime())
 		executionTime    = timestamp.TimeValue(executionInfo.GetExecutionTime())
 		visibilityMemo   = getWorkflowMemo(copyMapPayload(executionInfo.Memo))
 		searchAttributes = getSearchAttributes(copyMapPayload(executionInfo.SearchAttributes))
@@ -379,6 +401,10 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 		TaskQueue:        executionInfo.TaskQueue,
 		SearchAttributes: searchAttributes,
 		ParentExecution:  parentExecution,
+		RootExecution: &commonpb.WorkflowExecution{
+			WorkflowId: executionInfo.RootWorkflowId,
+			RunId:      executionInfo.RootRunId,
+		},
 	}
 }
 
@@ -423,11 +449,11 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 		return nil
 	}
 
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	closeVersion, err := mutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
-	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -435,7 +461,7 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	executionInfo := mutableState.GetExecutionInfo()
 	executionInfo.Memo = nil
 	executionInfo.SearchAttributes = nil
-	executionInfo.CloseVisibilityTaskCompleted = true
+	executionInfo.RelocatableAttributesRemoved = true
 	return weContext.SetWorkflowExecution(ctx, t.shardContext)
 }
 

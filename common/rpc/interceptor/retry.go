@@ -27,9 +27,8 @@ package interceptor
 import (
 	"context"
 
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common/backoff"
+	"google.golang.org/grpc"
 )
 
 type (

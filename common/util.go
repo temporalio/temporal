@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -39,22 +40,22 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/encoding/prototext"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protopath"
+	"google.golang.org/protobuf/reflect/protorange"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -110,16 +111,6 @@ const (
 	sdkClientFactoryRetryInitialInterval    = 200 * time.Millisecond
 	sdkClientFactoryRetryMaxInterval        = 5 * time.Second
 	sdkClientFactoryRetryExpirationInterval = time.Minute
-
-	defaultInitialInterval            = time.Second
-	defaultMaximumIntervalCoefficient = 100.0
-	defaultBackoffCoefficient         = 2.0
-	defaultMaximumAttempts            = 0
-
-	initialIntervalInSecondsConfigKey   = "InitialIntervalInSeconds"
-	maximumIntervalCoefficientConfigKey = "MaximumIntervalCoefficient"
-	backoffCoefficientConfigKey         = "BackoffCoefficient"
-	maximumAttemptsConfigKey            = "MaximumAttempts"
 
 	contextExpireThreshold = 10 * time.Millisecond
 
@@ -182,16 +173,6 @@ func BlockWithTimeout(fn func(), timeout time.Duration) bool {
 		return true
 	case <-timer.C:
 		return false
-	}
-}
-
-// InterruptibleSleep is like time.Sleep but can be interrupted by a context.
-func InterruptibleSleep(ctx context.Context, timeout time.Duration) {
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-	case <-ctx.Done():
 	}
 }
 
@@ -348,13 +329,12 @@ func IsServiceClientTransientError(err error) bool {
 
 	switch err := err.(type) {
 	case *serviceerror.ResourceExhausted:
-		if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-			return true
-		}
+		return err.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
 	case *serviceerrors.ShardOwnershipLost:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
@@ -362,10 +342,16 @@ func IsServiceHandlerRetryableError(err error) bool {
 		return false
 	}
 
-	switch err.(type) {
+	switch err := err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.Unavailable:
 		return true
+	case *serviceerror.MultiOperationExecution:
+		for _, opErr := range err.OperationErrors() {
+			if opErr != nil && IsServiceHandlerRetryableError(opErr) {
+				return true
+			}
+		}
 	}
 
 	return false
@@ -398,6 +384,13 @@ func IsInternalError(err error) bool {
 func IsNotFoundError(err error) bool {
 	var notFoundErr *serviceerror.NotFound
 	return errors.As(err, &notFoundErr)
+}
+
+func ErrorHash(err error) string {
+	if err != nil {
+		return fmt.Sprintf("%08x", farm.Fingerprint32([]byte(err.Error())))
+	}
+	return "00000000"
 }
 
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
@@ -541,116 +534,7 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 	return matchingResp
 }
 
-// EnsureRetryPolicyDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults
-func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultRetrySettings) {
-	if originalPolicy.GetMaximumAttempts() == 0 {
-		originalPolicy.MaximumAttempts = defaultSettings.MaximumAttempts
-	}
-
-	if timestamp.DurationValue(originalPolicy.GetInitialInterval()) == 0 {
-		originalPolicy.InitialInterval = durationpb.New(defaultSettings.InitialInterval)
-	}
-
-	if timestamp.DurationValue(originalPolicy.GetMaximumInterval()) == 0 {
-		originalPolicy.MaximumInterval = durationpb.New(time.Duration(defaultSettings.MaximumIntervalCoefficient) * timestamp.DurationValue(originalPolicy.GetInitialInterval()))
-	}
-
-	if originalPolicy.GetBackoffCoefficient() == 0 {
-		originalPolicy.BackoffCoefficient = defaultSettings.BackoffCoefficient
-	}
-}
-
-// ValidateRetryPolicy validates a retry policy
-func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
-	if policy == nil {
-		// nil policy is valid which means no retry
-		return nil
-	}
-
-	if policy.GetMaximumAttempts() == 1 {
-		// One maximum attempt effectively disable retries. Validating the
-		// rest of the arguments is pointless
-		return nil
-	}
-	if timestamp.DurationValue(policy.GetInitialInterval()) < 0 {
-		return serviceerror.NewInvalidArgument("InitialInterval cannot be negative on retry policy.")
-	}
-	if policy.GetBackoffCoefficient() < 1 {
-		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
-	}
-	if timestamp.DurationValue(policy.GetMaximumInterval()) < 0 {
-		return serviceerror.NewInvalidArgument("MaximumInterval cannot be negative on retry policy.")
-	}
-	if timestamp.DurationValue(policy.GetMaximumInterval()) > 0 && timestamp.DurationValue(policy.GetMaximumInterval()) < timestamp.DurationValue(policy.GetInitialInterval()) {
-		return serviceerror.NewInvalidArgument("MaximumInterval cannot be less than InitialInterval on retry policy.")
-	}
-	if policy.GetMaximumAttempts() < 0 {
-		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
-	}
-
-	for _, nrt := range policy.NonRetryableErrorTypes {
-		if strings.HasPrefix(nrt, TimeoutFailureTypePrefix) {
-			timeoutTypeValue := nrt[len(TimeoutFailureTypePrefix):]
-			timeoutType, err := enumspb.TimeoutTypeFromString(timeoutTypeValue)
-			if err != nil || enumspb.TimeoutType(timeoutType) == enumspb.TIMEOUT_TYPE_UNSPECIFIED {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid timeout type value: %v.", timeoutTypeValue))
-			}
-		}
-	}
-
-	return nil
-}
-
-func GetDefaultRetryPolicyConfigOptions() map[string]interface{} {
-	return map[string]interface{}{
-		initialIntervalInSecondsConfigKey:   int(defaultInitialInterval.Seconds()),
-		maximumIntervalCoefficientConfigKey: defaultMaximumIntervalCoefficient,
-		backoffCoefficientConfigKey:         defaultBackoffCoefficient,
-		maximumAttemptsConfigKey:            defaultMaximumAttempts,
-	}
-}
-
-func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRetrySettings {
-	defaultSettings := DefaultRetrySettings{
-		InitialInterval:            defaultInitialInterval,
-		MaximumIntervalCoefficient: defaultMaximumIntervalCoefficient,
-		BackoffCoefficient:         defaultBackoffCoefficient,
-		MaximumAttempts:            defaultMaximumAttempts,
-	}
-
-	if seconds, ok := options[initialIntervalInSecondsConfigKey]; ok {
-		defaultSettings.InitialInterval = time.Duration(
-			number.NewNumber(
-				seconds,
-			).GetIntOrDefault(int(defaultInitialInterval.Nanoseconds())),
-		) * time.Second
-	}
-
-	if coefficient, ok := options[maximumIntervalCoefficientConfigKey]; ok {
-		defaultSettings.MaximumIntervalCoefficient = number.NewNumber(
-			coefficient,
-		).GetFloatOrDefault(defaultMaximumIntervalCoefficient)
-	}
-
-	if coefficient, ok := options[backoffCoefficientConfigKey]; ok {
-		defaultSettings.BackoffCoefficient = number.NewNumber(
-			coefficient,
-		).GetFloatOrDefault(defaultBackoffCoefficient)
-	}
-
-	if attempts, ok := options[maximumAttemptsConfigKey]; ok {
-		defaultSettings.MaximumAttempts = int32(number.NewNumber(
-			attempts,
-		).GetIntOrDefault(defaultMaximumAttempts))
-	}
-
-	return defaultSettings
-}
-
 // CreateHistoryStartWorkflowRequest create a start workflow request for history.
-// Note: this mutates startRequest by unsetting the fields ContinuedFailure and
-// LastCompletionResult (these should only be set on workflows created by the scheduler
-// worker).
 // Assumes startRequest is valid. See frontend workflow_handler for detailed validation logic.
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
@@ -659,6 +543,12 @@ func CreateHistoryStartWorkflowRequest(
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	now time.Time,
 ) *historyservice.StartWorkflowExecutionRequest {
+	// We include the original startRequest in the forwarded request to History, but
+	// we don't want to send workflow payloads twice. We deep copy to a new struct,
+	// rather than mutate the request, to accommodate internal retries.
+	if startRequest.ContinuedFailure != nil || startRequest.LastCompletionResult != nil {
+		startRequest = CloneProto(startRequest)
+	}
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:              namespaceID,
 		StartRequest:             startRequest,
@@ -669,6 +559,7 @@ func CreateHistoryStartWorkflowRequest(
 		ContinuedFailure:         startRequest.ContinuedFailure,
 		LastCompletionResult:     startRequest.LastCompletionResult,
 		RootExecutionInfo:        rootExecutionInfo,
+		VersioningOverride:       startRequest.GetVersioningOverride(),
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil
@@ -795,7 +686,7 @@ func OverrideWorkflowTaskTimeout(
 	namespace string,
 	taskStartToCloseTimeout time.Duration,
 	workflowRunTimeout time.Duration,
-	getDefaultTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter,
+	getDefaultTimeoutFunc func(namespace string) time.Duration,
 ) time.Duration {
 
 	if taskStartToCloseTimeout == 0 {
@@ -821,4 +712,63 @@ func ValidateUTF8String(fieldName string, strValue string) error {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%s %v is not a valid UTF-8 string", fieldName, strValue))
 	}
 	return nil
+}
+
+// DiscardUnknownProto discards unknown fields in a proto message.
+func DiscardUnknownProto(m proto.Message) error {
+	return protorange.Range(m.ProtoReflect(), func(values protopath.Values) error {
+		m, ok := values.Index(-1).Value.Interface().(protoreflect.Message)
+		if ok && len(m.GetUnknown()) > 0 {
+			m.SetUnknown(nil)
+		}
+		return nil
+	})
+}
+
+// MergeProtoExcludingFields merges fields from source into target, excluding specific fields.
+// The fields to exclude are specified as pointers to fields in the target struct.
+func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(v any) []interface{}) error {
+	if target == nil || source == nil {
+		return serviceerror.NewInvalidArgument("target and source cannot be nil")
+	}
+
+	if reflect.TypeOf(target) != reflect.TypeOf(source) {
+		return serviceerror.NewInvalidArgument("target and source must be of the same type")
+	}
+
+	excludeFields := doNotSyncFunc(target)
+	excludeSet := make(map[string]struct{}, len(excludeFields))
+	for _, fieldPtr := range excludeFields {
+		fieldName, err := getFieldNameFromStruct(target, fieldPtr)
+		if err != nil {
+			return err
+		}
+		excludeSet[fieldName] = struct{}{}
+	}
+
+	srcVal := reflect.ValueOf(source).Elem()
+	dstVal := reflect.ValueOf(target).Elem()
+	for i := 0; i < srcVal.NumField(); i++ {
+		field := srcVal.Type().Field(i)
+		if _, exclude := excludeSet[field.Name]; !exclude {
+			srcField := srcVal.Field(i)
+			dstField := dstVal.Field(i)
+			if dstField.CanSet() {
+				dstField.Set(srcField)
+			}
+		}
+	}
+
+	return nil
+}
+
+func getFieldNameFromStruct(structPtr interface{}, fieldPtr interface{}) (string, error) {
+	structVal := reflect.ValueOf(structPtr).Elem()
+	for i := 0; i < structVal.NumField(); i++ {
+		field := structVal.Field(i)
+		if field.CanSet() && field.Addr().Interface() == fieldPtr {
+			return structVal.Type().Field(i).Name, nil
+		}
+	}
+	return "", serviceerror.NewInternal("field not found in the struct")
 }

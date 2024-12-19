@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 
 	"github.com/pborman/uuid"
@@ -38,12 +39,8 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxevent"
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
@@ -74,9 +71,12 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
+	expmaps "golang.org/x/exp/maps"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -148,7 +148,6 @@ var (
 		fx.Provide(
 			NewServerFxImpl,
 			ServerOptionsProvider,
-			dynamicconfig.NewCollection,
 			resource.ArchivalMetadataProvider,
 			TaskCategoryRegistryProvider,
 			PersistenceFactoryProvider,
@@ -159,6 +158,7 @@ var (
 			WorkerServiceProvider,
 			ApplyClusterMetadataConfigProvider,
 		),
+		dynamicconfig.Module,
 		pprof.Module,
 		TraceExportModule,
 		FxLogAdapter,
@@ -252,12 +252,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	} else if persistenceConfig.SecondaryVisibilityConfigExist() &&
 		persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch != nil {
 		esConfig = persistenceConfig.DataStores[persistenceConfig.SecondaryVisibilityStore].Elasticsearch
-	} else if persistenceConfig.AdvancedVisibilityConfigExist() {
-		esConfig = persistenceConfig.DataStores[persistenceConfig.AdvancedVisibilityStore].Elasticsearch
 	}
 
 	if esConfig != nil {
 		esHttpClient := so.elasticsearchHttpClient
+		esConfig.SetHttpClient(esHttpClient)
 		if esHttpClient == nil {
 			var err error
 			esHttpClient, err = esclient.NewAwsHttpClient(esConfig.AWSRequestSigning)
@@ -464,16 +463,11 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 // it, we also do validation on request task categories in the frontend service. As a result, we need to initialize the
 // registry in the server graph, and then propagate it to the service graphs. Otherwise, it would be isolated to the
 // history service's graph.
-func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata, dc *dynamicconfig.Collection) tasks.TaskCategoryRegistry {
+func TaskCategoryRegistryProvider(archivalMetadata archiver.ArchivalMetadata) tasks.TaskCategoryRegistry {
 	registry := tasks.NewDefaultTaskCategoryRegistry()
 	if archivalMetadata.GetHistoryConfig().StaticClusterState() == archiver.ArchivalEnabled ||
 		archivalMetadata.GetVisibilityConfig().StaticClusterState() == archiver.ArchivalEnabled {
 		registry.AddCategory(tasks.CategoryArchival)
-	}
-	// Can't use history service configs.Config because this provider is applied to all services (see docstring for this
-	// function for more info).
-	if dc.GetBoolProperty(dynamicconfig.OutboundProcessorEnabled, false)() {
-		registry.AddCategory(tasks.CategoryOutbound)
 	}
 	return registry
 }
@@ -499,7 +493,6 @@ func HistoryServiceProvider(
 	}
 
 	app := fx.New(
-		fx.Provide(workflow.NewTaskGeneratorProvider),
 		params.GetCommonServiceOptions(serviceName),
 		history.QueueModule,
 		history.Module,
@@ -610,7 +603,7 @@ func ApplyClusterMetadataConfigProvider(
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 	metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
 	clusterName := persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName)
-	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
+	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
 		clusterName,
 		persistenceServiceResolver,
 		&svc.Persistence,
@@ -623,7 +616,6 @@ func ApplyClusterMetadataConfigProvider(
 		Cfg:                        &svc.Persistence,
 		PersistenceMaxQPS:          nil,
 		PersistenceNamespaceMaxQPS: nil,
-		EnablePriorityRateLimiting: nil,
 		ClusterName:                persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName),
 		MetricsHandler:             metricsHandler,
 		Logger:                     logger,
@@ -895,7 +887,7 @@ var TraceExportModule = fx.Options(
 		// config-defined exporters override env-defined exporters with the same type
 		maps.Copy(exportersByType, exportersByTypeFromEnv)
 
-		exporters := maps.Values(exportersByType)
+		exporters := expmaps.Values(exportersByType)
 		lc.Append(fx.Hook{
 			OnStart: startAll(exporters),
 			OnStop:  shutdownAll(exporters),
@@ -913,14 +905,12 @@ var TraceExportModule = fx.Options(
 //     default: wrap each otelsdktrace.SpanExporter with otelsdktrace.NewBatchSpanProcessor
 //   - *go.opentelemetry.io/otel/sdk/resource.Resource
 //     default: resource.Default() augmented with the supplied serviceName
-//   - []go.opentelemetry.io/otel/sdk/trace.TracerProviderOption
-//     default: the provided resource.Resource and each of the otelsdktrace.SpanExporter
 //   - go.opentelemetry.io/otel/trace.TracerProvider
-//     default: otelsdktrace.NewTracerProvider with each of the otelsdktrace.TracerProviderOption
+//     default: noop.NewTracerProvider()
 //   - go.opentelemetry.io/otel/ppropagation.TextMapPropagator
 //     default: propagation.TraceContext{}
-//   - telemetry.ServerTraceInterceptor
-//   - telemetry.ClientTraceInterceptor
+//   - telemetry.ServerStatsHandler
+//   - telemetry.ClientStatsHandler
 var ServiceTracingModule = fx.Options(
 	fx.Supply([]otelsdktrace.BatchSpanProcessorOption{}),
 	fx.Provide(
@@ -957,17 +947,15 @@ var ServiceTracingModule = fx.Options(
 			fx.ParamTags(``, `optional:"true"`),
 		),
 	),
-	fx.Provide(
-		func(r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) []otelsdktrace.TracerProviderOption {
-			opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
-			opts = append(opts, otelsdktrace.WithResource(r))
-			for _, sp := range sps {
-				opts = append(opts, otelsdktrace.WithSpanProcessor(sp))
-			}
-			return opts
-		},
-	),
-	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
+	fx.Provide(func(lc fx.Lifecycle, r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) trace.TracerProvider {
+		if len(sps) == 0 {
+			return noop.NewTracerProvider()
+		}
+		opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
+		opts = append(opts, otelsdktrace.WithResource(r))
+		for _, sp := range sps {
+			opts = append(opts, otelsdktrace.WithSpanProcessor(sp))
+		}
 		tp := otelsdktrace.NewTracerProvider(opts...)
 		lc.Append(fx.Hook{OnStop: func(ctx context.Context) error {
 			return tp.Shutdown(ctx)
@@ -976,8 +964,8 @@ var ServiceTracingModule = fx.Options(
 	}),
 	// Haven't had use for baggage propagation yet
 	fx.Provide(func() propagation.TextMapPropagator { return propagation.TraceContext{} }),
-	fx.Provide(telemetry.NewServerTraceInterceptor),
-	fx.Provide(telemetry.NewClientTraceInterceptor),
+	fx.Provide(telemetry.NewServerStatsHandler),
+	fx.Provide(telemetry.NewClientStatsHandler),
 )
 
 func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {

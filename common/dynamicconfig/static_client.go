@@ -29,6 +29,7 @@ import "go.temporal.io/server/common/log"
 type (
 	// StaticClient is a simple implementation of Client that just looks up in a map.
 	// Values can be either plain values or []ConstrainedValue for a constrained value.
+	// A StaticClient should never be mutated or you'll create race conditions!
 	StaticClient map[Key]any
 )
 

@@ -27,10 +27,9 @@ package history
 import (
 	"context"
 
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/backoff"
+	"google.golang.org/grpc"
 )
 
 var _ historyservice.HistoryServiceClient = (*retryableClient)(nil)

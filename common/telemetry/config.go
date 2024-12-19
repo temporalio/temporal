@@ -25,8 +25,11 @@
 package telemetry
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -39,11 +42,11 @@ import (
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
 	"gopkg.in/yaml.v3"
-
-	"go.temporal.io/server/common/util"
 )
 
 const (
+	debugModeEnvVar = "TEMPORAL_OTEL_DEBUG"
+
 	// the following defaults were taken from the grpc docs as of grpc v1.46.
 	// they are not available programmatically
 
@@ -139,7 +142,7 @@ type (
 	sharedConnSpanExporter struct {
 		baseOpts []otlptracegrpc.Option
 		dialer   interface {
-			Dial(context.Context) (*grpc.ClientConn, error)
+			Dial() (*grpc.ClientConn, error)
 		}
 		startOnce sync.Once
 		otelsdktrace.SpanExporter
@@ -148,7 +151,7 @@ type (
 	sharedConnMetricExporter struct {
 		baseOpts []otlpmetricgrpc.Option
 		dialer   interface {
-			Dial(context.Context) (*grpc.ClientConn, error)
+			Dial() (*grpc.ClientConn, error)
 		}
 		startOnce sync.Once
 		metric.Exporter
@@ -178,26 +181,26 @@ func (ec *ExportConfig) MetricExporters() ([]metric.Exporter, error) {
 
 // Dial returns the cached *grpc.ClientConn instance or creates a new one,
 // caches and then returns it. This function is not threadsafe.
-func (g *grpcconn) Dial(ctx context.Context) (*grpc.ClientConn, error) {
+func (g *grpcconn) Dial() (*grpc.ClientConn, error) {
 	var err error
 	if g.cc == nil {
-		g.cc, err = grpc.DialContext(ctx, g.Endpoint, g.dialOpts()...)
+		g.cc, err = grpc.NewClient(g.Endpoint, g.dialOpts()...)
 	}
 	return g.cc, err
 }
 
 func (g *grpcconn) dialOpts() []grpc.DialOption {
 	out := []grpc.DialOption{
-		grpc.WithReadBufferSize(util.Coalesce(g.ReadBufferSize, defaultReadBufferSize)),
-		grpc.WithWriteBufferSize(util.Coalesce(g.WriteBufferSize, defaultWriteBufferSize)),
+		grpc.WithReadBufferSize(cmp.Or(g.ReadBufferSize, defaultReadBufferSize)),
+		grpc.WithWriteBufferSize(cmp.Or(g.WriteBufferSize, defaultWriteBufferSize)),
 		grpc.WithUserAgent(g.UserAgent),
 		grpc.WithConnectParams(grpc.ConnectParams{
-			MinConnectTimeout: util.Coalesce(g.ConnectParams.MinConnectTimeout, defaultMinConnectTimeout),
+			MinConnectTimeout: cmp.Or(g.ConnectParams.MinConnectTimeout, defaultMinConnectTimeout),
 			Backoff: backoff.Config{
-				BaseDelay:  util.Coalesce(g.ConnectParams.Backoff.BaseDelay, backoff.DefaultConfig.BaseDelay),
-				MaxDelay:   util.Coalesce(g.ConnectParams.Backoff.MaxDelay, backoff.DefaultConfig.MaxDelay),
-				Jitter:     util.Coalesce(g.ConnectParams.Backoff.Jitter, backoff.DefaultConfig.Jitter),
-				Multiplier: util.Coalesce(g.ConnectParams.Backoff.Multiplier, backoff.DefaultConfig.Multiplier),
+				BaseDelay:  cmp.Or(g.ConnectParams.Backoff.BaseDelay, backoff.DefaultConfig.BaseDelay),
+				MaxDelay:   cmp.Or(g.ConnectParams.Backoff.MaxDelay, backoff.DefaultConfig.MaxDelay),
+				Jitter:     cmp.Or(g.ConnectParams.Backoff.Jitter, backoff.DefaultConfig.Jitter),
+				Multiplier: cmp.Or(g.ConnectParams.Backoff.Multiplier, backoff.DefaultConfig.Multiplier),
 			},
 		}),
 	}
@@ -264,13 +267,13 @@ func (ec *exportConfig) buildOtlpGrpcMetricExporter(
 	opts := []otlpmetricgrpc.Option{
 		otlpmetricgrpc.WithEndpoint(cfg.Connection.Endpoint),
 		otlpmetricgrpc.WithHeaders(cfg.Headers),
-		otlpmetricgrpc.WithTimeout(util.Coalesce(cfg.Timeout, 10*time.Second)),
+		otlpmetricgrpc.WithTimeout(cmp.Or(cfg.Timeout, 10*time.Second)),
 		otlpmetricgrpc.WithDialOption(dopts...),
 		otlpmetricgrpc.WithRetry(otlpmetricgrpc.RetryConfig{
-			Enabled:         util.Coalesce(cfg.Retry.Enabled, retryDefaultEnabled),
-			InitialInterval: util.Coalesce(cfg.Retry.InitialInterval, retryDefaultInitialInterval),
-			MaxInterval:     util.Coalesce(cfg.Retry.MaxInterval, retryDefaultMaxInterval),
-			MaxElapsedTime:  util.Coalesce(cfg.Retry.MaxElapsedTime, retryDefaultMaxElapsedTime),
+			Enabled:         cmp.Or(cfg.Retry.Enabled, retryDefaultEnabled),
+			InitialInterval: cmp.Or(cfg.Retry.InitialInterval, retryDefaultInitialInterval),
+			MaxInterval:     cmp.Or(cfg.Retry.MaxInterval, retryDefaultMaxInterval),
+			MaxElapsedTime:  cmp.Or(cfg.Retry.MaxElapsedTime, retryDefaultMaxElapsedTime),
 		}),
 	}
 
@@ -299,13 +302,13 @@ func (ec *exportConfig) buildOtlpGrpcSpanExporter(
 	opts := []otlptracegrpc.Option{
 		otlptracegrpc.WithEndpoint(cfg.Connection.Endpoint),
 		otlptracegrpc.WithHeaders(cfg.Headers),
-		otlptracegrpc.WithTimeout(util.Coalesce(cfg.Timeout, 10*time.Second)),
+		otlptracegrpc.WithTimeout(cmp.Or(cfg.Timeout, 10*time.Second)),
 		otlptracegrpc.WithDialOption(cfg.Connection.dialOpts()...),
 		otlptracegrpc.WithRetry(otlptracegrpc.RetryConfig{
-			Enabled:         util.Coalesce(cfg.Retry.Enabled, retryDefaultEnabled),
-			InitialInterval: util.Coalesce(cfg.Retry.InitialInterval, retryDefaultInitialInterval),
-			MaxInterval:     util.Coalesce(cfg.Retry.MaxInterval, retryDefaultMaxInterval),
-			MaxElapsedTime:  util.Coalesce(cfg.Retry.MaxElapsedTime, retryDefaultMaxElapsedTime),
+			Enabled:         cmp.Or(cfg.Retry.Enabled, retryDefaultEnabled),
+			InitialInterval: cmp.Or(cfg.Retry.InitialInterval, retryDefaultInitialInterval),
+			MaxInterval:     cmp.Or(cfg.Retry.MaxInterval, retryDefaultMaxInterval),
+			MaxElapsedTime:  cmp.Or(cfg.Retry.MaxElapsedTime, retryDefaultMaxElapsedTime),
 		}),
 	}
 
@@ -333,7 +336,7 @@ func (scse *sharedConnSpanExporter) Start(ctx context.Context) error {
 	var err error
 	scse.startOnce.Do(func() {
 		var cc *grpc.ClientConn
-		cc, err = scse.dialer.Dial(ctx)
+		cc, err = scse.dialer.Dial()
 		if err != nil {
 			return
 		}
@@ -348,7 +351,7 @@ func (scme *sharedConnMetricExporter) Start(ctx context.Context) error {
 	var err error
 	scme.startOnce.Do(func() {
 		var cc *grpc.ClientConn
-		cc, err = scme.dialer.Dial(ctx)
+		cc, err = scme.dialer.Dial()
 		if err != nil {
 			return
 		}
@@ -418,4 +421,12 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 		)
 	}
 	return obj.Spec.Decode(e.Spec)
+}
+
+func debugMode() bool {
+	isDebug, err := strconv.ParseBool(os.Getenv(debugModeEnvVar))
+	if err != nil {
+		return false
+	}
+	return isDebug
 }

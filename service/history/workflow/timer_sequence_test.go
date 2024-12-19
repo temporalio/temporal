@@ -28,19 +28,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -175,7 +173,6 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_AfterWorkflowExp
 func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_BeforeWorkflowExpiry() {
 	now := time.Now().UTC()
 	timerExpiry := timestamppb.New(now.Add(100))
-	currentVersion := int64(999)
 	timerInfo := &persistencespb.TimerInfo{
 		Version:        123,
 		TimerId:        "some random timer ID",
@@ -192,14 +189,12 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_BeforeWorkflowEx
 
 	var timerInfoUpdated = common.CloneProto(timerInfo) // make a copy
 	timerInfoUpdated.TaskStatus = TimerTaskStatusCreated
-	s.mockMutableState.EXPECT().UpdateUserTimer(protomock.Eq(timerInfoUpdated)).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
+	s.mockMutableState.EXPECT().UpdateUserTimerTaskStatus(timerInfo.TimerId, timerInfoUpdated.TaskStatus).Return(nil)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: timerExpiry.AsTime(),
 		EventID:             timerInfo.GetStartedEventId(),
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextUserTimer()
@@ -210,7 +205,6 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_BeforeWorkflowEx
 func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_NoWorkflowExpiry() {
 	now := time.Now().UTC()
 	timerExpiry := timestamppb.New(now.Add(100))
-	currentVersion := int64(999)
 	timerInfo := &persistencespb.TimerInfo{
 		Version:        123,
 		TimerId:        "some random timer ID",
@@ -227,14 +221,12 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_NoWorkflowExpiry
 
 	var timerInfoUpdated = common.CloneProto(timerInfo) // make a copy
 	timerInfoUpdated.TaskStatus = TimerTaskStatusCreated
-	s.mockMutableState.EXPECT().UpdateUserTimer(protomock.Eq(timerInfoUpdated)).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
+	s.mockMutableState.EXPECT().UpdateUserTimerTaskStatus(timerInfoUpdated.TimerId, timerInfoUpdated.TaskStatus).Return(nil)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: timerExpiry.AsTime(),
 		EventID:             timerInfo.GetStartedEventId(),
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextUserTimer()
@@ -332,6 +324,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_AfterWorkflo
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "some random activity ID",
@@ -356,11 +349,11 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_AfterWorkflo
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkflowExpiry() {
 	now := time.Now().UTC()
-	currentVersion := int64(999)
 	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "some random activity ID",
@@ -381,8 +374,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 
 	var activityInfoUpdated = common.CloneProto(activityInfo) // make a copy
 	activityInfoUpdated.TimerTaskStatus = TimerTaskStatusCreatedScheduleToStart
-	s.mockMutableState.EXPECT().UpdateActivity(protomock.Eq(activityInfoUpdated)).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
+	s.mockMutableState.EXPECT().UpdateActivityTaskStatusWithTimerHeartbeat(activityInfoUpdated.ScheduledEventId, activityInfoUpdated.TimerTaskStatus, nil).Return(nil)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -390,7 +382,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()
@@ -400,11 +391,11 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowExpiry() {
 	now := time.Now().UTC()
-	currentVersion := int64(999)
 	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "some random activity ID",
@@ -425,8 +416,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowEx
 
 	var activityInfoUpdated = common.CloneProto(activityInfo) // make a copy
 	activityInfoUpdated.TimerTaskStatus = TimerTaskStatusCreatedScheduleToStart
-	s.mockMutableState.EXPECT().UpdateActivity(protomock.Eq(activityInfoUpdated)).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
+	s.mockMutableState.EXPECT().UpdateActivityTaskStatusWithTimerHeartbeat(activityInfoUpdated.ScheduledEventId, activityInfoUpdated.TimerTaskStatus, nil).Return(nil)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -434,7 +424,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowEx
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()
@@ -448,6 +437,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_AfterWor
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -472,11 +462,11 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_AfterWor
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWorkflowExpiry() {
 	now := time.Now().UTC()
-	currentVersion := int64(999)
 	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -499,8 +489,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWo
 
 	var activityInfoUpdated = common.CloneProto(activityInfo) // make a copy
 	activityInfoUpdated.TimerTaskStatus = TimerTaskStatusCreatedHeartbeat
-	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(protomock.Eq(activityInfoUpdated), taskVisibilityTimestamp).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
+	s.mockMutableState.EXPECT().UpdateActivityTaskStatusWithTimerHeartbeat(activityInfo.ScheduledEventId, activityInfoUpdated.TimerTaskStatus, &taskVisibilityTimestamp).Return(nil)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -508,7 +497,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWo
 		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()
@@ -518,11 +506,11 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWo
 
 func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkflowExpiry() {
 	now := time.Now().UTC()
-	currentVersion := int64(999)
 	activityInfo := &persistencespb.ActivityInfo{
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -545,8 +533,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkfl
 
 	var activityInfoUpdated = common.CloneProto(activityInfo) // make a copy
 	activityInfoUpdated.TimerTaskStatus = TimerTaskStatusCreatedHeartbeat
-	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(protomock.Eq(activityInfoUpdated), taskVisibilityTimestamp).Return(nil)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
+	s.mockMutableState.EXPECT().UpdateActivityTaskStatusWithTimerHeartbeat(activityInfo.ScheduledEventId, activityInfoUpdated.TimerTaskStatus, &taskVisibilityTimestamp).Return(nil)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -554,7 +541,6 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkfl
 		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		EventID:             activityInfo.ScheduledEventId,
 		Attempt:             activityInfo.Attempt,
-		Version:             currentVersion,
 	})
 
 	modified, err := s.timerSequence.CreateNextActivityTimer()
@@ -672,6 +658,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_NotStar
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "some random activity ID",
@@ -711,6 +698,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -757,6 +745,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -796,6 +785,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -842,6 +832,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -881,6 +872,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -896,6 +888,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 		Version:                 123,
 		ScheduledEventId:        2345,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "other random activity ID",
@@ -1159,6 +1152,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_WithTimeout_S
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "some random activity ID",
@@ -1588,4 +1582,39 @@ func (s *timerSequenceSuite) TestLess_CompareType() {
 	timerSequenceIDs := TimerSequenceIDs([]TimerSequenceID{timerSequenceID1, timerSequenceID2})
 	s.True(timerSequenceIDs.Less(0, 1))
 	s.False(timerSequenceIDs.Less(1, 0))
+}
+
+func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_FirstScheduledTime() {
+	now := time.Now().UTC()
+	activityInfo := &persistencespb.ActivityInfo{
+		ScheduledEventId:       234,
+		ScheduledTime:          timestamppb.New(now),
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(10),
+		ScheduleToCloseTimeout: timestamp.DurationFromSeconds(1000),
+		StartToCloseTimeout:    timestamp.DurationFromSeconds(100),
+		HeartbeatTimeout:       timestamp.DurationFromSeconds(1),
+		TimerTaskStatus:        TimerTaskStatusCreatedScheduleToClose | TimerTaskStatusCreatedScheduleToStart,
+		Attempt:                12,
+	}
+	activityInfo.FirstScheduledTime = timestamppb.New(now.Add(1 * time.Second))
+	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduledEventId: activityInfo}
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
+
+	timerSequenceIDs := s.timerSequence.LoadAndSortActivityTimers()
+	s.Equal([]TimerSequenceID{
+		{
+			EventID:      activityInfo.ScheduledEventId,
+			Timestamp:    activityInfo.ScheduledTime.AsTime().Add(activityInfo.ScheduleToStartTimeout.AsDuration()),
+			TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			TimerCreated: true,
+			Attempt:      activityInfo.Attempt,
+		},
+		{
+			EventID:      activityInfo.ScheduledEventId,
+			Timestamp:    activityInfo.FirstScheduledTime.AsTime().Add(activityInfo.ScheduleToCloseTimeout.AsDuration()),
+			TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			TimerCreated: true,
+			Attempt:      activityInfo.Attempt,
+		},
+	}, timerSequenceIDs)
 }

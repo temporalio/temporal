@@ -27,6 +27,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -54,6 +55,8 @@ type (
 		EnableSniff                  bool                      `yaml:"enableSniff"`
 		EnableHealthcheck            bool                      `yaml:"enableHealthcheck"`
 		TLS                          *auth.TLS                 `yaml:"tls"`
+		// httpClient is the awsHttpClient to be used for creating esClient
+		httpClient *http.Client
 	}
 
 	// ESAWSRequestSigningConfig represents configuration for signing ES requests to AWS
@@ -97,6 +100,17 @@ func (cfg *Config) GetSecondaryVisibilityIndex() string {
 		return ""
 	}
 	return cfg.Indices[SecondaryVisibilityAppName]
+}
+
+func (cfg *Config) SetHttpClient(httpClient *http.Client) {
+	cfg.httpClient = httpClient
+}
+
+func (cfg *Config) GetHttpClient() *http.Client {
+	if cfg == nil {
+		return nil
+	}
+	return cfg.httpClient
 }
 
 func (cfg *Config) Validate() error {

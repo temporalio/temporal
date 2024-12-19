@@ -34,14 +34,13 @@ import (
 	"testing"
 
 	"cloud.google.com/go/storage"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/api/iterator"
-
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/config"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/api/iterator"
 )
 
 func (s *clientSuite) SetupTest() {

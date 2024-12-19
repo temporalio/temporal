@@ -17,10 +17,12 @@ persistence:
                   errors:
                     ResourceExhausted: 0.05
                     Timeout: 0.05
+                    ExecuteAndTimeout: 0.05
                 UpdateWorkflowExecution:
                   errors:
                     ResourceExhausted: 0.10
                     Timeout: 0.05
+                    ExecuteAndTimeout: 0.05
                 GetWorkflowExecution:
                   errors:
                     ResourceExhausted: 0.05
@@ -33,6 +35,7 @@ persistence:
                   errors:
                     ResourceExhausted: 0.05
                     Timeout: 0.05
+                    ExecuteAndTimeout: 0.05
                 ReadHistoryBranch:
                   errors:
                     ResourceExhausted: 0.05

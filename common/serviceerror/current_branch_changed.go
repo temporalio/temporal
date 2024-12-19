@@ -25,10 +25,9 @@
 package serviceerror
 
 import (
+	errordetailsspb "go.temporal.io/server/api/errordetails/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"go.temporal.io/server/api/errordetails/v1"
 )
 
 type (
@@ -63,7 +62,7 @@ func (e *CurrentBranchChanged) Status() *status.Status {
 
 	st := status.New(codes.InvalidArgument, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.CurrentBranchChangedFailure{
+		&errordetailsspb.CurrentBranchChangedFailure{
 			CurrentBranchToken: e.CurrentBranchToken,
 			RequestBranchToken: e.RequestBranchToken,
 		},
@@ -71,7 +70,7 @@ func (e *CurrentBranchChanged) Status() *status.Status {
 	return st
 }
 
-func newCurrentBranchChanged(st *status.Status, errDetails *errordetails.CurrentBranchChangedFailure) error {
+func newCurrentBranchChanged(st *status.Status, errDetails *errordetailsspb.CurrentBranchChangedFailure) error {
 	return &CurrentBranchChanged{
 		Message:            st.Message(),
 		CurrentBranchToken: errDetails.GetCurrentBranchToken(),

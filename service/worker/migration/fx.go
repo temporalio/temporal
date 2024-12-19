@@ -30,8 +30,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/fx"
-
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
@@ -42,6 +40,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	workercommon "go.temporal.io/server/service/worker/common"
+	"go.uber.org/fx"
 )
 
 type (

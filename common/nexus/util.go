@@ -23,26 +23,12 @@
 package nexus
 
 import (
-	"go.temporal.io/api/nexus/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	persistencepb "go.temporal.io/server/api/persistence/v1"
-	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"strconv"
+	"time"
 )
 
-func IncomingServicePersistedEntryToExternalAPI(entry *persistencepb.NexusIncomingServiceEntry) *nexus.IncomingService {
-	var lastModifiedTime *timestamppb.Timestamp
-	// Only set last modified if there were modifications as stated in the UI contract.
-	if entry.Version > 1 {
-		lastModifiedTime = timestamppb.New(hlc.UTC(entry.Service.Clock))
-	}
-
-	return &nexus.IncomingService{
-		Version:          entry.Version,
-		Id:               entry.Id,
-		Spec:             entry.Service.Spec,
-		CreatedTime:      entry.Service.CreatedTime,
-		LastModifiedTime: lastModifiedTime,
-		UrlPrefix:        "/" + RouteDispatchNexusTaskByService.Path(entry.Id),
-	}
+// FormatDuration converts a duration into a string representation in millisecond resolution.
+// TODO: replace this with the version exported from the Nexus SDK
+func FormatDuration(d time.Duration) string {
+	return strconv.FormatInt(d.Milliseconds(), 10) + "ms"
 }

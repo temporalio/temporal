@@ -93,7 +93,6 @@ func BenchmarkPipe(b *testing.B) {
 			socketFactory: tcpSocketFactory{},
 		},
 	} {
-		tc := tc
 
 		b.Run(tc.name, func(b *testing.B) {
 			b.RunParallel(func(pb *testing.PB) {

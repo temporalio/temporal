@@ -31,6 +31,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/mock"
+	"go.uber.org/mock/gomock"
 )
 
 func TestFactoryImpl_NewHistoryTaskQueueManager(t *testing.T) {
@@ -49,18 +51,19 @@ func TestFactoryImpl_NewHistoryTaskQueueManager(t *testing.T) {
 			err:  errors.New("some error"),
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			dataStoreFactory := &testDataStoreFactory{
-				err: tc.err,
-			}
+			ctrl := gomock.NewController(t)
+			dataStoreFactory := mock.NewMockDataStoreFactory(ctrl)
+			dataStoreFactory.EXPECT().NewQueueV2().Return(nil, tc.err).AnyTimes()
+
 			factory := client.NewFactory(
 				dataStoreFactory,
 				&config.Persistence{
 					NumHistoryShards: 1,
 				},
+				nil,
 				nil,
 				nil,
 				nil,

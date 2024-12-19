@@ -31,7 +31,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence"

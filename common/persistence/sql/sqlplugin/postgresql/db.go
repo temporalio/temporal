@@ -26,12 +26,15 @@ package postgresql
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
+	"go.temporal.io/server/common/resolver"
 	postgresqlschemaV12 "go.temporal.io/server/schema/postgresql/v12"
 )
 
@@ -49,14 +52,16 @@ type db struct {
 	dbName   string
 	dbDriver driver.Driver
 
-	db        *sqlx.DB
-	tx        *sqlx.Tx
-	conn      sqlplugin.Conn
+	plugin    *plugin
+	cfg       *config.SQL
+	resolver  resolver.ServiceResolver
 	converter DataConverter
+
+	handle *sqlplugin.DatabaseHandle
+	tx     *sqlx.Tx
 }
 
 var _ sqlplugin.DB = (*db)(nil)
-var _ sqlplugin.Tx = (*db)(nil)
 
 // newDB returns an instance of DB, which is a logical
 // connection to the underlying postgresql database
@@ -64,46 +69,45 @@ func newDB(
 	dbKind sqlplugin.DbKind,
 	dbName string,
 	dbDriver driver.Driver,
-	xdb *sqlx.DB,
+	handle *sqlplugin.DatabaseHandle,
 	tx *sqlx.Tx,
 ) *db {
 	mdb := &db{
 		dbKind:   dbKind,
 		dbName:   dbName,
 		dbDriver: dbDriver,
-		db:       xdb,
+		handle:   handle,
 		tx:       tx,
-	}
-	mdb.conn = xdb
-	if tx != nil {
-		mdb.conn = tx
 	}
 	mdb.converter = &converter{}
 	return mdb
 }
 
+func (pdb *db) conn() sqlplugin.Conn {
+	if pdb.tx != nil {
+		return pdb.tx
+	}
+	return pdb.handle.Conn()
+}
+
 // BeginTx starts a new transaction and returns a reference to the Tx object
 func (pdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
-	xtx, err := pdb.db.BeginTxx(ctx, nil)
+	db, err := pdb.handle.DB()
 	if err != nil {
+		// This error needs no conversion
 		return nil, err
 	}
-	return newDB(pdb.dbKind, pdb.dbName, pdb.dbDriver, pdb.db, xtx), nil
-}
-
-// Commit commits a previously started transaction
-func (pdb *db) Commit() error {
-	return pdb.tx.Commit()
-}
-
-// Rollback triggers rollback of a previously started transaction
-func (pdb *db) Rollback() error {
-	return pdb.tx.Rollback()
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, pdb.handle.ConvertError(err)
+	}
+	return newDB(pdb.dbKind, pdb.dbName, pdb.dbDriver, pdb.handle, tx), nil
 }
 
 // Close closes the connection to the mysql db
 func (pdb *db) Close() error {
-	return pdb.db.Close()
+	pdb.handle.Close()
+	return nil
 }
 
 // PluginName returns the name of the mysql plugin
@@ -132,4 +136,62 @@ func (pdb *db) ExpectedVersion() string {
 func (pdb *db) VerifyVersion() error {
 	expectedVersion := pdb.ExpectedVersion()
 	return schema.VerifyCompatibleVersion(pdb, pdb.dbName, expectedVersion)
+}
+
+// Commit commits a previously started transaction
+func (pdb *db) Commit() error {
+	return pdb.tx.Commit()
+}
+
+// Rollback triggers rollback of a previously started transaction
+func (pdb *db) Rollback() error {
+	return pdb.tx.Rollback()
+}
+
+// Helper methods to hide common error handling
+func (pdb *db) ExecContext(ctx context.Context, stmt string, args ...any) (sql.Result, error) {
+	res, err := pdb.conn().ExecContext(ctx, stmt, args...)
+	return res, pdb.handle.ConvertError(err)
+}
+
+func (pdb *db) GetContext(ctx context.Context, dest any, query string, args ...any) error {
+	err := pdb.conn().GetContext(ctx, dest, query, args...)
+	return pdb.handle.ConvertError(err)
+}
+
+func (pdb *db) Select(dest any, query string, args ...any) error {
+	db, err := pdb.handle.DB()
+	if err != nil {
+		return err
+	}
+	err = db.Select(dest, query, args...)
+	return pdb.handle.ConvertError(err)
+}
+
+func (pdb *db) SelectContext(ctx context.Context, dest any, query string, args ...any) error {
+	err := pdb.conn().SelectContext(ctx, dest, query, args...)
+	return pdb.handle.ConvertError(err)
+}
+
+func (pdb *db) NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error) {
+	res, err := pdb.conn().NamedExecContext(ctx, query, arg)
+	return res, pdb.handle.ConvertError(err)
+}
+
+func (pdb *db) PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error) {
+	stmt, err := pdb.conn().PrepareNamedContext(ctx, query)
+	return stmt, pdb.handle.ConvertError(err)
+}
+
+func (pdb *db) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	db, err := pdb.handle.DB()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx, query, args...)
+	return rows, pdb.handle.ConvertError(err)
+}
+
+func (pdb *db) Rebind(query string) string {
+	return pdb.conn().Rebind(query)
 }

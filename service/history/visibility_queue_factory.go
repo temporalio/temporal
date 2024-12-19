@@ -25,8 +25,6 @@
 package history
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -35,6 +33,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 const (
@@ -65,9 +64,10 @@ func NewVisibilityQueueFactory(
 			HostScheduler: queues.NewScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
 				queues.SchedulerOptions{
-					WorkerCount:             params.Config.VisibilityProcessorSchedulerWorkerCount,
-					ActiveNamespaceWeights:  params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
-					StandbyNamespaceWeights: params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
+					WorkerCount:                    params.Config.VisibilityProcessorSchedulerWorkerCount,
+					ActiveNamespaceWeights:         params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
+					StandbyNamespaceWeights:        params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
+					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
 				},
 				params.NamespaceRegistry,
 				params.Logger,
@@ -124,6 +124,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.MetricsHandler,
 		f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
 		f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
+		f.Config.VisibilityProcessorRelocateAttributesMinBlobSize,
 	)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
@@ -155,6 +156,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 				BatchSize:            f.Config.VisibilityTaskBatchSize,
 				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.VisibilityProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,

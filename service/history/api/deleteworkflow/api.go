@@ -28,9 +28,9 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -49,13 +49,12 @@ func Invoke(
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return nil, err
@@ -90,12 +89,14 @@ func Invoke(
 				func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 					mutableState := workflowLease.GetMutableState()
 
-					return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+					return api.UpdateWorkflowTerminate, workflow.TerminateWorkflow(
 						mutableState,
 						"Delete workflow execution",
 						nil,
 						consts.IdentityHistoryService,
 						true,
+						// TODO(bergundy): No links will be attached here for now, we may want to add support for this later though.
+						nil,
 					)
 				},
 				nil,
@@ -115,7 +116,6 @@ func Invoke(
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
 		workflowLease.GetMutableState(),
-		request.GetWorkflowVersion(),
 	); err != nil {
 		return nil, err
 	}

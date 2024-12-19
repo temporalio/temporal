@@ -40,40 +40,6 @@ const (
 	SecondaryVisibilityWritingModeDual = "dual"
 )
 
-//nolint:revive
-func GetVisibilityPersistenceMaxReadQPS(
-	dc *dynamicconfig.Collection,
-) dynamicconfig.IntPropertyFn {
-	return dc.GetIntProperty(dynamicconfig.VisibilityPersistenceMaxReadQPS, 9000)
-}
-
-//nolint:revive
-func GetVisibilityPersistenceMaxWriteQPS(
-	dc *dynamicconfig.Collection,
-) dynamicconfig.IntPropertyFn {
-	return dc.GetIntProperty(dynamicconfig.VisibilityPersistenceMaxWriteQPS, 9000)
-}
-
-//nolint:revive
-func GetEnableReadFromSecondaryVisibilityConfig(
-	dc *dynamicconfig.Collection,
-) dynamicconfig.BoolPropertyFnWithNamespaceFilter {
-	return dc.GetBoolPropertyFnWithNamespaceFilter(
-		dynamicconfig.EnableReadFromSecondaryVisibility,
-		false,
-	)
-}
-
-//nolint:revive
-func GetSecondaryVisibilityWritingModeConfig(
-	dc *dynamicconfig.Collection,
-) dynamicconfig.StringPropertyFn {
-	return dc.GetStringProperty(
-		dynamicconfig.SecondaryVisibilityWritingMode,
-		SecondaryVisibilityWritingModeOff,
-	)
-}
-
 func AllowListForValidation(
 	storeNames []string,
 	allowList dynamicconfig.BoolPropertyFnWithNamespaceFilter,

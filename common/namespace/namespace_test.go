@@ -28,16 +28,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	nexuspb "go.temporal.io/api/nexus/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
-	persistence "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -57,15 +54,6 @@ func base(t *testing.T) *namespace.Namespace {
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: "foo",
 				Clusters:          []string{"foo", "bar"},
-			},
-			OutgoingServices: []*persistencespb.NexusOutgoingService{
-				{
-					Version: 1,
-					Name:    "svc",
-					Spec: &nexuspb.OutgoingServiceSpec{
-						Url: "http://localhost",
-					},
-				},
 			},
 		},
 	})
@@ -151,11 +139,4 @@ func TestNamespace_GetCustomData(t *testing.T) {
 	assert.Equal(t, "bar", data)
 	data2 := ns.GetCustomData("fake")
 	assert.Equal(t, "", data2)
-}
-
-func TestNamespace_NexusOutgoingService(t *testing.T) {
-	ns := base(t)
-	spec, ok := ns.NexusOutgoingService("svc")
-	require.True(t, ok)
-	require.Equal(t, "http://localhost", spec.Url)
 }

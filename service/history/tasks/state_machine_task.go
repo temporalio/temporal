@@ -25,8 +25,8 @@ package tasks
 import (
 	"time"
 
-	enums "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -35,18 +35,10 @@ type StateMachineTask struct {
 	definition.WorkflowKey
 	VisibilityTimestamp time.Time
 	TaskID              int64
-	Info                *persistence.StateMachineTaskInfo
+	Info                *persistencespb.StateMachineTaskInfo
 }
 
 var _ HasStateMachineTaskType = &StateMachineTask{}
-
-func (t *StateMachineTask) GetVersion() int64 {
-	return t.Info.Ref.MutableStateNamespaceFailoverVersion
-}
-
-func (t *StateMachineTask) SetVersion(version int64) {
-	t.Info.Ref.MutableStateNamespaceFailoverVersion = version
-}
 
 func (t *StateMachineTask) GetTaskID() int64 {
 	return t.TaskID
@@ -64,7 +56,7 @@ func (t *StateMachineTask) SetVisibilityTime(timestamp time.Time) {
 	t.VisibilityTimestamp = timestamp
 }
 
-func (t *StateMachineTask) StateMachineTaskType() int32 {
+func (t *StateMachineTask) StateMachineTaskType() string {
 	return t.Info.Type
 }
 
@@ -83,8 +75,8 @@ func (*StateMachineOutboundTask) GetCategory() Category {
 	return CategoryOutbound
 }
 
-func (*StateMachineOutboundTask) GetType() enums.TaskType {
-	return enums.TASK_TYPE_STATE_MACHINE_OUTBOUND
+func (*StateMachineOutboundTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND
 }
 
 func (t *StateMachineOutboundTask) GetKey() Key {
@@ -96,19 +88,38 @@ var _ HasDestination = &StateMachineOutboundTask{}
 
 // StateMachineCallbackTask is a generic timer task that can be emitted by any hierarchical state machine.
 type StateMachineTimerTask struct {
-	StateMachineTask
+	definition.WorkflowKey
+	VisibilityTimestamp time.Time
+	TaskID              int64
+	Version             int64
 }
 
 func (*StateMachineTimerTask) GetCategory() Category {
 	return CategoryTimer
 }
 
-func (*StateMachineTimerTask) GetType() enums.TaskType {
-	return enums.TASK_TYPE_STATE_MACHINE_TIMER
+func (*StateMachineTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_STATE_MACHINE_TIMER
 }
 
 func (t *StateMachineTimerTask) GetKey() Key {
 	return NewKey(t.VisibilityTimestamp, t.TaskID)
+}
+
+func (t *StateMachineTimerTask) GetTaskID() int64 {
+	return t.TaskID
+}
+
+func (t *StateMachineTimerTask) SetTaskID(id int64) {
+	t.TaskID = id
+}
+
+func (t *StateMachineTimerTask) GetVisibilityTime() time.Time {
+	return t.VisibilityTimestamp
+}
+
+func (t *StateMachineTimerTask) SetVisibilityTime(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
 }
 
 var _ Task = &StateMachineTimerTask{}

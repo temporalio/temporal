@@ -55,7 +55,7 @@ var (
 	FlagClusterMembershipRole      = "role"
 	FlagSkipErrorMode              = "skip-errors"
 	FlagTaskID                     = "task-id"
-	FlagTaskType                   = "task-type"
+	FlagTaskCategory               = "task-category"
 	FlagTaskVisibilityTimestamp    = "task-timestamp"
 	FlagMinVisibilityTimestamp     = "min-visibility-ts"
 	FlagMaxVisibilityTimestamp     = "max-visibility-ts"
@@ -86,4 +86,9 @@ var (
 	FlagBase64File                 = "base64-file"
 	FlagTaskCategoryID             = "task-category-id"
 	FlagEncoding                   = "encoding"
+	FlagPartitionID                = "partition-id"
+	FlagStickyName                 = "sticky-name"
+	FlagBuildIDs                   = "select-build-id"
+	FlagUnversioned                = "select-unversioned"
+	FlagAllActive                  = "select-all-active"
 )

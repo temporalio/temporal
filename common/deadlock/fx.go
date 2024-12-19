@@ -25,21 +25,12 @@
 package deadlock
 
 import (
-	"context"
-
 	"go.uber.org/fx"
 )
 
 var Module = fx.Options(
 	fx.Provide(NewDeadlockDetector),
 	fx.Invoke(func(lc fx.Lifecycle, dd *deadlockDetector) {
-		lc.Append(fx.Hook{
-			OnStart: func(ctx context.Context) error {
-				return dd.Start()
-			},
-			OnStop: func(ctx context.Context) error {
-				return dd.Stop()
-			},
-		})
+		lc.Append(fx.StartStopHook(dd.Start, dd.Stop))
 	}),
 )

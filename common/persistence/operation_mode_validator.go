@@ -28,7 +28,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 

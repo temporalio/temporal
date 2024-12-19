@@ -29,25 +29,24 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/cluster/clustertest"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/cluster/clustertest"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	persistencespb "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -55,6 +54,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -72,7 +72,7 @@ type (
 		workflowContext     *workflow.MockContext
 		currentMutableState *workflow.MockMutableState
 
-		activityInfo *persistencepb.ActivityInfo
+		activityInfo *persistencespb.ActivityInfo
 	}
 )
 
@@ -437,9 +437,9 @@ func (s *workflowSuite) setupWorkflowContext(mutableState *workflow.MockMutableS
 
 func (s *workflowSuite) setupCache() *wcache.MockCache {
 	workflowCache := wcache.NewMockCache(s.controller)
-	workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).
+	workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), locks.PriorityHigh).
 		Return(s.workflowContext, wcache.NoopReleaseFn, nil).AnyTimes()
-	workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), workflow.LockPriorityHigh).Return(wcache.NoopReleaseFn, nil).AnyTimes()
+	workflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), locks.PriorityHigh).Return(wcache.NoopReleaseFn, nil).AnyTimes()
 	return workflowCache
 }
 
@@ -453,7 +453,7 @@ func (s *workflowSuite) setupShardContext(registry namespace.Registry) *shard.Mo
 	shardContext.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).AnyTimes()
 	shardContext.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
 	shardContext.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
-	response := &persistencespb.GetCurrentExecutionResponse{
+	response := &persistence.GetCurrentExecutionResponse{
 		RunID: tests.RunID,
 	}
 	shardContext.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(response, nil).AnyTimes()
@@ -462,15 +462,19 @@ func (s *workflowSuite) setupShardContext(registry namespace.Registry) *shard.Mo
 
 func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContext *shard.MockContext) {
 	timer := metrics.NewMockTimerIface(s.controller)
-	timer.EXPECT().Record(
-		gomock.Any(),
+	tags := []metrics.Tag{
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
-		metrics.NamespaceTag(uc.namespaceName.String()),
 		metrics.WorkflowTypeTag(uc.wfType.Name),
 		metrics.ActivityTypeTag(uc.activityType),
-		metrics.TaskQueueTag(uc.taskQueueId),
+		metrics.NamespaceTag(uc.namespaceName.String()),
+		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
+	}
+
+	timer.EXPECT().Record(
+		gomock.Any(),
 	)
 	metricsHandler := metrics.NewMockHandler(s.controller)
+	metricsHandler.EXPECT().WithTags(tags).Return(metricsHandler)
 	metricsHandler.EXPECT().Timer(metrics.ActivityE2ELatency.Name()).Return(timer)
 
 	shardContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
@@ -488,16 +492,16 @@ func (s *workflowSuite) expectCounterRecorded(shardContext *shard.MockContext) *
 
 func (s *workflowSuite) setupNamespaceRegistry(uc UsecaseConfig) *namespace.MockRegistry {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencepb.NamespaceInfo{
+		&persistencespb.NamespaceInfo{
 			Id:   uc.namespaceId.String(),
 			Name: uc.namespaceName.String(),
 		},
-		&persistencepb.NamespaceConfig{
+		&persistencespb.NamespaceConfig{
 			Retention:               timestamp.DurationFromDays(1),
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
 			VisibilityArchivalUri:   "test:///visibility/archival",
 		},
-		&persistencepb.NamespaceReplicationConfig{
+		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
@@ -511,13 +515,13 @@ func (s *workflowSuite) setupNamespaceRegistry(uc UsecaseConfig) *namespace.Mock
 	return namespaceRegistry
 }
 
-func (s *workflowSuite) setupMutableState(uc UsecaseConfig, ai *persistencepb.ActivityInfo) *workflow.MockMutableState {
+func (s *workflowSuite) setupMutableState(uc UsecaseConfig, ai *persistencespb.ActivityInfo) *workflow.MockMutableState {
 	currentMutableState := workflow.NewMockMutableState(s.controller)
 	currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
-	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencepb.WorkflowExecutionInfo{
+	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: tests.WorkflowID,
 	}).AnyTimes()
-	currentMutableState.EXPECT().GetExecutionState().Return(&persistencepb.WorkflowExecutionState{
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: tests.RunID,
 	}).AnyTimes()
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(uc.isExecutionRunning).AnyTimes()
@@ -534,14 +538,15 @@ func (s *workflowSuite) setupMutableState(uc UsecaseConfig, ai *persistencepb.Ac
 
 	currentMutableState.EXPECT().GetWorkflowType().Return(uc.wfType).AnyTimes()
 	if uc.expectRetryActivity {
+		currentMutableState.EXPECT().RecordLastActivityCompleteTime(gomock.Any())
 		currentMutableState.EXPECT().RetryActivity(ai, gomock.Any()).Return(uc.retryActivityState, uc.retryActivityError)
 		currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false).AnyTimes()
 	}
 	return currentMutableState
 }
 
-func (s *workflowSuite) setupActivityInfo(uc UsecaseConfig) *persistencepb.ActivityInfo {
-	return &persistencepb.ActivityInfo{
+func (s *workflowSuite) setupActivityInfo(uc UsecaseConfig) *persistencespb.ActivityInfo {
+	return &persistencespb.ActivityInfo{
 		ScheduledEventId: uc.scheduledEventId,
 		Attempt:          uc.attempt,
 		StartedEventId:   uc.startedEventId,

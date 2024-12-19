@@ -89,7 +89,7 @@ func NewExecutableFactory(
 		namespaceRegistry:          namespaceRegistry,
 		clusterMetadata:            clusterMetadata,
 		logger:                     logger,
-		metricsHandler:             metricsHandler,
+		metricsHandler:             metricsHandler.WithTags(defaultExecutableMetricsTags...),
 		dlqWriter:                  dlqWriter,
 		dlqEnabled:                 dlqEnabled,
 		attemptsBeforeSendingToDlq: attemptsBeforeSendingToDlq,

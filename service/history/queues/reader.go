@@ -69,6 +69,7 @@ type (
 		BatchSize            dynamicconfig.IntPropertyFn
 		MaxPendingTasksCount dynamicconfig.IntPropertyFn
 		PollBackoffInterval  dynamicconfig.DurationPropertyFn
+		MaxPredicateSize     dynamicconfig.IntPropertyFn
 	}
 
 	SliceIterator func(s Slice)
@@ -156,7 +157,7 @@ func NewReader(
 
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
-			backoff.SystemClock,
+			clock.NewRealTimeSource(),
 		),
 
 		rateLimitContext:       rateLimitContext,
@@ -474,7 +475,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 		if common.IsResourceExhausted(err) {
 			r.pauseLocked(throttleRetryDelay)
 		} else {
-			r.pauseLocked(r.retrier.NextBackOff())
+			r.pauseLocked(r.retrier.NextBackOff(err))
 		}
 		return
 	}

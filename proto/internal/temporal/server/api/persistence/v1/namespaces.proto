@@ -31,8 +31,6 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/enums/v1/namespace.proto";
 import "temporal/api/namespace/v1/message.proto";
 
-import "temporal/server/api/persistence/v1/nexus.proto";
-
 // detail column
 message NamespaceDetail {
     NamespaceInfo info = 1;
@@ -42,9 +40,6 @@ message NamespaceDetail {
     int64 failover_notification_version = 5;
     int64 failover_version = 6;
     google.protobuf.Timestamp failover_end_time = 7;
-    // The list of registered Nexus outgoing services that are used by this namespace. This must remain sorted in
-    // ascending order by service name.
-    repeated NexusOutgoingService outgoing_services = 8;
 }
 
 message NamespaceInfo {

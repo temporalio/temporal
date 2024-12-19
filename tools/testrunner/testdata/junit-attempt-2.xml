@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="2" failures="2" errors="0" time="2.244000">
+    <testsuite name="go.temporal.io/server/tests" tests="2" failures="2" errors="0" id="0" time="2.244000" timestamp="2024-11-18T13:57:56-08:00">
+        <properties>
+            <property name="go.version" value="go1.23.2 darwin/arm64"></property>
+        </properties>
+        <testcase name="TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument" classname="go.temporal.io/server/tests" time="0.000000">
+            <failure message="Failed"><![CDATA[=== RUN   TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument
+    callbacks_test.go:99: 
+        	Error Trace:	/Users/me/temporal/temporal/tests/callbacks_test.go:99
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 2
+        	Test:       	TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument
+    --- FAIL: TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument (0.00s)
+]]></failure>
+        </testcase>
+        <testcase name="TestCallbacksSuite" classname="go.temporal.io/server/tests" time="1.200000">
+            <failure message="Failed"><![CDATA[=== RUN   TestCallbacksSuite
+=== PAUSE TestCallbacksSuite
+=== CONT  TestCallbacksSuite
+--- FAIL: TestCallbacksSuite (1.20s)
+]]></failure>
+        </testcase>
+    </testsuite>
+</testsuites>

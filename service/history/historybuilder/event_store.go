@@ -27,11 +27,10 @@ package historybuilder
 import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"google.golang.org/protobuf/proto"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
+	"google.golang.org/protobuf/proto"
 )
 
 type EventStore struct {
@@ -75,6 +74,23 @@ func (b *EventStore) AllocateEventID() int64 {
 
 func (b *EventStore) NextEventID() int64 {
 	return b.nextEventID
+}
+
+func (b *EventStore) LastEventVersion() (int64, bool) {
+	if len(b.memLatestBatch) != 0 {
+		lastEvent := b.memLatestBatch[len(b.memLatestBatch)-1]
+		return lastEvent.GetVersion(), true
+	}
+
+	if len(b.memEventsBatches) != 0 {
+		lastBatch := b.memEventsBatches[len(b.memEventsBatches)-1]
+		lastEvent := lastBatch[len(lastBatch)-1]
+		return lastEvent.GetVersion(), true
+	}
+
+	// buffered events are not real events yet, so not taken into account here
+
+	return common.EmptyVersion, false
 }
 
 func (b *EventStore) add(
@@ -299,12 +315,13 @@ func (b *EventStore) bufferEvent(
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
+		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED:
 		// do not buffer event if event is directly generated from a corresponding command
 		return false
 
 	case // events generated directly from messages should not be buffered
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED:
 		return false
@@ -404,7 +421,7 @@ func (b *EventStore) wireEventIDs(
 func (b *EventStore) reorderBuffer(
 	bufferEvents []*historypb.HistoryEvent,
 ) []*historypb.HistoryEvent {
-	b.emitInorderedBufferedEvents(bufferEvents)
+	b.emitOutOfOrderBufferedEvents(bufferEvents)
 	reorderBuffer := make([]*historypb.HistoryEvent, 0, len(bufferEvents))
 	reorderEvents := make([]*historypb.HistoryEvent, 0, len(bufferEvents))
 	for _, event := range bufferEvents {
@@ -417,7 +434,13 @@ func (b *EventStore) reorderBuffer(
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
 			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
-			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
+			// TODO: This implementation detail is hurting extensibility of workflows and the ability to add external
+			// components.
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED,
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
 			reorderBuffer = append(reorderBuffer, event)
 		default:
 			reorderEvents = append(reorderEvents, event)
@@ -427,44 +450,61 @@ func (b *EventStore) reorderBuffer(
 	return append(reorderEvents, reorderBuffer...)
 }
 
-func (b *EventStore) emitInorderedBufferedEvents(bufferedEvents []*historypb.HistoryEvent) {
-	completedActivities := make(map[int64]struct{})
-	completedChildWorkflows := make(map[int64]struct{})
-	var inorderedEventsCount int64
-	for _, event := range bufferedEvents {
-		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
-			if _, seenCompleted := completedActivities[event.GetEventId()]; seenCompleted {
-				inorderedEventsCount++
-			}
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
-			completedActivities[event.GetActivityTaskCompletedEventAttributes().GetStartedEventId()] = struct{}{}
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
-			completedActivities[event.GetActivityTaskFailedEventAttributes().GetStartedEventId()] = struct{}{}
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
-			completedActivities[event.GetActivityTaskTimedOutEventAttributes().GetStartedEventId()] = struct{}{}
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
-			completedActivities[event.GetActivityTaskCanceledEventAttributes().GetStartedEventId()] = struct{}{}
+func (b *EventStore) emitOutOfOrderBufferedEvents(bufferedEvents []*historypb.HistoryEvent) {
 
-		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
-			if _, seenCompleted := completedChildWorkflows[event.GetEventId()]; seenCompleted {
-				inorderedEventsCount++
-			}
-		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
-			completedChildWorkflows[event.GetChildWorkflowExecutionCompletedEventAttributes().GetStartedEventId()] = struct{}{}
-		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
-			completedChildWorkflows[event.GetChildWorkflowExecutionFailedEventAttributes().GetStartedEventId()] = struct{}{}
-		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
-			completedChildWorkflows[event.GetChildWorkflowExecutionTimedOutEventAttributes().GetStartedEventId()] = struct{}{}
-		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
-			completedChildWorkflows[event.GetChildWorkflowExecutionCanceledEventAttributes().GetStartedEventId()] = struct{}{}
-		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
-			completedChildWorkflows[event.GetChildWorkflowExecutionTerminatedEventAttributes().GetStartedEventId()] = struct{}{}
-		}
+	if b.metricsHandler == nil {
+		return
 	}
 
-	if inorderedEventsCount > 0 && b.metricsHandler != nil {
-		metrics.InorderBufferedEventsCounter.With(b.metricsHandler).Record(inorderedEventsCount)
+	completedActivities := make(map[int64]enumspb.EventType)
+	completedChildWorkflows := make(map[int64]enumspb.EventType)
+	completedNexusOperations := make(map[int64]enumspb.EventType)
+	for _, event := range bufferedEvents {
+		switch event.GetEventType() {
+		// Activity.
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
+			if completeEventType, seenCompleted := completedActivities[event.GetActivityTaskStartedEventAttributes().GetScheduledEventId()]; seenCompleted {
+				metrics.OutOfOrderBufferedEventsCounter.With(b.metricsHandler).Record(1, metrics.OperationTag(completeEventType.String()))
+			}
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+			completedActivities[event.GetActivityTaskCompletedEventAttributes().GetScheduledEventId()] = event.GetEventType()
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
+			completedActivities[event.GetActivityTaskFailedEventAttributes().GetScheduledEventId()] = event.GetEventType()
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
+			completedActivities[event.GetActivityTaskTimedOutEventAttributes().GetScheduledEventId()] = event.GetEventType()
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
+			completedActivities[event.GetActivityTaskCanceledEventAttributes().GetScheduledEventId()] = event.GetEventType()
+
+		// Child Workflow.
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
+			if completeEventType, seenCompleted := completedChildWorkflows[event.GetChildWorkflowExecutionStartedEventAttributes().GetInitiatedEventId()]; seenCompleted {
+				metrics.OutOfOrderBufferedEventsCounter.With(b.metricsHandler).Record(1, metrics.OperationTag(completeEventType.String()))
+			}
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+			completedChildWorkflows[event.GetChildWorkflowExecutionCompletedEventAttributes().GetInitiatedEventId()] = event.GetEventType()
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+			completedChildWorkflows[event.GetChildWorkflowExecutionFailedEventAttributes().GetInitiatedEventId()] = event.GetEventType()
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+			completedChildWorkflows[event.GetChildWorkflowExecutionTimedOutEventAttributes().GetInitiatedEventId()] = event.GetEventType()
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+			completedChildWorkflows[event.GetChildWorkflowExecutionCanceledEventAttributes().GetInitiatedEventId()] = event.GetEventType()
+		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+			completedChildWorkflows[event.GetChildWorkflowExecutionTerminatedEventAttributes().GetInitiatedEventId()] = event.GetEventType()
+
+		// Nexus Operation.
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED:
+			if completeEventType, seenCompleted := completedNexusOperations[event.GetNexusOperationStartedEventAttributes().GetScheduledEventId()]; seenCompleted {
+				metrics.OutOfOrderBufferedEventsCounter.With(b.metricsHandler).Record(1, metrics.OperationTag(completeEventType.String()))
+			}
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:
+			completedNexusOperations[event.GetNexusOperationCompletedEventAttributes().GetScheduledEventId()] = event.GetEventType()
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:
+			completedNexusOperations[event.GetNexusOperationFailedEventAttributes().GetScheduledEventId()] = event.GetEventType()
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
+			completedNexusOperations[event.GetNexusOperationTimedOutEventAttributes().GetScheduledEventId()] = event.GetEventType()
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:
+			completedNexusOperations[event.GetNexusOperationCanceledEventAttributes().GetScheduledEventId()] = event.GetEventType()
+		}
 	}
 }
 

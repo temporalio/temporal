@@ -31,7 +31,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -167,7 +166,7 @@ func (r *ConflictResolverImpl) rebuild(
 
 	rebuildMutableState, _, err := r.stateRebuilder.Rebuild(
 		ctx,
-		timestamp.TimeValue(executionInfo.StartTime),
+		timestamp.TimeValue(executionState.StartTime),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventId(),
@@ -183,6 +182,8 @@ func (r *ConflictResolverImpl) rebuild(
 	// after rebuilt verification
 	rebuildVersionHistories := rebuildMutableState.GetExecutionInfo().GetVersionHistories()
 	rebuildVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuildVersionHistories)
+	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistory = r.mutableState.GetExecutionInfo().PreviousTransitionHistory
+	rebuildMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = r.mutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint
 	if err != nil {
 		return nil, err
 	}
@@ -192,10 +193,6 @@ func (r *ConflictResolverImpl) rebuild(
 	}
 
 	// set the current branch index to target branch index
-	// set the version history back
-	//
-	// caller can use the IsVersionHistoriesRebuilt function in VersionHistories
-	// telling whether mutable state is rebuilt, before apply new history events
 	if err := versionhistory.SetCurrentVersionHistoryIndex(versionHistories, branchIndex); err != nil {
 		return nil, err
 	}

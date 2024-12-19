@@ -32,7 +32,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/client"
@@ -42,7 +41,9 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/service/history/configs"
 )
 
 const (
@@ -58,7 +59,7 @@ type (
 		namespaceId namespace.ID,
 		workflowId string,
 		runId string,
-		events []*historypb.HistoryEvent,
+		events [][]*historypb.HistoryEvent,
 		versionHistory []*historyspb.VersionHistoryItem,
 	) error
 	// NDCHistoryResender is the interface for resending history events to remote
@@ -85,6 +86,7 @@ type (
 		serializer           serialization.Serializer
 		rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
 		logger               log.Logger
+		config               *configs.Config
 	}
 
 	historyBatch struct {
@@ -105,6 +107,7 @@ func NewNDCHistoryResender(
 	serializer serialization.Serializer,
 	rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter,
 	logger log.Logger,
+	config *configs.Config,
 ) *NDCHistoryResenderImpl {
 
 	return &NDCHistoryResenderImpl{
@@ -114,6 +117,7 @@ func NewNDCHistoryResender(
 		serializer:           serializer,
 		rereplicationTimeout: rereplicationTimeout,
 		logger:               logger,
+		config:               config,
 	}
 }
 
@@ -153,6 +157,39 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		endEventVersion,
 	))
 
+	getMaxBatchCount := func() int {
+		if n.config == nil {
+			return 1
+		}
+		return n.config.ReplicationResendMaxBatchCount()
+	}
+	var eventsBatch [][]*historypb.HistoryEvent
+	var versionHistory []*historyspb.VersionHistoryItem
+	const EmptyVersion = int64(-1) // 0 is a valid event version when namespace is local
+	eventsVersion := EmptyVersion
+	applyFn := func() error {
+		err := n.ApplyReplicateFn(
+			ctx,
+			remoteClusterName,
+			namespaceID,
+			workflowID,
+			runID,
+			eventsBatch,
+			versionHistory,
+		)
+		if err != nil {
+			n.logger.Error("failed to replicate events",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(runID),
+				tag.Error(err))
+			return err
+		}
+		eventsBatch = nil
+		versionHistory = nil
+		eventsVersion = EmptyVersion
+		return nil
+	}
 	for historyIterator.HasNext() {
 		batch, err := historyIterator.Next()
 		if err != nil {
@@ -167,21 +204,32 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		if err != nil {
 			return err
 		}
-		err = n.ApplyReplicateFn(
-			ctx,
-			remoteClusterName,
-			namespaceID,
-			workflowID,
-			runID,
-			events,
-			batch.versionHistory.Items,
-		)
+		if len(events) == 0 {
+			continue
+		}
+		// check if version history changed during the batching process
+		if len(eventsBatch) != 0 && len(versionHistory) != 0 {
+			if !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.versionHistory.Items) ||
+				(eventsVersion != EmptyVersion && eventsVersion != events[0].Version) {
+				err := applyFn()
+				if err != nil {
+					return err
+				}
+			}
+		}
+		eventsBatch = append(eventsBatch, events)
+		versionHistory = batch.versionHistory.Items
+		eventsVersion = events[0].Version
+		if len(eventsBatch) >= getMaxBatchCount() {
+			err := applyFn()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if len(eventsBatch) > 0 {
+		err := applyFn()
 		if err != nil {
-			n.logger.Error("failed to replicate events",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(workflowID),
-				tag.WorkflowRunID(runID),
-				tag.Error(err))
 			return err
 		}
 	}
@@ -238,7 +286,7 @@ func (n *NDCHistoryResenderImpl) ApplyReplicateFn(
 	namespaceId namespace.ID,
 	workflowId string,
 	runId string,
-	events []*historypb.HistoryEvent,
+	events [][]*historypb.HistoryEvent,
 	versionHistory []*historyspb.VersionHistoryItem,
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, resendContextTimeout)

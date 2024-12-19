@@ -30,11 +30,10 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/service/history/tasks"
-
-	"github.com/temporalio/tctl-kit/pkg/color"
 )
 
 type (
@@ -46,6 +45,8 @@ type (
 		TaskCategoryRegistry tasks.TaskCategoryRegistry
 		// Writer is used to write output from tdbg. The default is os.Stdout.
 		Writer io.Writer
+		// ErrWriter is used to write errors from tdbg. The default is os.Stderr.
+		ErrWriter io.Writer
 		// TaskBlobEncoder is needed for custom task serialization. The default uses PredefinedTaskBlobDeserializer.
 		TaskBlobEncoder TaskBlobEncoder
 	}
@@ -59,6 +60,7 @@ func NewCliApp(opts ...Option) *cli.App {
 		ClientFactory:        NewClientFactory(),
 		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
 		Writer:               os.Stdout,
+		ErrWriter:            os.Stderr,
 		TaskBlobEncoder:      NewProtoTaskBlobEncoder(NewPredefinedTaskBlobDeserializer()),
 	}
 	for _, opt := range opts {
@@ -124,7 +126,7 @@ func NewCliApp(opts ...Option) *cli.App {
 		},
 		&cli.StringFlag{
 			Name:  color.FlagColor,
-			Usage: fmt.Sprintf("when to use color: %v, %v, %v.", color.Auto, color.Always, color.Never),
+			Usage: fmt.Sprintf("When to use color: %v, %v, %v.", color.Auto, color.Always, color.Never),
 			Value: string(color.Auto),
 		},
 	}
@@ -141,9 +143,10 @@ func NewCliApp(opts ...Option) *cli.App {
 		params.TaskCategoryRegistry,
 		prompterFactory,
 		params.TaskBlobEncoder,
-		params.Writer,
 	)
 	app.ExitErrHandler = handleError
+	app.Writer = params.Writer
+	app.ErrWriter = params.ErrWriter
 
 	return app
 }
@@ -153,12 +156,12 @@ func handleError(c *cli.Context, err error) {
 		return
 	}
 
-	_, _ = fmt.Fprintf(os.Stderr, "%s %+v\n", color.Red(c, "Error:"), err)
+	_, _ = fmt.Fprintf(c.App.ErrWriter, "%s %+v\n", color.Red(c, "Error:"), err)
 	if os.Getenv(showErrorStackEnv) != `` {
-		_, _ = fmt.Fprintln(os.Stderr, color.Magenta(c, "Stack trace:"))
+		_, _ = fmt.Fprintln(c.App.ErrWriter, color.Magenta(c, "Stack trace:"))
 		debug.PrintStack()
 	} else {
-		_, _ = fmt.Fprintf(os.Stderr, "('export %s=1' to see stack traces)\n", showErrorStackEnv)
+		_, _ = fmt.Fprintf(c.App.ErrWriter, "('export %s=1' to see stack traces)\n", showErrorStackEnv)
 	}
 
 	cli.OsExiter(1)

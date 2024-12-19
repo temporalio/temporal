@@ -32,16 +32,17 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	historyspb "go.temporal.io/server/api/history/v1"
-	workflowpb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common/definition"
-
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -70,17 +71,17 @@ type (
 		TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) (*historyservice.TerminateWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(ctx context.Context, deleteRequest *historyservice.DeleteWorkflowExecutionRequest) (*historyservice.DeleteWorkflowExecutionResponse, error)
 		ResetWorkflowExecution(ctx context.Context, request *historyservice.ResetWorkflowExecutionRequest) (*historyservice.ResetWorkflowExecutionResponse, error)
+		UpdateWorkflowExecutionOptions(ctx context.Context, request *historyservice.UpdateWorkflowExecutionOptionsRequest) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error)
 		ScheduleWorkflowTask(ctx context.Context, request *historyservice.ScheduleWorkflowTaskRequest) error
 		IsActivityTaskValid(ctx context.Context, request *historyservice.IsActivityTaskValidRequest) (*historyservice.IsActivityTaskValidResponse, error)
 		IsWorkflowTaskValid(ctx context.Context, request *historyservice.IsWorkflowTaskValidRequest) (*historyservice.IsWorkflowTaskValidResponse, error)
 		VerifyFirstWorkflowTaskScheduled(ctx context.Context, request *historyservice.VerifyFirstWorkflowTaskScheduledRequest) error
 		RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) (*historyservice.RecordChildExecutionCompletedResponse, error)
 		VerifyChildExecutionCompletionRecorded(ctx context.Context, request *historyservice.VerifyChildExecutionCompletionRecordedRequest) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error)
-		// ReplicateHistoryEvents is for a WIP feature. Ultimately will replace the ReplicateEventsV2 API
 		ReplicateHistoryEvents(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
-			baseExecutionInfo *workflowpb.BaseExecutionInfo,
+			baseExecutionInfo *workflowspb.BaseExecutionInfo,
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			historyEvents [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
@@ -88,9 +89,12 @@ type (
 		) error
 		ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 		ReplicateWorkflowState(ctx context.Context, request *historyservice.ReplicateWorkflowStateRequest) error
+		ReplicateVersionedTransition(ctx context.Context, artifact *replicationspb.VersionedTransitionArtifact, sourceClusterName string) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
 		SyncActivities(ctx context.Context, request *historyservice.SyncActivitiesRequest) error
+		SyncHSM(ctx context.Context, request *SyncHSMRequest) error
+		BackfillHistoryEvents(ctx context.Context, request *BackfillHistoryEventsRequest) error
 		GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID int64, ackTimestamp time.Time, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationspb.ReplicationTaskInfo) ([]*replicationspb.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
@@ -111,10 +115,16 @@ type (
 		GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *historyservice.GetWorkflowExecutionRawHistoryV2Request) (*historyservice.GetWorkflowExecutionRawHistoryV2Response, error)
 		AddTasks(ctx context.Context, request *historyservice.AddTasksRequest) (*historyservice.AddTasksResponse, error)
 		ListTasks(ctx context.Context, request *historyservice.ListTasksRequest) (*historyservice.ListTasksResponse, error)
+		SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (*historyservice.SyncWorkflowStateResponse, error)
+		UpdateActivityOptions(ctx context.Context, request *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error)
+		PauseActivity(ctx context.Context, request *historyservice.PauseActivityRequest) (*historyservice.PauseActivityResponse, error)
+		UnpauseActivity(ctx context.Context, request *historyservice.UnpauseActivityRequest) (*historyservice.UnpauseActivityResponse, error)
+		ResetActivity(ctx context.Context, request *historyservice.ResetActivityRequest) (*historyservice.ResetActivityResponse, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)
-		AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask)
+		// TODO(bergundy): This Environment should be host level once shard level workflow cache is deprecated.
+		StateMachineEnvironment(operationTag metrics.Tag) hsm.Environment
 
 		ReplicationStream
 		Start()
@@ -127,6 +137,7 @@ type (
 		ConvertReplicationTask(
 			ctx context.Context,
 			task tasks.Task,
+			clusterID int32,
 		) (*replicationspb.ReplicationTask, error)
 		GetReplicationTasksIter(
 			ctx context.Context,
@@ -134,5 +145,28 @@ type (
 			minInclusiveTaskID int64,
 			maxExclusiveTaskID int64,
 		) (collection.Iterator[tasks.Task], error)
+		GetMaxReplicationTaskInfo() (int64, time.Time)
+	}
+)
+
+type (
+	SyncHSMRequest struct {
+		definition.WorkflowKey
+
+		StateMachineNode    *persistencespb.StateMachineNode
+		EventVersionHistory *historyspb.VersionHistory
+	}
+
+	BackfillHistoryEventsRequest struct {
+		definition.WorkflowKey
+
+		SourceClusterName   string
+		VersionedHistory    *persistencespb.VersionedTransition
+		BaseExecutionInfo   *workflowspb.BaseExecutionInfo
+		VersionHistoryItems []*historyspb.VersionHistoryItem
+
+		Events    [][]*historypb.HistoryEvent
+		NewEvents []*historypb.HistoryEvent
+		NewRunID  string
 	}
 )

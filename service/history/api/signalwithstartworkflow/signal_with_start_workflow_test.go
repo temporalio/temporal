@@ -28,15 +28,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/history/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/fakedata"
@@ -46,6 +44,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -95,10 +94,10 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 	s.shardContext.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).AnyTimes()
 
 	s.currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
+	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: s.workflowID,
 	}).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistence.WorkflowExecutionState{
+	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.currentRunID,
 	}).AnyTimes()
 }
@@ -157,7 +156,6 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 		s.currentMutableState,
 	)
 	request := s.randomRequest()
-	request.SkipGenerateWorkflowTask = false
 
 	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false)
 	s.currentMutableState.EXPECT().IsSignalRequested(request.GetRequestId()).Return(false)
@@ -167,9 +165,10 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
-		request.GetSkipGenerateWorkflowTask(),
-	).Return(&history.HistoryEvent{}, nil)
+		request.GetLinks(),
+	).Return(&historypb.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
+	s.currentMutableState.EXPECT().HadOrHasWorkflowTask().Return(true)
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&workflow.WorkflowTaskInfo{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
@@ -199,8 +198,8 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
-		request.GetSkipGenerateWorkflowTask(),
-	).Return(&history.HistoryEvent{}, nil)
+		request.GetLinks(),
+	).Return(&historypb.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(true)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 

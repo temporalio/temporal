@@ -29,17 +29,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -206,7 +208,6 @@ func (s *taskSerializerSuite) TestTimerActivityTask() {
 		EventID:             rand.Int63(),
 		Attempt:             rand.Int31(),
 		TimeoutType:         enumspb.TimeoutType(rand.Int31n(int32(len(enumspb.TimeoutType_name)))),
-		Version:             rand.Int63(),
 	}
 
 	s.assertEqualTasks(activityTaskTimer)
@@ -231,7 +232,6 @@ func (s *taskSerializerSuite) TestTimerUserTask() {
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		EventID:             rand.Int63(),
-		Version:             rand.Int63(),
 	}
 
 	s.assertEqualTasks(userTimer)
@@ -287,7 +287,6 @@ func (s *taskSerializerSuite) TestVisibilityUpsertTask() {
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
-		Version:             rand.Int63(),
 	}
 
 	s.assertEqualTasks(visibilityUpsert)
@@ -315,8 +314,8 @@ func (s *taskSerializerSuite) TestVisibilityDeleteTask() {
 	s.assertEqualTasks(visibilityDelete)
 }
 
-func (s *taskSerializerSuite) TestReplicateActivityTask() {
-	replicateActivityTask := &tasks.SyncActivityTask{
+func (s *taskSerializerSuite) TestSyncActivityTask() {
+	syncActivityTask := &tasks.SyncActivityTask{
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
@@ -324,11 +323,11 @@ func (s *taskSerializerSuite) TestReplicateActivityTask() {
 		ScheduledEventID:    rand.Int63(),
 	}
 
-	s.assertEqualTasks(replicateActivityTask)
+	s.assertEqualTasks(syncActivityTask)
 }
 
-func (s *taskSerializerSuite) TestReplicateHistoryTask() {
-	replicateHistoryTask := &tasks.HistoryReplicationTask{
+func (s *taskSerializerSuite) TestHistoryReplicationTask() {
+	historyReplicationTask := &tasks.HistoryReplicationTask{
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
@@ -339,30 +338,83 @@ func (s *taskSerializerSuite) TestReplicateHistoryTask() {
 		NewRunBranchToken:   shuffle.Bytes([]byte("random new branch token")),
 	}
 
-	s.assertEqualTasks(replicateHistoryTask)
+	s.assertEqualTasks(historyReplicationTask)
 }
 
-func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
-	replicateHistoryTask := &tasks.DeleteExecutionVisibilityTask{
-		WorkflowKey:                    s.workflowKey,
-		VisibilityTimestamp:            time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
-		TaskID:                         rand.Int63(),
-		Version:                        rand.Int63(),
-		CloseExecutionVisibilityTaskID: rand.Int63(),
+func (s *taskSerializerSuite) TestSyncHSMTask() {
+	syncHSMTask := &tasks.SyncHSMTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:              rand.Int63(),
 	}
 
-	s.assertEqualTasks(replicateHistoryTask)
+	s.assertEqualTasks(syncHSMTask)
 }
 
-func (s *taskSerializerSuite) TestDeleteExecutionTask() {
-	replicateHistoryTask := &tasks.DeleteExecutionTask{
+func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
+	syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:              rand.Int63(),
+		FirstEventID:        rand.Int63(),
+		NextEventID:         rand.Int63(),
+		NewRunID:            uuid.New().String(),
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+		TaskEquivalents: []tasks.Task{
+			&tasks.HistoryReplicationTask{
+				WorkflowKey:         s.workflowKey,
+				VisibilityTimestamp: time.Unix(0, 0).UTC(),
+				FirstEventID:        rand.Int63(),
+				NextEventID:         rand.Int63(),
+				Version:             rand.Int63(),
+				NewRunID:            uuid.New().String(),
+			},
+		},
+	}
+
+	s.assertEqualTasksWithOpts(syncVersionedTransitionTask,
+		func(task, deserializedTask tasks.Task) {
+			s.True(proto.Equal(task.(*tasks.SyncVersionedTransitionTask).VersionedTransition, deserializedTask.(*tasks.SyncVersionedTransitionTask).VersionedTransition))
+		},
+		cmpopts.IgnoreFields(tasks.SyncVersionedTransitionTask{}, "VersionedTransition"),
+	)
+}
+
+func (s *taskSerializerSuite) TestSyncWorkflowStateTask() {
+	syncWorkflowStateTask := &tasks.SyncWorkflowStateTask{
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
+		Priority:            enumsspb.TASK_PRIORITY_LOW,
 	}
 
-	s.assertEqualTasks(replicateHistoryTask)
+	s.assertEqualTasks(syncWorkflowStateTask)
+}
+
+func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
+	deleteExecutionVisibilityTask := &tasks.DeleteExecutionVisibilityTask{
+		WorkflowKey:                    s.workflowKey,
+		VisibilityTimestamp:            time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:                         rand.Int63(),
+		CloseExecutionVisibilityTaskID: rand.Int63(),
+		CloseTime:                      time.Unix(0, 0).UTC(),
+	}
+
+	s.assertEqualTasks(deleteExecutionVisibilityTask)
+}
+
+func (s *taskSerializerSuite) TestDeleteExecutionTask() {
+	deleteExecutionTask := &tasks.DeleteExecutionTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:              rand.Int63(),
+	}
+
+	s.assertEqualTasks(deleteExecutionTask)
 }
 
 func (s *taskSerializerSuite) TestArchiveExecutionTask() {
@@ -384,19 +436,29 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 			WorkflowKey:         s.workflowKey,
 			VisibilityTimestamp: time.Now().UTC(),
 			TaskID:              rand.Int63(),
-			Info: &persistence.StateMachineTaskInfo{
-				Ref: &persistence.StateMachineRef{
-					Path: []*persistence.StateMachineKey{
+			Info: &persistencespb.StateMachineTaskInfo{
+				Ref: &persistencespb.StateMachineRef{
+					Path: []*persistencespb.StateMachineKey{
 						{
-							Type: rand.Int31(),
+							Type: "some-type",
 							Id:   "some-id",
 						},
 					},
-					MutableStateNamespaceFailoverVersion: rand.Int63(),
-					MutableStateTransitionCount:          rand.Int63(),
-					MachineTransitionCount:               rand.Int63(),
+					MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: rand.Int63(),
+						TransitionCount:          rand.Int63(),
+					},
+					MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: rand.Int63(),
+						TransitionCount:          rand.Int63(),
+					},
+					MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+						NamespaceFailoverVersion: rand.Int63(),
+						TransitionCount:          rand.Int63(),
+					},
+					MachineTransitionCount: rand.Int63(),
 				},
-				Type: rand.Int31(),
+				Type: "some-type",
 				Data: []byte{},
 			},
 		},
@@ -420,26 +482,10 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 
 func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 	task := &tasks.StateMachineTimerTask{
-		StateMachineTask: tasks.StateMachineTask{
-			WorkflowKey:         s.workflowKey,
-			VisibilityTimestamp: time.Now().UTC(),
-			TaskID:              rand.Int63(),
-			Info: &persistence.StateMachineTaskInfo{
-				Ref: &persistence.StateMachineRef{
-					Path: []*persistence.StateMachineKey{
-						{
-							Type: rand.Int31(),
-							Id:   "some-id",
-						},
-					},
-					MutableStateNamespaceFailoverVersion: rand.Int63(),
-					MutableStateTransitionCount:          rand.Int63(),
-					MachineTransitionCount:               rand.Int63(),
-				},
-				Type: rand.Int31(),
-				Data: []byte{},
-			},
-		},
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              rand.Int63(),
+		Version:             rand.Int63(),
 	}
 
 	s.Assert().Equal(tasks.CategoryTimer, task.GetCategory())
@@ -451,10 +497,22 @@ func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 	deserializedTask := deserializedTaskIface.(*tasks.StateMachineTimerTask)
 	s.NoError(err)
 
-	protorequire.ProtoEqual(s.T(), task.Info, deserializedTask.Info)
-	task.Info = nil
-	deserializedTask.Info = nil
 	s.Equal(task, deserializedTask)
+}
+
+func (s *taskSerializerSuite) assertEqualTasksWithOpts(
+	task tasks.Task,
+	cmpFunc func(task, deserializedTask tasks.Task),
+	opts ...cmp.Option,
+) {
+	blob, err := s.taskSerializer.SerializeTask(task)
+	s.NoError(err)
+	deserializedTask, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
+	s.NoError(err)
+	s.Empty(cmp.Diff(task, deserializedTask, opts...))
+	if cmpFunc != nil {
+		cmpFunc(task, deserializedTask)
+	}
 }
 
 func (s *taskSerializerSuite) assertEqualTasks(

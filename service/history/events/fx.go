@@ -25,12 +25,11 @@
 package events
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
+	"go.uber.org/fx"
 )
 
 var Module = fx.Options(

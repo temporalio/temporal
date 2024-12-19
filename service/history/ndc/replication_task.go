@@ -28,24 +28,23 @@ import (
 	"fmt"
 	"time"
 
-	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/util"
-
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 )
 
@@ -63,29 +62,32 @@ type (
 		getEvents() [][]*historypb.HistoryEvent
 		getNewEvents() []*historypb.HistoryEvent
 		getNewRunID() string
+		getVersionedTransition() *persistencespb.VersionedTransition
 		getLogger() log.Logger
 		getBaseWorkflowInfo() *workflowspb.BaseExecutionInfo
 		getVersionHistory() *historyspb.VersionHistory
 		isWorkflowReset() bool
+		stateBased() bool
 
 		skipDuplicatedEvents(skipIndex int) error
 		splitTask() (replicationTask, replicationTask, error)
 	}
 
 	replicationTaskImpl struct {
-		sourceCluster    string
-		workflowKey      definition.WorkflowKey
-		version          int64
-		firstEvent       *historypb.HistoryEvent
-		lastEvent        *historypb.HistoryEvent
-		eventTime        time.Time
-		baseWorkflowInfo *workflowspb.BaseExecutionInfo
-		versionHistory   *historyspb.VersionHistory
-		events           [][]*historypb.HistoryEvent
-		newEvents        []*historypb.HistoryEvent
-		newRunID         string
-
-		logger log.Logger
+		sourceCluster       string
+		workflowKey         definition.WorkflowKey
+		version             int64
+		firstEvent          *historypb.HistoryEvent
+		lastEvent           *historypb.HistoryEvent
+		eventTime           time.Time
+		baseWorkflowInfo    *workflowspb.BaseExecutionInfo
+		versionHistory      *historyspb.VersionHistory
+		events              [][]*historypb.HistoryEvent
+		newEvents           []*historypb.HistoryEvent
+		newRunID            string
+		versionedTransition *persistencespb.VersionedTransition
+		isStateBased        bool
+		logger              log.Logger
 	}
 )
 
@@ -138,6 +140,8 @@ func newReplicationTaskFromRequest(
 		[][]*historypb.HistoryEvent{events},
 		newEvents,
 		request.NewRunId,
+		nil,
+		false,
 	)
 }
 
@@ -150,6 +154,8 @@ func newReplicationTaskFromBatch(
 	eventsSlice [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
 	newRunID string,
+	versionedTransition *persistencespb.VersionedTransition,
+	isStateBased bool,
 ) (*replicationTaskImpl, error) {
 
 	if len(eventsSlice) == 0 {
@@ -178,6 +184,8 @@ func newReplicationTaskFromBatch(
 		eventsSlice,
 		newEvents,
 		newRunID,
+		versionedTransition,
+		isStateBased,
 	)
 }
 
@@ -190,6 +198,8 @@ func newReplicationTask(
 	eventsSlice [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
 	newRunID string,
+	versionedTransition *persistencespb.VersionedTransition,
+	isStateBased bool,
 ) (*replicationTaskImpl, error) {
 
 	versionHistory := &historyspb.VersionHistory{
@@ -237,17 +247,19 @@ func newReplicationTask(
 	)
 
 	return &replicationTaskImpl{
-		sourceCluster:    sourceCluster,
-		workflowKey:      workflowKey,
-		version:          version,
-		firstEvent:       firstEvent,
-		lastEvent:        lastEvent,
-		eventTime:        eventTime,
-		baseWorkflowInfo: baseExecutionInfo,
-		versionHistory:   versionHistory,
-		events:           eventsSlice,
-		newEvents:        newEvents,
-		newRunID:         newRunID,
+		sourceCluster:       sourceCluster,
+		workflowKey:         workflowKey,
+		version:             version,
+		firstEvent:          firstEvent,
+		lastEvent:           lastEvent,
+		eventTime:           eventTime,
+		baseWorkflowInfo:    baseExecutionInfo,
+		versionHistory:      versionHistory,
+		events:              eventsSlice,
+		newEvents:           newEvents,
+		newRunID:            newRunID,
+		versionedTransition: versionedTransition,
+		isStateBased:        isStateBased,
 
 		logger: logger,
 	}, nil
@@ -308,27 +320,12 @@ func (t *replicationTaskImpl) getLogger() log.Logger {
 	return t.logger
 }
 
-func (t *replicationTaskImpl) getBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
-	if t.baseWorkflowInfo != nil {
-		return t.baseWorkflowInfo
-	}
+func (t *replicationTaskImpl) getVersionedTransition() *persistencespb.VersionedTransition {
+	return t.versionedTransition
+}
 
-	// TODO deprecate
-	switch t.getFirstEvent().GetEventType() {
-	case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
-		workflowTaskFailedEvent := t.getFirstEvent()
-		attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
-		baseRunID := attr.GetBaseRunId()
-		baseEventID := t.getFirstEvent().EventId - 1
-		baseEventVersion := attr.GetForkEventVersion()
-		return &workflowspb.BaseExecutionInfo{
-			RunId:                            baseRunID,
-			LowestCommonAncestorEventId:      baseEventID,
-			LowestCommonAncestorEventVersion: baseEventVersion,
-		}
-	default:
-		return nil
-	}
+func (t *replicationTaskImpl) getBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
+	return t.baseWorkflowInfo
 }
 
 func (t *replicationTaskImpl) getVersionHistory() *historyspb.VersionHistory {
@@ -339,21 +336,11 @@ func (t *replicationTaskImpl) isWorkflowReset() bool {
 	if t.baseWorkflowInfo != nil && t.baseWorkflowInfo.LowestCommonAncestorEventId+1 == t.firstEvent.EventId {
 		return true
 	}
+	return false
+}
 
-	// TODO deprecate
-	switch t.getFirstEvent().GetEventType() {
-	case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
-		workflowTaskFailedEvent := t.getFirstEvent()
-		attr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
-		baseRunID := attr.GetBaseRunId()
-		baseEventVersion := attr.GetForkEventVersion()
-		newRunID := attr.GetNewRunId()
-
-		return len(baseRunID) > 0 && baseEventVersion != 0 && len(newRunID) > 0
-
-	default:
-		return false
-	}
+func (t *replicationTaskImpl) stateBased() bool {
+	return t.isStateBased
 }
 
 func (t *replicationTaskImpl) skipDuplicatedEvents(index int) error {
@@ -431,9 +418,16 @@ func (t *replicationTaskImpl) splitTask() (_ replicationTask, _ replicationTask,
 		events:           [][]*historypb.HistoryEvent{t.newEvents},
 		newEvents:        []*historypb.HistoryEvent{},
 		newRunID:         "",
-
-		logger: logger,
+		logger:           logger,
 	}
+	if t.stateBased() {
+		newRunTask.versionedTransition = &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: t.newEvents[0].GetVersion(),
+			TransitionCount:          1,
+		}
+		newRunTask.isStateBased = true
+	}
+
 	t.newEvents = nil
 	t.newRunID = ""
 

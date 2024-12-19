@@ -28,9 +28,9 @@ import (
 	"net"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/config"
+	"go.uber.org/mock/gomock"
 )
 
 type (

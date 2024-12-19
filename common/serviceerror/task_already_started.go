@@ -27,10 +27,9 @@ package serviceerror
 import (
 	"fmt"
 
+	errordetailsspb "go.temporal.io/server/api/errordetails/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"go.temporal.io/server/api/errordetails/v1"
 )
 
 type (
@@ -60,7 +59,7 @@ func (e *TaskAlreadyStarted) Status() *status.Status {
 
 	st := status.New(codes.AlreadyExists, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.TaskAlreadyStartedFailure{},
+		&errordetailsspb.TaskAlreadyStartedFailure{},
 	)
 	return st
 }

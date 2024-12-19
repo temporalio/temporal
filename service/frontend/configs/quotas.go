@@ -44,7 +44,8 @@ const (
 	OpenAPIV3APIName                                = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV3Docs"
 	OpenAPIV2APIName                                = "/temporal.api.openapi.v1.OpenAPIService/GetOpenAPIV2Docs"
 	DispatchNexusTaskByNamespaceAndTaskQueueAPIName = "/temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue"
-	DispatchNexusTaskByServiceAPIName               = "/temporal.api.nexusservice.v1.NexusService/DispatchByService"
+	DispatchNexusTaskByEndpointAPIName              = "/temporal.api.nexusservice.v1.NexusService/DispatchByEndpoint"
+	CompleteNexusOperation                          = "/temporal.api.nexusservice.v1.NexusService/CompleteNexusOperation"
 )
 
 var (
@@ -69,7 +70,7 @@ var (
 
 		// Dispatching a Nexus task is a potentially long running RPC, it's classified in the same bucket as QueryWorkflow.
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName: 1,
-		DispatchNexusTaskByServiceAPIName:               1,
+		DispatchNexusTaskByEndpointAPIName:              1,
 	}
 
 	// APIToPriority determines common API priorities.
@@ -93,7 +94,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
-		DispatchNexusTaskByServiceAPIName:                                                   1,
+		DispatchNexusTaskByEndpointAPIName:                                                  1,
 
 		// P2: Change State APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution": 2,
@@ -105,6 +106,12 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PatchSchedule":                  2,
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteSchedule":                 2,
 		"/temporal.api.workflowservice.v1.WorkflowService/StopBatchOperation":             2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateActivityOptionsById":      2,
+		"/temporal.api.workflowservice.v1.WorkflowService/PauseActivityById":              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivityById":            2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivityById":              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecutionOptions": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":           2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,
@@ -116,6 +123,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":              3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes":     3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation":        3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeDeployment":            3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":          3,
 
 		// P4: Progress APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      4,
@@ -131,6 +140,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":           4,
+		CompleteNexusOperation: 4,
 
 		// P5: Poll APIs and other low priority APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              5,
@@ -138,6 +148,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        5,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                 5,
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               5,
+		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     5,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 5,
 
 		// P6: Informational API that aren't required for the temporal service to function
@@ -156,9 +167,12 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 
 		// APIs that rely on visibility
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             1,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":                     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": 1, // note this isn't a real method name
+		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
@@ -201,7 +215,7 @@ func NewNamespaceRateBurst(
 		namespaceName: namespaceName,
 		rateFn:        rateFn,
 		burstFn: func(namespace string) int {
-			return int(rateFn(namespace) * math.Max(1, burstRatioFn(namespace)))
+			return max(1, int(math.Ceil(rateFn(namespace)*burstRatioFn(namespace))))
 		},
 	}
 }

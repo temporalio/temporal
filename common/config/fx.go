@@ -25,9 +25,8 @@
 package config
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/primitives"
+	"go.uber.org/fx"
 )
 
 // ServicePortMap contains the gRPC ports for our services.

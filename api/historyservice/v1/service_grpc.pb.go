@@ -63,6 +63,7 @@ const (
 	HistoryService_TerminateWorkflowExecution_FullMethodName             = "/temporal.server.api.historyservice.v1.HistoryService/TerminateWorkflowExecution"
 	HistoryService_DeleteWorkflowExecution_FullMethodName                = "/temporal.server.api.historyservice.v1.HistoryService/DeleteWorkflowExecution"
 	HistoryService_ResetWorkflowExecution_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/ResetWorkflowExecution"
+	HistoryService_UpdateWorkflowExecutionOptions_FullMethodName         = "/temporal.server.api.historyservice.v1.HistoryService/UpdateWorkflowExecutionOptions"
 	HistoryService_RequestCancelWorkflowExecution_FullMethodName         = "/temporal.server.api.historyservice.v1.HistoryService/RequestCancelWorkflowExecution"
 	HistoryService_ScheduleWorkflowTask_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/ScheduleWorkflowTask"
 	HistoryService_VerifyFirstWorkflowTaskScheduled_FullMethodName       = "/temporal.server.api.historyservice.v1.HistoryService/VerifyFirstWorkflowTaskScheduled"
@@ -104,6 +105,14 @@ const (
 	HistoryService_ListQueues_FullMethodName                             = "/temporal.server.api.historyservice.v1.HistoryService/ListQueues"
 	HistoryService_AddTasks_FullMethodName                               = "/temporal.server.api.historyservice.v1.HistoryService/AddTasks"
 	HistoryService_ListTasks_FullMethodName                              = "/temporal.server.api.historyservice.v1.HistoryService/ListTasks"
+	HistoryService_CompleteNexusOperation_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/CompleteNexusOperation"
+	HistoryService_InvokeStateMachineMethod_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/InvokeStateMachineMethod"
+	HistoryService_DeepHealthCheck_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck"
+	HistoryService_SyncWorkflowState_FullMethodName                      = "/temporal.server.api.historyservice.v1.HistoryService/SyncWorkflowState"
+	HistoryService_UpdateActivityOptions_FullMethodName                  = "/temporal.server.api.historyservice.v1.HistoryService/UpdateActivityOptions"
+	HistoryService_PauseActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/PauseActivity"
+	HistoryService_UnpauseActivity_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseActivity"
+	HistoryService_ResetActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/ResetActivity"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -204,6 +213,11 @@ type HistoryServiceClient interface {
 	// in the history and immediately terminating the current execution instance.
 	// After reset, the history will grow from nextFirstEventId.
 	ResetWorkflowExecution(ctx context.Context, in *ResetWorkflowExecutionRequest, opts ...grpc.CallOption) (*ResetWorkflowExecutionResponse, error)
+	// UpdateWorkflowExecutionOptions modifies the options of an existing workflow execution.
+	// Currently the option that can be updated is setting and unsetting a versioning behavior override.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateWorkflowExecutionOptions(ctx context.Context, in *UpdateWorkflowExecutionOptionsRequest, opts ...grpc.CallOption) (*UpdateWorkflowExecutionOptionsResponse, error)
 	// RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
 	// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
@@ -311,6 +325,64 @@ type HistoryServiceClient interface {
 	// in the same shard. Calls to the persistence API will be batched by workflow run.
 	AddTasks(ctx context.Context, in *AddTasksRequest, opts ...grpc.CallOption) (*AddTasksResponse, error)
 	ListTasks(ctx context.Context, in *ListTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error)
+	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
+	// canceled.
+	CompleteNexusOperation(ctx context.Context, in *CompleteNexusOperationRequest, opts ...grpc.CallOption) (*CompleteNexusOperationResponse, error)
+	InvokeStateMachineMethod(ctx context.Context, in *InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*InvokeStateMachineMethodResponse, error)
+	// Deep health check history service dependencies health status
+	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
+	SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error)
+	// UpdateActivityOptions is called by the client to update the options of an activity
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateActivityOptions(ctx context.Context, in *UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityOptionsResponse, error)
+	// PauseActivity pauses the execution of an activity specified by its ID.
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	//
+	// Pausing an activity means:
+	//   - If the activity is currently waiting for a retry or is running and subsequently fails,
+	//     it will not be rescheduled until it is unpaused.
+	//   - If the activity is already paused, calling this method will have no effect.
+	//   - If the activity is running and will finish successfully, activity will be completed.
+	//   - If the activity is running and will finish with failure:
+	//   - if there is no retry left - activity will be completed.
+	//   - if there are more retries left - activity will be paused.
+	//
+	// For long-running activities:
+	// - activity in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
+	// - The activity should respond to the cancellation accordingly.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	PauseActivity(ctx context.Context, in *PauseActivityRequest, opts ...grpc.CallOption) (*PauseActivityResponse, error)
+	// UnpauseActivity unpauses the execution of an activity specified by its ID.
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	// There are two 'modes' of unpausing an activity:
+	// 'resume' - If the activity is paused, it will be resumed and scheduled for execution.
+	//   - If activity is currently running Unpause with 'resume' has no effect.
+	//   - if 'no_wait' flag is set and activity is waiting, the activity will be scheduled immediately.
+	//
+	// 'reset' - If the activity is paused, it will be reset to its initial state and (depending on parameters) scheduled for execution.
+	//   - If activity is currently running Unpause with 'reset' will reset the number of attempts.
+	//   - if 'no_wait' flag is set, the activity will be scheduled immediately.
+	//   - if 'reset_heartbeats' flag is set, the activity heartbeat timer and heartbeats will be reset.
+	//
+	// If activity is in waiting for retry and past it retry timeout, it will be scheduled immediately.
+	// Once activity is unpaused, all timeout timers will be regenerated.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UnpauseActivity(ctx context.Context, in *UnpauseActivityRequest, opts ...grpc.CallOption) (*UnpauseActivityResponse, error)
+	// ResetActivity resets the execution of an activity specified by its ID.
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	// Resetting an activity means:
+	// * number of attempts will be reset to 0.
+	// * activity timeouts will be resetted.
+	// If activity currently running:
+	// *  if 'no_wait' flag is provided, new instance of activity will be scheduled immediately.
+	// *  if 'no_wait' flag is not provided, activity will be scheduled after current instance completes if needed.
+	// If 'reset_heartbeats' flag is set, the activity heartbeat timer and heartbeats will be reset.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error)
 }
 
 type historyServiceClient struct {
@@ -504,6 +576,15 @@ func (c *historyServiceClient) DeleteWorkflowExecution(ctx context.Context, in *
 func (c *historyServiceClient) ResetWorkflowExecution(ctx context.Context, in *ResetWorkflowExecutionRequest, opts ...grpc.CallOption) (*ResetWorkflowExecutionResponse, error) {
 	out := new(ResetWorkflowExecutionResponse)
 	err := c.cc.Invoke(ctx, HistoryService_ResetWorkflowExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) UpdateWorkflowExecutionOptions(ctx context.Context, in *UpdateWorkflowExecutionOptionsRequest, opts ...grpc.CallOption) (*UpdateWorkflowExecutionOptionsResponse, error) {
+	out := new(UpdateWorkflowExecutionOptionsResponse)
+	err := c.cc.Invoke(ctx, HistoryService_UpdateWorkflowExecutionOptions_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -901,6 +982,78 @@ func (c *historyServiceClient) ListTasks(ctx context.Context, in *ListTasksReque
 	return out, nil
 }
 
+func (c *historyServiceClient) CompleteNexusOperation(ctx context.Context, in *CompleteNexusOperationRequest, opts ...grpc.CallOption) (*CompleteNexusOperationResponse, error) {
+	out := new(CompleteNexusOperationResponse)
+	err := c.cc.Invoke(ctx, HistoryService_CompleteNexusOperation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) InvokeStateMachineMethod(ctx context.Context, in *InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*InvokeStateMachineMethodResponse, error) {
+	out := new(InvokeStateMachineMethodResponse)
+	err := c.cc.Invoke(ctx, HistoryService_InvokeStateMachineMethod_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error) {
+	out := new(DeepHealthCheckResponse)
+	err := c.cc.Invoke(ctx, HistoryService_DeepHealthCheck_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error) {
+	out := new(SyncWorkflowStateResponse)
+	err := c.cc.Invoke(ctx, HistoryService_SyncWorkflowState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) UpdateActivityOptions(ctx context.Context, in *UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityOptionsResponse, error) {
+	out := new(UpdateActivityOptionsResponse)
+	err := c.cc.Invoke(ctx, HistoryService_UpdateActivityOptions_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) PauseActivity(ctx context.Context, in *PauseActivityRequest, opts ...grpc.CallOption) (*PauseActivityResponse, error) {
+	out := new(PauseActivityResponse)
+	err := c.cc.Invoke(ctx, HistoryService_PauseActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) UnpauseActivity(ctx context.Context, in *UnpauseActivityRequest, opts ...grpc.CallOption) (*UnpauseActivityResponse, error) {
+	out := new(UnpauseActivityResponse)
+	err := c.cc.Invoke(ctx, HistoryService_UnpauseActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error) {
+	out := new(ResetActivityResponse)
+	err := c.cc.Invoke(ctx, HistoryService_ResetActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -999,6 +1152,11 @@ type HistoryServiceServer interface {
 	// in the history and immediately terminating the current execution instance.
 	// After reset, the history will grow from nextFirstEventId.
 	ResetWorkflowExecution(context.Context, *ResetWorkflowExecutionRequest) (*ResetWorkflowExecutionResponse, error)
+	// UpdateWorkflowExecutionOptions modifies the options of an existing workflow execution.
+	// Currently the option that can be updated is setting and unsetting a versioning behavior override.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateWorkflowExecutionOptions(context.Context, *UpdateWorkflowExecutionOptionsRequest) (*UpdateWorkflowExecutionOptionsResponse, error)
 	// RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
 	// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
@@ -1106,6 +1264,64 @@ type HistoryServiceServer interface {
 	// in the same shard. Calls to the persistence API will be batched by workflow run.
 	AddTasks(context.Context, *AddTasksRequest) (*AddTasksResponse, error)
 	ListTasks(context.Context, *ListTasksRequest) (*ListTasksResponse, error)
+	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
+	// canceled.
+	CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error)
+	InvokeStateMachineMethod(context.Context, *InvokeStateMachineMethodRequest) (*InvokeStateMachineMethodResponse, error)
+	// Deep health check history service dependencies health status
+	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
+	SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error)
+	// UpdateActivityOptions is called by the client to update the options of an activity
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error)
+	// PauseActivity pauses the execution of an activity specified by its ID.
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	//
+	// Pausing an activity means:
+	//   - If the activity is currently waiting for a retry or is running and subsequently fails,
+	//     it will not be rescheduled until it is unpaused.
+	//   - If the activity is already paused, calling this method will have no effect.
+	//   - If the activity is running and will finish successfully, activity will be completed.
+	//   - If the activity is running and will finish with failure:
+	//   - if there is no retry left - activity will be completed.
+	//   - if there are more retries left - activity will be paused.
+	//
+	// For long-running activities:
+	// - activity in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
+	// - The activity should respond to the cancellation accordingly.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	PauseActivity(context.Context, *PauseActivityRequest) (*PauseActivityResponse, error)
+	// UnpauseActivity unpauses the execution of an activity specified by its ID.
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	// There are two 'modes' of unpausing an activity:
+	// 'resume' - If the activity is paused, it will be resumed and scheduled for execution.
+	//   - If activity is currently running Unpause with 'resume' has no effect.
+	//   - if 'no_wait' flag is set and activity is waiting, the activity will be scheduled immediately.
+	//
+	// 'reset' - If the activity is paused, it will be reset to its initial state and (depending on parameters) scheduled for execution.
+	//   - If activity is currently running Unpause with 'reset' will reset the number of attempts.
+	//   - if 'no_wait' flag is set, the activity will be scheduled immediately.
+	//   - if 'reset_heartbeats' flag is set, the activity heartbeat timer and heartbeats will be reset.
+	//
+	// If activity is in waiting for retry and past it retry timeout, it will be scheduled immediately.
+	// Once activity is unpaused, all timeout timers will be regenerated.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UnpauseActivity(context.Context, *UnpauseActivityRequest) (*UnpauseActivityResponse, error)
+	// ResetActivity resets the execution of an activity specified by its ID.
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	// Resetting an activity means:
+	// * number of attempts will be reset to 0.
+	// * activity timeouts will be resetted.
+	// If activity currently running:
+	// *  if 'no_wait' flag is provided, new instance of activity will be scheduled immediately.
+	// *  if 'no_wait' flag is not provided, activity will be scheduled after current instance completes if needed.
+	// If 'reset_heartbeats' flag is set, the activity heartbeat timer and heartbeats will be reset.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1175,6 +1391,9 @@ func (UnimplementedHistoryServiceServer) DeleteWorkflowExecution(context.Context
 }
 func (UnimplementedHistoryServiceServer) ResetWorkflowExecution(context.Context, *ResetWorkflowExecutionRequest) (*ResetWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetWorkflowExecution not implemented")
+}
+func (UnimplementedHistoryServiceServer) UpdateWorkflowExecutionOptions(context.Context, *UpdateWorkflowExecutionOptionsRequest) (*UpdateWorkflowExecutionOptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateWorkflowExecutionOptions not implemented")
 }
 func (UnimplementedHistoryServiceServer) RequestCancelWorkflowExecution(context.Context, *RequestCancelWorkflowExecutionRequest) (*RequestCancelWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RequestCancelWorkflowExecution not implemented")
@@ -1298,6 +1517,30 @@ func (UnimplementedHistoryServiceServer) AddTasks(context.Context, *AddTasksRequ
 }
 func (UnimplementedHistoryServiceServer) ListTasks(context.Context, *ListTasksRequest) (*ListTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTasks not implemented")
+}
+func (UnimplementedHistoryServiceServer) CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CompleteNexusOperation not implemented")
+}
+func (UnimplementedHistoryServiceServer) InvokeStateMachineMethod(context.Context, *InvokeStateMachineMethodRequest) (*InvokeStateMachineMethodResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InvokeStateMachineMethod not implemented")
+}
+func (UnimplementedHistoryServiceServer) DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeepHealthCheck not implemented")
+}
+func (UnimplementedHistoryServiceServer) SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncWorkflowState not implemented")
+}
+func (UnimplementedHistoryServiceServer) UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptions not implemented")
+}
+func (UnimplementedHistoryServiceServer) PauseActivity(context.Context, *PauseActivityRequest) (*PauseActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PauseActivity not implemented")
+}
+func (UnimplementedHistoryServiceServer) UnpauseActivity(context.Context, *UnpauseActivityRequest) (*UnpauseActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnpauseActivity not implemented")
+}
+func (UnimplementedHistoryServiceServer) ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -1686,6 +1929,24 @@ func _HistoryService_ResetWorkflowExecution_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HistoryServiceServer).ResetWorkflowExecution(ctx, req.(*ResetWorkflowExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_UpdateWorkflowExecutionOptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateWorkflowExecutionOptionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).UpdateWorkflowExecutionOptions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_UpdateWorkflowExecutionOptions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).UpdateWorkflowExecutionOptions(ctx, req.(*UpdateWorkflowExecutionOptionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2436,6 +2697,150 @@ func _HistoryService_ListTasks_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_CompleteNexusOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompleteNexusOperationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).CompleteNexusOperation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_CompleteNexusOperation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).CompleteNexusOperation(ctx, req.(*CompleteNexusOperationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_InvokeStateMachineMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InvokeStateMachineMethodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).InvokeStateMachineMethod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_InvokeStateMachineMethod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).InvokeStateMachineMethod(ctx, req.(*InvokeStateMachineMethodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_DeepHealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeepHealthCheckRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).DeepHealthCheck(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_DeepHealthCheck_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).DeepHealthCheck(ctx, req.(*DeepHealthCheckRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_SyncWorkflowState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncWorkflowStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).SyncWorkflowState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_SyncWorkflowState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).SyncWorkflowState(ctx, req.(*SyncWorkflowStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_UpdateActivityOptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateActivityOptionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).UpdateActivityOptions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_UpdateActivityOptions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).UpdateActivityOptions(ctx, req.(*UpdateActivityOptionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_PauseActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).PauseActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_PauseActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).PauseActivity(ctx, req.(*PauseActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_UnpauseActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnpauseActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).UnpauseActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_UnpauseActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).UnpauseActivity(ctx, req.(*UnpauseActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_ResetActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).ResetActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_ResetActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).ResetActivity(ctx, req.(*ResetActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2526,6 +2931,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetWorkflowExecution",
 			Handler:    _HistoryService_ResetWorkflowExecution_Handler,
+		},
+		{
+			MethodName: "UpdateWorkflowExecutionOptions",
+			Handler:    _HistoryService_UpdateWorkflowExecutionOptions_Handler,
 		},
 		{
 			MethodName: "RequestCancelWorkflowExecution",
@@ -2686,6 +3095,38 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListTasks",
 			Handler:    _HistoryService_ListTasks_Handler,
+		},
+		{
+			MethodName: "CompleteNexusOperation",
+			Handler:    _HistoryService_CompleteNexusOperation_Handler,
+		},
+		{
+			MethodName: "InvokeStateMachineMethod",
+			Handler:    _HistoryService_InvokeStateMachineMethod_Handler,
+		},
+		{
+			MethodName: "DeepHealthCheck",
+			Handler:    _HistoryService_DeepHealthCheck_Handler,
+		},
+		{
+			MethodName: "SyncWorkflowState",
+			Handler:    _HistoryService_SyncWorkflowState_Handler,
+		},
+		{
+			MethodName: "UpdateActivityOptions",
+			Handler:    _HistoryService_UpdateActivityOptions_Handler,
+		},
+		{
+			MethodName: "PauseActivity",
+			Handler:    _HistoryService_PauseActivity_Handler,
+		},
+		{
+			MethodName: "UnpauseActivity",
+			Handler:    _HistoryService_UnpauseActivity_Handler,
+		},
+		{
+			MethodName: "ResetActivity",
+			Handler:    _HistoryService_ResetActivity_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

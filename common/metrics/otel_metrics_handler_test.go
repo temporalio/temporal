@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
@@ -39,9 +38,9 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
-	"go.temporal.io/server/common/log/tag"
-
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.uber.org/mock/gomock"
 )
 
 var (
@@ -120,7 +119,8 @@ func TestMeter(t *testing.T) {
 			Data: metricdata.Sum[int64]{
 				DataPoints: []metricdata.DataPoint[int64]{
 					{
-						Value: 8,
+						Value:     8,
+						Exemplars: []metricdata.Exemplar[int64]{},
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -134,6 +134,7 @@ func TestMeter(t *testing.T) {
 					{
 						Attributes: attribute.NewSet(attribute.String("taskqueue", "__sticky__")),
 						Value:      11,
+						Exemplars:  []metricdata.Exemplar[int64]{},
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -148,6 +149,7 @@ func TestMeter(t *testing.T) {
 
 						Attributes: attribute.NewSet(attribute.String("taskqueue", tagExcludedValue)),
 						Value:      14,
+						Exemplars:  []metricdata.Exemplar[int64]{},
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -164,6 +166,7 @@ func TestMeter(t *testing.T) {
 						Min:          metricdata.NewExtrema[int64](int64(minLatency)),
 						Max:          metricdata.NewExtrema[int64](int64(maxLatency)),
 						Sum:          6503,
+						Exemplars:    []metricdata.Exemplar[int64]{},
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -177,6 +180,7 @@ func TestMeter(t *testing.T) {
 					{
 						Attributes: attribute.NewSet(attribute.String("location", "Mare Imbrium")),
 						Value:      100,
+						Exemplars:  []metricdata.Exemplar[float64]{},
 					},
 				},
 			},
@@ -191,6 +195,7 @@ func TestMeter(t *testing.T) {
 						Min:          metricdata.NewExtrema[int64](int64(testBytes)),
 						Max:          metricdata.NewExtrema[int64](int64(testBytes)),
 						Sum:          int64(testBytes),
+						Exemplars:    []metricdata.Exemplar[int64]{},
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -232,8 +237,8 @@ func recordMetrics(mp Handler) {
 	timer.Record(time.Duration(minLatency) * time.Millisecond)
 	timer.Record(time.Duration(maxLatency) * time.Millisecond)
 	histogram.Record(int64(testBytes))
-	hitsTaggedCounter.Record(11, TaskQueueTag("__sticky__"))
-	hitsTaggedExcludedCounter.Record(14, TaskQueueTag("filtered"))
+	hitsTaggedCounter.Record(11, UnsafeTaskQueueTag("__sticky__"))
+	hitsTaggedExcludedCounter.Record(14, UnsafeTaskQueueTag("filtered"))
 }
 
 type erroneousMeter struct {

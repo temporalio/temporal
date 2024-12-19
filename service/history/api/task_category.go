@@ -28,7 +28,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/service/history/tasks"
 )
 

@@ -30,11 +30,11 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.uber.org/mock/gomock"
 )
 
 func TestSessionEmitsMetricOnRefreshError(t *testing.T) {

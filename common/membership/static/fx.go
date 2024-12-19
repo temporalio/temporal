@@ -27,10 +27,9 @@ package static
 import (
 	"fmt"
 
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
+	"go.uber.org/fx"
 )
 
 func MembershipModule(

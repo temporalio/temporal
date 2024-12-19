@@ -26,15 +26,13 @@ package log
 
 import (
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 
+	"go.temporal.io/server/common/log/tag"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
-	"go.temporal.io/server/common/log/tag"
 )
 
 const (
@@ -97,7 +95,7 @@ func caller(skip int) string {
 	if !ok {
 		return ""
 	}
-	return filepath.Base(path) + ":" + strconv.Itoa(line)
+	return path + ":" + strconv.Itoa(line)
 }
 
 func (l *zapLogger) buildFieldsWithCallAt(tags []tag.Tag) []zap.Field {

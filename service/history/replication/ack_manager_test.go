@@ -30,13 +30,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -53,6 +51,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -65,6 +64,7 @@ type (
 		mockNamespaceRegistry *namespace.MockRegistry
 		mockMutableState      *workflow.MockMutableState
 		mockClusterMetadata   *cluster.MockMetadata
+		syncStateRetriever    *MockSyncStateRetriever
 
 		mockExecutionMgr *persistence.MockExecutionManager
 
@@ -115,14 +115,16 @@ func (s *ackManagerSuite) SetupTest() {
 
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	workflowCache := wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
-
+	workflowCache := wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	replicationProgressCache := NewProgressCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.syncStateRetriever = NewMockSyncStateRetriever(s.controller)
 	s.replicationAckManager = NewAckManager(
-		s.mockShard, workflowCache, nil, s.mockExecutionMgr, s.logger,
+		s.mockShard, workflowCache, nil, replicationProgressCache, s.mockExecutionMgr, s.syncStateRetriever, s.logger,
 	).(*ackMgrImpl)
 }
 

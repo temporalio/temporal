@@ -29,7 +29,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -40,14 +39,13 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/proto"
-
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/proto"
 )
 
-func prettyPrintJSONObject(o interface{}) {
+func prettyPrintJSONObject(c *cli.Context, o interface{}) {
 	var b []byte
 	var err error
 	if pb, ok := o.(proto.Message); ok {
@@ -58,11 +56,12 @@ func prettyPrintJSONObject(o interface{}) {
 	}
 
 	if err != nil {
-		fmt.Printf("Error when try to print pretty: %v\n", err)
-		fmt.Println(o)
+		fmt.Fprintf(c.App.ErrWriter, "Error when trying to pretty-print: %v\n%v\n", err, o)
+		return
 	}
-	_, _ = os.Stdout.Write(b)
-	fmt.Println()
+
+	_, _ = c.App.Writer.Write(b)
+	_, _ = c.App.Writer.Write([]byte("\n"))
 }
 
 func getRequiredOption(c *cli.Context, optionName string) (string, error) {
@@ -231,14 +230,14 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 		pageItems = append(pageItems, item)
 		if len(pageItems) == pageSize || !iter.HasNext() {
 			if isTableView {
-				if err := printTable(pageItems, os.Stdout); err != nil {
+				if err := printTable(pageItems, c.App.Writer); err != nil {
 					return err
 				}
 			} else {
-				prettyPrintJSONObject(pageItems)
+				prettyPrintJSONObject(c, pageItems)
 			}
 
-			if !more || !showNextPage() {
+			if !more || !showNextPage(c.App.Writer) {
 				break
 			}
 			pageItems = pageItems[:0]
@@ -261,10 +260,12 @@ func printTable(items []interface{}, writer io.Writer) error {
 	}
 
 	var fields []string
+	var exportedFields []int
 	t := e.Type()
 	for i := 0; i < e.NumField(); i++ {
 		if exportRgx.MatchString(t.Field(i).Name) {
 			fields = append(fields, t.Field(i).Name)
+			exportedFields = append(exportedFields, i)
 		}
 	}
 
@@ -279,7 +280,7 @@ func printTable(items []interface{}, writer io.Writer) error {
 			item = item.Elem()
 		}
 		var columns []string
-		for j := 0; j < len(fields); j++ {
+		for _, j := range exportedFields {
 			col := item.Field(j)
 			columns = append(columns, fmt.Sprintf("%v", col.Interface()))
 		}
@@ -291,8 +292,8 @@ func printTable(items []interface{}, writer io.Writer) error {
 	return nil
 }
 
-func showNextPage() bool {
-	fmt.Printf("Press %s to show next page, press %s to quit: ",
+func showNextPage(wr io.Writer) bool {
+	fmt.Fprintf(wr, "Press %s to show next page, press %s to quit: ",
 		color.GreenString("Enter"), color.RedString("any other key then Enter"))
 	var input string
 	_, _ = fmt.Scanln(&input)

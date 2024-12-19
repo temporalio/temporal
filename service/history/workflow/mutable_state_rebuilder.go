@@ -37,7 +37,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -112,7 +111,9 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	if err != nil {
 		return nil, err
 	}
-	// must generate the activity timer / user timer at the very end
+	// TODO: There doesn't seem to be a good reason to generate tasks here since they'll be generated eventually when we
+	// close the transaction.
+	// Previously this comment was here: must generate the activity timer / user timer at the very end
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
 	if err := taskGenerator.GenerateActivityTimerTasks(); err != nil {
 		return nil, err
@@ -254,6 +255,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 				attributes.GetSuggestContinueAsNew(),
 				attributes.GetHistorySizeBytes(),
 				attributes.GetWorkerVersion(),
+				attributes.GetBuildIdRedirectCounter(),
 			)
 			if err != nil {
 				return nil, err
@@ -327,7 +329,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 			if err := taskGenerator.GenerateActivityTasks(
-				event,
+				event.GetEventId(),
 			); err != nil {
 				return nil, err
 			}
@@ -660,7 +662,6 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if err := b.mutableState.ApplyWorkflowExecutionUpdateAdmittedEvent(event, firstEvent.GetEventId()); err != nil {
 				return nil, err
 			}
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED:
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
 			if err := b.mutableState.ApplyWorkflowExecutionUpdateAcceptedEvent(event); err != nil {
 				return nil, err
@@ -675,7 +676,13 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			return nil, serviceerror.NewUnimplemented("Workflow/activity property modification not implemented")
 
 		default:
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
+			def, ok := b.shard.StateMachineRegistry().EventDefinition(event.GetEventType())
+			if !ok {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
+			}
+			if err := def.Apply(b.mutableState.HSM(), event); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -715,9 +722,10 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 		sameWorkflowChain = newRunFirstRunID == b.mutableState.GetExecutionInfo().FirstExecutionRunId
 	}
 
+	var err error
 	var newRunMutableState MutableState
 	if sameWorkflowChain {
-		newRunMutableState = NewMutableStateInChain(
+		newRunMutableState, err = NewMutableStateInChain(
 			b.shard,
 			b.shard.GetEventsCache(),
 			b.logger,
@@ -727,6 +735,9 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
 			b.mutableState,
 		)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		newRunMutableState = NewMutableState(
 			b.shard,
@@ -741,7 +752,7 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 
 	newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableState)
 
-	_, err := newRunStateBuilder.ApplyEvents(
+	_, err = newRunStateBuilder.ApplyEvents(
 		ctx,
 		namespaceID,
 		uuid.New(),

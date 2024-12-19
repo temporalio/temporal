@@ -28,7 +28,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 

@@ -27,15 +27,8 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync/atomic"
-
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
-
-	cnexus "go.temporal.io/server/common/nexus"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -44,7 +37,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	svc "go.temporal.io/server/client"
@@ -69,6 +61,10 @@ import (
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 )
 
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
@@ -80,37 +76,37 @@ type (
 
 		status int32
 
-		logger                  log.Logger
-		config                  *Config
-		esClient                esclient.Client
-		sdkClientFactory        sdk.ClientFactory
-		metricsHandler          metrics.Handler
-		visibilityMgr           manager.VisibilityManager
-		saManager               searchattribute.Manager
-		healthServer            *health.Server
-		historyClient           resource.HistoryClient
-		clusterMetadataManager  persistence.ClusterMetadataManager
-		clusterMetadata         clustermetadata.Metadata
-		clientFactory           svc.Factory
-		incomingServiceClient   *NexusIncomingServiceClient
-		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
+		logger                 log.Logger
+		config                 *Config
+		esClient               esclient.Client
+		sdkClientFactory       sdk.ClientFactory
+		metricsHandler         metrics.Handler
+		visibilityMgr          manager.VisibilityManager
+		saManager              searchattribute.Manager
+		healthServer           *health.Server
+		historyClient          resource.HistoryClient
+		clusterMetadataManager persistence.ClusterMetadataManager
+		clusterMetadata        clustermetadata.Metadata
+		clientFactory          svc.Factory
+		namespaceRegistry      namespace.Registry
+		nexusEndpointClient    *NexusEndpointClient
 	}
 
 	NewOperatorHandlerImplArgs struct {
-		config                  *Config
-		EsClient                esclient.Client
-		Logger                  log.Logger
-		sdkClientFactory        sdk.ClientFactory
-		MetricsHandler          metrics.Handler
-		VisibilityMgr           manager.VisibilityManager
-		SaManager               searchattribute.Manager
-		healthServer            *health.Server
-		historyClient           resource.HistoryClient
-		clusterMetadataManager  persistence.ClusterMetadataManager
-		clusterMetadata         clustermetadata.Metadata
-		clientFactory           svc.Factory
-		incomingServiceClient   *NexusIncomingServiceClient
-		outgoingServiceRegistry *cnexus.OutgoingServiceRegistry
+		config                 *Config
+		EsClient               esclient.Client
+		Logger                 log.Logger
+		sdkClientFactory       sdk.ClientFactory
+		MetricsHandler         metrics.Handler
+		VisibilityMgr          manager.VisibilityManager
+		SaManager              searchattribute.Manager
+		healthServer           *health.Server
+		historyClient          resource.HistoryClient
+		clusterMetadataManager persistence.ClusterMetadataManager
+		clusterMetadata        clustermetadata.Metadata
+		clientFactory          svc.Factory
+		namespaceRegistry      namespace.Registry
+		nexusEndpointClient    *NexusEndpointClient
 	}
 )
 
@@ -126,21 +122,21 @@ func NewOperatorHandlerImpl(
 ) *OperatorHandlerImpl {
 
 	handler := &OperatorHandlerImpl{
-		logger:                  args.Logger,
-		status:                  common.DaemonStatusInitialized,
-		config:                  args.config,
-		esClient:                args.EsClient,
-		sdkClientFactory:        args.sdkClientFactory,
-		metricsHandler:          args.MetricsHandler,
-		visibilityMgr:           args.VisibilityMgr,
-		saManager:               args.SaManager,
-		healthServer:            args.healthServer,
-		historyClient:           args.historyClient,
-		clusterMetadataManager:  args.clusterMetadataManager,
-		clusterMetadata:         args.clusterMetadata,
-		clientFactory:           args.clientFactory,
-		incomingServiceClient:   args.incomingServiceClient,
-		outgoingServiceRegistry: args.outgoingServiceRegistry,
+		logger:                 args.Logger,
+		status:                 common.DaemonStatusInitialized,
+		config:                 args.config,
+		esClient:               args.EsClient,
+		sdkClientFactory:       args.sdkClientFactory,
+		metricsHandler:         args.MetricsHandler,
+		visibilityMgr:          args.VisibilityMgr,
+		saManager:              args.SaManager,
+		healthServer:           args.healthServer,
+		historyClient:          args.historyClient,
+		clusterMetadataManager: args.clusterMetadataManager,
+		clusterMetadata:        args.clusterMetadata,
+		clientFactory:          args.clientFactory,
+		namespaceRegistry:      args.namespaceRegistry,
+		nexusEndpointClient:    args.nexusEndpointClient,
 	}
 
 	return handler
@@ -618,6 +614,40 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, errUnableDeleteSystemNamespace
 	}
 
+	if !h.config.AllowDeleteNamespaceIfNexusEndpointTarget() {
+		// Get the namespace name in case the request is to delete by ID so we can verify that this namespace is not
+		// associated with a Nexus endpoint.
+		requestNSName := request.GetNamespace()
+		if request.GetNamespaceId() != "" {
+			nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
+			if err != nil {
+				return nil, err
+			}
+			requestNSName = nsName.String()
+		}
+
+		// Prevent deletion of a namespace that is targeted by a Nexus endpoint.
+		var nextPageToken []byte
+		for {
+			resp, err := h.nexusEndpointClient.List(ctx, &operatorservice.ListNexusEndpointsRequest{
+				// Don't specify PageSize and fallback to default.
+				NextPageToken: nextPageToken,
+			})
+			if err != nil {
+				return nil, err
+			}
+			for _, entry := range resp.GetEndpoints() {
+				if nsName := entry.GetSpec().GetTarget().GetWorker().GetNamespace(); nsName == requestNSName {
+					return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot delete a namespace that is a target of a Nexus endpoint (%s)", entry.GetSpec().GetName()))
+				}
+			}
+			nextPageToken = resp.NextPageToken
+			if len(nextPageToken) == 0 {
+				break
+			}
+		}
+	}
+
 	namespaceDeleteDelay := h.config.DeleteNamespaceNamespaceDeleteDelay()
 	if request.NamespaceDeleteDelay != nil {
 		namespaceDeleteDelay = request.NamespaceDeleteDelay.AsDuration()
@@ -650,17 +680,13 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, deletenamespace.WorkflowName, err))
 	}
 
-	scope := h.metricsHandler.WithTags(metrics.OperationTag(metrics.OperatorDeleteNamespaceScope))
-
 	// Wait for workflow to complete.
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		metrics.DeleteNamespaceWorkflowFailuresCount.With(scope).Record(1)
 		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
 		return nil, serviceerror.NewSystemWorkflow(execution, err)
 	}
-	metrics.DeleteNamespaceWorkflowSuccessCount.With(scope).Record(1)
 
 	return &operatorservice.DeleteNamespaceResponse{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),
@@ -715,7 +741,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
-			HttpAddress:              request.GetFrontendHttpAddress(),
+			HttpAddress:              resp.GetHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
@@ -764,7 +790,6 @@ func (h *OperatorHandlerImpl) ListClusters(
 	request *operatorservice.ListClustersRequest,
 ) (_ *operatorservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -786,6 +811,7 @@ func (h *OperatorHandlerImpl) ListClusters(
 			ClusterName:            clusterResp.GetClusterName(),
 			ClusterId:              clusterResp.GetClusterId(),
 			Address:                clusterResp.GetClusterAddress(),
+			HttpAddress:            clusterResp.GetHttpAddress(),
 			InitialFailoverVersion: clusterResp.GetInitialFailoverVersion(),
 			HistoryShardCount:      clusterResp.GetHistoryShardCount(),
 			IsConnectionEnabled:    clusterResp.GetIsConnectionEnabled(),
@@ -833,112 +859,57 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 	return nil
 }
 
-func (h *OperatorHandlerImpl) CreateNexusIncomingService(
+func (h *OperatorHandlerImpl) CreateNexusEndpoint(
 	ctx context.Context,
-	request *operatorservice.CreateNexusIncomingServiceRequest,
-) (_ *operatorservice.CreateNexusIncomingServiceResponse, retErr error) {
+	request *operatorservice.CreateNexusEndpointRequest,
+) (_ *operatorservice.CreateNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.incomingServiceClient.Create(ctx, request)
+	return h.nexusEndpointClient.Create(ctx, request)
 }
 
-func (h *OperatorHandlerImpl) UpdateNexusIncomingService(
+func (h *OperatorHandlerImpl) UpdateNexusEndpoint(
 	ctx context.Context,
-	request *operatorservice.UpdateNexusIncomingServiceRequest,
-) (_ *operatorservice.UpdateNexusIncomingServiceResponse, retErr error) {
+	request *operatorservice.UpdateNexusEndpointRequest,
+) (_ *operatorservice.UpdateNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.incomingServiceClient.Update(ctx, request)
+	return h.nexusEndpointClient.Update(ctx, request)
 }
 
-func (h *OperatorHandlerImpl) DeleteNexusIncomingService(
+func (h *OperatorHandlerImpl) DeleteNexusEndpoint(
 	ctx context.Context,
-	request *operatorservice.DeleteNexusIncomingServiceRequest,
-) (_ *operatorservice.DeleteNexusIncomingServiceResponse, retErr error) {
+	request *operatorservice.DeleteNexusEndpointRequest,
+) (_ *operatorservice.DeleteNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.incomingServiceClient.Delete(ctx, request)
+	return h.nexusEndpointClient.Delete(ctx, request)
 }
 
-func (h *OperatorHandlerImpl) GetNexusIncomingService(
+func (h *OperatorHandlerImpl) GetNexusEndpoint(
 	ctx context.Context,
-	request *operatorservice.GetNexusIncomingServiceRequest,
-) (_ *operatorservice.GetNexusIncomingServiceResponse, retErr error) {
+	request *operatorservice.GetNexusEndpointRequest,
+) (_ *operatorservice.GetNexusEndpointResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.incomingServiceClient.Get(ctx, request)
+	return h.nexusEndpointClient.Get(ctx, request)
 }
 
-func (h *OperatorHandlerImpl) ListNexusIncomingServices(
+func (h *OperatorHandlerImpl) ListNexusEndpoints(
 	ctx context.Context,
-	request *operatorservice.ListNexusIncomingServicesRequest,
-) (_ *operatorservice.ListNexusIncomingServicesResponse, retErr error) {
+	request *operatorservice.ListNexusEndpointsRequest,
+) (_ *operatorservice.ListNexusEndpointsResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	if !h.config.EnableNexusAPIs() {
 		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
 	}
-	return h.incomingServiceClient.List(ctx, request)
-}
-
-func (h *OperatorHandlerImpl) GetNexusOutgoingService(
-	ctx context.Context,
-	req *operatorservice.GetNexusOutgoingServiceRequest,
-) (_ *operatorservice.GetNexusOutgoingServiceResponse, retErr error) {
-	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
-	return h.outgoingServiceRegistry.Get(ctx, req)
-}
-
-func (h *OperatorHandlerImpl) CreateNexusOutgoingService(
-	ctx context.Context,
-	req *operatorservice.CreateNexusOutgoingServiceRequest,
-) (_ *operatorservice.CreateNexusOutgoingServiceResponse, retErr error) {
-	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
-	return h.outgoingServiceRegistry.Create(ctx, req)
-}
-
-func (h *OperatorHandlerImpl) UpdateNexusOutgoingService(
-	ctx context.Context,
-	req *operatorservice.UpdateNexusOutgoingServiceRequest,
-) (_ *operatorservice.UpdateNexusOutgoingServiceResponse, retErr error) {
-	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
-	return h.outgoingServiceRegistry.Update(ctx, req)
-}
-
-func (h *OperatorHandlerImpl) DeleteNexusOutgoingService(
-	ctx context.Context,
-	req *operatorservice.DeleteNexusOutgoingServiceRequest,
-) (_ *operatorservice.DeleteNexusOutgoingServiceResponse, retErr error) {
-	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
-	return h.outgoingServiceRegistry.Delete(ctx, req)
-}
-
-func (h *OperatorHandlerImpl) ListNexusOutgoingServices(
-	ctx context.Context,
-	req *operatorservice.ListNexusOutgoingServicesRequest,
-) (_ *operatorservice.ListNexusOutgoingServicesResponse, retErr error) {
-	defer log.CapturePanic(h.logger, &retErr)
-	if !h.config.EnableNexusAPIs() {
-		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
-	}
-	return h.outgoingServiceRegistry.List(ctx, req)
+	return h.nexusEndpointClient.List(ctx, request)
 }

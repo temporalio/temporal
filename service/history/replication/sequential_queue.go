@@ -28,7 +28,6 @@ import (
 	"sync"
 
 	"github.com/dgryski/go-farm"
-
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	ctasks "go.temporal.io/server/common/tasks"

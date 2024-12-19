@@ -33,9 +33,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/workflow/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -66,6 +65,14 @@ func (h StubHandler) Histogram(_ string, _ metrics.MetricUnit) metrics.Histogram
 }
 
 func (h StubHandler) Stop(_ log.Logger) {}
+
+func (h StubHandler) Close() error {
+	return nil
+}
+
+func (h StubHandler) StartBatch(_ string) metrics.BatchHandler {
+	return h
+}
 
 func TestHistoryBuilder_IsDirty(t *testing.T) {
 	hb := HistoryBuilder{EventStore: EventStore{}}
@@ -106,7 +113,7 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 
 	t.Run("When ParentExecutionInfo is not nil should copy values to attributes", func(t *testing.T) {
 		hb := HistoryBuilder{}
-		parentInfo := &workflow.ParentExecutionInfo{Namespace: ns}
+		parentInfo := &workflowspb.ParentExecutionInfo{Namespace: ns}
 		startReq := &workflowservice.StartWorkflowExecutionRequest{}
 		req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq, ParentExecutionInfo: parentInfo}
 
@@ -162,14 +169,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			32,
 			&commandpb.ScheduleActivityTaskCommandAttributes{},
 		)
-		hb.AddActivityTaskStartedEvent(
-			42,
-			1,
-			"request-id-1",
-			"identity-1",
-			nil,
-			nil,
-		)
+		hb.AddActivityTaskStartedEvent(42, 1, "request-id-1", "identity-1", nil, nil, 0)
 		hb.workflowFinished = true
 		hb.FlushBufferToCurrentBatch()
 		if hb.memBufferBatch != nil || hb.dbBufferBatch != nil {
@@ -205,14 +205,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			t.Errorf("expected 1 event in memLatestBatch got %d", len(hb.memLatestBatch))
 		}
 		// add event to memBufferBatch
-		hb.AddActivityTaskStartedEvent(
-			42,
-			1,
-			"request-id-1",
-			"identity-1",
-			nil,
-			nil,
-		)
+		hb.AddActivityTaskStartedEvent(42, 1, "request-id-1", "identity-1", nil, nil, 0)
 		if len(hb.memBufferBatch) != 1 {
 			t.Errorf("expected 1 event in memBufferBatch got %d", len(hb.memBufferBatch))
 		}
@@ -234,14 +227,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			32,
 			&commandpb.ScheduleActivityTaskCommandAttributes{},
 		)
-		hb.AddActivityTaskStartedEvent(
-			42,
-			1,
-			"request-id-1",
-			"identity-1",
-			nil,
-			nil,
-		)
+		hb.AddActivityTaskStartedEvent(42, 1, "request-id-1", "identity-1", nil, nil, 0)
 		hb.FlushBufferToCurrentBatch()
 		if len(hb.memLatestBatch) != 3 {
 			t.Fatalf("wrong length of memLatestBatch after Flush expected 3 got %d", len(hb.memLatestBatch))
@@ -289,14 +275,7 @@ func TestHistoryBuilder_Finish(t *testing.T) {
 			32,
 			&commandpb.ScheduleActivityTaskCommandAttributes{},
 		)
-		hb.AddActivityTaskStartedEvent(
-			42,
-			1,
-			"request-id-1",
-			"identity-1",
-			nil,
-			nil,
-		)
+		hb.AddActivityTaskStartedEvent(42, 1, "request-id-1", "identity-1", nil, nil, 0)
 		result, err := hb.Finish(false)
 		if err != nil {
 			t.Fatal(err)
@@ -339,13 +318,7 @@ func TestHistoryBuilder_GetAndRemoveTimerFireEvent(t *testing.T) {
 			32,
 			&commandpb.ScheduleActivityTaskCommandAttributes{},
 		)
-		hb.AddActivityTaskStartedEvent(42,
-			1,
-			"request-id-1",
-			"identity-1",
-			nil,
-			nil,
-		)
+		hb.AddActivityTaskStartedEvent(42, 1, "request-id-1", "identity-1", nil, nil, 0)
 		memBufferSize := len(hb.memBufferBatch)
 		dbBufferSize := len(hb.dbBufferBatch)
 
@@ -1250,22 +1223,14 @@ func (s *sutTestingAdapter) ResetHistoryBuilder() {
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionStartedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	parentInfo := &workflow.ParentExecutionInfo{Namespace: "ns-1"}
+	parentInfo := &workflowspb.ParentExecutionInfo{Namespace: "ns-1"}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{}
 	req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq, ParentExecutionInfo: parentInfo}
 	return s.HistoryBuilder.AddWorkflowExecutionStartedEvent(s.today, req, nil, "prev-run-1", "first-run-1", "original-run-1")
 }
 
 func (s *sutTestingAdapter) AddWorkflowTaskStartedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddWorkflowTaskStartedEvent(
-		64,
-		"request-1",
-		"identity-1",
-		s.today,
-		false,
-		100,
-		nil,
-	)
+	return s.HistoryBuilder.AddWorkflowTaskStartedEvent(64, "request-1", "identity-1", s.today, false, 100, nil, 0)
 }
 
 func (s *sutTestingAdapter) AddWorkflowTaskCompletedEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1277,6 +1242,8 @@ func (s *sutTestingAdapter) AddWorkflowTaskCompletedEvent(_ ...eventConfig) *his
 		nil,
 		nil,
 		nil,
+		nil,
+		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
 	)
 }
 
@@ -1321,7 +1288,7 @@ func (s *sutTestingAdapter) AddWorkflowTaskScheduledEvent(_ ...eventConfig) *his
 
 func (s *sutTestingAdapter) AddActivityTaskStartedEvent(optionalConfig ...eventConfig) *historypb.HistoryEvent {
 	config := getConfigOrDefault(optionalConfig)
-	return s.HistoryBuilder.AddActivityTaskStartedEvent(config.scheduledId, 1, "request-1", "identity-1", nil, nil)
+	return s.HistoryBuilder.AddActivityTaskStartedEvent(config.scheduledId, 1, "request-1", "identity-1", nil, nil, 0)
 }
 
 func (s *sutTestingAdapter) AddActivityTaskCompletedEvent(optionalConfig ...eventConfig) *historypb.HistoryEvent {
@@ -1357,7 +1324,7 @@ func (s *sutTestingAdapter) AddTimeoutWorkflowEvent(_ ...eventConfig) *historypb
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionTerminatedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddWorkflowExecutionTerminatedEvent("no reason to terminate", nil, "identity-secret")
+	return s.HistoryBuilder.AddWorkflowExecutionTerminatedEvent("no reason to terminate", nil, "identity-secret", nil)
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionUpdateAcceptedEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1494,7 +1461,7 @@ func (s *sutTestingAdapter) AddWorkflowExecutionSignaledEvent(_ ...eventConfig) 
 		nil,
 		"identity-1",
 		nil,
-		false,
+		nil,
 		nil,
 	)
 }

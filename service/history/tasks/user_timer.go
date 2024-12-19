@@ -39,20 +39,11 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
-		Version             int64
 	}
 )
 
 func (u *UserTimerTask) GetKey() Key {
 	return NewKey(u.VisibilityTimestamp, u.TaskID)
-}
-
-func (u *UserTimerTask) GetVersion() int64 {
-	return u.Version
-}
-
-func (u *UserTimerTask) SetVersion(version int64) {
-	u.Version = version
 }
 
 func (u *UserTimerTask) GetTaskID() int64 {

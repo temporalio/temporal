@@ -47,12 +47,13 @@ const (
 	StateTransitionCount  = "StateTransitionCount"
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
-	BuildIds              = "BuildIds"
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 	HistorySizeBytes      = "HistorySizeBytes"
 	ParentWorkflowID      = "ParentWorkflowId"
 	ParentRunID           = "ParentRunId"
+	RootWorkflowID        = "RootWorkflowId"
+	RootRunID             = "RootRunId"
 
 	TemporalNamespaceDivision = "TemporalNamespaceDivision"
 
@@ -73,6 +74,30 @@ const (
 	// Query clause that mentions TemporalNamespaceDivision to disable special handling of that
 	// search attribute in visibility.
 	matchAnyNamespaceDivision = TemporalNamespaceDivision + ` IS NULL OR ` + TemporalNamespaceDivision + ` IS NOT NULL`
+
+	// A user may specify a ScheduleID in a query even if a ScheduleId search attribute isn't defined for the namespace.
+	// In such a case, ScheduleId is effectively a fake search attribute. Of course, a user may optionally choose to
+	// define a custom ScheduleId search attribute, in which case the query using the ScheduleId would operate just like
+	// any other custom search attribute.
+	ScheduleID = "ScheduleId"
+
+	// TemporalPauseInfo is a search attribute that stores the information about paused entities in the workflow.
+	// Format of a single paused entity: "<key>:<value>".
+	//  * <key> is something that can be used to identify the filtering condition
+	//  * <value> is the value of the corresponding filtering condition.
+	// examples:
+	//   - for paused activities, manual pause, we may have 2 <key>:<value> pairs:
+	//     * "Activity:MyCoolActivityType"
+	//     * "Reason:ManualActivityPause"
+	//     * or
+	//     * "Policy:<some policy id>"
+	//   - for paused workflows, we may have the following <key>:<value> pairs:
+	//     * "Workflow:WorkflowID"
+	//     * "Reason:ManualWorkflowPause"
+	TemporalPauseInfo = "TemporalPauseInfo"
+
+	// Used for Worker Versioning
+	BuildIds = "BuildIds"
 )
 
 var (
@@ -92,6 +117,8 @@ var (
 		HistorySizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
 		ParentWorkflowID:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		ParentRunID:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RootWorkflowID:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RootRunID:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
@@ -105,6 +132,7 @@ var (
 		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.
@@ -134,6 +162,8 @@ var (
 		MemoEncoding:         "encoding",
 		ParentWorkflowID:     "parent_workflow_id",
 		ParentRunID:          "parent_run_id",
+		RootWorkflowID:       "root_workflow_id",
+		RootRunID:            "root_run_id",
 	}
 
 	sqlDbCustomSearchAttributes = map[string]enumspb.IndexedValueType{

@@ -26,7 +26,6 @@ package sql
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -44,6 +43,7 @@ func extractCurrentWorkflowConflictError(
 			State:            enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
 			LastWriteVersion: 0,
+			StartTime:        nil,
 		}
 	}
 
@@ -54,5 +54,6 @@ func extractCurrentWorkflowConflictError(
 		State:            currentRow.State,
 		Status:           currentRow.Status,
 		LastWriteVersion: currentRow.LastWriteVersion,
+		StartTime:        currentRow.StartTime,
 	}
 }

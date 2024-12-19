@@ -30,7 +30,6 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -51,7 +50,6 @@ type (
 			nsID namespace.ID,
 			we *commonpb.WorkflowExecution,
 			ms workflow.MutableState,
-			workflowClosedVersion int64,
 		) error
 		DeleteWorkflowExecution(
 			ctx context.Context,
@@ -108,10 +106,9 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	nsID namespace.ID,
 	we *commonpb.WorkflowExecution,
 	ms workflow.MutableState,
-	workflowClosedVersion int64,
 ) error {
 
-	taskGenerator := workflow.NewTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
+	taskGenerator := workflow.GetTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
 
 	// We can make this task immediately because the task itself will keep rescheduling itself until the workflow is
 	// closed before actually deleting the workflow.
@@ -120,7 +117,6 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		return err
 	}
 
-	deleteTask.Version = workflowClosedVersion
 	return m.shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: m.shardContext.GetShardID(),
 		// RangeID is set by shardContext
@@ -173,6 +169,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		return err
 	}
 
+	executionInfo := ms.GetExecutionInfo()
 	if err := m.shardContext.DeleteWorkflowExecution(
 		ctx,
 		definition.WorkflowKey{
@@ -181,7 +178,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 			RunID:       we.GetRunId(),
 		},
 		currentBranchToken,
-		ms.GetExecutionInfo().GetCloseVisibilityTaskId(),
+		executionInfo.GetCloseVisibilityTaskId(),
+		executionInfo.GetCloseTime().AsTime(),
 		stage,
 	); err != nil {
 		return err

@@ -30,15 +30,14 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
-
 	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
@@ -51,32 +50,31 @@ func Invoke(
 	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	updateRef := req.GetRequest().GetUpdateRef()
 	wfexec := updateRef.GetWorkflowExecution()
-	wfKey, upd, ok, err := func() (*definition.WorkflowKey, *update.Update, bool, error) {
+	wfKey, upd, err := func() (*definition.WorkflowKey, *update.Update, error) {
 		workflowLease, err := ctxLookup.GetWorkflowLease(
 			ctx,
 			nil,
-			api.BypassMutableStateConsistencyPredicate,
 			definition.NewWorkflowKey(
 				req.GetNamespaceId(),
 				wfexec.GetWorkflowId(),
 				wfexec.GetRunId(),
 			),
-			workflow.LockPriorityHigh,
+			locks.PriorityHigh,
 		)
 		if err != nil {
-			return nil, nil, false, err
+			return nil, nil, err
 		}
 		release := workflowLease.GetReleaseFn()
 		defer release(nil)
 		wfCtx := workflowLease.GetContext()
-		upd, found := wfCtx.UpdateRegistry(ctx, nil).Find(ctx, updateRef.UpdateId)
+		upd := wfCtx.UpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
 		wfKey := wfCtx.GetWorkflowKey()
-		return &wfKey, upd, found, nil
+		return &wfKey, upd, nil
 	}()
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
+	if upd == nil {
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("update %q not found", updateRef.GetUpdateId()))
 	}
 

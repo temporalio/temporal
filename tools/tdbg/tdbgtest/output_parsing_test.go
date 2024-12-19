@@ -92,7 +92,6 @@ func TestParseDLQMessages(t *testing.T) {
 		"tdbg",
 		"--" + tdbg.FlagYes,
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"read",
 		"--" + tdbg.FlagDLQType, "1",
 		"--" + tdbg.FlagTargetCluster, "test-target-cluster",

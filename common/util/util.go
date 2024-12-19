@@ -27,11 +27,12 @@
 package util
 
 import (
+	"context"
+	"maps"
 	"sort"
 	"time"
 
-	"golang.org/x/exp/constraints"
-	"golang.org/x/exp/maps"
+	expconstraints "golang.org/x/exp/constraints"
 )
 
 // MinTime returns the earlier of two given time.Time
@@ -58,7 +59,7 @@ func NextAlignedTime(t time.Time, align time.Duration) time.Time {
 
 // SortSlice sorts the given slice of an ordered type.
 // Sort is not guaranteed to be stable.
-func SortSlice[S ~[]E, E constraints.Ordered](slice S) {
+func SortSlice[S ~[]E, E expconstraints.Ordered](slice S) {
 	sort.Slice(slice, func(i, j int) bool {
 		return slice[i] < slice[j]
 	})
@@ -168,19 +169,17 @@ func RepeatSlice[T any](xs []T, n int) []T {
 	return ys
 }
 
-// Coalesce returns the first non-zero value of its arguments, or the zero value for the type
-// if all are zero.
-func Coalesce[T comparable](vals ...T) T {
-	var zero T
-	for _, v := range vals {
-		if v != zero {
-			return v
-		}
-	}
-	return zero
-}
-
 // Ptr returns a pointer to a copy of v.
 func Ptr[T any](v T) *T {
 	return &v
+}
+
+// InterruptibleSleep is like time.Sleep but can be interrupted by a context.
+func InterruptibleSleep(ctx context.Context, timeout time.Duration) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+	}
 }

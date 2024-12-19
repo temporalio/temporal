@@ -27,14 +27,12 @@ package replication
 import (
 	"context"
 
-	"go.uber.org/fx"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/fx"
 )
 
 type (
@@ -48,8 +46,9 @@ type (
 	}
 	// DLQWriteRequest is a request to write a task to the DLQ.
 	DLQWriteRequest struct {
-		ShardID             int32
+		SourceShardID       int32
 		SourceCluster       string
+		TargetShardID       int32
 		ReplicationTaskInfo *persistencespb.ReplicationTaskInfo
 	}
 	// ExecutionManager is a trimmed version of [go.temporal.io/server/common/persistence.ExecutionManager] that only
@@ -133,8 +132,9 @@ func (e *executionManagerDLQWriter) WriteTaskToDLQ(
 	return e.executionManager.PutReplicationTaskToDLQ(
 		ctx, &persistence.PutReplicationTaskToDLQRequest{
 			SourceClusterName: request.SourceCluster,
-			ShardID:           request.ShardID,
-			TaskInfo:          request.ReplicationTaskInfo,
+			// For dlq v1, this is target cluster shardID
+			ShardID:  request.TargetShardID,
+			TaskInfo: request.ReplicationTaskInfo,
 		},
 	)
 }
@@ -148,20 +148,22 @@ func (d *DLQWriterAdapter) WriteTaskToDLQ(
 	if err != nil {
 		return err
 	}
-	return d.dlqWriter.WriteTaskToDLQ(ctx, request.SourceCluster, d.currentClusterName, task)
+	return d.dlqWriter.WriteTaskToDLQ(ctx, request.SourceCluster, d.currentClusterName, int(request.SourceShardID), task)
 }
 
 // This is a helper function to make it easier to change the DLQWriteRequest format in the future.
 func writeTaskToDLQ(
 	ctx context.Context,
 	dlqWriter DLQWriter,
-	shardContext shard.Context,
+	sourceShardID int32,
 	sourceClusterName string,
+	targetShardID int32,
 	replicationTaskInfo *persistencespb.ReplicationTaskInfo,
 ) error {
 	return dlqWriter.WriteTaskToDLQ(ctx, DLQWriteRequest{
-		ShardID:             shardContext.GetShardID(),
+		SourceShardID:       sourceShardID,
 		SourceCluster:       sourceClusterName,
+		TargetShardID:       targetShardID,
 		ReplicationTaskInfo: replicationTaskInfo,
 	})
 }

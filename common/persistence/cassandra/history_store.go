@@ -30,7 +30,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/primitives"
@@ -70,18 +69,13 @@ const (
 type (
 	HistoryStore struct {
 		Session gocql.Session
-		Logger  log.Logger
 		p.HistoryBranchUtilImpl
 	}
 )
 
-func NewHistoryStore(
-	session gocql.Session,
-	logger log.Logger,
-) *HistoryStore {
+func NewHistoryStore(session gocql.Session) *HistoryStore {
 	return &HistoryStore{
 		Session: session,
-		Logger:  logger,
 	}
 }
 
@@ -312,7 +306,7 @@ func (h *HistoryStore) DeleteHistoryBranch(
 }
 
 func (h *HistoryStore) deleteBranchRangeNodes(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	treeID string,
 	branchID string,
 	beginNodeID int64,

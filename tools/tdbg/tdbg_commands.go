@@ -43,7 +43,6 @@ func getCommands(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	prompterFactory PrompterFactory,
 	taskBlobEncoder TaskBlobEncoder,
-	writer io.Writer,
 ) []*cli.Command {
 	return []*cli.Command{
 		{
@@ -60,7 +59,7 @@ func getCommands(
 		},
 		{
 			Name:        "history-host",
-			Aliases:     []string{"h"},
+			Aliases:     []string{"hh"},
 			Usage:       "Run admin operation on history host",
 			Subcommands: newAdminHistoryHostCommands(clientFactory),
 		},
@@ -84,14 +83,14 @@ func getCommands(
 				&cli.StringFlag{
 					Name:  FlagDLQVersion,
 					Usage: "Version of DLQ to manage, options: v1, v2",
-					Value: "v1",
+					Value: "v2",
 				},
 			},
 		},
 		{
 			Name:        "decode",
 			Usage:       "Decode payload",
-			Subcommands: newDecodeCommands(taskBlobEncoder, writer),
+			Subcommands: newDecodeCommands(taskBlobEncoder),
 		},
 	}
 }
@@ -220,6 +219,26 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 			},
 		},
 		{
+			Name:    "replicate",
+			Aliases: []string{},
+			Usage:   "Force replicate a workflow by generating replication tasks",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagWorkflowID,
+					Aliases: FlagWorkflowIDAlias,
+					Usage:   "Workflow ID",
+				},
+				&cli.StringFlag{
+					Name:    FlagRunID,
+					Aliases: FlagRunIDAlias,
+					Usage:   "Run ID",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminReplicateWorkflow(c, clientFactory)
+			},
+		},
+		{
 			Name:    "delete",
 			Aliases: []string{"del"},
 			Usage:   "Delete current workflow execution and the mutableState record",
@@ -243,15 +262,11 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 }
 
 func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRegistry tasks.TaskCategoryRegistry) []*cli.Command {
-	// There are two different flags for the task type, and they have slightly different semantics. The first is the
-	// task type for the list-tasks command, which is required and does not have a default. The second is the task type
+	// There are two different categories for the task type, and they have slightly
+	// different semantics. The first is the task category for the list-tasks command,
+	// which is required and does not have a default. The second is the task category
 	// for the remove-task command, which is optional and defaults to transfer.
-	taskTypeFlag := getTaskTypeFlag(taskCategoryRegistry)
-	listTasksCategory := *taskTypeFlag
-	listTasksCategory.Required = true
-	removeTaskCategory := *taskTypeFlag
-	removeTaskCategory.Value = tasks.CategoryTransfer.Name()
-
+	taskCategoryFlag := getTaskCategoryFlag(taskCategoryRegistry)
 	return []*cli.Command{
 		{
 			Name:    "describe",
@@ -269,7 +284,7 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 		},
 		{
 			Name:  "list-tasks",
-			Usage: "List tasks for given shard ID and task type",
+			Usage: "List tasks for given shard ID and task category",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  FlagMore,
@@ -285,7 +300,7 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 					Usage:    "The ID of the shard",
 					Required: true,
 				},
-				&listTasksCategory,
+				taskCategoryFlag,
 				&cli.Int64Flag{
 					Name:  FlagMinTaskID,
 					Usage: "Inclusive min taskID. Optional for transfer, replication, visibility tasks. Can't be specified for timer task",
@@ -334,17 +349,19 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 		{
 			Name:    "remove-task",
 			Aliases: []string{"rmtk"},
-			Usage:   "remove a task based on shardId, task type, taskId, and task visibility timestamp",
+			Usage:   "remove a task based on shardId, task category, taskId, and task visibility timestamp",
 			Flags: []cli.Flag{
 				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "shardId",
+					Name:     FlagShardID,
+					Usage:    "shardId",
+					Required: true,
 				},
 				&cli.Int64Flag{
-					Name:  FlagTaskID,
-					Usage: "taskId",
+					Name:     FlagTaskID,
+					Usage:    "taskId",
+					Required: true,
 				},
-				&removeTaskCategory,
+				taskCategoryFlag,
 				&cli.Int64Flag{
 					Name:  FlagTaskVisibilityTimestamp,
 					Usage: "task visibility timestamp in nano (required for removing timer task)",
@@ -357,15 +374,16 @@ func newAdminShardManagementCommands(clientFactory ClientFactory, taskCategoryRe
 	}
 }
 
-func getTaskTypeFlag(taskCategoryRegistry tasks.TaskCategoryRegistry) *cli.StringFlag {
+func getTaskCategoryFlag(taskCategoryRegistry tasks.TaskCategoryRegistry) *cli.StringFlag {
 	categories := taskCategoryRegistry.GetCategories()
 	options := make([]string, 0, len(categories))
 	for _, category := range categories {
 		options = append(options, category.Name())
 	}
 	flag := &cli.StringFlag{
-		Name:  FlagTaskType,
-		Usage: "Task type: " + strings.Join(options, ", "),
+		Name:     FlagTaskCategory,
+		Usage:    "Task category: " + strings.Join(options, ", "),
+		Required: true,
 	}
 	return flag
 }
@@ -504,6 +522,89 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminListTaskQueueTasks(c, clientFactory)
+			},
+		},
+		{
+			Name:  "describe-task-queue-partition",
+			Usage: "Describe information related to a task queue partition",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagNamespaceID,
+					Usage: "NamespaceId",
+					Value: "default",
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: activity, workflow, nexus (experimental)",
+				},
+				&cli.Int64Flag{
+					Name:  FlagPartitionID,
+					Usage: "Partition ID",
+					Value: 0,
+				},
+				&cli.StringFlag{
+					Name:  FlagStickyName,
+					Usage: "Sticky Name for a task queue partition, if present",
+					Value: "",
+				},
+				&cli.StringSliceFlag{
+					Name:  FlagBuildIDs,
+					Value: &cli.StringSlice{},
+					Usage: "Build IDs",
+				},
+				&cli.BoolFlag{
+					Name:  FlagUnversioned,
+					Usage: "Unversioned task queue partition",
+					Value: true,
+				},
+				&cli.BoolFlag{
+					Name:  FlagAllActive,
+					Usage: "All active task queue versions",
+					Value: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminDescribeTaskQueuePartition(c, clientFactory)
+			},
+		},
+		{
+			Name:  "force-unload-task-queue-partition",
+			Usage: "Forcefully unload a task queue partition",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagNamespaceID,
+					Usage: "NamespaceId",
+					Value: "default",
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: activity, workflow, nexus (experimental)",
+				},
+				&cli.Int64Flag{
+					Name:  FlagPartitionID,
+					Usage: "Partition ID",
+					Value: 0,
+				},
+				&cli.StringFlag{
+					Name:  FlagStickyName,
+					Usage: "Sticky Name for a task queue partition, if present",
+					Value: "",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminForceUnloadTaskQueuePartition(c, clientFactory)
 			},
 		},
 	}
@@ -691,7 +792,6 @@ func getDLQFlags(taskCategoryRegistry tasks.TaskCategoryRegistry) []cli.Flag {
 
 func newDecodeCommands(
 	taskBlobEncoder TaskBlobEncoder,
-	writer io.Writer,
 ) []*cli.Command {
 	return []*cli.Command{
 		{
@@ -778,7 +878,7 @@ func newDecodeCommands(
 					EncodingType: encodingType,
 					Data:         b,
 				}
-				if err := taskBlobEncoder.Encode(writer, taskCategoryID, &blob); err != nil {
+				if err := taskBlobEncoder.Encode(c.App.Writer, taskCategoryID, &blob); err != nil {
 					return fmt.Errorf("failed to decode task blob: %w", err)
 				}
 				return nil

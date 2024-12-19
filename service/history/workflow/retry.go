@@ -27,13 +27,10 @@ package workflow
 import (
 	"context"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/pborman/uuid"
-	"golang.org/x/exp/slices"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -41,14 +38,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type BackoffCalculatorAlgorithmFunc func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration
@@ -75,6 +73,11 @@ func getBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
+	// Check if the remote worker sent an application failure indicating a custom backoff duration.
+	delayedRetryDuration := nextRetryDelayFrom(failure)
+	if delayedRetryDuration != nil {
+		return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, makeBackoffAlgorithm(delayedRetryDuration))
+	}
 	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, ExponentialBackoffAlgorithm)
 }
 
@@ -138,7 +141,7 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
 			return !slices.Contains(
 				nonRetryableTypes,
-				common.TimeoutFailureTypePrefix+timeoutType.String(),
+				retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
 			)
 		}
 
@@ -300,7 +303,7 @@ func SetupNewWorkflowForRetryOrCron(
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow execution started event.")
 	}
-	var parentClock *clock.VectorClock
+	var parentClock *clockspb.VectorClock
 	if parentInfo != nil {
 		parentClock = parentInfo.Clock
 	}

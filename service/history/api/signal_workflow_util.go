@@ -28,7 +28,6 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"

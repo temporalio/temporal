@@ -30,13 +30,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -79,6 +77,22 @@ func (s *sequentialSchedulerSuite) TestSubmitProcess_Running_Success() {
 	mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 	mockTask.EXPECT().Execute().Return(nil).Times(1)
 	mockTask.EXPECT().Ack().Do(func() { testWaitGroup.Done() }).Times(1)
+
+	s.scheduler.Submit(mockTask)
+
+	testWaitGroup.Wait()
+}
+
+func (s *sequentialSchedulerSuite) TestSubmitProcess_Running_Panic_ShouldCapturePanicAndNackTask() {
+	testWaitGroup := sync.WaitGroup{}
+	testWaitGroup.Add(1)
+
+	mockTask := NewMockTask(s.controller)
+	mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
+	mockTask.EXPECT().Execute().DoAndReturn(func() {
+		panic("random panic")
+	}).Times(1)
+	mockTask.EXPECT().Nack(gomock.Any()).Do(func(arg interface{}) { testWaitGroup.Done() }).Times(1)
 
 	s.scheduler.Submit(mockTask)
 
@@ -225,8 +239,10 @@ func (s *sequentialSchedulerSuite) newTestProcessor() *SequentialScheduler[*Mock
 	}
 	return NewSequentialScheduler[*MockTask](
 		&SequentialSchedulerOptions{
-			QueueSize:   1,
-			WorkerCount: dynamicconfig.GetIntPropertyFn(1),
+			QueueSize: 1,
+			WorkerCount: func(_ func(int)) (v int, cancel func()) {
+				return 1, func() {}
+			},
 		},
 		hashFn,
 		factory,

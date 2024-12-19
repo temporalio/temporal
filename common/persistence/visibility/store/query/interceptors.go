@@ -29,7 +29,7 @@ type (
 		Name(name string, usage FieldNameUsage) (string, error)
 	}
 	FieldValuesInterceptor interface {
-		Values(name string, values ...interface{}) ([]interface{}, error)
+		Values(name string, fieldName string, values ...interface{}) ([]interface{}, error)
 	}
 
 	NopFieldNameInterceptor struct{}
@@ -49,6 +49,6 @@ func (n *NopFieldNameInterceptor) Name(name string, _ FieldNameUsage) (string, e
 	return name, nil
 }
 
-func (n *NopFieldValuesInterceptor) Values(_ string, values ...interface{}) ([]interface{}, error) {
+func (n *NopFieldValuesInterceptor) Values(_ string, _ string, values ...interface{}) ([]interface{}, error) {
 	return values, nil
 }

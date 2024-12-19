@@ -38,23 +38,26 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
 	workflowTaskStateMachine struct {
-		ms *MutableStateImpl
+		ms             *MutableStateImpl
+		metricsHandler metrics.Handler
 	}
 )
 
@@ -65,9 +68,11 @@ const (
 
 func newWorkflowTaskStateMachine(
 	ms *MutableStateImpl,
+	metricsHandler metrics.Handler,
 ) *workflowTaskStateMachine {
 	return &workflowTaskStateMachine{
-		ms: ms,
+		ms:             ms,
+		metricsHandler: metricsHandler,
 	}
 }
 
@@ -110,8 +115,20 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskScheduledEvent(
 		HistorySizeBytes:      0,     // reset, will be recomputed on workflow task started
 	}
 
+	m.retainWorkflowTaskBuildIdInfo(workflowTask)
 	m.UpdateWorkflowTask(workflowTask)
 	return workflowTask, nil
+}
+
+// if this is a transient WFT (attempt > 1), we make sure to keep the following from the previous attempt:
+//   - BuildId of the previous attempt to be able to compare it with next attempt and renew tasks if it changes
+//   - BuildIdRedirectCounter so add the right BuildIdRedirectCounter to the WFT started event that will be
+//     created at WFT completion time
+func (m *workflowTaskStateMachine) retainWorkflowTaskBuildIdInfo(workflowTask *WorkflowTaskInfo) {
+	if workflowTask.Attempt > 1 {
+		workflowTask.BuildId = m.ms.executionInfo.WorkflowTaskBuildId
+		workflowTask.BuildIdRedirectCounter = m.ms.executionInfo.BuildIdRedirectCounter
+	}
 }
 
 func (m *workflowTaskStateMachine) ApplyTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
@@ -155,6 +172,7 @@ func (m *workflowTaskStateMachine) ApplyTransientWorkflowTaskScheduled() (*Workf
 		HistorySizeBytes:     0,     // reset, will be recomputed on workflow task started
 	}
 
+	m.retainWorkflowTaskBuildIdInfo(workflowTask)
 	m.UpdateWorkflowTask(workflowTask)
 	return workflowTask, nil
 }
@@ -169,6 +187,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	suggestContinueAsNew bool,
 	historySizeBytes int64,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectCounter int64,
 ) (*WorkflowTaskInfo, error) {
 	// When this function is called from ApplyEvents, workflowTask is nil.
 	// It is safe to look up the workflow task as it does not have to deal with transient workflow task case.
@@ -193,31 +212,42 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	}
 
 	workflowTask = &WorkflowTaskInfo{
-		Version:               version,
-		ScheduledEventID:      scheduledEventID,
-		StartedEventID:        startedEventID,
-		RequestID:             requestID,
-		WorkflowTaskTimeout:   workflowTask.WorkflowTaskTimeout,
-		Attempt:               workflowTask.Attempt,
-		StartedTime:           startedTime,
-		ScheduledTime:         workflowTask.ScheduledTime,
-		TaskQueue:             workflowTask.TaskQueue,
-		OriginalScheduledTime: workflowTask.OriginalScheduledTime,
-		Type:                  workflowTask.Type,
-		SuggestContinueAsNew:  suggestContinueAsNew,
-		HistorySizeBytes:      historySizeBytes,
+		Version:                version,
+		ScheduledEventID:       scheduledEventID,
+		StartedEventID:         startedEventID,
+		RequestID:              requestID,
+		WorkflowTaskTimeout:    workflowTask.WorkflowTaskTimeout,
+		Attempt:                workflowTask.Attempt,
+		StartedTime:            startedTime,
+		ScheduledTime:          workflowTask.ScheduledTime,
+		TaskQueue:              workflowTask.TaskQueue,
+		OriginalScheduledTime:  workflowTask.OriginalScheduledTime,
+		Type:                   workflowTask.Type,
+		SuggestContinueAsNew:   suggestContinueAsNew,
+		HistorySizeBytes:       historySizeBytes,
+		BuildIdRedirectCounter: redirectCounter,
+	}
+
+	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
+		if redirectCounter == 0 {
+			// this is the initial build ID, it should normally be persisted after scheduling the wf task,
+			// but setting it here again in case it failed to be persisted before.
+			err := m.ms.UpdateBuildIdAssignment(buildId)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// apply redirect if applicable
+			err := m.ms.ApplyBuildIdRedirect(scheduledEventID, buildId, redirectCounter)
+			if err != nil {
+				return nil, err
+			}
+		}
+		workflowTask.BuildId = buildId
+		workflowTask.BuildIdRedirectCounter = m.ms.GetExecutionInfo().GetBuildIdRedirectCounter()
 	}
 
 	m.UpdateWorkflowTask(workflowTask)
-
-	if versioningStamp.GetUseVersioning() && m.ms.GetLastWorkflowTaskStartedEventID() == common.EmptyEventTaskID &&
-		m.ms.GetInheritedBuildId() == "" {
-		// if this is the first workflow task and the build ID is not inherited, we update the wf assigned build ID
-		err := m.ms.UpdateBuildIdAssignment(versioningStamp.GetBuildId())
-		if err != nil {
-			return nil, err
-		}
-	}
 	return workflowTask, nil
 }
 
@@ -314,14 +344,17 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		m.ms.updatePendingEventIDs(m.ms.hBuilder.FlushBufferToCurrentBatch())
 	}
 	if m.ms.IsTransientWorkflowTask() {
-		lastWriteVersion, err := m.ms.GetLastWriteVersion()
+		// TODO: ideally this should be the version of the last started workflow task.
+		// but we are using the last event version here instead since there's no other
+		// events when there's a started workflow task.
+		lastEventVersion, err := m.ms.GetLastEventVersion()
 		if err != nil {
 			return nil, err
 		}
 
 		// If failover happened during transient workflow task,
 		// then reset the attempt to 1, and not use transient workflow task.
-		if m.ms.GetCurrentVersion() != lastWriteVersion {
+		if m.ms.GetCurrentVersion() != lastEventVersion {
 			m.ms.executionInfo.WorkflowTaskAttempt = 1
 			workflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 			createWorkflowTaskScheduledEvent = true
@@ -434,6 +467,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	taskQueue *taskqueuepb.TaskQueue,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
+	skipVersioningCheck bool,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -457,7 +492,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// that resulted in the successful completion.
 	suggestContinueAsNew, historySizeBytes := m.getHistorySizeInfo()
 
-	workflowTaskScheduledEventCreated := !m.ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
+	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, taskQueue, redirectInfo, skipVersioningCheck)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	workflowTaskScheduledEventCreated := scheduledEventCreatedForRedirect ||
+		(!m.ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
 
 	// If new events came since transient/speculative WT was scheduled or failover happened during lifetime of transient/speculative WT,
 	// transient/speculative WT needs to be converted to normal WT, i.e. WorkflowTaskScheduledEvent needs to be created now.
@@ -490,12 +531,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			suggestContinueAsNew,
 			historySizeBytes,
 			versioningStamp,
+			redirectCounter,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
 	}
 
-	workflowTask, err := m.ApplyWorkflowTaskStartedEvent(
+	workflowTask, err = m.ApplyWorkflowTaskStartedEvent(
 		workflowTask,
 		m.ms.GetCurrentVersion(),
 		scheduledEventID,
@@ -505,47 +547,146 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNew,
 		historySizeBytes,
 		versioningStamp,
+		redirectCounter,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	m.emitWorkflowTaskAttemptStats(workflowTask.Attempt)
 
 	// TODO merge active & passive task generation
-	if err := m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
+	if err = m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
 		scheduledEventID,
 	); err != nil {
 		return nil, nil, err
 	}
 
-	return startedEvent, workflowTask, err
+	return startedEvent, workflowTask, nil
 }
+
+// processBuildIdRedirectInfo validated possible build ID redirect based on the versioningStamp and redirectInfo.
+// If a valid redirect is being applied to a transient WFT, the transient WFT is converted to normal and a
+// scheduled event is created. In this case, the returned workflow info will be different from the given one and
+// `converted` will be true.
+// Also returns redirect counter that shall be used in the WFT started event.
+func (m *workflowTaskStateMachine) processBuildIdRedirectInfo(
+	versioningStamp *commonpb.WorkerVersionStamp,
+	workflowTask *WorkflowTaskInfo,
+	taskQueue *taskqueuepb.TaskQueue,
+	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
+	skipVersioningCheck bool,
+) (newWorkflowTask *WorkflowTaskInfo, converted bool, redirectCounter int64, err error) {
+	buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp)
+	if buildId == "" && (m.ms.GetAssignedBuildId() == "" || // unversioned workflow
+		skipVersioningCheck || // resetter may add WFT started events without stamps, it sets skipVersioningCheck=true
+		(taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY && m.ms.executionInfo.GetStickyTaskQueue() == taskQueue.GetName())) {
+		// build ID is expected to be empty for sticky queues until old versioning is removed [cleanup-old-wv]
+		return workflowTask, false, 0, nil
+	}
+
+	redirectCounter, err = m.ms.validateBuildIdRedirectInfo(versioningStamp, redirectInfo)
+	if err != nil {
+		return nil, false, redirectCounter, err
+	}
+
+	if m.ms.IsTransientWorkflowTask() && m.ms.GetExecutionInfo().GetWorkflowTaskBuildId() != buildId {
+		// we're retrying a workflow task and this attempt is on a different build ID, converting the transient wf task
+		// to a normal wf task by creating a scheduled event for it and setting its attempt to 1.
+		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
+			m.ms.CurrentTaskQueue(),
+			durationpb.New(workflowTask.WorkflowTaskTimeout),
+			// Preserving the number of previous attempts. This value shows the number of attempts made on the last
+			// build ID + 1 (because it's being reset to 1 for the next build ID. See bellow.)
+			workflowTask.Attempt,
+			workflowTask.ScheduledTime,
+		)
+		newWorkflowTask = m.getWorkflowTaskInfo()
+		newWorkflowTask.ScheduledEventID = scheduledEvent.GetEventId()
+		// Using 1 as the attempt in MS. it's needed so that the new WFT is not considered transient.
+		// TODO: maybe add a separate field in MS for flagging transient WFT instead of relying on attempt so that we
+		// can put total attempt count (across all build IDs) here?
+		newWorkflowTask.Attempt = 1
+		m.UpdateWorkflowTask(newWorkflowTask)
+		return newWorkflowTask, true, redirectCounter, nil
+	}
+	return workflowTask, false, redirectCounter, nil
+}
+
 func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskType enumsspb.WorkflowTaskType, request *workflowservice.RespondWorkflowTaskCompletedRequest) bool {
 	if workflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		// Only Speculative WT can skip WorkflowTaskCompletedEvent.
 		return false
 	}
+
 	if len(request.GetCommands()) != 0 {
 		// If worker returned commands, they will be converted to events, which must follow by WorkflowTaskCompletedEvent.
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("worker_returned_commands"))
 		return false
 	}
 
 	if request.GetForceCreateNewWorkflowTask() {
 		// If ForceCreateNewWorkflowTask is set to true, then this is a heartbeat response.
-		// New WT will be created as Normal and WorkflowTaskCompletedEvent for this WT is also must be written.
-		// In the future, if we decide not to write heartbeat of speculative WT to the history, this check should be removed,
-		// and extra logic should be added to create next WT as Speculative. Currently, new heartbeat WT is always created as Normal.
+		// New WFT will be created as Normal and WorkflowTaskCompletedEvent for this WFT is also must be written.
+		// In the future, if we decide not to write heartbeat of speculative WFT to the history, this check should be removed,
+		// and extra logic should be added to create next WFT as Speculative. Currently, new heartbeat WFT is always created as Normal.
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("force_create_task"))
+		return false
+	}
+
+	// Speculative WFT that has only Update rejection messages should be discarded (this function returns `true`).
+	// If speculative WFT also shipped events to the worker and was discarded, then
+	// next WFT will ship these events again. Unfortunately, old SDKs don't support receiving same events more than once.
+	// If SDK supports this, it will set DiscardSpeculativeWorkflowTaskWithEvents to `true`
+	// and server can discard speculative WFT even if it had events.
+
+	// Otherwise, server needs to determinate if there were events on this speculative WFT,
+	// i.e. last event in the history is WFTCompleted event.
+	// It is guaranteed that WFTStarted event is followed by WFTCompleted event and history tail might look like:
+	//   previous WFTStarted
+	//   previous WFTCompleted
+	//   --> NextEventID points here because it doesn't move for speculative WFT.
+	// In this case, the difference between NextEventID and LastCompletedWorkflowTaskStartedEventId is 2.
+	// If there are other events after WFTCompleted event, then the difference is > 2 and speculative WFT can't be discarded.
+	if !request.GetCapabilities().GetDiscardSpeculativeWorkflowTaskWithEvents() &&
+		m.ms.GetNextEventID() > m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2 {
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("interleaved_events"))
+		return false
+	}
+
+	// Even if worker supports receiving same events more than once,
+	// server still writes speculative WFT if it had too many events.
+	// This is to prevent shipping a big set of events to the worker over and over again,
+	// in case if Updates are constantly rejected.
+	if request.GetCapabilities().GetDiscardSpeculativeWorkflowTaskWithEvents() &&
+		m.ms.GetNextEventID() > m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2+int64(m.ms.config.DiscardSpeculativeWorkflowTaskMaximumEventsCount()) {
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("too_many_interleaved_events"))
 		return false
 	}
 
 	for _, message := range request.Messages {
 		if !message.GetBody().MessageIs((*updatepb.Rejection)(nil)) {
+			metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+				metrics.ReasonTag("update_accepted"))
 			return false
 		}
 	}
 
-	// Speculative WT can be dropped when response contains only rejection messages.
+	// Speculative WFT can be discarded when response contains only rejection messages.
 	// Empty messages list is equivalent to only rejection messages because server will reject all sent updates (if any).
+
+	// TODO: We should perform a shard ownership check here to prevent the case where the entire speculative workflow task
+	// is done on a stale mutable state and the fact that mutable state is stale caused workflow update requests to be rejected.
+	// NOTE: The AssertShardOwnership persistence API is not implemented in the repo.
+
+	metrics.SpeculativeWorkflowTaskRollbacks.With(m.metricsHandler).Record(1)
 	return true
 }
+
 func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	workflowTask *WorkflowTaskInfo,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
@@ -571,6 +712,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.Attempt,
 			workflowTask.ScheduledTime.UTC(),
 		)
+
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
 			workflowTask.ScheduledEventID,
@@ -580,6 +722,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
 			request.WorkerVersionStamp,
+			workflowTask.BuildIdRedirectCounter,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -594,6 +737,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.WorkerVersionStamp,
 		request.SdkMetadata,
 		request.MeteringMetadata,
+		request.Deployment,
+		request.VersioningBehavior,
 	)
 
 	err := m.afterAddWorkflowTaskCompletedEvent(event, limits)
@@ -636,6 +781,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
 			versioningStamp,
+			workflowTask.BuildIdRedirectCounter,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -700,6 +846,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			workflowTask.SuggestContinueAsNew,
 			workflowTask.HistorySizeBytes,
 			nil,
+			workflowTask.BuildIdRedirectCounter,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -744,11 +891,14 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		Type:                  enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED,
 		SuggestContinueAsNew:  false,
 		HistorySizeBytes:      0,
+		// need to retain Build ID of failed WF task to compare it with the build ID of next attempt
+		BuildId: m.ms.executionInfo.WorkflowTaskBuildId,
 	}
 	if incrementAttempt {
 		failWorkflowTaskInfo.Attempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
 		failWorkflowTaskInfo.ScheduledTime = m.ms.timeSource.Now().UTC()
 	}
+	m.retainWorkflowTaskBuildIdInfo(failWorkflowTaskInfo)
 	m.UpdateWorkflowTask(failWorkflowTaskInfo)
 }
 
@@ -813,6 +963,11 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew = workflowTask.SuggestContinueAsNew
 	m.ms.executionInfo.WorkflowTaskHistorySizeBytes = workflowTask.HistorySizeBytes
 
+	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
+	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
+
+	m.ms.workflowTaskUpdated = true
+
 	// NOTE: do not update task queue in execution info
 
 	m.ms.logger.Debug("Workflow task updated",
@@ -853,7 +1008,7 @@ func (m *workflowTaskStateMachine) GetStartedWorkflowTask() *WorkflowTaskInfo {
 }
 
 func (m *workflowTaskStateMachine) HadOrHasWorkflowTask() bool {
-	return m.HasPendingWorkflowTask() || m.ms.GetLastWorkflowTaskStartedEventID() != common.EmptyEventID
+	return m.HasPendingWorkflowTask() || m.ms.HasCompletedAnyWorkflowTask()
 }
 
 // GetWorkflowTaskByID returns details about the current workflow task by scheduled event ID.
@@ -886,6 +1041,12 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 		},
 	}
 
+	var versioningStamp *commonpb.WorkerVersionStamp
+	if workflowTask.BuildId != "" {
+		// fill out the stamp value of the transient WFT based on MS data
+		versioningStamp = &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: workflowTask.BuildId}
+	}
+
 	startedEvent := &historypb.HistoryEvent{
 		EventId:   workflowTask.StartedEventID,
 		EventTime: timestamppb.New(workflowTask.StartedTime),
@@ -898,6 +1059,7 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 				RequestId:            workflowTask.RequestID,
 				SuggestContinueAsNew: workflowTask.SuggestContinueAsNew,
 				HistorySizeBytes:     workflowTask.HistorySizeBytes,
+				WorkerVersion:        versioningStamp,
 			},
 		},
 	}
@@ -909,19 +1071,21 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 
 func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *WorkflowTaskInfo {
 	return &WorkflowTaskInfo{
-		Version:               m.ms.executionInfo.WorkflowTaskVersion,
-		ScheduledEventID:      m.ms.executionInfo.WorkflowTaskScheduledEventId,
-		StartedEventID:        m.ms.executionInfo.WorkflowTaskStartedEventId,
-		RequestID:             m.ms.executionInfo.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:   m.ms.executionInfo.WorkflowTaskTimeout.AsDuration(),
-		Attempt:               m.ms.executionInfo.WorkflowTaskAttempt,
-		StartedTime:           m.ms.executionInfo.WorkflowTaskStartedTime.AsTime(),
-		ScheduledTime:         m.ms.executionInfo.WorkflowTaskScheduledTime.AsTime(),
-		TaskQueue:             m.ms.CurrentTaskQueue(),
-		OriginalScheduledTime: m.ms.executionInfo.WorkflowTaskOriginalScheduledTime.AsTime(),
-		Type:                  m.ms.executionInfo.WorkflowTaskType,
-		SuggestContinueAsNew:  m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew,
-		HistorySizeBytes:      m.ms.executionInfo.WorkflowTaskHistorySizeBytes,
+		Version:                m.ms.executionInfo.WorkflowTaskVersion,
+		ScheduledEventID:       m.ms.executionInfo.WorkflowTaskScheduledEventId,
+		StartedEventID:         m.ms.executionInfo.WorkflowTaskStartedEventId,
+		RequestID:              m.ms.executionInfo.WorkflowTaskRequestId,
+		WorkflowTaskTimeout:    m.ms.executionInfo.WorkflowTaskTimeout.AsDuration(),
+		Attempt:                m.ms.executionInfo.WorkflowTaskAttempt,
+		StartedTime:            m.ms.executionInfo.WorkflowTaskStartedTime.AsTime(),
+		ScheduledTime:          m.ms.executionInfo.WorkflowTaskScheduledTime.AsTime(),
+		TaskQueue:              m.ms.CurrentTaskQueue(),
+		OriginalScheduledTime:  m.ms.executionInfo.WorkflowTaskOriginalScheduledTime.AsTime(),
+		Type:                   m.ms.executionInfo.WorkflowTaskType,
+		SuggestContinueAsNew:   m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew,
+		HistorySizeBytes:       m.ms.executionInfo.WorkflowTaskHistorySizeBytes,
+		BuildId:                m.ms.executionInfo.WorkflowTaskBuildId,
+		BuildIdRedirectCounter: m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter,
 	}
 }
 
@@ -935,16 +1099,82 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	limits WorkflowTaskCompletionLimits,
 ) error {
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
-	m.ms.executionInfo.LastWorkflowTaskStartedEventId = attrs.GetStartedEventId()
+	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
+
+	wftDeployment := attrs.GetDeployment()
+	wftBehavior := attrs.GetVersioningBehavior()
+	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
+
+	var completedTransition bool
+	if versioningInfo.GetDeploymentTransition() != nil {
+		// It's possible that the completed WFT is not yet from the current transition because when
+		// the transition started, the current wft was already started. In this case, we allow the
+		// started wft to run and when completed, we create another wft immediately.
+		if versioningInfo.DeploymentTransition.GetDeployment().Equal(wftDeployment) {
+			versioningInfo.DeploymentTransition = nil
+			completedTransition = true
+		}
+	}
+
+	if versioningInfo.GetDeploymentTransition() != nil {
+		// There is still a transition going on. We need to schedule a new WFT so it goes to the
+		// transition deployment this time.
+		if _, err := m.ms.AddWorkflowTaskScheduledEvent(
+			false,
+			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		); err != nil {
+			return err
+		}
+	} else {
+		// Deployment and behavior before applying the data came from the completed wft.
+		wfDeploymentBefore := m.ms.GetEffectiveDeployment()
+		wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
+
+		// Change deployment and behavior based on the completed wft.
+		if wfBehaviorBefore != wftBehavior || !wfDeploymentBefore.Equal(wftDeployment) {
+			if versioningInfo == nil {
+				versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+				m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
+			}
+			versioningInfo.Behavior = wftBehavior
+			versioningInfo.Deployment = wftDeployment
+		}
+
+		// Deployment and behavior after applying the data came from the completed wft.
+		wfDeploymentAfter := m.ms.GetEffectiveDeployment()
+		wfBehaviorAfter := m.ms.GetEffectiveVersioningBehavior()
+		// We reschedule activities if a transition was completed because during the transition
+		// ATs might have been dropped. Note that it is possible that transition completes and still
+		// `wfDeploymentBefore == wfDeploymentAfter`. Example: wf was on deployment1, started
+		// transition to deployment2, before completing the transition it changed the transition to
+		// deployment1 (maybe user rolled back current deployment), now the transition completes.
+		if completedTransition ||
+			// It is possible that this WFT is changing workflow's deployment even if there was no
+			// ongoing transition in the MS. That is possible when the wft is speculative. We still
+			// want to reschedule the activities so they are queued with the up-to-date directive.
+			!wfDeploymentBefore.Equal(wfDeploymentAfter) ||
+			// If effective behavior changes we also want to reschedule the pending activities, so
+			// they go to the right matching queues.
+			wfBehaviorBefore != wfBehaviorAfter {
+			if err := m.ms.reschedulePendingActivities(); err != nil {
+				return err
+			}
+		}
+	}
+
+	// TODO: create reset point based on attrs.Deployment instead of the build ID.
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
 		attrs.GetWorkerVersion().GetBuildId(),
 		event.GetEventId(),
 		limits.MaxResetPoints,
 	)
-	// For versioned workflows the search attributes should be already up-to-date based on the task started events.
-	// This is still useful for unversioned workers who report build ID.
+	// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
+	// search attribute based on the execution_info.deployment and/or override deployment if one exists. We must update the
+	// search attribute here because the reachability deployment may have just been changed by CompleteDeploymentTransition.
+	// This is also useful for unversioned workers.
+	// For v1 and v2 versioned workflows the search attributes should be already up-to-date based on the task started events.
 	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
@@ -994,7 +1224,7 @@ func (m *workflowTaskStateMachine) getStartToCloseTimeout(
 	policy := backoff.NewExponentialRetryPolicy(workflowTaskRetryInitialInterval).
 		WithMaximumInterval(m.ms.shard.GetConfig().WorkflowTaskRetryMaxInterval()).
 		WithExpirationInterval(backoff.NoInterval)
-	startToCloseTimeout := defaultTimeout.AsDuration() + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryBackoffMinAttempts)
+	startToCloseTimeout := defaultTimeout.AsDuration() + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryBackoffMinAttempts, nil)
 	return durationpb.New(startToCloseTimeout)
 }
 
@@ -1029,12 +1259,20 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	// convert it to normal workflow task before persisting.
 	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
-	if !m.ms.IsWorkflowExecutionRunning() {
-		// Workflow execution can be terminated. New events can't be added after workflow is finished.
-		return nil
+	if !m.ms.workflowTaskUpdated {
+		// Whenever we close transaction, speculative workflow task will be converted to normal.
+		// This means when there's a speculative workflow task, we haven't closed the transaction for the
+		// speculative workflow task yet after it's created.
+		// Upon creation of the speculative workflow task, the workflowTaskUpdated flag should be set.
+		// The flag is only unset when closing the transaction, which we know haven't happened yet.
+		// So the workflowTaskUpdated flag should always be set here.
+		m.ms.logger.Warn("Speculative workflow task didn't set workflowTaskUpdated flag, likely due to a bug")
+		m.ms.workflowTaskUpdated = true
 	}
 
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+	metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+		metrics.ReasonTag("close_transaction"))
 
 	wt := m.getWorkflowTaskInfo()
 
@@ -1049,8 +1287,8 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, scheduled event Id: %d for normal workflow task doesn't match the one from speculative workflow task: %d", scheduledEvent.EventId, wt.ScheduledEventID))
 	}
 
-	if wt.StartedEventID != common.EmptyEventID {
-		// If WT is started then started event is written to the history and
+	if wtAlreadyStarted := wt.StartedEventID != common.EmptyEventID; wtAlreadyStarted {
+		// If WT was already started then started event is written to the history and
 		// timeout timer task (for START_TO_CLOSE timeout) is created.
 
 		_ = m.ms.hBuilder.AddWorkflowTaskStartedEvent(
@@ -1061,6 +1299,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			wt.SuggestContinueAsNew,
 			wt.HistorySizeBytes,
 			nil,
+			wt.BuildIdRedirectCounter,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 

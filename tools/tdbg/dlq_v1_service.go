@@ -31,7 +31,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
-	repication "go.temporal.io/server/api/replication/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
@@ -112,7 +112,7 @@ func (ac *DLQV1Service) ReadMessages(c *cli.Context) (err error) {
 			return fmt.Errorf("unable to read dlq message. Last read message id: %v, Error: %v", lastReadMessageID, err)
 		}
 
-		task := item.(*repication.ReplicationTask)
+		task := item.(*replicationspb.ReplicationTask)
 		encoder := codec.NewJSONPBIndentEncoder(" ")
 		taskStr, err := encoder.Encode(task)
 		if err != nil {
@@ -157,7 +157,7 @@ func (ac *DLQV1Service) PurgeMessages(c *cli.Context) error {
 	}); err != nil {
 		return fmt.Errorf("failed to purge DLQ")
 	}
-	fmt.Println("Successfully purged DLQ Messages.")
+	fmt.Fprintln(c.App.Writer, "Successfully purged DLQ Messages.")
 	return nil
 }
 
@@ -199,9 +199,9 @@ func (ac *DLQV1Service) MergeMessages(c *cli.Context) error {
 		}
 
 		request.NextPageToken = response.NextPageToken
-		fmt.Printf("Successfully merged %v messages. More messages to merge.\n", defaultPageSize)
+		fmt.Fprintf(c.App.Writer, "Successfully merged %v messages. More messages to merge.\n", defaultPageSize)
 	}
-	fmt.Println("Successfully merged all messages.")
+	fmt.Fprintln(c.App.Writer, "Successfully merged all messages.")
 	return nil
 }
 

@@ -29,13 +29,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/config"
-
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	persistencesql "go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/tools/sql"
 )
@@ -130,7 +128,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 			"default":    {SQL: &defaultCfg},
 			"visibility": {SQL: &visibilityCfg},
 		},
-		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
+		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(primitives.DefaultTransactionSizeLimit),
 	}
 	s.NoError(persistencesql.VerifyCompatibleVersion(cfg, resolver.NewNoopResolver()))
 }

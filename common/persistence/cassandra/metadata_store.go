@@ -29,7 +29,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
@@ -489,7 +488,7 @@ func (m *MetadataStore) GetMetadata(
 }
 
 func (m *MetadataStore) updateMetadataBatch(
-	batch gocql.Batch,
+	batch *gocql.Batch,
 	notificationVersion int64,
 ) {
 	var nextVersion int64 = 1

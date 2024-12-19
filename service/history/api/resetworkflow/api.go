@@ -28,19 +28,18 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"go.temporal.io/api/serviceerror"
-
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -62,13 +61,12 @@ func Invoke(
 	baseWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			baseRunID,
 		),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -86,7 +84,7 @@ func Invoke(
 		ctx,
 		namespaceID.String(),
 		request.WorkflowExecution.GetWorkflowId(),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -102,13 +100,12 @@ func Invoke(
 		currentWorkflowLease, err = workflowConsistencyChecker.GetWorkflowLease(
 			ctx,
 			nil,
-			api.BypassMutableStateConsistencyPredicate,
 			definition.NewWorkflowKey(
 				namespaceID.String(),
 				workflowID,
 				currentRunID,
 			),
-			workflow.LockPriorityHigh,
+			locks.PriorityHigh,
 		)
 		if err != nil {
 			return nil, err
@@ -140,7 +137,18 @@ func Invoke(
 	}
 	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 	baseNextEventID := baseMutableState.GetNextEventID()
+	baseWorkflow := ndc.NewWorkflow(
+		shard.GetClusterMetadata(),
+		baseWorkflowLease.GetContext(),
+		baseWorkflowLease.GetMutableState(),
+		baseWorkflowLease.GetReleaseFn(),
+	)
 
+	namespaceEntry, err := api.GetActiveNamespace(shard, namespaceID)
+	if err != nil {
+		return nil, err
+	}
+	allowResetWithPendingChildren := shard.GetConfig().AllowResetWithPendingChildren(namespaceEntry.Name().String())
 	if err := ndc.NewWorkflowResetter(
 		shard,
 		workflowConsistencyChecker.GetWorkflowCache(),
@@ -156,6 +164,7 @@ func Invoke(
 		baseNextEventID,
 		resetRunID,
 		request.GetRequestId(),
+		baseWorkflow,
 		ndc.NewWorkflow(
 			shard.GetClusterMetadata(),
 			currentWorkflowLease.GetContext(),
@@ -165,6 +174,7 @@ func Invoke(
 		request.GetReason(),
 		nil,
 		GetResetReapplyExcludeTypes(request.GetResetReapplyExcludeTypes(), request.GetResetReapplyType()),
+		allowResetWithPendingChildren,
 	); err != nil {
 		return nil, err
 	}
@@ -180,21 +190,23 @@ func Invoke(
 func GetResetReapplyExcludeTypes(
 	excludeTypes []enumspb.ResetReapplyExcludeType,
 	includeType enumspb.ResetReapplyType,
-) map[enumspb.ResetReapplyExcludeType]bool {
+) map[enumspb.ResetReapplyExcludeType]struct{} {
 	// A client who wishes to have reapplication of all supported event types should omit the deprecated
 	// reset_reapply_type field (since its default value is RESET_REAPPLY_TYPE_ALL_ELIGIBLE).
-	exclude := map[enumspb.ResetReapplyExcludeType]bool{}
+	exclude := map[enumspb.ResetReapplyExcludeType]struct{}{}
 	switch includeType {
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
 		// A client sending this value of the deprecated reset_reapply_type field will not have any events other than
 		// signal reapplied.
-		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = struct{}{}
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
-		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = true
-		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = struct{}{}
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = struct{}{}
+	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED, enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE:
+		// Do nothing.
 	}
 	for _, e := range excludeTypes {
-		exclude[e] = true
+		exclude[e] = struct{}{}
 	}
 	return exclude
 }

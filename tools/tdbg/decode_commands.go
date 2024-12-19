@@ -32,11 +32,11 @@ import (
 	"strings"
 
 	"github.com/urfave/cli/v2"
+	"go.temporal.io/server/common/codec"
+	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-
-	"go.temporal.io/server/common/codec"
 )
 
 func AdminDecodeProto(c *cli.Context) error {
@@ -97,10 +97,16 @@ func AdminDecodeProto(c *cli.Context) error {
 	encoder := codec.NewJSONPBIndentEncoder(" ")
 	json, err := encoder.Encode(message)
 	if err != nil {
-		return fmt.Errorf("unable to encode to JSON: %s", err)
+		err := fmt.Errorf("unable to encode to JSON: %s", err)
+		text, terr := prototext.Marshal(message)
+		if terr != nil {
+			return err
+		}
+		fmt.Fprintln(c.App.Writer, err)
+		fmt.Fprintln(c.App.Writer, "marshal to text:")
+		json = text
 	}
-	fmt.Println()
-	fmt.Println(string(json))
+	fmt.Fprintln(c.App.Writer, string(json))
 	return nil
 }
 
@@ -130,7 +136,7 @@ func AdminDecodeBase64(c *cli.Context) error {
 		return fmt.Errorf("unable to decode base64 data %s%s: %s", base64Data[:cutLen], dots, err)
 	}
 
-	fmt.Println()
-	fmt.Println(string(data))
+	fmt.Fprintln(c.App.Writer)
+	fmt.Fprintln(c.App.Writer, string(data))
 	return nil
 }

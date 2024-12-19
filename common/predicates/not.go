@@ -60,3 +60,7 @@ func (n *NotImpl[T]) Equals(
 	}
 	return n.Predicate.Equals(notPredicate.Predicate)
 }
+
+func (n *NotImpl[T]) Size() int {
+	return n.Predicate.Size() + EmptyPredicateProtoSize
+}

@@ -214,6 +214,43 @@ func (this *StateMachineTaskInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type StateMachineTimerGroup to the protobuf v3 wire format
+func (val *StateMachineTimerGroup) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StateMachineTimerGroup from the protobuf v3 wire format
+func (val *StateMachineTimerGroup) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StateMachineTimerGroup) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StateMachineTimerGroup values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StateMachineTimerGroup) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StateMachineTimerGroup
+	switch t := that.(type) {
+	case *StateMachineTimerGroup:
+		that1 = t
+	case StateMachineTimerGroup:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type VersionedTransition to the protobuf v3 wire format
 func (val *VersionedTransition) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -243,6 +280,117 @@ func (this *VersionedTransition) Equal(that interface{}) bool {
 	case *VersionedTransition:
 		that1 = t
 	case VersionedTransition:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type StateMachineTombstoneBatch to the protobuf v3 wire format
+func (val *StateMachineTombstoneBatch) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StateMachineTombstoneBatch from the protobuf v3 wire format
+func (val *StateMachineTombstoneBatch) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StateMachineTombstoneBatch) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StateMachineTombstoneBatch values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StateMachineTombstoneBatch) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StateMachineTombstoneBatch
+	switch t := that.(type) {
+	case *StateMachineTombstoneBatch:
+		that1 = t
+	case StateMachineTombstoneBatch:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type StateMachineTombstone to the protobuf v3 wire format
+func (val *StateMachineTombstone) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StateMachineTombstone from the protobuf v3 wire format
+func (val *StateMachineTombstone) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StateMachineTombstone) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StateMachineTombstone values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StateMachineTombstone) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StateMachineTombstone
+	switch t := that.(type) {
+	case *StateMachineTombstone:
+		that1 = t
+	case StateMachineTombstone:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type StateMachinePath to the protobuf v3 wire format
+func (val *StateMachinePath) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StateMachinePath from the protobuf v3 wire format
+func (val *StateMachinePath) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StateMachinePath) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StateMachinePath values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StateMachinePath) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StateMachinePath
+	switch t := that.(type) {
+	case *StateMachinePath:
+		that1 = t
+	case StateMachinePath:
 		that1 = &t
 	default:
 		return false

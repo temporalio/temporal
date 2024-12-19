@@ -89,6 +89,15 @@ func (a *AndImpl[T]) Equals(
 	return predicatesEqual(a.Predicates, andPredicate.Predicates)
 }
 
+func (a *AndImpl[T]) Size() int {
+	size := EmptyPredicateProtoSize
+	for _, p := range a.Predicates {
+		size += p.Size()
+	}
+
+	return size
+}
+
 // appendPredicates adds new predicates to the slice of existing predicates
 // dropping any duplicated predicates where duplication is determined by Predicate.Equals.
 // appendPredicates assumes that there's no duplication in new predicates.

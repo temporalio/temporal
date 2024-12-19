@@ -31,7 +31,6 @@ import (
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
 	"go.temporal.io/server/common/resolver"

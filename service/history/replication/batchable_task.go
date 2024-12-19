@@ -72,6 +72,10 @@ func (w *batchedTask) QueueID() interface{} {
 	return w.batchedTask.QueueID()
 }
 
+func (w *batchedTask) SourceClusterName() string {
+	return w.batchedTask.SourceClusterName()
+}
+
 func (w *batchedTask) TaskID() int64 {
 	return w.individualTasks[0].TaskID()
 }

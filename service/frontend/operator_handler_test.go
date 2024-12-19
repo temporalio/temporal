@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -41,16 +40,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/health"
-
-	"go.temporal.io/server/common/namespace"
-	cnexus "go.temporal.io/server/common/nexus"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -62,6 +56,9 @@ import (
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
+	"go.uber.org/mock/gomock"
+	expmaps "golang.org/x/exp/maps"
+	"google.golang.org/grpc/health"
 )
 
 var (
@@ -74,8 +71,9 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller   *gomock.Controller
-		mockResource *resourcetest.Test
+		controller                      *gomock.Controller
+		mockResource                    *resourcetest.Test
+		nexusEndpointPersistenceManager *persistence.MockNexusEndpointManager
 
 		handler *OperatorHandlerImpl
 	}
@@ -92,18 +90,14 @@ func (s *operatorHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
 	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
+	s.nexusEndpointPersistenceManager = persistence.NewMockNexusEndpointManager(s.controller)
 
-	incomingServiceClient := newNexusIncomingServiceClient(
-		newNexusIncomingServiceClientConfig(dynamicconfig.NewNoopCollection()),
+	endpointClient := newNexusEndpointClient(
+		newNexusEndpointClientConfig(dynamicconfig.NewNoopCollection()),
 		s.mockResource.NamespaceCache,
 		s.mockResource.MatchingClient,
-		persistence.NewMockNexusIncomingServiceManager(s.controller),
+		s.nexusEndpointPersistenceManager,
 		s.mockResource.Logger,
-	)
-	outgoingServiceRegistry := cnexus.NewOutgoingServiceRegistry(
-		s.mockResource.MetadataMgr,
-		namespace.NewNamespaceReplicator(s.mockResource.NamespaceReplicationQueue, s.mockResource.Logger),
-		cnexus.NewOutgoingServiceRegistryConfig(dynamicconfig.NewNoopCollection()),
 	)
 
 	args := NewOperatorHandlerImplArgs{
@@ -119,8 +113,8 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),
-		incomingServiceClient,
-		outgoingServiceRegistry,
+		s.mockResource.NamespaceCache,
+		endpointClient,
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()
@@ -248,6 +242,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes_DualVisibility() {
 		mockVisManager1,
 		mockVisManager2,
 		mockManagerSelector,
+		dynamicconfig.GetBoolPropertyFn(false),
 	)
 	s.handler.visibilityMgr = mockDualVisManager
 
@@ -824,7 +819,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 						opts ...any,
 					) (*workflowservice.UpdateNamespaceResponse, error) {
 						s.Len(r.Config.CustomSearchAttributeAliases, len(tc.customSearchAttributesToAdd))
-						aliases := maps.Values(r.Config.CustomSearchAttributeAliases)
+						aliases := expmaps.Values(r.Config.CustomSearchAttributeAliases)
 						for _, saName := range tc.customSearchAttributesToAdd {
 							s.Contains(aliases, saName)
 						}
@@ -1163,6 +1158,32 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 		})
 	}
 
+	// The "fake" namespace ID is associated with a Nexus endoint.
+	s.nexusEndpointPersistenceManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{
+		Entries: []*persistencespb.NexusEndpointEntry{
+			{
+				Endpoint: &persistencespb.NexusEndpoint{
+					Spec: &persistencespb.NexusEndpointSpec{
+						Name: "test-endpoint",
+						Target: &persistencespb.NexusEndpointTarget{
+							Variant: &persistencespb.NexusEndpointTarget_Worker_{
+								Worker: &persistencespb.NexusEndpointTarget_Worker{
+									NamespaceId: "fake",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, nil).AnyTimes()
+	// Map "fake" namespace ID to the "namespace-with-nexus-endpoint" name.
+	s.mockResource.NamespaceCache.EXPECT().GetNamespaceName(namespace.ID("fake")).
+		Return(namespace.Name("test-namespace"), nil).AnyTimes()
+	// Map "c13c01a7-3887-4eda-ba4b-9a07a6359e7e" namespace ID to the "test-namespace-deleted-ka2te" name.
+	s.mockResource.NamespaceCache.EXPECT().GetNamespaceName(namespace.ID("c13c01a7-3887-4eda-ba4b-9a07a6359e7e")).
+		Return(namespace.Name("test-namespace-deleted-ka2te"), nil).AnyTimes()
+
 	mockSdkClient := mocksdk.NewMockClient(s.controller)
 	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 
@@ -1172,7 +1193,23 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 		DeleteNamespacePagesPerExecution:                    dynamicconfig.GetIntPropertyFn(78),
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.GetIntPropertyFn(3),
 		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.GetDurationPropertyFn(22 * time.Hour),
+		AllowDeleteNamespaceIfNexusEndpointTarget:           dynamicconfig.GetBoolPropertyFn(false),
 	}
+
+	// Delete by name: Nexus endpoint associated.
+	_, err := handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace: "test-namespace",
+	})
+	s.ErrorContains(err, "cannot delete a namespace that is a target of a Nexus endpoint (test-endpoint)")
+
+	// Delete by ID: Nexus endpoint associated.
+	_, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		NamespaceId: "fake",
+	})
+	s.ErrorContains(err, "cannot delete a namespace that is a target of a Nexus endpoint (test-endpoint)")
+
+	// Allow delete from now on.
+	handler.config.AllowDeleteNamespaceIfNexusEndpointTarget = dynamicconfig.GetBoolPropertyFn(true)
 
 	// Start workflow failed.
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(nil, errors.New("start failed"))
@@ -1271,6 +1308,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success
 			ClusterId:                clusterId,
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
+			HttpAddress:              httpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
@@ -1293,8 +1331,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success
 		Version: recordVersion,
 	}).Return(true, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:     rpcAddress,
-		FrontendHttpAddress: httpAddress,
+		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
 }
@@ -1315,6 +1352,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 			ClusterId:                clusterId,
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
+			HttpAddress:              httpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
@@ -1337,8 +1375,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 		Version: 0,
 	}).Return(true, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:     rpcAddress,
-		FrontendHttpAddress: httpAddress,
+		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
 }
@@ -1427,6 +1464,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple
 			ClusterId:                clusterId,
 			ClusterName:              clusterName,
 			HistoryShardCount:        16,
+			HttpAddress:              httpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
@@ -1449,8 +1487,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ShardCount_Multiple
 		Version: recordVersion,
 	}).Return(true, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:     rpcAddress,
-		FrontendHttpAddress: httpAddress,
+		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
 }
@@ -1561,6 +1598,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 			ClusterId:                clusterId,
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
+			HttpAddress:              httpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
@@ -1583,8 +1621,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 		Version: 0,
 	}).Return(false, fmt.Errorf("test error"))
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:     rpcAddress,
-		FrontendHttpAddress: httpAddress,
+		FrontendAddress: rpcAddress,
 	})
 	s.Error(err)
 }
@@ -1605,6 +1642,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 			ClusterId:                clusterId,
 			ClusterName:              clusterName,
 			HistoryShardCount:        4,
+			HttpAddress:              httpAddress,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
@@ -1627,8 +1665,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 		Version: 0,
 	}).Return(false, nil)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:     rpcAddress,
-		FrontendHttpAddress: httpAddress,
+		FrontendAddress: rpcAddress,
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)

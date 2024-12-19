@@ -38,8 +38,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
-	"golang.org/x/time/rate"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -48,6 +46,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -296,11 +295,13 @@ func startTaskProcessor(
 						var eventId int64
 						var err error
 						var resetReapplyType enumspb.ResetReapplyType
+						var resetReapplyExcludeTypes []enumspb.ResetReapplyExcludeType
 						if batchParams.ResetParams.resetOptions != nil {
 							// Using ResetOptions
 							// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
 							eventId, err = getResetEventIDByOptions(ctx, batchParams.ResetParams.resetOptions, batchParams.Namespace, workflowExecution, frontendClient, logger)
 							resetReapplyType = batchParams.ResetParams.resetOptions.ResetReapplyType
+							resetReapplyExcludeTypes = batchParams.ResetParams.resetOptions.ResetReapplyExcludeTypes
 						} else {
 							// Old fields
 							eventId, err = getResetEventIDByType(ctx, batchParams.ResetParams.ResetType, batchParams.Namespace, workflowExecution, frontendClient, logger)
@@ -316,6 +317,22 @@ func startTaskProcessor(
 							RequestId:                 uuid.New(),
 							WorkflowTaskFinishEventId: eventId,
 							ResetReapplyType:          resetReapplyType,
+							ResetReapplyExcludeTypes:  resetReapplyExcludeTypes,
+						})
+						return err
+					})
+			case BatchTypeUpdateOptions:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						var err error
+						_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+							Namespace: batchParams.Namespace,
+							WorkflowExecution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+							WorkflowExecutionOptions: batchParams.UpdateOptionsParams.WorkflowExecutionOptions,
+							UpdateMask:               batchParams.UpdateOptionsParams.UpdateMask,
 						})
 						return err
 					})

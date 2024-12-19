@@ -36,11 +36,11 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -104,6 +104,12 @@ var (
 	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
 )
 
+var defaultExecutableMetricsTags = []metrics.Tag{
+	metrics.NamespaceUnknownTag(),
+	metrics.TaskTypeTag("__unknown__"),
+	metrics.OperationTag("__unknown__"),
+}
+
 const (
 	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
 	// check the comment in shouldResubmitOnNack() for more details
@@ -117,13 +123,6 @@ const (
 	// while task is retrying
 	taskCriticalLogMetricAttempts = 30
 )
-
-// ErrStaleTask is an indicator that a task cannot be executed because it is stale. This is expected in certain
-// situations and it is safe to drop the task.
-// An example of a stale task is when the task is pointing to a state machine in mutable state that has a newer version
-// than the version that task was created from, that is the state machine has already transitioned and the task is no
-// longer needed.
-var ErrStaleTask = errors.New("task stale")
 
 // UnprocessableTaskError is an indicator that an executor does not know how to handle a task. Considered terminal.
 type UnprocessableTaskError struct {
@@ -141,26 +140,6 @@ func (e UnprocessableTaskError) Error() string {
 
 // IsTerminalTaskError marks this error as terminal to be handled appropriately.
 func (UnprocessableTaskError) IsTerminalTaskError() bool {
-	return true
-}
-
-// StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that
-// state reload solves this issue but otherwise it is unexpected and considered terminal.
-type StaleStateError struct {
-	Message string
-}
-
-// NewStateStaleError returns a new StateStaleError from given message.
-func NewStateStaleError(message string) StaleStateError {
-	return StaleStateError{Message: message}
-}
-
-func (e StaleStateError) Error() string {
-	return "state stale: " + e.Message
-}
-
-// IsTerminalTaskError marks this error as terminal to be handled appropriately.
-func (StaleStateError) IsTerminalTaskError() bool {
 	return true
 }
 
@@ -193,7 +172,6 @@ type (
 		inMemoryNoUserLatency      time.Duration
 		lastActiveness             bool
 		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
-		taggedMetricsHandler       metrics.Handler
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
 		unexpectedErrorAttempts    int
@@ -263,7 +241,6 @@ func NewExecutable(
 			},
 		),
 		metricsHandler:             metricsHandler,
-		taggedMetricsHandler:       metricsHandler,
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
@@ -312,7 +289,12 @@ func (e *executableImpl) Execute() (retErr error) {
 
 			// we need to guess the metrics tags here as we don't know which execution logic
 			// is actually used which is upto the executor implementation
-			e.taggedMetricsHandler = e.metricsHandler.WithTags(EstimateTaskMetricTag(e, e.namespaceRegistry, e.clusterMetadata.GetCurrentClusterName())...)
+			e.metricsHandler = e.metricsHandler.WithTags(
+				estimateTaskMetricTag(
+					e.GetTask(),
+					e.namespaceRegistry,
+					e.clusterMetadata.GetCurrentClusterName(),
+				)...)
 		}
 
 		attemptUserLatency := time.Duration(0)
@@ -323,9 +305,9 @@ func (e *executableImpl) Execute() (retErr error) {
 		attemptLatency := e.timeSource.Now().Sub(startTime)
 		e.attemptNoUserLatency = attemptLatency - attemptUserLatency
 		// emit total attempt latency so that we know how much time a task will occpy a worker goroutine
-		metrics.TaskProcessingLatency.With(e.taggedMetricsHandler).Record(attemptLatency)
+		metrics.TaskProcessingLatency.With(e.metricsHandler).Record(attemptLatency)
 
-		priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
+		priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 		metrics.TaskRequests.With(priorityTaggedProvider).Record(1)
 		metrics.TaskScheduleLatency.With(priorityTaggedProvider).Record(e.scheduleLatency)
 
@@ -354,7 +336,7 @@ func (e *executableImpl) Execute() (retErr error) {
 	}
 
 	resp := e.executor.Execute(ctx, e)
-	e.taggedMetricsHandler = e.metricsHandler.WithTags(resp.ExecutionMetricTags...)
+	e.metricsHandler = e.metricsHandler.WithTags(resp.ExecutionMetricTags...)
 
 	if resp.ExecutedAsActive != e.lastActiveness {
 		// namespace did a failover,
@@ -367,23 +349,37 @@ func (e *executableImpl) Execute() (retErr error) {
 }
 
 func (e *executableImpl) writeToDLQ(ctx context.Context) error {
+
+	currentClusterName := e.clusterMetadata.GetCurrentClusterName()
+	numShards := e.clusterMetadata.GetAllClusterInfo()[currentClusterName].ShardCount
+
 	start := e.timeSource.Now()
 	err := e.dlqWriter.WriteTaskToDLQ(
 		ctx,
-		e.clusterMetadata.GetCurrentClusterName(),
-		e.clusterMetadata.GetCurrentClusterName(),
+		currentClusterName,
+		currentClusterName,
+		tasks.GetShardIDForTask(e.Task, int(numShards)),
 		e.GetTask(),
 	)
 	if err != nil {
-		metrics.TaskDLQFailures.With(e.taggedMetricsHandler).Record(1)
+		metrics.TaskDLQFailures.With(e.metricsHandler).Record(1)
 		e.logger.Error("Failed to write task to DLQ", tag.Error(err))
 	}
-	metrics.TaskDLQSendLatency.With(e.taggedMetricsHandler).Record(e.timeSource.Now().Sub(start))
+	metrics.TaskDLQSendLatency.With(e.metricsHandler).Record(e.timeSource.Now().Sub(start))
 	return err
 }
 
 func (e *executableImpl) isSafeToDropError(err error) bool {
-	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+	if errors.Is(err, consts.ErrStaleReference) {
+		// The task is stale and is safe to be dropped.
+		// Even though ErrStaleReference is castable to serviceerror.NotFound, we give this error special treatment
+		// because we're interested in the metric.
+		metrics.TaskSkipped.With(e.metricsHandler).Record(1)
+		e.logger.Info("Skipped task due to stale reference", tag.Error(err))
+		return true
+	}
+
+	if errors.As(err, new(*serviceerror.NotFound)) {
 		return true
 	}
 
@@ -393,12 +389,12 @@ func (e *executableImpl) isSafeToDropError(err error) bool {
 	}
 
 	if err == consts.ErrTaskDiscarded {
-		metrics.TaskDiscarded.With(e.taggedMetricsHandler).Record(1)
+		metrics.TaskDiscarded.With(e.metricsHandler).Record(1)
 		return true
 	}
 
 	if err == consts.ErrTaskVersionMismatch {
-		metrics.TaskVersionMisMatch.With(e.taggedMetricsHandler).Record(1)
+		metrics.TaskVersionMisMatch.With(e.metricsHandler).Record(1)
 		return true
 	}
 
@@ -417,50 +413,42 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	if errors.As(err, &resourceExhaustedErr) {
-		if resourceExhaustedErr.Cause != enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-			if resourceExhaustedErr.Cause == enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT {
-				err = consts.ErrResourceExhaustedAPSLimit
-			}
+		switch resourceExhaustedErr.Cause { //nolint:exhaustive
+		case enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
+			err = consts.ErrResourceExhaustedBusyWorkflow
+		case enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
+			err = consts.ErrResourceExhaustedAPSLimit
 			e.resourceExhaustedCount++
-			metrics.TaskThrottledCounter.With(e.taggedMetricsHandler).Record(1)
-			return true, err
+		default:
+			e.resourceExhaustedCount++
 		}
 
-		err = consts.ErrResourceExhaustedBusyWorkflow
+		metrics.TaskThrottledCounter.With(e.metricsHandler).Record(
+			1, metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause))
+		return true, err
 	}
 	e.resourceExhaustedCount = 0
 
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		// error is expected when there's namespace failover,
 		// so don't count it into task failures.
-		metrics.TaskNotActiveCounter.With(e.taggedMetricsHandler).Record(1)
+		metrics.TaskNotActiveCounter.With(e.metricsHandler).Record(1)
 		return true, err
 	}
 
 	if err == consts.ErrDependencyTaskNotCompleted {
-		metrics.TasksDependencyTaskNotCompleted.With(e.taggedMetricsHandler).Record(1)
+		metrics.TasksDependencyTaskNotCompleted.With(e.metricsHandler).Record(1)
 		return true, err
 	}
 
 	if err == consts.ErrTaskRetry {
-		metrics.TaskStandbyRetryCounter.With(e.taggedMetricsHandler).Record(1)
-		return true, err
-	}
-
-	if errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
-		metrics.TaskWorkflowBusyCounter.With(e.taggedMetricsHandler).Record(1)
+		metrics.TaskStandbyRetryCounter.With(e.metricsHandler).Record(1)
 		return true, err
 	}
 
 	if err.Error() == consts.ErrNamespaceHandover.Error() {
-		metrics.TaskNamespaceHandoverCounter.With(e.taggedMetricsHandler).Record(1)
+		metrics.TaskNamespaceHandoverCounter.With(e.metricsHandler).Record(1)
 		return true, consts.ErrNamespaceHandover
-	}
-	if errors.Is(err, ErrStaleTask) {
-		// The task is stale and is safe to be dropped.
-		metrics.TaskSkipped.With(e.taggedMetricsHandler).Record(1)
-		e.logger.Info("Skipped task due to task being stale", tag.Error(err))
-		return true, err
 	}
 
 	return false, nil
@@ -478,7 +466,7 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 
 	isInternalError := common.IsInternalError(err)
 	if isInternalError {
-		metrics.TaskInternalErrorCounter.With(e.taggedMetricsHandler).Record(1)
+		metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1)
 		// Only DQL/drop when configured to
 		return e.dlqInternalErrors()
 	}
@@ -507,8 +495,12 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 			e.attempt++
 			if e.attempt > taskCriticalLogMetricAttempts {
-				metrics.TaskAttempt.With(e.taggedMetricsHandler).Record(int64(e.attempt))
-				e.logger.Error("Critical error processing task, retrying.", tag.Attempt(int32(e.attempt)), tag.Error(err), tag.OperationCritical)
+				metrics.TaskAttempt.With(e.metricsHandler).Record(int64(e.attempt))
+				e.logger.Error("Critical error processing task, retrying.",
+					tag.Attempt(int32(e.attempt)),
+					tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
+					tag.Error(err),
+					tag.OperationCritical)
 			}
 		}
 	}()
@@ -516,15 +508,15 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if len(e.dlqErrorPattern()) > 0 {
 		match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
 		if mErr != nil {
-			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern))
+			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern.Key()))
 		} else if match {
 			e.logger.Error(
 				fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
-					dynamicconfig.HistoryTaskDLQErrorPattern),
+					dynamicconfig.HistoryTaskDLQErrorPattern.Key()),
 				tag.Error(err),
 				tag.ErrorType(err))
 			e.terminalFailureCause = err
-			metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
+			metrics.TaskTerminalFailures.With(e.metricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
 	}
@@ -536,20 +528,22 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	if ok, rewrittenErr := e.isExpectedRetryableError(err); ok {
 		return rewrittenErr
 	}
+
 	// Unexpected errors handled below
-	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
+	e.unexpectedErrorAttempts++
+	metrics.TaskFailures.With(e.metricsHandler).Record(1)
+	e.logger.Warn("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
 	if e.isUnexpectedNonRetryableError(err) {
 		// Terminal errors are likely due to data corruption.
 		// Drop the task by returning nil so that task will be marked as completed,
 		// or send it to the DLQ if that is enabled.
-		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
+		metrics.TaskCorruptionCounter.With(e.metricsHandler).Record(1)
 		if e.dlqEnabled() {
 			// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
 			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err), tag.ErrorType(err))
 			e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
-			metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
+			metrics.TaskTerminalFailures.With(e.metricsHandler).Record(1)
 			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 		}
 		e.logger.Error("Dropping task due to terminal error", tag.Error(err), tag.ErrorType(err))
@@ -557,16 +551,12 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	// Unexpected but retryable error
-	e.unexpectedErrorAttempts++
-	metrics.TaskFailures.With(e.taggedMetricsHandler).Record(1)
-	e.logger.Error("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
-
 	if e.unexpectedErrorAttempts >= e.maxUnexpectedErrorAttempts() && e.dlqEnabled() {
 		// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
 		e.logger.Error("Marking task as terminally failed, will send to DLQ. Maximum number of attempts with unexpected errors",
-			tag.Attempt(int32(e.unexpectedErrorAttempts)), tag.Error(err))
+			tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.Error(err))
 		e.terminalFailureCause = err // <- Execute() examines this attribute on the next attempt.
-		metrics.TaskTerminalFailures.With(e.taggedMetricsHandler).Record(1)
+		metrics.TaskTerminalFailures.With(e.metricsHandler).Record(1)
 		return fmt.Errorf("%w: %w", ErrTerminalTaskFailure, e.terminalFailureCause)
 	}
 
@@ -616,13 +606,13 @@ func (e *executableImpl) Ack() {
 
 	e.state = ctasks.TaskStateAcked
 
-	metrics.TaskLoadLatency.With(e.taggedMetricsHandler).Record(
+	metrics.TaskLoadLatency.With(e.metricsHandler).Record(
 		e.loadTime.Sub(e.GetVisibilityTime()),
 		metrics.QueueReaderIDTag(e.readerID),
 	)
-	metrics.TaskAttempt.With(e.taggedMetricsHandler).Record(int64(e.attempt))
+	metrics.TaskAttempt.With(e.metricsHandler).Record(int64(e.attempt))
 
-	priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
+	priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
 	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)
 	metrics.TaskQueueLatency.With(priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))).
 		Record(time.Since(e.GetVisibilityTime()))
@@ -709,11 +699,11 @@ func (e *executableImpl) GetDestination() string {
 }
 
 // StateMachineTaskType returns the embedded task's state machine task type if it exists. Defaults to 0.
-func (e *executableImpl) StateMachineTaskType() int32 {
+func (e *executableImpl) StateMachineTaskType() string {
 	if t, ok := e.Task.(tasks.HasStateMachineTaskType); ok {
 		return t.StateMachineTaskType()
 	}
-	return 0
+	return ""
 }
 
 func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
@@ -755,20 +745,20 @@ func (e *executableImpl) backoffDuration(
 		common.IsInternalError(err) {
 		// using a different reschedule policy to slow down retry
 		// as immediate retry typically won't resolve the issue.
-		return taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt)
+		return taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt, err)
 	}
 
 	if err == consts.ErrDependencyTaskNotCompleted {
-		return dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt)
+		return dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt, err)
 	}
 
-	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt)
+	backoffDuration := reschedulePolicy.ComputeNextDelay(0, attempt, err)
 	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
 		// try a different reschedule policy to slow down retry
 		// upon system resource exhausted error and pick the longer backoff duration
 		backoffDuration = max(
 			backoffDuration,
-			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount),
+			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount, err),
 		)
 	}
 
@@ -794,25 +784,111 @@ func (e *executableImpl) resetAttempt() {
 	e.attempt = 1
 }
 
-func EstimateTaskMetricTag(
-	e Executable,
+func estimateTaskMetricTag(
+	task tasks.Task,
 	namespaceRegistry namespace.Registry,
 	currentClusterName string,
 ) []metrics.Tag {
 	namespaceTag := metrics.NamespaceUnknownTag()
 	isActive := true
 
-	ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(e.GetNamespaceID()))
+	ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	if err == nil {
 		namespaceTag = metrics.NamespaceTag(ns.Name().String())
 		isActive = ns.ActiveInCluster(currentClusterName)
 	}
 
-	taskType := getTaskTypeTagValue(e, isActive)
+	taskType := getTaskTypeTagValue(task, isActive)
 	return []metrics.Tag{
 		namespaceTag,
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
 		// TODO: add task priority tag here as well
 	}
+}
+
+// CircuitBreakerExecutable wraps Executable with a circuit breaker.
+// If the executable returns DestinationDownError, it will signal the circuit breaker
+// of failure, and return the inner error.
+type CircuitBreakerExecutable struct {
+	Executable
+	cb circuitbreaker.TwoStepCircuitBreaker
+
+	metricsHandler metrics.Handler
+}
+
+func NewCircuitBreakerExecutable(
+	e Executable,
+	cb circuitbreaker.TwoStepCircuitBreaker,
+	metricsHandler metrics.Handler,
+) *CircuitBreakerExecutable {
+	return &CircuitBreakerExecutable{
+		Executable: e,
+		cb:         cb,
+
+		metricsHandler: metricsHandler,
+	}
+}
+
+// This is roughly the same implementation of the `gobreaker.CircuitBreaker.Execute` function,
+// but checks if the error is `DestinationDownError` to report success, and unwrap it.
+func (e *CircuitBreakerExecutable) Execute() error {
+	doneCb, err := e.cb.Allow()
+	if err != nil {
+		metrics.CircuitBreakerExecutableBlocked.With(e.metricsHandler).Record(1)
+		// Return a resource exhausted error to ensure that this task is retried less aggressively
+		// and does not go to the DLQ.
+		return fmt.Errorf(
+			"%w: %w",
+			serviceerror.NewResourceExhausted(
+				enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
+				"circuit breaker rejection",
+			),
+			err,
+		)
+	}
+
+	defer func() {
+		e := recover()
+		if e != nil {
+			doneCb(false)
+			panic(e)
+		}
+	}()
+
+	err = e.Executable.Execute()
+	var destinationDownErr *DestinationDownError
+	if errors.As(err, &destinationDownErr) {
+		err = destinationDownErr.Unwrap()
+	}
+
+	doneCb(destinationDownErr == nil)
+	return err
+}
+
+// DestinationDownError indicates the destination is down and wraps another error.
+// It is a useful specific error that can be used, for example, in a circuit breaker
+// to distinguish when a destination service is down and an internal error.
+type DestinationDownError struct {
+	Message string
+	err     error
+}
+
+func NewDestinationDownError(msg string, err error) *DestinationDownError {
+	return &DestinationDownError{
+		Message: "destination down: " + msg,
+		err:     err,
+	}
+}
+
+func (e *DestinationDownError) Error() string {
+	msg := e.Message
+	if e.err != nil {
+		msg += "\n" + e.err.Error()
+	}
+	return msg
+}
+
+func (e *DestinationDownError) Unwrap() error {
+	return e.err
 }

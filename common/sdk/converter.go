@@ -31,9 +31,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
-	"google.golang.org/protobuf/proto"
-
 	"go.temporal.io/server/common/utf8validator"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
