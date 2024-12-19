@@ -59,13 +59,21 @@ type (
 		tv      *testvars.TestVars
 		timeout time.Duration
 	}
-	optionFunc func(*options)
+	optionFunc           func(*options)
+	TaskCompletedRequest struct {
+		WorkflowTaskCompletedRequest *workflowservice.RespondWorkflowTaskCompletedRequest
+		QueryTaskCompletedRequest    *workflowservice.RespondQueryTaskCompletedRequest
+	}
+	TaskCompletedResponse struct {
+		WorkflowTaskCompletedResponse *workflowservice.RespondWorkflowTaskCompletedResponse
+		QueryTaskCompletedResponse    *workflowservice.RespondQueryTaskCompletedResponse
+	}
 )
 
 var (
 	// DrainWorkflowTask returns an empty RespondWorkflowTaskCompletedRequest
-	DrainWorkflowTask = func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	DrainWorkflowTask = func(task *workflowservice.PollWorkflowTaskQueueResponse) (*TaskCompletedRequest, error) {
+		return &TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{}}, nil
 	}
 	// CompleteActivityTask returns a RespondActivityTaskCompletedRequest with an auto-generated `Result` from `tv.Any().Payloads()`.
 	CompleteActivityTask = func(tv *testvars.TestVars) func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
@@ -111,9 +119,9 @@ func (p *TaskPoller) PollWorkflowTask(
 // If no task is available, it returns NoTaskAvailable.
 func (p *TaskPoller) PollAndHandleWorkflowTask(
 	tv *testvars.TestVars,
-	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*TaskCompletedRequest, error),
 	opts ...optionFunc,
-) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+) (*TaskCompletedResponse, error) {
 	return p.
 		PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{}).
 		HandleTask(tv, handler, opts...)
@@ -125,9 +133,9 @@ func (p *TaskPoller) PollAndHandleWorkflowTask(
 // If no task is available, it returns NoTaskAvailable.
 func (p *workflowTaskPoller) HandleTask(
 	tv *testvars.TestVars,
-	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*TaskCompletedRequest, error),
 	opts ...optionFunc,
-) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+) (*TaskCompletedResponse, error) {
 	p.t.Helper()
 	options := newOptions(tv, opts)
 	ctx, cancel := newContext(options)
@@ -141,9 +149,9 @@ func (p *workflowTaskPoller) HandleTask(
 func (p *TaskPoller) HandleWorkflowTask(
 	tv *testvars.TestVars,
 	task *workflowservice.PollWorkflowTaskQueueResponse,
-	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*TaskCompletedRequest, error),
 	opts ...optionFunc,
-) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+) (*TaskCompletedResponse, error) {
 	p.t.Helper()
 	options := newOptions(tv, opts)
 	ctx, cancel := newContext(options)
@@ -239,9 +247,6 @@ func (p *workflowTaskPoller) pollTask(
 	}
 
 	events = history.Events
-	if len(events) == 0 {
-		return nil, errors.New("history events are empty")
-	}
 
 	nextPageToken := resp.NextPageToken
 	for nextPageToken != nil {
@@ -265,8 +270,8 @@ func (p *workflowTaskPoller) pollTask(
 func (p *workflowTaskPoller) pollAndHandleTask(
 	ctx context.Context,
 	opts *options,
-	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
-) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*TaskCompletedRequest, error),
+) (*TaskCompletedResponse, error) {
 	p.t.Helper()
 	task, err := p.pollTask(ctx, opts)
 	if err != nil {
@@ -279,19 +284,52 @@ func (p *workflowTaskPoller) handleTask(
 	ctx context.Context,
 	opts *options,
 	task *workflowservice.PollWorkflowTaskQueueResponse,
-	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
-) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*TaskCompletedRequest, error),
+) (*TaskCompletedResponse, error) {
 	p.t.Helper()
 	reply, err := handler(task)
 	if err != nil {
 		return nil, p.respondTaskFailed(ctx, opts, task.TaskToken, err)
 	}
 
-	resp, err := p.respondTaskCompleted(ctx, opts, task, reply)
+	if reply.QueryTaskCompletedRequest != nil {
+		resp, err := p.respondQueryTaskCompleted(ctx, task, reply.QueryTaskCompletedRequest)
+		if err != nil {
+			return nil, err
+		}
+		return &TaskCompletedResponse{QueryTaskCompletedResponse: resp}, nil
+	}
+
+	resp, err := p.respondTaskCompleted(ctx, opts, task, reply.WorkflowTaskCompletedRequest)
 	if err != nil {
 		return nil, err
 	}
 
+	return &TaskCompletedResponse{WorkflowTaskCompletedResponse: resp}, nil
+}
+
+func (p *workflowTaskPoller) respondQueryTaskCompleted(
+	ctx context.Context,
+	task *workflowservice.PollWorkflowTaskQueueResponse,
+	reply *workflowservice.RespondQueryTaskCompletedRequest,
+) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
+	p.t.Helper()
+	if task == nil {
+		return nil, errors.New("missing PollWorkflowTaskQueue")
+	}
+	if reply == nil {
+		return nil, errors.New("missing RespondQueryTaskCompleted return")
+	}
+	if reply.Namespace == "" {
+		reply.Namespace = p.namespace
+	}
+	if reply.TaskToken == nil {
+		reply.TaskToken = task.TaskToken
+	}
+	resp, err := p.client.RespondQueryTaskCompleted(ctx, reply)
+	if err != nil {
+		return nil, fmt.Errorf("failed to respond with respondQueryTaskCompleted: %w", err)
+	}
 	return resp, nil
 }
 
