@@ -129,14 +129,14 @@ func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace
 	var la *localActivities
 
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	var bns blockedNamespaces
-	err := workflow.ExecuteLocalActivity(ctx1, la.GetBlockedNamespacesActivity).Get(ctx, &bns)
+	var protectedNamespaces []string
+	err := workflow.ExecuteLocalActivity(ctx1, la.GetProtectedNamespacesActivity).Get(ctx, &protectedNamespaces)
 	if err != nil {
-		return fmt.Errorf("%w: GetBlockedNamespacesActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return fmt.Errorf("%w: GetProtectedNamespacesActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
-	for _, blockedNsName := range bns.Names {
-		if blockedNsName == nsName.String() {
-			return temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is blocked from deletion", nsName), errors.ValidationErrorErrType, nil, nil)
+	for _, protectedNamespace := range protectedNamespaces {
+		if protectedNamespace == nsName.String() {
+			return temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is protected from deletion", nsName), errors.ValidationErrorErrType, nil, nil)
 		}
 	}
 

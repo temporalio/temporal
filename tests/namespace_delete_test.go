@@ -548,7 +548,7 @@ func (s *namespaceTestSuite) checkTestShard() {
 	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index+1, total)
 }
 
-func (s *namespaceTestSuite) Test_NamespaceDelete_Blocked() {
+func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
 	ctx := context.Background()
 
 	tv := testvars.New(s.T())
@@ -562,7 +562,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Blocked() {
 	})
 	s.NoError(err)
 
-	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.DeleteNamespaceBlockedNamespaces, []string{tv.NamespaceName().String()})
+	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.ProtectedNamespaces, []string{tv.NamespaceName().String()})
 
 	delResp, err := s.operatorClient.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: tv.NamespaceName().String(),
@@ -572,5 +572,5 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Blocked() {
 
 	var invalidArgErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgErr)
-	s.Equal(fmt.Sprintf("namespace %s is blocked from deletion", tv.NamespaceName().String()), invalidArgErr.Message)
+	s.Equal(fmt.Sprintf("namespace %s is protected from deletion", tv.NamespaceName().String()), invalidArgErr.Message)
 }

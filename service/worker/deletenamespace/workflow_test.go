@@ -49,8 +49,7 @@ func Test_DeleteNamespaceWorkflow_ByName(t *testing.T) {
 			NamespaceID: "namespace-id",
 			Namespace:   "namespace",
 		}, nil).Once()
-	env.OnActivity(la.GetBlockedNamespacesActivity, mock.Anything).Return(
-		blockedNamespaces{}, nil).Once()
+	env.OnActivity(la.GetProtectedNamespacesActivity, mock.Anything).Return(nil, nil).Once()
 	env.OnActivity(la.MarkNamespaceDeletedActivity, mock.Anything, namespace.Name("namespace")).Return(nil).Once()
 	env.OnActivity(la.GenerateDeletedNamespaceNameActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(namespace.Name("namespace-delete-220878"), nil).Once()
 	env.OnActivity(la.RenameNamespaceActivity, mock.Anything, namespace.Name("namespace"), namespace.Name("namespace-delete-220878")).Return(nil).Once()
@@ -95,8 +94,7 @@ func Test_DeleteNamespaceWorkflow_ByID(t *testing.T) {
 			NamespaceID: "namespace-id",
 			Namespace:   "namespace",
 		}, nil).Once()
-	env.OnActivity(la.GetBlockedNamespacesActivity, mock.Anything).Return(
-		blockedNamespaces{}, nil).Once()
+	env.OnActivity(la.GetProtectedNamespacesActivity, mock.Anything).Return(nil, nil).Once()
 	env.OnActivity(la.MarkNamespaceDeletedActivity, mock.Anything, namespace.Name("namespace")).Return(nil).Once()
 	env.OnActivity(la.GenerateDeletedNamespaceNameActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(namespace.Name("namespace-delete-220878"), nil).Once()
 	env.OnActivity(la.RenameNamespaceActivity, mock.Anything, namespace.Name("namespace"), namespace.Name("namespace-delete-220878")).Return(nil).Once()
@@ -190,7 +188,7 @@ func Test_DeleteSystemNamespace(t *testing.T) {
 	require.Contains(t, err.Error(), "unable to delete system namespace")
 }
 
-func Test_DeleteBlockedNamespace(t *testing.T) {
+func Test_DeleteProtectedNamespace(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	var la *localActivities
@@ -201,10 +199,7 @@ func Test_DeleteBlockedNamespace(t *testing.T) {
 			Namespace:   "namespace",
 		}, nil).Once()
 
-	env.OnActivity(la.GetBlockedNamespacesActivity, mock.Anything).Return(
-		blockedNamespaces{
-			Names: []string{"namespace"},
-		}, nil).Once()
+	env.OnActivity(la.GetProtectedNamespacesActivity, mock.Anything).Return([]string{"namespace"}, nil).Once()
 
 	env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{
 		NamespaceID: "namespace-id",
@@ -213,5 +208,5 @@ func Test_DeleteBlockedNamespace(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted())
 	err := env.GetWorkflowError()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "namespace namespace is blocked from deletion")
+	require.Contains(t, err.Error(), "namespace namespace is protected from deletion")
 }

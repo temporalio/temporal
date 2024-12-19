@@ -46,13 +46,13 @@ import (
 type (
 	// deleteNamespaceComponent represent background work needed for delete namespace.
 	deleteNamespaceComponent struct {
-		atWorkerCfg       sdkworker.Options
-		visibilityManager manager.VisibilityManager
-		metadataManager   persistence.MetadataManager
-		historyClient     resource.HistoryClient
-		metricsHandler    metrics.Handler
-		blockedNamespaces dynamicconfig.TypedPropertyFn[[]string]
-		logger            log.Logger
+		atWorkerCfg         sdkworker.Options
+		visibilityManager   manager.VisibilityManager
+		metadataManager     persistence.MetadataManager
+		historyClient       resource.HistoryClient
+		metricsHandler      metrics.Handler
+		protectedNamespaces dynamicconfig.TypedPropertyFn[[]string]
+		logger              log.Logger
 	}
 	componentParams struct {
 		fx.In
@@ -71,13 +71,13 @@ func newComponent(
 	params componentParams,
 ) workercommon.WorkerComponent {
 	return &deleteNamespaceComponent{
-		atWorkerCfg:       dynamicconfig.WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
-		visibilityManager: params.VisibilityManager,
-		metadataManager:   params.MetadataManager,
-		historyClient:     params.HistoryClient,
-		metricsHandler:    params.MetricsHandler,
-		blockedNamespaces: dynamicconfig.DeleteNamespaceBlockedNamespaces.Get(params.DynamicCollection),
-		logger:            params.Logger,
+		atWorkerCfg:         dynamicconfig.WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
+		visibilityManager:   params.VisibilityManager,
+		metadataManager:     params.MetadataManager,
+		historyClient:       params.HistoryClient,
+		metricsHandler:      params.MetricsHandler,
+		protectedNamespaces: dynamicconfig.ProtectedNamespaces.Get(params.DynamicCollection),
+		logger:              params.Logger,
 	}
 }
 
@@ -116,7 +116,7 @@ func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercomm
 }
 
 func (wc *deleteNamespaceComponent) deleteNamespaceLocalActivities() *localActivities {
-	return newLocalActivities(wc.metadataManager, wc.blockedNamespaces, wc.logger)
+	return newLocalActivities(wc.metadataManager, wc.protectedNamespaces, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) reclaimResourcesActivities() *reclaimresources.Activities {

@@ -42,9 +42,9 @@ import (
 
 type (
 	localActivities struct {
-		metadataManager   persistence.MetadataManager
-		blockedNamespaces dynamicconfig.TypedPropertyFn[[]string]
-		logger            log.Logger
+		metadataManager     persistence.MetadataManager
+		protectedNamespaces dynamicconfig.TypedPropertyFn[[]string]
+		logger              log.Logger
 	}
 
 	getNamespaceInfoResult struct {
@@ -52,21 +52,17 @@ type (
 		Namespace   namespace.Name
 		Clusters    []string
 	}
-
-	blockedNamespaces struct {
-		Names []string
-	}
 )
 
 func newLocalActivities(
 	metadataManager persistence.MetadataManager,
-	blockedNamespaces dynamicconfig.TypedPropertyFn[[]string],
+	protectedNamespaces dynamicconfig.TypedPropertyFn[[]string],
 	logger log.Logger,
 ) *localActivities {
 	return &localActivities{
-		metadataManager:   metadataManager,
-		blockedNamespaces: blockedNamespaces,
-		logger:            logger,
+		metadataManager:     metadataManager,
+		protectedNamespaces: protectedNamespaces,
+		logger:              logger,
 	}
 }
 
@@ -94,8 +90,8 @@ func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID nam
 	}, nil
 }
 
-func (a *localActivities) GetBlockedNamespacesActivity(_ context.Context) (blockedNamespaces, error) {
-	return blockedNamespaces{Names: a.blockedNamespaces()}, nil
+func (a *localActivities) GetProtectedNamespacesActivity(_ context.Context) ([]string, error) {
+	return a.protectedNamespaces(), nil
 }
 
 func (a *localActivities) MarkNamespaceDeletedActivity(ctx context.Context, nsName namespace.Name) error {
