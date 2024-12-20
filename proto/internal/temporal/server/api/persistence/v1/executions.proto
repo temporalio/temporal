@@ -280,10 +280,6 @@ message WorkflowExecutionInfo {
     repeated VersionedTransition previous_transition_history = 100;
     VersionedTransition last_transition_history_break_point = 101;
 
-    // This is the execution time when the WorkflowExecutionStarted event was written.
-    // A workflow reset changes the workflow start time, but preserves this field .
-    google.protobuf.Timestamp original_execution_start_time = 102;
-
 }
 
 message ExecutionStats {

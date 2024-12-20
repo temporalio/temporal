@@ -106,6 +106,7 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	s.Nil(dweResponse.WorkflowExtendedInfo.LastResetTime) // workflow was not reset
 	s.Nil(dweResponse.WorkflowExtendedInfo.ExecutionExpirationTime)
 	s.NotNil(dweResponse.WorkflowExtendedInfo.RunExpirationTime)
+	s.NotNil(dweResponse.WorkflowExtendedInfo.OriginalStartTime)
 
 	// workflow logic
 	workflowComplete := false

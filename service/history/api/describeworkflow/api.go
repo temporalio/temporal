@@ -158,7 +158,7 @@ func Invoke(
 		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
 			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
 			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
-			OriginalStartTime:       executionInfo.OriginalExecutionStartTime,
+			OriginalStartTime:       startEvent.EventTime,
 			CancelRequested:         executionInfo.CancelRequested,
 		},
 	}
