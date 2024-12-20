@@ -28,10 +28,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/nexus-rpc/sdk-go/nexus"
-	nexuspb "go.temporal.io/api/nexus/v1"
 	"testing"
 	"time"
+
+	"github.com/nexus-rpc/sdk-go/nexus"
+	nexuspb "go.temporal.io/api/nexus/v1"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
