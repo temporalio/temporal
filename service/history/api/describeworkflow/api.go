@@ -158,11 +158,12 @@ func Invoke(
 		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
 			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
 			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
+			OriginalStartTime:       executionInfo.OriginalExecutionStartTime,
 			CancelRequested:         executionInfo.CancelRequested,
 		},
 	}
 
-	if executionInfo.OriginalExecutionRunId != executionState.RunId {
+	if mutableState.IsResetRun() {
 		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
 	}
 
