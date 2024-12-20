@@ -694,9 +694,6 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 
 	if isStateBased {
 		newRunMutableState.InitTransitionHistory()
-		for _, event := range newRunHistory {
-			newRunMutableState.AddReapplyCandidateEvent(event)
-		}
 	}
 
 	return newRunMutableState, nil
@@ -950,7 +947,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 		return err
 	}
 
-	lastFirstTxnID, events, err := r.backfillHistory(
+	lastFirstTxnID, eventsToReapply, err := r.backfillHistory(
 		ctx,
 		sourceCluster,
 		namespaceID,
@@ -993,7 +990,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	}
 
 	if isStateBased {
-		for _, event := range events {
+		for _, event := range eventsToReapply {
 			mutableState.AddReapplyCandidateEvent(event)
 		}
 	}
@@ -1099,7 +1096,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	lastEventVersion int64,
 	branchToken []byte,
 	isStateBased bool,
-) (taskID int64, backfilledEvents []*historypb.HistoryEvent, retError error) {
+) (taskID int64, eventsToReapply []*historypb.HistoryEvent, retError error) {
 
 	if runID != originalRunID {
 		// At this point, it already acquired the workflow lock on the run ID.
@@ -1176,6 +1173,16 @@ BackfillLoop:
 			return common.EmptyEventTaskID, nil, err
 		}
 
+		if isStateBased {
+			// If backfill suceeds but later event reapply fails, during task's next retry,
+			// we still need to reapply events that have been stored in local DB.
+			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
+			if err != nil {
+				return common.EmptyEventTaskID, nil, err
+			}
+			eventsToReapply = append(eventsToReapply, events...)
+		}
+
 		if historyBlob.nodeID <= lastBatchNodeID {
 			// The history batch already in DB.
 			if len(sortedAncestors) > sortedAncestorsIdx {
@@ -1229,13 +1236,6 @@ BackfillLoop:
 		if err != nil {
 			return common.EmptyEventTaskID, nil, err
 		}
-		if isStateBased {
-			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
-			if err != nil {
-				return common.EmptyEventTaskID, nil, err
-			}
-			backfilledEvents = append(backfilledEvents, events...)
-		}
 
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
@@ -1258,7 +1258,7 @@ BackfillLoop:
 		prevBranchID = branchID
 	}
 
-	return prevTxnID, backfilledEvents, nil
+	return prevTxnID, eventsToReapply, nil
 }
 
 func (r *WorkflowStateReplicatorImpl) getHistoryFromLocalPaginationFn(
