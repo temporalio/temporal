@@ -135,22 +135,20 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 
 	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
-	namespaceDeleteDelay := params.NamespaceDeleteDelay
-	var cancelDeleteDelay workflow.CancelFunc
+	var (
+		namespaceDeleteDelay = params.NamespaceDeleteDelay
+		cancelDeleteDelay    workflow.CancelFunc
+	)
 	err := workflow.SetUpdateHandlerWithOptions(ctx, "update_namespace_delete_delay", func(ctx workflow.Context, newNamespaceDeleteDelayStr string) (string, error) {
-		if newNamespaceDeleteDelayStr == "" {
-			logger.Info("Namespace delete delay is removed. Namespace will be deleted immediately after all workflow executions are deleted.",
-				"oldDuration", namespaceDeleteDelay.String())
-			namespaceDeleteDelay = 0
-		} else {
-			// This must succeed because Update validator already validated the input.
-			namespaceDeleteDelay, _ = time.ParseDuration(newNamespaceDeleteDelayStr)
-		}
+		// This must succeed because Update validator already validated the input.
+		namespaceDeleteDelay, _ = time.ParseDuration(newNamespaceDeleteDelayStr)
 
 		var updateResult string
 		if namespaceDeleteDelay == 0 {
+			logger.Info("Namespace delete delay is removed. Namespace will be deleted immediately after all workflow executions are deleted.")
 			updateResult = "Namespace delete delay is removed."
 		} else {
+			logger.Info("Namespace delete delay is updated.", "new-delete-delay", namespaceDeleteDelay)
 			updateResult = fmt.Sprintf("Namespace delete delay is updated to %s.", namespaceDeleteDelay)
 		}
 
@@ -163,17 +161,17 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	}, workflow.UpdateHandlerOptions{
 		Validator: func(_ workflow.Context, newNamespaceDeleteDelayStr string) error {
 			if newNamespaceDeleteDelayStr == "" {
-				return nil
+				return temporal.NewNonRetryableApplicationError("delay duration is required", errors.ValidationErrorErrType, nil)
 			}
 			newDuration, err := time.ParseDuration(newNamespaceDeleteDelayStr)
 			if err != nil {
-				return temporal.NewNonRetryableApplicationError("unable to parse sleep duration", errors.ValidationErrorErrType, err)
+				return temporal.NewNonRetryableApplicationError("unable to parse delay duration", errors.ValidationErrorErrType, err)
 			}
 			if newDuration < 0 {
-				return temporal.NewNonRetryableApplicationError("sleep duration must be positive", errors.ValidationErrorErrType, nil)
+				return temporal.NewNonRetryableApplicationError("delay duration must be positive", errors.ValidationErrorErrType, nil)
 			}
 			if newDuration > 30*24*time.Hour {
-				return temporal.NewNonRetryableApplicationError("sleep duration must be less than 30 days", errors.ValidationErrorErrType, nil)
+				return temporal.NewNonRetryableApplicationError("delay duration must be less than 30 days", errors.ValidationErrorErrType, nil)
 			}
 			return nil
 		},

@@ -405,7 +405,7 @@ func Test_ReclaimResourcesWorkflow_UpdateDeleteDelay(t *testing.T) {
 					require.EqualValues(t, "Existing namespace delete delay timer is cancelled. Namespace delete delay is removed.", r)
 				},
 			}
-			env.UpdateWorkflow("update_namespace_delete_delay", "", uc, "")
+			env.UpdateWorkflow("update_namespace_delete_delay", "", uc, "0")
 		}
 	})
 
