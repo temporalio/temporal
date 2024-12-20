@@ -47,7 +47,7 @@ func (d ScheduledEventDefinition) Apply(root *hsm.Node, event *historypb.History
 	if err != nil {
 		return err
 	}
-	_, err = AddChild(root, strconv.FormatInt(event.EventId, 10), event, token)
+	_, err = AddChild(root, strconv.FormatInt(event.EventId, 10), event, token, true)
 	return err
 }
 
@@ -67,11 +67,9 @@ func (d CancelRequestedEventDefinition) Type() enumspb.EventType {
 }
 
 func (d CancelRequestedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
-	_, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
+	return transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return o.Cancel(node, event.EventTime.AsTime())
 	})
-
-	return err
 }
 
 func (d CancelRequestedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -90,15 +88,13 @@ func (d StartedEventDefinition) Type() enumspb.EventType {
 }
 
 func (d StartedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
-	_, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
+	return transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionStarted.Apply(o, EventStarted{
 			Time:       event.EventTime.AsTime(),
 			Node:       node,
 			Attributes: event.GetNexusOperationStartedEventAttributes(),
 		})
 	})
-
-	return err
 }
 
 func (d StartedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -115,17 +111,12 @@ func (d CompletedEventDefinition) IsWorkflowTaskTrigger() bool {
 }
 
 func (d CompletedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
-	node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
+	return transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionSucceeded.Apply(o, EventSucceeded{
 			Time: event.EventTime.AsTime(),
 			Node: node,
 		})
 	})
-	if err != nil {
-		return err
-	}
-
-	return root.DeleteChild(node.Key)
 }
 
 func (d CompletedEventDefinition) Type() enumspb.EventType {
@@ -150,18 +141,13 @@ func (d FailedEventDefinition) Type() enumspb.EventType {
 }
 
 func (d FailedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
-	node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
+	return transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionFailed.Apply(o, EventFailed{
 			Time:       event.EventTime.AsTime(),
 			Attributes: event.GetNexusOperationFailedEventAttributes(),
 			Node:       node,
 		})
 	})
-	if err != nil {
-		return err
-	}
-
-	return root.DeleteChild(node.Key)
 }
 
 func (d FailedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -182,17 +168,12 @@ func (d CanceledEventDefinition) Type() enumspb.EventType {
 }
 
 func (d CanceledEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
-	node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
+	return transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionCanceled.Apply(o, EventCanceled{
 			Time: event.EventTime.AsTime(),
 			Node: node,
 		})
 	})
-	if err != nil {
-		return err
-	}
-
-	return root.DeleteChild(node.Key)
 }
 
 func (d CanceledEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -213,16 +194,11 @@ func (d TimedOutEventDefinition) Type() enumspb.EventType {
 }
 
 func (d TimedOutEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
-	node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
+	return transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 		return TransitionTimedOut.Apply(o, EventTimedOut{
 			Node: node,
 		})
 	})
-	if err != nil {
-		return err
-	}
-
-	return root.DeleteChild(node.Key)
 }
 
 func (d TimedOutEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -254,21 +230,14 @@ func RegisterEventDefinitions(reg *hsm.Registry) error {
 	return reg.RegisterEventDefinition(TimedOutEventDefinition{})
 }
 
-func transitionOperation(
-	root *hsm.Node,
-	event *historypb.HistoryEvent,
-	fn func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error),
-) (*hsm.Node, error) {
+func transitionOperation(root *hsm.Node, event *historypb.HistoryEvent, fn func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error)) error {
 	node, err := findOperationNode(root, event)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if err := hsm.MachineTransition(node, func(o Operation) (hsm.TransitionOutput, error) {
+	return hsm.MachineTransition(node, func(o Operation) (hsm.TransitionOutput, error) {
 		return fn(node, o)
-	}); err != nil {
-		return nil, err
-	}
-	return node, nil
+	})
 }
 
 func findOperationNode(root *hsm.Node, event *historypb.HistoryEvent) (*hsm.Node, error) {

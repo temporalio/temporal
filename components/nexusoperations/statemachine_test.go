@@ -83,7 +83,7 @@ func TestAddChild(t *testing.T) {
 					},
 				},
 			}
-			child, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"))
+			child, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"), false)
 			require.NoError(t, err)
 			opLog, err := root.Outputs()
 			require.NoError(t, err)
