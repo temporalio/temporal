@@ -2,9 +2,8 @@
 
 The Temporal server supports ability to configure OTEL trace exporters to
 support emitting spans and traces for observability. More specifically, the
-server uses the [Go Open Telemetry
-library](https://github.com/open-telemetry/opentelemetry-go) for instrumentation
-and multi-protocol multi-model telemetry exporting. This document is intended to
+server uses the [Go Open Telemetry library](https://github.com/open-telemetry/opentelemetry-go)
+for instrumentation and multi-protocol multi-model telemetry exporting. This document is intended to
 help developers understand how to configure exporters and instrument their code.
 A full exploration of tracing and telemetry is out of scope of this document and
 the reader is referred to [external reference
@@ -15,16 +14,12 @@ itself](https://github.com/open-telemetry/opentelemetry-specification/blob/main/
 
 ## Quickstart
 
-1. Run [`jaeger-all-in-one`](https://www.jaegertracing.io/download/) (either from a binary, or using the docker image).
-2. View the Jaeger UI at http://localhost:16686/search
-3. Set these environment variables:
-    ```
-    export OTEL_TRACES_EXPORTER=otlp
-    export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
-    export TEMPORAL_OTEL_DEBUG=true
-    ```
-4. Start the server using `make start`
-5. Refresh the Jaeger UI. You should see traces from Temporal services.
+1. Run `make start-dependencies` (which starts Grafana Tempo)
+2. Start the server using `make OTEL=true start` (or any other start-x command)
+3. Visit http://localhost:3000/explore and select "Tempo" from the datasource dropdown.
+
+tip: use [TraceQL](https://grafana.com/docs/tempo/latest/traceql/)
+`{ .temporalWorkflowID =~ "<WF-ID>.*" }` to find the traces for your workflow 
 
 ## Configuring
 

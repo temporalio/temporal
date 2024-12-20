@@ -135,11 +135,56 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 
 	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
+	var (
+		namespaceDeleteDelay = params.NamespaceDeleteDelay
+		cancelDeleteDelay    workflow.CancelFunc
+	)
+	err := workflow.SetUpdateHandlerWithOptions(ctx, "update_namespace_delete_delay", func(ctx workflow.Context, newNamespaceDeleteDelayStr string) (string, error) {
+		// This must succeed because Update validator already validated the input.
+		namespaceDeleteDelay, _ = time.ParseDuration(newNamespaceDeleteDelayStr)
+
+		var updateResult string
+		if namespaceDeleteDelay == 0 {
+			logger.Info("Namespace delete delay is removed. Namespace will be deleted immediately after all workflow executions are deleted.")
+			updateResult = "Namespace delete delay is removed."
+		} else {
+			logger.Info("Namespace delete delay is updated.", "new-delete-delay", namespaceDeleteDelay)
+			updateResult = fmt.Sprintf("Namespace delete delay is updated to %s.", namespaceDeleteDelay)
+		}
+
+		if cancelDeleteDelay != nil {
+			cancelDeleteDelay()
+			logger.Info("Existing namespace delete delay timer is cancelled.")
+			updateResult = "Existing namespace delete delay timer is cancelled. " + updateResult
+		}
+		return updateResult, nil
+	}, workflow.UpdateHandlerOptions{
+		Validator: func(_ workflow.Context, newNamespaceDeleteDelayStr string) error {
+			if newNamespaceDeleteDelayStr == "" {
+				return temporal.NewNonRetryableApplicationError("delay duration is required", errors.ValidationErrorErrType, nil)
+			}
+			newDuration, err := time.ParseDuration(newNamespaceDeleteDelayStr)
+			if err != nil {
+				return temporal.NewNonRetryableApplicationError("unable to parse delay duration", errors.ValidationErrorErrType, err)
+			}
+			if newDuration < 0 {
+				return temporal.NewNonRetryableApplicationError("delay duration must be positive", errors.ValidationErrorErrType, nil)
+			}
+			if newDuration > 30*24*time.Hour {
+				return temporal.NewNonRetryableApplicationError("delay duration must be less than 30 days", errors.ValidationErrorErrType, nil)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		return result, fmt.Errorf("%w: %v", errors.ErrUnableToSetUpdateHandler, err)
+	}
+
 	var la *LocalActivities
 
 	// Step 0. This workflow is started right after the namespace is marked as DELETED and renamed.
 	// Wait for namespace cache refresh to make sure no new executions are created.
-	err := workflow.Sleep(ctx, namespaceCacheRefreshDelay)
+	err = workflow.Sleep(ctx, namespaceCacheRefreshDelay)
 	if err != nil {
 		return result, err
 	}
@@ -151,9 +196,15 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	}
 
 	// Step 2. Sleep before deleting namespace from a database.
-	err = workflow.Sleep(ctx, params.NamespaceDeleteDelay)
-	if err != nil {
-		return result, fmt.Errorf("%w: %v", errors.ErrUnableToSleep, err)
+	for namespaceDeleteDelay > 0 {
+		var cancelableCtx workflow.Context
+		cancelableCtx, cancelDeleteDelay = workflow.WithCancel(ctx)
+		logger.Info("Delaying namespace delete. Send 'update_namespace_delete_delay' update to change or clear the delay.",
+			"duration", namespaceDeleteDelay.String())
+
+		ndd := namespaceDeleteDelay
+		namespaceDeleteDelay = 0
+		_ = workflow.Sleep(cancelableCtx, ndd)
 	}
 
 	// Step 3. Delete namespace from database.

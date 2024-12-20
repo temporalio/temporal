@@ -866,9 +866,9 @@ and deployment interaction in matching and history.`,
 	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
-		false,
-		`EnableNexus toggles all Nexus functionality on the server. Note that toggling this requires restarting
-server hosts for it to take effect.`,
+		true,
+		`Toggles all Nexus functionality on the server. Note that toggling this requires restarting server hosts for it
+		to take effect.`,
 	)
 
 	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
@@ -1014,6 +1014,11 @@ Default is 4.`,
 		`DeleteNamespaceNamespaceDeleteDelay is a duration for how long namespace stays in database
 after all namespace resources (i.e. workflow executions) are deleted.
 Default is 0, means, namespace will be deleted immediately.`,
+	)
+	ProtectedNamespaces = NewGlobalTypedSetting(
+		"worker.protectedNamespaces",
+		([]string)(nil),
+		`List of namespace names that can't be deleted.`,
 	)
 
 	// keys for matching

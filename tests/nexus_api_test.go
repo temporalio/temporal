@@ -40,6 +40,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -820,6 +821,54 @@ func (s *NexusApiTestSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTokenM
 		Error:     &nexuspb.HandlerError{},
 	})
 	s.ErrorContains(err, "Operation requested with a token from a different namespace.")
+}
+
+func (s *NexusApiTestSuite) TestNexus_RespondNexusTaskMethods_ValidateFailureDetailsJSON() {
+	ctx := testcore.NewContext()
+
+	tt := tokenspb.NexusTask{
+		NamespaceId: s.GetNamespaceID(s.Namespace()),
+		TaskQueue:   "test",
+		TaskId:      uuid.NewString(),
+	}
+	ttBytes, err := tt.Marshal()
+	s.NoError(err)
+
+	_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		Namespace: s.Namespace(),
+		Identity:  uuid.NewString(),
+		TaskToken: ttBytes,
+		Response: &nexuspb.Response{
+			Variant: &nexuspb.Response_StartOperation{
+				StartOperation: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_OperationError{
+						OperationError: &nexuspb.UnsuccessfulOperationError{
+							OperationState: string(nexus.OperationStateFailed),
+							Failure: &nexuspb.Failure{
+								Details: []byte("not valid JSON"),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.Equal("failure details must be JSON serializable", invalidArgumentErr.Message)
+
+	_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
+		Namespace: s.Namespace(),
+		Identity:  uuid.NewString(),
+		TaskToken: ttBytes,
+		Error: &nexuspb.HandlerError{
+			Failure: &nexuspb.Failure{
+				Details: []byte("not valid JSON"),
+			},
+		},
+	})
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.Equal("failure details must be JSON serializable", invalidArgumentErr.Message)
 }
 
 func (s *NexusApiTestSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFound() {

@@ -32,6 +32,7 @@ import (
 )
 
 const (
+	ValidationErrorErrType                = "ValidationError"
 	ExecutionsStillExistErrType           = "ExecutionsStillExist"
 	NoProgressErrType                     = "NoProgress"
 	NotDeletedExecutionsStillExistErrType = "NotDeletedExecutionsStillExist"
@@ -40,7 +41,7 @@ const (
 var (
 	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
 	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
-	ErrUnableToSleep                = errors.New("unable to sleep")
+	ErrUnableToSetUpdateHandler     = errors.New("unable to set Update handler")
 )
 
 func NewExecutionsStillExistError(count int) error {

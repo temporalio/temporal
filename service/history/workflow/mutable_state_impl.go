@@ -811,8 +811,14 @@ func (ms *MutableStateImpl) UpdateResetRunID(runID string) {
 
 // IsResetRun returns true if this run is the result of a reset operation.
 // A run is a reset run if OriginalExecutionRunID points to another run.
+//
+// This method only works for workflows started by server version 1.27.0+.
+// Older workflows don't have OriginalExecutionRunID set in mutable state,
+// and this method will NOT try to load WorkflowExecutionStarted event to
+// get that information.
 func (ms *MutableStateImpl) IsResetRun() bool {
-	return ms.GetExecutionInfo().GetOriginalExecutionRunId() != ms.GetExecutionState().GetRunId()
+	originalExecutionRunID := ms.GetExecutionInfo().GetOriginalExecutionRunId()
+	return len(originalExecutionRunID) != 0 && originalExecutionRunID != ms.GetExecutionState().GetRunId()
 }
 
 func (ms *MutableStateImpl) GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {

@@ -28,6 +28,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -145,6 +146,7 @@ type (
 		healthInterceptor               *interceptor.HealthInterceptor
 		scheduleSpecBuilder             *scheduler.SpecBuilder
 		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
+		httpEnabled                     bool
 	}
 )
 
@@ -173,6 +175,7 @@ func NewWorkflowHandler(
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
+	httpEnabled bool,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
@@ -225,6 +228,7 @@ func NewWorkflowHandler(
 		healthInterceptor:   healthInterceptor,
 		scheduleSpecBuilder: scheduleSpecBuilder,
 		outstandingPollers:  collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
+		httpEnabled:         httpEnabled,
 	}
 
 	return handler
@@ -2922,7 +2926,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			SdkMetadata:                     true,
 			BuildIdBasedVersioning:          true,
 			CountGroupByExecutionStatus:     true,
-			Nexus:                           wh.config.EnableNexusAPIs(),
+			Nexus:                           wh.httpEnabled && wh.config.EnableNexusAPIs(),
 		},
 	}, nil
 }
@@ -4668,6 +4672,10 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
 	// good reason to fail at this point.
 
+	if details := request.GetResponse().GetStartOperation().GetOperationError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
+		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+	}
+
 	matchingRequest := &matchingservice.RespondNexusTaskCompletedRequest{
 		NamespaceId: namespaceId.String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
@@ -4704,6 +4712,10 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 		return nil, errInvalidTaskToken
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
+
+	if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
+		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+	}
 
 	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a

@@ -75,7 +75,6 @@ var (
 	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")
 	errCronNotAllowed                                     = serviceerror.NewInvalidArgument("Scheduled workflow must not contain CronSchedule")
 	errIDReusePolicyNotAllowed                            = serviceerror.NewInvalidArgument("Scheduled workflow must not contain WorkflowIDReusePolicy")
-	errUnableDeleteSystemNamespace                        = serviceerror.NewInvalidArgument("Unable to delete system namespace.")
 	errBatchJobIDNotSet                                   = serviceerror.NewInvalidArgument("JobId is not set on request.")
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
 	errReasonNotSet                                       = serviceerror.NewInvalidArgument("Reason is not set on request.")
