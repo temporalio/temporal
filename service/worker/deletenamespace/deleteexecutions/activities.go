@@ -117,7 +117,7 @@ func (a *LocalActivities) GetNextPageTokenActivity(ctx context.Context, params G
 
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.logger.Error("Unable to list all workflows to get next page token.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
+		a.logger.Error("Unable to list all workflows to get next page token.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowNamespaceID(params.NamespaceID.String()), tag.Error(err))
 		return nil, err
 	}
 

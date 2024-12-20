@@ -93,15 +93,12 @@ var (
 
 func validateParams(params *ReclaimResourcesParams) error {
 	if params.NamespaceID.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace ID is required", "", nil)
+		return errors.NewInvalidArgument("namespace ID is required", nil)
 	}
-
 	if params.Namespace.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace is required", "", nil)
+		return errors.NewInvalidArgument("namespace is required", nil)
 	}
-
 	params.Config.ApplyDefaults()
-
 	return nil
 }
 
@@ -161,23 +158,23 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	}, workflow.UpdateHandlerOptions{
 		Validator: func(_ workflow.Context, newNamespaceDeleteDelayStr string) error {
 			if newNamespaceDeleteDelayStr == "" {
-				return temporal.NewNonRetryableApplicationError("delay duration is required", errors.ValidationErrorErrType, nil)
+				return errors.NewInvalidArgument("delay duration is required", nil)
 			}
 			newDuration, err := time.ParseDuration(newNamespaceDeleteDelayStr)
 			if err != nil {
-				return temporal.NewNonRetryableApplicationError("unable to parse delay duration", errors.ValidationErrorErrType, err)
+				return errors.NewInvalidArgument("unable to parse delay duration", err)
 			}
 			if newDuration < 0 {
-				return temporal.NewNonRetryableApplicationError("delay duration must be positive", errors.ValidationErrorErrType, nil)
+				return errors.NewInvalidArgument("delay duration must be positive", nil)
 			}
 			if newDuration > 30*24*time.Hour {
-				return temporal.NewNonRetryableApplicationError("delay duration must be less than 30 days", errors.ValidationErrorErrType, nil)
+				return errors.NewInvalidArgument("delay duration must be less than 30 days", nil)
 			}
 			return nil
 		},
 	})
 	if err != nil {
-		return result, fmt.Errorf("%w: %v", errors.ErrUnableToSetUpdateHandler, err)
+		return result, err
 	}
 
 	var la *LocalActivities
@@ -211,7 +208,7 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	ctx5 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx5, la.DeleteNamespaceActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
 	if err != nil {
-		return result, fmt.Errorf("%w: DeleteNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 
 	result.NamespaceDeleted = true
@@ -236,7 +233,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params Re
 		var isAdvancedVisibility bool
 		err := workflow.ExecuteLocalActivity(ctx1, la.IsAdvancedVisibilityActivity, params.Namespace).Get(ctx, &isAdvancedVisibility)
 		if err != nil {
-			return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+			return result, err
 		}
 	}
 
@@ -244,7 +241,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params Re
 	var executionsCount int64
 	err := workflow.ExecuteLocalActivity(ctx4, la.CountExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsCount)
 	if err != nil {
-		return result, fmt.Errorf("%w: CountExecutionsAdvVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 	if executionsCount == 0 {
 		return result, nil
@@ -255,8 +252,8 @@ func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params Re
 	var der deleteexecutions.DeleteExecutionsResult
 	err = workflow.ExecuteChildWorkflow(ctx2, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
 	if err != nil {
-		logger.Error("Unable to execute child workflow.", tag.Error(err))
-		return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
+		logger.Error("Child workflow error.", tag.Error(err))
+		return result, err
 	}
 	result.DeleteSuccessCount = der.SuccessCount
 	result.DeleteErrorCount = der.ErrorCount
@@ -279,7 +276,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params Re
 				return result, temporal.NewApplicationError(appErr.Message(), appErr.Type(), notDeletedCount)
 			}
 		}
-		return result, fmt.Errorf("%w: EnsureNoExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 
 	return result, nil
