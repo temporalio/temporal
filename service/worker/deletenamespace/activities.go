@@ -44,9 +44,13 @@ import (
 
 type (
 	localActivities struct {
-		metadataManager     persistence.MetadataManager
-		protectedNamespaces dynamicconfig.TypedPropertyFn[[]string]
-		logger              log.Logger
+		metadataManager      persistence.MetadataManager
+		nexusEndpointManager persistence.NexusEndpointManager
+		logger               log.Logger
+
+		protectedNamespaces                       dynamicconfig.TypedPropertyFn[[]string]
+		allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn
+		nexusEndpointListDefaultPageSize          dynamicconfig.IntPropertyFn
 	}
 
 	getNamespaceInfoResult struct {
@@ -58,13 +62,19 @@ type (
 
 func newLocalActivities(
 	metadataManager persistence.MetadataManager,
-	protectedNamespaces dynamicconfig.TypedPropertyFn[[]string],
+	nexusEndpointManager persistence.NexusEndpointManager,
 	logger log.Logger,
+	protectedNamespaces dynamicconfig.TypedPropertyFn[[]string],
+	allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn,
+	nexusEndpointListDefaultPageSize dynamicconfig.IntPropertyFn,
 ) *localActivities {
 	return &localActivities{
-		metadataManager:     metadataManager,
-		protectedNamespaces: protectedNamespaces,
-		logger:              logger,
+		metadataManager:      metadataManager,
+		nexusEndpointManager: nexusEndpointManager,
+		logger:               logger,
+		protectedNamespaces:  protectedNamespaces,
+		allowDeleteNamespaceIfNexusEndpointTarget: allowDeleteNamespaceIfNexusEndpointTarget,
+		nexusEndpointListDefaultPageSize:          nexusEndpointListDefaultPageSize,
 	}
 }
 
@@ -95,6 +105,35 @@ func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID nam
 func (a *localActivities) ValidateProtectedNamespacesActivity(_ context.Context, nsName namespace.Name) error {
 	if slices.Contains(a.protectedNamespaces(), nsName.String()) {
 		return temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is protected from deletion", nsName), errors.ValidationErrorErrType, nil, nil)
+	}
+	return nil
+}
+
+func (a *localActivities) ValidateNexusEndpointsActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
+	if !a.allowDeleteNamespaceIfNexusEndpointTarget() {
+		// Prevent deletion of a namespace that is targeted by a Nexus endpoint.
+		var nextPageToken []byte
+		for {
+			resp, err := a.nexusEndpointManager.ListNexusEndpoints(ctx, &persistence.ListNexusEndpointsRequest{
+				LastKnownTableVersion: 0,
+				NextPageToken:         nextPageToken,
+				PageSize:              a.nexusEndpointListDefaultPageSize(),
+			})
+			if err != nil {
+				a.logger.Error("Unable to list Nexus endpoints from persistence.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+				return fmt.Errorf("unable to list Nexus endpoints for namespace %s: %w", nsName, err)
+			}
+
+			for _, entry := range resp.Entries {
+				if endpointNsID := entry.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(); endpointNsID == nsID.String() {
+					return temporal.NewNonRetryableApplicationError(fmt.Sprintf("cannot delete a namespace that is a target of a Nexus endpoint %s", entry.GetEndpoint().GetSpec().GetName()), errors.ValidationErrorErrType, nil, nil)
+				}
+			}
+			nextPageToken = resp.NextPageToken
+			if len(nextPageToken) == 0 {
+				break
+			}
+		}
 	}
 	return nil
 }

@@ -68,6 +68,7 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
@@ -613,43 +614,9 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, errRequestNotSet
 	}
 
-	if !h.config.AllowDeleteNamespaceIfNexusEndpointTarget() {
-		// Get the namespace name in case the request is to delete by ID so we can verify that this namespace is not
-		// associated with a Nexus endpoint.
-		requestNSName := request.GetNamespace()
-		if request.GetNamespaceId() != "" {
-			nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-			if err != nil {
-				return nil, err
-			}
-			requestNSName = nsName.String()
-		}
-
-		// Prevent deletion of a namespace that is targeted by a Nexus endpoint.
-		var nextPageToken []byte
-		for {
-			resp, err := h.nexusEndpointClient.List(ctx, &operatorservice.ListNexusEndpointsRequest{
-				// Don't specify PageSize and fallback to default.
-				NextPageToken: nextPageToken,
-			})
-			if err != nil {
-				return nil, err
-			}
-			for _, entry := range resp.GetEndpoints() {
-				if nsName := entry.GetSpec().GetTarget().GetWorker().GetNamespace(); nsName == requestNSName {
-					return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot delete a namespace that is a target of a Nexus endpoint (%s)", entry.GetSpec().GetName()))
-				}
-			}
-			nextPageToken = resp.NextPageToken
-			if len(nextPageToken) == 0 {
-				break
-			}
-		}
-	}
-
-	namespaceDeleteDelay := h.config.DeleteNamespaceNamespaceDeleteDelay()
-	if request.NamespaceDeleteDelay != nil {
-		namespaceDeleteDelay = request.NamespaceDeleteDelay.AsDuration()
+	// If NamespaceDeleteDelay is not provided, the default delay configured in the cluster should be used.
+	if request.NamespaceDeleteDelay == nil {
+		request.NamespaceDeleteDelay = durationpb.New(h.config.DeleteNamespaceNamespaceDeleteDelay())
 	}
 
 	// Execute workflow.
@@ -662,7 +629,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 			PagesPerExecution:                    h.config.DeleteNamespacePagesPerExecution(),
 			ConcurrentDeleteExecutionsActivities: h.config.DeleteNamespaceConcurrentDeleteExecutionsActivities(),
 		},
-		NamespaceDeleteDelay: namespaceDeleteDelay,
+		NamespaceDeleteDelay: request.NamespaceDeleteDelay.AsDuration(),
 	}
 
 	sdkClient := h.sdkClientFactory.GetSystemClient()
