@@ -723,11 +723,11 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 	}
 	deploymentA := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("A"),
+		BuildId:    tv.BuildId() + "_A",
 	}
 	deploymentB := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("B"),
+		BuildId:    tv.BuildId() + "_B",
 	}
 	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
@@ -841,7 +841,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 	}
 	deploymentA := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("A"),
+		BuildId:    tv.BuildId() + "_A",
 	}
 	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
@@ -901,7 +901,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	}
 	deploymentA := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("A"),
+		BuildId:    tv.BuildId() + "_A",
 	}
 	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
@@ -1203,11 +1203,11 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	dep1 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("1"),
+		BuildId:    tv.BuildId() + "_1",
 	}
 	dep2 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("2"),
+		BuildId:    tv.BuildId() + "_2",
 	}
 
 	// set to 1
@@ -1322,11 +1322,11 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 
 	dep1 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("1"),
+		BuildId:    tv.BuildId() + "_1",
 	}
 	dep2 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("2"),
+		BuildId:    tv.BuildId() + "_2",
 	}
 
 	// set to 1 with some metadata
