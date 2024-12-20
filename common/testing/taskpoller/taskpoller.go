@@ -28,6 +28,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nexus-rpc/sdk-go/nexus"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"testing"
 	"time"
 
@@ -54,6 +56,10 @@ type (
 	activityTaskPoller struct {
 		*TaskPoller
 		pollActivityTaskRequest *workflowservice.PollActivityTaskQueueRequest
+	}
+	nexusTaskPoller struct {
+		*TaskPoller
+		pollNexusTaskRequest *workflowservice.PollNexusTaskQueueRequest
 	}
 	options struct {
 		tv      *testvars.TestVars
@@ -112,6 +118,12 @@ func (p *TaskPoller) PollWorkflowTask(
 	return &workflowTaskPoller{TaskPoller: p, pollWorkflowTaskRequest: req}
 }
 
+func (p *TaskPoller) PollNexusTask(
+	req *workflowservice.PollNexusTaskQueueRequest,
+) *nexusTaskPoller {
+	return &nexusTaskPoller{TaskPoller: p, pollNexusTaskRequest: req}
+}
+
 // PollAndHandleWorkflowTask issues a PollWorkflowTaskQueueRequest to obtain a new workflow task,
 // invokes the handler with the task, and completes/fails the task accordingly.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
@@ -136,6 +148,120 @@ func (p *workflowTaskPoller) HandleTask(
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*TaskCompletedRequest, error),
 	opts ...optionFunc,
 ) (*TaskCompletedResponse, error) {
+	p.t.Helper()
+	options := newOptions(tv, opts)
+	ctx, cancel := newContext(options)
+	defer cancel()
+	return p.pollAndHandleTask(ctx, options, handler)
+}
+
+func (p *nexusTaskPoller) pollTask(
+	ctx context.Context,
+	opts *options,
+) (*workflowservice.PollNexusTaskQueueResponse, error) {
+	p.t.Helper()
+
+	req := common.CloneProto(p.pollNexusTaskRequest)
+	if req.Namespace == "" {
+		req.Namespace = p.namespace
+	}
+	if req.TaskQueue == nil {
+		req.TaskQueue = opts.tv.TaskQueue()
+	}
+	if req.Identity == "" {
+		req.Identity = opts.tv.WorkerIdentity()
+	}
+	resp, err := p.client.PollNexusTaskQueue(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil || resp.TaskToken == nil {
+		return nil, NoWorkflowTaskAvailable
+	}
+
+	return resp, err
+}
+
+func (p *nexusTaskPoller) pollAndHandleTask(
+	ctx context.Context,
+	opts *options,
+	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
+) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	p.t.Helper()
+	task, err := p.pollTask(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to poll nexus task: %w", err)
+	}
+	return p.handleTask(ctx, opts, task, handler)
+}
+func (p *nexusTaskPoller) handleTask(
+	ctx context.Context,
+	opts *options,
+	task *workflowservice.PollNexusTaskQueueResponse,
+	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
+) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	p.t.Helper()
+	reply, err := handler(task)
+	if err != nil {
+		return nil, p.respondNexusTaskFailed(ctx, opts, task.TaskToken)
+	}
+
+	resp, err := p.respondNexusTaskCompleted(ctx, opts, task, reply)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func (p *nexusTaskPoller) respondNexusTaskCompleted(
+	ctx context.Context,
+	opts *options,
+	task *workflowservice.PollNexusTaskQueueResponse,
+	reply *workflowservice.RespondNexusTaskCompletedRequest,
+) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	p.t.Helper()
+	if reply == nil {
+		return nil, errors.New("missing RespondWorkflowTaskCompletedRequest return")
+	}
+	if reply.Namespace == "" {
+		reply.Namespace = p.namespace
+	}
+	if len(reply.TaskToken) == 0 {
+		reply.TaskToken = task.TaskToken
+	}
+	if reply.Identity == "" {
+		reply.Identity = opts.tv.WorkerIdentity()
+	}
+	reply.Response = &nexuspb.Response{}
+
+	return p.client.RespondNexusTaskCompleted(ctx, reply)
+}
+
+func (p *nexusTaskPoller) respondNexusTaskFailed(
+	ctx context.Context,
+	opts *options,
+	taskToken []byte,
+) error {
+	p.t.Helper()
+	_, err := p.client.RespondNexusTaskFailed(
+		ctx,
+		&workflowservice.RespondNexusTaskFailedRequest{
+			Namespace: p.namespace,
+			TaskToken: taskToken,
+			Identity:  opts.tv.WorkerIdentity(),
+			Error: &nexuspb.HandlerError{
+				ErrorType: string(nexus.HandlerErrorTypeInternal),
+			},
+		})
+	return err
+}
+
+func (p *nexusTaskPoller) HandleTask(
+	tv *testvars.TestVars,
+	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
+	opts ...optionFunc,
+) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
 	p.t.Helper()
 	options := newOptions(tv, opts)
 	ctx, cancel := newContext(options)

@@ -28,6 +28,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/sdk/converter"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -60,6 +62,7 @@ import (
 const (
 	tqTypeWf        = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	tqTypeAct       = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	tqTypeNexus     = enumspb.TASK_QUEUE_TYPE_NEXUS
 	vbUnspecified   = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	vbPinned        = enumspb.VERSIONING_BEHAVIOR_PINNED
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
@@ -448,6 +451,64 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 				vbUnpinned)}, nil
 		})
 	s.verifyWorkflowVersioning(tvB, vbUnpinned, dB, nil, nil)
+}
+
+func (s *Versioning3Suite) TestNexusTask_StaysOnCurrentDeployment() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.nexusTaskStaysOnCurrentDeployment()
+		},
+	)
+}
+
+func (s *Versioning3Suite) nexusTaskStaysOnCurrentDeployment() {
+	tvA := testvars.New(s).WithBuildId("A")
+	tvB := tvA.WithBuildId("B")
+
+	nexusRequest := &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: s.GetNamespaceID(s.Namespace()),
+		TaskQueue:   tvA.TaskQueue(),
+		Request: &nexuspb.Request{
+			Header: map[string]string{
+				// placeholder value as passing in an empty map would result in protoc deserializing
+				// it as nil, which breaks existing logic inside of matching
+				"request-timeout": "1",
+			},
+		},
+	}
+
+	// current deployment is -> A
+	s.updateTaskQueueDeploymentData(tvA, 0, tqTypeNexus)
+	s.waitForDeploymentDataPropagation(tvA, tqTypeNexus)
+
+	// local poller with deployment A receives task
+	s.pollAndDispatchNexusTask(tvA, nexusRequest)
+
+	// current deployment is now -> B
+	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeNexus)
+	s.waitForDeploymentDataPropagation(tvB, tqTypeNexus)
+
+	// Pollers of A are there but should not get any task
+	go s.idlePollNexus(tvA, true, ver3MinPollTime, "nexus task should not go to the old deployment")
+
+	s.pollAndDispatchNexusTask(tvB, nexusRequest)
+}
+
+func (s *Versioning3Suite) pollAndDispatchNexusTask(
+	tv *testvars.TestVars,
+	nexusRequest *matchingservice.DispatchNexusTaskRequest,
+) {
+	matchingClient := s.GetTestCluster().MatchingClient()
+
+	nexusCompleted := make(chan interface{})
+	s.pollNexusTaskAndHandle(tv, false, nexusCompleted,
+		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return &workflowservice.RespondNexusTaskCompletedRequest{}, nil // response object gets filled during processing
+		})
+
+	_, err := matchingClient.DispatchNexusTask(context.Background(), nexusRequest)
+	s.NoError(err)
 }
 
 func (s *Versioning3Suite) TestEagerActivity() {
@@ -852,6 +913,41 @@ func respondCompleteWorkflow(
 	}
 }
 
+func respondScheduleNexusOperation(
+	tv *testvars.TestVars,
+	behavior enumspb.VersioningBehavior,
+	endpointName string,
+) *workflowservice.RespondWorkflowTaskCompletedRequest {
+	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+						Input:     mustToPayload("input"),
+					},
+				},
+			},
+		},
+		ForceCreateNewWorkflowTask: false,
+		Deployment:                 tv.Deployment(),
+		VersioningBehavior:         behavior,
+	}
+}
+
+func mustToPayload(v any) *commonpb.Payload {
+	conv := converter.GetDefaultDataConverter()
+	payload, err := conv.ToPayload(v)
+	if err != nil {
+
+		return &commonpb.Payload{}
+	}
+	return payload
+}
+
 func respondQueryTaskCompleted(
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	namespace string,
@@ -964,6 +1060,43 @@ func (s *Versioning3Suite) pollWftAndHandle(
 	return nil, nil
 }
 
+func (s *Versioning3Suite) pollNexusTaskAndHandle(
+	tv *testvars.TestVars,
+	sticky bool,
+	async chan<- interface{},
+	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
+) (*taskpoller.TaskPoller, *workflowservice.RespondNexusTaskCompletedResponse) {
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	d := tv.Deployment()
+	tq := tv.TaskQueue()
+	if sticky {
+		tq = tv.StickyTaskQueue()
+	}
+	f := func() *workflowservice.RespondNexusTaskCompletedResponse {
+		resp, err := poller.PollNexusTask(
+			&workflowservice.PollNexusTaskQueueRequest{
+				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+					BuildId:              d.BuildId,
+					DeploymentSeriesName: d.SeriesName,
+					UseVersioning:        true,
+				},
+				TaskQueue: tq,
+			},
+		).HandleTask(tv, handler)
+		s.NoError(err)
+		return resp
+	}
+	if async == nil {
+		return poller, f()
+	} else {
+		go func() {
+			f()
+			close(async)
+		}()
+	}
+	return nil, nil
+}
+
 func (s *Versioning3Suite) pollActivityAndHandle(
 	tv *testvars.TestVars,
 	async chan<- interface{},
@@ -1040,6 +1173,33 @@ func (s *Versioning3Suite) idlePollActivity(
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			if task != nil {
 				s.Logger.Error(fmt.Sprintf("Unexpected activity task received, ID: %s", task.ActivityId))
+				s.Fail(unexpectedTaskMessage)
+			}
+			return nil, nil
+		},
+		taskpoller.WithTimeout(timeout),
+	)
+}
+
+func (s *Versioning3Suite) idlePollNexus(
+	tv *testvars.TestVars,
+	versioned bool,
+	timeout time.Duration,
+	unexpectedTaskMessage string,
+) {
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	d := tv.Deployment()
+	_, _ = poller.PollNexusTask(
+		&workflowservice.PollNexusTaskQueueRequest{
+			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              d.BuildId,
+				UseVersioning:        versioned,
+				DeploymentSeriesName: d.SeriesName,
+			},
+		}).HandleTask(
+		tv,
+		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
+			if task != nil {
 				s.Fail(unexpectedTaskMessage)
 			}
 			return nil, nil
