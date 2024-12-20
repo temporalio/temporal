@@ -155,6 +155,15 @@ func Invoke(
 			FirstRunId:                   executionInfo.FirstExecutionRunId,
 			VersioningInfo:               executionInfo.VersioningInfo,
 		},
+		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
+			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
+			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
+			CancelRequested:         executionInfo.CancelRequested,
+		},
+	}
+
+	if executionInfo.OriginalExecutionRunId != executionState.RunId {
+		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
 	}
 
 	if executionInfo.ParentRunId != "" {
