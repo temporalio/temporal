@@ -1089,12 +1089,11 @@ func (s *Versioning3Suite) pollNexusTaskAndHandle(
 	}
 	if async == nil {
 		return poller, f()
-	} else {
-		go func() {
-			f()
-			close(async)
-		}()
 	}
+	go func() {
+		f()
+		close(async)
+	}()
 	return nil, nil
 }
 
