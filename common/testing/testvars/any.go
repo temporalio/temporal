@@ -25,11 +25,13 @@
 package testvars
 
 import (
-	"github.com/pborman/uuid"
+	"time"
+
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type Any struct {
@@ -80,6 +82,6 @@ func (a Any) ApplicationFailure() *failurepb.Failure {
 	}
 }
 
-func (a Any) RunID() string {
-	return uuid.New()
+func (a Any) InfiniteTimeout() *durationpb.Duration {
+	return durationpb.New(10 * time.Hour)
 }

@@ -556,7 +556,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        tv.NamespaceName().String(),
 		Description:                      tv.Any().String(),
-		WorkflowExecutionRetentionPeriod: tv.InfiniteTimeout(),
+		WorkflowExecutionRetentionPeriod: tv.Any().InfiniteTimeout(),
 		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
 		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 	})

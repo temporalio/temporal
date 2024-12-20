@@ -436,7 +436,8 @@ type resetTest struct {
 	messagesCompleted   bool
 }
 
-func (t resetTest) sendSignalAndProcessWFT(poller *testcore.TaskPoller) {
+//nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
+func (t *resetTest) sendSignalAndProcessWFT(poller *testcore.TaskPoller) {
 	signalRequest := &workflowservice.SignalWorkflowExecutionRequest{
 		RequestId:         uuid.New(),
 		Namespace:         t.Namespace(),
@@ -451,17 +452,18 @@ func (t resetTest) sendSignalAndProcessWFT(poller *testcore.TaskPoller) {
 	t.NoError(err)
 }
 
-func (t resetTest) sendUpdateAndProcessWFT(updateId string, poller *testcore.TaskPoller) {
-	t.ResetWorkflowTestSuite.sendUpdateNoErrorWaitPolicyAccepted(t.tv, updateId)
+//nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
+func (t *resetTest) sendUpdateAndProcessWFT(tv *testvars.TestVars, poller *testcore.TaskPoller) {
+	t.ResetWorkflowTestSuite.sendUpdateNoErrorWaitPolicyAccepted(tv)
 	// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
 	// required for the update request to return.
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	t.NoError(err)
 }
 
-func (s *ResetWorkflowTestSuite) sendUpdateNoErrorWaitPolicyAccepted(tv *testvars.TestVars, updateID string) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
+func (s *ResetWorkflowTestSuite) sendUpdateNoErrorWaitPolicyAccepted(tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
 	s.T().Helper()
-	return s.sendUpdateNoErrorInternal(tv, updateID, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
+	return s.sendUpdateNoErrorInternal(tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
 }
 
 func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
@@ -475,11 +477,11 @@ func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueRespo
 		t.messagesCompleted = true
 	}
 	if t.wftCounter > t.totalSignals+1 {
-		updateId := fmt.Sprint(t.wftCounter - t.totalSignals - 1)
+		updateId := strconv.Itoa(t.wftCounter - t.totalSignals - 1)
 		return []*protocolpb.Message{
 			{
-				Id:                 "accept-" + updateId,
-				ProtocolInstanceId: t.tv.UpdateID(updateId),
+				Id:                 t.tv.MessageID() + "_" + updateId + "_update-accepted",
+				ProtocolInstanceId: t.tv.UpdateID() + "_" + updateId,
 				Body: protoutils.MarshalAny(t.T(), &updatepb.Acceptance{
 					AcceptedRequestMessageId:         "fake-request-message-id",
 					AcceptedRequestSequencingEventId: int64(-1),
@@ -492,7 +494,7 @@ func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueRespo
 }
 
 func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-	commands := []*commandpb.Command{}
+	var commands []*commandpb.Command
 
 	// There's an initial empty WFT; then come `totalSignals` signals, followed by `totalUpdates` updates, each in
 	// a separate WFT. We must send COMPLETE_WORKFLOW_EXECUTION in the final WFT.
@@ -501,7 +503,7 @@ func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueRespon
 		commands = append(commands, &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 			Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-				MessageId: "accept-" + updateId,
+				MessageId: t.tv.MessageID() + "_" + updateId + "_update-accepted",
 			}},
 		})
 	}
@@ -519,7 +521,7 @@ func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueRespon
 	return commands, nil
 }
 
-func (t resetTest) reset(eventId int64) string {
+func (t *resetTest) reset(eventId int64) string {
 	resp, err := t.FrontendClient().ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 t.Namespace(),
 		WorkflowExecution:         t.tv.WorkflowExecution(),
@@ -563,7 +565,7 @@ func (t *resetTest) run() {
 		t.sendSignalAndProcessWFT(poller)
 	}
 	for i := 1; i <= t.totalUpdates; i++ {
-		t.sendUpdateAndProcessWFT(fmt.Sprint(i), poller)
+		t.sendUpdateAndProcessWFT(t.tv.AppendToUpdateID(strconv.Itoa(i)), poller)
 	}
 	t.True(t.commandsCompleted)
 	t.True(t.messagesCompleted)

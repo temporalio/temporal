@@ -201,8 +201,9 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 
 	for _, tc := range testCases {
 		s.T().Run(tc.testName, func(t *testing.T) {
+			tv = tv.AppendToWorkflowID(tc.testName)
 			workflowOptions := sdkclient.StartWorkflowOptions{
-				ID:         tv.WorkflowID(t.Name()),
+				ID:         tv.WorkflowID(),
 				TaskQueue:  s.TaskQueue(),
 				StartDelay: tc.startDelay,
 			}
@@ -218,7 +219,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 			assert.NotNil(t, workflowRun)
 			assert.NotEmpty(t, workflowRun.GetRunID())
 
-			queryResp, err := s.SdkClient().QueryWorkflow(ctx, tv.WorkflowID(t.Name()), workflowRun.GetRunID(), tv.QueryType())
+			queryResp, err := s.SdkClient().QueryWorkflow(ctx, tv.WorkflowID(), workflowRun.GetRunID(), tv.QueryType())
 
 			if tc.err != nil {
 				assert.Error(t, err)

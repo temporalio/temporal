@@ -73,14 +73,14 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
 			Namespace:    s.Namespace(),
-			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId:   tv.WorkflowID() + "_" + strconv.Itoa(i),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			Identity:     tv.WorkerIdentity(),
 		})
 		s.NoError(err)
 		wes = append(wes, &commonpb.WorkflowExecution{
-			WorkflowId: tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId: tv.WorkflowID() + "_" + strconv.Itoa(i),
 			RunId:      we.RunId,
 		})
 	}
@@ -217,14 +217,14 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
 			Namespace:    s.Namespace(),
-			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId:   tv.WorkflowID() + "_" + strconv.Itoa(i),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			Identity:     tv.WorkerIdentity(),
 		})
 		s.NoError(err)
 		wes = append(wes, &commonpb.WorkflowExecution{
-			WorkflowId: tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId: tv.WorkflowID() + "_" + strconv.Itoa(i),
 			RunId:      we.RunId,
 		})
 	}
@@ -332,14 +332,14 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
 			Namespace:    s.Namespace(),
-			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId:   tv.WorkflowID() + "_" + strconv.Itoa(i),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			Identity:     tv.WorkerIdentity(),
 		})
 		s.NoError(err)
 		wes = append(wes, &commonpb.WorkflowExecution{
-			WorkflowId: tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId: tv.WorkflowID() + "_" + strconv.Itoa(i),
 			RunId:      we.RunId,
 		})
 	}
