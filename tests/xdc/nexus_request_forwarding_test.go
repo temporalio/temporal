@@ -72,9 +72,8 @@ func (s *NexusRequestForwardingSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
-		dynamicconfig.EnableNexus.Key():                  true,
-		dynamicconfig.RefreshNexusEndpointsMinWait.Key(): 1 * time.Millisecond,
-		callbacks.AllowedAddresses.Key():                 []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
+		callbacks.AllowedAddresses.Key():                                               []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 	s.setupSuite([]string{"nexus_request_forwarding_active", "nexus_request_forwarding_standby"})
 }
