@@ -220,7 +220,7 @@ type (
 
 		// in memory fields to track potential reapply events that needs to be reapplied during workflow update
 		// should only be used in the state based replication as state based replication does not have
-		// event inside history builder
+		// event inside history builder. This is only for x-run reapply (from zombie wf to current wf)
 		reapplyEventsCandidate []*historypb.HistoryEvent
 
 		InsertTasks map[tasks.Category][]tasks.Task
@@ -7399,13 +7399,7 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 }
 
 func (ms *MutableStateImpl) AddReapplyCandidateEvent(event *historypb.HistoryEvent) {
-	switch event.GetEventType() {
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-
+	if shouldReapplyEvent(ms.shard.StateMachineRegistry(), event) {
 		ms.reapplyEventsCandidate = append(ms.reapplyEventsCandidate, event)
 	}
 }

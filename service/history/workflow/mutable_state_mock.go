@@ -404,6 +404,18 @@ func (mr *MockMutableStateMockRecorder) AddHistorySize(size any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddHistorySize", reflect.TypeOf((*MockMutableState)(nil).AddHistorySize), size)
 }
 
+// AddReapplyCandidateEvent mocks base method.
+func (m *MockMutableState) AddReapplyCandidateEvent(event *history.HistoryEvent) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddReapplyCandidateEvent", event)
+}
+
+// AddReapplyCandidateEvent indicates an expected call of AddReapplyCandidateEvent.
+func (mr *MockMutableStateMockRecorder) AddReapplyCandidateEvent(event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddReapplyCandidateEvent", reflect.TypeOf((*MockMutableState)(nil).AddReapplyCandidateEvent), event)
+}
+
 // AddRecordMarkerEvent mocks base method.
 func (m *MockMutableState) AddRecordMarkerEvent(arg0 int64, arg1 *command.RecordMarkerCommandAttributes) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -2321,6 +2333,20 @@ func (m *MockMutableState) GetQueryRegistry() QueryRegistry {
 func (mr *MockMutableStateMockRecorder) GetQueryRegistry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueryRegistry", reflect.TypeOf((*MockMutableState)(nil).GetQueryRegistry))
+}
+
+// GetReapplyCandidateEvents mocks base method.
+func (m *MockMutableState) GetReapplyCandidateEvents() []*history.HistoryEvent {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReapplyCandidateEvents")
+	ret0, _ := ret[0].([]*history.HistoryEvent)
+	return ret0
+}
+
+// GetReapplyCandidateEvents indicates an expected call of GetReapplyCandidateEvents.
+func (mr *MockMutableStateMockRecorder) GetReapplyCandidateEvents() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReapplyCandidateEvents", reflect.TypeOf((*MockMutableState)(nil).GetReapplyCandidateEvents))
 }
 
 // GetRequestCancelInfo mocks base method.

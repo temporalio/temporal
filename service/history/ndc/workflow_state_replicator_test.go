@@ -1038,6 +1038,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		RunId: s.runID,
 	}).AnyTimes()
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any())
+	mockMutableState.EXPECT().AddReapplyCandidateEvent(gomock.Any()).AnyTimes()
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	sourceClusterName := "test-cluster"
 	mockShard := shard.NewMockContext(s.controller)
