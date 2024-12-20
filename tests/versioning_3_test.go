@@ -509,6 +509,7 @@ func (s *Versioning3Suite) pollAndDispatchNexusTask(
 
 	_, err := matchingClient.DispatchNexusTask(context.Background(), nexusRequest)
 	s.NoError(err)
+	<-nexusCompleted
 }
 
 func (s *Versioning3Suite) TestEagerActivity() {
