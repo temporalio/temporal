@@ -383,7 +383,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}()
 
-	eventReapplyCandidates := c.MutableState.GetReapplyCandidateEvents()
+	eventReapplyCandidates := resetMutableState.GetReapplyCandidateEvents()
 	var newEventsReapplyCandidates []*historypb.HistoryEvent
 	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
 		resetWorkflowTransactionPolicy,
