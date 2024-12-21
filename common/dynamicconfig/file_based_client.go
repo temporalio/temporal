@@ -63,6 +63,10 @@ type (
 	FileBasedClientConfig struct {
 		Filepath     string        `yaml:"filepath"`
 		PollInterval time.Duration `yaml:"pollInterval"`
+		// If this is false (default), then the top level of the file is expected to contain
+		// dynamic config settings. If it's true, then the top level should have a key
+		// "dynamicConfig" which should have settings under that.
+		BelowDynamicConfigKey bool `yaml:"belowDynamicConfigKey"`
 	}
 
 	configValueMap map[string][]ConstrainedValue
@@ -94,7 +98,7 @@ type (
 )
 
 func ValidateFile(contents []byte) *LoadResult {
-	_, lr := loadFile(contents)
+	_, lr := loadFile(contents, false)
 	return lr
 }
 
@@ -153,21 +157,23 @@ func (fc *fileBasedClient) init() error {
 		return fmt.Errorf("unable to read dynamic config: %w", err)
 	}
 
-	go func() {
-		ticker := time.NewTicker(fc.config.PollInterval)
-		for {
-			select {
-			case <-ticker.C:
-				err := fc.Update()
-				if err != nil {
-					fc.logger.Error("Unable to update dynamic config.", tag.Error(err))
+	if fc.config.PollInterval > 0 {
+		go func() {
+			ticker := time.NewTicker(fc.config.PollInterval)
+			for {
+				select {
+				case <-ticker.C:
+					err := fc.Update()
+					if err != nil {
+						fc.logger.Error("Unable to update dynamic config.", tag.Error(err))
+					}
+				case <-fc.doneCh:
+					ticker.Stop()
+					return
 				}
-			case <-fc.doneCh:
-				ticker.Stop()
-				return
 			}
-		}
-	}()
+		}()
+	}
 
 	return nil
 }
@@ -189,7 +195,7 @@ func (fc *fileBasedClient) Update() error {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
 
-	newValues, lr := loadFile(contents)
+	newValues, lr := loadFile(contents, fc.config.BelowDynamicConfigKey)
 	for _, e := range lr.Errors {
 		fc.logger.Warn("dynamic config error", tag.Error(e))
 	}
@@ -221,15 +227,27 @@ func (fc *fileBasedClient) Update() error {
 	return nil
 }
 
-func loadFile(contents []byte) (configValueMap, *LoadResult) {
+func loadFile(contents []byte, belowDynamicConfigKey bool) (configValueMap, *LoadResult) {
 	lr := &LoadResult{}
 
-	var yamlValues map[string][]struct {
+	type valueMap map[string][]struct {
 		Constraints map[string]any
 		Value       any
 	}
-	if err := yaml.Unmarshal(contents, &yamlValues); err != nil {
-		return nil, lr.errorf("decode error: %w", err)
+	var yamlValues valueMap
+
+	if belowDynamicConfigKey {
+		var topLevel struct {
+			DynamicConfig valueMap `yaml:"dynamicConfig"`
+		}
+		if err := yaml.Unmarshal(contents, &topLevel); err != nil {
+			return nil, lr.errorf("decode error: %w", err)
+		}
+		yamlValues = topLevel.DynamicConfig
+	} else {
+		if err := yaml.Unmarshal(contents, &yamlValues); err != nil {
+			return nil, lr.errorf("decode error: %w", err)
+		}
 	}
 
 	newValues := make(configValueMap, len(yamlValues))
@@ -276,7 +294,7 @@ func (fc *fileBasedClient) validateStaticConfig(config *FileBasedClientConfig) e
 	if _, err := fc.reader.GetModTime(); err != nil {
 		return fmt.Errorf("dynamic config: %s: %w", config.Filepath, err)
 	}
-	if config.PollInterval < minPollInterval {
+	if config.PollInterval > 0 && config.PollInterval < minPollInterval {
 		return fmt.Errorf("poll interval should be at least %v", minPollInterval)
 	}
 	return nil
