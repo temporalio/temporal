@@ -279,6 +279,7 @@ message WorkflowExecutionInfo {
     // Should be deprecated once the transition history is fully launched
     repeated VersionedTransition previous_transition_history = 100;
     VersionedTransition last_transition_history_break_point = 101;
+
 }
 
 message ExecutionStats {
