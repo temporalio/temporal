@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/timer"
+	"go.temporal.io/server/common/util"
 	hshard "go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -303,10 +304,14 @@ func (p *scheduledQueue) lookAheadTask() {
 // IsTimeExpired checks if the testing time is equal or before
 // the reference time. The precision of the comparison is millisecond.
 func IsTimeExpired(
+	task tasks.Task,
 	referenceTime time.Time,
 	testingTime time.Time,
 ) bool {
-	referenceTime = referenceTime.Truncate(persistence.ScheduledTaskMinPrecision)
+	// NOTE: Persistence layer may lose precision when persisting the task, which essentially moves
+	// task fire time backward. But we are already performing truncation here, so doesn't need to
+	// account for that.
+	referenceTime = util.MaxTime(referenceTime, task.GetKey().FireTime).Truncate(persistence.ScheduledTaskMinPrecision)
 	testingTime = testingTime.Truncate(persistence.ScheduledTaskMinPrecision)
 	return !testingTime.After(referenceTime)
 }
