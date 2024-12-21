@@ -173,27 +173,29 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 
 func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 	mutableState workflow.MutableState,
+	task tasks.Task,
 	expirationTime *timestamppb.Timestamp,
 ) bool {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return false
 	}
 
-	now := t.shardContext.GetTimeSource().Now()
+	now := t.Now()
 	taskShouldTriggerAt := expirationTime.AsTime()
-	expired := queues.IsTimeExpired(now, taskShouldTriggerAt)
+	expired := queues.IsTimeExpired(task, now, taskShouldTriggerAt)
 	return expired
 
 }
 
 func (t *timerQueueTaskExecutorBase) isValidWorkflowRunTimeoutTask(
 	mutableState workflow.MutableState,
+	task *tasks.WorkflowRunTimeoutTask,
 ) bool {
 	executionInfo := mutableState.GetExecutionInfo()
 
 	// Check if workflow execution timeout is not expired
 	// This can happen if the workflow is reset but old timer task is still fired.
-	return t.isValidExpirationTime(mutableState, executionInfo.WorkflowRunExpirationTime)
+	return t.isValidExpirationTime(mutableState, task, executionInfo.WorkflowRunExpirationTime)
 }
 
 func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
@@ -210,7 +212,7 @@ func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
 	// Check if workflow execution timeout is not expired
 	// This can happen if the workflow is reset since reset re-calculates
 	// the execution timeout but shares the same firstRunID as the base run
-	return t.isValidExpirationTime(mutableState, executionInfo.WorkflowExecutionExpirationTime)
+	return t.isValidExpirationTime(mutableState, task, executionInfo.WorkflowExecutionExpirationTime)
 
 	// NOTE: we don't need to do version check here because if we were to do it, we need to compare the task version
 	// and the start version in the first run. However, failover & conflict resolution will never change
@@ -269,6 +271,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	ctx context.Context,
 	workflowContext workflow.Context,
 	ms workflow.MutableState,
+	task *tasks.StateMachineTimerTask,
 	execute func(node *hsm.Node, task hsm.Task) error,
 ) (int, error) {
 
@@ -285,7 +288,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
 	for len(timers) > 0 {
 		group := timers[0]
-		if !queues.IsTimeExpired(t.Now(), group.Deadline.AsTime()) {
+		if !queues.IsTimeExpired(task, t.Now(), group.Deadline.AsTime()) {
 			break
 		}
 
