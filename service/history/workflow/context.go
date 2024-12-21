@@ -383,6 +383,8 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}()
 
+	eventReapplyCandidates := resetMutableState.GetReapplyCandidateEvents()
+	var newEventsReapplyCandidates []*historypb.HistoryEvent
 	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
 		resetWorkflowTransactionPolicy,
 	)
@@ -400,6 +402,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 			}
 		}()
 
+		newEventsReapplyCandidates = newMutableState.GetReapplyCandidateEvents()
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
 			*newWorkflowTransactionPolicy,
 		)
@@ -426,15 +429,48 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}
 
-	if err := c.conflictResolveEventReapply(
-		ctx,
-		shardContext,
-		conflictResolveMode,
-		resetWorkflowEventsSeq,
-		newWorkflowEventsSeq,
-		// current workflow events will not participate in the events reapplication
-	); err != nil {
-		return err
+	if len(resetWorkflowEventsSeq) != 0 || len(newWorkflowEventsSeq) != 0 {
+		if err := c.conflictResolveEventReapply(
+			ctx,
+			shardContext,
+			conflictResolveMode,
+			resetWorkflowEventsSeq,
+			newWorkflowEventsSeq,
+			// current workflow events will not participate in the events reapplication
+		); err != nil {
+			return err
+		}
+	} else if len(eventReapplyCandidates) > 0 || len(newEventsReapplyCandidates) > 0 {
+		eventsToApply := []*persistence.WorkflowEvents{
+			{
+				NamespaceID: c.workflowKey.NamespaceID,
+				WorkflowID:  c.workflowKey.WorkflowID,
+				RunID:       c.workflowKey.RunID,
+				Events:      eventReapplyCandidates,
+			},
+		}
+		var newEventsToReapply []*persistence.WorkflowEvents
+		if len(newEventsReapplyCandidates) > 0 {
+			newEventsToReapply = []*persistence.WorkflowEvents{
+				{
+					NamespaceID: newContext.GetWorkflowKey().NamespaceID,
+					WorkflowID:  newContext.GetWorkflowKey().WorkflowID,
+					RunID:       newContext.GetWorkflowKey().RunID,
+					Events:      newEventsReapplyCandidates,
+				},
+			}
+		}
+		if err := c.conflictResolveEventReapply(
+			ctx,
+			shardContext,
+			conflictResolveMode,
+			eventsToApply,
+			newEventsToReapply,
+			// current workflow events will not participate in the events reapplication
+		); err != nil {
+			return err
+		}
+
 	}
 
 	if _, _, _, err := NewTransaction(shardContext).ConflictResolveWorkflowExecution(
@@ -581,7 +617,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 			c.Clear()
 		}
 	}()
-
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
 		updateWorkflowTransactionPolicy,
 	)
@@ -597,7 +632,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 				newContext.Clear()
 			}
 		}()
-
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
 			*newWorkflowTransactionPolicy,
 		)
@@ -613,11 +647,23 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		return err
 	}
 
+	eventsToReapply := updateWorkflowEventsSeq
+	if len(updateWorkflowEventsSeq) == 0 {
+		eventsToReapply = []*persistence.WorkflowEvents{
+			{
+				NamespaceID: c.workflowKey.NamespaceID,
+				WorkflowID:  c.workflowKey.WorkflowID,
+				RunID:       c.workflowKey.RunID,
+				Events:      c.MutableState.GetReapplyCandidateEvents(),
+			},
+		}
+	}
+
 	if err := c.updateWorkflowExecutionEventReapply(
 		ctx,
 		shardContext,
 		updateMode,
-		updateWorkflowEventsSeq,
+		eventsToReapply,
 		newWorkflowEventsSeq,
 	); err != nil {
 		return err
@@ -862,13 +908,7 @@ func (c *ContextImpl) ReapplyEvents(
 
 		for _, e := range events.Events {
 			event := e
-			switch event.GetEventType() {
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-
+			if shouldReapplyEvent(shardContext.StateMachineRegistry(), event) {
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}
