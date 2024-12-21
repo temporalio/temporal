@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -1158,6 +1157,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).Return(errors.New("workflow failed"))
 	const RunId = "9a9f668a-58b1-427e-bed6-bf1401049f7d"
 	mockRun.EXPECT().GetRunID().Return(RunId)
+	mockRun.EXPECT().GetID().Return("test-workflow-id")
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(mockRun, nil)
 	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: "test-namespace",
@@ -1166,20 +1166,38 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	var sysWfErr *serviceerror.SystemWorkflow
 	s.ErrorAs(err, &sysWfErr)
 	s.Equal(RunId, sysWfErr.WorkflowExecution.RunId)
-	s.Equal(fmt.Sprintf("System Workflow with WorkflowId temporal-sys-delete-namespace-workflow and RunId %s returned an error: workflow failed", RunId), err.Error())
+	s.Equal(fmt.Sprintf("System Workflow with WorkflowId test-workflow-id and RunId %s returned an error: workflow failed", RunId), err.Error())
 	s.Nil(resp)
 
 	// Workflow failed because of validation error (an attempt to delete system namespace).
 	mockRun2 := mocksdk.NewMockWorkflowRun(s.controller)
-	mockRun2.EXPECT().Get(gomock.Any(), gomock.Any()).Return(temporal.NewNonRetryableApplicationError("unable to delete system namespace", delnserrors.ValidationErrorErrType, nil, nil))
+	mockRun2.EXPECT().Get(gomock.Any(), gomock.Any()).Return(delnserrors.NewFailedPrecondition("unable to delete system namespace", nil))
+	mockRun2.EXPECT().GetRunID().Return(RunId)
+	mockRun2.EXPECT().GetID().Return("test-workflow-id")
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(mockRun2, nil)
 	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: "temporal-system",
 	})
 	s.Error(err)
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPreconditionErr)
+	s.Equal("unable to delete system namespace", failedPreconditionErr.Error())
+	s.Nil(resp)
+
+	// Workflow failed because of validation error (an attempt to delete system namespace).
+	mockRun3 := mocksdk.NewMockWorkflowRun(s.controller)
+	mockRun3.EXPECT().Get(gomock.Any(), gomock.Any()).Return(delnserrors.NewInvalidArgument("only one of namespace or namespace ID must be set", nil))
+	mockRun3.EXPECT().GetRunID().Return(RunId)
+	mockRun3.EXPECT().GetID().Return("test-workflow-id")
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(mockRun3, nil)
+	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace:   "temporal-system",
+		NamespaceId: "c13c01a7-3887-4eda-ba4b-9a07a6359e7e",
+	})
+	s.Error(err)
 	var invalidArgErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgErr)
-	s.Equal("unable to delete system namespace", invalidArgErr.Error())
+	s.Equal("only one of namespace or namespace ID must be set", invalidArgErr.Error())
 	s.Nil(resp)
 
 	// Success case.

@@ -25,7 +25,6 @@
 package deletenamespace
 
 import (
-	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
@@ -96,22 +95,19 @@ var (
 
 func validateParams(params *DeleteNamespaceWorkflowParams) error {
 	if params.Namespace.IsEmpty() && params.NamespaceID.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace or namespace ID is required", "", nil)
+		return errors.NewInvalidArgument("namespace or namespace ID is required", nil)
 	}
-
 	if !params.Namespace.IsEmpty() && !params.NamespaceID.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("only one of namespace or namespace ID must be set", "", nil)
+		return errors.NewInvalidArgument("only one of namespace or namespace ID must be set", nil)
 	}
-
 	params.DeleteExecutionsConfig.ApplyDefaults()
-
 	return nil
 }
 
 func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace.Name, nsClusters []string) error {
 
 	if nsName == primitives.SystemLocalNamespace || nsID == primitives.SystemNamespaceID {
-		return temporal.NewNonRetryableApplicationError("unable to delete system namespace", errors.ValidationErrorErrType, nil, nil)
+		return errors.NewFailedPrecondition("unable to delete system namespace", nil)
 	}
 
 	// Disable namespace deletion if namespace is replicate because:
@@ -121,7 +117,7 @@ func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace
 	//    in this case it will be deleted from this cluster only because delete operation is not replicated),
 	//    but this is confusing for the users, as they might expect that namespace is deleted from all clusters.
 	if len(nsClusters) > 1 {
-		return temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is replicated in several clusters [%s]: remove all other cluster and retry", nsName, strings.Join(nsClusters, ",")), errors.ValidationErrorErrType, nil)
+		return errors.NewFailedPrecondition(fmt.Sprintf("namespace %s is replicated in several clusters [%s]: remove all other cluster and retry", nsName, strings.Join(nsClusters, ",")), nil)
 	}
 
 	// NOTE: there is very little chance that another cluster is added after the check above,
@@ -132,21 +128,13 @@ func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err := workflow.ExecuteLocalActivity(ctx1, la.ValidateProtectedNamespacesActivity, nsName).Get(ctx, nil)
 	if err != nil {
-		var appErr *temporal.ApplicationError
-		if stderrors.As(err, &appErr) {
-			return appErr
-		}
-		return fmt.Errorf("%w: ValidateProtectedNamespacesActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return err
 	}
 
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx2, la.ValidateNexusEndpointsActivity, nsID, nsName).Get(ctx, nil)
 	if err != nil {
-		var appErr *temporal.ApplicationError
-		if stderrors.As(err, &appErr) {
-			return appErr
-		}
-		return fmt.Errorf("%w: ValidateNexusEndpointsActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return err
 	}
 
 	return nil
@@ -176,11 +164,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	var namespaceInfo getNamespaceInfoResult
 	err := workflow.ExecuteLocalActivity(ctx1, la.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
 	if err != nil {
-		ns := params.Namespace.String()
-		if ns == "" {
-			ns = params.NamespaceID.String()
-		}
-		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", ns), errors.ValidationErrorErrType, err)
+		return result, err
 	}
 	params.Namespace = namespaceInfo.Namespace
 	params.NamespaceID = namespaceInfo.NamespaceID
@@ -194,7 +178,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx2, la.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
 	if err != nil {
-		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 
 	result.DeletedNamespaceID = params.NamespaceID
@@ -203,13 +187,13 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	ctx3 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx3, la.GenerateDeletedNamespaceNameActivity, params.NamespaceID, params.Namespace).Get(ctx, &result.DeletedNamespace)
 	if err != nil {
-		return result, fmt.Errorf("%w: GenerateDeletedNamespaceNameActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 
 	ctx31 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx31, la.RenameNamespaceActivity, params.Namespace, result.DeletedNamespace).Get(ctx, nil)
 	if err != nil {
-		return result, fmt.Errorf("%w: RenameNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 
 	// Step 4. Reclaim workflow resources asynchronously.
@@ -225,9 +209,9 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 		NamespaceDeleteDelay: params.NamespaceDeleteDelay,
 	})
 	var reclaimResourcesExecution workflow.Execution
-	if err := reclaimResourcesFuture.GetChildWorkflowExecution().Get(ctx, &reclaimResourcesExecution); err != nil {
-		logger.Error("Unable to execute child workflow.", tag.Error(err))
-		return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, reclaimresources.WorkflowName, err)
+	if err = reclaimResourcesFuture.GetChildWorkflowExecution().Get(ctx, &reclaimResourcesExecution); err != nil {
+		logger.Error("Child workflow error.", tag.Error(err))
+		return result, err
 	}
 	logger.Info("Child workflow executed successfully.", tag.NewStringTag("wf-child-type", reclaimresources.WorkflowName))
 

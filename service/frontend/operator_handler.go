@@ -26,10 +26,10 @@ package frontend
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"sync/atomic"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	svc "go.temporal.io/server/client"
@@ -68,7 +67,6 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
@@ -609,14 +607,16 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 ) (_ *operatorservice.DeleteNamespaceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
-	// validate request
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
 	// If NamespaceDeleteDelay is not provided, the default delay configured in the cluster should be used.
+	var namespaceDeleteDelay time.Duration
 	if request.NamespaceDeleteDelay == nil {
-		request.NamespaceDeleteDelay = durationpb.New(h.config.DeleteNamespaceNamespaceDeleteDelay())
+		namespaceDeleteDelay = h.config.DeleteNamespaceNamespaceDeleteDelay()
+	} else {
+		namespaceDeleteDelay = request.NamespaceDeleteDelay.AsDuration()
 	}
 
 	// Execute workflow.
@@ -629,7 +629,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 			PagesPerExecution:                    h.config.DeleteNamespacePagesPerExecution(),
 			ConcurrentDeleteExecutionsActivities: h.config.DeleteNamespaceConcurrentDeleteExecutionsActivities(),
 		},
-		NamespaceDeleteDelay: request.NamespaceDeleteDelay.AsDuration(),
+		NamespaceDeleteDelay: namespaceDeleteDelay,
 	}
 
 	sdkClient := h.sdkClientFactory.GetSystemClient()
@@ -646,16 +646,11 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, deletenamespace.WorkflowName, err))
 	}
 
-	// Wait for workflow to complete.
+	// Wait for the workflow to complete.
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		// Special handling for validation errors. Convert them to InvalidArgument.
-		var appErr *temporal.ApplicationError
-		if errors.As(err, &appErr) && appErr.Type() == delnserrors.ValidationErrorErrType {
-			return nil, serviceerror.NewInvalidArgument(appErr.Message())
-		}
-		return nil, serviceerror.NewSystemWorkflow(&commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}, err)
+		return nil, delnserrors.ToServiceError(err, run.GetID(), run.GetRunID())
 	}
 
 	return &operatorservice.DeleteNamespaceResponse{

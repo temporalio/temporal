@@ -138,8 +138,9 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 	require.True(t, env.IsWorkflowCompleted())
 	err := env.GetWorkflowError()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unable to execute activity: EnsureNoExecutionsActivity")
-	require.Contains(t, err.Error(), "specific_error_from_activity")
+	require.Equal(t,
+		err.Error(),
+		"workflow execution error (type: ReclaimResourcesWorkflow, workflowID: default-test-workflow-id, runID: default-test-run-id): activity error (type: EnsureNoExecutionsAdvVisibilityActivity, scheduledEventID: 0, startedEventID: 0, identity: ): specific_error_from_activity")
 }
 
 func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExist(t *testing.T) {
@@ -169,7 +170,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 
 	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
-		Return(errors.NewExecutionsStillExistError(1)).
+		Return(errors.NewExecutionsStillExist(1)).
 		Times(10) // GoSDK defaultMaximumAttemptsForUnitTest value.
 
 	env.ExecuteWorkflow(ReclaimResourcesWorkflow, ReclaimResourcesParams{
