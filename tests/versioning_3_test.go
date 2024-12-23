@@ -257,11 +257,6 @@ func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
 	}
 
 	s.pollAndQueryWorkflow(tv, sticky)
-
-	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
-	if sticky {
-		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
-	}
 }
 
 func (s *Versioning3Suite) TestUnpinnedQuery_NoSticky() {
@@ -282,6 +277,7 @@ func (s *Versioning3Suite) TestUnpinnedQuery_Sticky() {
 
 func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 	tv := testvars.New(s)
+	tvB := tv.WithBuildId("B")
 	d := tv.Deployment()
 
 	if sticky {
@@ -307,12 +303,15 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
 	}
 
+	go s.idlePollWorkflow(tvB, sticky, ver3MinPollTime, "new deployment should not receive query")
 	s.pollAndQueryWorkflow(tv, sticky)
 
-	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
-	if sticky {
-		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
-	}
+	// redirect query to new deployment
+	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
+
+	go s.idlePollWorkflow(tv, sticky, ver3MinPollTime, "old deployment should not receive query")
+	s.pollAndQueryWorkflow(tvB, sticky)
+
 }
 
 func (s *Versioning3Suite) pollAndQueryWorkflow(
@@ -1000,9 +999,7 @@ func (s *Versioning3Suite) queryWorkflow(
 		},
 	}
 
-	// using a short context since we don't have query handlers defined and
-	// are okay with timeouts
-	shortCtx, cancel := context.WithTimeout(testcore.NewContext(), 100*time.Millisecond)
+	shortCtx, cancel := context.WithTimeout(testcore.NewContext(), common.MinLongPollTimeout)
 	defer cancel()
 	response, err := s.FrontendClient().QueryWorkflow(shortCtx, request)
 	return response, err

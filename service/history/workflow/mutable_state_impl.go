@@ -2563,6 +2563,7 @@ func (ms *MutableStateImpl) GetTransientWorkflowTaskInfo(
 	workflowTask *WorkflowTaskInfo,
 	identity string,
 ) *historyspb.TransientWorkflowTaskInfo {
+	// (todo-shivam): can we remove this check ms.IsTransientWorkflowTask()?
 	if !ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		return nil
 	}
