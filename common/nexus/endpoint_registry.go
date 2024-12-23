@@ -126,7 +126,7 @@ func NewEndpointRegistry(
 		logger:          logger,
 		readThroughCacheByID: cache.NewWithMetrics(config.readThroughCacheSize(), &cache.Options{
 			TTL: config.readThroughCacheTTL(),
-		}, metricsHandler.WithTags(metrics.CacheTypeTag(metrics.NexusEndpointRegistryReadThroughCacheTypeTagValue))),
+		}, metricsHandler.WithTags(metrics.CacheTypeTag(metrics.NexusEndpointRegistryReadThroughCacheTypeTagValue)), false),
 	}
 }
 
