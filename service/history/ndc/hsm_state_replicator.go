@@ -183,10 +183,19 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 		incomingNodePath := incomingNode.Path()
 		currentNode, err := currentHSM.Child(incomingNodePath)
 		if err != nil {
-			// 1. Already done history resend if needed before,
-			// and node creation today always associated with an event
-			// 2. Node deletion is not supported right now.
-			// Based on 1 and 2, node should always be found here.
+			// The node may not be found if:
+			// 1. The state machine was deleted (e.g. terminal state cleanup)
+			// 2. We're missing events that created this node
+			if errors.Is(err, hsm.ErrStateMachineNotFound) {
+				// In terminal state, nodes can be deleted
+				// Ignore the error and continue processing other nodes
+				r.logger.Debug("State machine not found - likely deleted in terminal state",
+					tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
+					tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
+					tag.WorkflowRunID(mutableState.GetExecutionInfo().OriginalExecutionRunId),
+				)
+				return nil
+			}
 			return err
 		}
 

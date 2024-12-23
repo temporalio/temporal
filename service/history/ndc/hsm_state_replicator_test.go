@@ -702,6 +702,47 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowClosed(
 	s.NoError(err)
 }
 
+func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
+	persistedState := s.buildWorkflowMutableState()
+	// Remove the child1 state machine so it doesn't exist
+	delete(persistedState.ExecutionInfo.SubStateMachinesByType[s.stateMachineDef.Type()].MachinesById, "child1")
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: s.workflowKey.NamespaceID,
+		WorkflowID:  s.workflowKey.WorkflowID,
+		RunID:       s.workflowKey.RunID,
+	}).Return(&persistence.GetWorkflowExecutionResponse{
+		State:           persistedState,
+		DBRecordVersion: 777,
+	}, nil).Times(1)
+
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+		WorkflowKey:         s.workflowKey,
+		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
+		StateMachineNode: &persistencespb.StateMachineNode{
+			Children: map[string]*persistencespb.StateMachineMap{
+				s.stateMachineDef.Type(): {
+					MachinesById: map[string]*persistencespb.StateMachineNode{
+						"child1": {
+							Data: []byte(hsmtest.State3),
+							InitialVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+							},
+							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+							},
+							TransitionCount: 50,
+						},
+					},
+				},
+			},
+		},
+	})
+
+	s.NoError(err) // Expect no error as we should gracefully handle missing state machines
+}
+
 func (s *hsmStateReplicatorSuite) buildWorkflowMutableState() *persistencespb.WorkflowMutableState {
 
 	info := &persistencespb.WorkflowExecutionInfo{
