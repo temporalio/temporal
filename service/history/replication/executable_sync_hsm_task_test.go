@@ -24,7 +24,6 @@ package replication
 
 import (
 	"errors"
-	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -46,7 +45,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -295,14 +293,4 @@ func (s *executableSyncHSMTaskSuite) TestMarkPoisonPill() {
 		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 		VisibilityTime: timestamppb.New(s.task.TaskCreationTime()),
 	}, replicationTask.RawTaskInfo)
-}
-
-func (s *executableSyncHSMTaskSuite) TestHandleErr_StateMachineNotFound() {
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(uuid.NewString(), true, nil).AnyTimes()
-
-	err := fmt.Errorf("wrapper: %w", hsm.ErrStateMachineNotFound)
-
-	actualErr := s.task.HandleErr(err)
-
-	s.NoError(actualErr)
 }

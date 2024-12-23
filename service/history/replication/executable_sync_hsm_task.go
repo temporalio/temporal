@@ -24,7 +24,6 @@ package replication
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -38,7 +37,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -168,16 +166,6 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 		}
 		return e.Execute()
 	default:
-		if errors.Is(err, hsm.ErrStateMachineNotFound) {
-			e.Logger.Debug("Dropped sync HSM task due to missing state machine - likely deleted",
-				tag.WorkflowNamespaceID(e.NamespaceID),
-				tag.WorkflowID(e.WorkflowID),
-				tag.WorkflowRunID(e.RunID),
-				tag.TaskID(e.ExecutableTask.TaskID()),
-			)
-			return nil
-		}
-
 		e.Logger.Error("Sync HSM replication task encountered error",
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
