@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 var (
@@ -80,6 +80,10 @@ type (
 		value      interface{}
 		refCount   int
 		size       int
+	}
+
+	hasUpdate interface {
+		UpdateRegistry(ctx context.Context) update.Registry
 	}
 )
 
@@ -279,7 +283,7 @@ func (c *lru) Release(key interface{}) {
 		if c.disabled {
 			// Check if there are pending updates in workflow.Context objects.
 			// This is a hacky way to do that
-			if ctx, ok := entry.value.(workflow.Context); ok {
+			if ctx, ok := entry.value.(hasUpdate); ok {
 				if ctx.UpdateRegistry(context.Background()).Len() > 0 {
 					return
 				}
