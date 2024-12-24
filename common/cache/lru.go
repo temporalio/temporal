@@ -26,6 +26,7 @@ package cache
 
 import (
 	"container/list"
+	"context"
 	"sync"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 var (
@@ -275,6 +277,13 @@ func (c *lru) Release(key interface{}) {
 	if entry.refCount == 0 {
 		c.pinnedSize -= entry.Size()
 		if c.disabled {
+			// Check if there are pending updates in workflow.Context objects.
+			// This is a hacky way to do that
+			if ctx, ok := entry.value.(workflow.Context); ok {
+				if ctx.UpdateRegistry(context.Background()).Len() > 0 {
+					return
+				}
+			}
 			c.tryEvictAndGetPreviousElement(entry, c.byKey[key])
 		}
 		metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
