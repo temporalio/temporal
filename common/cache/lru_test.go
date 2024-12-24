@@ -57,7 +57,7 @@ func TestLRU(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 
-	cache := NewWithMetrics(4, nil, metricsHandler)
+	cache := NewWithMetrics(4, nil, metricsHandler, false)
 
 	cache.Put("A", "Foo")
 	assert.Equal(t, "Foo", cache.Get("A"))
@@ -148,6 +148,7 @@ func TestLRUWithTTL(t *testing.T) {
 			TimeSource: timeSource,
 		},
 		metricsHandler,
+		false,
 	)
 	cache.Put("A", "foo")
 	assert.Equal(t, "foo", cache.Get("A"))
@@ -249,6 +250,7 @@ func TestTTLWithPin(t *testing.T) {
 			TimeSource: timeSource,
 		},
 		metricsHandler,
+		false,
 	)
 
 	capture := metricsHandler.StartCapture()

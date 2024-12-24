@@ -437,10 +437,14 @@ func (c *lru) tryEvictUntilEnoughSpaceWithSkipEntry(newEntrySize int, existingEn
 
 func (c *lru) tryEvictAndGetPreviousElement(entry *entryImpl, element *list.Element) *list.Element {
 	if entry.refCount == 0 {
-		elementPrev := element.Prev()
-		// currSize will be updated within deleteInternal
-		c.deleteInternal(element)
-		return elementPrev
+		if ctx, ok := entry.value.(hasUpdate); ok {
+			if ctx.UpdateRegistry(context.Background()).Len() == 0 {
+				elementPrev := element.Prev()
+				// currSize will be updated within deleteInternal
+				c.deleteInternal(element)
+				return elementPrev
+			}
+		}
 	}
 	// entry.refCount > 0
 	// skip, entry still being referenced
