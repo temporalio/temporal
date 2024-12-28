@@ -57,7 +57,7 @@ func TestLRU(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 
-	cache := NewWithMetrics(4, nil, metricsHandler, false)
+	cache := NewWithMetrics(4, nil, metricsHandler, true)
 
 	cache.Put("A", "Foo")
 	assert.Equal(t, "Foo", cache.Get("A"))
