@@ -65,7 +65,7 @@ type (
 		pin            bool
 		timeSource     clock.TimeSource
 		metricsHandler metrics.Handler
-		disabled       bool
+		enabled        bool
 	}
 
 	iteratorImpl struct {
@@ -166,7 +166,7 @@ func New(maxSize int, opts *Options) Cache {
 
 // NewWithMetrics creates a new cache that will emit capacity and ttl metrics.
 // handler should be tagged with metrics.CacheTypeTag.
-func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler, disabled bool) Cache {
+func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler, enabled bool) Cache {
 	if opts == nil {
 		opts = &Options{}
 	}
@@ -188,7 +188,7 @@ func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler, disable
 		onEvict:        opts.OnEvict,
 		timeSource:     timeSource,
 		metricsHandler: handler,
-		disabled:       disabled,
+		enabled:        enabled,
 	}
 }
 
@@ -280,10 +280,10 @@ func (c *lru) Release(key interface{}) {
 	entry.refCount--
 	if entry.refCount == 0 {
 		c.pinnedSize -= entry.Size()
-		if c.disabled {
+		metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
+		if !c.enabled {
 			c.tryEvictAndGetPreviousElement(entry, c.byKey[key])
 		}
-		metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
 	}
 	// Entry size might have changed. Recalculate size and evict entries if necessary.
 	newEntrySize := getSize(entry.value)
