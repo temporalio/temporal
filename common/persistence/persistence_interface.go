@@ -292,9 +292,12 @@ type (
 
 	InternalUpdateTaskQueueUserDataRequest struct {
 		NamespaceID string
-		TaskQueue   string
-		Version     int64
-		UserData    *commonpb.DataBlob
+		Updates     map[string]*InternalSingleTaskQueueUserDataUpdate // key is task queue name
+	}
+
+	InternalSingleTaskQueueUserDataUpdate struct {
+		Version  int64
+		UserData *commonpb.DataBlob
 		// Used to build an index of build_id to task_queues
 		BuildIdsAdded   []string
 		BuildIdsRemoved []string
