@@ -26,7 +26,6 @@ package cache
 
 import (
 	"container/list"
-	"context"
 	"sync"
 	"time"
 
@@ -34,7 +33,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/workflow/update"
 )
 
 var (
@@ -81,10 +79,10 @@ type (
 		refCount   int
 		size       int
 	}
-
-	hasUpdate interface {
-		UpdateRegistry(ctx context.Context) update.Registry
-	}
+	//
+	//hasUpdate interface {
+	//	UpdateRegistry(ctx context.Context) update.Registry
+	//}
 )
 
 // Close closes the iterator
@@ -430,14 +428,10 @@ func (c *lru) tryEvictUntilEnoughSpaceWithSkipEntry(newEntrySize int, existingEn
 
 func (c *lru) tryEvictAndGetPreviousElement(entry *entryImpl, element *list.Element) *list.Element {
 	if entry.refCount == 0 {
-		if ctx, ok := entry.value.(hasUpdate); ok {
-			if ctx.UpdateRegistry(context.Background()).Len() == 0 {
-				elementPrev := element.Prev()
-				// currSize will be updated within deleteInternal
-				c.deleteInternal(element)
-				return elementPrev
-			}
-		}
+		elementPrev := element.Prev()
+		// currSize will be updated within deleteInternal
+		c.deleteInternal(element)
+		return elementPrev
 	}
 	// entry.refCount > 0
 	// skip, entry still being referenced
