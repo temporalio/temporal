@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package util
+package stream_batcher
 
 import (
 	"context"
@@ -82,19 +82,17 @@ func (s *StreamBatcher[T, R]) Add(ctx context.Context, t T) (R, error) {
 	pair := batchPair[T, R]{resp: resp, item: t}
 
 	for {
-		var runningC *chan struct{}
-		for {
-			runningC = s.running.Load()
-			if runningC == nil {
-				// goroutine is not running, try to start it
-				newRunningC := make(chan struct{})
-				if s.running.CompareAndSwap(nil, &newRunningC) {
-					// we were the first one to notice the nil, start it now
-					go s.loop(&newRunningC)
-				}
-				// if CompareAndSwap failed, someone else was calling Add at the same time and
-				// started the goroutine already. reload to get the new running channel.
+		runningC := s.running.Load()
+		for runningC == nil {
+			// goroutine is not running, try to start it
+			newRunningC := make(chan struct{})
+			if s.running.CompareAndSwap(nil, &newRunningC) {
+				// we were the first one to notice the nil, start it now
+				go s.loop(&newRunningC)
 			}
+			// if CompareAndSwap failed, someone else was calling Add at the same time and
+			// started the goroutine already. reload to get the new running channel.
+			runningC = s.running.Load()
 		}
 
 		select {
@@ -135,7 +133,7 @@ func (s *StreamBatcher[T, R]) loop(runningC *chan struct{}) {
 		items, resps = items[:0], resps[:0]
 
 		// wait for first item. if no item after a while, exit the goroutine
-		idleC, _ := s.clock.NewTimer(s.opts.IdleTime)
+		idleC, idleT := s.clock.NewTimer(s.opts.IdleTime)
 		select {
 		case pair := <-s.ch:
 			items = append(items, pair.item)
@@ -143,13 +141,14 @@ func (s *StreamBatcher[T, R]) loop(runningC *chan struct{}) {
 		case <-idleC:
 			return
 		}
+		idleT.Stop()
 
 		// try to add more items. stop after a gap of MaxGap, total time of MaxTotalWait, or
 		// MaxItems items.
-		maxWaitC, _ := s.clock.NewTimer(s.opts.MaxDelay)
+		maxWaitC, maxWaitT := s.clock.NewTimer(s.opts.MaxDelay)
 	loop:
 		for len(items) < s.opts.MaxItems {
-			gapC, _ := s.clock.NewTimer(s.opts.MinDelay)
+			gapC, gapT := s.clock.NewTimer(s.opts.MinDelay)
 			select {
 			case pair := <-s.ch:
 				items = append(items, pair.item)
@@ -157,9 +156,12 @@ func (s *StreamBatcher[T, R]) loop(runningC *chan struct{}) {
 			case <-gapC:
 				break loop
 			case <-maxWaitC:
+				gapT.Stop()
 				break loop
 			}
+			gapT.Stop()
 		}
+		maxWaitT.Stop()
 
 		// process batch
 		r := s.fn(items)
