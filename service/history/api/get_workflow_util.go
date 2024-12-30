@@ -361,5 +361,6 @@ func MutableStateToGetResponse(
 		InheritedBuildId:             mutableState.GetInheritedBuildId(),
 		MostRecentWorkerVersionStamp: mostRecentWorkerVersionStamp,
 		TransitionHistory:            mutableState.GetExecutionInfo().TransitionHistory,
+		VersioningInfo:               mutableState.GetExecutionInfo().VersioningInfo,
 	}, nil
 }

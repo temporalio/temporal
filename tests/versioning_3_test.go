@@ -39,9 +39,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	querypb "go.temporal.io/api/query/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -59,6 +62,7 @@ import (
 const (
 	tqTypeWf        = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	tqTypeAct       = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	tqTypeNexus     = enumspb.TASK_QUEUE_TYPE_NEXUS
 	vbUnspecified   = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	vbPinned        = enumspb.VERSIONING_BEHAVIOR_PINNED
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
@@ -180,9 +184,10 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 
 	wftCompleted := make(chan interface{})
 	s.pollWftAndHandle(tv, false, wftCompleted,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
-			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondWftWithActivities(tv, tv,
+				sticky, vbUnpinned, "5")}, nil
 		})
 
 	actCompleted := make(chan interface{})
@@ -205,11 +210,127 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
 
 	s.pollWftAndHandle(tv, sticky, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
-			return respondCompleteWorkflow(tv, vbUnpinned), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondCompleteWorkflow(tv, vbUnpinned)}, nil
 		})
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
+}
+
+func (s *Versioning3Suite) TestQueryWithPinnedOverride_NoSticky() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testQueryWithPinnedOverride(false)
+		},
+	)
+}
+
+func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testQueryWithPinnedOverride(true)
+		},
+	)
+}
+
+func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
+	tv := testvars.New(s)
+
+	if sticky {
+		s.warmUpSticky(tv)
+	}
+
+	wftCompleted := make(chan interface{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+			s.NotNil(task)
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondEmptyWft(tv, sticky, vbUnpinned)}, nil
+		})
+
+	override := makePinnedOverride(tv.Deployment())
+	we := s.startWorkflow(tv, override)
+
+	<-wftCompleted
+	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
+	if sticky {
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
+	}
+
+	s.pollAndQueryWorkflow(tv, sticky)
+}
+
+func (s *Versioning3Suite) TestUnpinnedQuery_NoSticky() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testUnpinnedQuery(false)
+		},
+	)
+}
+
+func (s *Versioning3Suite) TestUnpinnedQuery_Sticky() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testUnpinnedQuery(true)
+		},
+	)
+}
+
+func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
+	tv := testvars.New(s)
+	tvB := tv.WithBuildId("B")
+	d := tv.Deployment()
+
+	if sticky {
+		s.warmUpSticky(tv)
+	}
+
+	wftCompleted := make(chan interface{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, transitionTo(d))
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondEmptyWft(tv, sticky, vbUnpinned)}, nil
+		})
+
+	s.setCurrentDeployment(d)
+	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
+
+	we := s.startWorkflow(tv, nil)
+
+	<-wftCompleted
+	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
+	if sticky {
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
+	}
+
+	go s.idlePollWorkflow(tvB, sticky, ver3MinPollTime, "new deployment should not receive query")
+	s.pollAndQueryWorkflow(tv, sticky)
+
+	// redirect query to new deployment
+	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
+
+	go s.idlePollWorkflow(tv, sticky, ver3MinPollTime, "old deployment should not receive query")
+	s.pollAndQueryWorkflow(tvB, sticky)
+
+}
+
+func (s *Versioning3Suite) pollAndQueryWorkflow(
+	tv *testvars.TestVars,
+	sticky bool,
+) {
+	queryResultCh := make(chan interface{})
+	s.pollWftAndHandle(tv, sticky, queryResultCh,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.NotNil(task.Query)
+			return &taskpoller.TaskCompletedRequest{QueryTaskCompletedRequest: respondQueryTaskCompleted(task, s.Namespace())}, nil
+		})
+
+	response, err := s.queryWorkflow(tv)
+	s.Error(err)
+	s.Nil(response)
+
+	<-queryResultCh
 }
 
 func (s *Versioning3Suite) TestUnpinnedWorkflow_Sticky() {
@@ -238,10 +359,11 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 
 	wftCompleted := make(chan interface{})
 	s.pollWftAndHandle(tv, false, wftCompleted,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
 			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, transitionTo(d))
-			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondWftWithActivities(tv, tv, sticky,
+				vbUnpinned, "5")}, nil
 		})
 
 	actCompleted := make(chan interface{})
@@ -266,9 +388,10 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
 
 	s.pollWftAndHandle(tv, sticky, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
-			return respondCompleteWorkflow(tv, vbUnpinned), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondCompleteWorkflow(tv,
+				vbUnpinned)}, nil
 		})
 	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
 }
@@ -282,7 +405,7 @@ func (s *Versioning3Suite) TestTransitionFromWft_NoSticky() {
 }
 
 func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
-	// Wf runs one TWF and one AT on dA, then the second WFT is redirected to dB and
+	// Wf runs one WFT and one AT on dA, then the second WFT is redirected to dB and
 	// transitions the wf with it.
 
 	tvA := testvars.New(s).WithBuildId("A")
@@ -298,10 +421,11 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 	we := s.startWorkflow(tvA, nil)
 
 	s.pollWftAndHandle(tvA, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
 			s.verifyWorkflowVersioning(tvA, vbUnspecified, nil, nil, transitionTo(dA))
-			return respondWftWithActivities(tvA, tvA, sticky, vbUnpinned, "5"), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondWftWithActivities(tvA, tvA,
+				sticky, vbUnpinned, "5")}, nil
 		})
 	s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, nil)
 	if sticky {
@@ -319,12 +443,72 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
 
 	s.pollWftAndHandle(tvB, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
 			s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, transitionTo(dB))
-			return respondCompleteWorkflow(tvB, vbUnpinned), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondCompleteWorkflow(tvB,
+				vbUnpinned)}, nil
 		})
 	s.verifyWorkflowVersioning(tvB, vbUnpinned, dB, nil, nil)
+}
+
+func (s *Versioning3Suite) TestNexusTask_StaysOnCurrentDeployment() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.nexusTaskStaysOnCurrentDeployment()
+		},
+	)
+}
+
+func (s *Versioning3Suite) nexusTaskStaysOnCurrentDeployment() {
+	tvA := testvars.New(s).WithBuildId("A")
+	tvB := tvA.WithBuildId("B")
+
+	nexusRequest := &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: s.GetNamespaceID(s.Namespace()),
+		TaskQueue:   tvA.TaskQueue(),
+		Request: &nexuspb.Request{
+			Header: map[string]string{
+				// placeholder value as passing in an empty map would result in protoc deserializing
+				// it as nil, which breaks existing logic inside of matching
+				"request-timeout": "1",
+			},
+		},
+	}
+
+	// current deployment is -> A
+	s.updateTaskQueueDeploymentData(tvA, 0, tqTypeNexus)
+	s.waitForDeploymentDataPropagation(tvA, tqTypeNexus)
+
+	// local poller with deployment A receives task
+	s.pollAndDispatchNexusTask(tvA, nexusRequest)
+
+	// current deployment is now -> B
+	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeNexus)
+	s.waitForDeploymentDataPropagation(tvB, tqTypeNexus)
+
+	// Pollers of A are there but should not get any task
+	go s.idlePollNexus(tvA, true, ver3MinPollTime, "nexus task should not go to the old deployment")
+
+	s.pollAndDispatchNexusTask(tvB, nexusRequest)
+}
+
+func (s *Versioning3Suite) pollAndDispatchNexusTask(
+	tv *testvars.TestVars,
+	nexusRequest *matchingservice.DispatchNexusTaskRequest,
+) {
+	matchingClient := s.GetTestCluster().MatchingClient()
+
+	nexusCompleted := make(chan interface{})
+	s.pollNexusTaskAndHandle(tv, false, nexusCompleted,
+		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return &workflowservice.RespondNexusTaskCompletedRequest{}, nil // response object gets filled during processing
+		})
+
+	_, err := matchingClient.DispatchNexusTask(context.Background(), nexusRequest)
+	s.NoError(err)
+	<-nexusCompleted
 }
 
 func (s *Versioning3Suite) TestEagerActivity() {
@@ -339,18 +523,20 @@ func (s *Versioning3Suite) TestEagerActivity() {
 	s.startWorkflow(tv, nil)
 
 	poller, resp := s.pollWftAndHandle(tv, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
 			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, transitionTo(d))
 			resp := respondWftWithActivities(tv, tv, true, vbUnpinned, "5")
 			resp.Commands[0].GetScheduleActivityTaskCommandAttributes().RequestEagerExecution = true
-			return resp, nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: resp}, nil
 		})
 	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
 
-	s.NotEmpty(resp.GetActivityTasks())
+	s.NotEmpty(resp)
+	s.NotEmpty(resp.WorkflowTaskCompletedResponse)
+	s.NotEmpty(resp.WorkflowTaskCompletedResponse.GetActivityTasks())
 
-	_, err := poller.HandleActivityTask(tv, resp.GetActivityTasks()[0],
+	_, err := poller.HandleActivityTask(tv, resp.WorkflowTaskCompletedResponse.GetActivityTasks()[0],
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return respondActivity(), nil
@@ -359,9 +545,9 @@ func (s *Versioning3Suite) TestEagerActivity() {
 	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
 
 	s.pollWftAndHandle(tv, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
-			return respondCompleteWorkflow(tv, vbUnpinned), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondCompleteWorkflow(tv, vbUnpinned)}, nil
 		})
 	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
 }
@@ -401,10 +587,11 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	we := s.startWorkflow(tvA, nil)
 
 	s.pollWftAndHandle(tvA, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
 			s.verifyWorkflowVersioning(tvA, vbUnspecified, nil, nil, transitionTo(dA))
-			return respondWftWithActivities(tvA, tvA, sticky, vbUnpinned, "5", "6", "7", "8"), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondWftWithActivities(tvA, tvA,
+				sticky, vbUnpinned, "5", "6", "7", "8")}, nil
 		})
 	s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, nil)
 	if sticky {
@@ -478,7 +665,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 
 	// 5. The transition should create a new WFT to be sent to dB.
 	s.pollWftAndHandle(tvB, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
 			s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, transitionTo(dB))
 			close(transitionStarted)
@@ -488,7 +675,8 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			<-act2Failed
 			transitionCompleted.Store(true)
 			s.Logger.Info("Transition wft completed")
-			return respondEmptyWft(tvB, sticky, vbUnpinned), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondEmptyWft(tvB,
+				sticky, vbUnpinned)}, nil
 		})
 	s.verifyWorkflowVersioning(tvB, vbUnpinned, dB, nil, nil)
 	if sticky {
@@ -498,10 +686,11 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	// 9. Now all activities should complete.
 	<-act2To4Completed
 	s.pollWftAndHandle(tvB, sticky, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
 			s.Logger.Info("Final wft completed")
-			return respondCompleteWorkflow(tvB, vbUnpinned), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondCompleteWorkflow(tvB,
+				vbUnpinned)}, nil
 		})
 	s.verifyWorkflowVersioning(tvB, vbUnpinned, dB, nil, nil)
 }
@@ -534,11 +723,12 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 	s.startWorkflow(tvWf, nil)
 
 	s.pollWftAndHandle(tvWf, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
 			s.verifyWorkflowVersioning(tvWf, vbUnspecified, nil, nil, transitionTo(dWf))
 			s.Logger.Info("First wf task completed")
-			return respondWftWithActivities(tvWf, tvAct, false, behavior, "5"), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondWftWithActivities(tvWf, tvAct,
+				false, behavior, "5")}, nil
 		})
 	s.verifyWorkflowVersioning(tvWf, behavior, dWf, nil, nil)
 
@@ -551,9 +741,10 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 	s.verifyWorkflowVersioning(tvWf, behavior, dWf, nil, nil)
 
 	s.pollWftAndHandle(tvWf, false, nil,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.NotNil(task)
-			return respondCompleteWorkflow(tvWf, behavior), nil
+			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: respondCompleteWorkflow(tvWf,
+				behavior)}, nil
 		})
 	s.verifyWorkflowVersioning(tvWf, behavior, dWf, nil, nil)
 }
@@ -722,6 +913,52 @@ func respondCompleteWorkflow(
 	}
 }
 
+func respondScheduleNexusOperation(
+	tv *testvars.TestVars,
+	behavior enumspb.VersioningBehavior,
+	endpointName string,
+) *workflowservice.RespondWorkflowTaskCompletedRequest {
+	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+						Input:     mustToPayload("input"),
+					},
+				},
+			},
+		},
+		ForceCreateNewWorkflowTask: false,
+		Deployment:                 tv.Deployment(),
+		VersioningBehavior:         behavior,
+	}
+}
+
+func mustToPayload(v any) *commonpb.Payload {
+	conv := converter.GetDefaultDataConverter()
+	payload, err := conv.ToPayload(v)
+	if err != nil {
+
+		return &commonpb.Payload{}
+	}
+	return payload
+}
+
+func respondQueryTaskCompleted(
+	task *workflowservice.PollWorkflowTaskQueueResponse,
+	namespace string,
+) *workflowservice.RespondQueryTaskCompletedRequest {
+	request := &workflowservice.RespondQueryTaskCompletedRequest{
+		Namespace: namespace,
+		TaskToken: task.TaskToken,
+	}
+	return request
+}
+
 func (s *Versioning3Suite) startWorkflow(
 	tv *testvars.TestVars,
 	override *workflowpb.VersioningOverride,
@@ -751,6 +988,23 @@ func (s *Versioning3Suite) startWorkflow(
 	}
 }
 
+func (s *Versioning3Suite) queryWorkflow(
+	tv *testvars.TestVars,
+) (*workflowservice.QueryWorkflowResponse, error) {
+	request := &workflowservice.QueryWorkflowRequest{
+		Namespace: s.Namespace(),
+		Execution: tv.WorkflowExecution(),
+		Query: &querypb.WorkflowQuery{
+			QueryType: tv.Any().String(),
+		},
+	}
+
+	shortCtx, cancel := context.WithTimeout(testcore.NewContext(), common.MinLongPollTimeout)
+	defer cancel()
+	response, err := s.FrontendClient().QueryWorkflow(shortCtx, request)
+	return response, err
+}
+
 // Name is used by testvars. We use a shorten test name in variables so that physical task queue IDs
 // do not grow larger that DB column limit (currently as low as 272 chars).
 func (s *Versioning3Suite) Name() string {
@@ -771,15 +1025,15 @@ func (s *Versioning3Suite) pollWftAndHandle(
 	tv *testvars.TestVars,
 	sticky bool,
 	async chan<- interface{},
-	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
-) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error),
+) (*taskpoller.TaskPoller, *taskpoller.TaskCompletedResponse) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
 	d := tv.Deployment()
 	tq := tv.TaskQueue()
 	if sticky {
 		tq = tv.StickyTaskQueue()
 	}
-	f := func() *workflowservice.RespondWorkflowTaskCompletedResponse {
+	f := func() *taskpoller.TaskCompletedResponse {
 		resp, err := poller.PollWorkflowTask(
 			&workflowservice.PollWorkflowTaskQueueRequest{
 				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
@@ -801,6 +1055,42 @@ func (s *Versioning3Suite) pollWftAndHandle(
 			close(async)
 		}()
 	}
+	return nil, nil
+}
+
+func (s *Versioning3Suite) pollNexusTaskAndHandle(
+	tv *testvars.TestVars,
+	sticky bool,
+	async chan<- interface{},
+	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
+) (*taskpoller.TaskPoller, *workflowservice.RespondNexusTaskCompletedResponse) {
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	d := tv.Deployment()
+	tq := tv.TaskQueue()
+	if sticky {
+		tq = tv.StickyTaskQueue()
+	}
+	f := func() *workflowservice.RespondNexusTaskCompletedResponse {
+		resp, err := poller.PollNexusTask(
+			&workflowservice.PollNexusTaskQueueRequest{
+				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+					BuildId:              d.BuildId,
+					DeploymentSeriesName: d.SeriesName,
+					UseVersioning:        true,
+				},
+				TaskQueue: tq,
+			},
+		).HandleTask(tv, handler)
+		s.NoError(err)
+		return resp
+	}
+	if async == nil {
+		return poller, f()
+	}
+	go func() {
+		f()
+		close(async)
+	}()
 	return nil, nil
 }
 
@@ -851,7 +1141,7 @@ func (s *Versioning3Suite) idlePollWorkflow(
 		},
 	).HandleTask(
 		tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.Fail(unexpectedTaskMessage)
 			return nil, nil
 		},
@@ -888,6 +1178,33 @@ func (s *Versioning3Suite) idlePollActivity(
 	)
 }
 
+func (s *Versioning3Suite) idlePollNexus(
+	tv *testvars.TestVars,
+	versioned bool,
+	timeout time.Duration,
+	unexpectedTaskMessage string,
+) {
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	d := tv.Deployment()
+	_, _ = poller.PollNexusTask(
+		&workflowservice.PollNexusTaskQueueRequest{
+			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              d.BuildId,
+				UseVersioning:        versioned,
+				DeploymentSeriesName: d.SeriesName,
+			},
+		}).HandleTask(
+		tv,
+		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
+			if task != nil {
+				s.Fail(unexpectedTaskMessage)
+			}
+			return nil, nil
+		},
+		taskpoller.WithTimeout(timeout),
+	)
+}
+
 func (s *Versioning3Suite) verifyWorkflowStickyQueue(
 	we *commonpb.WorkflowExecution,
 	stickyQ *taskqueuepb.TaskQueue,
@@ -914,7 +1231,7 @@ func (s *Versioning3Suite) warmUpSticky(
 		},
 	).HandleTask(
 		tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
 			s.Fail("sticky task is not expected")
 			return nil, nil
 		},
