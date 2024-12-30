@@ -26,6 +26,7 @@ package recordworkflowtaskstarted
 
 import (
 	"context"
+	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -84,7 +85,7 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
-			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx, nil)
+			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx)
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -132,29 +133,54 @@ func Invoke(
 			// Assuming a workflow is running on a sticky task queue by a workerA.
 			// After workerA is dead for more than 10s, matching will return StickyWorkerUnavailable error when history
 			// tries to push a new workflow task. When history sees that error, it will fall back to push the task to
-			// its original normal task queue without clear its stickiness to avoid an extra persistence write.
+			// its original normal task queue without clearing its stickiness to avoid an extra persistence write.
 			// We will clear the stickiness here when that task is delivered to another worker polling from normal queue.
 			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
 			// Sending down partial history will cost the worker an extra fetch to server for the full history.
 			currentTaskQueue := mutableState.CurrentTaskQueue()
+			pollerTaskQueue := req.PollRequest.TaskQueue
 			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY &&
-				currentTaskQueue.GetName() != req.PollRequest.TaskQueue.GetName() {
+				currentTaskQueue.GetName() != pollerTaskQueue.GetName() {
 				// For versioned workflows we additionally check for the poller queue to not be a sticky queue itself.
 				// Although it's ideal to check this for unversioned workflows as well, we can't rely on older clients
 				// setting the poller TQ kind.
-				if mutableState.GetAssignedBuildId() != "" && req.PollRequest.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+				if (mutableState.GetAssignedBuildId() != "" ||
+					mutableState.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED) &&
+					pollerTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 					return nil, serviceerrors.NewObsoleteDispatchBuildId("wrong sticky queue")
 				}
-				//
 				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
 				// and sticky queue never has partition, so it does not matter.
 				mutableState.ClearStickyTaskQueue()
 			}
 
+			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_NORMAL &&
+				pollerTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+				// A poll from a sticky queue while the workflow's task queue is not yet sticky
+				// should be rejected. This means the task was a stale task on the matching queue.
+				// Matching can drop the task, newer one should be scheduled already.
+				// Note that the other way around is not true: a poll from a normal task is valid
+				// even if the workflow's queue is sticky. It could be that the transfer task had to
+				// be scheduled in the normal task because matching returned a `StickyWorkerUnavailable`
+				// error. In that case, the mutable state is not updated at task transfer time until
+				// the workflow task starts on the normal queue, and we clear MS's sticky queue.
+				return nil, serviceerrors.NewObsoleteMatchingTask("wrong task queue type")
+			}
+
+			wfDeployment := mutableState.GetEffectiveDeployment()
+			pollerDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
+			// Effective deployment of the workflow when History scheduled the WFT.
+			scheduledDeployment := req.GetScheduledDeployment()
+			if !scheduledDeployment.Equal(wfDeployment) {
+				// This must be an AT scheduled before the workflow transitions to the current
+				// deployment. Matching can drop it.
+				return nil, serviceerrors.NewObsoleteMatchingTask("wrong directive deployment")
+			}
+
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
 				requestID,
-				req.PollRequest.TaskQueue,
+				pollerTaskQueue,
 				req.PollRequest.Identity,
 				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
 				req.GetBuildIdRedirectInfo(),
@@ -167,6 +193,28 @@ func Invoke(
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 				updateAction.Noop = true
+			} else {
+				// If the wft is speculative MS changes are not persisted, so the possibly started
+				// transition by the StartDeploymentTransition call above won't be persisted. This is OK
+				// because once the speculative task completes the transition will be applied
+				// automatically based on wft completion info. If the speculative task fails or times
+				// out, future wft will be redirected by matching again and the transition will
+				// eventually happen. If an activity starts while the speculative is also started on the
+				// new deployment, the activity will cause the transition to be created and persisted in
+				// the MS.
+				if !pollerDeployment.Equal(wfDeployment) {
+					// Dispatching to a different deployment. Try starting a transition. Starting the
+					// transition AFTER applying the start event because we don't want this pending
+					// wft to be rescheduled by StartDeploymentTransition.
+					if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
+						if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
+							// This must be a task from a time that the workflow was unpinned, but it's
+							// now pinned so can't transition. Matching can drop the task safely.
+							return nil, serviceerrors.NewObsoleteMatchingTask(err.Error())
+						}
+						return nil, err
+					}
+				}
 			}
 
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(workflowTask.ScheduledTime)

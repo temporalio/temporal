@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -86,6 +87,7 @@ var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
 	dynamicconfig.Module,
+	deployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
 	// This is okay because our routes don't have overlapping matches.
 	// The only important detail is that the PathPrefix("/") route registered in the HTTPAPIServerProvider comes last.
@@ -554,6 +556,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
@@ -658,6 +661,7 @@ func OperatorHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
+	namespaceRegistry namespace.Registry,
 	nexusEndpointClient *NexusEndpointClient,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
@@ -673,12 +677,15 @@ func OperatorHandlerProvider(
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
+		namespaceRegistry,
 		nexusEndpointClient,
 	}
 	return NewOperatorHandlerImpl(args)
 }
 
 func HandlerProvider(
+	cfg *config.Config,
+	serviceName primitives.ServiceName,
 	dcRedirectionPolicy config.DCRedirectionPolicy,
 	serviceConfig *Config,
 	versionChecker *VersionChecker,
@@ -692,6 +699,7 @@ func HandlerProvider(
 	clientBean client.Bean,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
+	deploymentStoreClient deployment.DeploymentStoreClient,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
@@ -717,6 +725,7 @@ func HandlerProvider(
 		persistenceMetadataManager,
 		historyClient,
 		matchingClient,
+		deploymentStoreClient,
 		archiverProvider,
 		payloadSerializer,
 		namespaceRegistry,
@@ -729,6 +738,7 @@ func HandlerProvider(
 		membershipMonitor,
 		healthInterceptor,
 		scheduleSpecBuilder,
+		httpEnabled(cfg, serviceName),
 	)
 	return wfHandler
 }
@@ -790,6 +800,15 @@ func MuxRouterProvider() *mux.Router {
 	return mux.NewRouter().UseEncodedPath()
 }
 
+func httpEnabled(cfg *config.Config, serviceName primitives.ServiceName) bool {
+	// If the service is not the frontend service, HTTP API is disabled
+	if serviceName != primitives.FrontendService {
+		return false
+	}
+	// If HTTP API port is 0, it is disabled
+	return cfg.Services[string(serviceName)].RPC.HTTPPort != 0
+}
+
 // HTTPAPIServerProvider provides an HTTP API server if enabled or nil
 // otherwise.
 func HTTPAPIServerProvider(
@@ -806,15 +825,10 @@ func HTTPAPIServerProvider(
 	logger log.Logger,
 	router *mux.Router,
 ) (*HTTPAPIServer, error) {
-	// If the service is not the frontend service, HTTP API is disabled
-	if serviceName != primitives.FrontendService {
+	if !httpEnabled(cfg, serviceName) {
 		return nil, nil
 	}
-	// If HTTP API port is 0, it is disabled
 	rpcConfig := cfg.Services[string(serviceName)].RPC
-	if rpcConfig.HTTPPort == 0 {
-		return nil, nil
-	}
 	return NewHTTPAPIServer(
 		serviceConfig,
 		rpcConfig,

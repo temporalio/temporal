@@ -38,7 +38,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -153,7 +153,18 @@ func Invoke(
 			AssignedBuildId:              executionInfo.AssignedBuildId,
 			InheritedBuildId:             executionInfo.InheritedBuildId,
 			FirstRunId:                   executionInfo.FirstExecutionRunId,
+			VersioningInfo:               executionInfo.VersioningInfo,
 		},
+		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
+			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
+			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
+			OriginalStartTime:       startEvent.EventTime,
+			CancelRequested:         executionInfo.CancelRequested,
+		},
+	}
+
+	if mutableState.IsResetRun() {
+		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
 	}
 
 	if executionInfo.ParentRunId != "" {
@@ -311,7 +322,7 @@ func buildCallbackInfo(
 	destination := ""
 	cbSpec := &commonpb.Callback{}
 	switch variant := callback.Callback.Variant.(type) {
-	case *persistence.Callback_Nexus_:
+	case *persistencespb.Callback_Nexus_:
 		cbSpec.Variant = &commonpb.Callback_Nexus_{
 			Nexus: &commonpb.Callback_Nexus{
 				Url:    variant.Nexus.GetUrl(),
@@ -355,7 +366,7 @@ func buildCallbackInfo(
 
 	trigger := &workflowpb.CallbackInfo_Trigger{}
 	switch callback.Trigger.Variant.(type) {
-	case *persistence.CallbackInfo_Trigger_WorkflowClosed:
+	case *persistencespb.CallbackInfo_Trigger_WorkflowClosed:
 		trigger.Variant = &workflowpb.CallbackInfo_Trigger_WorkflowClosed{}
 	}
 

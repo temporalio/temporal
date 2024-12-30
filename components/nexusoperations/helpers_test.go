@@ -34,7 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -70,7 +70,7 @@ func newRoot(t *testing.T, backend *hsmtest.NodeBackend) *hsm.Node {
 	reg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType, root{}, make(map[string]*persistence.StateMachineMap), backend)
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType, root{}, make(map[string]*persistencespb.StateMachineMap), backend)
 	require.NoError(t, err)
 	return root
 }
@@ -97,20 +97,24 @@ func mustNewScheduledEvent(schedTime time.Time, timeout time.Duration) *historyp
 		panic(err)
 	}
 
+	attr := &historypb.NexusOperationScheduledEventAttributes{
+		EndpointId: "endpoint-id",
+		Endpoint:   "endpoint",
+		Service:    "service",
+		Operation:  "operation",
+		Input:      payload,
+		RequestId:  uuid.NewString(),
+	}
+	if timeout > 0 {
+		attr.ScheduleToCloseTimeout = durationpb.New(timeout)
+	}
+
 	return &historypb.HistoryEvent{
 		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
 		EventId:   1,
 		EventTime: timestamppb.New(schedTime),
 		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
-			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
-				EndpointId:             "endpoint-id",
-				Endpoint:               "endpoint",
-				Service:                "service",
-				Operation:              "operation",
-				Input:                  payload,
-				RequestId:              uuid.NewString(),
-				ScheduleToCloseTimeout: durationpb.New(timeout),
-			},
+			NexusOperationScheduledEventAttributes: attr,
 		},
 	}
 }

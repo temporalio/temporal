@@ -2,6 +2,8 @@
 //
 // Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
+// Copyright (c) 2024 Uber Technologies, Inc.
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -20,18 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package scheduler
+package deployment
 
 import (
-	"go.temporal.io/server/service/worker/scheduler"
-	"go.uber.org/fx"
+	"context"
+
+	"go.temporal.io/sdk/activity"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/namespace"
 )
 
-var Module = fx.Module(
-	"component.scheduler",
-	fx.Provide(ConfigProvider),
-	fx.Provide(scheduler.NewSpecBuilder),
-	fx.Invoke(RegisterTaskSerializers),
-	fx.Invoke(RegisterStateMachine),
-	fx.Invoke(RegisterExecutor),
+type (
+	DeploymentSeriesActivities struct {
+		namespace        *namespace.Namespace
+		deploymentClient DeploymentStoreClient
+	}
 )
+
+func (a *DeploymentSeriesActivities) SyncDeployment(ctx context.Context, args *deploymentspb.SyncDeploymentStateActivityArgs) (*deploymentspb.SyncDeploymentStateActivityResult, error) {
+	identity := "deployment series workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	res, err := a.deploymentClient.SyncDeploymentWorkflowFromSeries(
+		ctx,
+		a.namespace,
+		args.Deployment,
+		args.Args,
+		identity,
+		args.RequestId,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &deploymentspb.SyncDeploymentStateActivityResult{
+		State: res.DeploymentLocalState,
+	}, nil
+}

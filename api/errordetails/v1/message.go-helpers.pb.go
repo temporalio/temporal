@@ -287,3 +287,77 @@ func (this *ObsoleteDispatchBuildIdFailure) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type ObsoleteMatchingTaskFailure to the protobuf v3 wire format
+func (val *ObsoleteMatchingTaskFailure) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ObsoleteMatchingTaskFailure from the protobuf v3 wire format
+func (val *ObsoleteMatchingTaskFailure) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ObsoleteMatchingTaskFailure) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ObsoleteMatchingTaskFailure values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ObsoleteMatchingTaskFailure) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ObsoleteMatchingTaskFailure
+	switch t := that.(type) {
+	case *ObsoleteMatchingTaskFailure:
+		that1 = t
+	case ObsoleteMatchingTaskFailure:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ActivityStartDuringTransitionFailure to the protobuf v3 wire format
+func (val *ActivityStartDuringTransitionFailure) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ActivityStartDuringTransitionFailure from the protobuf v3 wire format
+func (val *ActivityStartDuringTransitionFailure) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ActivityStartDuringTransitionFailure) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ActivityStartDuringTransitionFailure values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ActivityStartDuringTransitionFailure) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ActivityStartDuringTransitionFailure
+	switch t := that.(type) {
+	case *ActivityStartDuringTransitionFailure:
+		that1 = t
+	case ActivityStartDuringTransitionFailure:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

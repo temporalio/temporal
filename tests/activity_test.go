@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -226,7 +227,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 				// Since the entire activity will finish at 5s, there won't be
 				// any heartbeat timeout error.
 				// so here, we reduce the duration between two heartbeats, so that they are
-				// more likey be sent in the heartbeat batch at 1.6s
+				// more likely be sent in the heartbeat batch at 1.6s
 				// (basically increasing the room for delay in heartbeat goroutine from 0.1s to 1s)
 				for i := 0; i < 3; i++ {
 					activity.RecordHeartbeat(ctx, i)
@@ -239,7 +240,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		return nil
 	}
 
-	var err1, err2, err3, err4 error
+	var err1, err2, err3, err4, err5, err6 error
 	workflowFn := func(ctx workflow.Context) error {
 		noRetryPolicy := &temporal.RetryPolicy{
 			MaximumAttempts: 1, // disable retry
@@ -270,17 +271,33 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		f3 := workflow.ExecuteActivity(ctx3, activityFn)
 
 		ctx4 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:          "ScheduleToCloseNotSet",
+			StartToCloseTimeout: 2 * time.Second,
+			RetryPolicy:         noRetryPolicy,
+		})
+		f4 := workflow.ExecuteActivity(ctx4, activityFn)
+
+		ctx5 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "StartToCloseNotSet",
+			ScheduleToCloseTimeout: 2 * time.Second,
+			RetryPolicy:            noRetryPolicy,
+		})
+		f5 := workflow.ExecuteActivity(ctx5, activityFn)
+
+		ctx6 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ActivityID:          "Heartbeat",
 			StartToCloseTimeout: 10 * time.Second,
 			HeartbeatTimeout:    1 * time.Second,
 			RetryPolicy:         noRetryPolicy,
 		})
-		f4 := workflow.ExecuteActivity(ctx4, activityFn)
+		f6 := workflow.ExecuteActivity(ctx6, activityFn)
 
 		err1 = f1.Get(ctx1, nil)
 		err2 = f2.Get(ctx2, nil)
 		err3 = f3.Get(ctx3, nil)
 		err4 = f4.Get(ctx4, nil)
+		err5 = f5.Get(ctx5, nil)
+		err6 = f6.Get(ctx6, nil)
 
 		return nil
 	}
@@ -288,9 +305,8 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	s.Worker().RegisterActivity(activityFn)
 	s.Worker().RegisterWorkflow(workflowFn)
 
-	id := "functional-test-activity-timeouts"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 id,
+		ID:                 "functional-test-activity-timeouts",
 		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
@@ -334,6 +350,22 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	s.Error(err4)
 	activityErr, ok = err4.(*temporal.ActivityError)
 	s.True(ok)
+	s.Equal("ScheduleToCloseNotSet", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
+
+	s.Error(err5)
+	activityErr, ok = err5.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("StartToCloseNotSet", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+
+	s.Error(err6)
+	activityErr, ok = err6.(*temporal.ActivityError)
+	s.True(ok)
 	s.Equal("Heartbeat", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
@@ -342,8 +374,6 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	var v int
 	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
 	s.Equal(2, v)
-
-	// s.printHistory(id, workflowRun.GetRunID())
 }
 
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
@@ -478,28 +508,20 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 }
 
 func (s *ActivityTestSuite) TestActivityRetry() {
-	id := "functional-activity-retry-test"
-	wt := "functional-activity-retry-type"
-	tl := "functional-activity-retry-taskqueue"
-	identity := "worker1"
-	identity2 := "worker2"
+	tv := testvars.New(s.T())
+
 	activityName := "activity_retry"
 	timeoutActivityName := "timeout_activity"
-
-	workflowType := &commonpb.WorkflowType{Name: wt}
-
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
 		Namespace:           s.Namespace(),
-		WorkflowId:          id,
-		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
-		Identity:            identity,
+		Identity:            tv.WorkerIdentity(),
 	}
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -521,7 +543,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId:             "A",
 						ActivityType:           &commonpb.ActivityType{Name: activityName},
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						TaskQueue:              tv.TaskQueue(),
 						Input:                  payloads.EncodeString("1"),
 						ScheduleToCloseTimeout: durationpb.New(4 * time.Second),
 						ScheduleToStartTimeout: durationpb.New(4 * time.Second),
@@ -588,7 +610,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 
 	activityExecutedCount := 0
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
+		s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
 		var err error
 		if activityExecutedCount == 0 {
@@ -603,19 +625,8 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
-		TaskQueue:           taskQueue,
-		Identity:            identity,
-		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler,
-		Logger:              s.Logger,
-		T:                   s.T(),
-	}
-
-	poller2 := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
-		TaskQueue:           taskQueue,
-		Identity:            identity,
+		TaskQueue:           tv.TaskQueue(),
+		Identity:            tv.WorkerIdentity(),
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
 		Logger:              s.Logger,
@@ -626,7 +637,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		return s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace(),
 			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
+				WorkflowId: tv.WorkflowID(),
 				RunId:      we.RunId,
 			},
 		})
@@ -635,8 +646,13 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	err = poller.PollAndProcessActivityTask(false)
-	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
+	_, err = s.TaskPoller.PollAndHandleActivityTask(tv,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
+			s.Equal(activityName, task.ActivityType.GetName())
+			return nil, errors.New("bad-luck-please-retry")
+		})
+	s.NoError(err)
 
 	descResp, err := describeWorkflowExecution()
 	s.NoError(err)
@@ -646,24 +662,22 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 			expectedErrString := "bad-luck-please-retry"
 			s.Equal(expectedErrString, pendingActivity.GetLastFailure().GetMessage())
 			s.False(pendingActivity.GetLastFailure().GetApplicationFailureInfo().GetNonRetryable())
-			s.Equal(identity, pendingActivity.GetLastWorkerIdentity())
+			s.Equal(tv.WorkerIdentity(), pendingActivity.GetLastWorkerIdentity())
 		}
 	}
 
-	err = poller2.PollAndProcessActivityTask(false)
-	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
+	_, err = s.TaskPoller.PollAndHandleActivityTask(tv,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.Equal(tv.WorkflowID(), task.WorkflowExecution.GetWorkflowId())
+			s.Equal(activityName, task.ActivityType.GetName())
+			return nil, temporal.NewNonRetryableApplicationError("bad-bug", "", nil)
+		})
+	s.NoError(err)
 
 	descResp, err = describeWorkflowExecution()
 	s.NoError(err)
-	for _, pendingActivity := range descResp.GetPendingActivities() {
-		if pendingActivity.GetActivityId() == "A" {
-			s.NotNil(pendingActivity.GetLastFailure().GetApplicationFailureInfo())
-			expectedErrString := "bad-bug"
-			s.Equal(expectedErrString, pendingActivity.GetLastFailure().GetMessage())
-			s.True(pendingActivity.GetLastFailure().GetApplicationFailureInfo().GetNonRetryable())
-			s.Equal(identity2, pendingActivity.GetLastWorkerIdentity())
-		}
-	}
+	s.Len(descResp.GetPendingActivities(), 1)
+	s.Equal(descResp.GetPendingActivities()[0].GetActivityId(), "B")
 
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 	for i := 0; i < 3; i++ {
@@ -673,7 +687,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		_, err := poller.PollAndProcessWorkflowTask(testcore.WithRetries(1))
 		if err != nil {
 			s.PrintHistoryEvents(s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
-				WorkflowId: id,
+				WorkflowId: tv.WorkflowID(),
 				RunId:      we.GetRunId(),
 			}))
 		}
@@ -685,7 +699,6 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	}
 
 	s.True(workflowComplete)
-	s.True(activityExecutedCount == 2)
 }
 
 func (s *ActivityTestSuite) TestActivityRetry_Infinite() {

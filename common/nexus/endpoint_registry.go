@@ -233,9 +233,9 @@ func (r *EndpointRegistryImpl) waitUntilInitialized(ctx context.Context) error {
 
 func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context, dataReady *dataReady) error {
 	hasLoadedEndpointData := false
+	minWaitTime := r.config.refreshMinWait()
 
 	for ctx.Err() == nil {
-		minWaitTime := r.config.refreshMinWait()
 		start := time.Now()
 		if !hasLoadedEndpointData {
 			// Loading endpoints for the first time after being (re)enabled, so load with fallback to persistence

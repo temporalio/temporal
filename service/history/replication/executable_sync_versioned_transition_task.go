@@ -24,14 +24,18 @@ package replication
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
+	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 )
@@ -66,7 +70,7 @@ func NewExecutableSyncVersionedTransitionTask(
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
-			metrics.VerifyVersionedTransitionTaskScope,
+			metrics.SyncVersionedTransitionTaskScope,
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
@@ -102,7 +106,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
-			metrics.OperationTag(metrics.VerifyVersionedTransitionTaskScope),
+			metrics.OperationTag(metrics.SyncVersionedTransitionTaskScope),
 			metrics.NamespaceTag(namespaceName),
 		)
 		return nil
@@ -155,13 +159,47 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		}
 		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 		defer cancel()
+		var mutation *replicationspb.SyncWorkflowStateMutationAttributes
+		var snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes
+		switch artifactType := e.taskAttr.VersionedTransitionArtifact.StateAttributes.(type) {
+		case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes:
+			snapshot = e.taskAttr.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes()
+		case *replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes:
+			mutation = e.taskAttr.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
+		default:
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
+		}
+		versionHistories := func() *historyspb.VersionHistories {
+			if snapshot != nil {
+				return snapshot.State.ExecutionInfo.VersionHistories
+			}
+			return mutation.StateMutation.ExecutionInfo.VersionHistories
+		}()
+		history, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+		if err != nil {
+			return err
+		}
 
-		if doContinue, resendErr := e.Resend(
+		startEvent := taskErr.StartEventId + 1
+		endEvent := taskErr.EndEventId - 1
+		startEventVersion, err := versionhistory.GetVersionHistoryEventVersion(history, startEvent)
+		if err != nil {
+			return err
+		}
+		endEventVersion, err := versionhistory.GetVersionHistoryEventVersion(history, endEvent)
+		if err != nil {
+			return err
+		}
+		if resendErr := e.BackFillEvents(
 			ctx,
 			e.ExecutableTask.SourceClusterName(),
-			taskErr,
-			ResendAttempt,
-		); resendErr != nil || !doContinue {
+			definition.NewWorkflowKey(e.NamespaceID, e.WorkflowID, e.RunID),
+			startEvent,
+			startEventVersion,
+			endEvent,
+			endEventVersion,
+			"",
+		); resendErr != nil {
 			return err
 		}
 		return e.Execute()

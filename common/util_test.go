@@ -33,7 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/failure/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -352,7 +352,32 @@ func TestIsServiceClientTransientError_ResourceExhausted(t *testing.T) {
 			Message: "Mutable state cache is full",
 		},
 	))
+}
 
+func TestMultiOperationErrorRetries(t *testing.T) {
+	unavailableOpErr := serviceerror.NewMultiOperationExecution("err",
+		[]error{serviceerror.NewUnavailable("err")})
+	require.True(t, IsServiceHandlerRetryableError(unavailableOpErr))
+	require.True(t, IsServiceClientTransientError(unavailableOpErr))
+
+	invalidArgOpErr := serviceerror.NewMultiOperationExecution("err",
+		[]error{serviceerror.NewInvalidArgument("err")})
+	require.False(t, IsServiceHandlerRetryableError(invalidArgOpErr))
+	require.False(t, IsServiceClientTransientError(invalidArgOpErr))
+
+	nilOpErr := serviceerror.NewMultiOperationExecution("err",
+		[]error{nil})
+	require.False(t, IsServiceHandlerRetryableError(nilOpErr))
+	require.False(t, IsServiceClientTransientError(nilOpErr))
+
+	nilErrs := serviceerror.NewMultiOperationExecution("err", nil)
+	require.False(t, IsServiceHandlerRetryableError(nilErrs))
+	require.False(t, IsServiceClientTransientError(nilErrs))
+
+	nilAndUnavailableOpErr := serviceerror.NewMultiOperationExecution("err",
+		[]error{nil, serviceerror.NewUnavailable("err")})
+	require.True(t, IsServiceHandlerRetryableError(nilAndUnavailableOpErr))
+	require.True(t, IsServiceClientTransientError(nilAndUnavailableOpErr))
 }
 
 func TestDiscardUnknownProto(t *testing.T) {
@@ -569,7 +594,7 @@ func TestMergeProtoExcludingFields(t *testing.T) {
 // Tests that CreateHistoryStartWorkflowRequest doesn't mutate the request
 // parameter when creating a history request with payloads set.
 func TestCreateHistoryStartWorkflowRequestPayloads(t *testing.T) {
-	failurePayload := &failure.Failure{}
+	failurePayload := &failurepb.Failure{}
 	resultPayload := payloads.EncodeString("result")
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:            uuid.New(),

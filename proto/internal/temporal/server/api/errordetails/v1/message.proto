@@ -65,5 +65,15 @@ message SyncStateFailure {
 message StickyWorkerUnavailableFailure {
 }
 
+// Deprecated. Only used in WV2. [cleanup-old-wv]
 message ObsoleteDispatchBuildIdFailure {
+}
+
+// Returned when History determines a task that Matching wants to dispatch is no longer valid.
+message ObsoleteMatchingTaskFailure {
+}
+
+// Returned when an activity start is rejected by History because the workflow is in a transitioning
+// between worker deployments.
+message ActivityStartDuringTransitionFailure {
 }

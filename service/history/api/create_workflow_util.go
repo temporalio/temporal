@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/schedule/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -43,13 +42,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/sdk"
-	schedulerhsm "go.temporal.io/server/components/scheduler"
-	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -58,6 +54,7 @@ type (
 		RunID            string
 		LastWriteVersion int64
 	}
+	CreateOrUpdateLeaseFunc func(WorkflowLease, shard.Context, workflow.MutableState) (WorkflowLease, error)
 )
 
 func NewWorkflowWithSignal(
@@ -67,7 +64,7 @@ func NewWorkflowWithSignal(
 	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (WorkflowLease, error) {
+) (workflow.MutableState, error) {
 	newMutableState, err := CreateMutableState(
 		shard,
 		namespaceEntry,
@@ -91,30 +88,6 @@ func NewWorkflowWithSignal(
 		return nil, err
 	}
 
-	// This workflow is created for the hsm attached to it and will not generate actual workflow tasks.
-	// This is a bit of a hacky way to distinguish between a "real" workflow and a top level state machine.
-	// This code will change as the scheduler HSM project progresses.
-	hsmOnlyWorkflow := startRequest.StartRequest.WorkflowType.Name == scheduler.WorkflowType && shard.GetConfig().UseExperimentalHsmScheduler(startRequest.StartRequest.Namespace)
-	if hsmOnlyWorkflow {
-		args := schedule.StartScheduleArgs{}
-		if err := sdk.PreferProtoDataConverter.FromPayloads(startRequest.StartRequest.Input, &args); err != nil {
-			return nil, err
-		}
-
-		// Key ID is left empty as the scheduler machine is a singleton.
-		tweakables := shard.GetConfig().HsmSchedulerTweakables(startRequest.StartRequest.Namespace)
-		node, err := newMutableState.HSM().AddChild(hsm.Key{Type: schedulerhsm.StateMachineType}, schedulerhsm.NewScheduler(&args, &tweakables))
-		if err != nil {
-			return nil, err
-		}
-		err = hsm.MachineTransition(node, func(scheduler *schedulerhsm.Scheduler) (hsm.TransitionOutput, error) {
-			return schedulerhsm.TransitionSchedulerActivate.Apply(scheduler, schedulerhsm.EventSchedulerActivate{})
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	if signalWithStartRequest != nil {
 		if signalWithStartRequest.GetRequestId() != "" {
 			newMutableState.AddSignalRequested(signalWithStartRequest.GetRequestId())
@@ -132,17 +105,15 @@ func NewWorkflowWithSignal(
 	requestEagerExecution := startRequest.StartRequest.GetRequestEagerExecution()
 
 	var scheduledEventID int64
-	if !hsmOnlyWorkflow {
-		// Generate first workflow task event if not child WF and no first workflow task backoff
-		scheduledEventID, err = GenerateFirstWorkflowTask(
-			newMutableState,
-			startRequest.ParentExecutionInfo,
-			startEvent,
-			requestEagerExecution,
-		)
-		if err != nil {
-			return nil, err
-		}
+	// Generate first workflow task event if not child WF and no first workflow task backoff
+	scheduledEventID, err = GenerateFirstWorkflowTask(
+		newMutableState,
+		startRequest.ParentExecutionInfo,
+		startEvent,
+		requestEagerExecution,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	// If first workflow task should back off (e.g. cron or workflow retry) a workflow task will not be scheduled.
@@ -163,18 +134,34 @@ func NewWorkflowWithSignal(
 		}
 	}
 
-	newWorkflowContext := workflow.NewContext(
-		shard.GetConfig(),
-		definition.NewWorkflowKey(
-			namespaceEntry.ID().String(),
-			workflowID,
-			runID,
+	return newMutableState, nil
+}
+
+// NOTE: must implement CreateOrUpdateLeaseFunc.
+func NewWorkflowLeaseAndContext(
+	existingLease WorkflowLease,
+	shardCtx shard.Context,
+	ms workflow.MutableState,
+) (WorkflowLease, error) {
+	// TODO(stephanos): remove this hack
+	if existingLease != nil {
+		return existingLease, nil
+	}
+	return NewWorkflowLease(
+		workflow.NewContext(
+			shardCtx.GetConfig(),
+			definition.NewWorkflowKey(
+				ms.GetNamespaceEntry().ID().String(),
+				ms.GetExecutionInfo().WorkflowId,
+				ms.GetExecutionState().RunId,
+			),
+			shardCtx.GetLogger(),
+			shardCtx.GetThrottledLogger(),
+			shardCtx.GetMetricsHandler(),
 		),
-		shard.GetLogger(),
-		shard.GetThrottledLogger(),
-		shard.GetMetricsHandler(),
-	)
-	return NewWorkflowLease(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
+		wcache.NoopReleaseFn,
+		ms,
+	), nil
 }
 
 func CreateMutableState(
@@ -322,6 +309,9 @@ func ValidateStartWorkflowExecutionRequest(
 	}
 	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
+	}
+	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+		return err
 	}
 	if err := retrypolicy.Validate(request.RetryPolicy); err != nil {
 		return err

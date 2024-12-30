@@ -34,7 +34,7 @@ import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
-
+import "temporal/api/deployment/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -112,10 +112,12 @@ message WorkflowExecutionInfo {
     // tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
     // - verify WFT completes by the same Build ID that started in the latest attempt
     // - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     string workflow_task_build_id = 88;
     // tracks the started build ID redirect counter for transient/speculative WFT. This info is to
     // ensure the right redirect counter is used in the WFT started event created later
     // for a transient/speculative WFT.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     int64 workflow_task_build_id_redirect_counter = 89;
 
     bool cancel_requested = 29;
@@ -173,6 +175,7 @@ message WorkflowExecutionInfo {
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 76;
     // If using build-id based versioning: version stamp of the last worker to complete a
     // workflow tasks for this workflow.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     temporal.api.common.v1.WorkerVersionStamp most_recent_worker_version_stamp = 78;
     // The currently assigned build ID for this execution. Presence of this value means worker versioning is used
     // for this execution. Assigned build ID is selected by matching based on Worker Versioning Assignment Rules
@@ -180,12 +183,15 @@ message WorkflowExecutionInfo {
     // again, the assigned build ID may change according to the latest versioning rules.
     // Assigned build ID can also change in the middle of a execution if Compatible Redirect Rules are applied to
     // this execution.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     string assigned_build_id = 85;
     // Build ID inherited from a previous/parent execution. If present, assigned_build_id will be set to this, instead
     // of using the assignment rules.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     string inherited_build_id = 86;
     // Tracks the number of times a redirect rule is applied to this workflow. Used to apply redirects in the right
     // order when mutable state is rebuilt from history events.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     int64 build_id_redirect_counter = 87;
 
     // index of update IDs and pointers to associated history events.
@@ -257,6 +263,23 @@ message WorkflowExecutionInfo {
 
     // Reset Run ID points to the new nun when this execution is reset. If the execution is reset multiple times, it points to the latest run.
     string reset_run_id = 97;
+
+    // When present, it means the workflow execution is versioned, or is transitioning from
+    // unversioned workers to versioned ones.
+    // Note: Deployment objects inside versioning info are immutable, never change their fields.
+    // (-- api-linter: core::0203::immutable=disabled
+    //     aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
+    temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 98;
+
+    // This is the run id when the WorkflowExecutionStarted event was written.
+    // A workflow reset changes the execution run_id, but preserves this field so that we have a reference to the original workflow execution that was reset.
+    string original_execution_run_id = 99;
+
+    // These two fields are to record the transition history when the transition history is cleaned up due to disabling transition history
+    // Should be deprecated once the transition history is fully launched
+    repeated VersionedTransition previous_transition_history = 100;
+    VersionedTransition last_transition_history_break_point = 101;
+
 }
 
 message ExecutionStats {
@@ -407,6 +430,14 @@ message OutboundTaskInfo {
     StateMachineTaskInfo state_machine_info = 8;
 }
 
+message NexusInvocationTaskInfo {
+    int32 attempt = 1;
+}
+
+message NexusCancelationTaskInfo {
+    int32 attempt = 1;
+}
+
 // activity_map column
 message ActivityInfo {
     int64 version = 1;
@@ -449,24 +480,30 @@ message ActivityInfo {
     google.protobuf.Timestamp last_heartbeat_update_time = 32;
     // When true, it means the activity is assigned to the build ID of its workflow (only set for old versioning)
     // Deprecated. use `use_workflow_build_id`
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     bool use_compatible_version = 33;
     temporal.api.common.v1.ActivityType activity_type = 34;
     // Absence of `assigned_build_id` generally means this task is on an "unversioned" task queue.
     // In rare cases, it can also mean that the task queue is versioned but we failed to write activity's
     // independently-assigned build ID to the database. This case heals automatically once the task is dispatched.
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     oneof build_id_info {
         // When present, it means this activity is assigned to the build ID of its workflow.
+        // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
         UseWorkflowBuildIdInfo use_workflow_build_id_info = 35;
         // This means the activity is independently versioned and not bound to the build ID of its workflow.
         // If the task fails and is scheduled again, the assigned build ID may change according to the latest versioning
         // rules. This value also updates if a redirect rule is applied to the activity task to reflect the build ID
         // of the worker who received the task.
+        // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
         string last_independently_assigned_build_id = 36;
     }
     // The version stamp of the worker to whom this activity was most-recently dispatched
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     temporal.api.common.v1.WorkerVersionStamp last_worker_version_stamp = 37;
     VersionedTransition last_update_versioned_transition = 38;
 
+    // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
     message UseWorkflowBuildIdInfo {
         // build ID of the wf when this activity started last time (which is the build ID of
         // the worker who received this activity)
@@ -490,6 +527,10 @@ message ActivityInfo {
     // Iw will not be scheduled, timer tasks will not be processed, etc.
     // Note: it still can be cancelled/completed.
     bool  paused = 42;
+
+    // The deployment this activity was dispatched to most recently. Present only if the activity
+    // was dispatched to a versioned worker.
+    temporal.api.deployment.v1.Deployment last_started_deployment = 43;
 }
 
 // timer_map column

@@ -214,7 +214,7 @@ Update to the worker. This Workflow Task is always speculative, unless there is 
 already-scheduled-but-not-yet-started Workflow Task present.
 
 Later, when handling a worker response in the `RespondWorkflowTaskCompleted` API handler, the server
-might write or drop events for this Workflow Task. Read
+might write or discard events for this Workflow Task. Read
 [Speculative Workflow Tasks](./speculative-workflow-task.md) for more details.
 
 ### Lifecycle Stage
@@ -319,7 +319,7 @@ to process the Update response from the worker at the same time.
 ### Limits
 There are currently two limits: 
 - `history.maxInFlightUpdates`: maximum in-flight Updates (i.e., not completed Updates)
-- `history.maxTotalUpdates`: maximum total Updates per Workflow run
+- `history.maxTotalUpdates`: maximum total Updates per Workflow run (excludes rejections)
 
 There are two exceptions when the `maxInFlightUpdates` limit is ignored and can be exceeded:
 1. Update is resurrected (see "Update Resurrection" below).

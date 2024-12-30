@@ -2,6 +2,8 @@
 //
 // Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
+// Copyright (c) 2024 Uber Technologies, Inc.
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -20,30 +22,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package scheduler
+package deployment
 
 import (
-	enumspb "go.temporal.io/api/enums/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/persistence/serialization"
-	"google.golang.org/protobuf/proto"
+	"testing"
+
+	"github.com/stretchr/testify/suite"
+	"go.temporal.io/sdk/testsuite"
+	"go.uber.org/mock/gomock"
 )
 
-type ProcessWorkflowCompletionEvent struct{}
-
-func (p ProcessWorkflowCompletionEvent) Name() string {
-	return "scheduler.process_workflow_completion_event"
+type deploymentSeriesSuite struct {
+	suite.Suite
+	testsuite.WorkflowTestSuite
+	controller *gomock.Controller
+	env        *testsuite.TestWorkflowEnvironment
 }
 
-func (p ProcessWorkflowCompletionEvent) SerializeOutput(_ any) ([]byte, error) {
-	// ProcessWorkflowCompletionEvent outputs void and therefore does nothing for serialization.
-	return nil, nil
+func TestDeploymentSeriesSuite(t *testing.T) {
+	suite.Run(t, new(deploymentSeriesSuite))
 }
 
-func (p ProcessWorkflowCompletionEvent) DeserializeInput(data []byte) (any, error) {
-	output := &persistencepb.HSMCompletionCallbackArg{}
-	if err := proto.Unmarshal(data, output); err != nil {
-		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
-	}
-	return output, nil
+func (s *deploymentSeriesSuite) SetupTest() {
+	s.controller = gomock.NewController(s.T())
+	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
+	s.env.RegisterWorkflow(DeploymentSeriesWorkflow)
 }
+
+func (s *deploymentSeriesSuite) TearDownTest() {
+	s.controller.Finish()
+	s.env.AssertExpectations(s.T())
+}
+
+/*
+func (d *deploymentSeriesSuite) TestStartDeploymentSeriesWorkflow() {}
+
+
+
+
+
+*/

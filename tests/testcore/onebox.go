@@ -38,7 +38,6 @@ import (
 	"testing"
 	"time"
 
-	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -82,14 +81,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-const (
-	frontendPort     = 7134
-	frontendHTTPPort = 7144
-	historyPort      = 7132
-	matchingPort     = 7136
-	workerPort       = 7138 // not really listening
-)
-
 type (
 	TemporalImpl struct {
 		fxApps []*fx.App
@@ -118,7 +109,6 @@ type (
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		abstractDataStoreFactory         persistenceClient.AbstractDataStoreFactory
 		visibilityStoreFactory           visibility.VisibilityStoreFactory
-		clusterNo                        int // cluster number
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
 		frontendConfig                   FrontendConfig
@@ -129,10 +119,9 @@ type (
 		esClient                         esclient.Client
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
-		spanExporters                    []otelsdktrace.SpanExporter
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
-		hostsByService                   map[primitives.ServiceName]static.Hosts
+		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
 
 		onGetClaims          func(*authorization.AuthInfo) (*authorization.Claims, error)
 		onAuthorize          func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
@@ -186,7 +175,6 @@ type (
 		AbstractDataStoreFactory         persistenceClient.AbstractDataStoreFactory
 		VisibilityStoreFactory           visibility.VisibilityStoreFactory
 		Logger                           log.Logger
-		ClusterNo                        int
 		ArchiverMetadata                 carchiver.ArchivalMetadata
 		ArchiverProvider                 provider.ArchiverProvider
 		EnableReadHistoryFromArchival    bool
@@ -198,13 +186,13 @@ type (
 		ESClient                         esclient.Client
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
-		SpanExporters                    []otelsdktrace.SpanExporter
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
 		// ServiceFxOptions is populated by WithFxOptionsForService.
-		ServiceFxOptions     map[primitives.ServiceName][]fx.Option
-		TaskCategoryRegistry tasks.TaskCategoryRegistry
+		ServiceFxOptions         map[primitives.ServiceName][]fx.Option
+		TaskCategoryRegistry     tasks.TaskCategoryRegistry
+		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 	}
 
 	listenHostPort string
@@ -253,7 +241,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		namespaceReplicationQueue:        params.NamespaceReplicationQueue,
 		abstractDataStoreFactory:         params.AbstractDataStoreFactory,
 		visibilityStoreFactory:           params.VisibilityStoreFactory,
-		clusterNo:                        params.ClusterNo,
 		esConfig:                         params.ESConfig,
 		esClient:                         params.ESClient,
 		archiverMetadata:                 params.ArchiverMetadata,
@@ -264,29 +251,12 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		workerConfig:                     params.WorkerConfig,
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
-		spanExporters:                    params.SpanExporters,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
 		serviceFxOptions:                 params.ServiceFxOptions,
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
-	}
-
-	// set defaults
-	const minNodes = 1
-	impl.frontendConfig.NumFrontendHosts = max(minNodes, impl.frontendConfig.NumFrontendHosts)
-	impl.historyConfig.NumHistoryHosts = max(minNodes, impl.historyConfig.NumHistoryHosts)
-	impl.matchingConfig.NumMatchingHosts = max(minNodes, impl.matchingConfig.NumMatchingHosts)
-	impl.workerConfig.NumWorkers = max(minNodes, impl.workerConfig.NumWorkers)
-	if impl.workerConfig.DisableWorker {
-		impl.workerConfig.NumWorkers = 0
-	}
-
-	impl.hostsByService = map[primitives.ServiceName]static.Hosts{
-		primitives.FrontendService: static.Hosts{All: impl.FrontendGRPCAddresses()},
-		primitives.MatchingService: static.Hosts{All: impl.MatchingServiceAddresses()},
-		primitives.HistoryService:  static.Hosts{All: impl.HistoryServiceAddresses()},
-		primitives.WorkerService:   static.Hosts{All: impl.WorkerServiceAddresses()},
+		hostsByProtocolByService:         params.HostsByProtocolByService,
 	}
 
 	for k, v := range staticOverrides {
@@ -329,56 +299,26 @@ func (c *TemporalImpl) Stop() error {
 }
 
 func (c *TemporalImpl) makeHostMap(serviceName primitives.ServiceName, self string) map[primitives.ServiceName]static.Hosts {
-	hostMap := maps.Clone(c.hostsByService)
+	hostMap := maps.Clone(c.hostsByProtocolByService[grpcProtocol])
 	hosts := hostMap[serviceName]
 	hosts.Self = self
 	hostMap[serviceName] = hosts
 	return hostMap
 }
 
-func (c *TemporalImpl) makeGRPCAddresses(num, port int) []string {
-	hosts := make([]string, num)
-	for i := range hosts {
-		hosts[i] = fmt.Sprintf("127.0.%d.%d:%d", c.clusterNo, i+1, port)
-	}
-	return hosts
-}
-
-func (c *TemporalImpl) FrontendGRPCAddresses() []string {
-	return c.makeGRPCAddresses(c.frontendConfig.NumFrontendHosts, frontendPort)
-}
-
-// Use this to get an address for the Go SDK to connect to.
-func (c *TemporalImpl) FrontendGRPCAddress() string {
-	return c.frontendMembershipAddress
-}
-
 // Use this to get an address for a remote cluster to connect to.
 func (c *TemporalImpl) RemoteFrontendGRPCAddress() string {
-	return c.FrontendGRPCAddresses()[0]
+	return c.hostsByProtocolByService[grpcProtocol][primitives.FrontendService].All[0]
 }
 
 func (c *TemporalImpl) FrontendHTTPAddress() string {
 	// randomize like a load balancer would
-	addrs := c.FrontendGRPCAddresses()
-	addr := addrs[rand.Intn(len(addrs))]
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		panic(fmt.Errorf("Invalid gRPC frontend address: %w", err))
-	}
-	return net.JoinHostPort(host, strconv.Itoa(frontendHTTPPort))
+	addrs := c.hostsByProtocolByService[httpProtocol][primitives.FrontendService].All
+	return addrs[rand.Intn(len(addrs))]
 }
 
-func (c *TemporalImpl) HistoryServiceAddresses() []string {
-	return c.makeGRPCAddresses(c.historyConfig.NumHistoryHosts, historyPort)
-}
-
-func (c *TemporalImpl) MatchingServiceAddresses() []string {
-	return c.makeGRPCAddresses(c.matchingConfig.NumMatchingHosts, matchingPort)
-}
-
-func (c *TemporalImpl) WorkerServiceAddresses() []string {
-	return c.makeGRPCAddresses(c.workerConfig.NumWorkers, workerPort)
+func (c *TemporalImpl) FrontendGRPCAddress() string {
+	return c.hostsByProtocolByService[grpcProtocol][primitives.FrontendService].All[0]
 }
 
 func (c *TemporalImpl) AdminClient() adminservice.AdminServiceClient {
@@ -430,7 +370,7 @@ func (c *TemporalImpl) startFrontend() {
 	var matchingRawClient resource.MatchingRawClient
 	var grpcResolver *membership.GRPCResolver
 
-	for _, host := range c.hostsByService[serviceName].All {
+	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
 		var namespaceRegistry namespace.Registry
 		app := fx.New(
@@ -441,7 +381,7 @@ func (c *TemporalImpl) startFrontend() {
 			),
 			fx.Provide(c.frontendConfigProvider),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
+			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
@@ -471,7 +411,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Supply(c.spanExporters),
+			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
 			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &grpcResolver),
@@ -508,7 +448,7 @@ func (c *TemporalImpl) startFrontend() {
 func (c *TemporalImpl) startHistory() {
 	serviceName := primitives.HistoryService
 
-	for _, host := range c.hostsByService[serviceName].All {
+	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Supply(
@@ -518,7 +458,7 @@ func (c *TemporalImpl) startHistory() {
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
+			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
@@ -542,9 +482,8 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Supply(c.spanExporters),
+			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
-
 			history.QueueModule,
 			history.Module,
 			replication.Module,
@@ -565,7 +504,7 @@ func (c *TemporalImpl) startHistory() {
 func (c *TemporalImpl) startMatching() {
 	serviceName := primitives.MatchingService
 
-	for _, host := range c.hostsByService[serviceName].All {
+	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Supply(
@@ -575,7 +514,7 @@ func (c *TemporalImpl) startMatching() {
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
+			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
@@ -595,7 +534,7 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Supply(c.spanExporters),
+			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			matching.Module,
 			temporal.FxLogAdapter,
@@ -626,7 +565,7 @@ func (c *TemporalImpl) startWorker() {
 		clusterConfigCopy.EnableGlobalNamespace = true
 	}
 
-	for _, host := range c.hostsByService[serviceName].All {
+	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Supply(
@@ -636,7 +575,7 @@ func (c *TemporalImpl) startWorker() {
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return httpPort(frontendHTTPPort) }),
+			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
@@ -658,8 +597,6 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Supply(c.spanExporters),
-			temporal.ServiceTracingModule,
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
@@ -726,7 +663,7 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 		Services: map[string]config.Service{
 			string(primitives.FrontendService): {
 				RPC: config.RPC{
-					HTTPPort: frontendHTTPPort,
+					HTTPPort: int(mustPortFromAddress(c.FrontendHTTPAddress())),
 					HTTPAdditionalForwardedHeaders: []string{
 						"this-header-forwarded",
 						"this-header-prefix-forwarded-*",
@@ -948,4 +885,16 @@ func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Ke
 	cleanup := c.dcClient.OverrideValue(name, value)
 	t.Cleanup(cleanup)
 	return cleanup
+}
+
+func mustPortFromAddress(addr string) httpPort {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		panic(fmt.Errorf("Invalid address: %w", err))
+	}
+	portInt, err := strconv.Atoi(port)
+	if err != nil {
+		panic(fmt.Errorf("Cannot parse port: %w", err))
+	}
+	return httpPort(portInt)
 }

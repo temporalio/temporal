@@ -31,6 +31,7 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -150,6 +151,32 @@ func (tv *TestVars) Namespace(key ...string) *namespace.Namespace {
 
 func (tv *TestVars) WorkflowID(key ...string) string {
 	return tv.getOrCreate("workflow_id", key).(string)
+}
+
+func (tv *TestVars) BuildId(key ...string) string {
+	//revive:disable-next-line:unchecked-type-assertion
+	return tv.getOrCreate("build_id", key).(string)
+}
+
+func (tv *TestVars) WithBuildId(buildId string, key ...string) *TestVars {
+	return tv.cloneSet("build_id", key, buildId)
+}
+
+func (tv *TestVars) DeploymentSeries(key ...string) string {
+	//revive:disable-next-line:unchecked-type-assertion
+	return tv.getOrCreate("deployment_series", key).(string)
+}
+
+func (tv *TestVars) WithDeploymentSeries(series string, key ...string) *TestVars {
+	return tv.cloneSet("deployment_series", key, series)
+}
+
+func (tv *TestVars) Deployment(key ...string) *deploymentpb.Deployment {
+	//revive:disable-next-line:unchecked-type-assertion
+	return &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(key...),
+		BuildId:    tv.BuildId(key...),
+	}
 }
 
 func (tv *TestVars) WithWorkflowID(workflowID string, key ...string) *TestVars {

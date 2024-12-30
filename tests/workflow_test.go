@@ -571,8 +571,6 @@ func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 }
 
 func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
-	s.T().Skip("flaky test")
-
 	id := "functional-timeouts-workflow-test"
 	wt := "functional-timeouts-workflow-test-type"
 	tl := "functional-timeouts-workflow-test-taskqueue"

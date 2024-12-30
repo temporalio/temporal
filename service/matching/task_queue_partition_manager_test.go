@@ -33,14 +33,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
-	"go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -91,12 +91,12 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 
 func (s *PartitionManagerTestSuite) TestAddTask_Forwarded() {
 	_, _, err := s.partitionMgr.AddTask(context.Background(), addTaskParams{
-		taskInfo: &persistence.TaskInfo{
+		taskInfo: &persistencespb.TaskInfo{
 			NamespaceId: namespaceId,
 			RunId:       "run",
 			WorkflowId:  "wf",
 		},
-		forwardInfo: &taskqueue.TaskForwardInfo{SourcePartition: "another-partition"},
+		forwardInfo: &taskqueuespb.TaskForwardInfo{SourcePartition: "another-partition"},
 	})
 	s.Assert().Equal(errRemoteSyncMatchFailed, err)
 }
@@ -137,7 +137,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	// validate PhysicalTaskQueueInfo structures
 	s.NotNil(resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo)
 	s.NotNil(resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo)
-	expectedPhysicalTQInfo := &taskqueue.PhysicalTaskQueueInfo{
+	expectedPhysicalTQInfo := &taskqueuespb.PhysicalTaskQueueInfo{
 		Pollers: nil, // no pollers polling
 		TaskQueueStats: &taskqueuepb.TaskQueueStats{
 			ApproximateBacklogCount: 1,
@@ -156,7 +156,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.NoError(err)
 
 	// validate TQ internal statistics (not exposed via public API)
-	expectedInternalStatsInfo := &taskqueue.InternalTaskQueueStatus{
+	expectedInternalStatsInfo := &taskqueuespb.InternalTaskQueueStatus{
 		ReadLevel: 1,
 		AckLevel:  0,
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
@@ -172,7 +172,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 }
 
 // validateTQStats is a helper to validate if the right metrics are being returned during the getStats call
-func (s *PartitionManagerTestSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTQInfo *taskqueue.PhysicalTaskQueueInfo, actualPhysicalTQInfo *taskqueue.PhysicalTaskQueueInfo) {
+func (s *PartitionManagerTestSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTQInfo *taskqueuespb.PhysicalTaskQueueInfo, actualPhysicalTQInfo *taskqueuespb.PhysicalTaskQueueInfo) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		a.Equal(expectedPhysicalTQInfo.Pollers, actualPhysicalTQInfo.Pollers)
@@ -184,7 +184,7 @@ func (s *PartitionManagerTestSuite) validatePhysicalTaskQueueInfo(expectedPhysic
 }
 
 // validateInternalTaskQueueStatus is a helper to validate if the right internal task queue stats are being returned during the GetInternalTaskQueueStatus call
-func (s *PartitionManagerTestSuite) validateInternalTaskQueueStatus(expectedInternalTaskQueueStatus *taskqueue.InternalTaskQueueStatus, actualInternalTaskQueueStatus *taskqueue.InternalTaskQueueStatus) {
+func (s *PartitionManagerTestSuite) validateInternalTaskQueueStatus(expectedInternalTaskQueueStatus *taskqueuespb.InternalTaskQueueStatus, actualInternalTaskQueueStatus *taskqueuespb.InternalTaskQueueStatus) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		a.Equal(expectedInternalTaskQueueStatus.ReadLevel, actualInternalTaskQueueStatus.ReadLevel)
@@ -205,7 +205,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersi
 	buildIds[bld] = true
 
 	// task is backlogged in the source queue so it is loaded by now
-	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", bld, false)
+	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", bld, nil, false)
 	s.Assert().NoError(err)
 	s.Assert().NotNil(sourceQ)
 
@@ -229,8 +229,8 @@ func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
 func (s *PartitionManagerTestSuite) TestPollWithRedirectRules() {
 	source := "bld1"
 	target := "bld2"
-	versioningData := &persistence.VersioningData{
-		RedirectRules: []*persistence.RedirectRule{
+	versioningData := &persistencespb.VersioningData{
+		RedirectRules: []*persistencespb.RedirectRule{
 			{
 				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
 					SourceBuildId: source,
@@ -247,7 +247,7 @@ func (s *PartitionManagerTestSuite) TestPollWithRedirectRules() {
 	s.validatePollTask(target, true)
 
 	_, _, err := s.partitionMgr.PollTask(ctx, &pollMetadata{
-		workerVersionCapabilities: &common.WorkerVersionCapabilities{
+		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       source,
 			UseVersioning: true,
 		},
@@ -258,8 +258,8 @@ func (s *PartitionManagerTestSuite) TestPollWithRedirectRules() {
 func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
 	source := "bld1"
 	target := "bld2"
-	versioningData := &persistence.VersioningData{
-		RedirectRules: []*persistence.RedirectRule{
+	versioningData := &persistencespb.VersioningData{
+		RedirectRules: []*persistencespb.RedirectRule{
 			{
 				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
 					SourceBuildId: source,
@@ -274,7 +274,7 @@ func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(source))
 
 	// task is backlogged in the source queue so it is loaded by now
-	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", source, false)
+	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", source, nil, false)
 	s.Assert().NoError(err)
 	s.Assert().NotNil(sourceQ)
 
@@ -285,21 +285,21 @@ func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
 	s.validatePollTask(target, true)
 
 	// polling from target should've loaded the source as well
-	sourceQ, err = s.partitionMgr.getVersionedQueue(ctx, "", source, false)
+	sourceQ, err = s.partitionMgr.getVersionedQueue(ctx, "", source, nil, false)
 	s.Assert().NoError(err)
 	s.Assert().NotNil(sourceQ)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_NoVersionDirective() {
 	buildId := "bld"
-	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(buildId)}}
+	versioningData := &persistencespb.VersioningData{AssignmentRules: []*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp(buildId)}}
 	s.validateAddTask("", false, versioningData, nil)
 	s.validatePollTask("", false)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_AssignedTask() {
 	ruleBld := "rule-bld"
-	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)}}
+	versioningData := &persistencespb.VersioningData{AssignmentRules: []*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)}}
 	taskBld := "task-bld"
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(taskBld))
 	s.validatePollTask(taskBld, true)
@@ -307,14 +307,14 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_AssignedTask(
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_UnassignedTask() {
 	ruleBld := "rule-bld"
-	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)}}
+	versioningData := &persistencespb.VersioningData{AssignmentRules: []*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)}}
 	s.validateAddTask(ruleBld, false, versioningData, worker_versioning.MakeUseAssignmentRulesDirective())
 	s.validatePollTask(ruleBld, true)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_UnassignedTask_SyncMatch() {
 	ruleBld := "rule-bld"
-	versioningData := &persistence.VersioningData{AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)}}
+	versioningData := &persistencespb.VersioningData{AssignmentRules: []*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)}}
 	s.validatePollTaskSyncMatch(ruleBld, true)
 	s.validateAddTask("", true, versioningData, worker_versioning.MakeUseAssignmentRulesDirective())
 }
@@ -322,48 +322,48 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRules_UnassignedTas
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets_NoVersionDirective() {
 	ruleBld := "rule-bld"
 	vs := createVersionSet("vs-bld")
-	versioningData := &persistence.VersioningData{
-		AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)},
-		VersionSets:     []*persistence.CompatibleVersionSet{vs},
+	versioningData := &persistencespb.VersioningData{
+		AssignmentRules: []*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)},
+		VersionSets:     []*persistencespb.CompatibleVersionSet{vs},
 	}
 
 	s.validateAddTask("", false, versioningData, nil)
 	// make sure version set queue is not loaded
-	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
+	s.Assert().Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask("", false)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets_AssignedTask() {
 	ruleBld := "rule-bld"
 	vs := createVersionSet("vs-bld")
-	versioningData := &persistence.VersioningData{
-		AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)},
-		VersionSets:     []*persistence.CompatibleVersionSet{vs},
+	versioningData := &persistencespb.VersioningData{
+		AssignmentRules: []*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)},
+		VersionSets:     []*persistencespb.CompatibleVersionSet{vs},
 	}
 
 	taskBld := "task-bld"
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(taskBld))
 	// make sure version set queue is not loaded
-	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
+	s.Assert().Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask(taskBld, true)
 
 	// now use the version set build ID
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(vs.BuildIds[0].Id))
 	// make sure version set queue is loaded
-	s.Assert().NotNil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
+	s.Assert().NotNil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask(vs.BuildIds[0].Id, true)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets_UnassignedTask() {
 	ruleBld := "rule-bld"
 	vs := createVersionSet("vs-bld")
-	versioningData := &persistence.VersioningData{
-		AssignmentRules: []*persistence.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)},
-		VersionSets:     []*persistence.CompatibleVersionSet{vs},
+	versioningData := &persistencespb.VersioningData{
+		AssignmentRules: []*persistencespb.AssignmentRule{createAssignmentRuleWithoutRamp(ruleBld)},
+		VersionSets:     []*persistencespb.CompatibleVersionSet{vs},
 	}
 	s.validateAddTask(ruleBld, false, versioningData, worker_versioning.MakeUseAssignmentRulesDirective())
 	// make sure version set queue is not loaded
-	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
+	s.Assert().Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask(ruleBld, true)
 }
 
@@ -469,7 +469,7 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	}
 }
 
-func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistence.VersioningData, directive *taskqueue.TaskVersionDirective) {
+func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistencespb.VersioningData, directive *taskqueuespb.TaskVersionDirective) {
 	timeout := 1000000 * time.Millisecond
 	if expectedSyncMatch {
 		// trySyncMatch "eats" one second from the context timeout!
@@ -480,13 +480,12 @@ func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expe
 
 	s.userDataMgr.updateVersioningData(versioningData)
 	buildId, syncMatch, err := s.partitionMgr.AddTask(ctx, addTaskParams{
-		taskInfo: &persistence.TaskInfo{
+		taskInfo: &persistencespb.TaskInfo{
 			NamespaceId:      namespaceId,
 			RunId:            "run",
 			WorkflowId:       "wf",
 			VersionDirective: directive,
 		},
-		directive: directive,
 	})
 	s.Assert().NoError(err)
 	s.Assert().Equal(expectedSyncMatch, syncMatch)
@@ -500,7 +499,7 @@ func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, us
 
 		task, _, err := s.partitionMgr.PollTask(
 			ctx, &pollMetadata{
-				workerVersionCapabilities: &common.WorkerVersionCapabilities{
+				workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 					BuildId:       buildId,
 					UseVersioning: useVersioning,
 				},
@@ -521,7 +520,7 @@ func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioni
 	defer cancel()
 
 	task, _, err := s.partitionMgr.PollTask(ctx, &pollMetadata{
-		workerVersionCapabilities: &common.WorkerVersionCapabilities{
+		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       buildId,
 			UseVersioning: useVersioning,
 		},
@@ -536,7 +535,7 @@ func (s *PartitionManagerTestSuite) pollWithIdentity(pollerId, buildId string, u
 	defer cancel()
 
 	_, _, err := s.partitionMgr.PollTask(ctx, &pollMetadata{
-		workerVersionCapabilities: &common.WorkerVersionCapabilities{
+		workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       buildId,
 			UseVersioning: useVersioning,
 		},
@@ -545,11 +544,11 @@ func (s *PartitionManagerTestSuite) pollWithIdentity(pollerId, buildId string, u
 	s.True(errors.Is(err, errNoTasks), "no task is expected")
 }
 
-func createVersionSet(buildId string) *persistence.CompatibleVersionSet {
+func createVersionSet(buildId string) *persistencespb.CompatibleVersionSet {
 	clock := hlc.Zero(1)
-	return &persistence.CompatibleVersionSet{
+	return &persistencespb.CompatibleVersionSet{
 		SetIds: []string{hashBuildId(buildId)},
-		BuildIds: []*persistence.BuildId{
+		BuildIds: []*persistencespb.BuildId{
 			mkBuildId(buildId, clock),
 		},
 		BecameDefaultTimestamp: clock,
@@ -558,7 +557,7 @@ func createVersionSet(buildId string) *persistence.CompatibleVersionSet {
 
 type mockUserDataManager struct {
 	sync.Mutex
-	data *persistence.VersionedTaskQueueUserData
+	data *persistencespb.VersionedTaskQueueUserData
 }
 
 func (m *mockUserDataManager) Start() {
@@ -573,31 +572,35 @@ func (m *mockUserDataManager) WaitUntilInitialized(_ context.Context) error {
 	return nil
 }
 
-func (m *mockUserDataManager) GetUserData() (*persistence.VersionedTaskQueueUserData, chan struct{}, error) {
+func (m *mockUserDataManager) GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
 	m.Lock()
 	defer m.Unlock()
 	return m.data, nil, nil
 }
 
-func (m *mockUserDataManager) UpdateUserData(_ context.Context, _ UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
+func (m *mockUserDataManager) UpdateUserData(_ context.Context, _ UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error) {
 	m.Lock()
 	defer m.Unlock()
 	data, _, err := updateFn(m.data.Data)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	m.data = &persistence.VersionedTaskQueueUserData{Data: data, Version: m.data.Version + 1}
-	return nil
+	m.data = &persistencespb.VersionedTaskQueueUserData{Data: data, Version: m.data.Version + 1}
+	return m.data.Version, nil
 }
 
 func (m *mockUserDataManager) HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error) {
 	panic("unused")
 }
 
-func (m *mockUserDataManager) updateVersioningData(data *persistence.VersioningData) {
+func (m *mockUserDataManager) CheckTaskQueueUserDataPropagation(ctx context.Context, version int64, wfPartitions int, actPartitions int) error {
+	panic("unused")
+}
+
+func (m *mockUserDataManager) updateVersioningData(data *persistencespb.VersioningData) {
 	m.Lock()
 	defer m.Unlock()
-	m.data = &persistence.VersionedTaskQueueUserData{Data: &persistence.TaskQueueUserData{VersioningData: data}}
+	m.data = &persistencespb.VersionedTaskQueueUserData{Data: &persistencespb.TaskQueueUserData{VersioningData: data}}
 }
 
 var _ userDataManager = (*mockUserDataManager)(nil)

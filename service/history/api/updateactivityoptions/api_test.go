@@ -33,7 +33,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowservicepb "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -328,7 +328,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 
 func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservicepb.UpdateActivityOptionsByIdRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsByIdRequest{
 			ActivityOptions: &activitypb.ActivityOptions{
 				TaskQueue: &taskqueuepb.TaskQueue{Name: "task_queue_name"},
 			},
@@ -395,10 +395,10 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(fullActivityInfo, true)
 	s.mockMutableState.EXPECT().RegenerateActivityRetryTask(gomock.Any(), gomock.Any()).Return(nil)
-	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any()).Return(nil)
+	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
 
 	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservicepb.UpdateActivityOptionsByIdRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsByIdRequest{
 			ActivityOptions: options,
 			UpdateMask:      updateMask,
 		},

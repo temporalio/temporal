@@ -93,6 +93,16 @@ func (c *clientImpl) DescribeBatchOperation(
 	return c.client.DescribeBatchOperation(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeDeployment(
+	ctx context.Context,
+	request *workflowservice.DescribeDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeDeployment(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeNamespace(
 	ctx context.Context,
 	request *workflowservice.DescribeNamespaceRequest,
@@ -151,6 +161,26 @@ func (c *clientImpl) GetClusterInfo(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.GetClusterInfo(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetCurrentDeployment(
+	ctx context.Context,
+	request *workflowservice.GetCurrentDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetCurrentDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetCurrentDeployment(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetDeploymentReachability(
+	ctx context.Context,
+	request *workflowservice.GetDeploymentReachabilityRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetDeploymentReachabilityResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetDeploymentReachability(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetSearchAttributes(
@@ -251,6 +281,16 @@ func (c *clientImpl) ListClosedWorkflowExecutions(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.ListClosedWorkflowExecutions(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListDeployments(
+	ctx context.Context,
+	request *workflowservice.ListDeploymentsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListDeploymentsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListDeployments(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListNamespaces(
@@ -573,6 +613,16 @@ func (c *clientImpl) ScanWorkflowExecutions(
 	return c.client.ScanWorkflowExecutions(ctx, request, opts...)
 }
 
+func (c *clientImpl) SetCurrentDeployment(
+	ctx context.Context,
+	request *workflowservice.SetCurrentDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SetCurrentDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SetCurrentDeployment(ctx, request, opts...)
+}
+
 func (c *clientImpl) ShutdownWorker(
 	ctx context.Context,
 	request *workflowservice.ShutdownWorkerRequest,
@@ -711,4 +761,14 @@ func (c *clientImpl) UpdateWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UpdateWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateWorkflowExecutionOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkflowExecutionOptionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkflowExecutionOptions(ctx, request, opts...)
 }

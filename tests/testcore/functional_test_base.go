@@ -167,7 +167,6 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 		dynamicconfig.TaskQueueScannerEnabled.Key():  false,
 		dynamicconfig.ExecutionsScannerEnabled.Key(): false,
 		dynamicconfig.BuildIdScavengerEnabled.Key():  false,
-		dynamicconfig.EnableNexus.Key():              true,
 		// Better to read through in tests than add artificial sleeps (which is what we previously had).
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
 	})
@@ -184,14 +183,14 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 	s.operatorClient = s.testCluster.OperatorClient()
 	s.httpAPIAddress = cluster.Host().FrontendHTTPAddress()
 
-	s.namespace = RandomizeStr("functional-test-namespace")
+	s.namespace = RandomizeStr("namespace")
 	s.Require().NoError(s.registerNamespaceWithDefaults(s.namespace))
 
-	s.foreignNamespace = RandomizeStr("functional-foreign-test-namespace")
+	s.foreignNamespace = RandomizeStr("foreign-namespace")
 	s.Require().NoError(s.registerNamespaceWithDefaults(s.foreignNamespace))
 
 	if clusterConfig.EnableArchival {
-		s.archivalNamespace = RandomizeStr("functional-archival-enabled-namespace")
+		s.archivalNamespace = RandomizeStr("archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
 }
@@ -531,5 +530,14 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 				)
 			}
 		}
+	}
+}
+
+func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{}) {
+	s.T().Helper()
+	select {
+	case <-ch:
+	case <-ctx.Done():
+		s.FailNow("context timeout while waiting for channel")
 	}
 }

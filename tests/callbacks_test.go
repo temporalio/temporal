@@ -46,7 +46,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/internal/temporalite"
+	"go.temporal.io/server/internal/freeport"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -195,7 +195,6 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 }
 
 func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
@@ -250,7 +249,6 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				Namespace: s.Namespace(),
 			})
 			s.NoError(err)
-			pp := temporalite.NewPortProvider()
 
 			taskQueue := testcore.RandomizeStr(s.T().Name())
 			workflowType := "test"
@@ -259,8 +257,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				requestCh:         make(chan *nexus.CompletionRequest, 1),
 				requestCompleteCh: make(chan error, 1),
 			}
-			callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
-			s.NoError(pp.Close())
+			callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
 			shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
 			t.Cleanup(func() {
 				require.NoError(t, shutdownServer())
@@ -337,7 +334,6 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 }
 
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
@@ -349,7 +345,6 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		Namespace: s.Namespace(),
 	})
 	s.NoError(err)
-	pp := temporalite.NewPortProvider()
 
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
@@ -357,8 +352,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		requestCh:         make(chan *nexus.CompletionRequest, 1),
 		requestCompleteCh: make(chan error, 1),
 	}
-	callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
-	s.NoError(pp.Close())
+	callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
 	shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
 	s.T().Cleanup(func() {
 		require.NoError(s.T(), shutdownServer())

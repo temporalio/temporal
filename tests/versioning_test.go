@@ -52,7 +52,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/searchattribute"
@@ -86,6 +86,7 @@ func TestVersioningFunctionalSuite(t *testing.T) {
 
 func (s *VersioningIntegSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
 		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
@@ -682,7 +683,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	}
 
 	act2 := func() (string, error) {
-		s.waitForChan(ctx, rulesUpdated)
+		s.WaitForChannel(ctx, rulesUpdated)
 		return "act2 done!", nil
 	}
 
@@ -723,7 +724,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 
-	s.waitForChan(ctx, act1Done)
+	s.WaitForChannel(ctx, act1Done)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, v1, "", nil)
 
 	// update rules with v2 as the default build
@@ -769,7 +770,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	}
 
 	act2 := func() (string, error) {
-		s.waitForChan(ctx, rulesUpdated)
+		s.WaitForChannel(ctx, rulesUpdated)
 		return "act2 done!", nil
 	}
 
@@ -805,7 +806,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 
-	s.waitForChan(ctx, act1Done)
+	s.WaitForChannel(ctx, act1Done)
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), "", true, "binary-checksum", "", nil)
 
 	// update rules with v1 as the default build
@@ -873,7 +874,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	s.waitForChan(ctx, failedTask)
+	s.WaitForChannel(ctx, failedTask)
 
 	// After scheduling the second time, now MS should be assigned to v2
 	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v2)
@@ -904,7 +905,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	s.waitForChan(ctx, timedoutTask)
+	s.WaitForChannel(ctx, timedoutTask)
 
 	// After scheduling the third time, now MS should be assigned to v3
 	s.waitForWorkflowBuildId(ctx, run.GetID(), run.GetRunID(), v3)
@@ -977,8 +978,8 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	s.NoError(err)
 
 	// wait for two failures to make sure more attempts does not generate more history tasks
-	s.waitForChan(ctx, failedTask)
-	s.waitForChan(ctx, failedTask)
+	s.WaitForChannel(ctx, failedTask)
+	s.WaitForChannel(ctx, failedTask)
 
 	// MS should have the correct build ID
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, true, "", "", nil)
@@ -1009,9 +1010,9 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 
 	// wait for multiple timeouts to make sure more attempts do not generate more history events
-	s.waitForChan(ctx, timedoutTask)
-	s.waitForChan(ctx, timedoutTask)
-	s.waitForChan(ctx, timedoutTask)
+	s.WaitForChannel(ctx, timedoutTask)
+	s.WaitForChannel(ctx, timedoutTask)
+	s.WaitForChannel(ctx, timedoutTask)
 
 	// After scheduling the second time, now MS should be assigned to v2
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v2, true, "", "", []string{v1})
@@ -1049,8 +1050,6 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_Spooled_VersionedWorkflow() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSpooled(true) })
 }
 
@@ -1150,7 +1149,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
-	s.waitForChan(ctx, failedTask)
+	s.WaitForChannel(ctx, failedTask)
 
 	// After scheduling the second time, now pending activity should be assigned to v2
 	s.Eventually(
@@ -1189,7 +1188,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
-	s.waitForChan(ctx, timedoutTask)
+	s.WaitForChannel(ctx, timedoutTask)
 
 	// After scheduling the third time, now pending activity should be assigned to v3
 	s.Eventually(
@@ -1241,8 +1240,6 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_SyncMatch_VersionedWorkflow() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSyncMatch(true) })
 }
 
@@ -1316,7 +1313,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	}, wf)
 	s.NoError(err)
 
-	s.waitForChan(ctx, failedTask)
+	s.WaitForChannel(ctx, failedTask)
 
 	// MS should have the correct build ID after finishing the first WFT
 	s.Eventually(
@@ -1364,7 +1361,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	rule = s.addAssignmentRule(ctx, actTq, v2)
 	s.waitForAssignmentRulePropagation(ctx, actTq, rule)
 
-	s.waitForChan(ctx, timedoutTask)
+	s.WaitForChannel(ctx, timedoutTask)
 
 	// After scheduling the second time, now pending activity should be assigned to v2
 	s.Eventually(
@@ -1423,8 +1420,6 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 }
 
 func (s *VersioningIntegSuite) TestWorkflowTaskRedirectInRetryFirstTask() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.testWorkflowTaskRedirectInRetry(true) })
 }
 
@@ -1484,9 +1479,9 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	s.NoError(err)
 
 	// wait for multiple failures to make sure more attempts does not generate more history tasks
-	s.waitForChan(ctx, failedTask)
-	s.waitForChan(ctx, failedTask)
-	s.waitForChan(ctx, failedTask)
+	s.WaitForChannel(ctx, failedTask)
+	s.WaitForChannel(ctx, failedTask)
+	s.WaitForChannel(ctx, failedTask)
 
 	expectedStampBuildId := ""
 	if !firstTask {
@@ -1528,9 +1523,9 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	s.waitForRedirectRulePropagation(ctx, tq, rule2)
 
 	// wait for multiple timeouts to make sure more attempts does not generate more history tasks
-	s.waitForChan(ctx, timedoutTask)
-	s.waitForChan(ctx, timedoutTask)
-	s.waitForChan(ctx, timedoutTask)
+	s.WaitForChannel(ctx, timedoutTask)
+	s.WaitForChannel(ctx, timedoutTask)
+	s.WaitForChannel(ctx, timedoutTask)
 	// After scheduling the second time, now MS should be assigned to v2
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, expectedStampBuildId, "", []string{v1})
 
@@ -1707,7 +1702,7 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 
-	s.waitForChan(ctx, started)
+	s.WaitForChannel(ctx, started)
 	s.addNewDefaultBuildId(ctx, tq, v1)
 	s.waitForVersionSetPropagation(ctx, tq, v1)
 
@@ -1734,8 +1729,6 @@ func (s *VersioningIntegSuite) TestDispatchUpgradeStopOld() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchUpgradeWait() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchUpgrade(true, false) })
 }
 
@@ -1779,7 +1772,7 @@ func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
 
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
-	s.waitForChan(ctx, started)
+	s.WaitForChannel(ctx, started)
 
 	// now add v11 as compatible so the next workflow task runs there
 	if newVersioning {
@@ -1837,20 +1830,14 @@ const (
 )
 
 func (s *VersioningIntegSuite) TestDispatchActivityOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(dontFailActivity, false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityFailOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(failActivity, false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityTimeoutOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(timeoutActivity, false, false) })
 }
 
@@ -1982,7 +1969,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	s.waitForChan(ctx, started)
+	s.WaitForChannel(ctx, started)
 	close(started) // force panic if replayed
 
 	// now register v2 as default
@@ -2055,12 +2042,12 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	}
 	act11 := func() (string, error) {
 		started11 <- struct{}{}
-		s.waitForChan(ctx, proceed11)
+		s.WaitForChannel(ctx, proceed11)
 		return "v1.1", nil
 	}
 	act12 := func() (string, error) {
 		started12 <- struct{}{}
-		s.waitForChan(ctx, proceed12)
+		s.WaitForChannel(ctx, proceed12)
 		return "v1.2", nil
 	}
 	wf := func(ctx workflow.Context) (string, error) {
@@ -2135,36 +2122,36 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	s.NoError(err)
 
 	// wait for it to start on v1
-	s.waitForChan(ctx, startedWf)
+	s.WaitForChannel(ctx, startedWf)
 	rule2 := s.addRedirectRule(ctx, tq, v1, v11)
 	s.waitForRedirectRulePropagation(ctx, tq, rule2)
 	proceedWf <- struct{}{}
 
-	s.waitForChan(ctx, started11)
+	s.WaitForChannel(ctx, started11)
 	// wf assigned build ID should be updated by activity redirect
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, v1, "", []string{v1})
 	// let activity finish
 	proceed11 <- struct{}{}
 
 	// wf replays on 1.1 so need to unblock it an extra time
-	s.waitForChan(ctx, startedWf)
+	s.WaitForChannel(ctx, startedWf)
 	proceedWf <- struct{}{}
 
-	s.waitForChan(ctx, startedWf)
+	s.WaitForChannel(ctx, startedWf)
 	rule2 = s.addRedirectRule(ctx, tq, v11, v12)
 	s.waitForRedirectRulePropagation(ctx, tq, rule2)
 	proceedWf <- struct{}{}
 
-	s.waitForChan(ctx, started12)
+	s.WaitForChannel(ctx, started12)
 	// wf assigned build ID should not be updated by independent activity redirect
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, true, v11, "", []string{v1})
 	// let activity finish
 	proceed12 <- struct{}{}
 
 	// wf replays on 1.2 so need to unblock it two extra times
-	s.waitForChan(ctx, startedWf)
+	s.WaitForChannel(ctx, startedWf)
 	proceedWf <- struct{}{}
-	s.waitForChan(ctx, startedWf)
+	s.WaitForChannel(ctx, startedWf)
 	proceedWf <- struct{}{}
 
 	var out string
@@ -2448,7 +2435,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	s.waitForChan(ctx, started)
+	s.WaitForChannel(ctx, started)
 
 	// now register v1.1 as compatible
 	s.addCompatibleBuildId(ctx, tq, v11, v1, false)
@@ -2604,14 +2591,10 @@ func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflow(false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflow() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflow(true, false) })
 }
 
@@ -2734,7 +2717,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	s.waitForChan(ctx, started)
+	s.WaitForChannel(ctx, started)
 	close(started) //force panic if replayed
 
 	// now register v2 as default
@@ -2864,7 +2847,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	s.waitForChan(ctx, started)
+	s.WaitForChannel(ctx, started)
 
 	// now register v1.1 as compatible
 	if newVersioning {
@@ -3012,7 +2995,7 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	s.waitForChan(ctx, started)
+	s.WaitForChannel(ctx, started)
 
 	if newVersioning {
 		rule := s.addAssignmentRule(ctx, tq, v2)
@@ -3086,8 +3069,6 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 }
 
 func (s *VersioningIntegSuite) TestDispatchContinueAsNewOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchContinueAsNew(false, false) })
 }
 
@@ -3195,7 +3176,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	s.waitForChan(ctx, started1)
+	s.WaitForChannel(ctx, started1)
 
 	// now make v2 as a new default
 	if newVersioning {
@@ -3238,7 +3219,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v1
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 	// wait for it to start on v1
-	s.waitForChan(ctx, started1)
+	s.WaitForChannel(ctx, started1)
 
 	var out string
 	s.NoError(run.Get(ctx, &out))
@@ -3250,8 +3231,6 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 }
 
 func (s *VersioningIntegSuite) TestDispatchContinueAsNewUpgradeOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchContinueAsNewUpgrade(false) })
 }
 
@@ -3327,7 +3306,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	s.waitForChan(ctx, started1)
+	s.WaitForChannel(ctx, started1)
 
 	// now register v11 as newer compatible with v1 AND v2 as a new default
 	if newVersioning {
@@ -3369,10 +3348,10 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v11
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
-	s.waitForChan(ctx, started11)
+	s.WaitForChannel(ctx, started11)
 
 	// then continue-as-new onto v11
-	s.waitForChan(ctx, started11)
+	s.WaitForChannel(ctx, started11)
 
 	// initial run
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v11, newVersioning, v11, "", []string{v1})
@@ -3461,7 +3440,7 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 	}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	s.waitForChan(ctx, started1)
+	s.WaitForChannel(ctx, started1)
 
 	// now register v11 as newer compatible with v1 AND v2 as a new default
 	s.addCompatibleBuildId(ctx, tq, v11, v1, false)
@@ -3494,14 +3473,14 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 
 	// unblock the workflow. it should replay on v11 and then retry (on v11).
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
-	s.waitForChan(ctx, started11) // replay
-	s.waitForChan(ctx, started11) // attempt 2
+	s.WaitForChannel(ctx, started11) // replay
+	s.WaitForChannel(ctx, started11) // attempt 2
 
 	// now it's blocked in attempt 2. unblock it.
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// wait for attempt 3. unblock that and it should return.
-	s.waitForChan(ctx, started11) // attempt 3
+	s.WaitForChannel(ctx, started11) // attempt 3
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	var out string
@@ -3511,8 +3490,6 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchRetry() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(s.dispatchRetry)
 }
 
@@ -3569,7 +3546,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 	}, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	s.waitForChan(ctx, started1)
+	s.WaitForChannel(ctx, started1)
 
 	// now register v2 as a new default
 	rule = s.addAssignmentRule(ctx, tq, v2)
@@ -3589,12 +3566,12 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 	// unblock the workflow on v1
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
-	s.waitForChan(ctx, started2) // attempt 2
+	s.WaitForChannel(ctx, started2) // attempt 2
 	// now it's blocked in attempt 2. unblock it.
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	// wait for attempt 3. unblock that and it should return.
-	s.waitForChan(ctx, started2) // attempt 3
+	s.WaitForChannel(ctx, started2) // attempt 3
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
 
 	var out string
@@ -3604,14 +3581,10 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchCronOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchCron() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(true) })
 }
 
@@ -3967,7 +3940,7 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdChildWf(inher
 
 	_, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
-	s.waitForChan(ctx, childStarted)
+	s.WaitForChannel(ctx, childStarted)
 	s.validateBuildIdAfterReset(ctx, childWfId, "", inheritBuildId)
 }
 
@@ -4066,7 +4039,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 	defer w.Stop()
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
-	s.waitForChan(ctx, started)
+	s.WaitForChannel(ctx, started)
 
 	// 2. Wait for visibility to show A as running with BuildId SearchAttribute 'assigned:A'
 	s.Eventually(func() bool {
@@ -4134,7 +4107,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 	defer w.Stop()
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
-	s.waitForChan(ctx, started)
+	s.WaitForChannel(ctx, started)
 
 	// wait for visibility to show A as running with BuildId SearchAttribute 'assigned:A'
 	s.Eventually(func() bool {
@@ -4441,7 +4414,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, wf)
 	s.NoError(err)
 	// wait for it to start on v1
-	s.waitForChan(ctx, started1)
+	s.WaitForChannel(ctx, started1)
 
 	// describe and check build ID
 	s.Eventually(func() bool {
@@ -4470,7 +4443,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v11
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
-	s.waitForChan(ctx, started11)
+	s.WaitForChannel(ctx, started11)
 
 	s.Eventually(func() bool {
 		resp, err := s.sdkClient.DescribeWorkflowExecution(ctx, run.GetID(), "")
@@ -5041,19 +5014,10 @@ func (s *VersioningIntegSuite) waitForPropagation(
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *VersioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}) {
-	s.T().Helper()
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		s.FailNow("context timeout")
-	}
-}
-
 func (s *VersioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
 	_, err := s.GetTestCluster().MatchingClient().ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
 		NamespaceId: s.GetNamespaceID(s.Namespace()),
-		TaskQueuePartition: &taskqueue.TaskQueuePartition{
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 			TaskQueue:     tq,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		},

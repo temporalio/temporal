@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -548,17 +549,20 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		versioningStamp,
 		redirectCounter,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	m.emitWorkflowTaskAttemptStats(workflowTask.Attempt)
 
 	// TODO merge active & passive task generation
-	if err := m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
+	if err = m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
 		scheduledEventID,
 	); err != nil {
 		return nil, nil, err
 	}
 
-	return startedEvent, workflowTask, err
+	return startedEvent, workflowTask, nil
 }
 
 // processBuildIdRedirectInfo validated possible build ID redirect based on the versioningStamp and redirectInfo.
@@ -624,25 +628,43 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 
 	if request.GetForceCreateNewWorkflowTask() {
 		// If ForceCreateNewWorkflowTask is set to true, then this is a heartbeat response.
-		// New WT will be created as Normal and WorkflowTaskCompletedEvent for this WT is also must be written.
-		// In the future, if we decide not to write heartbeat of speculative WT to the history, this check should be removed,
-		// and extra logic should be added to create next WT as Speculative. Currently, new heartbeat WT is always created as Normal.
+		// New WFT will be created as Normal and WorkflowTaskCompletedEvent for this WFT is also must be written.
+		// In the future, if we decide not to write heartbeat of speculative WFT to the history, this check should be removed,
+		// and extra logic should be added to create next WFT as Speculative. Currently, new heartbeat WFT is always created as Normal.
 		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
 			metrics.ReasonTag("force_create_task"))
 		return false
 	}
 
-	// Speculative WFT can be dropped only if there are no events after previous WFTCompleted event,
+	// Speculative WFT that has only Update rejection messages should be discarded (this function returns `true`).
+	// If speculative WFT also shipped events to the worker and was discarded, then
+	// next WFT will ship these events again. Unfortunately, old SDKs don't support receiving same events more than once.
+	// If SDK supports this, it will set DiscardSpeculativeWorkflowTaskWithEvents to `true`
+	// and server can discard speculative WFT even if it had events.
+
+	// Otherwise, server needs to determinate if there were events on this speculative WFT,
 	// i.e. last event in the history is WFTCompleted event.
 	// It is guaranteed that WFTStarted event is followed by WFTCompleted event and history tail might look like:
 	//   previous WFTStarted
 	//   previous WFTCompleted
 	//   --> NextEventID points here because it doesn't move for speculative WFT.
-	// In this case difference between NextEventID and LastCompletedWorkflowTaskStartedEventId is 2.
-	// If there are other events after WFTCompleted event, then difference is > 2 and speculative WFT can't be dropped.
-	if m.ms.GetNextEventID() != m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2 {
+	// In this case, the difference between NextEventID and LastCompletedWorkflowTaskStartedEventId is 2.
+	// If there are other events after WFTCompleted event, then the difference is > 2 and speculative WFT can't be discarded.
+	if !request.GetCapabilities().GetDiscardSpeculativeWorkflowTaskWithEvents() &&
+		m.ms.GetNextEventID() > m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2 {
 		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
 			metrics.ReasonTag("interleaved_events"))
+		return false
+	}
+
+	// Even if worker supports receiving same events more than once,
+	// server still writes speculative WFT if it had too many events.
+	// This is to prevent shipping a big set of events to the worker over and over again,
+	// in case if Updates are constantly rejected.
+	if request.GetCapabilities().GetDiscardSpeculativeWorkflowTaskWithEvents() &&
+		m.ms.GetNextEventID() > m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2+int64(m.ms.config.DiscardSpeculativeWorkflowTaskMaximumEventsCount()) {
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("too_many_interleaved_events"))
 		return false
 	}
 
@@ -654,9 +676,9 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 		}
 	}
 
-	// Speculative WT can be dropped when response contains only rejection messages.
+	// Speculative WFT can be discarded when response contains only rejection messages.
 	// Empty messages list is equivalent to only rejection messages because server will reject all sent updates (if any).
-	//
+
 	// TODO: We should perform a shard ownership check here to prevent the case where the entire speculative workflow task
 	// is done on a stale mutable state and the fact that mutable state is stale caused workflow update requests to be rejected.
 	// NOTE: The AssertShardOwnership persistence API is not implemented in the repo.
@@ -715,6 +737,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.WorkerVersionStamp,
 		request.SdkMetadata,
 		request.MeteringMetadata,
+		request.Deployment,
+		request.VersioningBehavior,
 	)
 
 	err := m.afterAddWorkflowTaskCompletedEvent(event, limits)
@@ -1077,14 +1101,80 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
+
+	wftDeployment := attrs.GetDeployment()
+	wftBehavior := attrs.GetVersioningBehavior()
+	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
+
+	var completedTransition bool
+	if versioningInfo.GetDeploymentTransition() != nil {
+		// It's possible that the completed WFT is not yet from the current transition because when
+		// the transition started, the current wft was already started. In this case, we allow the
+		// started wft to run and when completed, we create another wft immediately.
+		if versioningInfo.DeploymentTransition.GetDeployment().Equal(wftDeployment) {
+			versioningInfo.DeploymentTransition = nil
+			completedTransition = true
+		}
+	}
+
+	if versioningInfo.GetDeploymentTransition() != nil {
+		// There is still a transition going on. We need to schedule a new WFT so it goes to the
+		// transition deployment this time.
+		if _, err := m.ms.AddWorkflowTaskScheduledEvent(
+			false,
+			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		); err != nil {
+			return err
+		}
+	} else {
+		// Deployment and behavior before applying the data came from the completed wft.
+		wfDeploymentBefore := m.ms.GetEffectiveDeployment()
+		wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
+
+		// Change deployment and behavior based on the completed wft.
+		if wfBehaviorBefore != wftBehavior || !wfDeploymentBefore.Equal(wftDeployment) {
+			if versioningInfo == nil {
+				versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+				m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
+			}
+			versioningInfo.Behavior = wftBehavior
+			versioningInfo.Deployment = wftDeployment
+		}
+
+		// Deployment and behavior after applying the data came from the completed wft.
+		wfDeploymentAfter := m.ms.GetEffectiveDeployment()
+		wfBehaviorAfter := m.ms.GetEffectiveVersioningBehavior()
+		// We reschedule activities if a transition was completed because during the transition
+		// ATs might have been dropped. Note that it is possible that transition completes and still
+		// `wfDeploymentBefore == wfDeploymentAfter`. Example: wf was on deployment1, started
+		// transition to deployment2, before completing the transition it changed the transition to
+		// deployment1 (maybe user rolled back current deployment), now the transition completes.
+		if completedTransition ||
+			// It is possible that this WFT is changing workflow's deployment even if there was no
+			// ongoing transition in the MS. That is possible when the wft is speculative. We still
+			// want to reschedule the activities so they are queued with the up-to-date directive.
+			!wfDeploymentBefore.Equal(wfDeploymentAfter) ||
+			// If effective behavior changes we also want to reschedule the pending activities, so
+			// they go to the right matching queues.
+			wfBehaviorBefore != wfBehaviorAfter {
+			if err := m.ms.reschedulePendingActivities(); err != nil {
+				return err
+			}
+		}
+	}
+
+	// TODO: create reset point based on attrs.Deployment instead of the build ID.
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
 		attrs.GetWorkerVersion().GetBuildId(),
 		event.GetEventId(),
 		limits.MaxResetPoints,
 	)
-	// For versioned workflows the search attributes should be already up-to-date based on the task started events.
-	// This is still useful for unversioned workers.
+	// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
+	// search attribute based on the execution_info.deployment and/or override deployment if one exists. We must update the
+	// search attribute here because the reachability deployment may have just been changed by CompleteDeploymentTransition.
+	// This is also useful for unversioned workers.
+	// For v1 and v2 versioned workflows the search attributes should be already up-to-date based on the task started events.
 	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}

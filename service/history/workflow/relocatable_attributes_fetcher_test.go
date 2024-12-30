@@ -32,9 +32,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
-	"go.temporal.io/api/workflow/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/tests"
@@ -44,18 +44,18 @@ import (
 
 func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 	mutableStateAttributes := &RelocatableAttributes{
-		Memo: &common.Memo{Fields: map[string]*common.Payload{
+		Memo: &commonpb.Memo{Fields: map[string]*commonpb.Payload{
 			"memoLocation": {Data: []byte("mutableState")},
 		}},
-		SearchAttributes: &common.SearchAttributes{IndexedFields: map[string]*common.Payload{
+		SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
 			"searchAttributesLocation": {Data: []byte("mutableState")},
 		}},
 	}
 	persistenceAttributes := &RelocatableAttributes{
-		Memo: &common.Memo{Fields: map[string]*common.Payload{
+		Memo: &commonpb.Memo{Fields: map[string]*commonpb.Payload{
 			"memoLocation": {Data: []byte("persistence")},
 		}},
-		SearchAttributes: &common.SearchAttributes{IndexedFields: map[string]*common.Payload{
+		SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
 			"searchAttributesLocation": {Data: []byte("persistence")},
 		}},
 	}
@@ -105,14 +105,14 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
 			closeTime := time.Unix(100, 0).UTC()
-			executionInfo := &persistence.WorkflowExecutionInfo{
+			executionInfo := &persistencespb.WorkflowExecutionInfo{
 				Memo:                         mutableStateAttributes.Memo.Fields,
 				SearchAttributes:             mutableStateAttributes.SearchAttributes.IndexedFields,
 				RelocatableAttributesRemoved: c.RelocatableAttributesRemoved,
 				CloseTime:                    timestamppb.New(closeTime),
 				WorkflowId:                   tests.WorkflowID,
 			}
-			executionState := &persistence.WorkflowExecutionState{
+			executionState := &persistencespb.WorkflowExecutionState{
 				RunId: tests.RunID,
 			}
 			namespaceEntry := tests.GlobalNamespaceEntry
@@ -129,7 +129,7 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 					RunID:       tests.RunID,
 					WorkflowID:  tests.WorkflowID,
 				}).Return(&manager.GetWorkflowExecutionResponse{
-					Execution: &workflow.WorkflowExecutionInfo{
+					Execution: &workflowpb.WorkflowExecutionInfo{
 						Memo:             persistenceAttributes.Memo,
 						SearchAttributes: persistenceAttributes.SearchAttributes,
 					},

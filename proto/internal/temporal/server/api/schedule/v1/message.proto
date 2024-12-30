@@ -32,7 +32,6 @@ import "temporal/api/enums/v1/schedule.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/schedule/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
-import "temporal/server/api/enums/v1/common.proto";
 
 import "google/protobuf/timestamp.proto";
 
@@ -147,11 +146,3 @@ message NextTimeCache {
     bool completed = 5;
 }
 
-
-// State of a scheduler using hierarchical state machines.
-message HsmSchedulerState {
-    StartScheduleArgs args = 1;
-    temporal.server.api.enums.v1.SchedulerState hsm_state = 2;
-    google.protobuf.Timestamp next_invocation_time = 3;
-
-}

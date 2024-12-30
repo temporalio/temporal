@@ -34,10 +34,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/query/v1"
-	"go.temporal.io/api/taskqueue/v1"
+	querypb "go.temporal.io/api/query/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/workflow"
@@ -55,9 +55,9 @@ type SomeJSONStruct struct {
 	SomeField string `json:"someField"`
 }
 
-func jsonPayload(data string) *common.Payloads {
-	return &common.Payloads{
-		Payloads: []*common.Payload{{
+func jsonPayload(data string) *commonpb.Payloads {
+	return &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{{
 			Metadata: map[string][]byte{
 				converter.MetadataEncoding: []byte(converter.MetadataEncodingJSON),
 			},
@@ -196,8 +196,8 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Protojson(contentType string, pr
 	// These are callbacks because the worker needs to be initialized so we can get the task queue
 	reqBody := func() string {
 		requestBody, err := protojson.Marshal(&workflowservice.StartWorkflowExecutionRequest{
-			WorkflowType: &common.WorkflowType{Name: "http-basic-workflow"},
-			TaskQueue:    &taskqueue.TaskQueue{Name: s.TaskQueue()},
+			WorkflowType: &commonpb.WorkflowType{Name: "http-basic-workflow"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: s.TaskQueue()},
 			Input:        jsonPayload(`{ "someField": "workflow-arg" }`),
 		})
 		s.Require().NoError(err)
@@ -205,7 +205,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Protojson(contentType string, pr
 	}
 	queryBody := func() string {
 		queryBody, err := protojson.Marshal(&workflowservice.QueryWorkflowRequest{
-			Query: &query.WorkflowQuery{
+			Query: &querypb.WorkflowQuery{
 				QueryArgs: jsonPayload(`{ "someField": "query-arg" }`),
 			},
 		})
@@ -329,8 +329,6 @@ func (s *HttpApiTestSuite) TestHTTPHostValidation() {
 }
 
 func (s *HttpApiTestSuite) TestHTTPAPIHeaders() {
-	s.T().Skip("flaky test")
-
 	if s.HttpAPIAddress() == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}

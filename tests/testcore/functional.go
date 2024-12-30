@@ -47,7 +47,7 @@ type (
 		updateutils.UpdateUtils
 		FunctionalTestBase
 
-		TaskPoller taskpoller.TaskPoller
+		TaskPoller *taskpoller.TaskPoller
 	}
 )
 
@@ -55,7 +55,6 @@ func (s *FunctionalSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.RetentionTimerJitterDuration.Key():        time.Second,
 		dynamicconfig.EnableEagerWorkflowStart.Key():            true,
-		dynamicconfig.EnableNexus.Key():                         true,
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")

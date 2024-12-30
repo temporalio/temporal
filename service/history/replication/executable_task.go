@@ -32,9 +32,12 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/backoff"
@@ -45,8 +48,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -110,6 +115,16 @@ type (
 		) (bool, error)
 		ReplicationTask() *replicationspb.ReplicationTask
 		MarkPoisonPill() error
+		BackFillEvents(
+			ctx context.Context,
+			remoteCluster string,
+			workflowKey definition.WorkflowKey,
+			startEventId int64, // inclusive
+			startEventVersion int64,
+			endEventId int64, // inclusive
+			endEventVersion int64,
+			newRunId string,
+		) error
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
@@ -445,6 +460,161 @@ func (e *ExecutableTaskImpl) Resend(
 	}
 }
 
+//nolint:revive // cognitive complexity 29 (> max enabled 25)
+func (e *ExecutableTaskImpl) BackFillEvents(
+	ctx context.Context,
+	remoteCluster string,
+	workflowKey definition.WorkflowKey,
+	startEventId int64, // inclusive
+	startEventVersion int64,
+	endEventId int64, // inclusive
+	endEventVersion int64,
+	newRunId string, // only verify task should pass this value
+) error {
+	if len(newRunId) != 0 && e.replicationTask.GetTaskType() != enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK {
+		return serviceerror.NewInternal("newRunId should be empty for non verify task")
+	}
+
+	var namespaceName string
+	item := e.namespace.Load()
+	if item != nil {
+		namespaceName = item.(namespace.Name).String()
+	}
+	metrics.ClientRequests.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(e.metricsTag+"BackFill"),
+		metrics.NamespaceTag(namespaceName),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	startTime := time.Now().UTC()
+	defer func() {
+		metrics.ClientLatency.With(e.MetricsHandler).Record(
+			time.Since(startTime),
+			metrics.OperationTag(e.metricsTag+"BackFill"),
+			metrics.NamespaceTag(namespaceName),
+			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+		)
+	}()
+	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
+		namespace.ID(workflowKey.NamespaceID),
+		workflowKey.WorkflowID,
+	)
+	if err != nil {
+		return err
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return err
+	}
+
+	var eventsBatch [][]*historypb.HistoryEvent
+	var newRunEvents []*historypb.HistoryEvent
+	var versionHistory []*historyspb.VersionHistoryItem
+	const EmptyVersion = int64(-1) // 0 is a valid event version when namespace is local
+	var eventsVersion = EmptyVersion
+	isLastEvent := false
+	if len(newRunId) != 0 {
+		iterator := e.ProcessToolBox.RemoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
+			ctx,
+			remoteCluster,
+			namespace.ID(workflowKey.NamespaceID),
+			workflowKey.WorkflowID,
+			newRunId,
+			1,
+			endEventVersion, // continue as new run's first event batch should have the same version as the last event of the old run
+			1,
+			endEventVersion,
+		)
+		if !iterator.HasNext() {
+			return serviceerror.NewInternal(fmt.Sprintf("failed to get new run history when backfill"))
+		}
+		batch, err := iterator.Next()
+		if err != nil {
+			return serviceerror.NewInternal(fmt.Sprintf("failed to get new run history when backfill: %v", err))
+		}
+		events, err := e.EventSerializer.DeserializeEvents(batch.RawEventBatch)
+		if err != nil {
+			return serviceerror.NewInternal(fmt.Sprintf("failed to deserailize run history events when backfill: %v", err))
+		}
+		newRunEvents = events
+	}
+
+	applyFn := func() error {
+		backFillRequest := &shard.BackfillHistoryEventsRequest{
+			WorkflowKey:         workflowKey,
+			SourceClusterName:   e.SourceClusterName(),
+			VersionedHistory:    e.ReplicationTask().VersionedTransition,
+			VersionHistoryItems: versionHistory,
+			Events:              eventsBatch,
+		}
+		if isLastEvent && len(newRunId) > 0 && len(newRunEvents) > 0 {
+			backFillRequest.NewEvents = newRunEvents
+			backFillRequest.NewRunID = newRunId
+		}
+		err := engine.BackfillHistoryEvents(ctx, backFillRequest)
+		if err != nil {
+			return serviceerror.NewInternal(fmt.Sprintf("failed to backfill: %v", err))
+		}
+		eventsBatch = nil
+		versionHistory = nil
+		eventsVersion = EmptyVersion
+		return nil
+	}
+	iterator := e.ProcessToolBox.RemoteHistoryFetcher.GetSingleWorkflowHistoryPaginatedIteratorInclusive(
+		ctx,
+		remoteCluster,
+		namespace.ID(workflowKey.NamespaceID),
+		workflowKey.WorkflowID,
+		workflowKey.RunID,
+		startEventId,
+		startEventVersion,
+		endEventId,
+		endEventVersion,
+	)
+	for iterator.HasNext() {
+		batch, err := iterator.Next()
+		if err != nil {
+			return err
+		}
+		events, err := e.EventSerializer.DeserializeEvents(batch.RawEventBatch)
+		if err != nil {
+			return err
+		}
+		if len(events) == 0 {
+			return serviceerror.NewInvalidArgument("Empty batch received from remote during resend")
+		}
+		if len(eventsBatch) != 0 && len(versionHistory) != 0 {
+			if !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.VersionHistory.Items) ||
+				(eventsVersion != EmptyVersion && eventsVersion != events[0].Version) {
+				err := applyFn()
+				if err != nil {
+					return err
+				}
+			}
+		}
+		eventsBatch = append(eventsBatch, events)
+		if events[len(events)-1].GetEventId() == endEventId {
+			isLastEvent = true
+		}
+		versionHistory = batch.VersionHistory.Items
+		eventsVersion = events[0].Version
+		if len(eventsBatch) >= e.Config.ReplicationResendMaxBatchCount() {
+			err := applyFn()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if len(eventsBatch) > 0 {
+		err := applyFn()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (e *ExecutableTaskImpl) SyncState(
 	ctx context.Context,
 	syncStateErr *serviceerrors.SyncState,
@@ -470,6 +640,18 @@ func (e *ExecutableTaskImpl) SyncState(
 		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
 	})
 	if err != nil {
+		logger := log.With(e.Logger,
+			tag.WorkflowNamespaceID(syncStateErr.NamespaceId),
+			tag.WorkflowID(syncStateErr.WorkflowId),
+			tag.WorkflowRunID(syncStateErr.RunId),
+			tag.ReplicationTask(e.replicationTask),
+		)
+
+		var workflowNotReady *serviceerror.WorkflowNotReady
+		if errors.As(err, &workflowNotReady) {
+			logger.Info("Dropped replication task as source mutable state has buffered events.", tag.Error(err))
+			return false, nil
+		}
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		if !errors.As(err, &failedPreconditionErr) {
 			return false, err
@@ -477,13 +659,6 @@ func (e *ExecutableTaskImpl) SyncState(
 		// Unable to perform sync state. Transition history maybe disabled in source cluster.
 		// Add task equivalents back to source cluster.
 		taskEquivalents := e.replicationTask.GetRawTaskInfo().GetTaskEquivalents()
-
-		logger := log.With(e.Logger,
-			tag.WorkflowNamespaceID(syncStateErr.NamespaceId),
-			tag.WorkflowID(syncStateErr.WorkflowId),
-			tag.WorkflowRunID(syncStateErr.RunId),
-			tag.ReplicationTask(e.replicationTask),
-		)
 
 		if len(taskEquivalents) == 0 {
 			// Just drop the task since there's nothing to replicate in event-based stack.
@@ -593,6 +768,9 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	}
 
 	e.namespace.Store(namespaceEntry.Name())
+	if namespaceEntry.State() == enumspb.NAMESPACE_STATE_DELETED {
+		return namespaceEntry.Name().String(), false, nil
+	}
 	shouldProcessTask := false
 FilterLoop:
 	for _, targetCluster := range namespaceEntry.ClusterNames() {

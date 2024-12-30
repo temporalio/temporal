@@ -38,7 +38,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client"
@@ -181,7 +181,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		WorkflowId:        uuid.NewString(),
 		RunId:             uuid.NewString(),
 		BaseExecutionInfo: &workflowspb.BaseExecutionInfo{},
-		VersionHistoryItems: []*history.VersionHistoryItem{{
+		VersionHistoryItems: []*historyspb.VersionHistoryItem{{
 			EventId: nextEventID - 1,
 			Version: version,
 		}},
@@ -426,13 +426,13 @@ func (s *executableHistoryTaskSuite) TestBatchWith_EventVersionNotMatch_BatchFai
 
 func (s *executableHistoryTaskSuite) TestBatchWith_VersionHistoryDoesNotMatch_BatchFailed() {
 	currentTask, incomingTask := s.generateTwoBatchableTasks()
-	currentTask.versionHistoryItems = []*history.VersionHistoryItem{
+	currentTask.versionHistoryItems = []*historyspb.VersionHistoryItem{
 		{
 			EventId: 108,
 			Version: 3,
 		},
 	}
-	incomingTask.versionHistoryItems = []*history.VersionHistoryItem{
+	incomingTask.versionHistoryItems = []*historyspb.VersionHistoryItem{
 		{
 			EventId: 108,
 			Version: 4,
@@ -518,13 +518,13 @@ func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHis
 			},
 		},
 	}
-	currentVersionHistoryItems := []*history.VersionHistoryItem{
+	currentVersionHistoryItems := []*historyspb.VersionHistoryItem{
 		{
 			EventId: 102,
 			Version: 3,
 		},
 	}
-	incomingVersionHistoryItems := []*history.VersionHistoryItem{
+	incomingVersionHistoryItems := []*historyspb.VersionHistoryItem{
 		{
 			EventId: 108,
 			Version: 3,
@@ -565,7 +565,7 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 	newRunEvents []*historypb.HistoryEvent,
 	newRunID string,
 	taskId int64,
-	versionHistoryItems []*history.VersionHistoryItem,
+	versionHistoryItems []*historyspb.VersionHistoryItem,
 	workflowKey definition.WorkflowKey,
 ) *ExecutableHistoryTask {
 	eventsBlob, _ := s.eventSerializer.SerializeEvents(events[0], enumspb.ENCODING_TYPE_PROTO3)

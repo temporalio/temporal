@@ -29,6 +29,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -36,6 +37,7 @@ import "temporal/api/query/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
+import "temporal/server/api/deployment/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/nexus.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
@@ -124,6 +126,7 @@ message AddWorkflowTaskRequest {
 
 message AddWorkflowTaskResponse {
     // When present, it means that the task is spooled to a versioned queue of this build ID
+    // Deprecated. [cleanup-old-wv]
     string assigned_build_id = 1;
 }
 
@@ -147,6 +150,7 @@ message AddActivityTaskRequest {
 
 message AddActivityTaskResponse {
     // When present, it means that the task is spooled to a versioned queue of this build ID
+    // Deprecated. [cleanup-old-wv]
     string assigned_build_id = 1;
 }
 
@@ -287,6 +291,7 @@ message GetWorkerBuildIdCompatibilityRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest request = 2;
 }
+
 message GetWorkerBuildIdCompatibilityResponse {
     temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse response = 1;
 }
@@ -296,8 +301,6 @@ message GetTaskQueueUserDataRequest {
     // The task queue to fetch data from. The task queue is always considered as a normal
     // queue, since sticky queues have no user data.
     string task_queue = 2;
-    // Normally task queue type should always be TASK_QUEUE_TYPE_WORKFLOW here, but querying
-    // activity task queues is useful for testing.
     temporal.api.enums.v1.TaskQueueType task_queue_type = 5;
     // The value of the last known user data version.
     // If the requester has no data, it should set this to 0.
@@ -306,12 +309,33 @@ message GetTaskQueueUserDataRequest {
     // If set and last_known_user_data_version is the current version, block until new data is
     // available (or timeout).
     bool wait_new_data = 4;
+    // If set, do not load task queue if unloaded. (Returns FailedPrecondition error in that case.)
+    bool only_if_loaded = 6;
 }
+
 message GetTaskQueueUserDataResponse {
     reserved 1;
     // Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
     // than the version cached in the root partition.
     temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 2;
+}
+
+message SyncDeploymentUserDataRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    // Note: this is the task queue type being modified, but this field should not be used for
+    // routing, the user data is owned by the WORKFLOW task queue.
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+
+    // This is the deployment being modified.
+    temporal.api.deployment.v1.Deployment deployment = 4;
+    // Data for this deployment.
+    temporal.server.api.deployment.v1.TaskQueueData data = 5;
+}
+
+message SyncDeploymentUserDataResponse {
+    // New task queue user data version. Can be used to wait for propagation.
+    int64 version = 1;
 }
 
 message ApplyTaskQueueUserDataReplicationEventRequest {
@@ -389,6 +413,15 @@ message ReplicateTaskQueueUserDataRequest {
 }
 
 message ReplicateTaskQueueUserDataResponse {
+}
+
+message CheckTaskQueueUserDataPropagationRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    int64 version = 3;
+}
+
+message CheckTaskQueueUserDataPropagationResponse {
 }
 
 message DispatchNexusTaskRequest {

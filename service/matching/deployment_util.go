@@ -1,8 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2021 Datadog, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2024 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,54 +22,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package temporalite
+package matching
 
 import (
-	"fmt"
-	"net"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-func NewPortProvider() *PortProvider {
-	return &PortProvider{}
-}
+var (
+	errDeploymentsNotAllowed = serviceerror.NewPermissionDenied("deployments are disabled on this namespace", "")
+	errMissingDeployment     = serviceerror.NewInvalidArgument("missing deployment")
+)
 
-type PortProvider struct {
-	listeners []*net.TCPListener
-}
-
-// GetFreePort finds an open port on the system which is ready to use.
-func (p *PortProvider) GetFreePort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
-	if err != nil {
-		if addr, err = net.ResolveTCPAddr("tcp6", "[::1]:0"); err != nil {
-			return 0, fmt.Errorf("failed to get free port: %w", err)
+func findDeployment(deployments *persistencespb.DeploymentData, deployment *deploymentpb.Deployment) int {
+	for i, d := range deployments.GetDeployments() {
+		if d.Deployment.SeriesName == deployment.SeriesName && d.Deployment.BuildId == deployment.BuildId {
+			return i
 		}
 	}
-
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
-	}
-
-	p.listeners = append(p.listeners, l)
-
-	return l.Addr().(*net.TCPAddr).Port, nil
-}
-
-// MustGetFreePort calls GetFreePort, panicking on error.
-func (p *PortProvider) MustGetFreePort() int {
-	port, err := p.GetFreePort()
-	if err != nil {
-		panic(err)
-	}
-	return port
-}
-
-func (p *PortProvider) Close() error {
-	for _, l := range p.listeners {
-		if err := l.Close(); err != nil {
-			return err
-		}
-	}
-	return nil
+	return -1
 }

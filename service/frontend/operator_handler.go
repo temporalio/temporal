@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"maps"
 	"sync/atomic"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -61,6 +62,7 @@ import (
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
+	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -88,6 +90,7 @@ type (
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
+		namespaceRegistry      namespace.Registry
 		nexusEndpointClient    *NexusEndpointClient
 	}
 
@@ -104,6 +107,7 @@ type (
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
+		namespaceRegistry      namespace.Registry
 		nexusEndpointClient    *NexusEndpointClient
 	}
 )
@@ -133,6 +137,7 @@ func NewOperatorHandlerImpl(
 		clusterMetadataManager: args.clusterMetadataManager,
 		clusterMetadata:        args.clusterMetadata,
 		clientFactory:          args.clientFactory,
+		namespaceRegistry:      args.namespaceRegistry,
 		nexusEndpointClient:    args.nexusEndpointClient,
 	}
 
@@ -602,17 +607,15 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 ) (_ *operatorservice.DeleteNamespaceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
-	// validate request
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
-	if request.GetNamespace() == primitives.SystemLocalNamespace || request.GetNamespaceId() == primitives.SystemNamespaceID {
-		return nil, errUnableDeleteSystemNamespace
-	}
-
-	namespaceDeleteDelay := h.config.DeleteNamespaceNamespaceDeleteDelay()
-	if request.NamespaceDeleteDelay != nil {
+	// If NamespaceDeleteDelay is not provided, the default delay configured in the cluster should be used.
+	var namespaceDeleteDelay time.Duration
+	if request.NamespaceDeleteDelay == nil {
+		namespaceDeleteDelay = h.config.DeleteNamespaceNamespaceDeleteDelay()
+	} else {
 		namespaceDeleteDelay = request.NamespaceDeleteDelay.AsDuration()
 	}
 
@@ -643,17 +646,12 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, deletenamespace.WorkflowName, err))
 	}
 
-	scope := h.metricsHandler.WithTags(metrics.OperationTag(metrics.OperatorDeleteNamespaceScope))
-
-	// Wait for workflow to complete.
+	// Wait for the workflow to complete.
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		metrics.DeleteNamespaceWorkflowFailuresCount.With(scope).Record(1)
-		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
-		return nil, serviceerror.NewSystemWorkflow(execution, err)
+		return nil, delnserrors.ToServiceError(err, run.GetID(), run.GetRunID())
 	}
-	metrics.DeleteNamespaceWorkflowSuccessCount.With(scope).Record(1)
 
 	return &operatorservice.DeleteNamespaceResponse{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),

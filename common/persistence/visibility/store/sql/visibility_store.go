@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -328,7 +328,7 @@ func (s *VisibilityStore) countGroupByWorkflowExecutions(
 		Groups: make([]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup, 0, len(rows)),
 	}
 	for _, row := range rows {
-		groupValues := make([]*common.Payload, len(row.GroupValues))
+		groupValues := make([]*commonpb.Payload, len(row.GroupValues))
 		for i, val := range row.GroupValues {
 			groupValues[i], err = searchattribute.EncodeValue(val, groupByTypes[i])
 			if err != nil {
@@ -496,7 +496,7 @@ func (s *VisibilityStore) rowToInfo(
 func (s *VisibilityStore) processRowSearchAttributes(
 	rowSearchAttributes sqlplugin.VisibilitySearchAttributes,
 	nsName namespace.Name,
-) (*common.SearchAttributes, error) {
+) (*commonpb.SearchAttributes, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(
 		s.GetIndexName(),
 		false,

@@ -33,9 +33,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -349,9 +349,9 @@ func (s *Scavenger) getPaginationFn(
 
 func (s *Scavenger) cleanUpWorkflowPastRetention(
 	ctx context.Context,
-	mutableState *persistencepb.WorkflowMutableState,
+	mutableState *persistencespb.WorkflowMutableState,
 ) error {
-	if mutableState.GetExecutionState().GetState() != enums.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Skip running workflow
 		return nil
 	}
