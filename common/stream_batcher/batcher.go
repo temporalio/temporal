@@ -30,9 +30,13 @@ import (
 	"go.temporal.io/server/common/clock"
 )
 
-type StreamBatcher[T, R any] struct {
+// Batcher collects items concurrently passed to Add into batches and calls a processing
+// function on them a batch at a time.
+// The processing function will be called on batches of items in a single-threaded manner, and
+// Add will block while fn is running.
+type Batcher[T, R any] struct {
 	fn    func([]T) R          // batch executor function
-	opts  StreamBatcherOptions // timing/size options
+	opts  BatcherOptions       // timing/size options
 	clock clock.TimeSource     // clock for testing
 	ch    chan batchPair[T, R] // channel for submitting items
 	// keeps track of goroutine state:
@@ -46,7 +50,7 @@ type batchPair[T, R any] struct {
 	item T      // item to add
 }
 
-type StreamBatcherOptions struct {
+type BatcherOptions struct {
 	// MaxItems is the maximum number of items in a batch.
 	MaxItems int
 	// MinDelay is how long to wait for no more items to come in after any item before
@@ -60,12 +64,10 @@ type StreamBatcherOptions struct {
 	IdleTime time.Duration
 }
 
-// NewStreamBatcher creates a StreamBatcher. It collects items passed to Add into slices, and
-// then calls `fn` on each batch.
-// fn will be called on batches of items in a single-threaded manner, and Add will block while
-// fn is running.
-func NewStreamBatcher[T, R any](fn func([]T) R, opts StreamBatcherOptions, clock clock.TimeSource) *StreamBatcher[T, R] {
-	return &StreamBatcher[T, R]{
+// NewBatcher creates a Batcher. `fn` is the processing function, `opts` are the timing options.
+// `clock` is usually clock.NewRealTimeSource but can be a fake time source for testing.
+func NewBatcher[T, R any](fn func([]T) R, opts BatcherOptions, clock clock.TimeSource) *Batcher[T, R] {
+	return &Batcher[T, R]{
 		fn:    fn,
 		opts:  opts,
 		clock: clock,
@@ -77,7 +79,7 @@ func NewStreamBatcher[T, R any](fn func([]T) R, opts StreamBatcherOptions, clock
 // canceled or times out. It returns two values: the value that the batch processor returned,
 // and a context error. Even if Add returns a context error, the item may still be processed in
 // the future!
-func (s *StreamBatcher[T, R]) Add(ctx context.Context, t T) (R, error) {
+func (s *Batcher[T, R]) Add(ctx context.Context, t T) (R, error) {
 	resp := make(chan R)
 	pair := batchPair[T, R]{resp: resp, item: t}
 
@@ -115,7 +117,7 @@ func (s *StreamBatcher[T, R]) Add(ctx context.Context, t T) (R, error) {
 	}
 }
 
-func (s *StreamBatcher[T, R]) loop(runningC *chan struct{}) {
+func (s *Batcher[T, R]) loop(runningC *chan struct{}) {
 	defer func() {
 		// store nil so that Add knows it should start a goroutine
 		s.running.Store(nil)

@@ -70,6 +70,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -105,11 +106,6 @@ type (
 		ratePerSecond             *float64
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		forwardedFrom             string
-	}
-
-	userDataChannelContext struct {
-		ch      chan *userDataUpdate
-		running atomic.Bool
 	}
 
 	userDataUpdate struct {
@@ -169,8 +165,8 @@ type (
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
 		replicationLock sync.Mutex
-		// Serialize and batch user data updates.
-		userDataUpdates collection.SyncMap[string, *util.StreamBatcher[*userDataUpdate, error]]
+		// Serialize and batch user data updates. Key: namespace id as string.
+		userDataUpdateBatchers collection.SyncMap[string, *stream_batcher.Batcher[*userDataUpdate, error]]
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
 	}
@@ -189,6 +185,14 @@ var (
 
 	// The routing key for the single partition used to route Nexus endpoints CRUD RPCs to.
 	nexusEndpointsTablePartitionRoutingKey = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey()
+
+	// Options for batching user data updates.
+	userDataBatcherOptions = stream_batcher.BatcherOptions{
+		MaxItems: 100,
+		MinDelay: 200 * time.Millisecond,
+		MaxDelay: 1000 * time.Millisecond,
+		IdleTime: time.Minute,
+	}
 )
 
 var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed implemented
@@ -244,7 +248,7 @@ func NewEngine(
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		userDataUpdates:           collection.NewSyncMap[string, *util.StreamBatcher[*userDataUpdate, error]](),
+		userDataUpdateBatchers:    collection.NewSyncMap[string, *stream_batcher.Batcher[*userDataUpdate, error]](),
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -2130,22 +2134,18 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
 
-func (e *matchingEngineImpl) getUserDataBatcher(namespaceId string) *util.StreamBatcher[*userDataUpdate, error] {
-	if stream, ok := e.userDataUpdates.Get(namespaceId); ok {
-		return stream
+func (e *matchingEngineImpl) getUserDataBatcher(namespaceId string) *stream_batcher.Batcher[*userDataUpdate, error] {
+	// Note that values are never removed from this map. The batcher's goroutine will exit
+	// after the idle time, though, which gets most of the desired resource savings.
+	if batcher, ok := e.userDataUpdateBatchers.Get(namespaceId); ok {
+		return batcher
 	}
 	fn := func(batch []*userDataUpdate) error {
 		return e.applyUserDataUpdateBatch(namespaceId, batch)
 	}
-	opts := util.StreamBatcherOptions{
-		MaxItems: 100,
-		MinDelay: 200 * time.Millisecond,
-		MaxDelay: 1000 * time.Millisecond,
-		IdleTime: time.Minute,
-	}
-	newStream := util.NewStreamBatcher[*userDataUpdate, error](fn, opts)
-	stream, _ := e.userDataUpdates.GetOrSet(namespaceId, newStream)
-	return stream
+	newBatcher := stream_batcher.NewBatcher[*userDataUpdate, error](fn, userDataBatcherOptions, e.timeSource)
+	batcher, _ := e.userDataUpdateBatchers.GetOrSet(namespaceId, newBatcher)
+	return batcher
 }
 
 func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId string, batch []*userDataUpdate) error {

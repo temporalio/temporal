@@ -38,7 +38,7 @@ import (
 func TestStreamBatcher_MinDelay(t *testing.T) {
 	clk := clock.NewEventTimeSource()
 
-	opts := StreamBatcherOptions{
+	opts := BatcherOptions{
 		MaxItems: 10,
 		MinDelay: 100 * time.Millisecond,
 		MaxDelay: 400 * time.Millisecond,
@@ -51,7 +51,7 @@ func TestStreamBatcher_MinDelay(t *testing.T) {
 		clk.Sleep(50 * time.Millisecond)
 		return
 	}
-	sb := NewStreamBatcher(process, opts, clk)
+	sb := NewBatcher(process, opts, clk)
 
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -104,7 +104,7 @@ func TestStreamBatcher_MinDelay(t *testing.T) {
 func TestStreamBatcher_MaxDelay(t *testing.T) {
 	clk := clock.NewEventTimeSource()
 
-	opts := StreamBatcherOptions{
+	opts := BatcherOptions{
 		MaxItems: 10,
 		MinDelay: 100 * time.Millisecond,
 		MaxDelay: 120 * time.Millisecond,
@@ -117,7 +117,7 @@ func TestStreamBatcher_MaxDelay(t *testing.T) {
 		clk.Sleep(50 * time.Millisecond)
 		return
 	}
-	sb := NewStreamBatcher(process, opts, clk)
+	sb := NewBatcher(process, opts, clk)
 
 	var wg sync.WaitGroup
 	wg.Add(4)
@@ -187,7 +187,7 @@ func TestStreamBatcher_MaxDelay(t *testing.T) {
 func TestStreamBatcher_MaxItems(t *testing.T) {
 	clk := clock.NewEventTimeSource()
 
-	opts := StreamBatcherOptions{
+	opts := BatcherOptions{
 		MaxItems: 2,
 		MinDelay: 100 * time.Millisecond,
 		MaxDelay: 400 * time.Millisecond,
@@ -200,7 +200,7 @@ func TestStreamBatcher_MaxItems(t *testing.T) {
 		clk.Sleep(50 * time.Millisecond)
 		return
 	}
-	sb := NewStreamBatcher(process, opts, clk)
+	sb := NewBatcher(process, opts, clk)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -247,7 +247,7 @@ func TestStreamBatcher_Random(t *testing.T) {
 	const workers = 20
 	const events = 1000
 
-	opts := StreamBatcherOptions{
+	opts := BatcherOptions{
 		MaxItems: 10,
 		MinDelay: 100 * time.Millisecond,
 		MaxDelay: 400 * time.Millisecond,
@@ -260,7 +260,7 @@ func TestStreamBatcher_Random(t *testing.T) {
 		clk.Sleep(time.Duration(rand.Intn(50)) * time.Millisecond)
 		return
 	}
-	sb := NewStreamBatcher(process, opts, clk)
+	sb := NewBatcher(process, opts, clk)
 
 	var running atomic.Int64
 	for range workers {
