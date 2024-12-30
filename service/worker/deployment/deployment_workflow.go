@@ -26,6 +26,7 @@ package deployment
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -38,6 +39,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -300,33 +302,14 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 		}
 
 		// sync to task queues
-		syncReq := &deploymentspb.SyncUserDataRequest{
-			Deployment: d.State.Deployment,
+		if workflow.GetVersion(ctx, "syncToTaskQueues", workflow.DefaultVersion, 0) == workflow.DefaultVersion {
+			err = d.syncToTaskQueues1(ctx)
+		} else {
+			err = d.syncToTaskQueues2(ctx)
 		}
-		for tqName, byType := range d.State.TaskQueueFamilies {
-			for tqType, data := range byType.TaskQueues {
-				syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncUserDataRequest_SyncUserData{
-					Name: tqName,
-					Type: enumspb.TaskQueueType(tqType),
-					Data: d.dataWithTime(data),
-				})
-			}
-		}
-		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-		var syncRes deploymentspb.SyncUserDataResponse
-		err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, syncReq).Get(ctx, &syncRes)
 		if err != nil {
 			// TODO: if this fails, should we roll back anything?
 			return nil, err
-		}
-		if len(syncRes.TaskQueueMaxVersions) > 0 {
-			// wait for propagation
-			err = workflow.ExecuteActivity(activityCtx, d.a.CheckUserDataPropagation, &deploymentspb.CheckUserDataPropagationRequest{
-				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
-			}).Get(ctx, nil)
-			if err != nil {
-				return nil, err
-			}
 		}
 	}
 
@@ -344,6 +327,89 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 	return &deploymentspb.SyncDeploymentStateResponse{
 		DeploymentLocalState: d.State,
 	}, nil
+}
+
+func (d *DeploymentWorkflowRunner) syncToTaskQueues1(ctx workflow.Context) error {
+	syncReq := &deploymentspb.SyncUserDataRequest{
+		Deployment: d.State.Deployment,
+	}
+	for tqName, byType := range d.State.TaskQueueFamilies {
+		for tqType, data := range byType.TaskQueues {
+			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncUserDataRequest_SyncUserData{
+				Name: tqName,
+				Type: enumspb.TaskQueueType(tqType),
+				Data: d.dataWithTime(data),
+			})
+		}
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var syncRes deploymentspb.SyncUserDataResponse
+	err := workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, syncReq).Get(ctx, &syncRes)
+	if err != nil {
+		return err
+	}
+	if len(syncRes.TaskQueueMaxVersions) > 0 {
+		// wait for propagation
+		checkReq := &deploymentspb.CheckUserDataPropagationRequest{TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions}
+		err = workflow.ExecuteActivity(activityCtx, d.a.CheckUserDataPropagation, checkReq).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *DeploymentWorkflowRunner) syncToTaskQueues2(ctx workflow.Context) error {
+	const batchSize = 100
+	type nameDataPair struct {
+		name string
+		data *deploymentspb.TaskQueueData
+	}
+
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	tqNames := workflow.DeterministicKeys(d.State.TaskQueueFamilies)
+
+	for _, tqType := range []enumspb.TaskQueueType{
+		// Sync and wait for workflow task queues, then activity task queues, to ensure that
+		// workflows don't bounce between deployments due to activity/wft starts.
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+	} {
+		var toSync []nameDataPair
+		for _, tqName := range tqNames {
+			if data := d.State.TaskQueueFamilies[tqName].TaskQueues[int32(tqType)]; data != nil {
+				toSync = append(toSync, nameDataPair{name: tqName, data: data})
+			}
+		}
+
+		for batch := range slices.Chunk(toSync, batchSize) {
+			syncReq := &deploymentspb.SyncUserDataRequest{
+				Deployment: d.State.Deployment,
+				Sync: util.MapSlice(batch, func(pair nameDataPair) *deploymentspb.SyncUserDataRequest_SyncUserData {
+					return &deploymentspb.SyncUserDataRequest_SyncUserData{
+						Name: pair.name,
+						Type: tqType,
+						Data: d.dataWithTime(pair.data),
+					}
+				}),
+			}
+			var syncRes deploymentspb.SyncUserDataResponse
+			err := workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, syncReq).Get(ctx, &syncRes)
+			if err != nil {
+				return err
+			}
+			if len(syncRes.TaskQueueMaxVersions) > 0 {
+				// wait for propagation
+				checkReq := &deploymentspb.CheckUserDataPropagationRequest{TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions}
+				err = workflow.ExecuteActivity(activityCtx, d.a.CheckUserDataPropagation, checkReq).Get(ctx, nil)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (d *DeploymentWorkflowRunner) dataWithTime(data *deploymentspb.TaskQueueData) *deploymentspb.TaskQueueData {
