@@ -197,8 +197,6 @@ func isUnhealthyError(err error) bool {
 	case *AppendHistoryTimeoutError,
 		*TimeoutError:
 		return true
-
-	default:
-		return false
 	}
+	return false
 }
