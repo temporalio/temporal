@@ -78,7 +78,7 @@ type (
 		f    func(T)
 		def  T
 		// protected by subscriptionLock in Collection:
-		prev T
+		raw any // raw value that last sent value was converted from
 	}
 
 	subscriptionCallbackSettings struct {
@@ -87,6 +87,9 @@ type (
 		TargetDelay  time.Duration
 		ShrinkFactor float64
 	}
+
+	// sentinel type that doesn't compare equal to anything else
+	defaultValue struct{}
 
 	// These function types follow a similar pattern:
 	//   {X}PropertyFn - returns a value of type X that is global (no filters)
@@ -117,6 +120,8 @@ var (
 	protoEnumType = reflect.TypeOf((*protoreflect.Enum)(nil)).Elem()
 	durationType  = reflect.TypeOf(time.Duration(0))
 	stringType    = reflect.TypeOf("")
+
+	usingDefaultValue any = defaultValue{}
 )
 
 // NewCollection creates a new collection. For subscriptions to work, you must call Start/Stop.
@@ -257,7 +262,8 @@ func matchAndConvert[T any](
 	precedence []Constraints,
 ) T {
 	cvs := c.client.GetValue(key)
-	return matchAndConvertCvs(c, key, def, convert, precedence, cvs)
+	v, _ := matchAndConvertCvs(c, key, def, convert, precedence, cvs)
+	return v
 }
 
 func matchAndConvertCvs[T any](
@@ -267,14 +273,14 @@ func matchAndConvertCvs[T any](
 	convert func(value any) (T, error),
 	precedence []Constraints,
 	cvs []ConstrainedValue,
-) T {
+) (T, any) {
 	cvp, err := findMatch(cvs, precedence)
 	if err != nil {
 		if c.throttleLog() {
 			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()), tag.Error(err))
 		}
 		// couldn't find a constrained match, use default
-		return def
+		return def, usingDefaultValue
 	}
 
 	typedVal, err := convertWithCache(c, key, convert, cvp)
@@ -283,9 +289,9 @@ func matchAndConvertCvs[T any](
 		if c.throttleLog() {
 			c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(cvp), tag.Error(err))
 		}
-		return def
+		return def, usingDefaultValue
 	}
-	return typedVal
+	return typedVal, cvp.Value
 }
 
 // Returns matched value out of cvs, matched default out of defaultCVs, and also the priorities
@@ -372,7 +378,8 @@ func subscribe[T any](
 
 	// get one value immediately (note that subscriptionLock is held here so we can't race with
 	// an update)
-	init := matchAndConvert(c, key, def, convert, prec)
+	cvs := c.client.GetValue(key)
+	init, raw := matchAndConvertCvs(c, key, def, convert, prec, cvs)
 
 	// As a convenience (and for efficiency), you can pass in a nil callback; we just return the
 	// current value and skip the subscription.  The cancellation func returned is also nil.
@@ -391,7 +398,7 @@ func subscribe[T any](
 		prec: prec,
 		f:    callback,
 		def:  def,
-		prev: init,
+		raw:  raw,
 	}
 
 	return init, func() {
@@ -409,15 +416,43 @@ func dispatchUpdate[T any](
 	sub *subscription[T],
 	cvs []ConstrainedValue,
 ) {
-	newVal := matchAndConvertCvs(c, key, sub.def, convert, sub.prec, cvs)
-	// Unfortunately we have to use reflect.DeepEqual instead of just == because T is not comparable.
-	// We can't make T comparable because maps and slices are not comparable, and we want to support
-	// those directly. We could have two versions of this, one for comparable types and one for
-	// non-comparable, but it's not worth it.
-	if !reflect.DeepEqual(sub.prev, newVal) {
-		sub.prev = newVal
-		c.callbackPool.Do(func() { sub.f(newVal) })
+	var raw any
+	cvp, err := findMatch(cvs, sub.prec)
+	if err != nil {
+		if c.throttleLog() {
+			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()), tag.Error(err))
+		}
+		raw = usingDefaultValue
+	} else {
+		raw = cvp.Value
 	}
+
+	// compare raw (pre-conversion) values, if unchanged, skip this update. note that
+	// `usingDefaultValue` is equal to itself but nothing else.
+	if reflect.DeepEqual(sub.raw, raw) {
+		// make raw field point to new one, not old one, so that old loaded files can get
+		// garbage collected.
+		sub.raw = raw
+		return
+	}
+
+	// raw value changed, need to dispatch default or converted value
+	var newVal T
+	if cvp == nil {
+		newVal = sub.def
+	} else {
+		newVal, err = convertWithCache(c, key, convert, cvp)
+		if err != nil {
+			// We failed to convert the value to the desired type. Use the default.
+			if c.throttleLog() {
+				c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(cvp), tag.Error(err))
+			}
+			newVal, raw = sub.def, usingDefaultValue
+		}
+	}
+
+	sub.raw = raw
+	c.callbackPool.Do(func() { sub.f(newVal) })
 }
 
 func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error), cvp *ConstrainedValue) (T, error) {
