@@ -202,7 +202,7 @@ SignalLoop:
 	}
 	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
 	// error. InvalidArgument is returned by the client.
-	s.EqualError(signalErr, common.FailureReasonHistoryCountExceedsLimit)
+	s.EqualError(signalErr, common.TerminationReasonHistoryCountExceedsLimit.String())
 	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
 	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
@@ -451,7 +451,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 
 		// Workflow should be force terminated at this point
-		s.EqualError(err, common.FailureReasonMutableStateSizeExceedsLimit)
+		s.EqualError(err, common.TerminationReasonMutableStateSizeExceedsLimit.String())
 	}
 
 	// Send another signal without RunID
@@ -559,7 +559,7 @@ SignalLoop:
 	}
 	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
 	// error. InvalidArgument is returned by the client.
-	s.EqualError(signalErr, common.FailureReasonHistorySizeExceedsLimit)
+	s.EqualError(signalErr, common.TerminationReasonHistorySizeExceedsLimit.String())
 	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
 	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
