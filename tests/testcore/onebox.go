@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
@@ -597,6 +598,8 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			temporal.TraceExportModule,
+			temporal.ServiceTracingModule,
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
@@ -715,6 +718,7 @@ func (c *TemporalImpl) newRPCFactory(
 	grpcResolver *membership.GRPCResolver,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	monitor membership.Monitor,
+	tracingStatsHandler telemetry.ClientStatsHandler,
 	httpPort httpPort,
 ) (common.RPCFactory, error) {
 	host, portStr, err := net.SplitHostPort(string(grpcHostPort))
@@ -731,6 +735,10 @@ func (c *TemporalImpl) newRPCFactory(
 			return nil, fmt.Errorf("failed getting client TLS config: %w", err)
 		}
 	}
+	var options []grpc.DialOption
+	if tracingStatsHandler != nil {
+		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
+	}
 	return rpc.NewFactory(
 		&config.RPC{BindOnIP: host, GRPCPort: port, HTTPPort: int(httpPort)},
 		sn,
@@ -740,7 +748,7 @@ func (c *TemporalImpl) newRPCFactory(
 		grpcResolver.MakeURL(primitives.FrontendService),
 		int(httpPort),
 		frontendTLSConfig,
-		nil,
+		options,
 		monitor,
 	), nil
 }
