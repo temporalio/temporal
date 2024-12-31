@@ -29,11 +29,13 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"weak"
 
 	"github.com/mitchellh/mapstructure"
 	"go.temporal.io/server/common/clock"
@@ -63,6 +65,11 @@ type (
 		callbackPool     *goro.AdaptivePool
 
 		poller goro.Group
+
+		// cache converted values. use weak pointers to avoid holding on to values in the cache
+		// that are no longer in use.
+		convertCacheLock sync.Mutex
+		convertCache     map[weak.Pointer[ConstrainedValue]]any
 	}
 
 	subscription[T any] struct {
@@ -120,6 +127,7 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 		logger:        logger,
 		errCount:      -1,
 		subscriptions: make(map[Key]map[int]any),
+		convertCache:  make(map[weak.Pointer[ConstrainedValue]]any),
 	}
 }
 
@@ -224,14 +232,14 @@ func (c *Collection) throttleLog() bool {
 	return errCount < errCountLogThreshold || errCount%errCountLogThreshold == 0
 }
 
-func findMatch(cvs []ConstrainedValue, precedence []Constraints) (any, error) {
+func findMatch(cvs []ConstrainedValue, precedence []Constraints) (*ConstrainedValue, error) {
 	if len(cvs) == 0 {
 		return nil, errKeyNotPresent
 	}
 	for _, m := range precedence {
-		for _, cv := range cvs {
+		for idx, cv := range cvs {
 			if m == cv.Constraints {
-				return cv.Value, nil
+				return &cvs[idx], nil
 			}
 		}
 	}
@@ -260,7 +268,7 @@ func matchAndConvertCvs[T any](
 	precedence []Constraints,
 	cvs []ConstrainedValue,
 ) T {
-	val, err := findMatch(cvs, precedence)
+	cvp, err := findMatch(cvs, precedence)
 	if err != nil {
 		if c.throttleLog() {
 			c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()), tag.Error(err))
@@ -269,11 +277,11 @@ func matchAndConvertCvs[T any](
 		return def
 	}
 
-	typedVal, err := convert(val)
+	typedVal, err := convertWithCache(c, key, convert, cvp)
 	if err != nil {
 		// We failed to convert the value to the desired type. Use the default.
 		if c.throttleLog() {
-			c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(val), tag.Error(err))
+			c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(cvp), tag.Error(err))
 		}
 		return def
 	}
@@ -283,19 +291,19 @@ func matchAndConvertCvs[T any](
 // Returns matched value out of cvs, matched default out of defaultCVs, and also the priorities
 // of each of the matches (lower matched first). For no match, order will be 0.
 func findMatchWithConstrainedDefaults[T any](cvs []ConstrainedValue, defaultCVs []TypedConstrainedValue[T], precedence []Constraints) (
-	matchedValue any,
+	matchedValue *ConstrainedValue,
 	matchedDefault T,
 	valueOrder int,
 	defaultOrder int,
 ) {
 	order := 0
 	for _, m := range precedence {
-		for _, cv := range cvs {
+		for idx, cv := range cvs {
 			order++
 			if m == cv.Constraints {
 				if valueOrder == 0 {
 					valueOrder = order
-					matchedValue = cv.Value
+					matchedValue = &cvs[idx]
 				}
 			}
 		}
@@ -320,7 +328,7 @@ func matchAndConvertWithConstrainedDefault[T any](
 	precedence []Constraints,
 ) T {
 	cvs := c.client.GetValue(key)
-	val, defVal, valOrder, defOrder := findMatchWithConstrainedDefaults(cvs, cdef, precedence)
+	cvp, defVal, valOrder, defOrder := findMatchWithConstrainedDefaults(cvs, cdef, precedence)
 	if defOrder == 0 {
 		// This is a server bug: all precedence lists must end with no-constraints, and all
 		// constrained defaults must have a no-constraints value, so we should have gotten a match.
@@ -337,11 +345,11 @@ func matchAndConvertWithConstrainedDefault[T any](
 		// value was present but constrained default took precedence
 		return defVal
 	}
-	typedVal, err := convert(val)
+	typedVal, err := convertWithCache(c, key, convert, cvp)
 	if err != nil {
 		// We failed to convert the value to the desired type. Use the default.
 		if c.throttleLog() {
-			c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(val), tag.Error(err))
+			c.logger.Warn("Failed to convert value, using default", tag.Key(key.String()), tag.IgnoredValue(cvp), tag.Error(err))
 		}
 		// if defOrder == 0, this will be the zero value, but that's the best we can do
 		return defVal
@@ -410,6 +418,41 @@ func dispatchUpdate[T any](
 		sub.prev = newVal
 		c.callbackPool.Do(func() { sub.f(newVal) })
 	}
+}
+
+func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error), cvp *ConstrainedValue) (T, error) {
+	weakcvp := weak.Make(cvp)
+
+	c.convertCacheLock.Lock()
+	if converted, ok := c.convertCache[weakcvp]; ok {
+		if t, ok := converted.(T); ok {
+			c.convertCacheLock.Unlock()
+			return t, nil
+		}
+		// Each key can only be used with a single type, so this shouldn't happen
+		c.logger.Warn("Cached converted value has wrong type", tag.Key(key.String()))
+		// Fall through to regular conversion
+	}
+	c.convertCacheLock.Unlock()
+
+	// unlock around convert
+	t, err := convert(cvp.Value)
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+
+	c.convertCacheLock.Lock()
+	c.convertCache[weakcvp] = t
+	c.convertCacheLock.Unlock()
+
+	runtime.AddCleanup(cvp, func(w weak.Pointer[ConstrainedValue]) {
+		c.convertCacheLock.Lock()
+		delete(c.convertCache, w)
+		c.convertCacheLock.Unlock()
+	}, weakcvp)
+
+	return t, nil
 }
 
 func convertInt(val any) (int, error) {
