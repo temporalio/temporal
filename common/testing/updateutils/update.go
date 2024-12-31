@@ -52,7 +52,7 @@ func New(t require.TestingT) UpdateUtils {
 	}
 }
 
-func (u UpdateUtils) UpdateAcceptCommands(tv *testvars.TestVars, messageID string) []*commandpb.Command {
+func (u UpdateUtils) UpdateAcceptCommands(tv *testvars.TestVars) []*commandpb.Command {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
@@ -60,12 +60,12 @@ func (u UpdateUtils) UpdateAcceptCommands(tv *testvars.TestVars, messageID strin
 	return []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 		Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-			MessageId: tv.MessageID("update-accepted", messageID),
+			MessageId: tv.MessageID() + "_update-accepted",
 		}},
 	}}
 }
 
-func (u UpdateUtils) UpdateCompleteCommands(tv *testvars.TestVars, messageID string) []*commandpb.Command {
+func (u UpdateUtils) UpdateCompleteCommands(tv *testvars.TestVars) []*commandpb.Command {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
@@ -73,20 +73,20 @@ func (u UpdateUtils) UpdateCompleteCommands(tv *testvars.TestVars, messageID str
 		{
 			CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 			Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-				MessageId: tv.MessageID("update-completed", messageID),
+				MessageId: tv.MessageID() + "_update-completed",
 			}},
 		},
 	}
 }
 
-func (u UpdateUtils) UpdateAcceptCompleteCommands(tv *testvars.TestVars, messageID string) []*commandpb.Command {
+func (u UpdateUtils) UpdateAcceptCompleteCommands(tv *testvars.TestVars) []*commandpb.Command {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
-	return append(u.UpdateAcceptCommands(tv, messageID), u.UpdateCompleteCommands(tv, messageID)...)
+	return append(u.UpdateAcceptCommands(tv), u.UpdateCompleteCommands(tv)...)
 }
 
-func (u UpdateUtils) UpdateAcceptMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
+func (u UpdateUtils) UpdateAcceptMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
@@ -94,7 +94,7 @@ func (u UpdateUtils) UpdateAcceptMessages(tv *testvars.TestVars, updRequestMsg *
 
 	return []*protocolpb.Message{
 		{
-			Id:                 tv.MessageID("update-accepted", messageID),
+			Id:                 tv.MessageID() + "_update-accepted",
 			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 			SequencingId:       nil,
 			Body: protoutils.MarshalAny(u.t, &updatepb.Acceptance{
@@ -106,7 +106,7 @@ func (u UpdateUtils) UpdateAcceptMessages(tv *testvars.TestVars, updRequestMsg *
 	}
 }
 
-func (u UpdateUtils) UpdateCompleteMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
+func (u UpdateUtils) UpdateCompleteMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
@@ -114,7 +114,7 @@ func (u UpdateUtils) UpdateCompleteMessages(tv *testvars.TestVars, updRequestMsg
 
 	return []*protocolpb.Message{
 		{
-			Id:                 tv.MessageID("update-completed", messageID),
+			Id:                 tv.MessageID() + "_update-completed",
 			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 			SequencingId:       nil,
 			Body: protoutils.MarshalAny(u.t, &updatepb.Response{
@@ -129,14 +129,16 @@ func (u UpdateUtils) UpdateCompleteMessages(tv *testvars.TestVars, updRequestMsg
 	}
 }
 
-func (u UpdateUtils) UpdateAcceptCompleteMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
+func (u UpdateUtils) UpdateAcceptCompleteMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
-	return append(u.UpdateAcceptMessages(tv, updRequestMsg, messageID), u.UpdateCompleteMessages(tv, updRequestMsg, messageID)...)
+	return append(
+		u.UpdateAcceptMessages(tv, updRequestMsg),
+		u.UpdateCompleteMessages(tv, updRequestMsg)...)
 }
 
-func (u UpdateUtils) UpdateRejectMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message, messageID string) []*protocolpb.Message {
+func (u UpdateUtils) UpdateRejectMessages(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 	if th, ok := u.t.(helper); ok {
 		th.Helper()
 	}
@@ -144,7 +146,7 @@ func (u UpdateUtils) UpdateRejectMessages(tv *testvars.TestVars, updRequestMsg *
 
 	return []*protocolpb.Message{
 		{
-			Id:                 tv.MessageID("update-rejected", messageID),
+			Id:                 tv.MessageID() + "_update-rejected",
 			ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 			SequencingId:       nil,
 			Body: protoutils.MarshalAny(u.t, &updatepb.Rejection{

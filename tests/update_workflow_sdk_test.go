@@ -59,7 +59,10 @@ func TestUpdateWorkflowSdkSuite(t *testing.T) {
 func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAdmitted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
+	tv := testvars.New(s.T()).
+		WithTaskQueue(s.TaskQueue()).
+		WithNamespaceName(namespace.Name(s.Namespace())).
+		WithRunID("")
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
@@ -97,7 +100,10 @@ WorkflowExecutionTerminated // This can be EventID=3 if WF is terminated before 
 func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAccepted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
+	tv := testvars.New(s.T()).
+		WithTaskQueue(s.TaskQueue()).
+		WithNamespaceName(namespace.Name(s.Namespace())).
+		WithRunID("")
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
@@ -159,7 +165,10 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
 func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
+	tv := testvars.New(s.T()).
+		WithTaskQueue(s.TaskQueue()).
+		WithNamespaceName(namespace.Name(s.Namespace())).
+		WithRunID("")
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
@@ -221,7 +230,10 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmi
 		starts 2nd run, Update is delivered to it, and processed by registered handler.
 	*/
 
-	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
+	tv := testvars.New(s.T()).
+		WithTaskQueue(s.TaskQueue()).
+		WithNamespaceName(namespace.Name(s.Namespace())).
+		WithRunID("")
 
 	rootCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -306,7 +318,10 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWithRetryAfterUpdateA
 		and catch up the second run.
 	*/
 
-	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
+	tv := testvars.New(s.T()).
+		WithTaskQueue(s.TaskQueue()).
+		WithNamespaceName(namespace.Name(s.Namespace())).
+		WithRunID("")
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()

@@ -47,17 +47,17 @@ type updateResponseErr struct {
 	err      error
 }
 
-func (s *WorkflowUpdateBaseSuite) sendUpdateNoErrorWaitPolicyAccepted(tv *testvars.TestVars, updateID string) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
+func (s *WorkflowUpdateBaseSuite) sendUpdateNoErrorWaitPolicyAccepted(tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
 	s.T().Helper()
-	return s.sendUpdateNoErrorInternal(tv, updateID, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
+	return s.sendUpdateNoErrorInternal(tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
 }
 
-func (s *WorkflowUpdateBaseSuite) sendUpdateNoErrorInternal(tv *testvars.TestVars, updateID string, waitPolicy *updatepb.WaitPolicy) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
+func (s *WorkflowUpdateBaseSuite) sendUpdateNoErrorInternal(tv *testvars.TestVars, waitPolicy *updatepb.WaitPolicy) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
 	s.T().Helper()
 	retCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 	syncCh := make(chan struct{})
 	go func() {
-		urCh := s.sendUpdateInternal(testcore.NewContext(), tv, updateID, waitPolicy, true)
+		urCh := s.sendUpdateInternal(testcore.NewContext(), tv, waitPolicy, true)
 		// Unblock return only after the server admits update.
 		syncCh <- struct{}{}
 		// Unblocked when an update result is ready.
@@ -70,7 +70,6 @@ func (s *WorkflowUpdateBaseSuite) sendUpdateNoErrorInternal(tv *testvars.TestVar
 func (s *WorkflowUpdateBaseSuite) sendUpdateInternal(
 	ctx context.Context,
 	tv *testvars.TestVars,
-	updateID string,
 	waitPolicy *updatepb.WaitPolicy,
 	requireNoError bool,
 ) <-chan updateResponseErr {
@@ -79,7 +78,7 @@ func (s *WorkflowUpdateBaseSuite) sendUpdateInternal(
 
 	updateResultCh := make(chan updateResponseErr)
 	go func() {
-		updateResp, updateErr := s.FrontendClient().UpdateWorkflowExecution(ctx, s.updateWorkflowRequest(tv, waitPolicy, updateID))
+		updateResp, updateErr := s.FrontendClient().UpdateWorkflowExecution(ctx, s.updateWorkflowRequest(tv, waitPolicy))
 		// It is important to do assert here (before writing to channel which doesn't have readers yet)
 		// to fail fast without trying to process update in wtHandler.
 		if requireNoError {
@@ -87,41 +86,40 @@ func (s *WorkflowUpdateBaseSuite) sendUpdateInternal(
 		}
 		updateResultCh <- updateResponseErr{response: updateResp, err: updateErr}
 	}()
-	s.waitUpdateAdmitted(tv, updateID)
+	s.waitUpdateAdmitted(tv)
 	return updateResultCh
 }
 
 func (s *WorkflowUpdateBaseSuite) updateWorkflowRequest(
 	tv *testvars.TestVars,
 	waitPolicy *updatepb.WaitPolicy,
-	updateID string,
 ) *workflowservice.UpdateWorkflowExecutionRequest {
 	return &workflowservice.UpdateWorkflowExecutionRequest{
 		Namespace:         s.Namespace(),
 		WorkflowExecution: tv.WorkflowExecution(),
 		WaitPolicy:        waitPolicy,
 		Request: &updatepb.Request{
-			Meta: &updatepb.Meta{UpdateId: tv.UpdateID(updateID)},
+			Meta: &updatepb.Meta{UpdateId: tv.UpdateID()},
 			Input: &updatepb.Input{
 				Name: tv.HandlerName(),
-				Args: payloads.EncodeString("args-value-of-" + tv.UpdateID(updateID)),
+				Args: payloads.EncodeString("args-value-of-" + tv.UpdateID()),
 			},
 		},
 	}
 }
 
-func (s *WorkflowUpdateBaseSuite) waitUpdateAdmitted(tv *testvars.TestVars, updateID string) {
+func (s *WorkflowUpdateBaseSuite) waitUpdateAdmitted(tv *testvars.TestVars) {
 	s.T().Helper()
 	s.EventuallyWithTf(func(collect *assert.CollectT) {
 		pollResp, pollErr := s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
 			Namespace:  s.Namespace(),
-			UpdateRef:  tv.UpdateRef(updateID),
+			UpdateRef:  tv.UpdateRef(),
 			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
 		})
 
 		assert.NoError(collect, pollErr)
 		assert.GreaterOrEqual(collect, pollResp.GetStage(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
-	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", tv.UpdateID(updateID))
+	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", tv.UpdateID())
 }
 
 func (s *WorkflowUpdateBaseSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {
