@@ -563,7 +563,11 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 			return typedV, nil
 		}
 
+		// TODO: This does a shallow copy, but we should do a deep copy instead to make this
+		// interface less error-prone. Now that we have conversion caching, the cost of a deep
+		// copy isn't a problem.
 		out := def
+
 		dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result: &out,
 			DecodeHook: mapstructure.ComposeDecodeHookFunc(
