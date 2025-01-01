@@ -583,9 +583,9 @@ func convertMap(val any) (map[string]any, error) {
 // Note that any failure in conversion of _any_ field will result in the overall default being used,
 // ignoring the fields that successfully converted.
 //
-// Note that the default value will be shallow-copied, so it should not have any deep structure.
-// Scalar types and values are fine, and slice and map types are fine too as long as they're set to
-// nil in the default.
+// Note that the default value will be deep-copied and then passed to mapstructure with the
+// ZeroFields setting false, so the config value will be _merged_ on top of it. Be very careful
+// when using non-empty maps or slices, the result may not be what you want.
 //
 // To avoid confusion, the default passed to ConvertStructure should be either the same as the
 // overall default for the setting (if you want any value set to be merged over the default, i.e.
@@ -598,10 +598,9 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 			return typedV, nil
 		}
 
-		// TODO: This does a shallow copy, but we should do a deep copy instead to make this
-		// interface less error-prone. Now that we have conversion caching, the cost of a deep
-		// copy isn't a problem.
-		out := def
+		// Deep-copy the default and decode over it. This allows using e.g. a struct with some
+		// default fields filled in and a config that only set some fields.
+		out := deepCopyForMapstructure(def)
 
 		dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result: &out,

@@ -158,8 +158,8 @@ type {{.P.Name}}TypedSetting[T any] setting[T, func({{.P.GoArgs}})]
 type {{.P.Name}}TypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, func({{.P.GoArgs}})]
 
 // New{{.P.Name}}TypedSetting creates a setting that uses mapstructure to handle complex structured
-// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
-// 'def' must not contain any non-nil slices, maps, or pointers.
+// values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
+// when using non-empty maps or slices as defaults, the result may not be what you want.
 func New{{.P.Name}}TypedSetting[T any](key Key, def T, description string) {{.P.Name}}TypedSetting[T] {
 	s := {{.P.Name}}TypedSetting[T]{
 		key:         key,
