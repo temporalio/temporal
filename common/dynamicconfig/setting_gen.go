@@ -768,8 +768,8 @@ type GlobalTypedSetting[T any] setting[T, func()]
 type GlobalTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, func()]
 
 // NewGlobalTypedSetting creates a setting that uses mapstructure to handle complex structured
-// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
-// 'def' must not contain any non-nil slices, maps, or pointers.
+// values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
+// when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewGlobalTypedSetting[T any](key Key, def T, description string) GlobalTypedSetting[T] {
 	s := GlobalTypedSetting[T]{
 		key:         key,
@@ -892,8 +892,8 @@ type NamespaceTypedSetting[T any] setting[T, func(namespace string)]
 type NamespaceTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, func(namespace string)]
 
 // NewNamespaceTypedSetting creates a setting that uses mapstructure to handle complex structured
-// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
-// 'def' must not contain any non-nil slices, maps, or pointers.
+// values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
+// when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewNamespaceTypedSetting[T any](key Key, def T, description string) NamespaceTypedSetting[T] {
 	s := NamespaceTypedSetting[T]{
 		key:         key,
@@ -1016,8 +1016,8 @@ type NamespaceIDTypedSetting[T any] setting[T, func(namespaceID namespace.ID)]
 type NamespaceIDTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, func(namespaceID namespace.ID)]
 
 // NewNamespaceIDTypedSetting creates a setting that uses mapstructure to handle complex structured
-// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
-// 'def' must not contain any non-nil slices, maps, or pointers.
+// values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
+// when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewNamespaceIDTypedSetting[T any](key Key, def T, description string) NamespaceIDTypedSetting[T] {
 	s := NamespaceIDTypedSetting[T]{
 		key:         key,
@@ -1140,8 +1140,8 @@ type TaskQueueTypedSetting[T any] setting[T, func(namespace string, taskQueue st
 type TaskQueueTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType)]
 
 // NewTaskQueueTypedSetting creates a setting that uses mapstructure to handle complex structured
-// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
-// 'def' must not contain any non-nil slices, maps, or pointers.
+// values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
+// when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewTaskQueueTypedSetting[T any](key Key, def T, description string) TaskQueueTypedSetting[T] {
 	s := TaskQueueTypedSetting[T]{
 		key:         key,
@@ -1282,8 +1282,8 @@ type ShardIDTypedSetting[T any] setting[T, func(shardID int32)]
 type ShardIDTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, func(shardID int32)]
 
 // NewShardIDTypedSetting creates a setting that uses mapstructure to handle complex structured
-// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
-// 'def' must not contain any non-nil slices, maps, or pointers.
+// values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
+// when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewShardIDTypedSetting[T any](key Key, def T, description string) ShardIDTypedSetting[T] {
 	s := ShardIDTypedSetting[T]{
 		key:         key,
@@ -1406,8 +1406,8 @@ type TaskTypeTypedSetting[T any] setting[T, func(taskType enumsspb.TaskType)]
 type TaskTypeTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, func(taskType enumsspb.TaskType)]
 
 // NewTaskTypeTypedSetting creates a setting that uses mapstructure to handle complex structured
-// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
-// 'def' must not contain any non-nil slices, maps, or pointers.
+// values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
+// when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewTaskTypeTypedSetting[T any](key Key, def T, description string) TaskTypeTypedSetting[T] {
 	s := TaskTypeTypedSetting[T]{
 		key:         key,
@@ -1530,8 +1530,8 @@ type DestinationTypedSetting[T any] setting[T, func(namespace string, destinatio
 type DestinationTypedConstrainedDefaultSetting[T any] constrainedDefaultSetting[T, func(namespace string, destination string)]
 
 // NewDestinationTypedSetting creates a setting that uses mapstructure to handle complex structured
-// values. The value from dynamic config will be copied over a shallow copy of 'def', which means
-// 'def' must not contain any non-nil slices, maps, or pointers.
+// values. The value from dynamic config will be _merged_ over a deep copy of 'def'. Be very careful
+// when using non-empty maps or slices as defaults, the result may not be what you want.
 func NewDestinationTypedSetting[T any](key Key, def T, description string) DestinationTypedSetting[T] {
 	s := DestinationTypedSetting[T]{
 		key:         key,
