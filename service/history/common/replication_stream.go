@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,15 +20,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination engine_factory_mock.go
+package common
 
-package shard
+import (
+	"context"
+	"time"
 
-import history "go.temporal.io/server/service/history/common"
+	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/service/history/tasks"
+)
 
 type (
-	// EngineFactory is used to create an instance of sharded history engine
-	EngineFactory interface {
-		CreateEngine(context Context) history.Engine
+	ReplicationStream interface {
+		SubscribeReplicationNotification() (<-chan struct{}, string)
+		UnsubscribeReplicationNotification(string)
+		ConvertReplicationTask(
+			ctx context.Context,
+			task tasks.Task,
+			clusterID int32,
+		) (*replicationspb.ReplicationTask, error)
+
+		GetReplicationTasksIter(
+			ctx context.Context,
+			pollingCluster string,
+			minInclusiveTaskID int64,
+			maxExclusiveTaskID int64,
+		) (collection.Iterator[tasks.Task], error)
+
+		GetMaxReplicationTaskInfo() (int64, time.Time)
 	}
 )

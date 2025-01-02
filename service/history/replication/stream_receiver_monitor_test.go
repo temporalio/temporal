@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -498,8 +499,8 @@ func (s *streamReceiverMonitorSuite) TestGenerateStatusMap_Success() {
 	inboundKeys[key3] = struct{}{}
 	ctx1 := shard.NewMockContext(s.controller)
 	ctx2 := shard.NewMockContext(s.controller)
-	engine1 := shard.NewMockEngine(s.controller)
-	engine2 := shard.NewMockEngine(s.controller)
+	engine1 := history.NewMockEngine(s.controller)
+	engine2 := history.NewMockEngine(s.controller)
 	engine1.EXPECT().GetMaxReplicationTaskInfo().Return(int64(1000), time.Now())
 	engine2.EXPECT().GetMaxReplicationTaskInfo().Return(int64(2000), time.Now())
 	readerId1 := shard.ReplicationReaderIDFromClusterShardID(int64(key1.Client.ClusterID), key1.Client.ShardID)

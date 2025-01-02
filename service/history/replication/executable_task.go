@@ -51,7 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/shard"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -541,7 +541,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 	}
 
 	applyFn := func() error {
-		backFillRequest := &shard.BackfillHistoryEventsRequest{
+		backFillRequest := &history.BackfillHistoryEventsRequest{
 			WorkflowKey:         workflowKey,
 			SourceClusterName:   e.SourceClusterName(),
 			VersionedHistory:    e.ReplicationTask().VersionedTransition,
