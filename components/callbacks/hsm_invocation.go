@@ -36,10 +36,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type CanGetHSMCompletionCallbackArg interface {
-	GetHSMCompletionCallbackArg(ctx context.Context) (*persistencespb.HSMCompletionCallbackArg, error)
-}
-
 type hsmInvocation struct {
 	hsm         *persistencespb.Callback_HSM
 	callbackArg *persistencespb.HSMCompletionCallbackArg

@@ -43,10 +43,6 @@ var retryable4xxErrorTypes = []int{
 	http.StatusTooManyRequests,
 }
 
-type CanGetNexusCompletion interface {
-	GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error)
-}
-
 type nexusInvocation struct {
 	nexus      *persistencespb.Callback_Nexus
 	completion nexus.OperationCompletion
