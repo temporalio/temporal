@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -77,7 +78,7 @@ type (
 
 func (f *historyEngineFactory) CreateEngine(
 	shard shard.Context,
-) shard.Engine {
+) history.Engine {
 	var wfCache wcache.Cache
 	if shard.GetConfig().EnableHostLevelHistoryCache() {
 		wfCache = f.WorkflowCache
