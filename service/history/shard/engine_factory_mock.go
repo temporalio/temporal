@@ -36,6 +36,7 @@ package shard
 import (
 	reflect "reflect"
 
+	common "go.temporal.io/server/service/history/common"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -63,10 +64,10 @@ func (m *MockEngineFactory) EXPECT() *MockEngineFactoryMockRecorder {
 }
 
 // CreateEngine mocks base method.
-func (m *MockEngineFactory) CreateEngine(context Context) Engine {
+func (m *MockEngineFactory) CreateEngine(context Context) common.Engine {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEngine", context)
-	ret0, _ := ret[0].(Engine)
+	ret0, _ := ret[0].(common.Engine)
 	return ret0
 }
 

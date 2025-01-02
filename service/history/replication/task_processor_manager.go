@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/xdc"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -64,7 +65,7 @@ type (
 	taskProcessorManagerImpl struct {
 		config                        *configs.Config
 		deleteMgr                     deletemanager.DeleteManager
-		engine                        shard.Engine
+		engine                        history.Engine
 		eventSerializer               serialization.Serializer
 		shard                         shard.Context
 		status                        int32
@@ -88,7 +89,7 @@ type (
 func NewTaskProcessorManager(
 	config *configs.Config,
 	shard shard.Context,
-	engine shard.Engine,
+	engine history.Engine,
 	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
 	clientBean client.Bean,

@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -61,7 +62,7 @@ type (
 		controller    *gomock.Controller
 		server        *historyservicemock.MockHistoryService_StreamWorkflowReplicationMessagesServer
 		shardContext  *shard.MockContext
-		historyEngine *shard.MockEngine
+		historyEngine *history.MockEngine
 		taskConverter *MockSourceTaskConverter
 
 		clientShardKey ClusterShardKey
@@ -90,7 +91,7 @@ func (s *streamSenderSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.server = historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesServer(s.controller)
 	s.shardContext = shard.NewMockContext(s.controller)
-	s.historyEngine = shard.NewMockEngine(s.controller)
+	s.historyEngine = history.NewMockEngine(s.controller)
 	s.taskConverter = NewMockSourceTaskConverter(s.controller)
 	s.config = tests.NewDynamicConfig()
 

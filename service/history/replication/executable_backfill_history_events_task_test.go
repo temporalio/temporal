@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -202,14 +203,14 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Process() {
 	).AnyTimes()
 
 	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	engine := history.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
 
-	engine.EXPECT().BackfillHistoryEvents(gomock.Any(), &shard.BackfillHistoryEventsRequest{
+	engine.EXPECT().BackfillHistoryEvents(gomock.Any(), &history.BackfillHistoryEventsRequest{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: s.task.NamespaceID,
 			WorkflowID:  s.task.WorkflowID,
@@ -261,7 +262,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Success(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	engine := history.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,

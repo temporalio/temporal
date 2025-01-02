@@ -71,6 +71,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -117,7 +118,7 @@ type (
 		contextTaggedLogger log.Logger
 		throttledLogger     log.Logger
 		engineFactory       EngineFactory
-		engineFuture        *future.FutureImpl[Engine]
+		engineFuture        *future.FutureImpl[history.Engine]
 		queueMetricEmitter  sync.Once
 		finalizer           *finalizer.Finalizer
 
@@ -189,7 +190,7 @@ type (
 	contextRequest interface{}
 
 	contextRequestAcquire    struct{}
-	contextRequestAcquired   struct{ engine Engine }
+	contextRequestAcquired   struct{ engine history.Engine }
 	contextRequestLost       struct{}
 	contextRequestStop       struct{ reason stopReason }
 	contextRequestFinishStop struct{}
@@ -280,7 +281,7 @@ func (s *ContextImpl) GetPingChecks() []pingable.Check {
 
 func (s *ContextImpl) GetEngine(
 	ctx context.Context,
-) (Engine, error) {
+) (history.Engine, error) {
 	return s.engineFuture.Get(ctx)
 }
 
@@ -1475,7 +1476,7 @@ func (s *ContextImpl) maybeRecordShardAcquisitionLatency(ownershipChanged bool) 
 	}
 }
 
-func (s *ContextImpl) createEngine() Engine {
+func (s *ContextImpl) createEngine() history.Engine {
 	s.contextTaggedLogger.Info("", tag.LifeCycleStarting, tag.ComponentShardEngine)
 	engine := s.engineFactory.CreateEngine(s)
 	engine.Start()
@@ -2001,7 +2002,7 @@ func (s *ContextImpl) acquireShard() {
 		s.contextTaggedLogger.Info("Acquired shard")
 
 		// The first time we get the shard, we have to create the engine
-		var engine Engine
+		var engine history.Engine
 		if !s.engineFuture.Ready() {
 			s.maybeRecordShardAcquisitionLatency(ownershipChanged)
 			engine = s.createEngine()
@@ -2136,7 +2137,7 @@ func newContext(
 		handoverNamespaces:      make(map[namespace.Name]*namespaceHandOverInfo),
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
-		engineFuture:            future.NewFuture[Engine](),
+		engineFuture:            future.NewFuture[history.Engine](),
 		queueMetricEmitter:      sync.Once{},
 		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,

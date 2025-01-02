@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -116,7 +117,7 @@ type (
 			newEvents []*historypb.HistoryEvent,
 			newRunID string,
 		) error
-		BackfillHistoryEvents(ctx context.Context, request *shard.BackfillHistoryEventsRequest) error
+		BackfillHistoryEvents(ctx context.Context, request *history.BackfillHistoryEventsRequest) error
 	}
 
 	HistoryReplicatorImpl struct {
@@ -232,7 +233,7 @@ func (r *HistoryReplicatorImpl) ApplyEvents(
 
 func (r *HistoryReplicatorImpl) BackfillHistoryEvents(
 	ctx context.Context,
-	request *shard.BackfillHistoryEventsRequest,
+	request *history.BackfillHistoryEventsRequest,
 ) error {
 	task, err := newReplicationTaskFromBatch(
 		r.clusterMetadata,

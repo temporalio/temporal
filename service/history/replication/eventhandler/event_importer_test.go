@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/service/history/shard"
+	history "go.temporal.io/server/service/history/common"
 	"go.uber.org/mock/gomock"
 )
 
@@ -57,7 +57,7 @@ type (
 		remoteHistoryFetcher *MockHistoryPaginatedFetcher
 		engineProvider       historyEngineProvider
 		eventImporter        EventImporter
-		engine               *shard.MockEngine
+		engine               *history.MockEngine
 	}
 )
 
@@ -91,8 +91,8 @@ func (s *eventImporterSuite) SetupTest() {
 	s.logger = log.NewNoopLogger()
 	s.eventSerializer = serialization.NewSerializer()
 	s.remoteHistoryFetcher = NewMockHistoryPaginatedFetcher(s.controller)
-	s.engine = shard.NewMockEngine(s.controller)
-	s.engineProvider = func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error) {
+	s.engine = history.NewMockEngine(s.controller)
+	s.engineProvider = func(ctx context.Context, namespaceId namespace.ID, workflowId string) (history.Engine, error) {
 		return s.engine, nil
 	}
 	s.eventImporter = NewEventImporter(
