@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -77,7 +78,7 @@ func (s *contextSuite) SetupTest() {
 		&persistencespb.ShardInfo{ShardId: 1},
 		configs,
 	)
-	mockEngine := shard.NewMockEngine(controller)
+	mockEngine := history.NewMockEngine(controller)
 	mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 	s.mockShard.SetEngineForTesting(mockEngine)

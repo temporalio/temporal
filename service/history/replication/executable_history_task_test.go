@@ -53,6 +53,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/xdc"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -222,7 +223,7 @@ func (s *executableHistoryTaskSuite) TestExecute_Process() {
 	).AnyTimes()
 
 	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	engine := history.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
@@ -275,7 +276,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	engine := history.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,

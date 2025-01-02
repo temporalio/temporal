@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -55,7 +56,7 @@ import (
 
 type (
 	SourceTaskConverterImpl struct {
-		historyEngine  shard.Engine
+		historyEngine  history.Engine
 		namespaceCache namespace.Registry
 		serializer     serialization.Serializer
 		config         *configs.Config
@@ -64,7 +65,7 @@ type (
 		Convert(task tasks.Task, targetClusterID int32) (*replicationspb.ReplicationTask, error)
 	}
 	SourceTaskConverterProvider func(
-		historyEngine shard.Engine,
+		historyEngine history.Engine,
 		shardContext shard.Context,
 		clientClusterName string, // Some task converter may use the client cluster name.
 		serializer serialization.Serializer,
@@ -83,7 +84,7 @@ type (
 )
 
 func NewSourceTaskConverter(
-	historyEngine shard.Engine,
+	historyEngine history.Engine,
 	namespaceCache namespace.Registry,
 	serializer serialization.Serializer,
 	config *configs.Config,

@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
+	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -103,13 +104,13 @@ type ContextConfigOverrides struct {
 
 type StubContext struct {
 	ContextTest
-	engine Engine
+	engine history.Engine
 }
 
 func NewStubContext(
 	ctrl *gomock.Controller,
 	overrides ContextConfigOverrides,
-	engine Engine,
+	engine history.Engine,
 ) *StubContext {
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
 	eventsCache := events.NewMockCache(ctrl)
@@ -162,7 +163,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		queueMetricEmitter:  sync.Once{},
 
 		state:              contextStateAcquired,
-		engineFuture:       future.NewFuture[Engine](),
+		engineFuture:       future.NewFuture[history.Engine](),
 		shardInfo:          config.ShardInfo,
 		remoteClusterInfos: make(map[string]*remoteClusterInfo),
 		handoverNamespaces: make(map[namespace.Name]*namespaceHandOverInfo),
@@ -196,7 +197,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 }
 
 // SetEngineForTest sets s.engine. Only used by tests.
-func (s *ContextTest) SetEngineForTesting(engine Engine) {
+func (s *ContextTest) SetEngineForTesting(engine history.Engine) {
 	s.engineFuture.Set(engine, nil)
 }
 
@@ -234,6 +235,6 @@ func (s *ContextTest) StopForTest() {
 	s.FinishStop()
 }
 
-func (s *StubContext) GetEngine(_ context.Context) (Engine, error) {
+func (s *StubContext) GetEngine(_ context.Context) (history.Engine, error) {
 	return s.engine, nil
 }
