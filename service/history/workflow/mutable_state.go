@@ -51,7 +51,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/components/callbacks"
+	components "go.temporal.io/server/components/common"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
@@ -151,8 +151,8 @@ type (
 	ActivityUpdater func(*persistencespb.ActivityInfo, MutableState) error
 
 	MutableState interface {
-		callbacks.CanGetNexusCompletion
-		callbacks.CanGetHSMCompletionCallbackArg
+		components.CanGetNexusCompletion
+		components.CanGetHSMCompletionCallbackArg
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 

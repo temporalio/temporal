@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
+	components "go.temporal.io/server/components/common"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
@@ -160,7 +161,7 @@ func (e taskExecutor) loadInvocationArgs(
 
 		switch variant := callback.GetCallback().GetVariant().(type) {
 		case *persistencespb.Callback_Nexus_:
-			target, err := hsm.MachineData[CanGetNexusCompletion](node.Parent)
+			target, err := hsm.MachineData[components.CanGetNexusCompletion](node.Parent)
 			if err != nil {
 				return err
 			}
@@ -173,7 +174,7 @@ func (e taskExecutor) loadInvocationArgs(
 				return err
 			}
 		case *persistencespb.Callback_Hsm:
-			target, err := hsm.MachineData[CanGetHSMCompletionCallbackArg](node.Parent)
+			target, err := hsm.MachineData[components.CanGetHSMCompletionCallbackArg](node.Parent)
 			if err != nil {
 				return err
 			}
