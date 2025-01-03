@@ -383,8 +383,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}()
 
-	eventReapplyCandidates := resetMutableState.GetReapplyCandidateEvents()
-	var newEventsReapplyCandidates []*historypb.HistoryEvent
 	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
 		resetWorkflowTransactionPolicy,
 	)
@@ -402,7 +400,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 			}
 		}()
 
-		newEventsReapplyCandidates = newMutableState.GetReapplyCandidateEvents()
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
 			*newWorkflowTransactionPolicy,
 		)
@@ -429,48 +426,29 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}
 
-	if len(resetWorkflowEventsSeq) != 0 || len(newWorkflowEventsSeq) != 0 {
-		if err := c.conflictResolveEventReapply(
-			ctx,
-			shardContext,
-			conflictResolveMode,
-			resetWorkflowEventsSeq,
-			newWorkflowEventsSeq,
-			// current workflow events will not participate in the events reapplication
-		); err != nil {
-			return err
-		}
-	} else if len(eventReapplyCandidates) > 0 || len(newEventsReapplyCandidates) > 0 {
-		eventsToApply := []*persistence.WorkflowEvents{
+	eventsToReapply := resetWorkflowEventsSeq
+	if len(resetWorkflowEventsSeq) == 0 {
+		eventsToReapply = []*persistence.WorkflowEvents{
 			{
 				NamespaceID: c.workflowKey.NamespaceID,
 				WorkflowID:  c.workflowKey.WorkflowID,
 				RunID:       c.workflowKey.RunID,
-				Events:      eventReapplyCandidates,
+				Events:      resetMutableState.GetReapplyCandidateEvents(),
 			},
 		}
-		var newEventsToReapply []*persistence.WorkflowEvents
-		if len(newEventsReapplyCandidates) > 0 {
-			newEventsToReapply = []*persistence.WorkflowEvents{
-				{
-					NamespaceID: newContext.GetWorkflowKey().NamespaceID,
-					WorkflowID:  newContext.GetWorkflowKey().WorkflowID,
-					RunID:       newContext.GetWorkflowKey().RunID,
-					Events:      newEventsReapplyCandidates,
-				},
-			}
-		}
-		if err := c.conflictResolveEventReapply(
-			ctx,
-			shardContext,
-			conflictResolveMode,
-			eventsToApply,
-			newEventsToReapply,
-			// current workflow events will not participate in the events reapplication
-		); err != nil {
-			return err
-		}
+	}
 
+	if err := c.conflictResolveEventReapply(
+		ctx,
+		shardContext,
+		conflictResolveMode,
+		eventsToReapply,
+		// The new run is created by applying events so the history builder in newMutableState contains the events be re-applied.
+		// So we can use newWorkflowEventsSeq directly to reapply events.
+		newWorkflowEventsSeq,
+		// current workflow events will not participate in the events reapplication
+	); err != nil {
+		return err
 	}
 
 	if _, _, _, err := NewTransaction(shardContext).ConflictResolveWorkflowExecution(
@@ -617,6 +595,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 			c.Clear()
 		}
 	}()
+
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
 		updateWorkflowTransactionPolicy,
 	)
@@ -632,6 +611,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 				newContext.Clear()
 			}
 		}()
+
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
 			*newWorkflowTransactionPolicy,
 		)
@@ -664,6 +644,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		shardContext,
 		updateMode,
 		eventsToReapply,
+		// The new run is created by applying events so the history builder in newMutableState contains the events be re-applied.
+		// So we can use newWorkflowEventsSeq directly to reapply events.
 		newWorkflowEventsSeq,
 	); err != nil {
 		return err

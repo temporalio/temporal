@@ -947,25 +947,6 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 		return err
 	}
 
-	lastFirstTxnID, eventsToReapply, err := r.backfillHistory(
-		ctx,
-		sourceCluster,
-		namespaceID,
-		workflowID,
-		runID,
-		// TODO: The original run id is in the workflow started history event but not in mutable state.
-		// Use the history tree id to be the original run id.
-		// https://github.com/temporalio/temporal/issues/6501
-		branchInfo.GetTreeId(),
-		lastEventItem.GetEventId(),
-		lastEventItem.GetVersion(),
-		newHistoryBranchToken,
-		isStateBased,
-	)
-	if err != nil {
-		return err
-	}
-
 	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -977,22 +958,38 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 		r.logger,
 		ns,
 		sourceMutableState,
-		lastFirstTxnID,
+		common.EmptyEventTaskID, // will be updated below
 		lastEventItem.GetVersion(),
 	)
 	if err != nil {
 		return err
 	}
 
-	err = mutableState.SetCurrentBranchToken(newHistoryBranchToken)
+	lastFirstTxnID, err := r.backfillHistory(
+		ctx,
+		sourceCluster,
+		namespaceID,
+		workflowID,
+		runID,
+		// TODO: The original run id is in the workflow started history event but not in mutable state.
+		// Use the history tree id to be the original run id.
+		// https://github.com/temporalio/temporal/issues/6501
+		branchInfo.GetTreeId(),
+		mutableState,
+		lastEventItem.GetEventId(),
+		lastEventItem.GetVersion(),
+		newHistoryBranchToken,
+		isStateBased,
+	)
 	if err != nil {
 		return err
 	}
 
-	if isStateBased {
-		for _, event := range eventsToReapply {
-			mutableState.AddReapplyCandidateEvent(event)
-		}
+	mutableState.GetExecutionInfo().LastFirstEventTxnId = lastFirstTxnID
+
+	err = mutableState.SetCurrentBranchToken(newHistoryBranchToken)
+	if err != nil {
+		return err
 	}
 
 	if newRunInfo != nil {
@@ -1092,11 +1089,12 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	workflowID string,
 	runID string,
 	originalRunID string,
+	mutableState *workflow.MutableStateImpl,
 	lastEventID int64,
 	lastEventVersion int64,
 	branchToken []byte,
 	isStateBased bool,
-) (taskID int64, eventsToReapply []*historypb.HistoryEvent, retError error) {
+) (taskID int64, retError error) {
 
 	if runID != originalRunID {
 		// At this point, it already acquired the workflow lock on the run ID.
@@ -1112,7 +1110,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 			locks.PriorityLow,
 		)
 		if err != nil {
-			return common.EmptyEventTaskID, nil, err
+			return common.EmptyEventTaskID, err
 		}
 		defer func() {
 			if rec := recover(); rec != nil {
@@ -1139,7 +1137,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 			}
 		case *serviceerror.NotFound:
 		default:
-			return common.EmptyEventTaskID, nil, err
+			return common.EmptyEventTaskID, err
 		}
 	}
 
@@ -1157,7 +1155,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	historyBranchUtil := r.executionMgr.GetHistoryBranchUtil()
 	historyBranch, err := historyBranchUtil.ParseHistoryBranchInfo(branchToken)
 	if err != nil {
-		return common.EmptyEventTaskID, nil, err
+		return common.EmptyEventTaskID, err
 	}
 
 	prevTxnID := common.EmptyEventTaskID
@@ -1170,7 +1168,7 @@ BackfillLoop:
 	for remoteHistoryIterator.HasNext() {
 		historyBlob, err := remoteHistoryIterator.Next()
 		if err != nil {
-			return common.EmptyEventTaskID, nil, err
+			return common.EmptyEventTaskID, err
 		}
 
 		if isStateBased {
@@ -1178,9 +1176,11 @@ BackfillLoop:
 			// we still need to reapply events that have been stored in local DB.
 			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
 			if err != nil {
-				return common.EmptyEventTaskID, nil, err
+				return common.EmptyEventTaskID, err
 			}
-			eventsToReapply = append(eventsToReapply, events...)
+			for _, event := range events {
+				mutableState.AddReapplyCandidateEvent(event)
+			}
 		}
 
 		if historyBlob.nodeID <= lastBatchNodeID {
@@ -1210,7 +1210,7 @@ BackfillLoop:
 				currentAncestor = sortedAncestors[sortedAncestorsIdx]
 				branchID = currentAncestor.GetBranchId()
 				if historyBlob.nodeID < currentAncestor.GetBeginNodeId() || historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
-					return common.EmptyEventTaskID, nil, serviceerror.NewInternal(
+					return common.EmptyEventTaskID, serviceerror.NewInternal(
 						fmt.Sprintf("The backfill history blob node id %d is not in acestoer range [%d, %d]",
 							historyBlob.nodeID,
 							currentAncestor.GetBeginNodeId(),
@@ -1230,11 +1230,11 @@ BackfillLoop:
 			runID,
 		)
 		if err != nil {
-			return common.EmptyEventTaskID, nil, err
+			return common.EmptyEventTaskID, err
 		}
 		txnID, err := r.shardContext.GenerateTaskID()
 		if err != nil {
-			return common.EmptyEventTaskID, nil, err
+			return common.EmptyEventTaskID, err
 		}
 
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
@@ -1252,13 +1252,13 @@ BackfillLoop:
 			),
 		})
 		if err != nil {
-			return common.EmptyEventTaskID, nil, err
+			return common.EmptyEventTaskID, err
 		}
 		prevTxnID = txnID
 		prevBranchID = branchID
 	}
 
-	return prevTxnID, eventsToReapply, nil
+	return prevTxnID, nil
 }
 
 func (r *WorkflowStateReplicatorImpl) getHistoryFromLocalPaginationFn(
