@@ -1260,6 +1260,12 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		1000,
 		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registed in a single deployment`,
 	)
+	DeploymentScavengerDuration = NewNamespaceDurationSetting(
+		"deployment.scavenger.duration",
+		24*time.Hour,
+		`DeploymentScavengerDuration is the default duration of a timer for scavenging those deployments that are not scavenged
+		after their retention period.`,
+	)
 	// for matching testing only:
 
 	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(

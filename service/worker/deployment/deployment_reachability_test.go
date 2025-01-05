@@ -46,11 +46,11 @@ func TestMakeDeploymentQuery(t *testing.T) {
 	seriesName := "test-deployment"
 	buildId := "A"
 
-	query := makeDeploymentQuery(seriesName, buildId, true)
+	query := makeDeploymentQuery(seriesName, buildId, true, true)
 	expectedQuery := "BuildIds = 'pinned:test-deployment:A' AND ExecutionStatus = 'Running'"
 	assert.Equal(t, expectedQuery, query)
 
-	query = makeDeploymentQuery(seriesName, buildId, false)
+	query = makeDeploymentQuery(seriesName, buildId, false, true)
 	expectedQuery = "BuildIds = 'pinned:test-deployment:A' AND ExecutionStatus != 'Running'"
 	assert.Equal(t, expectedQuery, query)
 }
@@ -76,8 +76,8 @@ func TestReachable_OpenWorkflow(t *testing.T) {
 	seriesName := "test-deployment"
 	buildId := "A"
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
-	openCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, true)
-	closedCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, false)
+	openCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, true, true)
+	closedCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, false, true)
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &openCountRequest).MaxTimes(2).Return(mkCountResponse(1))
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &closedCountRequest).MaxTimes(2).Return(mkCountResponse(0))
 	testCache := newReachabilityCache(metrics.NoopMetricsHandler, vm, testReachabilityCacheOpenWFsTTL, testReachabilityCacheClosedWFsTTL)
@@ -110,8 +110,8 @@ func TestReachable_ClosedWorkflow(t *testing.T) {
 	seriesName := "test-deployment"
 	buildId := "A"
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
-	openCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, true)
-	closedCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, false)
+	openCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, true, true)
+	closedCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, false, true)
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &openCountRequest).MaxTimes(2).Return(mkCountResponse(0))
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &closedCountRequest).MaxTimes(2).Return(mkCountResponse(1))
 	testCache := newReachabilityCache(metrics.NoopMetricsHandler, vm, testReachabilityCacheOpenWFsTTL, testReachabilityCacheClosedWFsTTL)

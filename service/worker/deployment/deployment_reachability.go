@@ -64,7 +64,7 @@ func getDeploymentReachability(
 	}
 
 	// 2a. Reachable by open pinned workflows
-	countRequest := makeCountRequest(nsId, nsName, seriesName, buildId, true)
+	countRequest := makeCountRequest(nsId, nsName, seriesName, buildId, true, true)
 	exists, lastUpdateTime, err := rc.Get(ctx, countRequest, true)
 	if err != nil {
 		return enumspb.DEPLOYMENT_REACHABILITY_UNSPECIFIED, time.Time{}, err
@@ -74,7 +74,7 @@ func getDeploymentReachability(
 	}
 
 	// 3. Reachable by closed pinned workflows
-	countRequest = makeCountRequest(nsId, nsName, seriesName, buildId, false)
+	countRequest = makeCountRequest(nsId, nsName, seriesName, buildId, false, true)
 	exists, lastUpdateTime, err = rc.Get(ctx, countRequest, false)
 	if err != nil {
 		return enumspb.DEPLOYMENT_REACHABILITY_UNSPECIFIED, time.Time{}, err
@@ -87,29 +87,55 @@ func getDeploymentReachability(
 	return enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE, time.Now(), nil
 }
 
+// isDeploymentDrainedOfOpenWorkflows returns true if the deployment contains no open workflows (all pinned workflows are closed)
+func isDeploymentDrainedOfOpenWorkflows(ctx context.Context, nsId, nsName, seriesName, buildId string, visibilityMgr manager.VisibilityManager) (bool, error) {
+	countRequest := makeCountRequest(nsId, nsName, seriesName, buildId, true, true)
+	countResponse, err := visibilityMgr.CountWorkflowExecutions(ctx, &countRequest)
+	if err != nil {
+		return false, err
+	}
+	return countResponse.Count == 0, nil
+}
+
+// isDeploymentDrainedOfAllWorkflows returns true if the deployment contains no open or closed workflows
+func isDeploymentDrainedOfAllWorkflows(ctx context.Context, nsId, nsName, seriesName, buildId string, visibilityMgr manager.VisibilityManager) (bool, error) {
+	countRequest := makeCountRequest(nsId, nsName, seriesName, buildId, false, false)
+	countResponse, err := visibilityMgr.CountWorkflowExecutions(ctx, &countRequest)
+	if err != nil {
+		return false, err
+	}
+	return countResponse.Count == 0, nil
+}
+
 func makeCountRequest(
-	namespaceId, namespaceName, seriesName, buildId string, open bool,
+	namespaceId, namespaceName, seriesName, buildId string, open bool, filterOnStatus bool,
 ) manager.CountWorkflowExecutionsRequest {
 	return manager.CountWorkflowExecutionsRequest{
 		NamespaceID: namespace.ID(namespaceId),
 		Namespace:   namespace.Name(namespaceName),
-		Query:       makeDeploymentQuery(seriesName, buildId, open),
+		Query:       makeDeploymentQuery(seriesName, buildId, open, filterOnStatus),
 	}
 }
 
-func makeDeploymentQuery(seriesName, buildID string, open bool) string {
+func makeDeploymentQuery(seriesName, buildID string, open bool, filterOnStatus bool) string {
 	var statusFilter string
+	var deploymentQuery string
 	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(&deploymentpb.Deployment{
 		SeriesName: seriesName,
 		BuildId:    buildID,
 	}))
-	if open {
-		statusFilter = "= 'Running'"
+	if filterOnStatus {
+		if open {
+			statusFilter = "= 'Running'"
+		} else {
+			statusFilter = "!= 'Running'"
+		}
+		// todo (carly) part 2: handle null search attribute / unversioned deployment
+		deploymentQuery = fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
 	} else {
-		statusFilter = "!= 'Running'"
+		deploymentQuery = fmt.Sprintf("%s %s", searchattribute.BuildIds, deploymentFilter)
 	}
-	// todo (carly) part 2: handle null search attribute / unversioned deployment
-	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
+	return deploymentQuery
 }
 
 /*

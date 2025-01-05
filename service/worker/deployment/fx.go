@@ -82,7 +82,8 @@ func DeploymentStoreClientProvider(
 			dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc)(),
 			dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc)(),
 		),
-		maxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
+		maxTaskQueuesInDeployment:       dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
+		defaultDurationBeforeScavenging: dynamicconfig.DeploymentScavengerDuration.Get(dc),
 	}
 }
 

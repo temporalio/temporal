@@ -37,17 +37,21 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	deploymentwf "go.temporal.io/server/service/worker/deployment"
@@ -1377,6 +1381,162 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 	s.Nil(cur.CurrentDeploymentInfo.Metadata["key2"])
 	s.Equal(`"val3"`, payload.ToString(cur.CurrentDeploymentInfo.Metadata["key3"]))
 	s.Equal(`"val4"`, payload.ToString(cur.CurrentDeploymentInfo.Metadata["key4"]))
+}
+
+/*
+
+-- Scavenging Deployments
+
+*/
+
+// TestDeploymentDrainedOfOpenWorkflows tests whether the entity workflow is aware when a
+// deployment is drained of all open workflows.
+
+func (s *DeploymentSuite) createDeploymentAndReceiveWorkflowTask(
+	ctx context.Context,
+	deployment *deploymentpb.Deployment,
+	tq *taskqueuepb.TaskQueue,
+) {
+	// Start a deployment workflow
+	go s.pollFromDeployment(ctx, tq, deployment)
+
+	// Wait for the deployment to exist
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
+			Namespace:  s.Namespace(),
+			Deployment: deployment,
+		})
+		a.NoError(err)
+		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
+	}, time.Second*5, time.Millisecond*100)
+}
+
+type PollResponse struct {
+	Response *workflowservice.PollWorkflowTaskQueueResponse
+	Error    error
+}
+
+// pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
+func (s *DeploymentSuite) pollFromDeploymentReceiveWorkflowTask(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
+	deployment *deploymentpb.Deployment, taskCh chan *PollResponse) {
+	resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace(),
+		TaskQueue: taskQueue,
+		Identity:  "random",
+		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			UseVersioning:        true,
+			BuildId:              deployment.BuildId,
+			DeploymentSeriesName: deployment.SeriesName,
+		},
+	})
+	taskCh <- &PollResponse{Response: resp, Error: err}
+}
+
+func (s *DeploymentSuite) TestDeploymentDrainedOfOpenWorkflows() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	// presence of internally used delimiters (:) or escape
+	// characters shouldn't break functionality
+	seriesName := testcore.RandomizeStr("my-series|:|:")
+	buildID := testcore.RandomizeStr("bgt:|")
+	taskQueue := &taskqueuepb.TaskQueue{Name: "deployment-test", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	workerDeployment := &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
+	}
+
+	// Start a poller process in a separate goroutine which when receives a workflow task,
+	// will respond with a command to complete the workflow.
+	taskCh := make(chan *PollResponse)
+	go s.pollFromDeploymentReceiveWorkflowTask(ctx, taskQueue, workerDeployment, taskCh)
+
+	// Verify that the deployment is reachable
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		desc, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
+			Namespace:  s.Namespace(),
+			Deployment: workerDeployment,
+		})
+		a.NoError(err)
+		a.NotNil(desc.GetDeploymentInfo().GetDeployment())
+	}, time.Second*5, time.Millisecond*100)
+
+	// execute a workflow
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: taskQueue.Name}, "wf")
+	s.NoError(err)
+
+	// update the workflow to be versioned
+	unversionedWFExec := &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	}
+	updateOpts := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: workerDeployment,
+		},
+	}
+	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                s.Namespace(),
+		WorkflowExecution:        unversionedWFExec,
+		WorkflowExecutionOptions: updateOpts,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	s.NoError(err)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), updateOpts))
+
+	// Wait for the poller to receive a workflow task
+	var pollResp *PollResponse
+	select {
+	case pollResp = <-taskCh:
+		s.NoError(pollResp.Error)   // First check if there was an error
+		s.NotNil(pollResp.Response) // Then verify we got a response
+	case <-ctx.Done():
+		s.Fail("Timed out waiting for workflow task")
+		return
+	}
+
+	// Complete the workflow
+	s.NotNil(pollResp.Response.TaskToken)
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "random",
+		TaskToken: pollResp.Response.TaskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				},
+			},
+		}},
+	})
+	s.NoError(err)
+
+	// Query deployment workflow
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		queryResp, err := s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+			Namespace: s.Namespace(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: deploymentwf.GenerateDeploymentWorkflowID(seriesName, buildID),
+			},
+			Query: &querypb.WorkflowQuery{
+				QueryType: deploymentwf.QueryDescribeDeployment,
+			},
+		})
+		a.NoError(err)
+		a.NotNil(queryResp)
+		a.NotNil(queryResp.GetQueryResult())
+
+		// convert payloads to deployment local state
+		deploymentLocalState := &deploymentspb.DeploymentLocalState{}
+		payloads.Decode(queryResp.GetQueryResult(), deploymentLocalState)
+		a.NotNil(deploymentLocalState.GetDrainedStateInfo())
+	}, time.Second*5, time.Millisecond*100)
 }
 
 // Name is used by testvars. We use a shorten test name in variables so that physical task queue IDs

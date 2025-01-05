@@ -731,3 +731,151 @@ func (this *DeploymentSeriesWorkflowMemo) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type IsDeploymentDrainedOfOpenWorkflowsRequest to the protobuf v3 wire format
+func (val *IsDeploymentDrainedOfOpenWorkflowsRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type IsDeploymentDrainedOfOpenWorkflowsRequest from the protobuf v3 wire format
+func (val *IsDeploymentDrainedOfOpenWorkflowsRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *IsDeploymentDrainedOfOpenWorkflowsRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two IsDeploymentDrainedOfOpenWorkflowsRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *IsDeploymentDrainedOfOpenWorkflowsRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *IsDeploymentDrainedOfOpenWorkflowsRequest
+	switch t := that.(type) {
+	case *IsDeploymentDrainedOfOpenWorkflowsRequest:
+		that1 = t
+	case IsDeploymentDrainedOfOpenWorkflowsRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type IsDeploymentDrainedOfOpenWorkflowsResponse to the protobuf v3 wire format
+func (val *IsDeploymentDrainedOfOpenWorkflowsResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type IsDeploymentDrainedOfOpenWorkflowsResponse from the protobuf v3 wire format
+func (val *IsDeploymentDrainedOfOpenWorkflowsResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *IsDeploymentDrainedOfOpenWorkflowsResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two IsDeploymentDrainedOfOpenWorkflowsResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *IsDeploymentDrainedOfOpenWorkflowsResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *IsDeploymentDrainedOfOpenWorkflowsResponse
+	switch t := that.(type) {
+	case *IsDeploymentDrainedOfOpenWorkflowsResponse:
+		that1 = t
+	case IsDeploymentDrainedOfOpenWorkflowsResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type IsDeploymentDrainedOfAllWorkflowsRequest to the protobuf v3 wire format
+func (val *IsDeploymentDrainedOfAllWorkflowsRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type IsDeploymentDrainedOfAllWorkflowsRequest from the protobuf v3 wire format
+func (val *IsDeploymentDrainedOfAllWorkflowsRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *IsDeploymentDrainedOfAllWorkflowsRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two IsDeploymentDrainedOfAllWorkflowsRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *IsDeploymentDrainedOfAllWorkflowsRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *IsDeploymentDrainedOfAllWorkflowsRequest
+	switch t := that.(type) {
+	case *IsDeploymentDrainedOfAllWorkflowsRequest:
+		that1 = t
+	case IsDeploymentDrainedOfAllWorkflowsRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type IsDeploymentDrainedOfAllWorkflowsResponse to the protobuf v3 wire format
+func (val *IsDeploymentDrainedOfAllWorkflowsResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type IsDeploymentDrainedOfAllWorkflowsResponse from the protobuf v3 wire format
+func (val *IsDeploymentDrainedOfAllWorkflowsResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *IsDeploymentDrainedOfAllWorkflowsResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two IsDeploymentDrainedOfAllWorkflowsResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *IsDeploymentDrainedOfAllWorkflowsResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *IsDeploymentDrainedOfAllWorkflowsResponse
+	switch t := that.(type) {
+	case *IsDeploymentDrainedOfAllWorkflowsResponse:
+		that1 = t
+	case IsDeploymentDrainedOfAllWorkflowsResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

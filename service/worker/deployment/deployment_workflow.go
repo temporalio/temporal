@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -80,18 +81,75 @@ func (d *DeploymentWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	forceCAN := false
 
+	timerScheduled := false
+
 	selector := workflow.NewSelector(ctx)
 	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		// Process Signal
 		forceCAN = true
 	})
 
-	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
+	for {
+		if !timerScheduled && d.State.DrainedStateInfo != nil {
+			timerFuture, cancelHandler := d.createScavengerTimer(ctx)
+			selector.AddFuture(timerFuture, func(f workflow.Future) {
+				if d.isDeploymentScavengeable(ctx) {
+					timerScheduled = true
+					forceCAN = true
+					cancelHandler()
+				}
+			})
+		}
+
+		// Break iff we have no pending signals AND if CAN is suggested or forced.
+		if (workflow.GetInfo(ctx).GetContinueAsNewSuggested() || forceCAN) && !selector.HasPending() {
+			break
+		}
 		selector.Select(ctx)
 	}
 
 	// Done processing signals before CAN
 	d.signalsCompleted = true
+}
+
+func (d *DeploymentWorkflowRunner) createScavengerTimer(ctx workflow.Context) (workflow.Future, workflow.CancelFunc) {
+	var timerDuration time.Duration
+
+	if d.State.DrainedStateInfo.ScavengerDurationTime != nil {
+		// Use configured duration
+		if duration, err := d.a.getDefaultDurationBeforeScavenging(); err == nil {
+			timerDuration = duration
+		}
+	} else {
+		// Calculate remaining time based on retention
+		if retention, err := d.a.GetNamespaceRetention(); err == nil {
+			timerDuration = retention - workflow.Now(ctx).Sub(d.State.DrainedStateInfo.CreateTime.AsTime())
+		}
+	}
+
+	if timerDuration <= 0 {
+		d.logger.Error("Could not create scavenger timer")
+		return nil, nil
+	}
+
+	timerCtx, cancelHandler := workflow.WithCancel(ctx)
+	timerFuture := workflow.NewTimer(timerCtx, timerDuration)
+	return timerFuture, cancelHandler
+}
+
+// isDeploymentScavengeable returns true if the deployment is in a state where it can be scavenged.
+// This is possible when a deployment is:
+// 1. Is Unreachable (has no open or closed workflows)
+// 2. No pending pollers (not sure how to get this info)
+// 3. No pending updates and signals (will be gracefully handled by the listenToSignals function so no need to check here)
+func (d *DeploymentWorkflowRunner) isDeploymentScavengeable(ctx workflow.Context) bool {
+	if d.State.DrainedStateInfo == nil {
+		return false
+	}
+	if !d.IsDeploymentDrainedOfAllWorkflows(ctx) {
+		return false
+	}
+	return false
 }
 
 func (d *DeploymentWorkflowRunner) run(ctx workflow.Context) error {
@@ -143,6 +201,14 @@ func (d *DeploymentWorkflowRunner) run(ctx workflow.Context) error {
 	// Listen to signals in a different goroutine to make business logic clearer
 	workflow.Go(ctx, d.listenToSignals)
 
+	// TODO (shivam): - Until deployment states are finalized, this go-routine runs regardless of the current state of the deployment.
+	// After deployment states are implemented, the go-routine will only run when the deployment is in "Draining State".
+	workflow.Go(ctx, func(ctx workflow.Context) {
+		d.retryWithBackoff(ctx, func(ctx workflow.Context) bool {
+			return d.IsDeploymentDrainedOfOpenWorkflows(ctx)
+		})
+	})
+
 	// Wait on any pending signals and updates.
 	err := workflow.Await(ctx, func() bool { return d.pendingUpdates == 0 && d.signalsCompleted })
 	if err != nil {
@@ -163,6 +229,67 @@ func (d *DeploymentWorkflowRunner) run(ctx workflow.Context) error {
 
 	d.logger.Debug("Deployment doing continue-as-new")
 	return workflow.NewContinueAsNewError(ctx, DeploymentWorkflow, d.DeploymentWorkflowArgs)
+}
+
+// TODO (Shivam) - should only run when deployment enters "Draining State"
+func (d *DeploymentWorkflowRunner) retryWithBackoff(ctx workflow.Context, fn func(workflow.Context) bool) {
+	backoff := 1 * time.Millisecond
+	maxBackoff := 20 * time.Minute
+
+	// todo (Shivam) -if this function is sleeping and the calling main workflow thread CAN's, this gets cancelled abruptly.
+
+	for {
+		if shouldStop := fn(ctx); shouldStop {
+			return // Stop retrying if function signals completion
+		}
+
+		if err := workflow.Sleep(ctx, backoff); err != nil {
+			return // Context canceled
+		}
+
+		// Exponential backoff with max cap
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
+}
+
+func (d *DeploymentWorkflowRunner) IsDeploymentDrainedOfOpenWorkflows(ctx workflow.Context) bool {
+	var resp *deploymentspb.IsDeploymentDrainedOfOpenWorkflowsResponse
+
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	err := workflow.ExecuteActivity(activityCtx, d.a.IsDeploymentDrainedOfOpenWorkflows, &deploymentspb.IsDeploymentDrainedOfOpenWorkflowsRequest{
+		Deployment: d.State.Deployment,
+	}).Get(ctx, &resp)
+	if err != nil {
+		d.logger.Error("error when checking if deployment is drained", "error", err)
+		return false
+	}
+
+	if resp.IsDrained {
+		d.State.DrainedStateInfo = &deploymentspb.DeploymentLocalState_StateInfo{
+			CreateTime: timestamppb.New(workflow.Now(ctx)),
+		}
+		return true
+	}
+
+	return false
+}
+
+func (d *DeploymentWorkflowRunner) IsDeploymentDrainedOfAllWorkflows(ctx workflow.Context) bool {
+	var resp *deploymentspb.IsDeploymentDrainedOfAllWorkflowsResponse
+
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	err := workflow.ExecuteActivity(activityCtx, d.a.IsDeploymentDrainedOfAllWorkflows, &deploymentspb.IsDeploymentDrainedOfAllWorkflowsRequest{
+		Deployment: d.State.Deployment,
+	}).Get(ctx, &resp)
+	if err != nil {
+		d.logger.Error("error when checking if deployment is drained of all workflows", "error", err)
+		return false
+	}
+
+	return resp.IsDrained
 }
 
 func (d *DeploymentWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInDeploymentArgs) error {
@@ -291,6 +418,8 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 	if set := args.SetCurrent; set != nil {
 		if set.LastBecameCurrentTime == nil {
 			d.State.IsCurrent = false
+
+			// Deployment workflow enters the "Draining State"
 		} else {
 			d.State.IsCurrent = true
 			d.State.LastBecameCurrentTime = set.LastBecameCurrentTime

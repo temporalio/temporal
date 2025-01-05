@@ -102,6 +102,8 @@ type DeploymentStoreClient interface {
 		requestID string,
 	) (*deploymentpb.DeploymentInfo, *deploymentpb.DeploymentInfo, error)
 
+	// TODO (Shivam): Should we make these methods public?
+
 	// Only used internally by deployment workflow:
 	StartDeploymentSeries(
 		ctx context.Context,
@@ -120,6 +122,23 @@ type DeploymentStoreClient interface {
 		identity string,
 		requestID string,
 	) (*deploymentspb.SyncDeploymentStateResponse, error)
+
+	// Only used internally by deployment workflow:
+	IsDeploymentDrainedOfOpenWorkflows(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deployment *deploymentpb.Deployment,
+	) (bool, error)
+
+	// Only used internally by deployment workflow:
+	IsDeploymentDrainedOfAllWorkflows(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deployment *deploymentpb.Deployment,
+	) (bool, error)
+
+	// Only used internally by deployment workflow:
+	getDefaultDurationBeforeScavenging(namespace string) time.Duration
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
@@ -128,18 +147,35 @@ type ErrRegister struct{ error }
 
 // implements DeploymentStoreClient
 type DeploymentClientImpl struct {
-	logger                    log.Logger
-	historyClient             historyservice.HistoryServiceClient
-	visibilityManager         manager.VisibilityManager
-	maxIDLengthLimit          dynamicconfig.IntPropertyFn
-	visibilityMaxPageSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	maxTaskQueuesInDeployment dynamicconfig.IntPropertyFnWithNamespaceFilter
-	reachabilityCache         reachabilityCache
+	logger                          log.Logger
+	historyClient                   historyservice.HistoryServiceClient
+	visibilityManager               manager.VisibilityManager
+	maxIDLengthLimit                dynamicconfig.IntPropertyFn
+	visibilityMaxPageSize           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	maxTaskQueuesInDeployment       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	reachabilityCache               reachabilityCache
+	defaultDurationBeforeScavenging dynamicconfig.DurationPropertyFnWithNamespaceFilter
 }
 
 var _ DeploymentStoreClient = (*DeploymentClientImpl)(nil)
 
 var errRetry = errors.New("retry update")
+
+func (d *DeploymentClientImpl) IsDeploymentDrainedOfOpenWorkflows(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deployment *deploymentpb.Deployment,
+) (bool, error) {
+	return isDeploymentDrainedOfOpenWorkflows(ctx, namespaceEntry.ID().String(), namespaceEntry.Name().String(), deployment.SeriesName, deployment.BuildId, d.visibilityManager)
+}
+
+func (d *DeploymentClientImpl) IsDeploymentDrainedOfAllWorkflows(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deployment *deploymentpb.Deployment,
+) (bool, error) {
+	return isDeploymentDrainedOfAllWorkflows(ctx, namespaceEntry.ID().String(), namespaceEntry.Name().String(), deployment.SeriesName, deployment.BuildId, d.visibilityManager)
+}
 
 func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	ctx context.Context,
@@ -811,4 +847,8 @@ func stateToInfo(state *deploymentspb.DeploymentLocalState) *deploymentpb.Deploy
 		Metadata:       state.Metadata,
 		IsCurrent:      state.IsCurrent,
 	}
+}
+
+func (d *DeploymentClientImpl) getDefaultDurationBeforeScavenging(namespace string) time.Duration {
+	return d.defaultDurationBeforeScavenging(namespace)
 }

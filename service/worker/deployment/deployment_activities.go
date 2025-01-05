@@ -28,6 +28,7 @@ import (
 	"cmp"
 	"context"
 	"sync"
+	"time"
 
 	"go.temporal.io/sdk/activity"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -115,4 +116,34 @@ func (a *DeploymentActivities) CheckUserDataPropagation(ctx context.Context, inp
 		err = cmp.Or(err, <-errs)
 	}
 	return err
+}
+
+func (a *DeploymentActivities) IsDeploymentDrainedOfOpenWorkflows(ctx context.Context, input *deploymentspb.IsDeploymentDrainedOfOpenWorkflowsRequest) (*deploymentspb.IsDeploymentDrainedOfOpenWorkflowsResponse, error) {
+	logger := activity.GetLogger(ctx)
+
+	response, err := a.deploymentClient.IsDeploymentDrainedOfOpenWorkflows(ctx, a.namespace, input.Deployment)
+	if err != nil {
+		logger.Error("error when checking if deployment reachability", "error", err)
+		return nil, err
+	}
+	return &deploymentspb.IsDeploymentDrainedOfOpenWorkflowsResponse{IsDrained: response}, nil
+}
+
+func (a *DeploymentActivities) IsDeploymentDrainedOfAllWorkflows(ctx context.Context, input *deploymentspb.IsDeploymentDrainedOfAllWorkflowsRequest) (*deploymentspb.IsDeploymentDrainedOfAllWorkflowsResponse, error) {
+	logger := activity.GetLogger(ctx)
+
+	response, err := a.deploymentClient.IsDeploymentDrainedOfAllWorkflows(ctx, a.namespace, input.Deployment)
+	if err != nil {
+		logger.Error("error when checking if deployment is scavenged", "error", err)
+		return nil, err
+	}
+	return &deploymentspb.IsDeploymentDrainedOfAllWorkflowsResponse{IsDrained: response}, nil
+}
+
+func (a *DeploymentActivities) GetNamespaceRetention() (time.Duration, error) {
+	return a.namespace.Retention(), nil
+}
+
+func (a *DeploymentActivities) getDefaultDurationBeforeScavenging() (time.Duration, error) {
+	return a.deploymentClient.getDefaultDurationBeforeScavenging(a.namespace.Name().String()), nil
 }

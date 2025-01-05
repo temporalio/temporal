@@ -56,6 +56,13 @@ message DeploymentLocalState {
         // truth for that is the value at the root of DeploymentLocalState.
         map<int32, TaskQueueData> task_queues = 1;
     }
+
+    StateInfo drained_state_info = 8;
+    message StateInfo {
+        google.protobuf.Timestamp create_time = 1;
+        // only present if the deployment is in a drained state
+        google.protobuf.Timestamp scavenger_duration_time = 2;  
+    }
 }
 
 // used as deployment workflow input:
@@ -177,4 +184,23 @@ message DeploymentSeriesWorkflowMemo {
     string series_name = 1;
     string current_build_id = 2;
     google.protobuf.Timestamp current_changed_time = 3;
+}
+
+// used as deployment workflow activity input:
+message IsDeploymentDrainedOfOpenWorkflowsRequest {
+    temporal.api.deployment.v1.Deployment deployment = 1;
+}
+// used as deployment workflow activity output:
+message IsDeploymentDrainedOfOpenWorkflowsResponse {
+    bool is_drained = 1;
+}
+
+// used as deployment workflow activity input:
+message IsDeploymentDrainedOfAllWorkflowsRequest {
+    temporal.api.deployment.v1.Deployment deployment = 1;
+}
+
+// used as deployment workflow activity output:
+message IsDeploymentDrainedOfAllWorkflowsResponse {
+    bool is_drained = 1;
 }
