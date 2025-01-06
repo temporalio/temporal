@@ -1,4 +1,4 @@
-package scheduler2_test
+package scheduler2
 
 import (
 	"fmt"
@@ -7,11 +7,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/api/schedule/v1"
-	"go.temporal.io/server/components/scheduler2"
 )
 
 func TestGenerateRequestID(t *testing.T) {
-	scheduler := scheduler2.Scheduler{
+	scheduler := Scheduler{
 		SchedulerInternal: &schedule.SchedulerInternal{
 			Namespace:     "ns",
 			NamespaceId:   "nsid",
@@ -23,7 +22,7 @@ func TestGenerateRequestID(t *testing.T) {
 	actualTime := time.Now()
 
 	// No backfill ID given.
-	actual := scheduler2.GenerateRequestID(
+	actual := generateRequestID(
 		scheduler,
 		"",
 		nominalTime,
@@ -37,7 +36,7 @@ func TestGenerateRequestID(t *testing.T) {
 	require.Equal(t, expected, actual)
 
 	// Backfill ID given.
-	actual = scheduler2.GenerateRequestID(
+	actual = generateRequestID(
 		scheduler,
 		"backfillid",
 		nominalTime,
