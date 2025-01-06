@@ -441,7 +441,6 @@ func (p *workflowTaskPoller) pollAndHandleTask(
 	if err != nil {
 		return nil, fmt.Errorf("failed to poll workflow task: %w", err)
 	}
-	// could maybe have type assertions?
 	return p.handleTask(ctx, opts, task, handler)
 }
 
