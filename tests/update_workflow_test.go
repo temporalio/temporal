@@ -1381,10 +1381,10 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 
 			// Drain existing first WT from regular task queue, but respond with sticky queue enabled response, next WT will go to sticky queue.
 			_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
-				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
-					return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
 						StickyAttributes: tv.StickyExecutionAttributes(3 * time.Second),
-					}}, nil
+					}, nil
 				})
 			s.NoError(err)
 
@@ -1393,7 +1393,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 				res, err := s.TaskPoller.
 					PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: tv.StickyTaskQueue()}).
 					HandleTask(tv,
-						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 							// This WT contains partial history because sticky was enabled.
 							s.EqualHistory(`
 						  4 WorkflowTaskCompleted
@@ -1406,15 +1406,14 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 							s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 							s.EqualValues(5, updRequestMsg.GetEventId())
 
-							return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+							return &workflowservice.RespondWorkflowTaskCompletedRequest{
 								Commands: s.UpdateAcceptCompleteCommands(tv, "1"),
 								Messages: s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"),
-							}}, nil
+							}, nil
 						})
 				require.NoError(s.T(), err)
 				require.NotNil(s.T(), res)
-				require.NotNil(s.T(), res.WorkflowTaskCompletedResponse)
-				require.EqualValues(s.T(), 0, res.WorkflowTaskCompletedResponse.ResetHistoryEventId)
+				require.EqualValues(s.T(), 0, res.ResetHistoryEventId)
 			}()
 
 			// This is to make sure that sticky poller above reached server first.
@@ -1627,7 +1626,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Re
 
 	// Process update in workflow.
 	res, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.EqualHistory(`
 			 1 WorkflowExecutionStarted
 			 2 WorkflowTaskScheduled
@@ -1644,14 +1643,14 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Re
 			s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
 			s.EqualValues(5, updRequestMsg.GetEventId())
 
-			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Messages: s.UpdateRejectMessages(tv, updRequestMsg, "1"),
-			}}, nil
+			}, nil
 		})
 	s.NoError(err)
 	updateResult := <-updateResultCh
 	s.Equal("rejection-of-"+tv.UpdateID("1"), updateResult.GetOutcome().GetFailure().GetMessage())
-	s.EqualValues(3, res.WorkflowTaskCompletedResponse.ResetHistoryEventId)
+	s.EqualValues(3, res.ResetHistoryEventId)
 
 	// Send signal to create WT.
 	err = s.SendSignal(s.Namespace(), tv.WorkflowExecution(), tv.Any().String(), tv.Any().Payloads(), tv.Any().String())
@@ -1659,7 +1658,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Re
 
 	// Process signal and complete workflow.
 	res, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.EqualHistory(`
 			 1 WorkflowExecutionStarted
 			 2 WorkflowTaskScheduled
@@ -1669,7 +1668,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Re
 			 6 WorkflowTaskScheduled
 			 7 WorkflowTaskStarted`, task.History)
 
-			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Commands: []*commandpb.Command{
 					{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -1678,7 +1677,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Re
 						},
 					},
 				},
-			}}, nil
+			}, nil
 		})
 	s.NoError(err)
 	s.NotNil(res)
@@ -2210,7 +2209,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 
 	// Try to accept update in workflow: get malformed response.
 	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.EqualHistory(`
 			  1 WorkflowExecutionStarted
 			  2 WorkflowTaskScheduled
@@ -2221,7 +2220,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 			`, task.History)
 
 			updRequestMsg := task.Messages[0]
-			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Commands: s.UpdateAcceptCommands(tv, "1"),
 				// Emulate bug in worker/SDK update handler code. Return malformed acceptance response.
 				Messages: []*protocolpb.Message{
@@ -2236,7 +2235,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 						}),
 					},
 				},
-			}}, nil
+			}, nil
 		})
 	s.Error(err)
 	s.Contains(err.Error(), "wasn't found")
@@ -2246,7 +2245,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
 	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			// 2nd attempt has same updates attached to it.
 			updRequestMsg := task.Messages[0]
 			s.EqualValues(8, updRequestMsg.GetEventId())
@@ -2266,7 +2265,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 
 	// Try to accept update in workflow 3rd time: get error. Poller will fail WT.
 	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			// 3rd attempt UpdateWorkflowExecution call has timed out but the
 			// update is still running
 			updRequestMsg := task.Messages[0]
@@ -2280,7 +2279,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 
 	// Complete workflow.
 	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.EqualHistory(`
 			  1 WorkflowExecutionStarted
 			  2 WorkflowTaskScheduled
@@ -2292,14 +2291,14 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 			  8 WorkflowTaskScheduled
 			  9 WorkflowTaskStarted`, task.History)
 
-			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Commands: []*commandpb.Command{
 					{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
 					},
 				},
-			}}, nil
+			}, nil
 		})
 	s.NoError(err)
 
@@ -2694,10 +2693,10 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Schedul
 	// Drain first WT and respond with sticky enabled response to enable sticky task queue.
 	stickyScheduleToStartTimeout := 1 * time.Second
 	_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
-			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				StickyAttributes: tv.StickyExecutionAttributes(stickyScheduleToStartTimeout),
-			}}, nil
+			}, nil
 		})
 	s.NoError(err)
 
@@ -2709,7 +2708,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Schedul
 
 	// Try to process update in workflow, poll from normal task queue.
 	res, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			// Speculative WFT timed out on sticky task queue. Server sent full history with sticky timeout event.
 			s.EqualHistory(`
 				1 WorkflowExecutionStarted
@@ -2722,9 +2721,9 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Schedul
 				8 WorkflowTaskStarted`, task.History)
 
 			// Reject update, but WFT will still be in the history due to timeout on sticky queue.
-			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Messages: s.UpdateRejectMessages(tv, task.Messages[0], "1"),
-			}}, nil
+			}, nil
 		})
 	s.NoError(err)
 	s.NotNil(res)
@@ -3238,7 +3237,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbe
 	// Heartbeat from speculative WT (no messages, no commands).
 	var updRequestMsg *protocolpb.Message
 	res, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.EqualHistory(`
 			  1 WorkflowExecutionStarted
 			  2 WorkflowTaskScheduled
@@ -3252,17 +3251,17 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbe
 			updRequestMsg = task.Messages[0]
 			s.EqualValues(5, updRequestMsg.GetEventId())
 
-			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				ReturnNewWorkflowTask:      true,
 				ForceCreateNewWorkflowTask: true,
-			}}, nil
+			}, nil
 		})
 	s.NoError(err)
 
 	// Reject update from workflow.
 	updateResp, err := s.TaskPoller.HandleWorkflowTask(tv,
-		res.WorkflowTaskCompletedResponse.GetWorkflowTask(),
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
+		res.GetWorkflowTask(),
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.EqualHistory(`
 			  7 WorkflowTaskCompleted
 			  8 WorkflowTaskScheduled // New WT (after heartbeat) is normal and won't disappear from the history after reject.
@@ -3271,17 +3270,16 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbe
 
 			s.Empty(task.Messages)
 
-			return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Messages: s.UpdateRejectMessages(tv, updRequestMsg, "1"),
-			}}, nil
+			}, nil
 		})
 	s.NoError(err)
 	s.NotNil(updateResp)
-	s.NotNil(updateResp.WorkflowTaskCompletedResponse)
 
 	updateResult := <-updateResultCh
 	s.Equal("rejection-of-"+tv.UpdateID("1"), updateResult.GetOutcome().GetFailure().GetMessage())
-	s.EqualValues(0, updateResp.WorkflowTaskCompletedResponse.ResetHistoryEventId, "no reset of event ID should happened after update rejection because of heartbeat")
+	s.EqualValues(0, updateResp.ResetHistoryEventId, "no reset of event ID should happened after update rejection because of heartbeat")
 
 	events := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
 
@@ -4946,10 +4944,10 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
 
 					_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
-						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
-							return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+							return &workflowservice.RespondWorkflowTaskCompletedRequest{
 								Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
-							}}, nil
+							}, nil
 						})
 					s.NoError(err)
 
@@ -4984,10 +4982,10 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
 
 					_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
-						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
-							return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+							return &workflowservice.RespondWorkflowTaskCompletedRequest{
 								Messages: s.UpdateRejectMessages(tv, task.Messages[0], "1"),
-							}}, nil
+							}, nil
 						})
 					s.NoError(err)
 
@@ -5036,10 +5034,10 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
 
 				_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
-					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
-						return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+						return &workflowservice.RespondWorkflowTaskCompletedRequest{
 							Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
-						}}, nil
+						}, nil
 					})
 				s.NoError(err)
 
@@ -5086,10 +5084,10 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
 
 				_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
-					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
-						return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+						return &workflowservice.RespondWorkflowTaskCompletedRequest{
 							Messages: s.UpdateRejectMessages(tv, task.Messages[0], "1"),
-						}}, nil
+						}, nil
 					})
 				s.NoError(err)
 
@@ -5134,10 +5132,10 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			s.NoError(err)
 
 			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
-				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
-					return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
 						Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
-					}}, nil
+					}, nil
 				})
 			s.NoError(err)
 
@@ -5210,10 +5208,10 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					// 1st
 					uwsCh1 := sendUpdateWithStart(testcore.NewContext(), startReq, updReq)
 					_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
-						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
-							return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+							return &workflowservice.RespondWorkflowTaskCompletedRequest{
 								Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
-							}}, nil
+							}, nil
 						})
 					s.NoError(err)
 					uwsRes1 := <-uwsCh1
@@ -5242,7 +5240,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			tv := testvars.New(s.T())
 
 			// start and terminate workflow
-			_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
+			initialWorkflow, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
 			s.NoError(err)
 
 			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
@@ -5264,10 +5262,10 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
 
 			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
-				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*taskpoller.TaskCompletedRequest, error) {
-					return &taskpoller.TaskCompletedRequest{WorkflowTaskCompletedRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
 						Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
-					}}, nil
+					}, nil
 				})
 			s.NoError(err)
 
@@ -5277,6 +5275,13 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 			s.True(startResp.Started)
 			s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+
+			// ensure terminated workflow is not locked by update-with-start
+			err = s.SendSignal(s.Namespace(), &commonpb.WorkflowExecution{
+				WorkflowId: tv.WorkflowID(),
+				RunId:      initialWorkflow.RunId,
+			}, tv.Any().String(), tv.Any().Payloads(), tv.Any().String())
+			s.ErrorContains(err, "workflow execution already completed")
 
 			// poll update to ensure same outcome is returned
 			pollRes, err := s.pollUpdate(tv, "1",
@@ -5338,7 +5343,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
 		s.Len(errs, 2)
 		s.Equal("Operation was aborted.", errs[0].Error())
-		s.Contains(errs[1].Error(), "limit on number of total updates has been reached")
+		s.Contains(errs[1].Error(), "limit on the total number of distinct updates in this workflow has been reached")
 	})
 }
 
