@@ -153,8 +153,6 @@ message NextTimeCache {
 
 // State machine scheduler internal state.
 message SchedulerInternal {
-    temporal.server.api.enums.v1.Scheduler2State state = 1;
-
     // Scheduler request parameters and metadata. 
     temporal.api.schedule.v1.Schedule schedule = 2;
     temporal.api.schedule.v1.ScheduleInfo info = 3;
@@ -172,8 +170,6 @@ message SchedulerInternal {
 
 // State machine scheduler's Generator internal state.
 message GeneratorInternal {
-    temporal.server.api.enums.v1.SchedulerGeneratorState state = 1;
-
     // Generator waits for the next_invocation_time before buffering more actions.
     google.protobuf.Timestamp next_invocation_time = 2;
 
