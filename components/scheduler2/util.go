@@ -8,9 +8,9 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 )
 
-// ValidateTask ensures that the given transition is possible with the current
+// validateTaskTransition ensures that the given transition is possible with the current
 // state machine state.
-func ValidateTask[
+func validateTaskTransition[
 	S comparable,
 	SM hsm.StateMachine[S],
 	E any](node *hsm.Node, transition hsm.Transition[S, SM, E]) error {
@@ -33,15 +33,15 @@ func ValidateTask[
 	return nil
 }
 
-// Generates a deterministic request ID for a buffered action's time. The request
-// ID is deterministic because the jittered actual time (as well as the spec's
-// nominal time) is, in turn, also deterministic.
+// generateRequestID generates a deterministic request ID for a buffered action's
+// time. The request ID is deterministic because the jittered actual time (as
+// well as the spec's nominal time) is, in turn, also deterministic.
 //
 // backfillID should be left blank for actions that are being started
 // automatically, based on the schedule spec. It must be set for backfills,
 // as backfills may generate buffered actions that overlap with both
 // automatically-buffered actions, as well as other requested backfills.
-func GenerateRequestID(scheduler Scheduler, backfillID string, nominal, actual time.Time) string {
+func generateRequestID(scheduler Scheduler, backfillID string, nominal, actual time.Time) string {
 	if backfillID == "" {
 		backfillID = "auto"
 	}
