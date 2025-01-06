@@ -279,6 +279,7 @@ message WorkflowExecutionInfo {
     // Should be deprecated once the transition history is fully launched
     repeated VersionedTransition previous_transition_history = 100;
     VersionedTransition last_transition_history_break_point = 101;
+
 }
 
 message ExecutionStats {
@@ -427,6 +428,14 @@ message OutboundTaskInfo {
     string destination = 7;
     // If task addresses a sub-statemachine (e.g. callback), this field will be set.
     StateMachineTaskInfo state_machine_info = 8;
+}
+
+message NexusInvocationTaskInfo {
+    int32 attempt = 1;
+}
+
+message NexusCancelationTaskInfo {
+    int32 attempt = 1;
 }
 
 // activity_map column

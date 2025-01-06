@@ -171,41 +171,47 @@ func Invoke(
 	}
 
 	// workflow was already started, ...
-	if currentWorkflowLease != nil && currentWorkflowLease.GetMutableState().IsWorkflowExecutionRunning() {
-		switch conflictPolicy {
-		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
-			// ... skip the start and only send the update
-			// NOTE: currentWorkflowLease will be released by the function
-			return updateWorkflow(ctx, shardContext, currentWorkflowLease, updater)
-
-		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL:
-			// ... if same request ID, just send update
-			// NOTE: currentWorkflowLease will be released by the function
-			if dedup(startReq, currentWorkflowLease) {
+	if currentWorkflowLease != nil {
+		if !currentWorkflowLease.GetMutableState().IsWorkflowExecutionRunning() {
+			// ... but cannot receive an update since it's not running.
+			currentWorkflowLease.GetReleaseFn()(nil)
+		} else {
+			// and is running, ...
+			switch conflictPolicy {
+			case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
+				// ... skip the start and only send the update
+				// NOTE: currentWorkflowLease will be released by the function
 				return updateWorkflow(ctx, shardContext, currentWorkflowLease, updater)
+
+			case enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL:
+				// ... if same request ID, just send update
+				// NOTE: currentWorkflowLease will be released by the function
+				if dedup(startReq, currentWorkflowLease) {
+					return updateWorkflow(ctx, shardContext, currentWorkflowLease, updater)
+				}
+
+				// ... otherwise, abort the entire operation
+				currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
+				wfKey := currentWorkflowLease.GetContext().GetWorkflowKey()
+				err = serviceerror.NewWorkflowExecutionAlreadyStarted(
+					fmt.Sprintf("Workflow execution is already running. WorkflowId: %v, RunId: %v.", wfKey.WorkflowID, wfKey.RunID),
+					startReq.StartRequest.RequestId,
+					wfKey.RunID,
+				)
+				return nil, newMultiOpError(err, multiOpAbortedErr)
+
+			case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
+				return updateWorkflow(ctx, shardContext, currentWorkflowLease, updater)
+
+			case enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED:
+				// ... fail since this policy is invalid
+				currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
+				return nil, serviceerror.NewInvalidArgument("unhandled workflow id conflict policy: unspecified")
 			}
-
-			// ... otherwise, abort the entire operation
-			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
-			wfKey := currentWorkflowLease.GetContext().GetWorkflowKey()
-			err = serviceerror.NewWorkflowExecutionAlreadyStarted(
-				fmt.Sprintf("Workflow execution is already running. WorkflowId: %v, RunId: %v.", wfKey.WorkflowID, wfKey.RunID),
-				startReq.StartRequest.RequestId,
-				wfKey.RunID,
-			)
-			return nil, newMultiOpError(err, multiOpAbortedErr)
-
-		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
-			return updateWorkflow(ctx, shardContext, currentWorkflowLease, updater)
-
-		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED:
-			// ... fail since this policy is invalid
-			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
-			return nil, serviceerror.NewInvalidArgument("unhandled workflow id conflict policy: unspecified")
 		}
 	}
 
-	// workflow hasn't been started yet: start and then apply update
+	// workflow isn't running: start and then apply update
 	resp, err := startAndUpdateWorkflow(ctx, starter, updater)
 	var noStartErr *noStartError
 	if errors.As(err, &noStartErr) {

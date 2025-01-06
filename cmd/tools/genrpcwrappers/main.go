@@ -346,6 +346,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"RespondQueryTaskCompletedRequest",
 		"ListTaskQueuePartitionsRequest",
 		"SyncDeploymentUserDataRequest",
+		"CheckTaskQueueUserDataPropagationRequest",
 		"ApplyTaskQueueUserDataReplicationEventRequest",
 		"GetWorkerVersioningRulesRequest",
 		"UpdateWorkerVersioningRulesRequest":

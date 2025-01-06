@@ -578,18 +578,22 @@ func (m *mockUserDataManager) GetUserData() (*persistencespb.VersionedTaskQueueU
 	return m.data, nil, nil
 }
 
-func (m *mockUserDataManager) UpdateUserData(_ context.Context, _ UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
+func (m *mockUserDataManager) UpdateUserData(_ context.Context, _ UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error) {
 	m.Lock()
 	defer m.Unlock()
 	data, _, err := updateFn(m.data.Data)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	m.data = &persistencespb.VersionedTaskQueueUserData{Data: data, Version: m.data.Version + 1}
-	return nil
+	return m.data.Version, nil
 }
 
 func (m *mockUserDataManager) HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+	panic("unused")
+}
+
+func (m *mockUserDataManager) CheckTaskQueueUserDataPropagation(ctx context.Context, version int64, wfPartitions int, actPartitions int) error {
 	panic("unused")
 }
 

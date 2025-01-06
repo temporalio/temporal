@@ -69,6 +69,7 @@ const (
 	MatchingService_ForceUnloadTaskQueuePartition_FullMethodName          = "/temporal.server.api.matchingservice.v1.MatchingService/ForceUnloadTaskQueuePartition"
 	MatchingService_UpdateTaskQueueUserData_FullMethodName                = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData"
 	MatchingService_ReplicateTaskQueueUserData_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData"
+	MatchingService_CheckTaskQueueUserDataPropagation_FullMethodName      = "/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueUserDataPropagation"
 	MatchingService_CreateNexusEndpoint_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/CreateNexusEndpoint"
 	MatchingService_UpdateNexusEndpoint_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateNexusEndpoint"
 	MatchingService_DeleteNexusEndpoint_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/DeleteNexusEndpoint"
@@ -176,6 +177,10 @@ type MatchingServiceClient interface {
 	UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(ctx context.Context, in *ReplicateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*ReplicateTaskQueueUserDataResponse, error)
+	// Blocks on user data propagation to all loaded partitions. If successful, all loaded
+	// workflow + activity partitions have the requested version or higher.
+	// Routed to user data owner (root partition of workflow task queue).
+	CheckTaskQueueUserDataPropagation(ctx context.Context, in *CheckTaskQueueUserDataPropagationRequest, opts ...grpc.CallOption) (*CheckTaskQueueUserDataPropagationResponse, error)
 	// Create a Nexus endpoint.
 	// (-- api-linter: core::0133::method-signature=disabled
 	//
@@ -461,6 +466,15 @@ func (c *matchingServiceClient) ReplicateTaskQueueUserData(ctx context.Context, 
 	return out, nil
 }
 
+func (c *matchingServiceClient) CheckTaskQueueUserDataPropagation(ctx context.Context, in *CheckTaskQueueUserDataPropagationRequest, opts ...grpc.CallOption) (*CheckTaskQueueUserDataPropagationResponse, error) {
+	out := new(CheckTaskQueueUserDataPropagationResponse)
+	err := c.cc.Invoke(ctx, MatchingService_CheckTaskQueueUserDataPropagation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *matchingServiceClient) CreateNexusEndpoint(ctx context.Context, in *CreateNexusEndpointRequest, opts ...grpc.CallOption) (*CreateNexusEndpointResponse, error) {
 	out := new(CreateNexusEndpointResponse)
 	err := c.cc.Invoke(ctx, MatchingService_CreateNexusEndpoint_FullMethodName, in, out, opts...)
@@ -598,6 +612,10 @@ type MatchingServiceServer interface {
 	UpdateTaskQueueUserData(context.Context, *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error)
+	// Blocks on user data propagation to all loaded partitions. If successful, all loaded
+	// workflow + activity partitions have the requested version or higher.
+	// Routed to user data owner (root partition of workflow task queue).
+	CheckTaskQueueUserDataPropagation(context.Context, *CheckTaskQueueUserDataPropagationRequest) (*CheckTaskQueueUserDataPropagationResponse, error)
 	// Create a Nexus endpoint.
 	// (-- api-linter: core::0133::method-signature=disabled
 	//
@@ -717,6 +735,9 @@ func (UnimplementedMatchingServiceServer) UpdateTaskQueueUserData(context.Contex
 }
 func (UnimplementedMatchingServiceServer) ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReplicateTaskQueueUserData not implemented")
+}
+func (UnimplementedMatchingServiceServer) CheckTaskQueueUserDataPropagation(context.Context, *CheckTaskQueueUserDataPropagationRequest) (*CheckTaskQueueUserDataPropagationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CheckTaskQueueUserDataPropagation not implemented")
 }
 func (UnimplementedMatchingServiceServer) CreateNexusEndpoint(context.Context, *CreateNexusEndpointRequest) (*CreateNexusEndpointResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateNexusEndpoint not implemented")
@@ -1229,6 +1250,24 @@ func _MatchingService_ReplicateTaskQueueUserData_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_CheckTaskQueueUserDataPropagation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckTaskQueueUserDataPropagationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).CheckTaskQueueUserDataPropagation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_CheckTaskQueueUserDataPropagation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).CheckTaskQueueUserDataPropagation(ctx, req.(*CheckTaskQueueUserDataPropagationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MatchingService_CreateNexusEndpoint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateNexusEndpointRequest)
 	if err := dec(in); err != nil {
@@ -1415,6 +1454,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReplicateTaskQueueUserData",
 			Handler:    _MatchingService_ReplicateTaskQueueUserData_Handler,
+		},
+		{
+			MethodName: "CheckTaskQueueUserDataPropagation",
+			Handler:    _MatchingService_CheckTaskQueueUserDataPropagation_Handler,
 		},
 		{
 			MethodName: "CreateNexusEndpoint",

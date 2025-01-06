@@ -1731,6 +1731,80 @@ func (this *ReplicateTaskQueueUserDataResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type CheckTaskQueueUserDataPropagationRequest to the protobuf v3 wire format
+func (val *CheckTaskQueueUserDataPropagationRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CheckTaskQueueUserDataPropagationRequest from the protobuf v3 wire format
+func (val *CheckTaskQueueUserDataPropagationRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CheckTaskQueueUserDataPropagationRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CheckTaskQueueUserDataPropagationRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CheckTaskQueueUserDataPropagationRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CheckTaskQueueUserDataPropagationRequest
+	switch t := that.(type) {
+	case *CheckTaskQueueUserDataPropagationRequest:
+		that1 = t
+	case CheckTaskQueueUserDataPropagationRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type CheckTaskQueueUserDataPropagationResponse to the protobuf v3 wire format
+func (val *CheckTaskQueueUserDataPropagationResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CheckTaskQueueUserDataPropagationResponse from the protobuf v3 wire format
+func (val *CheckTaskQueueUserDataPropagationResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CheckTaskQueueUserDataPropagationResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CheckTaskQueueUserDataPropagationResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CheckTaskQueueUserDataPropagationResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CheckTaskQueueUserDataPropagationResponse
+	switch t := that.(type) {
+	case *CheckTaskQueueUserDataPropagationResponse:
+		that1 = t
+	case CheckTaskQueueUserDataPropagationResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type DispatchNexusTaskRequest to the protobuf v3 wire format
 func (val *DispatchNexusTaskRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
