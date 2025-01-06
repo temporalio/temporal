@@ -1070,12 +1070,11 @@ func (s *Versioning3Suite) pollWftAndHandleQueries(
 	}
 	if async == nil {
 		return poller, f()
-	} else {
-		go func() {
-			f()
-			close(async)
-		}()
 	}
+	go func() {
+		f()
+		close(async)
+	}()
 	return nil, nil
 }
 
@@ -1281,12 +1280,12 @@ func (s *Versioning3Suite) warmUpSticky(
 	)
 
 	if handlerQueries {
-		wfTaskPoller.HandleQueries(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
+		_, _ = wfTaskPoller.HandleQueries(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
 			s.Fail("sticky task is not expected")
 			return nil, nil
 		})
 	} else {
-		wfTaskPoller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		_, _ = wfTaskPoller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.Fail("sticky task is not expected")
 			return nil, nil
 		})
