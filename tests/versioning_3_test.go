@@ -177,9 +177,10 @@ func (s *Versioning3Suite) TestWorkflowWithPinnedOverride_NoSticky() {
 
 func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 	tv := testvars.New(s)
+	handlingQueries := false
 
 	if sticky {
-		s.warmUpSticky(tv, sticky)
+		s.warmUpSticky(tv, handlingQueries)
 	}
 
 	wftCompleted := make(chan interface{})
@@ -234,9 +235,10 @@ func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
 
 func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
 	tv := testvars.New(s)
+	handlingQueries := true
 
 	if sticky {
-		s.warmUpSticky(tv, sticky)
+		s.warmUpSticky(tv, handlingQueries)
 	}
 
 	wftCompleted := make(chan interface{})
@@ -274,9 +276,9 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 	tv := testvars.New(s)
 	tvB := tv.WithBuildId("B")
 	d := tv.Deployment()
-
+	handlingQueries := true
 	if sticky {
-		s.warmUpSticky(tv, sticky)
+		s.warmUpSticky(tv, handlingQueries)
 	}
 
 	wftCompleted := make(chan interface{})
@@ -347,9 +349,10 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_NoSticky() {
 func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 	tv := testvars.New(s)
 	d := tv.Deployment()
+	handlingQueries := false
 
 	if sticky {
-		s.warmUpSticky(tv, sticky)
+		s.warmUpSticky(tv, handlingQueries)
 	}
 
 	wftCompleted := make(chan interface{})
@@ -405,9 +408,10 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 	tvB := tvA.WithBuildId("B")
 	dA := tvA.Deployment()
 	dB := tvB.Deployment()
+	handlingQueries := false
 
 	if sticky {
-		s.warmUpSticky(tvA, sticky)
+		s.warmUpSticky(tvA, handlingQueries)
 	}
 
 	s.updateTaskQueueDeploymentData(tvA, 0, tqTypeWf, tqTypeAct)
@@ -567,9 +571,9 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	tvB := tvA.WithBuildId("B")
 	dA := tvA.Deployment()
 	dB := tvB.Deployment()
-
+	handlingQueries := false
 	if sticky {
-		s.warmUpSticky(tvA, sticky)
+		s.warmUpSticky(tvA, handlingQueries)
 	}
 
 	s.updateTaskQueueDeploymentData(tvA, 0, tqTypeWf, tqTypeAct)
@@ -1269,7 +1273,7 @@ func (s *Versioning3Suite) verifyWorkflowStickyQueue(
 // create the sticky queue by polling it.
 func (s *Versioning3Suite) warmUpSticky(
 	tv *testvars.TestVars,
-	handlerQueries bool,
+	handlingQueries bool,
 ) {
 
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
@@ -1279,7 +1283,7 @@ func (s *Versioning3Suite) warmUpSticky(
 		},
 	)
 
-	if handlerQueries {
+	if handlingQueries {
 		_, _ = wfTaskPoller.HandleQueries(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
 			s.Fail("sticky task is not expected")
 			return nil, nil
