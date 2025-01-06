@@ -3,7 +3,6 @@ package scheduler2
 import (
 	"time"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
 )
@@ -44,17 +43,13 @@ func (BufferTask) Destination() string {
 	return ""
 }
 
-func (BufferTask) Validate(_ *persistencespb.StateMachineRef, node *hsm.Node) error {
-	return ValidateTask(node, TransitionBuffer)
+func (BufferTask) Validate(_ *persistencespb.StateMachineRef, _ *hsm.Node) error {
+	// Generator only has a single task/state, so no validation is done here.
+	return nil
 }
 
 func (g Generator) tasks() ([]hsm.Task, error) {
-	switch g.State() { // nolint:exhaustive
-	case enumsspb.SCHEDULER_GENERATOR_STATE_BUFFERING:
-		return []hsm.Task{BufferTask{deadline: g.NextInvocationTime.AsTime()}}, nil
-	default:
-		return nil, nil
-	}
+	return []hsm.Task{BufferTask{deadline: g.NextInvocationTime.AsTime()}}, nil
 }
 
 func (g Generator) output() (hsm.TransitionOutput, error) {

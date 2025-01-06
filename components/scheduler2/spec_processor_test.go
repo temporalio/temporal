@@ -29,7 +29,7 @@ func newTestSpecProcessor(ctrl *gomock.Controller) *testSpecProcessor {
 	mockMetrics.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
 
 	return &testSpecProcessor{
-		SpecProcessor: scheduler2.SpecProcessor{
+		SpecProcessor: scheduler2.SpecProcessorImpl{
 			Config: &scheduler2.Config{
 				Tweakables: func(_ string) scheduler2.Tweakables {
 					return scheduler2.DefaultTweakables
