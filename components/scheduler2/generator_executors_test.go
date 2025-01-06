@@ -1,10 +1,12 @@
 package scheduler2_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/components/scheduler2"
@@ -14,31 +16,34 @@ import (
 )
 
 // registerGeneratorExecutor creates and registers an executor with dependencies injected for testing.
-func registerGeneratorExecutor(t *testing.T, ctrl *gomock.Controller, registry *hsm.Registry) {
-	specProcessor := newTestSpecProcessor(ctrl)
+func registerGeneratorExecutor(t *testing.T, ctrl *gomock.Controller, registry *hsm.Registry, specProcessor scheduler2.SpecProcessor) {
 	require.NoError(t, scheduler2.RegisterGeneratorExecutors(registry, scheduler2.GeneratorTaskExecutorOptions{
 		Config:         &scheduler2.Config{},
 		MetricsHandler: metrics.NoopMetricsHandler,
-		Logger:         log.NewTestLogger(),
-		SpecProcessor:  &specProcessor.SpecProcessor,
+		BaseLogger:     log.NewTestLogger(),
+		SpecProcessor:  specProcessor,
 	}))
 }
 
-func TestExecuteBufferTask_ApplyExecuteFails(t *testing.T) {
-	// If applying the Execute transition fails, we should fail the task for retry.
-
-	// TODO - it's not clear to me on how a test should/could trigger a MachineTransition failure path
-}
-
-func TestExecuteBufferTask_ApplyBufferFails(t *testing.T) {
-	// If applying the Buffer transition fails, we should fail the task for retry (we
-	// don't know if another buffer task was already enqueued).
-
-	// TODO - it's not clear to me on how a test should/could trigger a MachineTransition failure path
-}
-
 func TestExecuteBufferTask_ProcessTimeRangeFails(t *testing.T) {
-	// If ProcessTimeRange fails, we should fail the task to the DLQ.
+	env := fakeEnv{}
+	registry := newRegistry(t)
+	ctrl := gomock.NewController(t)
+	root := newSchedulerTree(t, registry, defaultSchedule(), nil)
+
+	// If ProcessTimeRange fails, we should fail the task as an internal error.
+	specProcessor := scheduler2.NewMockSpecProcessor(ctrl)
+	specProcessor.EXPECT().ProcessTimeRange(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Return(nil, errors.New("processTimeRange bug"))
+
+	registerGeneratorExecutor(t, ctrl, registry, specProcessor)
+	generatorNode, err := root.Child([]hsm.Key{scheduler2.GeneratorMachineKey})
+	require.NoError(t, err)
+
+	// Execute the buffer task.
+	err = registry.ExecuteTimerTask(env, generatorNode, scheduler2.BufferTask{})
+	require.True(t, common.IsInternalError(err))
 }
 
 func TestExecuteBufferTask_Basic(t *testing.T) {
@@ -47,7 +52,9 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	root := newSchedulerTree(t, registry, defaultSchedule(), nil)
 
-	registerGeneratorExecutor(t, ctrl, registry)
+	// Use a real SpecProcessor.
+	specProcessor := newTestSpecProcessor(ctrl)
+	registerGeneratorExecutor(t, ctrl, registry, specProcessor.SpecProcessor)
 	generatorNode, err := root.Child([]hsm.Key{scheduler2.GeneratorMachineKey})
 	require.NoError(t, err)
 

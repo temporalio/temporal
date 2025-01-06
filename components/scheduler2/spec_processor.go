@@ -12,10 +12,27 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination spec_processor_mock.go
+
 type (
 	// SpecProcessor is used by the Generator and Backfiller to generate buffered
 	// actions according to the schedule spec.
-	SpecProcessor struct {
+	SpecProcessor interface {
+		// ProcessTimeRange generates buffered actions according to the schedule spec for
+		// the given time range.
+		//
+		// The parameter manual is propagated to the returned BufferedStarts. When the limit
+		// is set to a non-nil pointer, it will be decremented for each buffered start, and
+		// the function will return early should limit reach 0.
+		ProcessTimeRange(
+			scheduler Scheduler,
+			start, end time.Time,
+			manual bool,
+			limit *int,
+		) (*ProcessedTimeRange, error)
+	}
+
+	SpecProcessorImpl struct {
 		fx.In
 
 		Config         *Config
@@ -31,20 +48,14 @@ type (
 	}
 )
 
-// ProcessTimeRange generates buffered actions according to the schedule spec for
-// the given time range.
-//
-// The parameter manual is propagated to the returned BufferedStarts. When the limit
-// is set to a non-nil pointer, it will be decremented for each buffered start, and
-// the function will return early should limit reach 0.
-func (s SpecProcessor) ProcessTimeRange(
+func (s SpecProcessorImpl) ProcessTimeRange(
 	scheduler Scheduler,
 	start, end time.Time,
 	manual bool,
 	limit *int,
 ) (*ProcessedTimeRange, error) {
 	tweakables := s.Config.Tweakables(scheduler.Namespace)
-	overlapPolicy := scheduler.OverlapPolicy()
+	overlapPolicy := scheduler.overlapPolicy()
 
 	s.Logger.Debug("ProcessTimeRange",
 		tag.NewTimeTag("start", start),
@@ -57,7 +68,7 @@ func (s SpecProcessor) ProcessTimeRange(
 	// Skip over entire time range if paused or no actions can be taken.
 	//
 	// Manual (backfill/patch) runs are always buffered here.
-	if !scheduler.UseScheduledAction(false) && !manual {
+	if !scheduler.useScheduledAction(false) && !manual {
 		// Use end as last action time so that we don't reprocess time spent paused.
 		next, err := s.getNextTime(scheduler, end)
 		if err != nil {
@@ -100,7 +111,7 @@ func (s SpecProcessor) ProcessTimeRange(
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
-			RequestId:     GenerateRequestID(scheduler, "", next.Nominal, next.Next),
+			RequestId:     generateRequestID(scheduler, "", next.Nominal, next.Next),
 		})
 		lastAction = next.Next
 
@@ -128,12 +139,12 @@ func catchupWindow(s Scheduler, tweakables Tweakables) time.Duration {
 }
 
 // getNextTime returns the next time result, or an error if the schedule cannot be compiled.
-func (s SpecProcessor) getNextTime(scheduler Scheduler, after time.Time) (scheduler1.GetNextTimeResult, error) {
-	spec, err := scheduler.CompiledSpec(s.SpecBuilder)
+func (s SpecProcessorImpl) getNextTime(scheduler Scheduler, after time.Time) (scheduler1.GetNextTimeResult, error) {
+	spec, err := scheduler.getCompiledSpec(s.SpecBuilder)
 	if err != nil {
 		s.Logger.Error("Invalid schedule", tag.Error(err))
 		return scheduler1.GetNextTimeResult{}, err
 	}
 
-	return spec.GetNextTime(scheduler.JitterSeed(), after), nil
+	return spec.GetNextTime(scheduler.jitterSeed(), after), nil
 }
