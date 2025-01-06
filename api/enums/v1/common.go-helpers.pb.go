@@ -86,42 +86,6 @@ func SchedulerStateFromString(s string) (SchedulerState, error) {
 }
 
 var (
-	Scheduler2State_shorthandValue = map[string]int32{
-		"Scheduler2StateUnspecified": 0,
-		"Scheduler2StateRunning":     1,
-	}
-)
-
-// Scheduler2StateFromString parses a Scheduler2State value from  either the protojson
-// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to Scheduler2State
-func Scheduler2StateFromString(s string) (Scheduler2State, error) {
-	if v, ok := Scheduler2State_value[s]; ok {
-		return Scheduler2State(v), nil
-	} else if v, ok := Scheduler2State_shorthandValue[s]; ok {
-		return Scheduler2State(v), nil
-	}
-	return Scheduler2State(0), fmt.Errorf("%s is not a valid Scheduler2State", s)
-}
-
-var (
-	SchedulerGeneratorState_shorthandValue = map[string]int32{
-		"Unspecified": 0,
-		"Buffering":   1,
-	}
-)
-
-// SchedulerGeneratorStateFromString parses a SchedulerGeneratorState value from  either the protojson
-// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to SchedulerGeneratorState
-func SchedulerGeneratorStateFromString(s string) (SchedulerGeneratorState, error) {
-	if v, ok := SchedulerGeneratorState_value[s]; ok {
-		return SchedulerGeneratorState(v), nil
-	} else if v, ok := SchedulerGeneratorState_shorthandValue[s]; ok {
-		return SchedulerGeneratorState(v), nil
-	}
-	return SchedulerGeneratorState(0), fmt.Errorf("%s is not a valid SchedulerGeneratorState", s)
-}
-
-var (
 	SchedulerExecutorState_shorthandValue = map[string]int32{
 		"Unspecified": 0,
 		"Waiting":     1,

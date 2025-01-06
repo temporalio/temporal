@@ -47,22 +47,6 @@ enum SchedulerState {
     SCHEDULER_STATE_EXECUTING = 2;
 }
 
-enum Scheduler2State {
-    // Default value, unspecified state.
-    SCHEDULER2_STATE_UNSPECIFIED = 0;
-    // Scheduler's top-level state machine has been initialized and is running.
-    SCHEDULER2_STATE_RUNNING = 1;
-}
-
-// State for the state machine scheduler's Generator.
-enum SchedulerGeneratorState {
-    // Default value, unspecified state.
-    SCHEDULER_GENERATOR_STATE_UNSPECIFIED = 0;
-    // Generator will alternate between buffer actions and sleeping for a wakeup
-    // interval.
-    SCHEDULER_GENERATOR_STATE_BUFFERING = 1;
-}
-
 // State for the state machine scheduler's Executor.
 enum SchedulerExecutorState {
     // Default value, unspecified state.
