@@ -102,7 +102,7 @@ type DeploymentStoreClient interface {
 		requestID string,
 	) (*deploymentpb.DeploymentInfo, *deploymentpb.DeploymentInfo, error)
 
-	// TODO (Shivam): Should we make these methods public?
+	// TODO (Shivam): Should we make these methods private?
 
 	// Only used internally by deployment workflow:
 	StartDeploymentSeries(
