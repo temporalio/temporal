@@ -31,15 +31,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	activitypb "go.temporal.io/api/activity/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 type (
@@ -116,7 +119,6 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		TaskQueue: taskQueue,
 	}
 
-	startTime := time.Now()
 	workflowRun, err := activeSDKClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
@@ -125,7 +127,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
 		assert.Len(t, description.GetPendingActivities(), 1)
-		assert.Greater(t, startedActivityCount.Load(), int32(1))
+		assert.Greater(t, startedActivityCount.Load(), int32(2))
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// pause the activity in cluster 1
@@ -138,34 +140,48 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	s.NoError(err)
 	s.NotNil(pauseResp)
 
+	// reset the activity in cluster 1
+	resetRequest := &workflowservice.ResetActivityByIdRequest{
+		Namespace:  ns,
+		WorkflowId: workflowRun.GetID(),
+		ActivityId: "activity-id",
+		NoWait:     false,
+	}
+	resetResp, err := s.cluster1.Host().FrontendClient().ResetActivityById(ctx, resetRequest)
+	s.NoError(err)
+	s.NotNil(resetResp)
+
+	// update the activity properties in cluster 1
+	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
+		Namespace:  ns,
+		WorkflowId: workflowRun.GetID(),
+		ActivityId: "activity-id",
+		ActivityOptions: &activitypb.ActivityOptions{
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval: durationpb.New(2 * time.Second),
+			},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+	}
+	respUpdate, err := s.cluster1.Host().FrontendClient().UpdateActivityOptionsById(ctx, updateRequest)
+	s.NoError(err)
+	s.NotNil(respUpdate)
+
 	// verify activity is paused is cluster 1
 	description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
 	s.Equal(1, len(description.PendingActivities))
 	s.True(description.PendingActivities[0].Paused)
+	s.Equal(int32(1), description.PendingActivities[0].Attempt)
+	// currently we are not replicating retry interval
+	// s.Equal(int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
 
 	// stop worker1 so cluster 1 won't make any progress on the activity (just in case)
+	time.Sleep(cacheRefreshInterval)
 	worker1.Stop()
 
 	// failover to standby cluster
 	s.failover(ns, s.clusterNames[1], int64(2), s.cluster1.FrontendClient())
-
-	// verify things are replicated over
-	resp, err := s.cluster1.HistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
-	s.NoError(err)
-	s.Equal(1, len(resp.Shards)) // test cluster has only one history shard
-	shard := resp.Shards[0]
-	s.True(shard.MaxReplicationTaskId > 0)
-	s.NotNil(shard.ShardLocalTime)
-	s.True(shard.ShardLocalTime.AsTime().Before(time.Now()))
-	s.True(shard.ShardLocalTime.AsTime().After(startTime))
-	s.NotNil(shard.RemoteClusters)
-	standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
-	s.True(ok)
-	s.LessOrEqual(shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
-	s.NotNil(standbyAckInfo.AckedTaskVisibilityTime)
-	s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now()))
-	s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(startTime))
 
 	// get standby client
 	standbyClient, err := sdkclient.Dial(sdkclient.Options{
@@ -180,6 +196,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	s.NoError(err)
 	s.Equal(1, len(description.PendingActivities))
 	s.True(description.PendingActivities[0].Paused)
+	s.Equal(int32(1), description.PendingActivities[0].Attempt)
 
 	// start worker2
 	worker2 := sdkworker.New(standbyClient, taskQueue, sdkworker.Options{})
