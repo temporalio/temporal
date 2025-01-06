@@ -177,7 +177,6 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	// s.Equal(int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
 
 	// stop worker1 so cluster 1 won't make any progress on the activity (just in case)
-	time.Sleep(cacheRefreshInterval)
 	worker1.Stop()
 
 	// failover to standby cluster
