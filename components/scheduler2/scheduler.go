@@ -7,7 +7,6 @@ import (
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/schedule/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -36,16 +35,21 @@ type (
 
 	// The machine definitions provide serialization/deserialization and type information.
 	schedulerMachineDefinition struct{}
+
+	SchedulerMachineState int
 )
 
 const (
 	// Unique identifier for top-level scheduler state machine.
 	SchedulerMachineType = "scheduler.SchedulerV2"
+
+	// The top-level scheduler only has a single, constant state.
+	SchedulerMachineStateRunning SchedulerMachineState = 0
 )
 
 var (
-	_ hsm.StateMachine[enumsspb.Scheduler2State] = Scheduler{}
-	_ hsm.StateMachineDefinition                 = &schedulerMachineDefinition{}
+	_ hsm.StateMachine[SchedulerMachineState] = Scheduler{}
+	_ hsm.StateMachineDefinition              = &schedulerMachineDefinition{}
 )
 
 // NewScheduler returns an initialized Scheduler state machine (without any sub
@@ -58,7 +62,6 @@ func NewScheduler(
 	var zero time.Time
 	return &Scheduler{
 		SchedulerInternal: &schedspb.SchedulerInternal{
-			State:    enumsspb.SCHEDULER2_STATE_RUNNING,
 			Schedule: sched,
 			Info: &schedule.ScheduleInfo{
 				ActionCount:         0,
@@ -104,13 +107,11 @@ func MachineCollection(tree *hsm.Node) hsm.Collection[Scheduler] {
 	return hsm.NewCollection[Scheduler](tree, SchedulerMachineType)
 }
 
-func (s Scheduler) State() enumsspb.Scheduler2State {
-	return s.SchedulerInternal.State
+func (s Scheduler) State() SchedulerMachineState {
+	return SchedulerMachineStateRunning
 }
 
-func (s Scheduler) SetState(state enumsspb.Scheduler2State) {
-	s.SchedulerInternal.State = state
-}
+func (s Scheduler) SetState(_ SchedulerMachineState) {}
 
 func (s Scheduler) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	// The top level scheduler has no tasks of its own.
@@ -140,13 +141,13 @@ func (schedulerMachineDefinition) CompareState(a any, b any) (int, error) {
 	panic("TODO: CompareState not yet implemented for Scheduler")
 }
 
-// UseScheduledAction returns true when the Scheduler should allow scheduled
+// useScheduledAction returns true when the Scheduler should allow scheduled
 // actions to be taken.
 //
 // When decrement is true, the schedule's state's `RemainingActions` counter is
 // decremented when an action can be taken. When decrement is false, no state
 // is mutated.
-func (s Scheduler) UseScheduledAction(decrement bool) bool {
+func (s *Scheduler) useScheduledAction(decrement bool) bool {
 	// If paused, don't do anything.
 	if s.Schedule.State.Paused {
 		return false
@@ -165,7 +166,7 @@ func (s Scheduler) UseScheduledAction(decrement bool) bool {
 			// The conflict token is updated because a client might be in the process of
 			// preparing an update request that increments their schedule's RemainingActions
 			// field.
-			s.UpdateConflictToken()
+			s.updateConflictToken()
 		}
 		return true
 	}
@@ -174,7 +175,7 @@ func (s Scheduler) UseScheduledAction(decrement bool) bool {
 	return false
 }
 
-func (s Scheduler) CompiledSpec(specBuilder *scheduler.SpecBuilder) (*scheduler.CompiledSpec, error) {
+func (s *Scheduler) getCompiledSpec(specBuilder *scheduler.SpecBuilder) (*scheduler.CompiledSpec, error) {
 	s.validateCachedState()
 
 	// Cache compiled spec.
@@ -189,15 +190,15 @@ func (s Scheduler) CompiledSpec(specBuilder *scheduler.SpecBuilder) (*scheduler.
 	return s.compiledSpec, nil
 }
 
-func (s Scheduler) JitterSeed() string {
+func (s Scheduler) jitterSeed() string {
 	return fmt.Sprintf("%s-%s", s.NamespaceId, s.ScheduleId)
 }
 
-func (s Scheduler) Identity() string {
+func (s Scheduler) identity() string {
 	return fmt.Sprintf("temporal-scheduler-%s-%s", s.Namespace, s.ScheduleId)
 }
 
-func (s Scheduler) OverlapPolicy() enumspb.ScheduleOverlapPolicy {
+func (s Scheduler) overlapPolicy() enumspb.ScheduleOverlapPolicy {
 	policy := s.Schedule.Policies.OverlapPolicy
 	if policy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
 		policy = enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
@@ -208,7 +209,7 @@ func (s Scheduler) OverlapPolicy() enumspb.ScheduleOverlapPolicy {
 // validateCachedState clears cached fields whenever the Scheduler's
 // ConflictToken doesn't match its cacheConflictToken field. Validation is only
 // as effective as the Scheduler's backing persisted state is up-to-date.
-func (s Scheduler) validateCachedState() {
+func (s *Scheduler) validateCachedState() {
 	if s.cacheConflictToken != s.ConflictToken {
 		// Bust stale cached fields.
 		s.compiledSpec = nil
@@ -218,9 +219,9 @@ func (s Scheduler) validateCachedState() {
 	}
 }
 
-// UpdateConflictToken bumps the Scheduler's conflict token. This has a side
+// updateConflictToken bumps the Scheduler's conflict token. This has a side
 // effect of invalidating the local cache. Use whenever applying a mutation that
 // should invalidate other in-flight updates.
-func (s Scheduler) UpdateConflictToken() {
+func (s *Scheduler) updateConflictToken() {
 	s.ConflictToken++
 }
