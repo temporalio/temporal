@@ -113,10 +113,10 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 			tv := testvars.New(s)
 
 			other := tv.WithBuildId("other")
-			go s.idlePollWorkflow(other, true, ver3MinPollTime, "other deployment should not receive pinned task")
+			go s.idlePollWorkflow(other, true, ver3MinPollTime, "other deployment should not receive pinned task", false)
 
 			s.startWorkflow(tv, makePinnedOverride(tv.Deployment()))
-			s.idlePollWorkflow(tv, false, ver3MinPollTime, "unversioned worker should not receive pinned task")
+			s.idlePollWorkflow(tv, false, ver3MinPollTime, "unversioned worker should not receive pinned task", false)
 
 			// Sleeping to let the pollers arrive to server before ending the test.
 			time.Sleep(200 * time.Millisecond) //nolint:forbidigo
@@ -127,7 +127,7 @@ func (s *Versioning3Suite) TestUnpinnedTask_NonCurrentDeployment() {
 	s.RunTestWithMatchingBehavior(
 		func() {
 			tv := testvars.New(s)
-			go s.idlePollWorkflow(tv, true, ver3MinPollTime, "non-current versioned poller should not receive unpinned task")
+			go s.idlePollWorkflow(tv, true, ver3MinPollTime, "non-current versioned poller should not receive unpinned task", false)
 
 			s.startWorkflow(tv, nil)
 
@@ -152,6 +152,7 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 				true,
 				ver3MinPollTime,
 				"old deployment should not receive unpinned task",
+				false,
 			)
 			// Sleeping to let the pollers arrive to server before ending the test.
 			time.Sleep(200 * time.Millisecond) //nolint:forbidigo
@@ -261,7 +262,11 @@ func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
 }
 
 func (s *Versioning3Suite) TestUnpinnedQuery_NoSticky() {
-	s.testUnpinnedQuery(false)
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testUnpinnedQuery(false)
+		},
+	)
 }
 
 func (s *Versioning3Suite) TestUnpinnedQuery_Sticky() {
@@ -300,13 +305,13 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
 	}
 
-	go s.idlePollWorkflowWhileHandlingQueries(tvB, sticky, ver3MinPollTime, "new deployment should not receive query")
+	go s.idlePollWorkflow(tvB, sticky, ver3MinPollTime, "new deployment should not receive query", handlingQueries)
 	s.pollAndQueryWorkflow(tv, sticky)
 
 	// redirect query to new deployment
 	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
 
-	go s.idlePollWorkflowWhileHandlingQueries(tv, sticky, ver3MinPollTime, "old deployment should not receive query")
+	go s.idlePollWorkflow(tv, sticky, ver3MinPollTime, "old deployment should not receive query", handlingQueries)
 	s.pollAndQueryWorkflow(tvB, sticky)
 
 }
@@ -1152,10 +1157,11 @@ func (s *Versioning3Suite) idlePollWorkflow(
 	versioned bool,
 	timeout time.Duration,
 	unexpectedTaskMessage string,
+	handlingQueries bool,
 ) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
 	d := tv.Deployment()
-	_, _ = poller.PollWorkflowTask(
+	taskPoller := poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 				BuildId:              d.BuildId,
@@ -1163,40 +1169,27 @@ func (s *Versioning3Suite) idlePollWorkflow(
 				UseVersioning:        versioned,
 			},
 		},
-	).HandleTask(
-		tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.Fail(unexpectedTaskMessage)
-			return nil, nil
-		},
-		taskpoller.WithTimeout(timeout),
 	)
-}
 
-func (s *Versioning3Suite) idlePollWorkflowWhileHandlingQueries(
-	tv *testvars.TestVars,
-	versioned bool,
-	timeout time.Duration,
-	unexpectedTaskMessage string,
-) {
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
-	d := tv.Deployment()
-	_, _ = poller.PollWorkflowTask(
-		&workflowservice.PollWorkflowTaskQueueRequest{
-			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-				BuildId:              d.BuildId,
-				DeploymentSeriesName: d.SeriesName,
-				UseVersioning:        versioned,
+	if handlingQueries {
+		_, _ = taskPoller.HandleQueries(
+			tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
+				s.Fail(unexpectedTaskMessage)
+				return nil, nil
 			},
-		},
-	).HandleQueries(
-		tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
-			s.Fail(unexpectedTaskMessage)
-			return nil, nil
-		},
-		taskpoller.WithTimeout(timeout),
-	)
+			taskpoller.WithTimeout(timeout),
+		)
+	} else {
+		_, _ = taskPoller.HandleTask(
+			tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.Fail(unexpectedTaskMessage)
+				return nil, nil
+			},
+			taskpoller.WithTimeout(timeout),
+		)
+	}
 }
 
 func (s *Versioning3Suite) idlePollActivity(

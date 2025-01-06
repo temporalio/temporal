@@ -366,6 +366,9 @@ func (p *workflowTaskPoller) pollTask(
 	}
 
 	events = history.Events
+	if len(events) == 0 && req.TaskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY {
+		return nil, errors.New("history events are empty")
+	}
 
 	nextPageToken := resp.NextPageToken
 	for nextPageToken != nil {
