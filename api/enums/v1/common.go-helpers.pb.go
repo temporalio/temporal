@@ -105,25 +105,6 @@ func SchedulerExecutorStateFromString(s string) (SchedulerExecutorState, error) 
 }
 
 var (
-	SchedulerBackfillerState_shorthandValue = map[string]int32{
-		"Unspecified": 0,
-		"Waiting":     1,
-		"Executing":   2,
-	}
-)
-
-// SchedulerBackfillerStateFromString parses a SchedulerBackfillerState value from  either the protojson
-// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to SchedulerBackfillerState
-func SchedulerBackfillerStateFromString(s string) (SchedulerBackfillerState, error) {
-	if v, ok := SchedulerBackfillerState_value[s]; ok {
-		return SchedulerBackfillerState(v), nil
-	} else if v, ok := SchedulerBackfillerState_shorthandValue[s]; ok {
-		return SchedulerBackfillerState(v), nil
-	}
-	return SchedulerBackfillerState(0), fmt.Errorf("%s is not a valid SchedulerBackfillerState", s)
-}
-
-var (
 	CallbackState_shorthandValue = map[string]int32{
 		"Unspecified": 0,
 		"Standby":     1,
