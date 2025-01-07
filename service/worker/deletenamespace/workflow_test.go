@@ -231,7 +231,7 @@ func Test_DeleteNamespaceUsedByNexus(t *testing.T) {
 		}, nil).Once()
 	env.OnActivity(la.ValidateProtectedNamespacesActivity, mock.Anything, mock.Anything).Return(nil).Once()
 	env.OnActivity(la.ValidateNexusEndpointsActivity, mock.Anything, mock.Anything, mock.Anything).
-		Return(temporal.NewNonRetryableApplicationError("cannot delete a namespace that is a target of a Nexus endpoint", errors.ValidationErrorErrType, nil, nil)).
+		Return(errors.NewFailedPrecondition("cannot delete a namespace that is a target of a Nexus endpoint", nil)).
 		Once()
 
 	env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{

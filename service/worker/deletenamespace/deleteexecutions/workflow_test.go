@@ -255,8 +255,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
 	require.True(t, stderrors.As(err, &appErr))
-	require.Contains(t, appErr.Error(), "unable to execute activity: DeleteExecutionsActivity")
-	require.Contains(t, appErr.Error(), "specific_error_from_activity")
+	require.Equal(t, appErr.Error(), "specific_error_from_activity (type: Unavailable, retryable: true)")
 }
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) {
