@@ -753,7 +753,7 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 					NonRetryable: !retryable,
 				},
 			},
-			// TODO: Replace with the above FailureInfo once there are more SDKs that support NexusHandlerFailureInfo in
+			// TODO: Replace with the FailureInfo below once there are more SDKs that support NexusHandlerFailureInfo in
 			// the wild.
 			// FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
 			// 	NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
