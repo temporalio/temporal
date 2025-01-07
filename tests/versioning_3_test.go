@@ -301,13 +301,13 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
 	}
 
-	go s.idlePollWorkflow(tvB, sticky, ver3MinPollTime, "new deployment should not receive query")
+	go s.idlePollWorkflow(tvB, true, ver3MinPollTime, "new deployment should not receive query")
 	s.pollAndQueryWorkflow(tv, sticky)
 
 	// redirect query to new deployment
 	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
 
-	go s.idlePollWorkflow(tv, sticky, ver3MinPollTime, "old deployment should not receive query")
+	go s.idlePollWorkflow(tv, true, ver3MinPollTime, "old deployment should not receive query")
 	s.pollAndQueryWorkflow(tvB, sticky)
 
 }
@@ -928,17 +928,6 @@ func mustToPayload(v any) *commonpb.Payload {
 		return &commonpb.Payload{}
 	}
 	return payload
-}
-
-func respondQueryTaskCompleted(
-	task *workflowservice.PollWorkflowTaskQueueResponse,
-	namespace string,
-) *workflowservice.RespondQueryTaskCompletedRequest {
-	request := &workflowservice.RespondQueryTaskCompletedRequest{
-		Namespace: namespace,
-		TaskToken: task.TaskToken,
-	}
-	return request
 }
 
 func (s *Versioning3Suite) startWorkflow(
