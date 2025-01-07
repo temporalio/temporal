@@ -35,11 +35,13 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/testing/testvars"
 )
@@ -389,7 +391,7 @@ func (p *workflowTaskPoller) pollTask(
 	return resp, err
 }
 
-func (p *workflowTaskPoller) HandleQueries(
+func (p *workflowTaskPoller) HandleLegacyQuery(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
 	opts ...optionFunc,
@@ -398,10 +400,10 @@ func (p *workflowTaskPoller) HandleQueries(
 	options := newOptions(tv, opts)
 	ctx, cancel := newContext(options)
 	defer cancel()
-	return p.pollAndHandleQueries(ctx, options, handler)
+	return p.pollAndHandleLegacyQuery(ctx, options, handler)
 }
 
-func (p *workflowTaskPoller) pollAndHandleQueries(
+func (p *workflowTaskPoller) pollAndHandleLegacyQuery(
 	ctx context.Context,
 	opts *options,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
@@ -411,22 +413,18 @@ func (p *workflowTaskPoller) pollAndHandleQueries(
 	if err != nil {
 		return nil, fmt.Errorf("failed to poll workflow task: %w", err)
 	}
-	return p.handleQueries(ctx, opts, task, handler)
+	return p.handleQuery(ctx, task, handler)
 }
 
-func (p *workflowTaskPoller) handleQueries(
+func (p *workflowTaskPoller) handleQuery(
 	ctx context.Context,
-	opts *options,
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
 ) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
 	p.t.Helper()
+	// if an error is received here it shall be present in RespondQueryTaskCompletedResponse.ErrorMessage
 	reply, err := handler(task)
-	if err != nil {
-		return nil, p.respondTaskFailed(ctx, opts, task.TaskToken, err)
-	}
-
-	resp, err := p.respondQueryTaskCompleted(ctx, task, reply)
+	resp, err := p.respondQueryTaskCompleted(ctx, task, reply, err)
 	if err != nil {
 		return nil, err
 	}
@@ -471,20 +469,36 @@ func (p *workflowTaskPoller) respondQueryTaskCompleted(
 	ctx context.Context,
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	reply *workflowservice.RespondQueryTaskCompletedRequest,
+	err error,
 ) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
 	p.t.Helper()
 	if task == nil {
-		return nil, errors.New("missing PollWorkflowTaskQueue")
+		return nil, errors.New("missing PollWorkflowTaskQueueResponse")
+	}
+	if task.Query == nil {
+		return nil, errors.New("missing Legacy Query in PollWorkflowTaskQueueResponse")
 	}
 	if reply == nil {
-		return nil, errors.New("missing RespondQueryTaskCompleted return")
+		return nil, errors.New("missing RespondQueryTaskCompletedRequest")
 	}
+
+	// setting the fields for RespondQueryTaskCompletedResponse
 	if reply.Namespace == "" {
 		reply.Namespace = p.namespace
 	}
 	if reply.TaskToken == nil {
 		reply.TaskToken = task.TaskToken
 	}
+	if err != nil {
+		reply.ErrorMessage = err.Error()
+		reply.Failure = &failurepb.Failure{
+			Message: err.Error(),
+		}
+		reply.CompletedType = enumspb.QUERY_RESULT_TYPE_FAILED
+	}
+	reply.CompletedType = enumspb.QUERY_RESULT_TYPE_ANSWERED
+	reply.QueryResult = payloads.EncodeString("query-result")
+
 	resp, err := p.client.RespondQueryTaskCompleted(ctx, reply)
 	if err != nil {
 		return nil, fmt.Errorf("failed to respond with respondQueryTaskCompleted: %w", err)

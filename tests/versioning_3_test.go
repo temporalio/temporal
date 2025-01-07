@@ -113,10 +113,10 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 			tv := testvars.New(s)
 
 			other := tv.WithBuildId("other")
-			go s.idlePollWorkflow(other, true, ver3MinPollTime, "other deployment should not receive pinned task", false)
+			go s.idlePollWorkflow(other, true, ver3MinPollTime, "other deployment should not receive pinned task")
 
 			s.startWorkflow(tv, makePinnedOverride(tv.Deployment()))
-			s.idlePollWorkflow(tv, false, ver3MinPollTime, "unversioned worker should not receive pinned task", false)
+			s.idlePollWorkflow(tv, false, ver3MinPollTime, "unversioned worker should not receive pinned task")
 
 			// Sleeping to let the pollers arrive to server before ending the test.
 			time.Sleep(200 * time.Millisecond) //nolint:forbidigo
@@ -127,7 +127,7 @@ func (s *Versioning3Suite) TestUnpinnedTask_NonCurrentDeployment() {
 	s.RunTestWithMatchingBehavior(
 		func() {
 			tv := testvars.New(s)
-			go s.idlePollWorkflow(tv, true, ver3MinPollTime, "non-current versioned poller should not receive unpinned task", false)
+			go s.idlePollWorkflow(tv, true, ver3MinPollTime, "non-current versioned poller should not receive unpinned task")
 
 			s.startWorkflow(tv, nil)
 
@@ -152,7 +152,6 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 				true,
 				ver3MinPollTime,
 				"old deployment should not receive unpinned task",
-				false,
 			)
 			// Sleeping to let the pollers arrive to server before ending the test.
 			time.Sleep(200 * time.Millisecond) //nolint:forbidigo
@@ -178,10 +177,9 @@ func (s *Versioning3Suite) TestWorkflowWithPinnedOverride_NoSticky() {
 
 func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 	tv := testvars.New(s)
-	handlingQueries := false
 
 	if sticky {
-		s.warmUpSticky(tv, handlingQueries)
+		s.warmUpSticky(tv)
 	}
 
 	wftCompleted := make(chan interface{})
@@ -236,10 +234,9 @@ func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
 
 func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
 	tv := testvars.New(s)
-	handlingQueries := true
 
 	if sticky {
-		s.warmUpSticky(tv, handlingQueries)
+		s.warmUpSticky(tv)
 	}
 
 	wftCompleted := make(chan interface{})
@@ -281,9 +278,8 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 	tv := testvars.New(s)
 	tvB := tv.WithBuildId("B")
 	d := tv.Deployment()
-	handlingQueries := true
 	if sticky {
-		s.warmUpSticky(tv, handlingQueries)
+		s.warmUpSticky(tv)
 	}
 
 	wftCompleted := make(chan interface{})
@@ -305,13 +301,13 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
 	}
 
-	go s.idlePollWorkflow(tvB, sticky, ver3MinPollTime, "new deployment should not receive query", handlingQueries)
+	go s.idlePollWorkflow(tvB, sticky, ver3MinPollTime, "new deployment should not receive query")
 	s.pollAndQueryWorkflow(tv, sticky)
 
 	// redirect query to new deployment
 	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
 
-	go s.idlePollWorkflow(tv, sticky, ver3MinPollTime, "old deployment should not receive query", handlingQueries)
+	go s.idlePollWorkflow(tv, sticky, ver3MinPollTime, "old deployment should not receive query")
 	s.pollAndQueryWorkflow(tvB, sticky)
 
 }
@@ -323,14 +319,11 @@ func (s *Versioning3Suite) pollAndQueryWorkflow(
 	queryResultCh := make(chan interface{})
 	s.pollWftAndHandleQueries(tv, sticky, queryResultCh,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
-			s.NotNil(task)
-			s.NotNil(task.Query)
-			return respondQueryTaskCompleted(task, s.Namespace()), nil
+			return &workflowservice.RespondQueryTaskCompletedRequest{}, nil
 		})
 
-	response, err := s.queryWorkflow(tv)
-	s.Error(err)
-	s.Nil(response)
+	_, err := s.queryWorkflow(tv)
+	s.NoError(err)
 
 	<-queryResultCh
 }
@@ -354,10 +347,9 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_NoSticky() {
 func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 	tv := testvars.New(s)
 	d := tv.Deployment()
-	handlingQueries := false
 
 	if sticky {
-		s.warmUpSticky(tv, handlingQueries)
+		s.warmUpSticky(tv)
 	}
 
 	wftCompleted := make(chan interface{})
@@ -413,10 +405,9 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 	tvB := tvA.WithBuildId("B")
 	dA := tvA.Deployment()
 	dB := tvB.Deployment()
-	handlingQueries := false
 
 	if sticky {
-		s.warmUpSticky(tvA, handlingQueries)
+		s.warmUpSticky(tvA)
 	}
 
 	s.updateTaskQueueDeploymentData(tvA, 0, tqTypeWf, tqTypeAct)
@@ -576,9 +567,8 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	tvB := tvA.WithBuildId("B")
 	dA := tvA.Deployment()
 	dB := tvB.Deployment()
-	handlingQueries := false
 	if sticky {
-		s.warmUpSticky(tvA, handlingQueries)
+		s.warmUpSticky(tvA)
 	}
 
 	s.updateTaskQueueDeploymentData(tvA, 0, tqTypeWf, tqTypeAct)
@@ -1073,7 +1063,7 @@ func (s *Versioning3Suite) pollWftAndHandleQueries(
 				},
 				TaskQueue: tq,
 			},
-		).HandleQueries(tv, handler)
+		).HandleLegacyQuery(tv, handler)
 		s.NoError(err)
 		return resp
 	}
@@ -1157,11 +1147,10 @@ func (s *Versioning3Suite) idlePollWorkflow(
 	versioned bool,
 	timeout time.Duration,
 	unexpectedTaskMessage string,
-	handlingQueries bool,
 ) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
 	d := tv.Deployment()
-	taskPoller := poller.PollWorkflowTask(
+	_, _ = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 				BuildId:              d.BuildId,
@@ -1169,27 +1158,14 @@ func (s *Versioning3Suite) idlePollWorkflow(
 				UseVersioning:        versioned,
 			},
 		},
+	).HandleTask(
+		tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.Fail(unexpectedTaskMessage)
+			return nil, nil
+		},
+		taskpoller.WithTimeout(timeout),
 	)
-
-	if handlingQueries {
-		_, _ = taskPoller.HandleQueries(
-			tv,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
-				s.Fail(unexpectedTaskMessage)
-				return nil, nil
-			},
-			taskpoller.WithTimeout(timeout),
-		)
-	} else {
-		_, _ = taskPoller.HandleTask(
-			tv,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.Fail(unexpectedTaskMessage)
-				return nil, nil
-			},
-			taskpoller.WithTimeout(timeout),
-		)
-	}
 }
 
 func (s *Versioning3Suite) idlePollActivity(
@@ -1266,28 +1242,19 @@ func (s *Versioning3Suite) verifyWorkflowStickyQueue(
 // create the sticky queue by polling it.
 func (s *Versioning3Suite) warmUpSticky(
 	tv *testvars.TestVars,
-	handlingQueries bool,
 ) {
 
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
-	wfTaskPoller := poller.PollWorkflowTask(
+	_, _ = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: tv.StickyTaskQueue(),
 		},
+	).HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		s.Fail("sticky task is not expected")
+		return nil, nil
+	},
+		taskpoller.WithTimeout(ver3MinPollTime),
 	)
-
-	if handlingQueries {
-		_, _ = wfTaskPoller.HandleQueries(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
-			s.Fail("sticky task is not expected")
-			return nil, nil
-		})
-	} else {
-		_, _ = wfTaskPoller.HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			s.Fail("sticky task is not expected")
-			return nil, nil
-		})
-	}
-
 }
 
 func (s *Versioning3Suite) waitForDeploymentDataPropagation(
