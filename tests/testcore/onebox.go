@@ -597,6 +597,8 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			temporal.TraceExportModule,
+			temporal.ServiceTracingModule,
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),

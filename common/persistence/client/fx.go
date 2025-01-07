@@ -27,6 +27,7 @@ package client
 import (
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -37,9 +38,11 @@ import (
 	"go.temporal.io/server/common/persistence/faultinjection"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/telemetry"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
+	otel "go.temporal.io/server/common/telemetry"
 	"go.uber.org/fx"
 )
 
@@ -182,6 +185,7 @@ func DataStoreFactoryProvider(
 	abstractDataStoreFactory AbstractDataStoreFactory,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	tracerProvider trace.TracerProvider,
 ) persistence.DataStoreFactory {
 
 	var dataStoreFactory persistence.DataStoreFactory
@@ -199,6 +203,10 @@ func DataStoreFactoryProvider(
 
 	if defaultStoreCfg.FaultInjection != nil {
 		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(defaultStoreCfg.FaultInjection, dataStoreFactory)
+	}
+
+	if otel.IsEnabled(tracerProvider) {
+		dataStoreFactory = telemetry.NewTelemetryDataStoreFactory(dataStoreFactory, tracerProvider.Tracer("persistence"))
 	}
 
 	return dataStoreFactory

@@ -1,0 +1,34 @@
+{{ $decorator := (or .Vars.DecoratorName (printf "telemetry%s" .Interface.Name)) }}
+
+// {{$decorator}} implements {{.Interface.Name}} interface instrumented with OpenTelemetry.
+type {{$decorator}} struct {
+    {{.Interface.Type}}
+    tracer trace.Tracer
+}
+
+// new{{upFirst $decorator}} returns {{$decorator}}.
+func new{{upFirst $decorator}} (base {{.Interface.Type}}, tracer trace.Tracer) {{$decorator}} {
+    return {{$decorator}} {
+        {{.Interface.Name}}: base,
+        tracer: tracer,
+    }
+}
+
+{{range $method := .Interface.Methods}}
+    {{if $method.AcceptsContext}}
+        {{ $methodIdent := (printf "%s.%s" $.Interface.Name $method.Name) }}
+        // {{$method.Name}} wraps {{ (printf "%s.%s" $.Interface.Name $method.Name) }}.
+        func (_d {{$decorator}}) {{$method.Declaration}} {
+            ctx, span := _d.tracer.Start(ctx, "{{ printf "persistence.%s/%s" $.Interface.Name $method.Name }}")
+            defer span.End()
+
+            {{$method.ResultsNames}} = _d.{{$.Interface.Name}}.{{$method.Call}}
+            {{- if $method.ReturnsError}}
+            if err != nil {
+              span.RecordError(err)
+            }
+            {{end}}
+            return
+        }
+    {{end}}
+{{end}}
