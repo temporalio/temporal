@@ -490,7 +490,6 @@ func (p *workflowTaskPoller) respondQueryTaskCompleted(
 		reply.TaskToken = task.TaskToken
 	}
 
-	// setting CompletedType based on error
 	if err != nil {
 		reply.ErrorMessage = err.Error()
 		reply.Failure = &failurepb.Failure{
@@ -499,10 +498,9 @@ func (p *workflowTaskPoller) respondQueryTaskCompleted(
 		reply.CompletedType = enumspb.QUERY_RESULT_TYPE_FAILED
 	} else {
 		reply.CompletedType = enumspb.QUERY_RESULT_TYPE_ANSWERED
-	}
-
-	if reply.QueryResult == nil {
-		reply.QueryResult = payloads.EncodeString("query-result")
+		if reply.QueryResult == nil {
+			reply.QueryResult = payloads.EncodeString("query-result")
+		}
 	}
 
 	resp, err := p.client.RespondQueryTaskCompleted(ctx, reply)
