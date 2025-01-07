@@ -129,33 +129,60 @@ func (s *activityReplicatorStateSuite) TearDownTest() {
 func (s *activityReplicatorStateSuite) TestActivity_LocalVersionLarger() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version: version + 1,
 		Attempt: attempt,
+		Stamp:   stamp,
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		localActivityInfo.Stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
 	s.False(apply)
 }
 
-func (s *activityReplicatorStateSuite) TestActivity_IncomingVersionLarger() {
+func (s *activityReplicatorStateSuite) TestActivity_DifferentStamp() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
-		Version: version - 1,
+		Version: version,
 		Attempt: attempt,
+		Stamp:   stamp + 1,
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		stamp,
+		lastHeartbeatTime,
+		localActivityInfo,
+	)
+	s.True(apply)
+}
+
+func (s *activityReplicatorStateSuite) TestActivity_IncomingVersionLarger() {
+	version := int64(123)
+	attempt := int32(1)
+	stamp := int32(1)
+	lastHeartbeatTime := time.Now()
+	localActivityInfo := &persistencespb.ActivityInfo{
+		Version: version - 1,
+		Attempt: attempt,
+		Stamp:   stamp,
+	}
+
+	apply := s.nDCActivityStateReplicator.compareActivity(
+		version,
+		attempt,
+		stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
@@ -165,15 +192,18 @@ func (s *activityReplicatorStateSuite) TestActivity_IncomingVersionLarger() {
 func (s *activityReplicatorStateSuite) TestActivity_SameVersion_LocalAttemptLarger() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version: version,
 		Attempt: attempt + 1,
+		Stamp:   stamp,
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
@@ -183,15 +213,18 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_LocalAttemptLarg
 func (s *activityReplicatorStateSuite) TestActivity_SameVersion_IncomingAttemptLarger() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version: version,
 		Attempt: attempt - 1,
+		Stamp:   stamp,
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
@@ -201,16 +234,19 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_IncomingAttemptL
 func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_LocalHeartbeatLater() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version:                 version,
 		Attempt:                 attempt,
+		Stamp:                   stamp,
 		LastHeartbeatUpdateTime: timestamppb.New(lastHeartbeatTime.Add(time.Second)),
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
@@ -220,16 +256,19 @@ func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_Loca
 func (s *activityReplicatorStateSuite) TestActivity_SameVersion_SameAttempt_IncomingHeartbeatLater() {
 	version := int64(123)
 	attempt := int32(1)
+	stamp := int32(1)
 	lastHeartbeatTime := time.Now()
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version:                 version,
 		Attempt:                 attempt,
+		Stamp:                   stamp,
 		LastHeartbeatUpdateTime: timestamppb.New(lastHeartbeatTime.Add(-time.Second)),
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
 		version,
 		attempt,
+		stamp,
 		lastHeartbeatTime,
 		localActivityInfo,
 	)
