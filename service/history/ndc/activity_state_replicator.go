@@ -155,6 +155,10 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 			LastAttemptCompleteTime:    request.LastAttemptCompleteTime,
 			Stamp:                      request.Stamp,
 			Paused:                     request.Paused,
+			RetryInitialInterval:       request.RetryInitialInterval,
+			RetryMaximumInterval:       request.RetryMaximumInterval,
+			RetryMaximumAttempts:       request.RetryMaximumAttempts,
+			RetryBackoffCoefficient:    request.RetryBackoffCoefficient,
 		},
 	)
 	if err != nil {

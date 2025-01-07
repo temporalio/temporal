@@ -630,6 +630,12 @@ message SyncActivityRequest {
     int32 stamp = 20;
     // Indicates if the activity is paused.
     bool paused = 21;
+
+    // Retry policy for the activity.
+    google.protobuf.Duration retry_initial_interval = 22;
+    google.protobuf.Duration retry_maximum_interval = 23;
+    int32 retry_maximum_attempts = 24;
+    double retry_backoff_coefficient = 25;
 }
 
 message SyncActivitiesRequest {
@@ -666,6 +672,11 @@ message ActivitySyncInfo {
     int32 stamp = 20;
     // Indicates if the activity is paused.
     bool paused = 21;
+    // Retry policy for the activity. It needs to be replicated now, since the activity properties can be updated.
+    google.protobuf.Duration retry_initial_interval = 22;
+    google.protobuf.Duration retry_maximum_interval = 23;
+    int32 retry_maximum_attempts = 24;
+    double retry_backoff_coefficient = 25;
 
 }
 

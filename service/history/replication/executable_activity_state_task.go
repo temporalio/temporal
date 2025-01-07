@@ -107,6 +107,10 @@ func NewExecutableActivityStateTask(
 			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
 			Stamp:                      task.Stamp,
 			Paused:                     task.Paused,
+			RetryInitialInterval:       task.RetryInitialInterval,
+			RetryMaximumInterval:       task.RetryMaximumInterval,
+			RetryMaximumAttempts:       task.RetryMaximumAttempts,
+			RetryBackoffCoefficient:    task.RetryBackoffCoefficient,
 		},
 
 		batchable: true,
