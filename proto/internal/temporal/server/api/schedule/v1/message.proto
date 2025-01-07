@@ -189,12 +189,11 @@ message ExecutorInternal {
     repeated BufferedStart buffered_starts = 3;
 }
 
-// State machine scheduler's Backfiller internal state.
+// State machine scheduler's Backfiller internal state. Backfill requests are 1:1
+// with Backfiller nodes.
 message BackfillerInternal {
-    temporal.server.api.enums.v1.SchedulerBackfillerState state = 1;
+    temporal.api.schedule.v1.BackfillRequest request = 1;
 
-    // Wakes from wait state on the "backfill requested" event. When backing off,
-    // the next_invocation_time is used to set the timer deadline that will move
-    // out of the "backing off" state.
+    // Backfiller waits for the next_invocation_time before buffering more actions.
     google.protobuf.Timestamp next_invocation_time = 2;
 }

@@ -57,16 +57,6 @@ enum SchedulerExecutorState {
     SCHEDULER_EXECUTOR_STATE_EXECUTING = 2;
 }
 
-// State for the state machine scheduler's Backfiller.
-enum SchedulerBackfillerState {
-    // Default value, unspecified state.
-    SCHEDULER_BACKFILLER_STATE_UNSPECIFIED = 0;
-    // Backfiller is awaiting backfill to be requested.
-    SCHEDULER_BACKFILLER_STATE_WAITING = 1;
-    // Backfiller is actively starting actions.
-    SCHEDULER_BACKFILLER_STATE_EXECUTING = 2;
-}
-
 // State of a callback.
 enum CallbackState {
     // Default value, unspecified state.
