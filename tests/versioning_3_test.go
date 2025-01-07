@@ -405,7 +405,6 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 	tvB := tvA.WithBuildId("B")
 	dA := tvA.Deployment()
 	dB := tvB.Deployment()
-
 	if sticky {
 		s.warmUpSticky(tvA)
 	}
@@ -1243,16 +1242,17 @@ func (s *Versioning3Suite) verifyWorkflowStickyQueue(
 func (s *Versioning3Suite) warmUpSticky(
 	tv *testvars.TestVars,
 ) {
-
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
 	_, _ = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: tv.StickyTaskQueue(),
 		},
-	).HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		s.Fail("sticky task is not expected")
-		return nil, nil
-	},
+	).HandleTask(
+		tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.Fail("sticky task is not expected")
+			return nil, nil
+		},
 		taskpoller.WithTimeout(ver3MinPollTime),
 	)
 }
