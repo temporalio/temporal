@@ -301,15 +301,19 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
 	}
 
-	go s.idlePollWorkflow(tvB, true, ver3MinPollTime, "new deployment should not receive query")
+	pollerDone := make(chan interface{})
+	go func() {
+		s.idlePollWorkflow(tvB, true, ver3MinPollTime, "new deployment should not receive query")
+		close(pollerDone)
+	}()
 	s.pollAndQueryWorkflow(tv, sticky)
-	time.Sleep(ver3MinPollTime) // //nolint:forbidigo
+	<-pollerDone // wait for the idle poller to complete to not interfere with the next poller
 
 	// redirect query to new deployment
 	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
 
 	go s.idlePollWorkflow(tv, true, ver3MinPollTime, "old deployment should not receive query")
-	// Since the current deployment has changed, task moves to the normal queue
+	// Since the current deployment has changed, task will move to the normal queue (thus, sticky=false)
 	s.pollAndQueryWorkflow(tvB, false)
 
 }
