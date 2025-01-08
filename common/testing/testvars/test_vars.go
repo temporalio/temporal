@@ -25,6 +25,8 @@
 package testvars
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -179,8 +181,15 @@ func (tv *TestVars) Deployment(key ...string) *deploymentpb.Deployment {
 	}
 }
 
-func (tv *TestVars) WithWorkflowID(workflowID string, key ...string) *TestVars {
-	return tv.cloneSet("workflow_id", key, workflowID)
+func (tv *TestVars) WithWorkflowID(workflowID any, key ...string) *TestVars {
+	switch v := workflowID.(type) {
+	case string:
+		return tv.cloneSet("workflow_id", key, workflowID)
+	case int:
+		return tv.cloneSet("workflow_id", key, strconv.Itoa(v))
+	default:
+		return tv.cloneSet("workflow_id", key, fmt.Sprintf("unsupported type %T", v))
+	}
 }
 
 func (tv *TestVars) RunID(key ...string) string {
