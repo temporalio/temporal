@@ -26,6 +26,7 @@ package batcher
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -194,7 +195,6 @@ func (s *activitiesSuite) TestGetFirstWorkflowTaskEventID() {
 
 func (s *activitiesSuite) TestGetResetPoint() {
 	ctx := context.Background()
-	logger := log.NewTestLogger()
 	ns := "namespacename"
 	tests := []struct {
 		name                    string
@@ -303,12 +303,78 @@ func (s *activitiesSuite) TestGetResetPoint() {
 				WorkflowId: "wfid",
 				RunId:      "run1",
 			}
-			id, err := getResetPoint(ctx, ns, execution, s.mockFrontendClient, logger, tt.buildId, tt.currentRunOnly)
+			id, err := getResetPoint(ctx, ns, execution, s.mockFrontendClient, tt.buildId, tt.currentRunOnly)
 			s.Equal(tt.wantErr, err != nil)
 			s.Equal(tt.wantWorkflowTaskEventID, id)
 			if tt.wantSetRunId != "" {
 				s.Equal(tt.wantSetRunId, execution.RunId)
 			}
+		})
+	}
+}
+
+func (s *activitiesSuite) TestAdjustQuery() {
+	tests := []struct {
+		name           string
+		query          string
+		expectedResult string
+		batchType      string
+	}{
+		{
+			name:           "Empty query",
+			query:          "",
+			expectedResult: "",
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Acceptance",
+			query:          "A=B",
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Acceptance with parenthesis",
+			query:          "(A=B)",
+			expectedResult: fmt.Sprintf("((A=B)) AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Acceptance with multiple conditions",
+			query:          "(A=B) OR C=D",
+			expectedResult: fmt.Sprintf("((A=B) OR C=D) AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Contains status - 1",
+			query:          "Status=Completed",
+			expectedResult: "Status=Completed",
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Contains status - 2",
+			query:          "A=B OR Status=Completed",
+			expectedResult: "A=B OR Status=Completed",
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Contains status as a part of different cause",
+			query:          "A=B OR NewStatus=Completed",
+			expectedResult: fmt.Sprintf("(A=B OR NewStatus=Completed) AND (%s)", statusRunningQueryFilter),
+			batchType:      BatchTypeTerminate,
+		},
+		{
+			name:           "Not supported batch type",
+			query:          "A=B",
+			expectedResult: "A=B",
+			batchType:      "NotSupported",
+		},
+	}
+	for _, testRun := range tests {
+		s.Run(testRun.name, func() {
+			a := activities{}
+			batchParams := BatchParams{Query: testRun.query, BatchType: testRun.batchType}
+			adjustedQuery := a.adjustQuery(batchParams)
+			s.Equal(testRun.expectedResult, adjustedQuery)
 		})
 	}
 }

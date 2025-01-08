@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -50,7 +51,8 @@ import (
 )
 
 const (
-	pageSize = 1000
+	pageSize                 = 1000
+	statusRunningQueryFilter = "Status='Running'"
 )
 
 var (
@@ -108,11 +110,13 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		}
 	}
 
+	adjustedQuery := a.adjustQuery(batchParams)
+
 	if startOver {
 		estimateCount := int64(len(batchParams.Executions))
-		if len(batchParams.Query) > 0 {
+		if len(adjustedQuery) > 0 {
 			resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-				Query: batchParams.Query,
+				Query: adjustedQuery,
 			})
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
@@ -136,11 +140,11 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	for {
 		executions := batchParams.Executions
 		pageToken := hbd.PageToken
-		if len(batchParams.Query) > 0 {
+		if len(adjustedQuery) > 0 {
 			resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				PageSize:      int32(pageSize),
 				NextPageToken: pageToken,
-				Query:         batchParams.Query,
+				Query:         adjustedQuery,
 			})
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
@@ -210,6 +214,35 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 		tag.WorkflowRunID(wfInfo.WorkflowExecution.RunID),
 		tag.WorkflowNamespace(wfInfo.WorkflowNamespace),
 	)
+}
+
+func containsStatusCondition(whereClause string) bool {
+	pattern := `(?i)\bStatus\b\s*([=!<>]+)`
+	matched, err := regexp.MatchString(pattern, whereClause)
+	if err != nil {
+		return false
+	}
+	return matched
+}
+
+func (a *activities) adjustQuery(batchParams BatchParams) string {
+	if len(batchParams.Query) == 0 {
+		// don't add anything if query is empty
+		return batchParams.Query
+	}
+
+	// if query is not empty and contains status check - return it as is
+	if containsStatusCondition(batchParams.Query) {
+		return batchParams.Query
+	}
+
+	switch batchParams.BatchType {
+	// anything else?
+	case BatchTypeTerminate, BatchTypeDelete, BatchTypeCancel:
+		return fmt.Sprintf("(%s) AND (%s)", batchParams.Query, statusRunningQueryFilter)
+	default:
+		return batchParams.Query
+	}
 }
 
 func (a *activities) getOperationRPS(requestedRPS float64) float64 {
@@ -426,7 +459,7 @@ func getResetEventIDByOptions(
 	case *commonpb.ResetOptions_WorkflowTaskId:
 		return target.WorkflowTaskId, nil
 	case *commonpb.ResetOptions_BuildId:
-		return getResetPoint(ctx, namespaceStr, workflowExecution, frontendClient, logger, target.BuildId, resetOptions.CurrentRunOnly)
+		return getResetPoint(ctx, namespaceStr, workflowExecution, frontendClient, target.BuildId, resetOptions.CurrentRunOnly)
 	default:
 		errorMsg := fmt.Sprintf("provided reset target (%+v) is not supported.", resetOptions.Target)
 		return 0, serviceerror.NewInvalidArgument(errorMsg)
@@ -519,7 +552,6 @@ func getResetPoint(
 	namespaceStr string,
 	execution *commonpb.WorkflowExecution,
 	frontendClient workflowservice.WorkflowServiceClient,
-	logger log.Logger,
 	buildId string,
 	currentRunOnly bool,
 ) (workflowTaskEventID int64, err error) {
