@@ -39,9 +39,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	querypb "go.temporal.io/api/query/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -59,6 +62,7 @@ import (
 const (
 	tqTypeWf        = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 	tqTypeAct       = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	tqTypeNexus     = enumspb.TASK_QUEUE_TYPE_NEXUS
 	vbUnspecified   = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	vbPinned        = enumspb.VERSIONING_BEHAVIOR_PINNED
 	vbUnpinned      = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
@@ -212,6 +216,124 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
 }
 
+func (s *Versioning3Suite) TestQueryWithPinnedOverride_NoSticky() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testQueryWithPinnedOverride(false)
+		},
+	)
+}
+
+func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testQueryWithPinnedOverride(true)
+		},
+	)
+}
+
+func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
+	tv := testvars.New(s)
+
+	if sticky {
+		s.warmUpSticky(tv)
+	}
+
+	wftCompleted := make(chan interface{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv, sticky, vbUnpinned), nil
+		})
+
+	override := makePinnedOverride(tv.Deployment())
+	we := s.startWorkflow(tv, override)
+
+	<-wftCompleted
+	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
+	if sticky {
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
+	}
+
+	s.pollAndQueryWorkflow(tv, sticky)
+}
+
+func (s *Versioning3Suite) TestUnpinnedQuery_NoSticky() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testUnpinnedQuery(false)
+		},
+	)
+}
+
+func (s *Versioning3Suite) TestUnpinnedQuery_Sticky() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testUnpinnedQuery(true)
+		},
+	)
+}
+
+func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
+	tv := testvars.New(s)
+	tvB := tv.WithBuildId("B")
+	d := tv.Deployment()
+	if sticky {
+		s.warmUpSticky(tv)
+	}
+
+	wftCompleted := make(chan interface{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, transitionTo(d))
+			return respondEmptyWft(tv, sticky, vbUnpinned), nil
+		})
+
+	s.setCurrentDeployment(d)
+	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
+
+	we := s.startWorkflow(tv, nil)
+
+	<-wftCompleted
+	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
+	if sticky {
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
+	}
+
+	pollerDone := make(chan interface{})
+	go func() {
+		s.idlePollWorkflow(tvB, true, ver3MinPollTime, "new deployment should not receive query")
+		close(pollerDone)
+	}()
+	s.pollAndQueryWorkflow(tv, sticky)
+	<-pollerDone // wait for the idle poller to complete to not interfere with the next poller
+
+	// redirect query to new deployment
+	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
+
+	go s.idlePollWorkflow(tv, true, ver3MinPollTime, "old deployment should not receive query")
+	// Since the current deployment has changed, task will move to the normal queue (thus, sticky=false)
+	s.pollAndQueryWorkflow(tvB, false)
+
+}
+
+func (s *Versioning3Suite) pollAndQueryWorkflow(
+	tv *testvars.TestVars,
+	sticky bool,
+) {
+	queryResultCh := make(chan interface{})
+	s.pollWftAndHandleQueries(tv, sticky, queryResultCh,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error) {
+			return &workflowservice.RespondQueryTaskCompletedRequest{}, nil
+		})
+
+	_, err := s.queryWorkflow(tv)
+	s.NoError(err)
+
+	<-queryResultCh
+}
+
 func (s *Versioning3Suite) TestUnpinnedWorkflow_Sticky() {
 	s.RunTestWithMatchingBehavior(
 		func() {
@@ -282,14 +404,13 @@ func (s *Versioning3Suite) TestTransitionFromWft_NoSticky() {
 }
 
 func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
-	// Wf runs one TWF and one AT on dA, then the second WFT is redirected to dB and
+	// Wf runs one WFT and one AT on dA, then the second WFT is redirected to dB and
 	// transitions the wf with it.
 
 	tvA := testvars.New(s).WithBuildId("A")
 	tvB := tvA.WithBuildId("B")
 	dA := tvA.Deployment()
 	dB := tvB.Deployment()
-
 	if sticky {
 		s.warmUpSticky(tvA)
 	}
@@ -325,6 +446,65 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 			return respondCompleteWorkflow(tvB, vbUnpinned), nil
 		})
 	s.verifyWorkflowVersioning(tvB, vbUnpinned, dB, nil, nil)
+}
+
+func (s *Versioning3Suite) TestNexusTask_StaysOnCurrentDeployment() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.nexusTaskStaysOnCurrentDeployment()
+		},
+	)
+}
+
+func (s *Versioning3Suite) nexusTaskStaysOnCurrentDeployment() {
+	tvA := testvars.New(s).WithBuildId("A")
+	tvB := tvA.WithBuildId("B")
+
+	nexusRequest := &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: s.GetNamespaceID(s.Namespace()),
+		TaskQueue:   tvA.TaskQueue(),
+		Request: &nexuspb.Request{
+			Header: map[string]string{
+				// placeholder value as passing in an empty map would result in protoc deserializing
+				// it as nil, which breaks existing logic inside of matching
+				"request-timeout": "1",
+			},
+		},
+	}
+
+	// current deployment is -> A
+	s.updateTaskQueueDeploymentData(tvA, 0, tqTypeNexus)
+	s.waitForDeploymentDataPropagation(tvA, tqTypeNexus)
+
+	// local poller with deployment A receives task
+	s.pollAndDispatchNexusTask(tvA, nexusRequest)
+
+	// current deployment is now -> B
+	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeNexus)
+	s.waitForDeploymentDataPropagation(tvB, tqTypeNexus)
+
+	// Pollers of A are there but should not get any task
+	go s.idlePollNexus(tvA, true, ver3MinPollTime, "nexus task should not go to the old deployment")
+
+	s.pollAndDispatchNexusTask(tvB, nexusRequest)
+}
+
+func (s *Versioning3Suite) pollAndDispatchNexusTask(
+	tv *testvars.TestVars,
+	nexusRequest *matchingservice.DispatchNexusTaskRequest,
+) {
+	matchingClient := s.GetTestCluster().MatchingClient()
+
+	nexusCompleted := make(chan interface{})
+	s.pollNexusTaskAndHandle(tv, false, nexusCompleted,
+		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return &workflowservice.RespondNexusTaskCompletedRequest{}, nil // response object gets filled during processing
+		})
+
+	_, err := matchingClient.DispatchNexusTask(context.Background(), nexusRequest)
+	s.NoError(err)
+	<-nexusCompleted
 }
 
 func (s *Versioning3Suite) TestEagerActivity() {
@@ -392,7 +572,6 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	tvB := tvA.WithBuildId("B")
 	dA := tvA.Deployment()
 	dB := tvB.Deployment()
-
 	if sticky {
 		s.warmUpSticky(tvA)
 	}
@@ -722,6 +901,41 @@ func respondCompleteWorkflow(
 	}
 }
 
+func respondScheduleNexusOperation(
+	tv *testvars.TestVars,
+	behavior enumspb.VersioningBehavior,
+	endpointName string,
+) *workflowservice.RespondWorkflowTaskCompletedRequest {
+	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+						Input:     mustToPayload("input"),
+					},
+				},
+			},
+		},
+		ForceCreateNewWorkflowTask: false,
+		Deployment:                 tv.Deployment(),
+		VersioningBehavior:         behavior,
+	}
+}
+
+func mustToPayload(v any) *commonpb.Payload {
+	conv := converter.GetDefaultDataConverter()
+	payload, err := conv.ToPayload(v)
+	if err != nil {
+
+		return &commonpb.Payload{}
+	}
+	return payload
+}
+
 func (s *Versioning3Suite) startWorkflow(
 	tv *testvars.TestVars,
 	override *workflowpb.VersioningOverride,
@@ -749,6 +963,23 @@ func (s *Versioning3Suite) startWorkflow(
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	}
+}
+
+func (s *Versioning3Suite) queryWorkflow(
+	tv *testvars.TestVars,
+) (*workflowservice.QueryWorkflowResponse, error) {
+	request := &workflowservice.QueryWorkflowRequest{
+		Namespace: s.Namespace(),
+		Execution: tv.WorkflowExecution(),
+		Query: &querypb.WorkflowQuery{
+			QueryType: tv.Any().String(),
+		},
+	}
+
+	shortCtx, cancel := context.WithTimeout(testcore.NewContext(), common.MinLongPollTimeout)
+	defer cancel()
+	response, err := s.FrontendClient().QueryWorkflow(shortCtx, request)
+	return response, err
 }
 
 // Name is used by testvars. We use a shorten test name in variables so that physical task queue IDs
@@ -801,6 +1032,78 @@ func (s *Versioning3Suite) pollWftAndHandle(
 			close(async)
 		}()
 	}
+	return nil, nil
+}
+
+func (s *Versioning3Suite) pollWftAndHandleQueries(
+	tv *testvars.TestVars,
+	sticky bool,
+	async chan<- interface{},
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
+) (*taskpoller.TaskPoller, *workflowservice.RespondQueryTaskCompletedResponse) {
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	d := tv.Deployment()
+	tq := tv.TaskQueue()
+	if sticky {
+		tq = tv.StickyTaskQueue()
+	}
+	f := func() *workflowservice.RespondQueryTaskCompletedResponse {
+		resp, err := poller.PollWorkflowTask(
+			&workflowservice.PollWorkflowTaskQueueRequest{
+				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+					BuildId:              d.BuildId,
+					DeploymentSeriesName: d.SeriesName,
+					UseVersioning:        true,
+				},
+				TaskQueue: tq,
+			},
+		).HandleLegacyQuery(tv, handler)
+		s.NoError(err)
+		return resp
+	}
+	if async == nil {
+		return poller, f()
+	}
+	go func() {
+		f()
+		close(async)
+	}()
+	return nil, nil
+}
+
+func (s *Versioning3Suite) pollNexusTaskAndHandle(
+	tv *testvars.TestVars,
+	sticky bool,
+	async chan<- interface{},
+	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
+) (*taskpoller.TaskPoller, *workflowservice.RespondNexusTaskCompletedResponse) {
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	d := tv.Deployment()
+	tq := tv.TaskQueue()
+	if sticky {
+		tq = tv.StickyTaskQueue()
+	}
+	f := func() *workflowservice.RespondNexusTaskCompletedResponse {
+		resp, err := poller.PollNexusTask(
+			&workflowservice.PollNexusTaskQueueRequest{
+				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+					BuildId:              d.BuildId,
+					DeploymentSeriesName: d.SeriesName,
+					UseVersioning:        true,
+				},
+				TaskQueue: tq,
+			},
+		).HandleTask(tv, handler)
+		s.NoError(err)
+		return resp
+	}
+	if async == nil {
+		return poller, f()
+	}
+	go func() {
+		f()
+		close(async)
+	}()
 	return nil, nil
 }
 
@@ -880,6 +1183,33 @@ func (s *Versioning3Suite) idlePollActivity(
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			if task != nil {
 				s.Logger.Error(fmt.Sprintf("Unexpected activity task received, ID: %s", task.ActivityId))
+				s.Fail(unexpectedTaskMessage)
+			}
+			return nil, nil
+		},
+		taskpoller.WithTimeout(timeout),
+	)
+}
+
+func (s *Versioning3Suite) idlePollNexus(
+	tv *testvars.TestVars,
+	versioned bool,
+	timeout time.Duration,
+	unexpectedTaskMessage string,
+) {
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	d := tv.Deployment()
+	_, _ = poller.PollNexusTask(
+		&workflowservice.PollNexusTaskQueueRequest{
+			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:              d.BuildId,
+				UseVersioning:        versioned,
+				DeploymentSeriesName: d.SeriesName,
+			},
+		}).HandleTask(
+		tv,
+		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
+			if task != nil {
 				s.Fail(unexpectedTaskMessage)
 			}
 			return nil, nil
