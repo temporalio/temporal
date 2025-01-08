@@ -797,7 +797,7 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 		},
 		{
 			name:    "ErrNamespaceHandOver",
-			taskErr: consts.ErrNamespaceHandOver, // this error won't trigger re-submit
+			taskErr: consts.ErrNamespaceHandover, // this error won't trigger re-submit
 		},
 	}
 
