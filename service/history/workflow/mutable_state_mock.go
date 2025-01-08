@@ -38,7 +38,6 @@ import (
 	reflect "reflect"
 	time "time"
 
-	nexus "github.com/nexus-rpc/sdk-go/nexus"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
 	deployment "go.temporal.io/api/deployment/v1"
@@ -2052,21 +2051,6 @@ func (mr *MockMutableStateMockRecorder) GetFirstRunID(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFirstRunID", reflect.TypeOf((*MockMutableState)(nil).GetFirstRunID), ctx)
 }
 
-// GetHSMCompletionCallbackArg mocks base method.
-func (m *MockMutableState) GetHSMCompletionCallbackArg(ctx context.Context) (*persistence.HSMCompletionCallbackArg, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHSMCompletionCallbackArg", ctx)
-	ret0, _ := ret[0].(*persistence.HSMCompletionCallbackArg)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetHSMCompletionCallbackArg indicates an expected call of GetHSMCompletionCallbackArg.
-func (mr *MockMutableStateMockRecorder) GetHSMCompletionCallbackArg(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHSMCompletionCallbackArg", reflect.TypeOf((*MockMutableState)(nil).GetHSMCompletionCallbackArg), ctx)
-}
-
 // GetHistorySize mocks base method.
 func (m *MockMutableState) GetHistorySize() int64 {
 	m.ctrl.T.Helper()
@@ -2194,21 +2178,6 @@ func (m *MockMutableState) GetNextEventID() int64 {
 func (mr *MockMutableStateMockRecorder) GetNextEventID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextEventID", reflect.TypeOf((*MockMutableState)(nil).GetNextEventID))
-}
-
-// GetNexusCompletion mocks base method.
-func (m *MockMutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNexusCompletion", ctx)
-	ret0, _ := ret[0].(nexus.OperationCompletion)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetNexusCompletion indicates an expected call of GetNexusCompletion.
-func (mr *MockMutableStateMockRecorder) GetNexusCompletion(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusCompletion", reflect.TypeOf((*MockMutableState)(nil).GetNexusCompletion), ctx)
 }
 
 // GetPendingActivityInfos mocks base method.
