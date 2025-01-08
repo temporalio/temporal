@@ -24,7 +24,7 @@
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination engine_mock.go
 
-package common
+package interfaces
 
 import (
 	"context"

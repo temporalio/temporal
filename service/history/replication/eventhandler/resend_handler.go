@@ -43,8 +43,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/configs"
+	history "go.temporal.io/server/service/history/interfaces"
 )
 
 type (

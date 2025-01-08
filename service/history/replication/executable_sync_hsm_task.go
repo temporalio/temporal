@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
-	history "go.temporal.io/server/service/history/common"
+	history "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

@@ -52,8 +52,8 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/configs"
+	history "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

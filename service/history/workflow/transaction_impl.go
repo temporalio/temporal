@@ -36,8 +36,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/events"
+	history "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 )
 
