@@ -489,10 +489,6 @@ Loop:
 			return fmt.Errorf("ReplicationServiceError StreamSender unable to get next replication task: %w", err)
 		}
 
-		if !s.shouldProcessTask(item) {
-			continue
-		}
-
 		skipCount++
 		// To avoid a situation: we are skipping a lot of tasks and never send any task, receiver side will not have updated high watermark,
 		// so it will not ACK back to sender, sender will not update the ACK level.
@@ -510,10 +506,15 @@ Loop:
 				return err
 			}
 		}
+
+		if !s.shouldProcessTask(item) {
+			continue Loop
+		}
 		if priority != enumsspb.TASK_PRIORITY_UNSPECIFIED && // case: skip priority check. When priority is unspecified, send all tasks
 			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
 			continue Loop
 		}
+
 		operation := func() error {
 			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID)
 			if err != nil {
