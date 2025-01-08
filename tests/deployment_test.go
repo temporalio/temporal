@@ -1048,9 +1048,8 @@ func (s *DeploymentSuite) startBatchJobWithinConcurrentJobLimit(ctx context.Cont
 			return true
 		} else if strings.Contains(err.Error(), "Max concurrent batch operations is reached") {
 			return false // retry
-		} else {
-			return true // don't retry, just return error to test
 		}
+		return true
 	}, 5*time.Second, 500*time.Millisecond)
 	return err
 }
