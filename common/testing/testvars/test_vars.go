@@ -47,7 +47,8 @@ type (
 		testName string
 		testHash uint32
 		an       Any
-		kv       sync.Map
+		values   sync.Map
+		ns       sync.Map
 	}
 	testNamer interface {
 		Name() string
@@ -67,10 +68,26 @@ func newFromName(testName string) *TestVars {
 	}
 }
 
-func getOrCreate[T any](tv *TestVars, key string, initialValGen func(key string) T) T {
-	v, _ := tv.kv.LoadOrStore(key, initialValGen(key))
+func getOrCreate[T any](tv *TestVars, key string, initialValGen func(key string) T, valNSetter func(val T, n int) T) T {
+	v, _ := tv.values.LoadOrStore(key, initialValGen(key))
+
+	n, ok := tv.ns.Load(key)
+	if !ok {
+		//revive:disable-next-line:unchecked-type-assertion
+		return v.(T)
+	}
+
 	//revive:disable-next-line:unchecked-type-assertion
-	return v.(T)
+	return valNSetter(v.(T), n.(int))
+}
+
+func (tv *TestVars) stringNSetter(v string, n int) string {
+	return fmt.Sprintf("%s_%d", v, n)
+}
+
+// Use this setter for entities that don't support setting n (like uuid).
+func unsupportedNSetter[T any](v T, _ int) T {
+	panic(fmt.Sprintf("setting n on type %T is not supported", v))
 }
 
 func (tv *TestVars) uniqueString(key string) string {
@@ -83,8 +100,12 @@ func (tv *TestVars) uuidString(_ string) string {
 
 func (tv *TestVars) clone() *TestVars {
 	tv2 := newFromName(tv.testName)
-	tv.kv.Range(func(key, value any) bool {
-		tv2.kv.Store(key, value)
+	tv.values.Range(func(key, value any) bool {
+		tv2.values.Store(key, value)
+		return true
+	})
+	tv.ns.Range(func(key, value any) bool {
+		tv2.ns.Store(key, value)
 		return true
 	})
 
@@ -92,56 +113,38 @@ func (tv *TestVars) clone() *TestVars {
 }
 func (tv *TestVars) cloneSetVal(key string, val any) *TestVars {
 	tv2 := tv.clone()
-	tv2.kv.Store(key, val)
+	tv2.values.Store(key, val)
 	return tv2
 }
 
-func (tv *TestVars) cloneSetN(key string, defaultValGen func(key string) string, n int) *TestVars {
+func (tv *TestVars) cloneSetN(key string, n int) *TestVars {
 	tv2 := tv.clone()
-
-	v, ok := tv.kv.Load(key)
-	if !ok {
-		v = defaultValGen(key)
-	}
-
-	vStr := valString(key, v)
-	tv2.kv.Store(key, fmt.Sprintf("%s_%d", vStr, n))
-
+	tv2.ns.Store(key, n)
 	return tv2
-}
-
-func valString(key string, v any) string {
-	vString, vIsString := v.(string)
-	if !vIsString {
-		vStringer, vIsStringer := v.(fmt.Stringer)
-		if !vIsStringer {
-			panic(fmt.Sprintf("value of key %s is of type %T but must be of type %T or implement fmt.Stringer", key, v, ""))
-		}
-		vString = vStringer.String()
-	}
-	return vString
 }
 
 // ----------- Methods for every entity ------------
 // Add more as you need them following the pattern below.
 // Replace "Entity" with the name of the entity, i.e., UpdateID, ActivityType, etc.
-// Add only the necessary methods (in most cases only getter).
+// Add only the necessary methods (in most cases only first getter).
 /*
 func (tv *TestVars) Entity() string {
-	return getOrCreate(tv, "entity", tv.uniqueString)
+	return getOrCreate(tv, "entity", tv.uniqueString, tv.stringNSetter)
 }
 func (tv *TestVars) WithEntity(entity string) *TestVars {
 	return tv.cloneSetVal("entity", entity)
 }
 func (tv *TestVars) WithEntityN(n int) *TestVars {
-	return tv.cloneSetN("entity", tv.uniqueString, n)
+	return tv.cloneSetN("entity", n)
 }
 */
 
 func (tv *TestVars) NamespaceID() namespace.ID {
 	return getOrCreate(tv, "namespace_id", func(key string) namespace.ID {
 		return namespace.ID(tv.uuidString(key))
-	})
+	},
+		unsupportedNSetter,
+	)
 }
 
 func (tv *TestVars) WithNamespaceID(namespaceID namespace.ID) *TestVars {
@@ -149,9 +152,14 @@ func (tv *TestVars) WithNamespaceID(namespaceID namespace.ID) *TestVars {
 }
 
 func (tv *TestVars) NamespaceName() namespace.Name {
-	return getOrCreate(tv, "namespace_name", func(key string) namespace.Name {
-		return namespace.Name(tv.uniqueString(key))
-	})
+	return getOrCreate(tv, "namespace_name",
+		func(key string) namespace.Name {
+			return namespace.Name(tv.uniqueString(key))
+		},
+		func(val namespace.Name, n int) namespace.Name {
+			return namespace.Name(tv.stringNSetter(val.String(), n))
+		},
+	)
 }
 
 func (tv *TestVars) WithNamespaceName(namespaceName namespace.Name) *TestVars {
@@ -177,15 +185,15 @@ func (tv *TestVars) Namespace() *namespace.Namespace {
 }
 
 func (tv *TestVars) WorkflowID() string {
-	return getOrCreate(tv, "workflow_id", tv.uniqueString)
+	return getOrCreate(tv, "workflow_id", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) WithWorkflowIDN(n int) *TestVars {
-	return tv.cloneSetN("workflow_id", tv.uniqueString, n)
+	return tv.cloneSetN("workflow_id", n)
 }
 
 func (tv *TestVars) RunID() string {
-	return getOrCreate(tv, "run_id", tv.uuidString)
+	return getOrCreate(tv, "run_id", tv.uuidString, unsupportedNSetter)
 }
 
 func (tv *TestVars) WithRunID(runID string) *TestVars {
@@ -200,11 +208,11 @@ func (tv *TestVars) WorkflowExecution() *commonpb.WorkflowExecution {
 }
 
 func (tv *TestVars) RequestID() string {
-	return getOrCreate(tv, "request_id", tv.uuidString)
+	return getOrCreate(tv, "request_id", tv.uuidString, unsupportedNSetter)
 }
 
 func (tv *TestVars) BuildID() string {
-	return getOrCreate(tv, "build_id", tv.uniqueString)
+	return getOrCreate(tv, "build_id", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) WithBuildID(buildId string) *TestVars {
@@ -212,11 +220,11 @@ func (tv *TestVars) WithBuildID(buildId string) *TestVars {
 }
 
 func (tv *TestVars) WithBuildIDN(n int) *TestVars {
-	return tv.cloneSetN("build_id", tv.uniqueString, n)
+	return tv.cloneSetN("build_id", n)
 }
 
 func (tv *TestVars) DeploymentSeries() string {
-	return getOrCreate(tv, "deployment_series", tv.uniqueString)
+	return getOrCreate(tv, "deployment_series", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) WithDeploymentSeries(series string) *TestVars {
@@ -232,7 +240,7 @@ func (tv *TestVars) Deployment() *deploymentpb.Deployment {
 
 func (tv *TestVars) TaskQueue() *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{
-		Name: getOrCreate(tv, "task_queue", tv.uniqueString),
+		Name: getOrCreate(tv, "task_queue", tv.uniqueString, tv.stringNSetter),
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 }
@@ -242,12 +250,12 @@ func (tv *TestVars) WithTaskQueue(taskQueue string) *TestVars {
 }
 
 func (tv *TestVars) WithTaskQueueN(n int) *TestVars {
-	return tv.cloneSetN("task_queue", tv.uniqueString, n)
+	return tv.cloneSetN("task_queue", n)
 }
 
 func (tv *TestVars) StickyTaskQueue() *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{
-		Name:       getOrCreate(tv, "sticky_task_queue", tv.uniqueString),
+		Name:       getOrCreate(tv, "sticky_task_queue", tv.uniqueString, tv.stringNSetter),
 		Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 		NormalName: tv.TaskQueue().Name,
 	}
@@ -262,38 +270,38 @@ func (tv *TestVars) StickyExecutionAttributes(timeout time.Duration) *taskqueuep
 
 func (tv *TestVars) WorkflowType() *commonpb.WorkflowType {
 	return &commonpb.WorkflowType{
-		Name: getOrCreate(tv, "workflow_type", tv.uniqueString),
+		Name: getOrCreate(tv, "workflow_type", tv.uniqueString, tv.stringNSetter),
 	}
 }
 
 func (tv *TestVars) ActivityID() string {
-	return getOrCreate(tv, "activity_id", tv.uniqueString)
+	return getOrCreate(tv, "activity_id", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) WithActivityIDN(n int) *TestVars {
-	return tv.cloneSetN("activity_id", tv.uniqueString, n)
+	return tv.cloneSetN("activity_id", n)
 }
 
 func (tv *TestVars) ActivityType() *commonpb.ActivityType {
 	return &commonpb.ActivityType{
-		Name: getOrCreate(tv, "activity_type", tv.uniqueString),
+		Name: getOrCreate(tv, "activity_type", tv.uniqueString, tv.stringNSetter),
 	}
 }
 
 func (tv *TestVars) MessageID() string {
-	return getOrCreate(tv, "message_id", tv.uniqueString)
+	return getOrCreate(tv, "message_id", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) WithMessageIDN(n int) *TestVars {
-	return tv.cloneSetN("message_id", tv.uniqueString, n)
+	return tv.cloneSetN("message_id", n)
 }
 
 func (tv *TestVars) UpdateID() string {
-	return getOrCreate(tv, "update_id", tv.uniqueString)
+	return getOrCreate(tv, "update_id", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) WithUpdateIDN(n int) *TestVars {
-	return tv.cloneSetN("update_id", tv.uniqueString, n)
+	return tv.cloneSetN("update_id", n)
 }
 
 func (tv *TestVars) UpdateRef() *updatepb.UpdateRef {
@@ -304,35 +312,35 @@ func (tv *TestVars) UpdateRef() *updatepb.UpdateRef {
 }
 
 func (tv *TestVars) HandlerName() string {
-	return getOrCreate(tv, "handler_name", tv.uniqueString)
+	return getOrCreate(tv, "handler_name", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) ClientIdentity() string {
-	return getOrCreate(tv, "client_identity", tv.uniqueString)
+	return getOrCreate(tv, "client_identity", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) WorkerIdentity() string {
-	return getOrCreate(tv, "worker_identity", tv.uniqueString)
+	return getOrCreate(tv, "worker_identity", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) TimerID() string {
-	return getOrCreate(tv, "timer_id", tv.uniqueString)
+	return getOrCreate(tv, "timer_id", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) WithTimerIDN(n int) *TestVars {
-	return tv.cloneSetN("timer_id", tv.uniqueString, n)
+	return tv.cloneSetN("timer_id", n)
 }
 
 func (tv *TestVars) QueryType() string {
-	return getOrCreate(tv, "query_type", tv.uniqueString)
+	return getOrCreate(tv, "query_type", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) SignalName() string {
-	return getOrCreate(tv, "signal_name", tv.uniqueString)
+	return getOrCreate(tv, "signal_name", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) IndexName() string {
-	return getOrCreate(tv, "index_name", tv.uniqueString)
+	return getOrCreate(tv, "index_name", tv.uniqueString, tv.stringNSetter)
 }
 
 // ----------- Generic methods ------------
