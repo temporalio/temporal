@@ -795,6 +795,10 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 			name:    "ErrDeleteOpenExecErr",
 			taskErr: consts.ErrDependencyTaskNotCompleted, // this error won't trigger re-submit
 		},
+		{
+			name:    "ErrNamespaceHandOver",
+			taskErr: consts.ErrNamespaceHandover, // this error won't trigger re-submit
+		},
 	}
 
 	for _, tc := range testCases {
