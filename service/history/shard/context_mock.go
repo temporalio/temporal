@@ -56,10 +56,10 @@ import (
 	serialization "go.temporal.io/server/common/persistence/serialization"
 	pingable "go.temporal.io/server/common/pingable"
 	searchattribute "go.temporal.io/server/common/searchattribute"
-	common0 "go.temporal.io/server/service/history/common"
 	configs "go.temporal.io/server/service/history/configs"
 	events "go.temporal.io/server/service/history/events"
 	hsm "go.temporal.io/server/service/history/hsm"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -318,10 +318,10 @@ func (mr *MockContextMockRecorder) GetCurrentTime(cluster any) *gomock.Call {
 }
 
 // GetEngine mocks base method.
-func (m *MockContext) GetEngine(ctx context.Context) (common0.Engine, error) {
+func (m *MockContext) GetEngine(ctx context.Context) (interfaces.Engine, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEngine", ctx)
-	ret0, _ := ret[0].(common0.Engine)
+	ret0, _ := ret[0].(interfaces.Engine)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1075,10 +1075,10 @@ func (mr *MockControllableContextMockRecorder) GetCurrentTime(cluster any) *gomo
 }
 
 // GetEngine mocks base method.
-func (m *MockControllableContext) GetEngine(ctx context.Context) (common0.Engine, error) {
+func (m *MockControllableContext) GetEngine(ctx context.Context) (interfaces.Engine, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEngine", ctx)
-	ret0, _ := ret[0].(common0.Engine)
+	ret0, _ := ret[0].(interfaces.Engine)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
