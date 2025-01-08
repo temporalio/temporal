@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +66,10 @@ tests to write:
 2. Tests to register worker in a deployment and using DescribeDeployment for verification
 */
 
+const (
+	maxConcurrentBatchOps = 3
+)
+
 type (
 	DeploymentSuite struct {
 		testcore.FunctionalTestBase
@@ -99,6 +104,9 @@ func (s *DeploymentSuite) SetupSuite() {
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Key(): 1,
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
+
+		// Reduce the chance of hitting max batch job limit in tests
+		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): maxConcurrentBatchOps,
 	}
 	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
@@ -977,7 +985,7 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 
 	// start batch update-options operation
 	batchJobId := uuid.New()
-	_, err := s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+	err := s.startBatchJobWithinConcurrentJobLimit(ctx, &workflowservice.StartBatchOperationRequest{
 		Namespace:  s.Namespace(),
 		JobId:      batchJobId,
 		Reason:     "test",
@@ -1005,7 +1013,7 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 
 	// unset with empty update opts with mutation mask
 	batchJobId = uuid.New()
-	_, err = s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+	err = s.startBatchJobWithinConcurrentJobLimit(ctx, &workflowservice.StartBatchOperationRequest{
 		Namespace:  s.Namespace(),
 		JobId:      batchJobId,
 		Reason:     "test",
@@ -1030,6 +1038,23 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 
 	// deployment should now be reachable
 	s.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+}
+
+func (s *DeploymentSuite) startBatchJobWithinConcurrentJobLimit(ctx context.Context, req *workflowservice.StartBatchOperationRequest) error {
+	var err error
+	started := false
+	for !started {
+		_, err = s.FrontendClient().StartBatchOperation(ctx, req)
+		if err == nil {
+			started = true
+			return nil
+		} else if strings.Contains(err.Error(), "Max concurrent batch operations is reached") {
+			time.Sleep(500 * time.Millisecond)
+		} else {
+			return err
+		}
+	}
+	return err
 }
 
 func (s *DeploymentSuite) checkListAndWaitForBatchCompletion(ctx context.Context, jobId string) {
