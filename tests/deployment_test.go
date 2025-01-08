@@ -1042,18 +1042,16 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 
 func (s *DeploymentSuite) startBatchJobWithinConcurrentJobLimit(ctx context.Context, req *workflowservice.StartBatchOperationRequest) error {
 	var err error
-	started := false
-	for !started {
+	s.Eventually(func() bool {
 		_, err = s.FrontendClient().StartBatchOperation(ctx, req)
 		if err == nil {
-			started = true
-			return nil
+			return true
 		} else if strings.Contains(err.Error(), "Max concurrent batch operations is reached") {
-			time.Sleep(500 * time.Millisecond)
+			return false // retry
 		} else {
-			return err
+			return true // don't retry, just return error to test
 		}
-	}
+	}, 5*time.Second, 500*time.Millisecond)
 	return err
 }
 
