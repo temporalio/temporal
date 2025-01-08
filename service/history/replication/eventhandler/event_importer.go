@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	history "go.temporal.io/server/service/history/common"
+	history "go.temporal.io/server/service/history/interfaces"
 )
 
 const (

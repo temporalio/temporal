@@ -31,7 +31,7 @@
 //
 
 // Package common is a generated GoMock package.
-package common
+package interfaces
 
 import (
 	context "context"

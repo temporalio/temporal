@@ -54,7 +54,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
-	history "go.temporal.io/server/service/history/common"
+	history "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"

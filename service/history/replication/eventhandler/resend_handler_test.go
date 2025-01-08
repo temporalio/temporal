@@ -48,8 +48,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
-	history "go.temporal.io/server/service/history/common"
 	"go.temporal.io/server/service/history/configs"
+	history "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 )

@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
-	history "go.temporal.io/server/service/history/common"
+	history "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
