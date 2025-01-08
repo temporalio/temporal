@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
@@ -59,7 +60,7 @@ type (
 type (
 	multiOp struct {
 		shardContext       shard.Context
-		namespaceId        string
+		namespaceId        namespace.ID
 		consistencyChecker api.WorkflowConsistencyChecker
 
 		updateReq *historyservice.UpdateWorkflowExecutionRequest
@@ -95,7 +96,7 @@ func Invoke(
 
 	mo := &multiOp{
 		shardContext:       shardContext,
-		namespaceId:        req.NamespaceId,
+		namespaceId:        namespace.ID(req.NamespaceId),
 		consistencyChecker: workflowConsistencyChecker,
 		updateReq:          updateReq,
 		startReq:           startReq,
@@ -229,7 +230,7 @@ func (mo *multiOp) getRunningWorkflowLease(ctx context.Context) (api.WorkflowLea
 	runningWorkflowLease, err := mo.consistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		definition.NewWorkflowKey(mo.namespaceId, mo.startReq.StartRequest.WorkflowId, ""),
+		definition.NewWorkflowKey(mo.namespaceId.String(), mo.startReq.StartRequest.WorkflowId, ""),
 		locks.PriorityHigh,
 	)
 	var notFound *serviceerror.NotFound
