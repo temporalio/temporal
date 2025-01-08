@@ -112,7 +112,7 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 		func() {
 			tv := testvars.New(s)
 
-			other := tv.WithBuildId("other")
+			other := tv.WithBuildID("other")
 			go s.idlePollWorkflow(other, true, ver3MinPollTime, "other deployment should not receive pinned task")
 
 			s.startWorkflow(tv, makePinnedOverride(tv.Deployment()))
@@ -141,14 +141,14 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 		func() {
 			tv := testvars.New(s)
 			// previous current deployment
-			s.updateTaskQueueDeploymentData(tv.WithBuildId("older"), time.Minute, tqTypeWf)
+			s.updateTaskQueueDeploymentData(tv.WithBuildID("older"), time.Minute, tqTypeWf)
 			// current deployment
 			s.updateTaskQueueDeploymentData(tv, 0, tqTypeWf)
 
 			s.startWorkflow(tv, nil)
 
 			s.idlePollWorkflow(
-				tv.WithBuildId("older"),
+				tv.WithBuildID("older"),
 				true,
 				ver3MinPollTime,
 				"old deployment should not receive unpinned task",
@@ -407,8 +407,8 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 	// Wf runs one WFT and one AT on dA, then the second WFT is redirected to dB and
 	// transitions the wf with it.
 
-	tvA := testvars.New(s).WithBuildId("A")
-	tvB := tvA.WithBuildId("B")
+	tvA := testvars.New(s).WithBuildID("A")
+	tvB := tvA.WithBuildID("B")
 	dA := tvA.Deployment()
 	dB := tvB.Deployment()
 	if sticky {
@@ -568,8 +568,8 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	// 8. WFT completes and the transition completes.
 	// 9. All the 3 remaining activities are now dispatched and completed.
 
-	tvA := testvars.New(s).WithBuildId("A")
-	tvB := tvA.WithBuildId("B")
+	tvA := testvars.New(s).WithBuildID("A")
+	tvB := tvA.WithBuildID("B")
 	dA := tvA.Deployment()
 	dB := tvB.Deployment()
 	if sticky {

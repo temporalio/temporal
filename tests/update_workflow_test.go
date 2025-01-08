@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -1131,7 +1130,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
-						Id:                 tv.MessageID() + "_1",
+						Id:                 tv.WithMessageIDN(1).MessageID(),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
 						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
@@ -1141,7 +1140,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 						}),
 					},
 					{
-						Id:                 tv.MessageID() + "_2",
+						Id:                 tv.WithMessageIDN(2).MessageID(),
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
 						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
@@ -1157,13 +1156,13 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 					{
 						CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 						Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-							MessageId: tv.MessageID() + "_1",
+							MessageId: tv.WithMessageIDN(1).MessageID(),
 						}},
 					},
 					{
 						CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 						Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
-							MessageId: tv.MessageID() + "_2",
+							MessageId: tv.WithMessageIDN(2).MessageID(),
 						}},
 					},
 				}
@@ -1837,8 +1836,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_1stAccept_2ndAccept_2ndComplete
 	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
-	tv1 := tv.AppendToUpdateID("1").AppendToMessageID("1").AppendToActivityID("1")
-	tv2 := tv.AppendToUpdateID("2").AppendToMessageID("2").AppendToActivityID("2")
+	tv1 := tv.WithUpdateIDN(1).WithMessageIDN(1).WithActivityIDN(1)
+	tv2 := tv.WithUpdateIDN(2).WithMessageIDN(2).WithActivityIDN(2)
 
 	wtHandlerCalls := 0
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -2048,8 +2047,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_1stAccept_2ndReject_1stComplete
 
 	tv = s.startWorkflow(tv)
 
-	tv1 := tv.AppendToUpdateID("1").AppendToMessageID("1").AppendToActivityID("1")
-	tv2 := tv.AppendToUpdateID("2").AppendToMessageID("2").AppendToActivityID("2")
+	tv1 := tv.WithUpdateIDN(1).WithMessageIDN(1).WithActivityIDN(1)
+	tv2 := tv.WithUpdateIDN(2).WithMessageIDN(2).WithActivityIDN(2)
 
 	wtHandlerCalls := 0
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -4254,8 +4253,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StaleSpeculativeWorkflowTask_Fa
 
 	tv := testvars.New(s.T())
 	tv = s.startWorkflow(tv)
-	tv1 := tv.AppendToUpdateID("1").AppendToMessageID("1")
-	tv2 := tv.AppendToUpdateID("2").AppendToMessageID("2")
+	tv1 := tv.WithUpdateIDN(1).WithMessageIDN(1)
+	tv2 := tv.WithUpdateIDN(2).WithMessageIDN(2)
 
 	testCtx := testcore.NewContext()
 
@@ -4371,8 +4370,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_WorkerS
 	tv := testvars.New(s.T())
 
 	tv = s.startWorkflow(tv)
-	tv1 := tv.AppendToUpdateID("1").AppendToMessageID("1")
-	tv2 := tv.AppendToUpdateID("2").AppendToMessageID("2")
+	tv1 := tv.WithUpdateIDN(1).WithMessageIDN(1)
+	tv2 := tv.WithUpdateIDN(2).WithMessageIDN(2)
 
 	var update2ResultCh <-chan *workflowservice.UpdateWorkflowExecutionResponse
 
@@ -4688,7 +4687,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOf
 	tv = s.startWorkflow(tv)
 	for i := 0; i < nUpdates; i++ {
 		// Sequentially send updates one by one.
-		s.sendUpdateNoError(tv.AppendToUpdateID(strconv.Itoa(i)))
+		s.sendUpdateNoError(tv.WithUpdateIDN(i))
 	}
 
 	wtHandlerCalls := 0
@@ -4702,7 +4701,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOf
 			msgHandlerCalls++
 			var commands []*commandpb.Command
 			for i := range task.Messages {
-				commands = append(commands, s.UpdateAcceptCompleteCommands(tv.AppendToMessageID(strconv.Itoa(i)))...)
+				commands = append(commands, s.UpdateAcceptCompleteCommands(tv.WithMessageIDN(i))...)
 			}
 			return commands, nil
 		},
@@ -4712,8 +4711,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOf
 			var messages []*protocolpb.Message
 			// Updates were sent in sequential order of updateId => messages must be ordered in the same way.
 			for i, m := range task.Messages {
-				s.Equal(tv.AppendToUpdateID(strconv.Itoa(i)).UpdateID(), m.ProtocolInstanceId)
-				messages = append(messages, s.UpdateAcceptCompleteMessages(tv.AppendToMessageID(strconv.Itoa(i)), m)...)
+				s.Equal(tv.WithUpdateIDN(i).UpdateID(), m.ProtocolInstanceId)
+				messages = append(messages, s.UpdateAcceptCompleteMessages(tv.WithMessageIDN(i), m)...)
 			}
 			return messages, nil
 		},
@@ -4732,7 +4731,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOf
   4 WorkflowTaskCompleted
 `
 	for i := 0; i < nUpdates; i++ {
-		tvi := tv.AppendToUpdateID(strconv.Itoa(i))
+		tvi := tv.WithUpdateIDN(i)
 		expectedHistory += fmt.Sprintf(`
   %d WorkflowExecutionUpdateAccepted {"AcceptedRequest":{"Meta": {"UpdateId": "%s"}}}
   %d WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "%s"}}`,
@@ -4787,8 +4786,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarrie
 	tv = s.startWorkflow(tv)
 	firstRunID := tv.RunID()
 	tv = tv.WithRunID("")
-	tv1 := tv.AppendToUpdateID("1").AppendToMessageID("1")
-	tv2 := tv.AppendToUpdateID("2").AppendToMessageID("2")
+	tv1 := tv.WithUpdateIDN(1).WithMessageIDN(1)
+	tv2 := tv.WithUpdateIDN(2).WithMessageIDN(2)
 
 	/*
 		1st Update goes to the 1st run and accepted (but not completed) by Workflow.
@@ -4814,7 +4813,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarrie
 				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
 					WorkflowType: tv.WorkflowType(),
-					TaskQueue:    tv.AppendToTaskQueue("2").TaskQueue(),
+					TaskQueue:    tv.WithTaskQueueN(2).TaskQueue(),
 				}},
 			}
 			return append(s.UpdateAcceptCommands(tv1), canCommand), nil
@@ -4829,7 +4828,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarrie
 	poller2 := &testcore.TaskPoller{
 		Client:    s.FrontendClient(),
 		Namespace: s.Namespace(),
-		TaskQueue: tv.AppendToTaskQueue("2").TaskQueue(),
+		TaskQueue: tv.WithTaskQueueN(2).TaskQueue(),
 		Identity:  tv.WorkerIdentity(),
 		WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 			return nil, nil

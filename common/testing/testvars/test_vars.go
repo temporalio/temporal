@@ -96,14 +96,21 @@ func (tv *TestVars) cloneSetVal(key string, val any) *TestVars {
 	return tv2
 }
 
-func (tv *TestVars) cloneAppendString(key string, initialValGen func(key string) string, suffix string) *TestVars {
+func (tv *TestVars) cloneSetN(key string, defaultValGen func(key string) string, n int) *TestVars {
 	tv2 := tv.clone()
 
-	v, isLoaded := tv.kv.Load(key)
-	if !isLoaded {
-		v = initialValGen(key)
+	v, ok := tv.kv.Load(key)
+	if !ok {
+		v = defaultValGen(key)
 	}
 
+	vStr := valString(key, v)
+	tv2.kv.Store(key, fmt.Sprintf("%s_%d", vStr, n))
+
+	return tv2
+}
+
+func valString(key string, v any) string {
 	vString, vIsString := v.(string)
 	if !vIsString {
 		vStringer, vIsStringer := v.(fmt.Stringer)
@@ -112,9 +119,7 @@ func (tv *TestVars) cloneAppendString(key string, initialValGen func(key string)
 		}
 		vString = vStringer.String()
 	}
-	tv2.kv.Store(key, vString+"_"+suffix)
-
-	return tv2
+	return vString
 }
 
 // ----------- Methods for every entity ------------
@@ -128,8 +133,8 @@ func (tv *TestVars) Entity() string {
 func (tv *TestVars) WithEntity(entity string) *TestVars {
 	return tv.cloneSetVal("entity", entity)
 }
-func (tv *TestVars) AppendToEntity(suffix string) *TestVars {
-	return tv.cloneAppendString("entity", tv.uniqueString, suffix)
+func (tv *TestVars) WithEntityN(n int) *TestVars {
+	return tv.cloneSetN("entity", tv.uniqueString, n)
 }
 */
 
@@ -175,8 +180,8 @@ func (tv *TestVars) WorkflowID() string {
 	return getOrCreate(tv, "workflow_id", tv.uniqueString)
 }
 
-func (tv *TestVars) AppendToWorkflowID(suffix string) *TestVars {
-	return tv.cloneAppendString("workflow_id", tv.uniqueString, suffix)
+func (tv *TestVars) WithWorkflowIDN(n int) *TestVars {
+	return tv.cloneSetN("workflow_id", tv.uniqueString, n)
 }
 
 func (tv *TestVars) RunID() string {
@@ -198,12 +203,16 @@ func (tv *TestVars) RequestID() string {
 	return getOrCreate(tv, "request_id", tv.uuidString)
 }
 
-func (tv *TestVars) BuildId() string {
+func (tv *TestVars) BuildID() string {
 	return getOrCreate(tv, "build_id", tv.uniqueString)
 }
 
-func (tv *TestVars) WithBuildId(buildId string) *TestVars {
+func (tv *TestVars) WithBuildID(buildId string) *TestVars {
 	return tv.cloneSetVal("build_id", buildId)
+}
+
+func (tv *TestVars) WithBuildIDN(n int) *TestVars {
+	return tv.cloneSetN("build_id", tv.uniqueString, n)
 }
 
 func (tv *TestVars) DeploymentSeries() string {
@@ -217,7 +226,7 @@ func (tv *TestVars) WithDeploymentSeries(series string) *TestVars {
 func (tv *TestVars) Deployment() *deploymentpb.Deployment {
 	return &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId(),
+		BuildId:    tv.BuildID(),
 	}
 }
 
@@ -232,8 +241,8 @@ func (tv *TestVars) WithTaskQueue(taskQueue string) *TestVars {
 	return tv.cloneSetVal("task_queue", taskQueue)
 }
 
-func (tv *TestVars) AppendToTaskQueue(suffix string) *TestVars {
-	return tv.cloneAppendString("task_queue", tv.uniqueString, suffix)
+func (tv *TestVars) WithTaskQueueN(n int) *TestVars {
+	return tv.cloneSetN("task_queue", tv.uniqueString, n)
 }
 
 func (tv *TestVars) StickyTaskQueue() *taskqueuepb.TaskQueue {
@@ -261,8 +270,8 @@ func (tv *TestVars) ActivityID() string {
 	return getOrCreate(tv, "activity_id", tv.uniqueString)
 }
 
-func (tv *TestVars) AppendToActivityID(suffix string) *TestVars {
-	return tv.cloneAppendString("activity_id", tv.uniqueString, suffix)
+func (tv *TestVars) WithActivityIDN(n int) *TestVars {
+	return tv.cloneSetN("activity_id", tv.uniqueString, n)
 }
 
 func (tv *TestVars) ActivityType() *commonpb.ActivityType {
@@ -275,16 +284,16 @@ func (tv *TestVars) MessageID() string {
 	return getOrCreate(tv, "message_id", tv.uniqueString)
 }
 
-func (tv *TestVars) AppendToMessageID(suffix string) *TestVars {
-	return tv.cloneAppendString("message_id", tv.uniqueString, suffix)
+func (tv *TestVars) WithMessageIDN(n int) *TestVars {
+	return tv.cloneSetN("message_id", tv.uniqueString, n)
 }
 
 func (tv *TestVars) UpdateID() string {
 	return getOrCreate(tv, "update_id", tv.uniqueString)
 }
 
-func (tv *TestVars) AppendToUpdateID(suffix string) *TestVars {
-	return tv.cloneAppendString("update_id", tv.uniqueString, suffix)
+func (tv *TestVars) WithUpdateIDN(n int) *TestVars {
+	return tv.cloneSetN("update_id", tv.uniqueString, n)
 }
 
 func (tv *TestVars) UpdateRef() *updatepb.UpdateRef {
@@ -308,6 +317,10 @@ func (tv *TestVars) WorkerIdentity() string {
 
 func (tv *TestVars) TimerID() string {
 	return getOrCreate(tv, "timer_id", tv.uniqueString)
+}
+
+func (tv *TestVars) WithTimerIDN(n int) *TestVars {
+	return tv.cloneSetN("timer_id", tv.uniqueString, n)
 }
 
 func (tv *TestVars) QueryType() string {

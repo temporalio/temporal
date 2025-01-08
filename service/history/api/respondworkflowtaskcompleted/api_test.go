@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"maps"
-	"strconv"
 	"testing"
 	"time"
 
@@ -282,10 +281,10 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
-				TaskToken: serializedTaskToken,
-				Commands:  s.UpdateAcceptCompleteCommands(tv),
-				Messages:  s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
-				Identity:  tv.Any().String(),
+				TaskToken:        serializedTaskToken,
+				Commands:         s.UpdateAcceptCompleteCommands(tv),
+				Messages:         s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
+				Identity:         tv.Any().String(),
 				StickyAttributes: tv.StickyExecutionAttributes(tv.Any().InfiniteTimeout().AsDuration()),
 			},
 		})
@@ -404,7 +403,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 			_, _, err = ms.AddTimerStartedEvent(
 				1,
 				&commandpb.StartTimerCommandAttributes{
-					TimerId:            tv.TimerID() + "_" + strconv.Itoa(i),
+					TimerId:            tv.WithTimerIDN(i).TimerID(),
 					StartToFireTimeout: tv.Any().InfiniteTimeout(),
 				},
 			)

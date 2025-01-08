@@ -210,9 +210,9 @@ func TestFind(t *testing.T) {
 
 func TestFindOrCreate(t *testing.T) {
 	tv := testvars.New(t)
-	tv1 := tv.AppendToUpdateID("1")
-	tv2 := tv.AppendToUpdateID("2")
-	tv3 := tv.AppendToUpdateID("3")
+	tv1 := tv.WithUpdateIDN(1)
+	tv2 := tv.WithUpdateIDN(2)
+	tv3 := tv.WithUpdateIDN(3)
 
 	t.Run("find stored update", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
@@ -461,9 +461,9 @@ func TestSendMessages(t *testing.T) {
 
 	t.Run("registry with 2 created updates has no messages to send", func(t *testing.T) {
 		var err error
-		upd1, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID()+"_1")
+		upd1, _, err = reg.FindOrCreate(context.Background(), tv.WithUpdateIDN(1).UpdateID())
 		require.NoError(t, err)
-		upd2, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID()+"_2")
+		upd2, _, err = reg.FindOrCreate(context.Background(), tv.WithUpdateIDN(2).UpdateID())
 		require.NoError(t, err)
 
 		msgs := reg.Send(context.Background(), includeAlreadySent, testSequencingEventID)
@@ -536,9 +536,9 @@ func TestRejectUnprocessed(t *testing.T) {
 
 	t.Run("registry with updates [#1, #2] in stateCreated rejects nothing", func(t *testing.T) {
 		var err error
-		upd1, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID()+"_1")
+		upd1, _, err = reg.FindOrCreate(context.Background(), tv.WithUpdateIDN(1).UpdateID())
 		require.NoError(t, err)
-		upd2, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID()+"_2")
+		upd2, _, err = reg.FindOrCreate(context.Background(), tv.WithUpdateIDN(2).UpdateID())
 		require.NoError(t, err)
 
 		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
@@ -592,14 +592,14 @@ func TestAbort(t *testing.T) {
 	reg := update.NewRegistry(&mockUpdateStore{
 		VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 			visitor(
-				tv.UpdateID()+"_1",
+				tv.WithUpdateIDN(1).UpdateID(),
 				&persistencespb.UpdateInfo{
 					Value: &persistencespb.UpdateInfo_Admission{
 						Admission: &persistencespb.UpdateAdmissionInfo{},
 					},
 				})
 			visitor(
-				tv.UpdateID()+"_2",
+				tv.WithUpdateIDN(2).UpdateID(),
 				&persistencespb.UpdateInfo{
 					Value: &persistencespb.UpdateInfo_Acceptance{
 						Acceptance: &persistencespb.UpdateAcceptanceInfo{},
@@ -611,13 +611,13 @@ func TestAbort(t *testing.T) {
 	// abort both updates
 	reg.Abort(update.AbortReasonWorkflowCompleted)
 
-	upd1 := reg.Find(context.Background(), tv.UpdateID()+"_1")
+	upd1 := reg.Find(context.Background(), tv.WithUpdateIDN(1).UpdateID())
 	require.NotNil(t, upd1)
 	status1, err := upd1.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
 	require.Equal(t, consts.ErrWorkflowCompleted, err)
 	require.Nil(t, status1)
 
-	upd2 := reg.Find(context.Background(), tv.UpdateID()+"_2")
+	upd2 := reg.Find(context.Background(), tv.WithUpdateIDN(2).UpdateID())
 	require.NotNil(t, upd2)
 	status2, err := upd2.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
 	require.NoError(t, err)
