@@ -303,7 +303,7 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 
 	go s.idlePollWorkflow(tvB, true, ver3MinPollTime, "new deployment should not receive query")
 	s.pollAndQueryWorkflow(tv, sticky)
-	time.Sleep(ver3MinPollTime) // so that the old idle poller does not interfere with the next poller
+	time.Sleep(ver3MinPollTime) // //nolint:forbidigo
 
 	// redirect query to new deployment
 	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
