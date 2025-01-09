@@ -27,6 +27,7 @@ package testvars
 import (
 	"time"
 
+	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/common/payload"
@@ -84,4 +85,8 @@ func (a Any) ApplicationFailure() *failurepb.Failure {
 
 func (a Any) InfiniteTimeout() *durationpb.Duration {
 	return durationpb.New(10 * time.Hour)
+}
+
+func (a Any) RunID() string {
+	return uuid.New()
 }

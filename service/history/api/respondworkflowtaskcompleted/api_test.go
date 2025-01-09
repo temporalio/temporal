@@ -181,6 +181,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Accept Complete", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
@@ -217,6 +218,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Reject", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 
@@ -241,6 +243,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Write failed on normal task queue", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 
@@ -266,6 +269,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Write failed on sticky task queue", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 
@@ -295,6 +299,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("GetHistory failed", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
@@ -335,6 +340,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Discard speculative WFT with events", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 		// Expect only 2 calls to UpdateWorkflowExecution: for timer started and timer fired events but not Update or WFT events.
@@ -392,6 +398,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Do not discard speculative WFT with more than 10 events", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 		// Expect 2 calls to UpdateWorkflowExecution: for timer started and WFT events.

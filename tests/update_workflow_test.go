@@ -4946,7 +4946,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			s.Run(fmt.Sprintf("start workflow and send update (with conflict policy %v)", p), func() {
 
 				s.Run("and accept", func() {
-					tv := testvars.New(s.T()).WithRunID("")
+					tv := testvars.New(s.T())
 
 					startReq := startWorkflowReq(tv)
 					startReq.WorkflowIdConflictPolicy = p
@@ -4985,7 +4985,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				})
 
 				s.Run("and reject", func() {
-					tv := testvars.New(s.T()).WithRunID("")
+					tv := testvars.New(s.T())
 
 					startReq := startWorkflowReq(tv)
 					updateReq := s.updateWorkflowRequest(tv,
@@ -5028,7 +5028,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		s.Run("workflow id conflict policy use-existing: only send update", func() {
 
 			s.Run("and accept", func() {
-				tv := testvars.New(s.T()).WithRunID("")
+				tv := testvars.New(s.T())
 
 				// start workflow
 				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
@@ -5078,7 +5078,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			})
 
 			s.Run("and reject", func() {
-				tv := testvars.New(s.T()).WithRunID("")
+				tv := testvars.New(s.T())
 
 				// start workflow
 				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
@@ -5125,7 +5125,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		})
 
 		s.Run("workflow id conflict policy terminate-existing: terminate workflow first, then start and update", func() {
-			tv := testvars.New(s.T()).WithRunID("")
+			tv := testvars.New(s.T())
 
 			// start workflow
 			firstWF, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
@@ -5175,7 +5175,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		})
 
 		s.Run("workflow id conflict policy fail: abort multi operation", func() {
-			tv := testvars.New(s.T()).WithRunID("")
+			tv := testvars.New(s.T())
 
 			_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
 			s.NoError(err)
@@ -5208,7 +5208,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 			} {
 				s.Run(fmt.Sprintf("for workflow id conflict policy %v", p), func() {
-					tv := testvars.New(s.T()).WithRunID("")
+					tv := testvars.New(s.T())
 
 					startReq := startWorkflowReq(tv)
 					startReq.RequestId = "request_id"
@@ -5248,7 +5248,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 	s.Run("workflow is closed", func() {
 
 		s.Run("workflow id reuse policy allow-duplicate", func() {
-			tv := testvars.New(s.T()).WithRunID("")
+			tv := testvars.New(s.T())
 
 			// start and terminate workflow
 			initialWorkflow, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
@@ -5302,7 +5302,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		})
 
 		s.Run("workflow id reuse policy reject-duplicate", func() {
-			tv := testvars.New(s.T()).WithRunID("")
+			tv := testvars.New(s.T())
 
 			// start and terminate workflow
 			_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
@@ -5344,7 +5344,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		cleanup := s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, maxTotalUpdates)
 		defer cleanup()
 
-		tv := testvars.New(s.T()).WithRunID("")
+		tv := testvars.New(s.T())
 
 		startReq := startWorkflowReq(tv)
 		updateReq := s.updateWorkflowRequest(tv,

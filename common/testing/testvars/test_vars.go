@@ -107,6 +107,10 @@ func (tv *TestVars) uuidString(_ string) string {
 	return uuid.New()
 }
 
+func (tv *TestVars) emptyString(_ string) string {
+	return ""
+}
+
 func (tv *TestVars) clone() *TestVars {
 	tv2 := newFromName(tv.testName)
 	tv.values.Range(func(key, value any) bool {
@@ -204,8 +208,11 @@ func (tv *TestVars) WithWorkflowIDNumber(n int) *TestVars {
 	return tv.cloneSetN("workflow_id", n)
 }
 
+// RunID is different from other getters. By default, it returns an empty string.
+// This is to simplify the usage of WorkflowExecution() which most of the time
+// doesn't need RunID. Otherwise, RunID can be set explicitly using WithRunID.
 func (tv *TestVars) RunID() string {
-	return getOrCreate(tv, "run_id", tv.uuidString, tv.uuidNSetter)
+	return getOrCreate(tv, "run_id", tv.emptyString, tv.uuidNSetter)
 }
 
 func (tv *TestVars) WithRunID(runID string) *TestVars {

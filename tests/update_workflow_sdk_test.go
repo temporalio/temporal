@@ -61,8 +61,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	defer cancel()
 	tv := testvars.New(s.T()).
 		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace())).
-		WithRunID("")
+		WithNamespaceName(namespace.Name(s.Namespace()))
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
@@ -102,8 +101,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
 	defer cancel()
 	tv := testvars.New(s.T()).
 		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace())).
-		WithRunID("")
+		WithNamespaceName(namespace.Name(s.Namespace()))
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
@@ -167,8 +165,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	defer cancel()
 	tv := testvars.New(s.T()).
 		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace())).
-		WithRunID("")
+		WithNamespaceName(namespace.Name(s.Namespace()))
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
@@ -232,8 +229,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmi
 
 	tv := testvars.New(s.T()).
 		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace())).
-		WithRunID("")
+		WithNamespaceName(namespace.Name(s.Namespace()))
 
 	rootCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -320,8 +316,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWithRetryAfterUpdateA
 
 	tv := testvars.New(s.T()).
 		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace())).
-		WithRunID("")
+		WithNamespaceName(namespace.Name(s.Namespace()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()

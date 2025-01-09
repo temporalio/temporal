@@ -115,7 +115,7 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 			tv2 := tv.WithBuildIDNumber(2)
 			go s.idlePollWorkflow(tv2, true, ver3MinPollTime, "second deployment should not receive pinned task")
 
-			tv = s.startWorkflow(tv, makePinnedOverride(tv.Deployment()))
+			s.startWorkflow(tv, makePinnedOverride(tv.Deployment()))
 			s.idlePollWorkflow(tv, false, ver3MinPollTime, "unversioned worker should not receive pinned task")
 
 			// Sleeping to let the pollers arrive to server before ending the test.
@@ -129,7 +129,7 @@ func (s *Versioning3Suite) TestUnpinnedTask_NonCurrentDeployment() {
 			tv := testvars.New(s)
 			go s.idlePollWorkflow(tv, true, ver3MinPollTime, "non-current versioned poller should not receive unpinned task")
 
-			tv = s.startWorkflow(tv, nil)
+			s.startWorkflow(tv, nil)
 
 			// Sleeping to let the pollers arrive to server before ending the test.
 			time.Sleep(200 * time.Millisecond) //nolint:forbidigo
@@ -145,7 +145,7 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 			// current deployment
 			s.updateTaskQueueDeploymentData(tv, 0, tqTypeWf)
 
-			tv = s.startWorkflow(tv, nil)
+			s.startWorkflow(tv, nil)
 
 			s.idlePollWorkflow(
 				tv.WithBuildIDNumber(2),
@@ -197,12 +197,12 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 		})
 
 	override := makePinnedOverride(tv.Deployment())
-	tv = s.startWorkflow(tv, override)
+	we := s.startWorkflow(tv, override)
 
 	<-wftCompleted
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
 	if sticky {
-		s.verifyWorkflowStickyQueue(tv.WorkflowExecution(), tv.StickyTaskQueue())
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
 	}
 
 	<-actCompleted
@@ -247,12 +247,12 @@ func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
 		})
 
 	override := makePinnedOverride(tv.Deployment())
-	tv = s.startWorkflow(tv, override)
+	we := s.startWorkflow(tv, override)
 
 	<-wftCompleted
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
 	if sticky {
-		s.verifyWorkflowStickyQueue(tv.WorkflowExecution(), tv.StickyTaskQueue())
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
 	}
 
 	s.pollAndQueryWorkflow(tv, sticky)
@@ -276,6 +276,7 @@ func (s *Versioning3Suite) TestUnpinnedQuery_Sticky() {
 
 func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 	tv := testvars.New(s)
+	tv2 := tv.WithBuildIDNumber(2)
 	d := tv.Deployment()
 	if sticky {
 		s.warmUpSticky(tv)
@@ -292,13 +293,12 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 	s.setCurrentDeployment(d)
 	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
 
-	tv = s.startWorkflow(tv, nil)
-	tv2 := tv.WithBuildIDNumber(2)
+	we := s.startWorkflow(tv, nil)
 
 	<-wftCompleted
 	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
 	if sticky {
-		s.verifyWorkflowStickyQueue(tv.WorkflowExecution(), tv.StickyTaskQueue())
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
 	}
 
 	pollerDone := make(chan interface{})
@@ -376,12 +376,12 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 	s.setCurrentDeployment(d)
 	s.waitForDeploymentDataPropagation(tv, tqTypeWf, tqTypeAct)
 
-	tv = s.startWorkflow(tv, nil)
+	we := s.startWorkflow(tv, nil)
 
 	<-wftCompleted
 	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
 	if sticky {
-		s.verifyWorkflowStickyQueue(tv.WorkflowExecution(), tv.StickyTaskQueue())
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
 	}
 
 	<-actCompleted
@@ -416,7 +416,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 	}
 
 	s.updateTaskQueueDeploymentData(tv1, 0, tqTypeWf, tqTypeAct)
-	tv1 = s.startWorkflow(tv1, nil)
+	we := s.startWorkflow(tv1, nil)
 
 	s.pollWftAndHandle(tv1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -426,7 +426,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 		})
 	s.verifyWorkflowVersioning(tv1, vbUnpinned, d1, nil, nil)
 	if sticky {
-		s.verifyWorkflowStickyQueue(tv1.WorkflowExecution(), tv1.StickyTaskQueue())
+		s.verifyWorkflowStickyQueue(we, tv1.StickyTaskQueue())
 	}
 
 	s.pollActivityAndHandle(tv1, nil,
@@ -516,7 +516,7 @@ func (s *Versioning3Suite) TestEagerActivity() {
 	d := tv.Deployment()
 
 	s.updateTaskQueueDeploymentData(tv, 0, tqTypeWf, tqTypeAct)
-	tv = s.startWorkflow(tv, nil)
+	s.startWorkflow(tv, nil)
 
 	poller, resp := s.pollWftAndHandle(tv, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -569,15 +569,15 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	// 9. All the 3 remaining activities are now dispatched and completed.
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+	d2 := tv2.Deployment()
 	d1 := tv1.Deployment()
 	if sticky {
 		s.warmUpSticky(tv1)
 	}
 
 	s.updateTaskQueueDeploymentData(tv1, 0, tqTypeWf, tqTypeAct)
-	tv1 = s.startWorkflow(tv1, nil)
-	tv2 := tv1.WithBuildIDNumber(2)
-	d2 := tv2.Deployment()
+	we := s.startWorkflow(tv1, nil)
 
 	s.pollWftAndHandle(tv1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -587,7 +587,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 		})
 	s.verifyWorkflowVersioning(tv1, vbUnpinned, d1, nil, nil)
 	if sticky {
-		s.verifyWorkflowStickyQueue(tv1.WorkflowExecution(), tv1.StickyTaskQueue())
+		s.verifyWorkflowStickyQueue(we, tv1.StickyTaskQueue())
 	}
 
 	transitionCompleted := atomic.Bool{}
@@ -710,7 +710,7 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 	s.updateTaskQueueDeploymentData(tvWf, 0, tqTypeWf)
 	s.updateTaskQueueDeploymentData(tvAct, 0, tqTypeAct)
 
-	tvWf = s.startWorkflow(tvWf, nil)
+	s.startWorkflow(tvWf, nil)
 
 	s.pollWftAndHandle(tvWf, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -939,7 +939,7 @@ func mustToPayload(v any) *commonpb.Payload {
 func (s *Versioning3Suite) startWorkflow(
 	tv *testvars.TestVars,
 	override *workflowpb.VersioningOverride,
-) *testvars.TestVars {
+) *commonpb.WorkflowExecution {
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
 		Namespace:           s.Namespace(),
@@ -953,10 +953,12 @@ func (s *Versioning3Suite) startWorkflow(
 		VersioningOverride:  override,
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.NoError(err)
-
-	return tv.WithRunID(we.GetRunId())
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err0)
+	return &commonpb.WorkflowExecution{
+		WorkflowId: tv.WorkflowID(),
+		RunId:      we.GetRunId(),
+	}
 }
 
 func (s *Versioning3Suite) queryWorkflow(

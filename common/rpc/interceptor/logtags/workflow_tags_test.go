@@ -49,6 +49,7 @@ func TestExtract(t *testing.T) {
 	)
 
 	tv := testvars.New(t)
+	tv = tv.WithRunID(tv.Any().RunID())
 	taskToken := tokenspb.Task{
 		WorkflowId: tv.WorkflowID(),
 		RunId:      tv.RunID(),
