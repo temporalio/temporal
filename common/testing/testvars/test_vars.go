@@ -227,10 +227,6 @@ func (tv *TestVars) BuildID() string {
 	return getOrCreate(tv, "build_id", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WithBuildID(buildId string) *TestVars {
-	return tv.cloneSetVal("build_id", buildId)
-}
-
 func (tv *TestVars) WithBuildIDNumber(n int) *TestVars {
 	return tv.cloneSetN("build_id", n)
 }
@@ -239,8 +235,8 @@ func (tv *TestVars) DeploymentSeries() string {
 	return getOrCreate(tv, "deployment_series", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WithDeploymentSeries(series string) *TestVars {
-	return tv.cloneSetVal("deployment_series", series)
+func (tv *TestVars) WithDeploymentSeriesNumber(n int) *TestVars {
+	return tv.cloneSetN("deployment_series", n)
 }
 
 func (tv *TestVars) Deployment() *deploymentpb.Deployment {
