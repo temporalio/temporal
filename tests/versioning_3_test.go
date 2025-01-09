@@ -140,15 +140,17 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 	s.RunTestWithMatchingBehavior(
 		func() {
 			tv := testvars.New(s)
+			tvOldDeployment := tv.WithBuildIDNumber(1)
+			tvNewDeployment := tv.WithBuildIDNumber(2)
 			// previous current deployment
-			s.updateTaskQueueDeploymentData(tv.WithBuildIDNumber(2), time.Minute, tqTypeWf)
+			s.updateTaskQueueDeploymentData(tvOldDeployment, time.Minute, tqTypeWf)
 			// current deployment
-			s.updateTaskQueueDeploymentData(tv, 0, tqTypeWf)
+			s.updateTaskQueueDeploymentData(tvNewDeployment, 0, tqTypeWf)
 
 			s.startWorkflow(tv, nil)
 
 			s.idlePollWorkflow(
-				tv.WithBuildIDNumber(2),
+				tvOldDeployment,
 				true,
 				ver3MinPollTime,
 				"old deployment should not receive unpinned task",

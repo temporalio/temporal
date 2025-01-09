@@ -230,8 +230,8 @@ func (s *engine2Suite) SetupTest() {
 
 	s.historyEngine = h
 
-	s.tv = testvars.New(s.T()).
-		WithNamespaceID(tests.NamespaceID)
+	s.tv = testvars.New(s.T()).WithNamespaceID(tests.NamespaceID)
+	s.tv = s.tv.WithRunID(s.tv.Any().RunID())
 }
 
 func (s *engine2Suite) SetupSubTest() {
