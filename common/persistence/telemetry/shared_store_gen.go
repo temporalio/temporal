@@ -52,11 +52,11 @@ func newTelemetryShardStore(base _sourcePersistence.ShardStore, tracer trace.Tra
 }
 
 // AssertShardOwnership wraps ShardStore.AssertShardOwnership.
-func (_d telemetryShardStore) AssertShardOwnership(ctx context.Context, request *_sourcePersistence.AssertShardOwnershipRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ShardStore/AssertShardOwnership")
+func (d telemetryShardStore) AssertShardOwnership(ctx context.Context, request *_sourcePersistence.AssertShardOwnershipRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ShardStore/AssertShardOwnership")
 	defer span.End()
 
-	err = _d.ShardStore.AssertShardOwnership(ctx, request)
+	err = d.ShardStore.AssertShardOwnership(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -65,11 +65,11 @@ func (_d telemetryShardStore) AssertShardOwnership(ctx context.Context, request 
 }
 
 // GetOrCreateShard wraps ShardStore.GetOrCreateShard.
-func (_d telemetryShardStore) GetOrCreateShard(ctx context.Context, request *_sourcePersistence.InternalGetOrCreateShardRequest) (ip1 *_sourcePersistence.InternalGetOrCreateShardResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ShardStore/GetOrCreateShard")
+func (d telemetryShardStore) GetOrCreateShard(ctx context.Context, request *_sourcePersistence.InternalGetOrCreateShardRequest) (ip1 *_sourcePersistence.InternalGetOrCreateShardResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ShardStore/GetOrCreateShard")
 	defer span.End()
 
-	ip1, err = _d.ShardStore.GetOrCreateShard(ctx, request)
+	ip1, err = d.ShardStore.GetOrCreateShard(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -78,11 +78,11 @@ func (_d telemetryShardStore) GetOrCreateShard(ctx context.Context, request *_so
 }
 
 // UpdateShard wraps ShardStore.UpdateShard.
-func (_d telemetryShardStore) UpdateShard(ctx context.Context, request *_sourcePersistence.InternalUpdateShardRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ShardStore/UpdateShard")
+func (d telemetryShardStore) UpdateShard(ctx context.Context, request *_sourcePersistence.InternalUpdateShardRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ShardStore/UpdateShard")
 	defer span.End()
 
-	err = _d.ShardStore.UpdateShard(ctx, request)
+	err = d.ShardStore.UpdateShard(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}

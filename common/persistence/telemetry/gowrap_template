@@ -18,11 +18,11 @@ func new{{upFirst $decorator}} (base {{.Interface.Type}}, tracer trace.Tracer) {
     {{if $method.AcceptsContext}}
         {{ $methodIdent := (printf "%s.%s" $.Interface.Name $method.Name) }}
         // {{$method.Name}} wraps {{ (printf "%s.%s" $.Interface.Name $method.Name) }}.
-        func (_d {{$decorator}}) {{$method.Declaration}} {
-            ctx, span := _d.tracer.Start(ctx, "{{ printf "persistence.%s/%s" $.Interface.Name $method.Name }}")
+        func (d {{$decorator}}) {{$method.Declaration}} {
+            ctx, span := d.tracer.Start(ctx, "{{ printf "persistence.%s/%s" $.Interface.Name $method.Name }}")
             defer span.End()
 
-            {{$method.ResultsNames}} = _d.{{$.Interface.Name}}.{{$method.Call}}
+            {{$method.ResultsNames}} = d.{{$.Interface.Name}}.{{$method.Call}}
             {{- if $method.ReturnsError}}
             if err != nil {
               span.RecordError(err)

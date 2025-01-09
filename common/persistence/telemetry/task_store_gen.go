@@ -52,11 +52,11 @@ func newTelemetryTaskStore(base _sourcePersistence.TaskStore, tracer trace.Trace
 }
 
 // CompleteTasksLessThan wraps TaskStore.CompleteTasksLessThan.
-func (_d telemetryTaskStore) CompleteTasksLessThan(ctx context.Context, request *_sourcePersistence.CompleteTasksLessThanRequest) (i1 int, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/CompleteTasksLessThan")
+func (d telemetryTaskStore) CompleteTasksLessThan(ctx context.Context, request *_sourcePersistence.CompleteTasksLessThanRequest) (i1 int, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/CompleteTasksLessThan")
 	defer span.End()
 
-	i1, err = _d.TaskStore.CompleteTasksLessThan(ctx, request)
+	i1, err = d.TaskStore.CompleteTasksLessThan(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -65,11 +65,11 @@ func (_d telemetryTaskStore) CompleteTasksLessThan(ctx context.Context, request 
 }
 
 // CountTaskQueuesByBuildId wraps TaskStore.CountTaskQueuesByBuildId.
-func (_d telemetryTaskStore) CountTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.CountTaskQueuesByBuildIdRequest) (i1 int, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/CountTaskQueuesByBuildId")
+func (d telemetryTaskStore) CountTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.CountTaskQueuesByBuildIdRequest) (i1 int, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/CountTaskQueuesByBuildId")
 	defer span.End()
 
-	i1, err = _d.TaskStore.CountTaskQueuesByBuildId(ctx, request)
+	i1, err = d.TaskStore.CountTaskQueuesByBuildId(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -78,11 +78,11 @@ func (_d telemetryTaskStore) CountTaskQueuesByBuildId(ctx context.Context, reque
 }
 
 // CreateTaskQueue wraps TaskStore.CreateTaskQueue.
-func (_d telemetryTaskStore) CreateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalCreateTaskQueueRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/CreateTaskQueue")
+func (d telemetryTaskStore) CreateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalCreateTaskQueueRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/CreateTaskQueue")
 	defer span.End()
 
-	err = _d.TaskStore.CreateTaskQueue(ctx, request)
+	err = d.TaskStore.CreateTaskQueue(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -91,11 +91,11 @@ func (_d telemetryTaskStore) CreateTaskQueue(ctx context.Context, request *_sour
 }
 
 // CreateTasks wraps TaskStore.CreateTasks.
-func (_d telemetryTaskStore) CreateTasks(ctx context.Context, request *_sourcePersistence.InternalCreateTasksRequest) (cp1 *_sourcePersistence.CreateTasksResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/CreateTasks")
+func (d telemetryTaskStore) CreateTasks(ctx context.Context, request *_sourcePersistence.InternalCreateTasksRequest) (cp1 *_sourcePersistence.CreateTasksResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/CreateTasks")
 	defer span.End()
 
-	cp1, err = _d.TaskStore.CreateTasks(ctx, request)
+	cp1, err = d.TaskStore.CreateTasks(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -104,11 +104,11 @@ func (_d telemetryTaskStore) CreateTasks(ctx context.Context, request *_sourcePe
 }
 
 // DeleteTaskQueue wraps TaskStore.DeleteTaskQueue.
-func (_d telemetryTaskStore) DeleteTaskQueue(ctx context.Context, request *_sourcePersistence.DeleteTaskQueueRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/DeleteTaskQueue")
+func (d telemetryTaskStore) DeleteTaskQueue(ctx context.Context, request *_sourcePersistence.DeleteTaskQueueRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/DeleteTaskQueue")
 	defer span.End()
 
-	err = _d.TaskStore.DeleteTaskQueue(ctx, request)
+	err = d.TaskStore.DeleteTaskQueue(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -117,11 +117,11 @@ func (_d telemetryTaskStore) DeleteTaskQueue(ctx context.Context, request *_sour
 }
 
 // GetTaskQueue wraps TaskStore.GetTaskQueue.
-func (_d telemetryTaskStore) GetTaskQueue(ctx context.Context, request *_sourcePersistence.InternalGetTaskQueueRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/GetTaskQueue")
+func (d telemetryTaskStore) GetTaskQueue(ctx context.Context, request *_sourcePersistence.InternalGetTaskQueueRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/GetTaskQueue")
 	defer span.End()
 
-	ip1, err = _d.TaskStore.GetTaskQueue(ctx, request)
+	ip1, err = d.TaskStore.GetTaskQueue(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -130,11 +130,11 @@ func (_d telemetryTaskStore) GetTaskQueue(ctx context.Context, request *_sourceP
 }
 
 // GetTaskQueueUserData wraps TaskStore.GetTaskQueueUserData.
-func (_d telemetryTaskStore) GetTaskQueueUserData(ctx context.Context, request *_sourcePersistence.GetTaskQueueUserDataRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueUserDataResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/GetTaskQueueUserData")
+func (d telemetryTaskStore) GetTaskQueueUserData(ctx context.Context, request *_sourcePersistence.GetTaskQueueUserDataRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueUserDataResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/GetTaskQueueUserData")
 	defer span.End()
 
-	ip1, err = _d.TaskStore.GetTaskQueueUserData(ctx, request)
+	ip1, err = d.TaskStore.GetTaskQueueUserData(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -143,11 +143,11 @@ func (_d telemetryTaskStore) GetTaskQueueUserData(ctx context.Context, request *
 }
 
 // GetTaskQueuesByBuildId wraps TaskStore.GetTaskQueuesByBuildId.
-func (_d telemetryTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.GetTaskQueuesByBuildIdRequest) (sa1 []string, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/GetTaskQueuesByBuildId")
+func (d telemetryTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.GetTaskQueuesByBuildIdRequest) (sa1 []string, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/GetTaskQueuesByBuildId")
 	defer span.End()
 
-	sa1, err = _d.TaskStore.GetTaskQueuesByBuildId(ctx, request)
+	sa1, err = d.TaskStore.GetTaskQueuesByBuildId(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -156,11 +156,11 @@ func (_d telemetryTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request
 }
 
 // GetTasks wraps TaskStore.GetTasks.
-func (_d telemetryTaskStore) GetTasks(ctx context.Context, request *_sourcePersistence.GetTasksRequest) (ip1 *_sourcePersistence.InternalGetTasksResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/GetTasks")
+func (d telemetryTaskStore) GetTasks(ctx context.Context, request *_sourcePersistence.GetTasksRequest) (ip1 *_sourcePersistence.InternalGetTasksResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/GetTasks")
 	defer span.End()
 
-	ip1, err = _d.TaskStore.GetTasks(ctx, request)
+	ip1, err = d.TaskStore.GetTasks(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -169,11 +169,11 @@ func (_d telemetryTaskStore) GetTasks(ctx context.Context, request *_sourcePersi
 }
 
 // ListTaskQueue wraps TaskStore.ListTaskQueue.
-func (_d telemetryTaskStore) ListTaskQueue(ctx context.Context, request *_sourcePersistence.ListTaskQueueRequest) (ip1 *_sourcePersistence.InternalListTaskQueueResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/ListTaskQueue")
+func (d telemetryTaskStore) ListTaskQueue(ctx context.Context, request *_sourcePersistence.ListTaskQueueRequest) (ip1 *_sourcePersistence.InternalListTaskQueueResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/ListTaskQueue")
 	defer span.End()
 
-	ip1, err = _d.TaskStore.ListTaskQueue(ctx, request)
+	ip1, err = d.TaskStore.ListTaskQueue(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -182,11 +182,11 @@ func (_d telemetryTaskStore) ListTaskQueue(ctx context.Context, request *_source
 }
 
 // ListTaskQueueUserDataEntries wraps TaskStore.ListTaskQueueUserDataEntries.
-func (_d telemetryTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, request *_sourcePersistence.ListTaskQueueUserDataEntriesRequest) (ip1 *_sourcePersistence.InternalListTaskQueueUserDataEntriesResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/ListTaskQueueUserDataEntries")
+func (d telemetryTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, request *_sourcePersistence.ListTaskQueueUserDataEntriesRequest) (ip1 *_sourcePersistence.InternalListTaskQueueUserDataEntriesResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/ListTaskQueueUserDataEntries")
 	defer span.End()
 
-	ip1, err = _d.TaskStore.ListTaskQueueUserDataEntries(ctx, request)
+	ip1, err = d.TaskStore.ListTaskQueueUserDataEntries(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -195,11 +195,11 @@ func (_d telemetryTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, r
 }
 
 // UpdateTaskQueue wraps TaskStore.UpdateTaskQueue.
-func (_d telemetryTaskStore) UpdateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueRequest) (up1 *_sourcePersistence.UpdateTaskQueueResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/UpdateTaskQueue")
+func (d telemetryTaskStore) UpdateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueRequest) (up1 *_sourcePersistence.UpdateTaskQueueResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/UpdateTaskQueue")
 	defer span.End()
 
-	up1, err = _d.TaskStore.UpdateTaskQueue(ctx, request)
+	up1, err = d.TaskStore.UpdateTaskQueue(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -208,11 +208,11 @@ func (_d telemetryTaskStore) UpdateTaskQueue(ctx context.Context, request *_sour
 }
 
 // UpdateTaskQueueUserData wraps TaskStore.UpdateTaskQueueUserData.
-func (_d telemetryTaskStore) UpdateTaskQueueUserData(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueUserDataRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.TaskStore/UpdateTaskQueueUserData")
+func (d telemetryTaskStore) UpdateTaskQueueUserData(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueUserDataRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/UpdateTaskQueueUserData")
 	defer span.End()
 
-	err = _d.TaskStore.UpdateTaskQueueUserData(ctx, request)
+	err = d.TaskStore.UpdateTaskQueueUserData(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}

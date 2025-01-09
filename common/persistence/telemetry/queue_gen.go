@@ -53,11 +53,11 @@ func newTelemetryQueue(base _sourcePersistence.Queue, tracer trace.Tracer) telem
 }
 
 // DeleteMessageFromDLQ wraps Queue.DeleteMessageFromDLQ.
-func (_d telemetryQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int64) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/DeleteMessageFromDLQ")
+func (d telemetryQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int64) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/DeleteMessageFromDLQ")
 	defer span.End()
 
-	err = _d.Queue.DeleteMessageFromDLQ(ctx, messageID)
+	err = d.Queue.DeleteMessageFromDLQ(ctx, messageID)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -66,11 +66,11 @@ func (_d telemetryQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int
 }
 
 // DeleteMessagesBefore wraps Queue.DeleteMessagesBefore.
-func (_d telemetryQueue) DeleteMessagesBefore(ctx context.Context, messageID int64) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/DeleteMessagesBefore")
+func (d telemetryQueue) DeleteMessagesBefore(ctx context.Context, messageID int64) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/DeleteMessagesBefore")
 	defer span.End()
 
-	err = _d.Queue.DeleteMessagesBefore(ctx, messageID)
+	err = d.Queue.DeleteMessagesBefore(ctx, messageID)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -79,11 +79,11 @@ func (_d telemetryQueue) DeleteMessagesBefore(ctx context.Context, messageID int
 }
 
 // EnqueueMessage wraps Queue.EnqueueMessage.
-func (_d telemetryQueue) EnqueueMessage(ctx context.Context, blob *commonpb.DataBlob) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/EnqueueMessage")
+func (d telemetryQueue) EnqueueMessage(ctx context.Context, blob *commonpb.DataBlob) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/EnqueueMessage")
 	defer span.End()
 
-	err = _d.Queue.EnqueueMessage(ctx, blob)
+	err = d.Queue.EnqueueMessage(ctx, blob)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -92,11 +92,11 @@ func (_d telemetryQueue) EnqueueMessage(ctx context.Context, blob *commonpb.Data
 }
 
 // EnqueueMessageToDLQ wraps Queue.EnqueueMessageToDLQ.
-func (_d telemetryQueue) EnqueueMessageToDLQ(ctx context.Context, blob *commonpb.DataBlob) (i1 int64, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/EnqueueMessageToDLQ")
+func (d telemetryQueue) EnqueueMessageToDLQ(ctx context.Context, blob *commonpb.DataBlob) (i1 int64, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/EnqueueMessageToDLQ")
 	defer span.End()
 
-	i1, err = _d.Queue.EnqueueMessageToDLQ(ctx, blob)
+	i1, err = d.Queue.EnqueueMessageToDLQ(ctx, blob)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -105,11 +105,11 @@ func (_d telemetryQueue) EnqueueMessageToDLQ(ctx context.Context, blob *commonpb
 }
 
 // GetAckLevels wraps Queue.GetAckLevels.
-func (_d telemetryQueue) GetAckLevels(ctx context.Context) (ip1 *_sourcePersistence.InternalQueueMetadata, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/GetAckLevels")
+func (d telemetryQueue) GetAckLevels(ctx context.Context) (ip1 *_sourcePersistence.InternalQueueMetadata, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/GetAckLevels")
 	defer span.End()
 
-	ip1, err = _d.Queue.GetAckLevels(ctx)
+	ip1, err = d.Queue.GetAckLevels(ctx)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -118,11 +118,11 @@ func (_d telemetryQueue) GetAckLevels(ctx context.Context) (ip1 *_sourcePersiste
 }
 
 // GetDLQAckLevels wraps Queue.GetDLQAckLevels.
-func (_d telemetryQueue) GetDLQAckLevels(ctx context.Context) (ip1 *_sourcePersistence.InternalQueueMetadata, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/GetDLQAckLevels")
+func (d telemetryQueue) GetDLQAckLevels(ctx context.Context) (ip1 *_sourcePersistence.InternalQueueMetadata, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/GetDLQAckLevels")
 	defer span.End()
 
-	ip1, err = _d.Queue.GetDLQAckLevels(ctx)
+	ip1, err = d.Queue.GetDLQAckLevels(ctx)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -131,11 +131,11 @@ func (_d telemetryQueue) GetDLQAckLevels(ctx context.Context) (ip1 *_sourcePersi
 }
 
 // Init wraps Queue.Init.
-func (_d telemetryQueue) Init(ctx context.Context, blob *commonpb.DataBlob) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/Init")
+func (d telemetryQueue) Init(ctx context.Context, blob *commonpb.DataBlob) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/Init")
 	defer span.End()
 
-	err = _d.Queue.Init(ctx, blob)
+	err = d.Queue.Init(ctx, blob)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -144,11 +144,11 @@ func (_d telemetryQueue) Init(ctx context.Context, blob *commonpb.DataBlob) (err
 }
 
 // RangeDeleteMessagesFromDLQ wraps Queue.RangeDeleteMessagesFromDLQ.
-func (_d telemetryQueue) RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/RangeDeleteMessagesFromDLQ")
+func (d telemetryQueue) RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/RangeDeleteMessagesFromDLQ")
 	defer span.End()
 
-	err = _d.Queue.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
+	err = d.Queue.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -157,11 +157,11 @@ func (_d telemetryQueue) RangeDeleteMessagesFromDLQ(ctx context.Context, firstMe
 }
 
 // ReadMessages wraps Queue.ReadMessages.
-func (_d telemetryQueue) ReadMessages(ctx context.Context, lastMessageID int64, maxCount int) (qpa1 []*_sourcePersistence.QueueMessage, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/ReadMessages")
+func (d telemetryQueue) ReadMessages(ctx context.Context, lastMessageID int64, maxCount int) (qpa1 []*_sourcePersistence.QueueMessage, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/ReadMessages")
 	defer span.End()
 
-	qpa1, err = _d.Queue.ReadMessages(ctx, lastMessageID, maxCount)
+	qpa1, err = d.Queue.ReadMessages(ctx, lastMessageID, maxCount)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -170,11 +170,11 @@ func (_d telemetryQueue) ReadMessages(ctx context.Context, lastMessageID int64, 
 }
 
 // ReadMessagesFromDLQ wraps Queue.ReadMessagesFromDLQ.
-func (_d telemetryQueue) ReadMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) (qpa1 []*_sourcePersistence.QueueMessage, ba1 []byte, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/ReadMessagesFromDLQ")
+func (d telemetryQueue) ReadMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) (qpa1 []*_sourcePersistence.QueueMessage, ba1 []byte, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/ReadMessagesFromDLQ")
 	defer span.End()
 
-	qpa1, ba1, err = _d.Queue.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
+	qpa1, ba1, err = d.Queue.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -183,11 +183,11 @@ func (_d telemetryQueue) ReadMessagesFromDLQ(ctx context.Context, firstMessageID
 }
 
 // UpdateAckLevel wraps Queue.UpdateAckLevel.
-func (_d telemetryQueue) UpdateAckLevel(ctx context.Context, metadata *_sourcePersistence.InternalQueueMetadata) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/UpdateAckLevel")
+func (d telemetryQueue) UpdateAckLevel(ctx context.Context, metadata *_sourcePersistence.InternalQueueMetadata) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/UpdateAckLevel")
 	defer span.End()
 
-	err = _d.Queue.UpdateAckLevel(ctx, metadata)
+	err = d.Queue.UpdateAckLevel(ctx, metadata)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -196,11 +196,11 @@ func (_d telemetryQueue) UpdateAckLevel(ctx context.Context, metadata *_sourcePe
 }
 
 // UpdateDLQAckLevel wraps Queue.UpdateDLQAckLevel.
-func (_d telemetryQueue) UpdateDLQAckLevel(ctx context.Context, metadata *_sourcePersistence.InternalQueueMetadata) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.Queue/UpdateDLQAckLevel")
+func (d telemetryQueue) UpdateDLQAckLevel(ctx context.Context, metadata *_sourcePersistence.InternalQueueMetadata) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.Queue/UpdateDLQAckLevel")
 	defer span.End()
 
-	err = _d.Queue.UpdateDLQAckLevel(ctx, metadata)
+	err = d.Queue.UpdateDLQAckLevel(ctx, metadata)
 	if err != nil {
 		span.RecordError(err)
 	}

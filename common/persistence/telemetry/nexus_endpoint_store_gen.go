@@ -52,11 +52,11 @@ func newTelemetryNexusEndpointStore(base _sourcePersistence.NexusEndpointStore, 
 }
 
 // CreateOrUpdateNexusEndpoint wraps NexusEndpointStore.CreateOrUpdateNexusEndpoint.
-func (_d telemetryNexusEndpointStore) CreateOrUpdateNexusEndpoint(ctx context.Context, request *_sourcePersistence.InternalCreateOrUpdateNexusEndpointRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.NexusEndpointStore/CreateOrUpdateNexusEndpoint")
+func (d telemetryNexusEndpointStore) CreateOrUpdateNexusEndpoint(ctx context.Context, request *_sourcePersistence.InternalCreateOrUpdateNexusEndpointRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/CreateOrUpdateNexusEndpoint")
 	defer span.End()
 
-	err = _d.NexusEndpointStore.CreateOrUpdateNexusEndpoint(ctx, request)
+	err = d.NexusEndpointStore.CreateOrUpdateNexusEndpoint(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -65,11 +65,11 @@ func (_d telemetryNexusEndpointStore) CreateOrUpdateNexusEndpoint(ctx context.Co
 }
 
 // DeleteNexusEndpoint wraps NexusEndpointStore.DeleteNexusEndpoint.
-func (_d telemetryNexusEndpointStore) DeleteNexusEndpoint(ctx context.Context, request *_sourcePersistence.DeleteNexusEndpointRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.NexusEndpointStore/DeleteNexusEndpoint")
+func (d telemetryNexusEndpointStore) DeleteNexusEndpoint(ctx context.Context, request *_sourcePersistence.DeleteNexusEndpointRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/DeleteNexusEndpoint")
 	defer span.End()
 
-	err = _d.NexusEndpointStore.DeleteNexusEndpoint(ctx, request)
+	err = d.NexusEndpointStore.DeleteNexusEndpoint(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -78,11 +78,11 @@ func (_d telemetryNexusEndpointStore) DeleteNexusEndpoint(ctx context.Context, r
 }
 
 // GetNexusEndpoint wraps NexusEndpointStore.GetNexusEndpoint.
-func (_d telemetryNexusEndpointStore) GetNexusEndpoint(ctx context.Context, request *_sourcePersistence.GetNexusEndpointRequest) (ip1 *_sourcePersistence.InternalNexusEndpoint, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.NexusEndpointStore/GetNexusEndpoint")
+func (d telemetryNexusEndpointStore) GetNexusEndpoint(ctx context.Context, request *_sourcePersistence.GetNexusEndpointRequest) (ip1 *_sourcePersistence.InternalNexusEndpoint, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/GetNexusEndpoint")
 	defer span.End()
 
-	ip1, err = _d.NexusEndpointStore.GetNexusEndpoint(ctx, request)
+	ip1, err = d.NexusEndpointStore.GetNexusEndpoint(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -91,11 +91,11 @@ func (_d telemetryNexusEndpointStore) GetNexusEndpoint(ctx context.Context, requ
 }
 
 // ListNexusEndpoints wraps NexusEndpointStore.ListNexusEndpoints.
-func (_d telemetryNexusEndpointStore) ListNexusEndpoints(ctx context.Context, request *_sourcePersistence.ListNexusEndpointsRequest) (ip1 *_sourcePersistence.InternalListNexusEndpointsResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.NexusEndpointStore/ListNexusEndpoints")
+func (d telemetryNexusEndpointStore) ListNexusEndpoints(ctx context.Context, request *_sourcePersistence.ListNexusEndpointsRequest) (ip1 *_sourcePersistence.InternalListNexusEndpointsResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/ListNexusEndpoints")
 	defer span.End()
 
-	ip1, err = _d.NexusEndpointStore.ListNexusEndpoints(ctx, request)
+	ip1, err = d.NexusEndpointStore.ListNexusEndpoints(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}

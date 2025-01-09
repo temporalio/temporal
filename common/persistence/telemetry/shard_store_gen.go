@@ -52,11 +52,11 @@ func newTelemetryMetadataStore(base _sourcePersistence.MetadataStore, tracer tra
 }
 
 // CreateNamespace wraps MetadataStore.CreateNamespace.
-func (_d telemetryMetadataStore) CreateNamespace(ctx context.Context, request *_sourcePersistence.InternalCreateNamespaceRequest) (cp1 *_sourcePersistence.CreateNamespaceResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.MetadataStore/CreateNamespace")
+func (d telemetryMetadataStore) CreateNamespace(ctx context.Context, request *_sourcePersistence.InternalCreateNamespaceRequest) (cp1 *_sourcePersistence.CreateNamespaceResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/CreateNamespace")
 	defer span.End()
 
-	cp1, err = _d.MetadataStore.CreateNamespace(ctx, request)
+	cp1, err = d.MetadataStore.CreateNamespace(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -65,11 +65,11 @@ func (_d telemetryMetadataStore) CreateNamespace(ctx context.Context, request *_
 }
 
 // DeleteNamespace wraps MetadataStore.DeleteNamespace.
-func (_d telemetryMetadataStore) DeleteNamespace(ctx context.Context, request *_sourcePersistence.DeleteNamespaceRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.MetadataStore/DeleteNamespace")
+func (d telemetryMetadataStore) DeleteNamespace(ctx context.Context, request *_sourcePersistence.DeleteNamespaceRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/DeleteNamespace")
 	defer span.End()
 
-	err = _d.MetadataStore.DeleteNamespace(ctx, request)
+	err = d.MetadataStore.DeleteNamespace(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -78,11 +78,11 @@ func (_d telemetryMetadataStore) DeleteNamespace(ctx context.Context, request *_
 }
 
 // DeleteNamespaceByName wraps MetadataStore.DeleteNamespaceByName.
-func (_d telemetryMetadataStore) DeleteNamespaceByName(ctx context.Context, request *_sourcePersistence.DeleteNamespaceByNameRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.MetadataStore/DeleteNamespaceByName")
+func (d telemetryMetadataStore) DeleteNamespaceByName(ctx context.Context, request *_sourcePersistence.DeleteNamespaceByNameRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/DeleteNamespaceByName")
 	defer span.End()
 
-	err = _d.MetadataStore.DeleteNamespaceByName(ctx, request)
+	err = d.MetadataStore.DeleteNamespaceByName(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -91,11 +91,11 @@ func (_d telemetryMetadataStore) DeleteNamespaceByName(ctx context.Context, requ
 }
 
 // GetMetadata wraps MetadataStore.GetMetadata.
-func (_d telemetryMetadataStore) GetMetadata(ctx context.Context) (gp1 *_sourcePersistence.GetMetadataResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.MetadataStore/GetMetadata")
+func (d telemetryMetadataStore) GetMetadata(ctx context.Context) (gp1 *_sourcePersistence.GetMetadataResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/GetMetadata")
 	defer span.End()
 
-	gp1, err = _d.MetadataStore.GetMetadata(ctx)
+	gp1, err = d.MetadataStore.GetMetadata(ctx)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -104,11 +104,11 @@ func (_d telemetryMetadataStore) GetMetadata(ctx context.Context) (gp1 *_sourceP
 }
 
 // GetNamespace wraps MetadataStore.GetNamespace.
-func (_d telemetryMetadataStore) GetNamespace(ctx context.Context, request *_sourcePersistence.GetNamespaceRequest) (ip1 *_sourcePersistence.InternalGetNamespaceResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.MetadataStore/GetNamespace")
+func (d telemetryMetadataStore) GetNamespace(ctx context.Context, request *_sourcePersistence.GetNamespaceRequest) (ip1 *_sourcePersistence.InternalGetNamespaceResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/GetNamespace")
 	defer span.End()
 
-	ip1, err = _d.MetadataStore.GetNamespace(ctx, request)
+	ip1, err = d.MetadataStore.GetNamespace(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -117,11 +117,11 @@ func (_d telemetryMetadataStore) GetNamespace(ctx context.Context, request *_sou
 }
 
 // ListNamespaces wraps MetadataStore.ListNamespaces.
-func (_d telemetryMetadataStore) ListNamespaces(ctx context.Context, request *_sourcePersistence.InternalListNamespacesRequest) (ip1 *_sourcePersistence.InternalListNamespacesResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.MetadataStore/ListNamespaces")
+func (d telemetryMetadataStore) ListNamespaces(ctx context.Context, request *_sourcePersistence.InternalListNamespacesRequest) (ip1 *_sourcePersistence.InternalListNamespacesResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/ListNamespaces")
 	defer span.End()
 
-	ip1, err = _d.MetadataStore.ListNamespaces(ctx, request)
+	ip1, err = d.MetadataStore.ListNamespaces(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -130,11 +130,11 @@ func (_d telemetryMetadataStore) ListNamespaces(ctx context.Context, request *_s
 }
 
 // RenameNamespace wraps MetadataStore.RenameNamespace.
-func (_d telemetryMetadataStore) RenameNamespace(ctx context.Context, request *_sourcePersistence.InternalRenameNamespaceRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.MetadataStore/RenameNamespace")
+func (d telemetryMetadataStore) RenameNamespace(ctx context.Context, request *_sourcePersistence.InternalRenameNamespaceRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/RenameNamespace")
 	defer span.End()
 
-	err = _d.MetadataStore.RenameNamespace(ctx, request)
+	err = d.MetadataStore.RenameNamespace(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -143,11 +143,11 @@ func (_d telemetryMetadataStore) RenameNamespace(ctx context.Context, request *_
 }
 
 // UpdateNamespace wraps MetadataStore.UpdateNamespace.
-func (_d telemetryMetadataStore) UpdateNamespace(ctx context.Context, request *_sourcePersistence.InternalUpdateNamespaceRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.MetadataStore/UpdateNamespace")
+func (d telemetryMetadataStore) UpdateNamespace(ctx context.Context, request *_sourcePersistence.InternalUpdateNamespaceRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/UpdateNamespace")
 	defer span.End()
 
-	err = _d.MetadataStore.UpdateNamespace(ctx, request)
+	err = d.MetadataStore.UpdateNamespace(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}

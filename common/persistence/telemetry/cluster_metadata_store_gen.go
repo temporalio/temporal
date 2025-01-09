@@ -52,11 +52,11 @@ func newTelemetryClusterMetadataStore(base _sourcePersistence.ClusterMetadataSto
 }
 
 // DeleteClusterMetadata wraps ClusterMetadataStore.DeleteClusterMetadata.
-func (_d telemetryClusterMetadataStore) DeleteClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalDeleteClusterMetadataRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ClusterMetadataStore/DeleteClusterMetadata")
+func (d telemetryClusterMetadataStore) DeleteClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalDeleteClusterMetadataRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/DeleteClusterMetadata")
 	defer span.End()
 
-	err = _d.ClusterMetadataStore.DeleteClusterMetadata(ctx, request)
+	err = d.ClusterMetadataStore.DeleteClusterMetadata(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -65,11 +65,11 @@ func (_d telemetryClusterMetadataStore) DeleteClusterMetadata(ctx context.Contex
 }
 
 // GetClusterMembers wraps ClusterMetadataStore.GetClusterMembers.
-func (_d telemetryClusterMetadataStore) GetClusterMembers(ctx context.Context, request *_sourcePersistence.GetClusterMembersRequest) (gp1 *_sourcePersistence.GetClusterMembersResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ClusterMetadataStore/GetClusterMembers")
+func (d telemetryClusterMetadataStore) GetClusterMembers(ctx context.Context, request *_sourcePersistence.GetClusterMembersRequest) (gp1 *_sourcePersistence.GetClusterMembersResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/GetClusterMembers")
 	defer span.End()
 
-	gp1, err = _d.ClusterMetadataStore.GetClusterMembers(ctx, request)
+	gp1, err = d.ClusterMetadataStore.GetClusterMembers(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -78,11 +78,11 @@ func (_d telemetryClusterMetadataStore) GetClusterMembers(ctx context.Context, r
 }
 
 // GetClusterMetadata wraps ClusterMetadataStore.GetClusterMetadata.
-func (_d telemetryClusterMetadataStore) GetClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalGetClusterMetadataRequest) (ip1 *_sourcePersistence.InternalGetClusterMetadataResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ClusterMetadataStore/GetClusterMetadata")
+func (d telemetryClusterMetadataStore) GetClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalGetClusterMetadataRequest) (ip1 *_sourcePersistence.InternalGetClusterMetadataResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/GetClusterMetadata")
 	defer span.End()
 
-	ip1, err = _d.ClusterMetadataStore.GetClusterMetadata(ctx, request)
+	ip1, err = d.ClusterMetadataStore.GetClusterMetadata(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -91,11 +91,11 @@ func (_d telemetryClusterMetadataStore) GetClusterMetadata(ctx context.Context, 
 }
 
 // ListClusterMetadata wraps ClusterMetadataStore.ListClusterMetadata.
-func (_d telemetryClusterMetadataStore) ListClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalListClusterMetadataRequest) (ip1 *_sourcePersistence.InternalListClusterMetadataResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ClusterMetadataStore/ListClusterMetadata")
+func (d telemetryClusterMetadataStore) ListClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalListClusterMetadataRequest) (ip1 *_sourcePersistence.InternalListClusterMetadataResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/ListClusterMetadata")
 	defer span.End()
 
-	ip1, err = _d.ClusterMetadataStore.ListClusterMetadata(ctx, request)
+	ip1, err = d.ClusterMetadataStore.ListClusterMetadata(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -104,11 +104,11 @@ func (_d telemetryClusterMetadataStore) ListClusterMetadata(ctx context.Context,
 }
 
 // PruneClusterMembership wraps ClusterMetadataStore.PruneClusterMembership.
-func (_d telemetryClusterMetadataStore) PruneClusterMembership(ctx context.Context, request *_sourcePersistence.PruneClusterMembershipRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ClusterMetadataStore/PruneClusterMembership")
+func (d telemetryClusterMetadataStore) PruneClusterMembership(ctx context.Context, request *_sourcePersistence.PruneClusterMembershipRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/PruneClusterMembership")
 	defer span.End()
 
-	err = _d.ClusterMetadataStore.PruneClusterMembership(ctx, request)
+	err = d.ClusterMetadataStore.PruneClusterMembership(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -117,11 +117,11 @@ func (_d telemetryClusterMetadataStore) PruneClusterMembership(ctx context.Conte
 }
 
 // SaveClusterMetadata wraps ClusterMetadataStore.SaveClusterMetadata.
-func (_d telemetryClusterMetadataStore) SaveClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalSaveClusterMetadataRequest) (b1 bool, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ClusterMetadataStore/SaveClusterMetadata")
+func (d telemetryClusterMetadataStore) SaveClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalSaveClusterMetadataRequest) (b1 bool, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/SaveClusterMetadata")
 	defer span.End()
 
-	b1, err = _d.ClusterMetadataStore.SaveClusterMetadata(ctx, request)
+	b1, err = d.ClusterMetadataStore.SaveClusterMetadata(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -130,11 +130,11 @@ func (_d telemetryClusterMetadataStore) SaveClusterMetadata(ctx context.Context,
 }
 
 // UpsertClusterMembership wraps ClusterMetadataStore.UpsertClusterMembership.
-func (_d telemetryClusterMetadataStore) UpsertClusterMembership(ctx context.Context, request *_sourcePersistence.UpsertClusterMembershipRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ClusterMetadataStore/UpsertClusterMembership")
+func (d telemetryClusterMetadataStore) UpsertClusterMembership(ctx context.Context, request *_sourcePersistence.UpsertClusterMembershipRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/UpsertClusterMembership")
 	defer span.End()
 
-	err = _d.ClusterMetadataStore.UpsertClusterMembership(ctx, request)
+	err = d.ClusterMetadataStore.UpsertClusterMembership(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}

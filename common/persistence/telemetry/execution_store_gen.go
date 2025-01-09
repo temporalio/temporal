@@ -52,11 +52,11 @@ func newTelemetryExecutionStore(base _sourcePersistence.ExecutionStore, tracer t
 }
 
 // AddHistoryTasks wraps ExecutionStore.AddHistoryTasks.
-func (_d telemetryExecutionStore) AddHistoryTasks(ctx context.Context, request *_sourcePersistence.InternalAddHistoryTasksRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/AddHistoryTasks")
+func (d telemetryExecutionStore) AddHistoryTasks(ctx context.Context, request *_sourcePersistence.InternalAddHistoryTasksRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/AddHistoryTasks")
 	defer span.End()
 
-	err = _d.ExecutionStore.AddHistoryTasks(ctx, request)
+	err = d.ExecutionStore.AddHistoryTasks(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -65,11 +65,11 @@ func (_d telemetryExecutionStore) AddHistoryTasks(ctx context.Context, request *
 }
 
 // AppendHistoryNodes wraps ExecutionStore.AppendHistoryNodes.
-func (_d telemetryExecutionStore) AppendHistoryNodes(ctx context.Context, request *_sourcePersistence.InternalAppendHistoryNodesRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/AppendHistoryNodes")
+func (d telemetryExecutionStore) AppendHistoryNodes(ctx context.Context, request *_sourcePersistence.InternalAppendHistoryNodesRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/AppendHistoryNodes")
 	defer span.End()
 
-	err = _d.ExecutionStore.AppendHistoryNodes(ctx, request)
+	err = d.ExecutionStore.AppendHistoryNodes(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -78,11 +78,11 @@ func (_d telemetryExecutionStore) AppendHistoryNodes(ctx context.Context, reques
 }
 
 // CompleteHistoryTask wraps ExecutionStore.CompleteHistoryTask.
-func (_d telemetryExecutionStore) CompleteHistoryTask(ctx context.Context, request *_sourcePersistence.CompleteHistoryTaskRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/CompleteHistoryTask")
+func (d telemetryExecutionStore) CompleteHistoryTask(ctx context.Context, request *_sourcePersistence.CompleteHistoryTaskRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/CompleteHistoryTask")
 	defer span.End()
 
-	err = _d.ExecutionStore.CompleteHistoryTask(ctx, request)
+	err = d.ExecutionStore.CompleteHistoryTask(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -91,11 +91,11 @@ func (_d telemetryExecutionStore) CompleteHistoryTask(ctx context.Context, reque
 }
 
 // ConflictResolveWorkflowExecution wraps ExecutionStore.ConflictResolveWorkflowExecution.
-func (_d telemetryExecutionStore) ConflictResolveWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalConflictResolveWorkflowExecutionRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/ConflictResolveWorkflowExecution")
+func (d telemetryExecutionStore) ConflictResolveWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalConflictResolveWorkflowExecutionRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ConflictResolveWorkflowExecution")
 	defer span.End()
 
-	err = _d.ExecutionStore.ConflictResolveWorkflowExecution(ctx, request)
+	err = d.ExecutionStore.ConflictResolveWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -104,11 +104,11 @@ func (_d telemetryExecutionStore) ConflictResolveWorkflowExecution(ctx context.C
 }
 
 // CreateWorkflowExecution wraps ExecutionStore.CreateWorkflowExecution.
-func (_d telemetryExecutionStore) CreateWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalCreateWorkflowExecutionRequest) (ip1 *_sourcePersistence.InternalCreateWorkflowExecutionResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/CreateWorkflowExecution")
+func (d telemetryExecutionStore) CreateWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalCreateWorkflowExecutionRequest) (ip1 *_sourcePersistence.InternalCreateWorkflowExecutionResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/CreateWorkflowExecution")
 	defer span.End()
 
-	ip1, err = _d.ExecutionStore.CreateWorkflowExecution(ctx, request)
+	ip1, err = d.ExecutionStore.CreateWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -117,11 +117,11 @@ func (_d telemetryExecutionStore) CreateWorkflowExecution(ctx context.Context, r
 }
 
 // DeleteCurrentWorkflowExecution wraps ExecutionStore.DeleteCurrentWorkflowExecution.
-func (_d telemetryExecutionStore) DeleteCurrentWorkflowExecution(ctx context.Context, request *_sourcePersistence.DeleteCurrentWorkflowExecutionRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteCurrentWorkflowExecution")
+func (d telemetryExecutionStore) DeleteCurrentWorkflowExecution(ctx context.Context, request *_sourcePersistence.DeleteCurrentWorkflowExecutionRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteCurrentWorkflowExecution")
 	defer span.End()
 
-	err = _d.ExecutionStore.DeleteCurrentWorkflowExecution(ctx, request)
+	err = d.ExecutionStore.DeleteCurrentWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -130,11 +130,11 @@ func (_d telemetryExecutionStore) DeleteCurrentWorkflowExecution(ctx context.Con
 }
 
 // DeleteHistoryBranch wraps ExecutionStore.DeleteHistoryBranch.
-func (_d telemetryExecutionStore) DeleteHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalDeleteHistoryBranchRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteHistoryBranch")
+func (d telemetryExecutionStore) DeleteHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalDeleteHistoryBranchRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteHistoryBranch")
 	defer span.End()
 
-	err = _d.ExecutionStore.DeleteHistoryBranch(ctx, request)
+	err = d.ExecutionStore.DeleteHistoryBranch(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -143,11 +143,11 @@ func (_d telemetryExecutionStore) DeleteHistoryBranch(ctx context.Context, reque
 }
 
 // DeleteHistoryNodes wraps ExecutionStore.DeleteHistoryNodes.
-func (_d telemetryExecutionStore) DeleteHistoryNodes(ctx context.Context, request *_sourcePersistence.InternalDeleteHistoryNodesRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteHistoryNodes")
+func (d telemetryExecutionStore) DeleteHistoryNodes(ctx context.Context, request *_sourcePersistence.InternalDeleteHistoryNodesRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteHistoryNodes")
 	defer span.End()
 
-	err = _d.ExecutionStore.DeleteHistoryNodes(ctx, request)
+	err = d.ExecutionStore.DeleteHistoryNodes(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -156,11 +156,11 @@ func (_d telemetryExecutionStore) DeleteHistoryNodes(ctx context.Context, reques
 }
 
 // DeleteReplicationTaskFromDLQ wraps ExecutionStore.DeleteReplicationTaskFromDLQ.
-func (_d telemetryExecutionStore) DeleteReplicationTaskFromDLQ(ctx context.Context, request *_sourcePersistence.DeleteReplicationTaskFromDLQRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteReplicationTaskFromDLQ")
+func (d telemetryExecutionStore) DeleteReplicationTaskFromDLQ(ctx context.Context, request *_sourcePersistence.DeleteReplicationTaskFromDLQRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteReplicationTaskFromDLQ")
 	defer span.End()
 
-	err = _d.ExecutionStore.DeleteReplicationTaskFromDLQ(ctx, request)
+	err = d.ExecutionStore.DeleteReplicationTaskFromDLQ(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -169,11 +169,11 @@ func (_d telemetryExecutionStore) DeleteReplicationTaskFromDLQ(ctx context.Conte
 }
 
 // DeleteWorkflowExecution wraps ExecutionStore.DeleteWorkflowExecution.
-func (_d telemetryExecutionStore) DeleteWorkflowExecution(ctx context.Context, request *_sourcePersistence.DeleteWorkflowExecutionRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteWorkflowExecution")
+func (d telemetryExecutionStore) DeleteWorkflowExecution(ctx context.Context, request *_sourcePersistence.DeleteWorkflowExecutionRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteWorkflowExecution")
 	defer span.End()
 
-	err = _d.ExecutionStore.DeleteWorkflowExecution(ctx, request)
+	err = d.ExecutionStore.DeleteWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -182,11 +182,11 @@ func (_d telemetryExecutionStore) DeleteWorkflowExecution(ctx context.Context, r
 }
 
 // ForkHistoryBranch wraps ExecutionStore.ForkHistoryBranch.
-func (_d telemetryExecutionStore) ForkHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalForkHistoryBranchRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/ForkHistoryBranch")
+func (d telemetryExecutionStore) ForkHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalForkHistoryBranchRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ForkHistoryBranch")
 	defer span.End()
 
-	err = _d.ExecutionStore.ForkHistoryBranch(ctx, request)
+	err = d.ExecutionStore.ForkHistoryBranch(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -195,11 +195,11 @@ func (_d telemetryExecutionStore) ForkHistoryBranch(ctx context.Context, request
 }
 
 // GetAllHistoryTreeBranches wraps ExecutionStore.GetAllHistoryTreeBranches.
-func (_d telemetryExecutionStore) GetAllHistoryTreeBranches(ctx context.Context, request *_sourcePersistence.GetAllHistoryTreeBranchesRequest) (ip1 *_sourcePersistence.InternalGetAllHistoryTreeBranchesResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/GetAllHistoryTreeBranches")
+func (d telemetryExecutionStore) GetAllHistoryTreeBranches(ctx context.Context, request *_sourcePersistence.GetAllHistoryTreeBranchesRequest) (ip1 *_sourcePersistence.InternalGetAllHistoryTreeBranchesResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetAllHistoryTreeBranches")
 	defer span.End()
 
-	ip1, err = _d.ExecutionStore.GetAllHistoryTreeBranches(ctx, request)
+	ip1, err = d.ExecutionStore.GetAllHistoryTreeBranches(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -208,11 +208,11 @@ func (_d telemetryExecutionStore) GetAllHistoryTreeBranches(ctx context.Context,
 }
 
 // GetCurrentExecution wraps ExecutionStore.GetCurrentExecution.
-func (_d telemetryExecutionStore) GetCurrentExecution(ctx context.Context, request *_sourcePersistence.GetCurrentExecutionRequest) (ip1 *_sourcePersistence.InternalGetCurrentExecutionResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/GetCurrentExecution")
+func (d telemetryExecutionStore) GetCurrentExecution(ctx context.Context, request *_sourcePersistence.GetCurrentExecutionRequest) (ip1 *_sourcePersistence.InternalGetCurrentExecutionResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetCurrentExecution")
 	defer span.End()
 
-	ip1, err = _d.ExecutionStore.GetCurrentExecution(ctx, request)
+	ip1, err = d.ExecutionStore.GetCurrentExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -221,11 +221,11 @@ func (_d telemetryExecutionStore) GetCurrentExecution(ctx context.Context, reque
 }
 
 // GetHistoryTasks wraps ExecutionStore.GetHistoryTasks.
-func (_d telemetryExecutionStore) GetHistoryTasks(ctx context.Context, request *_sourcePersistence.GetHistoryTasksRequest) (ip1 *_sourcePersistence.InternalGetHistoryTasksResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/GetHistoryTasks")
+func (d telemetryExecutionStore) GetHistoryTasks(ctx context.Context, request *_sourcePersistence.GetHistoryTasksRequest) (ip1 *_sourcePersistence.InternalGetHistoryTasksResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetHistoryTasks")
 	defer span.End()
 
-	ip1, err = _d.ExecutionStore.GetHistoryTasks(ctx, request)
+	ip1, err = d.ExecutionStore.GetHistoryTasks(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -234,11 +234,11 @@ func (_d telemetryExecutionStore) GetHistoryTasks(ctx context.Context, request *
 }
 
 // GetHistoryTreeContainingBranch wraps ExecutionStore.GetHistoryTreeContainingBranch.
-func (_d telemetryExecutionStore) GetHistoryTreeContainingBranch(ctx context.Context, request *_sourcePersistence.InternalGetHistoryTreeContainingBranchRequest) (ip1 *_sourcePersistence.InternalGetHistoryTreeContainingBranchResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/GetHistoryTreeContainingBranch")
+func (d telemetryExecutionStore) GetHistoryTreeContainingBranch(ctx context.Context, request *_sourcePersistence.InternalGetHistoryTreeContainingBranchRequest) (ip1 *_sourcePersistence.InternalGetHistoryTreeContainingBranchResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetHistoryTreeContainingBranch")
 	defer span.End()
 
-	ip1, err = _d.ExecutionStore.GetHistoryTreeContainingBranch(ctx, request)
+	ip1, err = d.ExecutionStore.GetHistoryTreeContainingBranch(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -247,11 +247,11 @@ func (_d telemetryExecutionStore) GetHistoryTreeContainingBranch(ctx context.Con
 }
 
 // GetReplicationTasksFromDLQ wraps ExecutionStore.GetReplicationTasksFromDLQ.
-func (_d telemetryExecutionStore) GetReplicationTasksFromDLQ(ctx context.Context, request *_sourcePersistence.GetReplicationTasksFromDLQRequest) (ip1 *_sourcePersistence.InternalGetReplicationTasksFromDLQResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/GetReplicationTasksFromDLQ")
+func (d telemetryExecutionStore) GetReplicationTasksFromDLQ(ctx context.Context, request *_sourcePersistence.GetReplicationTasksFromDLQRequest) (ip1 *_sourcePersistence.InternalGetReplicationTasksFromDLQResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetReplicationTasksFromDLQ")
 	defer span.End()
 
-	ip1, err = _d.ExecutionStore.GetReplicationTasksFromDLQ(ctx, request)
+	ip1, err = d.ExecutionStore.GetReplicationTasksFromDLQ(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -260,11 +260,11 @@ func (_d telemetryExecutionStore) GetReplicationTasksFromDLQ(ctx context.Context
 }
 
 // GetWorkflowExecution wraps ExecutionStore.GetWorkflowExecution.
-func (_d telemetryExecutionStore) GetWorkflowExecution(ctx context.Context, request *_sourcePersistence.GetWorkflowExecutionRequest) (ip1 *_sourcePersistence.InternalGetWorkflowExecutionResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/GetWorkflowExecution")
+func (d telemetryExecutionStore) GetWorkflowExecution(ctx context.Context, request *_sourcePersistence.GetWorkflowExecutionRequest) (ip1 *_sourcePersistence.InternalGetWorkflowExecutionResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetWorkflowExecution")
 	defer span.End()
 
-	ip1, err = _d.ExecutionStore.GetWorkflowExecution(ctx, request)
+	ip1, err = d.ExecutionStore.GetWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -273,11 +273,11 @@ func (_d telemetryExecutionStore) GetWorkflowExecution(ctx context.Context, requ
 }
 
 // IsReplicationDLQEmpty wraps ExecutionStore.IsReplicationDLQEmpty.
-func (_d telemetryExecutionStore) IsReplicationDLQEmpty(ctx context.Context, request *_sourcePersistence.GetReplicationTasksFromDLQRequest) (b1 bool, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/IsReplicationDLQEmpty")
+func (d telemetryExecutionStore) IsReplicationDLQEmpty(ctx context.Context, request *_sourcePersistence.GetReplicationTasksFromDLQRequest) (b1 bool, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/IsReplicationDLQEmpty")
 	defer span.End()
 
-	b1, err = _d.ExecutionStore.IsReplicationDLQEmpty(ctx, request)
+	b1, err = d.ExecutionStore.IsReplicationDLQEmpty(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -286,11 +286,11 @@ func (_d telemetryExecutionStore) IsReplicationDLQEmpty(ctx context.Context, req
 }
 
 // ListConcreteExecutions wraps ExecutionStore.ListConcreteExecutions.
-func (_d telemetryExecutionStore) ListConcreteExecutions(ctx context.Context, request *_sourcePersistence.ListConcreteExecutionsRequest) (ip1 *_sourcePersistence.InternalListConcreteExecutionsResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/ListConcreteExecutions")
+func (d telemetryExecutionStore) ListConcreteExecutions(ctx context.Context, request *_sourcePersistence.ListConcreteExecutionsRequest) (ip1 *_sourcePersistence.InternalListConcreteExecutionsResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ListConcreteExecutions")
 	defer span.End()
 
-	ip1, err = _d.ExecutionStore.ListConcreteExecutions(ctx, request)
+	ip1, err = d.ExecutionStore.ListConcreteExecutions(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -299,11 +299,11 @@ func (_d telemetryExecutionStore) ListConcreteExecutions(ctx context.Context, re
 }
 
 // PutReplicationTaskToDLQ wraps ExecutionStore.PutReplicationTaskToDLQ.
-func (_d telemetryExecutionStore) PutReplicationTaskToDLQ(ctx context.Context, request *_sourcePersistence.PutReplicationTaskToDLQRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/PutReplicationTaskToDLQ")
+func (d telemetryExecutionStore) PutReplicationTaskToDLQ(ctx context.Context, request *_sourcePersistence.PutReplicationTaskToDLQRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/PutReplicationTaskToDLQ")
 	defer span.End()
 
-	err = _d.ExecutionStore.PutReplicationTaskToDLQ(ctx, request)
+	err = d.ExecutionStore.PutReplicationTaskToDLQ(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -312,11 +312,11 @@ func (_d telemetryExecutionStore) PutReplicationTaskToDLQ(ctx context.Context, r
 }
 
 // RangeCompleteHistoryTasks wraps ExecutionStore.RangeCompleteHistoryTasks.
-func (_d telemetryExecutionStore) RangeCompleteHistoryTasks(ctx context.Context, request *_sourcePersistence.RangeCompleteHistoryTasksRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/RangeCompleteHistoryTasks")
+func (d telemetryExecutionStore) RangeCompleteHistoryTasks(ctx context.Context, request *_sourcePersistence.RangeCompleteHistoryTasksRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/RangeCompleteHistoryTasks")
 	defer span.End()
 
-	err = _d.ExecutionStore.RangeCompleteHistoryTasks(ctx, request)
+	err = d.ExecutionStore.RangeCompleteHistoryTasks(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -325,11 +325,11 @@ func (_d telemetryExecutionStore) RangeCompleteHistoryTasks(ctx context.Context,
 }
 
 // RangeDeleteReplicationTaskFromDLQ wraps ExecutionStore.RangeDeleteReplicationTaskFromDLQ.
-func (_d telemetryExecutionStore) RangeDeleteReplicationTaskFromDLQ(ctx context.Context, request *_sourcePersistence.RangeDeleteReplicationTaskFromDLQRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/RangeDeleteReplicationTaskFromDLQ")
+func (d telemetryExecutionStore) RangeDeleteReplicationTaskFromDLQ(ctx context.Context, request *_sourcePersistence.RangeDeleteReplicationTaskFromDLQRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/RangeDeleteReplicationTaskFromDLQ")
 	defer span.End()
 
-	err = _d.ExecutionStore.RangeDeleteReplicationTaskFromDLQ(ctx, request)
+	err = d.ExecutionStore.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -338,11 +338,11 @@ func (_d telemetryExecutionStore) RangeDeleteReplicationTaskFromDLQ(ctx context.
 }
 
 // ReadHistoryBranch wraps ExecutionStore.ReadHistoryBranch.
-func (_d telemetryExecutionStore) ReadHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalReadHistoryBranchRequest) (ip1 *_sourcePersistence.InternalReadHistoryBranchResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/ReadHistoryBranch")
+func (d telemetryExecutionStore) ReadHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalReadHistoryBranchRequest) (ip1 *_sourcePersistence.InternalReadHistoryBranchResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ReadHistoryBranch")
 	defer span.End()
 
-	ip1, err = _d.ExecutionStore.ReadHistoryBranch(ctx, request)
+	ip1, err = d.ExecutionStore.ReadHistoryBranch(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -351,11 +351,11 @@ func (_d telemetryExecutionStore) ReadHistoryBranch(ctx context.Context, request
 }
 
 // SetWorkflowExecution wraps ExecutionStore.SetWorkflowExecution.
-func (_d telemetryExecutionStore) SetWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalSetWorkflowExecutionRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/SetWorkflowExecution")
+func (d telemetryExecutionStore) SetWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalSetWorkflowExecutionRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/SetWorkflowExecution")
 	defer span.End()
 
-	err = _d.ExecutionStore.SetWorkflowExecution(ctx, request)
+	err = d.ExecutionStore.SetWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -364,11 +364,11 @@ func (_d telemetryExecutionStore) SetWorkflowExecution(ctx context.Context, requ
 }
 
 // UpdateWorkflowExecution wraps ExecutionStore.UpdateWorkflowExecution.
-func (_d telemetryExecutionStore) UpdateWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalUpdateWorkflowExecutionRequest) (err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.ExecutionStore/UpdateWorkflowExecution")
+func (d telemetryExecutionStore) UpdateWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalUpdateWorkflowExecutionRequest) (err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/UpdateWorkflowExecution")
 	defer span.End()
 
-	err = _d.ExecutionStore.UpdateWorkflowExecution(ctx, request)
+	err = d.ExecutionStore.UpdateWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}

@@ -52,11 +52,11 @@ func newTelemetryQueueV2(base _sourcePersistence.QueueV2, tracer trace.Tracer) t
 }
 
 // CreateQueue wraps QueueV2.CreateQueue.
-func (_d telemetryQueueV2) CreateQueue(ctx context.Context, request *_sourcePersistence.InternalCreateQueueRequest) (ip1 *_sourcePersistence.InternalCreateQueueResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.QueueV2/CreateQueue")
+func (d telemetryQueueV2) CreateQueue(ctx context.Context, request *_sourcePersistence.InternalCreateQueueRequest) (ip1 *_sourcePersistence.InternalCreateQueueResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/CreateQueue")
 	defer span.End()
 
-	ip1, err = _d.QueueV2.CreateQueue(ctx, request)
+	ip1, err = d.QueueV2.CreateQueue(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -65,11 +65,11 @@ func (_d telemetryQueueV2) CreateQueue(ctx context.Context, request *_sourcePers
 }
 
 // EnqueueMessage wraps QueueV2.EnqueueMessage.
-func (_d telemetryQueueV2) EnqueueMessage(ctx context.Context, request *_sourcePersistence.InternalEnqueueMessageRequest) (ip1 *_sourcePersistence.InternalEnqueueMessageResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.QueueV2/EnqueueMessage")
+func (d telemetryQueueV2) EnqueueMessage(ctx context.Context, request *_sourcePersistence.InternalEnqueueMessageRequest) (ip1 *_sourcePersistence.InternalEnqueueMessageResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/EnqueueMessage")
 	defer span.End()
 
-	ip1, err = _d.QueueV2.EnqueueMessage(ctx, request)
+	ip1, err = d.QueueV2.EnqueueMessage(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -78,11 +78,11 @@ func (_d telemetryQueueV2) EnqueueMessage(ctx context.Context, request *_sourceP
 }
 
 // ListQueues wraps QueueV2.ListQueues.
-func (_d telemetryQueueV2) ListQueues(ctx context.Context, request *_sourcePersistence.InternalListQueuesRequest) (ip1 *_sourcePersistence.InternalListQueuesResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.QueueV2/ListQueues")
+func (d telemetryQueueV2) ListQueues(ctx context.Context, request *_sourcePersistence.InternalListQueuesRequest) (ip1 *_sourcePersistence.InternalListQueuesResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/ListQueues")
 	defer span.End()
 
-	ip1, err = _d.QueueV2.ListQueues(ctx, request)
+	ip1, err = d.QueueV2.ListQueues(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -91,11 +91,11 @@ func (_d telemetryQueueV2) ListQueues(ctx context.Context, request *_sourcePersi
 }
 
 // RangeDeleteMessages wraps QueueV2.RangeDeleteMessages.
-func (_d telemetryQueueV2) RangeDeleteMessages(ctx context.Context, request *_sourcePersistence.InternalRangeDeleteMessagesRequest) (ip1 *_sourcePersistence.InternalRangeDeleteMessagesResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.QueueV2/RangeDeleteMessages")
+func (d telemetryQueueV2) RangeDeleteMessages(ctx context.Context, request *_sourcePersistence.InternalRangeDeleteMessagesRequest) (ip1 *_sourcePersistence.InternalRangeDeleteMessagesResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/RangeDeleteMessages")
 	defer span.End()
 
-	ip1, err = _d.QueueV2.RangeDeleteMessages(ctx, request)
+	ip1, err = d.QueueV2.RangeDeleteMessages(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -104,11 +104,11 @@ func (_d telemetryQueueV2) RangeDeleteMessages(ctx context.Context, request *_so
 }
 
 // ReadMessages wraps QueueV2.ReadMessages.
-func (_d telemetryQueueV2) ReadMessages(ctx context.Context, request *_sourcePersistence.InternalReadMessagesRequest) (ip1 *_sourcePersistence.InternalReadMessagesResponse, err error) {
-	ctx, span := _d.tracer.Start(ctx, "persistence.QueueV2/ReadMessages")
+func (d telemetryQueueV2) ReadMessages(ctx context.Context, request *_sourcePersistence.InternalReadMessagesRequest) (ip1 *_sourcePersistence.InternalReadMessagesResponse, err error) {
+	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/ReadMessages")
 	defer span.End()
 
-	ip1, err = _d.QueueV2.ReadMessages(ctx, request)
+	ip1, err = d.QueueV2.ReadMessages(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
