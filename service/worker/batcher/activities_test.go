@@ -346,20 +346,14 @@ func (s *activitiesSuite) TestAdjustQuery() {
 		},
 		{
 			name:           "Contains status - 1",
-			query:          "Status=Completed",
-			expectedResult: "Status=Completed",
+			query:          "ExecutionStatus=Completed",
+			expectedResult: fmt.Sprintf("(ExecutionStatus=Completed) AND (%s)", statusRunningQueryFilter),
 			batchType:      BatchTypeTerminate,
 		},
 		{
 			name:           "Contains status - 2",
-			query:          "A=B OR Status=Completed",
-			expectedResult: "A=B OR Status=Completed",
-			batchType:      BatchTypeTerminate,
-		},
-		{
-			name:           "Contains status as a part of different cause",
-			query:          "A=B OR NewStatus=Completed",
-			expectedResult: fmt.Sprintf("(A=B OR NewStatus=Completed) AND (%s)", statusRunningQueryFilter),
+			query:          "A=B OR ExecutionStatus='Completed'",
+			expectedResult: fmt.Sprintf("(A=B OR ExecutionStatus='Completed') AND (%s)", statusRunningQueryFilter),
 			batchType:      BatchTypeTerminate,
 		},
 		{

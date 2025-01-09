@@ -29,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"regexp"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -52,7 +51,7 @@ import (
 
 const (
 	pageSize                 = 1000
-	statusRunningQueryFilter = "Status='Running'"
+	statusRunningQueryFilter = "ExecutionStatus='Running'"
 )
 
 var (
@@ -216,29 +215,14 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 	)
 }
 
-func containsStatusCondition(whereClause string) bool {
-	pattern := `(?i)\bStatus\b\s*([=!<>]+)`
-	matched, err := regexp.MatchString(pattern, whereClause)
-	if err != nil {
-		return false
-	}
-	return matched
-}
-
 func (a *activities) adjustQuery(batchParams BatchParams) string {
 	if len(batchParams.Query) == 0 {
 		// don't add anything if query is empty
 		return batchParams.Query
 	}
 
-	// if query is not empty and contains status check - return it as is
-	if containsStatusCondition(batchParams.Query) {
-		return batchParams.Query
-	}
-
 	switch batchParams.BatchType {
-	// anything else?
-	case BatchTypeTerminate, BatchTypeDelete, BatchTypeCancel:
+	case BatchTypeTerminate, BatchTypeSignal, BatchTypeCancel, BatchTypeUpdateOptions:
 		return fmt.Sprintf("(%s) AND (%s)", batchParams.Query, statusRunningQueryFilter)
 	default:
 		return batchParams.Query
