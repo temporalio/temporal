@@ -48,7 +48,7 @@ type (
 		testHash uint32
 		an       Any
 		values   sync.Map
-		ns       sync.Map
+		numbers  sync.Map
 	}
 	testNamer interface {
 		Name() string
@@ -71,7 +71,7 @@ func newFromName(testName string) *TestVars {
 func getOrCreate[T any](tv *TestVars, key string, initialValGen func(key string) T, valNSetter func(val T, n int) T) T {
 	v, _ := tv.values.LoadOrStore(key, initialValGen(key))
 
-	n, ok := tv.ns.Load(key)
+	n, ok := tv.numbers.Load(key)
 	if !ok {
 		//revive:disable-next-line:unchecked-type-assertion
 		return v.(T)
@@ -113,8 +113,8 @@ func (tv *TestVars) clone() *TestVars {
 		tv2.values.Store(key, value)
 		return true
 	})
-	tv.ns.Range(func(key, value any) bool {
-		tv2.ns.Store(key, value)
+	tv.numbers.Range(func(key, value any) bool {
+		tv2.numbers.Store(key, value)
 		return true
 	})
 
@@ -128,7 +128,7 @@ func (tv *TestVars) cloneSetVal(key string, val any) *TestVars {
 
 func (tv *TestVars) cloneSetN(key string, n int) *TestVars {
 	tv2 := tv.clone()
-	tv2.ns.Store(key, n)
+	tv2.numbers.Store(key, n)
 	return tv2
 }
 
@@ -143,7 +143,7 @@ func (tv *TestVars) Entity() string {
 func (tv *TestVars) WithEntity(entity string) *TestVars {
 	return tv.cloneSetVal("entity", entity)
 }
-func (tv *TestVars) WithEntityN(n int) *TestVars {
+func (tv *TestVars) WithEntityNumber(n int) *TestVars {
 	return tv.cloneSetN("entity", n)
 }
 */
@@ -200,7 +200,7 @@ func (tv *TestVars) WorkflowID() string {
 	return getOrCreate(tv, "workflow_id", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WithWorkflowIDN(n int) *TestVars {
+func (tv *TestVars) WithWorkflowIDNumber(n int) *TestVars {
 	return tv.cloneSetN("workflow_id", n)
 }
 
@@ -231,7 +231,7 @@ func (tv *TestVars) WithBuildID(buildId string) *TestVars {
 	return tv.cloneSetVal("build_id", buildId)
 }
 
-func (tv *TestVars) WithBuildIDN(n int) *TestVars {
+func (tv *TestVars) WithBuildIDNumber(n int) *TestVars {
 	return tv.cloneSetN("build_id", n)
 }
 
@@ -261,7 +261,7 @@ func (tv *TestVars) WithTaskQueue(taskQueue string) *TestVars {
 	return tv.cloneSetVal("task_queue", taskQueue)
 }
 
-func (tv *TestVars) WithTaskQueueN(n int) *TestVars {
+func (tv *TestVars) WithTaskQueueNumber(n int) *TestVars {
 	return tv.cloneSetN("task_queue", n)
 }
 
@@ -290,7 +290,7 @@ func (tv *TestVars) ActivityID() string {
 	return getOrCreate(tv, "activity_id", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WithActivityIDN(n int) *TestVars {
+func (tv *TestVars) WithActivityIDNumber(n int) *TestVars {
 	return tv.cloneSetN("activity_id", n)
 }
 
@@ -304,7 +304,7 @@ func (tv *TestVars) MessageID() string {
 	return getOrCreate(tv, "message_id", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WithMessageIDN(n int) *TestVars {
+func (tv *TestVars) WithMessageIDNumber(n int) *TestVars {
 	return tv.cloneSetN("message_id", n)
 }
 
@@ -312,7 +312,7 @@ func (tv *TestVars) UpdateID() string {
 	return getOrCreate(tv, "update_id", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WithUpdateIDN(n int) *TestVars {
+func (tv *TestVars) WithUpdateIDNumber(n int) *TestVars {
 	return tv.cloneSetN("update_id", n)
 }
 
@@ -339,7 +339,7 @@ func (tv *TestVars) TimerID() string {
 	return getOrCreate(tv, "timer_id", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WithTimerIDN(n int) *TestVars {
+func (tv *TestVars) WithTimerIDNumber(n int) *TestVars {
 	return tv.cloneSetN("timer_id", n)
 }
 

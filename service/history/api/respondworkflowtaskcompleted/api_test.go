@@ -403,7 +403,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 			_, _, err = ms.AddTimerStartedEvent(
 				1,
 				&commandpb.StartTimerCommandAttributes{
-					TimerId:            tv.WithTimerIDN(i).TimerID(),
+					TimerId:            tv.WithTimerIDNumber(i).TimerID(),
 					StartToFireTimeout: tv.Any().InfiniteTimeout(),
 				},
 			)

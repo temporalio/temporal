@@ -731,11 +731,11 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 	}
 	deployment1 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.WithBuildIDN(1).BuildID(),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
 	deployment2 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.WithBuildIDN(2).BuildID(),
+		BuildId:    tv.WithBuildIDNumber(2).BuildID(),
 	}
 	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
@@ -849,7 +849,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 	}
 	deployment1 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.WithBuildIDN(1).BuildID(),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
 	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
@@ -909,7 +909,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	}
 	deployment1 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.WithBuildIDN(1).BuildID(),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
 	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
@@ -1225,11 +1225,11 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	dep1 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.WithBuildIDN(1).BuildID(),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
 	dep2 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.WithBuildIDN(2).BuildID(),
+		BuildId:    tv.WithBuildIDNumber(2).BuildID(),
 	}
 
 	// set to 1
@@ -1344,11 +1344,11 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 
 	dep1 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.WithBuildIDN(1).BuildID(),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
 	dep2 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.WithBuildIDN(2).BuildID(),
+		BuildId:    tv.WithBuildIDNumber(2).BuildID(),
 	}
 
 	// set to 1 with some metadata

@@ -478,7 +478,7 @@ func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueRespo
 	}
 	if t.wftCounter > t.totalSignals+1 {
 		updateID := t.wftCounter - t.totalSignals - 1
-		tv := t.tv.WithUpdateIDN(updateID).WithMessageIDN(updateID)
+		tv := t.tv.WithUpdateIDNumber(updateID).WithMessageIDNumber(updateID)
 		return []*protocolpb.Message{
 			{
 				Id:                 tv.MessageID() + "_update-accepted",
@@ -501,7 +501,7 @@ func (t *resetTest) wftHandler(task *workflowservice.PollWorkflowTaskQueueRespon
 	// a separate WFT. We must send COMPLETE_WORKFLOW_EXECUTION in the final WFT.
 	if t.wftCounter > t.totalSignals+1 {
 		updateID := t.wftCounter - t.totalSignals - 1
-		tv := t.tv.WithMessageIDN(updateID)
+		tv := t.tv.WithMessageIDNumber(updateID)
 		commands = append(commands, &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 			Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
@@ -567,7 +567,7 @@ func (t *resetTest) run() {
 		t.sendSignalAndProcessWFT(poller)
 	}
 	for i := 1; i <= t.totalUpdates; i++ {
-		t.sendUpdateAndProcessWFT(t.tv.WithUpdateIDN(i), poller)
+		t.sendUpdateAndProcessWFT(t.tv.WithUpdateIDNumber(i), poller)
 	}
 	t.True(t.commandsCompleted)
 	t.True(t.messagesCompleted)

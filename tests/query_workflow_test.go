@@ -201,7 +201,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 
 	for tci, tc := range testCases {
 		s.T().Run(tc.testName, func(t *testing.T) {
-			tv = tv.WithWorkflowIDN(tci)
+			tv = tv.WithWorkflowIDNumber(tci)
 			workflowOptions := sdkclient.StartWorkflowOptions{
 				ID:         tv.WorkflowID(),
 				TaskQueue:  s.TaskQueue(),

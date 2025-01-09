@@ -32,18 +32,16 @@ Later you can assert on the generated values. `testvars` guarantees to provide t
 ```go
 assert.Equal(t, tv.WorkflowID(), startedWorkflow.WorkflowId)
 ```
-If you don't care about specific value, you can use `Any()` method to generate a random value.
-It indicates that value doesn't matter for this test and will never be asserted on (but required for API, for example).
 
-If you need more than one value of the same type in the same test, you can use `WithEntityN()` method to
-get a new instance of `testvars` with a different value. `N` stands for a number of the value.
+If you need more than one value for the same entity in one test, you can use `WithEntityNumber()` method to
+get a new instance of `testvars` with a different value.
 
 ```go
 func TestFoo(t *testing.T) {
 
     tv := testvars.New(t)
-    tv1 := tv.WithUpdateIDN(1)
-    tv2 := tv.WithUpdateIDN(2)
+    tv1 := tv.WithUpdateIDNumber(1)
+    tv2 := tv.WithUpdateIDNumber(2)
 
     req1 := &workflowservice.UpdateWorkflowExecutionRequest{
         Namespace:         tv1.NamespaceName().String(),
@@ -70,6 +68,10 @@ func TestFoo(t *testing.T) {
     }
 }
 ```
+
+If you don't care about specific value, you can use `Any()` method to generate a random value.
+It indicates that value doesn't matter for this test and will never be asserted on (but required for API, for example).
+
 ### taskpoller package
 
 For end-to-end testing, consider using `taskpoller.TaskPoller` to handle workflow tasks. This is
