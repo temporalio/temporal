@@ -32,23 +32,29 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/telemetry"
 )
 
 // telemetryQueue implements Queue interface instrumented with OpenTelemetry.
 type telemetryQueue struct {
 	_sourcePersistence.Queue
-	tracer trace.Tracer
+	tracer    trace.Tracer
+	debugMode bool
 }
 
 // newTelemetryQueue returns telemetryQueue.
 func newTelemetryQueue(base _sourcePersistence.Queue, tracer trace.Tracer) telemetryQueue {
 	return telemetryQueue{
-		Queue:  base,
-		tracer: tracer,
+		Queue:     base,
+		tracer:    tracer,
+		debugMode: telemetry.DebugMode(),
 	}
 }
 
@@ -57,9 +63,23 @@ func (d telemetryQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int6
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/DeleteMessageFromDLQ")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("DeleteMessageFromDLQ"))
+
 	err = d.Queue.DeleteMessageFromDLQ(ctx, messageID)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(messageID, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize int64 for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -70,9 +90,23 @@ func (d telemetryQueue) DeleteMessagesBefore(ctx context.Context, messageID int6
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/DeleteMessagesBefore")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("DeleteMessagesBefore"))
+
 	err = d.Queue.DeleteMessagesBefore(ctx, messageID)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(messageID, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize int64 for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -83,9 +117,23 @@ func (d telemetryQueue) EnqueueMessage(ctx context.Context, blob *commonpb.DataB
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/EnqueueMessage")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("EnqueueMessage"))
+
 	err = d.Queue.EnqueueMessage(ctx, blob)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(blob, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *commonpb.DataBlob for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -96,9 +144,30 @@ func (d telemetryQueue) EnqueueMessageToDLQ(ctx context.Context, blob *commonpb.
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/EnqueueMessageToDLQ")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("EnqueueMessageToDLQ"))
+
 	i1, err = d.Queue.EnqueueMessageToDLQ(ctx, blob)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(blob, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *commonpb.DataBlob for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -109,9 +178,23 @@ func (d telemetryQueue) GetAckLevels(ctx context.Context) (ip1 *_sourcePersisten
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/GetAckLevels")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetAckLevels"))
+
 	ip1, err = d.Queue.GetAckLevels(ctx)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -122,9 +205,23 @@ func (d telemetryQueue) GetDLQAckLevels(ctx context.Context) (ip1 *_sourcePersis
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/GetDLQAckLevels")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetDLQAckLevels"))
+
 	ip1, err = d.Queue.GetDLQAckLevels(ctx)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -135,9 +232,23 @@ func (d telemetryQueue) Init(ctx context.Context, blob *commonpb.DataBlob) (err 
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/Init")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("Init"))
+
 	err = d.Queue.Init(ctx, blob)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(blob, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *commonpb.DataBlob for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -148,9 +259,23 @@ func (d telemetryQueue) RangeDeleteMessagesFromDLQ(ctx context.Context, firstMes
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/RangeDeleteMessagesFromDLQ")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("RangeDeleteMessagesFromDLQ"))
+
 	err = d.Queue.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(firstMessageID, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize int64 for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -161,9 +286,30 @@ func (d telemetryQueue) ReadMessages(ctx context.Context, lastMessageID int64, m
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/ReadMessages")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("ReadMessages"))
+
 	qpa1, err = d.Queue.ReadMessages(ctx, lastMessageID, maxCount)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(lastMessageID, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize int64 for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -174,9 +320,30 @@ func (d telemetryQueue) ReadMessagesFromDLQ(ctx context.Context, firstMessageID 
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/ReadMessagesFromDLQ")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("ReadMessagesFromDLQ"))
+
 	qpa1, ba1, err = d.Queue.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(firstMessageID, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize int64 for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(ba1, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize []byte for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -187,9 +354,23 @@ func (d telemetryQueue) UpdateAckLevel(ctx context.Context, metadata *_sourcePer
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/UpdateAckLevel")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("UpdateAckLevel"))
+
 	err = d.Queue.UpdateAckLevel(ctx, metadata)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(metadata, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalQueueMetadata for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -200,9 +381,23 @@ func (d telemetryQueue) UpdateDLQAckLevel(ctx context.Context, metadata *_source
 	ctx, span := d.tracer.Start(ctx, "persistence.Queue/UpdateDLQAckLevel")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
+	span.SetAttributes(attribute.Key("persistence.method").String("UpdateDLQAckLevel"))
+
 	err = d.Queue.UpdateDLQAckLevel(ctx, metadata)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(metadata, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalQueueMetadata for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return

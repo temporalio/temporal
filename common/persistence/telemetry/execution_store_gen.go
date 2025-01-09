@@ -32,15 +32,20 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/telemetry"
 )
 
 // telemetryExecutionStore implements ExecutionStore interface instrumented with OpenTelemetry.
 type telemetryExecutionStore struct {
 	_sourcePersistence.ExecutionStore
-	tracer trace.Tracer
+	tracer    trace.Tracer
+	debugMode bool
 }
 
 // newTelemetryExecutionStore returns telemetryExecutionStore.
@@ -48,6 +53,7 @@ func newTelemetryExecutionStore(base _sourcePersistence.ExecutionStore, tracer t
 	return telemetryExecutionStore{
 		ExecutionStore: base,
 		tracer:         tracer,
+		debugMode:      telemetry.DebugMode(),
 	}
 }
 
@@ -56,9 +62,23 @@ func (d telemetryExecutionStore) AddHistoryTasks(ctx context.Context, request *_
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/AddHistoryTasks")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("AddHistoryTasks"))
+
 	err = d.ExecutionStore.AddHistoryTasks(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalAddHistoryTasksRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -69,9 +89,23 @@ func (d telemetryExecutionStore) AppendHistoryNodes(ctx context.Context, request
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/AppendHistoryNodes")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("AppendHistoryNodes"))
+
 	err = d.ExecutionStore.AppendHistoryNodes(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalAppendHistoryNodesRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -82,9 +116,23 @@ func (d telemetryExecutionStore) CompleteHistoryTask(ctx context.Context, reques
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/CompleteHistoryTask")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("CompleteHistoryTask"))
+
 	err = d.ExecutionStore.CompleteHistoryTask(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.CompleteHistoryTaskRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -95,9 +143,23 @@ func (d telemetryExecutionStore) ConflictResolveWorkflowExecution(ctx context.Co
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ConflictResolveWorkflowExecution")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("ConflictResolveWorkflowExecution"))
+
 	err = d.ExecutionStore.ConflictResolveWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalConflictResolveWorkflowExecutionRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -108,9 +170,30 @@ func (d telemetryExecutionStore) CreateWorkflowExecution(ctx context.Context, re
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/CreateWorkflowExecution")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("CreateWorkflowExecution"))
+
 	ip1, err = d.ExecutionStore.CreateWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalCreateWorkflowExecutionRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -121,9 +204,23 @@ func (d telemetryExecutionStore) DeleteCurrentWorkflowExecution(ctx context.Cont
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteCurrentWorkflowExecution")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("DeleteCurrentWorkflowExecution"))
+
 	err = d.ExecutionStore.DeleteCurrentWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.DeleteCurrentWorkflowExecutionRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -134,9 +231,23 @@ func (d telemetryExecutionStore) DeleteHistoryBranch(ctx context.Context, reques
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteHistoryBranch")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("DeleteHistoryBranch"))
+
 	err = d.ExecutionStore.DeleteHistoryBranch(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalDeleteHistoryBranchRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -147,9 +258,23 @@ func (d telemetryExecutionStore) DeleteHistoryNodes(ctx context.Context, request
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteHistoryNodes")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("DeleteHistoryNodes"))
+
 	err = d.ExecutionStore.DeleteHistoryNodes(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalDeleteHistoryNodesRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -160,9 +285,23 @@ func (d telemetryExecutionStore) DeleteReplicationTaskFromDLQ(ctx context.Contex
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteReplicationTaskFromDLQ")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("DeleteReplicationTaskFromDLQ"))
+
 	err = d.ExecutionStore.DeleteReplicationTaskFromDLQ(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.DeleteReplicationTaskFromDLQRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -173,9 +312,23 @@ func (d telemetryExecutionStore) DeleteWorkflowExecution(ctx context.Context, re
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteWorkflowExecution")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("DeleteWorkflowExecution"))
+
 	err = d.ExecutionStore.DeleteWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.DeleteWorkflowExecutionRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -186,9 +339,23 @@ func (d telemetryExecutionStore) ForkHistoryBranch(ctx context.Context, request 
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ForkHistoryBranch")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("ForkHistoryBranch"))
+
 	err = d.ExecutionStore.ForkHistoryBranch(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalForkHistoryBranchRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -199,9 +366,30 @@ func (d telemetryExecutionStore) GetAllHistoryTreeBranches(ctx context.Context, 
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetAllHistoryTreeBranches")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetAllHistoryTreeBranches"))
+
 	ip1, err = d.ExecutionStore.GetAllHistoryTreeBranches(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.GetAllHistoryTreeBranchesRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -212,9 +400,30 @@ func (d telemetryExecutionStore) GetCurrentExecution(ctx context.Context, reques
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetCurrentExecution")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetCurrentExecution"))
+
 	ip1, err = d.ExecutionStore.GetCurrentExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.GetCurrentExecutionRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -225,9 +434,30 @@ func (d telemetryExecutionStore) GetHistoryTasks(ctx context.Context, request *_
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetHistoryTasks")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetHistoryTasks"))
+
 	ip1, err = d.ExecutionStore.GetHistoryTasks(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.GetHistoryTasksRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -238,9 +468,30 @@ func (d telemetryExecutionStore) GetHistoryTreeContainingBranch(ctx context.Cont
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetHistoryTreeContainingBranch")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetHistoryTreeContainingBranch"))
+
 	ip1, err = d.ExecutionStore.GetHistoryTreeContainingBranch(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalGetHistoryTreeContainingBranchRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -251,9 +502,30 @@ func (d telemetryExecutionStore) GetReplicationTasksFromDLQ(ctx context.Context,
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetReplicationTasksFromDLQ")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetReplicationTasksFromDLQ"))
+
 	ip1, err = d.ExecutionStore.GetReplicationTasksFromDLQ(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.GetReplicationTasksFromDLQRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -264,9 +536,30 @@ func (d telemetryExecutionStore) GetWorkflowExecution(ctx context.Context, reque
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetWorkflowExecution")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetWorkflowExecution"))
+
 	ip1, err = d.ExecutionStore.GetWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.GetWorkflowExecutionRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -277,9 +570,30 @@ func (d telemetryExecutionStore) IsReplicationDLQEmpty(ctx context.Context, requ
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/IsReplicationDLQEmpty")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("IsReplicationDLQEmpty"))
+
 	b1, err = d.ExecutionStore.IsReplicationDLQEmpty(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.GetReplicationTasksFromDLQRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -290,9 +604,30 @@ func (d telemetryExecutionStore) ListConcreteExecutions(ctx context.Context, req
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ListConcreteExecutions")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("ListConcreteExecutions"))
+
 	ip1, err = d.ExecutionStore.ListConcreteExecutions(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.ListConcreteExecutionsRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -303,9 +638,23 @@ func (d telemetryExecutionStore) PutReplicationTaskToDLQ(ctx context.Context, re
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/PutReplicationTaskToDLQ")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("PutReplicationTaskToDLQ"))
+
 	err = d.ExecutionStore.PutReplicationTaskToDLQ(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.PutReplicationTaskToDLQRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -316,9 +665,23 @@ func (d telemetryExecutionStore) RangeCompleteHistoryTasks(ctx context.Context, 
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/RangeCompleteHistoryTasks")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("RangeCompleteHistoryTasks"))
+
 	err = d.ExecutionStore.RangeCompleteHistoryTasks(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.RangeCompleteHistoryTasksRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -329,9 +692,23 @@ func (d telemetryExecutionStore) RangeDeleteReplicationTaskFromDLQ(ctx context.C
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/RangeDeleteReplicationTaskFromDLQ")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("RangeDeleteReplicationTaskFromDLQ"))
+
 	err = d.ExecutionStore.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.RangeDeleteReplicationTaskFromDLQRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -342,9 +719,30 @@ func (d telemetryExecutionStore) ReadHistoryBranch(ctx context.Context, request 
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ReadHistoryBranch")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("ReadHistoryBranch"))
+
 	ip1, err = d.ExecutionStore.ReadHistoryBranch(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalReadHistoryBranchRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -355,9 +753,23 @@ func (d telemetryExecutionStore) SetWorkflowExecution(ctx context.Context, reque
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/SetWorkflowExecution")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("SetWorkflowExecution"))
+
 	err = d.ExecutionStore.SetWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalSetWorkflowExecutionRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -368,9 +780,23 @@ func (d telemetryExecutionStore) UpdateWorkflowExecution(ctx context.Context, re
 	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/UpdateWorkflowExecution")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("UpdateWorkflowExecution"))
+
 	err = d.ExecutionStore.UpdateWorkflowExecution(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalUpdateWorkflowExecutionRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return

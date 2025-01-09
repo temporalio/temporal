@@ -32,22 +32,28 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/telemetry"
 )
 
 // telemetryQueueV2 implements QueueV2 interface instrumented with OpenTelemetry.
 type telemetryQueueV2 struct {
 	_sourcePersistence.QueueV2
-	tracer trace.Tracer
+	tracer    trace.Tracer
+	debugMode bool
 }
 
 // newTelemetryQueueV2 returns telemetryQueueV2.
 func newTelemetryQueueV2(base _sourcePersistence.QueueV2, tracer trace.Tracer) telemetryQueueV2 {
 	return telemetryQueueV2{
-		QueueV2: base,
-		tracer:  tracer,
+		QueueV2:   base,
+		tracer:    tracer,
+		debugMode: telemetry.DebugMode(),
 	}
 }
 
@@ -56,9 +62,30 @@ func (d telemetryQueueV2) CreateQueue(ctx context.Context, request *_sourcePersi
 	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/CreateQueue")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("QueueV2"))
+	span.SetAttributes(attribute.Key("persistence.method").String("CreateQueue"))
+
 	ip1, err = d.QueueV2.CreateQueue(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalCreateQueueRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -69,9 +96,30 @@ func (d telemetryQueueV2) EnqueueMessage(ctx context.Context, request *_sourcePe
 	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/EnqueueMessage")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("QueueV2"))
+	span.SetAttributes(attribute.Key("persistence.method").String("EnqueueMessage"))
+
 	ip1, err = d.QueueV2.EnqueueMessage(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalEnqueueMessageRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -82,9 +130,30 @@ func (d telemetryQueueV2) ListQueues(ctx context.Context, request *_sourcePersis
 	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/ListQueues")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("QueueV2"))
+	span.SetAttributes(attribute.Key("persistence.method").String("ListQueues"))
+
 	ip1, err = d.QueueV2.ListQueues(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalListQueuesRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -95,9 +164,30 @@ func (d telemetryQueueV2) RangeDeleteMessages(ctx context.Context, request *_sou
 	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/RangeDeleteMessages")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("QueueV2"))
+	span.SetAttributes(attribute.Key("persistence.method").String("RangeDeleteMessages"))
+
 	ip1, err = d.QueueV2.RangeDeleteMessages(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalRangeDeleteMessagesRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -108,9 +198,30 @@ func (d telemetryQueueV2) ReadMessages(ctx context.Context, request *_sourcePers
 	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/ReadMessages")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("QueueV2"))
+	span.SetAttributes(attribute.Key("persistence.method").String("ReadMessages"))
+
 	ip1, err = d.QueueV2.ReadMessages(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize *_sourcePersistence.InternalReadMessagesRequest for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		if err != nil {
+			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
