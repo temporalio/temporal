@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 )
@@ -53,5 +55,14 @@ func generateRequestID(scheduler Scheduler, backfillID string, nominal, actual t
 		scheduler.ConflictToken,
 		nominal.UnixMilli(),
 		actual.UnixMilli(),
+	)
+}
+
+// newTaggedLogger returns a logger tagged with the Scheduler's attributes.
+func newTaggedLogger(baseLogger log.Logger, scheduler Scheduler) log.Logger {
+	return log.With(
+		baseLogger,
+		tag.NewStringTag("wf-namespace", scheduler.Namespace),
+		tag.NewStringTag("schedule-id", scheduler.ScheduleId),
 	)
 }

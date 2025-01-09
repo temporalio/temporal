@@ -39,22 +39,13 @@ func RegisterGeneratorExecutors(registry *hsm.Registry, options GeneratorTaskExe
 	return hsm.RegisterTimerExecutor(registry, e.executeBufferTask)
 }
 
-// newTaggedLogger returns a logger tagged with the Scheduler's attributes.
-func (e generatorTaskExecutor) newTaggedLogger(scheduler Scheduler) log.Logger {
-	return log.With(
-		e.BaseLogger,
-		tag.NewStringTag("wf-namespace", scheduler.Namespace),
-		tag.NewStringTag("schedule-id", scheduler.ScheduleId),
-	)
-}
-
 func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.Node, task BufferTask) error {
 	schedulerNode := node.Parent
 	scheduler, err := e.loadScheduler(schedulerNode)
 	if err != nil {
 		return err
 	}
-	e.logger = e.newTaggedLogger(scheduler)
+	e.logger = newTaggedLogger(e.BaseLogger, scheduler)
 
 	generator, err := e.loadGenerator(node)
 	if err != nil {
