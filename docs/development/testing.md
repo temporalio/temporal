@@ -35,7 +35,8 @@ assert.Equal(t, tv.WorkflowID(), startedWorkflow.WorkflowId)
 If you don't care about specific value, you can use `Any()` method to generate a random value.
 It indicates that value doesn't matter for this test and will never be asserted on (but required for API, for example).
 
-If you need more than one value of the same type in the same test you can use `WithEntityN()` methods.
+If you need more than one value of the same type in the same test, you can use `WithEntityN()` method to
+get a new instance of `testvars` with a different value. `N` stands for a number of the value.
 
 ```go
 func TestFoo(t *testing.T) {

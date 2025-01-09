@@ -85,13 +85,22 @@ func (tv *TestVars) stringNSetter(v string, n int) string {
 	return fmt.Sprintf("%s_%d", v, n)
 }
 
-// Use this setter for entities that don't support setting n (like uuid).
+// Generate new uuid for every new n.
+func (tv *TestVars) uuidNSetter(_ string, _ int) string {
+	return tv.uuidString("")
+}
+
+func (tv *TestVars) intNSetter(v int, n int) int {
+	return n*1000 + v
+}
+
+// Use this setter for entities that don't support setting n.
 func unsupportedNSetter[T any](v T, _ int) T {
 	panic(fmt.Sprintf("setting n on type %T is not supported", v))
 }
 
 func (tv *TestVars) uniqueString(key string) string {
-	return tv.testName + "_" + key
+	return fmt.Sprintf("%s_%s", tv.testName, key)
 }
 
 func (tv *TestVars) uuidString(_ string) string {
@@ -140,10 +149,13 @@ func (tv *TestVars) WithEntityN(n int) *TestVars {
 */
 
 func (tv *TestVars) NamespaceID() namespace.ID {
-	return getOrCreate(tv, "namespace_id", func(key string) namespace.ID {
-		return namespace.ID(tv.uuidString(key))
-	},
-		unsupportedNSetter,
+	return getOrCreate(tv, "namespace_id",
+		func(key string) namespace.ID {
+			return namespace.ID(tv.uuidString(key))
+		},
+		func(val namespace.ID, n int) namespace.ID {
+			return namespace.ID(tv.uuidNSetter(val.String(), n))
+		},
 	)
 }
 
@@ -193,7 +205,7 @@ func (tv *TestVars) WithWorkflowIDN(n int) *TestVars {
 }
 
 func (tv *TestVars) RunID() string {
-	return getOrCreate(tv, "run_id", tv.uuidString, unsupportedNSetter)
+	return getOrCreate(tv, "run_id", tv.uuidString, tv.uuidNSetter)
 }
 
 func (tv *TestVars) WithRunID(runID string) *TestVars {
@@ -208,7 +220,7 @@ func (tv *TestVars) WorkflowExecution() *commonpb.WorkflowExecution {
 }
 
 func (tv *TestVars) RequestID() string {
-	return getOrCreate(tv, "request_id", tv.uuidString, unsupportedNSetter)
+	return getOrCreate(tv, "request_id", tv.uuidString, tv.uuidNSetter)
 }
 
 func (tv *TestVars) BuildID() string {
