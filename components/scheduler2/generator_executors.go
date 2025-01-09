@@ -41,7 +41,7 @@ func RegisterGeneratorExecutors(registry *hsm.Registry, options GeneratorTaskExe
 
 func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.Node, task BufferTask) error {
 	schedulerNode := node.Parent
-	scheduler, err := e.loadScheduler(schedulerNode)
+	scheduler, err := loadScheduler(schedulerNode)
 	if err != nil {
 		return err
 	}
@@ -144,17 +144,5 @@ func (e generatorTaskExecutor) loadGenerator(node *hsm.Node) (Generator, error) 
 
 	return Generator{
 		GeneratorInternal: prevGenerator.GeneratorInternal,
-	}, nil
-}
-
-// loadScheduler loads the Scheduler's persisted state.
-func (e generatorTaskExecutor) loadScheduler(node *hsm.Node) (Scheduler, error) {
-	prevScheduler, err := hsm.MachineData[Scheduler](node)
-	if err != nil {
-		return Scheduler{}, err
-	}
-
-	return Scheduler{
-		SchedulerInternal: prevScheduler.SchedulerInternal,
 	}, nil
 }

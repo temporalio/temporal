@@ -66,3 +66,15 @@ func newTaggedLogger(baseLogger log.Logger, scheduler Scheduler) log.Logger {
 		tag.NewStringTag("schedule-id", scheduler.ScheduleId),
 	)
 }
+
+// loadScheduler loads the Scheduler's persisted state.
+func loadScheduler(node *hsm.Node) (Scheduler, error) {
+	prevScheduler, err := hsm.MachineData[Scheduler](node)
+	if err != nil {
+		return Scheduler{}, err
+	}
+
+	return Scheduler{
+		SchedulerInternal: prevScheduler.SchedulerInternal,
+	}, nil
+}
