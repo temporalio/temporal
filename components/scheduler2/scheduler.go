@@ -41,7 +41,7 @@ type (
 
 const (
 	// Unique identifier for top-level scheduler state machine.
-	SchedulerMachineType = "scheduler.SchedulerV2"
+	SchedulerMachineType = "scheduler.Scheduler"
 
 	// The top-level scheduler only has a single, constant state.
 	SchedulerMachineStateRunning SchedulerMachineState = 0
@@ -100,11 +100,6 @@ func RegisterStateMachines(r *hsm.Registry) error {
 	}
 	// TODO: add other state machines here
 	return nil
-}
-
-// MachineCollection creates a new typed [statemachines.Collection] for operations.
-func MachineCollection(tree *hsm.Node) hsm.Collection[Scheduler] {
-	return hsm.NewCollection[Scheduler](tree, SchedulerMachineType)
 }
 
 func (s Scheduler) State() SchedulerMachineState {
