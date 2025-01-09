@@ -57,90 +57,90 @@ func newFaultInjectionQueue(
 }
 
 // DeleteMessageFromDLQ wraps Queue.DeleteMessageFromDLQ.
-func (_d faultInjectionQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int64) (err error) {
-	err = _d.generator.generate("DeleteMessageFromDLQ").inject(func() error {
-		err = _d.Queue.DeleteMessageFromDLQ(ctx, messageID)
+func (d faultInjectionQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int64) (err error) {
+	err = d.generator.generate("DeleteMessageFromDLQ").inject(func() error {
+		err = d.Queue.DeleteMessageFromDLQ(ctx, messageID)
 		return err
 	})
 	return
 }
 
 // DeleteMessagesBefore wraps Queue.DeleteMessagesBefore.
-func (_d faultInjectionQueue) DeleteMessagesBefore(ctx context.Context, messageID int64) (err error) {
-	err = _d.generator.generate("DeleteMessagesBefore").inject(func() error {
-		err = _d.Queue.DeleteMessagesBefore(ctx, messageID)
+func (d faultInjectionQueue) DeleteMessagesBefore(ctx context.Context, messageID int64) (err error) {
+	err = d.generator.generate("DeleteMessagesBefore").inject(func() error {
+		err = d.Queue.DeleteMessagesBefore(ctx, messageID)
 		return err
 	})
 	return
 }
 
 // EnqueueMessage wraps Queue.EnqueueMessage.
-func (_d faultInjectionQueue) EnqueueMessage(ctx context.Context, blob *commonpb.DataBlob) (err error) {
-	err = _d.generator.generate("EnqueueMessage").inject(func() error {
-		err = _d.Queue.EnqueueMessage(ctx, blob)
+func (d faultInjectionQueue) EnqueueMessage(ctx context.Context, blob *commonpb.DataBlob) (err error) {
+	err = d.generator.generate("EnqueueMessage").inject(func() error {
+		err = d.Queue.EnqueueMessage(ctx, blob)
 		return err
 	})
 	return
 }
 
 // EnqueueMessageToDLQ wraps Queue.EnqueueMessageToDLQ.
-func (_d faultInjectionQueue) EnqueueMessageToDLQ(ctx context.Context, blob *commonpb.DataBlob) (i1 int64, err error) {
-	err = _d.generator.generate("EnqueueMessageToDLQ").inject(func() error {
-		i1, err = _d.Queue.EnqueueMessageToDLQ(ctx, blob)
+func (d faultInjectionQueue) EnqueueMessageToDLQ(ctx context.Context, blob *commonpb.DataBlob) (i1 int64, err error) {
+	err = d.generator.generate("EnqueueMessageToDLQ").inject(func() error {
+		i1, err = d.Queue.EnqueueMessageToDLQ(ctx, blob)
 		return err
 	})
 	return
 }
 
 // Init wraps Queue.Init.
-func (_d faultInjectionQueue) Init(ctx context.Context, blob *commonpb.DataBlob) (err error) {
-	err = _d.generator.generate("Init").inject(func() error {
-		err = _d.Queue.Init(ctx, blob)
+func (d faultInjectionQueue) Init(ctx context.Context, blob *commonpb.DataBlob) (err error) {
+	err = d.generator.generate("Init").inject(func() error {
+		err = d.Queue.Init(ctx, blob)
 		return err
 	})
 	return
 }
 
 // RangeDeleteMessagesFromDLQ wraps Queue.RangeDeleteMessagesFromDLQ.
-func (_d faultInjectionQueue) RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) (err error) {
-	err = _d.generator.generate("RangeDeleteMessagesFromDLQ").inject(func() error {
-		err = _d.Queue.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
+func (d faultInjectionQueue) RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) (err error) {
+	err = d.generator.generate("RangeDeleteMessagesFromDLQ").inject(func() error {
+		err = d.Queue.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
 		return err
 	})
 	return
 }
 
 // ReadMessages wraps Queue.ReadMessages.
-func (_d faultInjectionQueue) ReadMessages(ctx context.Context, lastMessageID int64, maxCount int) (qpa1 []*_sourcePersistence.QueueMessage, err error) {
-	err = _d.generator.generate("ReadMessages").inject(func() error {
-		qpa1, err = _d.Queue.ReadMessages(ctx, lastMessageID, maxCount)
+func (d faultInjectionQueue) ReadMessages(ctx context.Context, lastMessageID int64, maxCount int) (qpa1 []*_sourcePersistence.QueueMessage, err error) {
+	err = d.generator.generate("ReadMessages").inject(func() error {
+		qpa1, err = d.Queue.ReadMessages(ctx, lastMessageID, maxCount)
 		return err
 	})
 	return
 }
 
 // ReadMessagesFromDLQ wraps Queue.ReadMessagesFromDLQ.
-func (_d faultInjectionQueue) ReadMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) (qpa1 []*_sourcePersistence.QueueMessage, ba1 []byte, err error) {
-	err = _d.generator.generate("ReadMessagesFromDLQ").inject(func() error {
-		qpa1, ba1, err = _d.Queue.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
+func (d faultInjectionQueue) ReadMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) (qpa1 []*_sourcePersistence.QueueMessage, ba1 []byte, err error) {
+	err = d.generator.generate("ReadMessagesFromDLQ").inject(func() error {
+		qpa1, ba1, err = d.Queue.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
 		return err
 	})
 	return
 }
 
 // UpdateAckLevel wraps Queue.UpdateAckLevel.
-func (_d faultInjectionQueue) UpdateAckLevel(ctx context.Context, metadata *_sourcePersistence.InternalQueueMetadata) (err error) {
-	err = _d.generator.generate("UpdateAckLevel").inject(func() error {
-		err = _d.Queue.UpdateAckLevel(ctx, metadata)
+func (d faultInjectionQueue) UpdateAckLevel(ctx context.Context, metadata *_sourcePersistence.InternalQueueMetadata) (err error) {
+	err = d.generator.generate("UpdateAckLevel").inject(func() error {
+		err = d.Queue.UpdateAckLevel(ctx, metadata)
 		return err
 	})
 	return
 }
 
 // UpdateDLQAckLevel wraps Queue.UpdateDLQAckLevel.
-func (_d faultInjectionQueue) UpdateDLQAckLevel(ctx context.Context, metadata *_sourcePersistence.InternalQueueMetadata) (err error) {
-	err = _d.generator.generate("UpdateDLQAckLevel").inject(func() error {
-		err = _d.Queue.UpdateDLQAckLevel(ctx, metadata)
+func (d faultInjectionQueue) UpdateDLQAckLevel(ctx context.Context, metadata *_sourcePersistence.InternalQueueMetadata) (err error) {
+	err = d.generator.generate("UpdateDLQAckLevel").inject(func() error {
+		err = d.Queue.UpdateDLQAckLevel(ctx, metadata)
 		return err
 	})
 	return

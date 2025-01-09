@@ -56,45 +56,45 @@ func newFaultInjectionQueueV2(
 }
 
 // CreateQueue wraps QueueV2.CreateQueue.
-func (_d faultInjectionQueueV2) CreateQueue(ctx context.Context, request *_sourcePersistence.InternalCreateQueueRequest) (ip1 *_sourcePersistence.InternalCreateQueueResponse, err error) {
-	err = _d.generator.generate("CreateQueue").inject(func() error {
-		ip1, err = _d.QueueV2.CreateQueue(ctx, request)
+func (d faultInjectionQueueV2) CreateQueue(ctx context.Context, request *_sourcePersistence.InternalCreateQueueRequest) (ip1 *_sourcePersistence.InternalCreateQueueResponse, err error) {
+	err = d.generator.generate("CreateQueue").inject(func() error {
+		ip1, err = d.QueueV2.CreateQueue(ctx, request)
 		return err
 	})
 	return
 }
 
 // EnqueueMessage wraps QueueV2.EnqueueMessage.
-func (_d faultInjectionQueueV2) EnqueueMessage(ctx context.Context, request *_sourcePersistence.InternalEnqueueMessageRequest) (ip1 *_sourcePersistence.InternalEnqueueMessageResponse, err error) {
-	err = _d.generator.generate("EnqueueMessage").inject(func() error {
-		ip1, err = _d.QueueV2.EnqueueMessage(ctx, request)
+func (d faultInjectionQueueV2) EnqueueMessage(ctx context.Context, request *_sourcePersistence.InternalEnqueueMessageRequest) (ip1 *_sourcePersistence.InternalEnqueueMessageResponse, err error) {
+	err = d.generator.generate("EnqueueMessage").inject(func() error {
+		ip1, err = d.QueueV2.EnqueueMessage(ctx, request)
 		return err
 	})
 	return
 }
 
 // ListQueues wraps QueueV2.ListQueues.
-func (_d faultInjectionQueueV2) ListQueues(ctx context.Context, request *_sourcePersistence.InternalListQueuesRequest) (ip1 *_sourcePersistence.InternalListQueuesResponse, err error) {
-	err = _d.generator.generate("ListQueues").inject(func() error {
-		ip1, err = _d.QueueV2.ListQueues(ctx, request)
+func (d faultInjectionQueueV2) ListQueues(ctx context.Context, request *_sourcePersistence.InternalListQueuesRequest) (ip1 *_sourcePersistence.InternalListQueuesResponse, err error) {
+	err = d.generator.generate("ListQueues").inject(func() error {
+		ip1, err = d.QueueV2.ListQueues(ctx, request)
 		return err
 	})
 	return
 }
 
 // RangeDeleteMessages wraps QueueV2.RangeDeleteMessages.
-func (_d faultInjectionQueueV2) RangeDeleteMessages(ctx context.Context, request *_sourcePersistence.InternalRangeDeleteMessagesRequest) (ip1 *_sourcePersistence.InternalRangeDeleteMessagesResponse, err error) {
-	err = _d.generator.generate("RangeDeleteMessages").inject(func() error {
-		ip1, err = _d.QueueV2.RangeDeleteMessages(ctx, request)
+func (d faultInjectionQueueV2) RangeDeleteMessages(ctx context.Context, request *_sourcePersistence.InternalRangeDeleteMessagesRequest) (ip1 *_sourcePersistence.InternalRangeDeleteMessagesResponse, err error) {
+	err = d.generator.generate("RangeDeleteMessages").inject(func() error {
+		ip1, err = d.QueueV2.RangeDeleteMessages(ctx, request)
 		return err
 	})
 	return
 }
 
 // ReadMessages wraps QueueV2.ReadMessages.
-func (_d faultInjectionQueueV2) ReadMessages(ctx context.Context, request *_sourcePersistence.InternalReadMessagesRequest) (ip1 *_sourcePersistence.InternalReadMessagesResponse, err error) {
-	err = _d.generator.generate("ReadMessages").inject(func() error {
-		ip1, err = _d.QueueV2.ReadMessages(ctx, request)
+func (d faultInjectionQueueV2) ReadMessages(ctx context.Context, request *_sourcePersistence.InternalReadMessagesRequest) (ip1 *_sourcePersistence.InternalReadMessagesResponse, err error) {
+	err = d.generator.generate("ReadMessages").inject(func() error {
+		ip1, err = d.QueueV2.ReadMessages(ctx, request)
 		return err
 	})
 	return

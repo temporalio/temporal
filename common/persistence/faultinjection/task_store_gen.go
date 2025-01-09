@@ -56,117 +56,117 @@ func newFaultInjectionTaskStore(
 }
 
 // CompleteTasksLessThan wraps TaskStore.CompleteTasksLessThan.
-func (_d faultInjectionTaskStore) CompleteTasksLessThan(ctx context.Context, request *_sourcePersistence.CompleteTasksLessThanRequest) (i1 int, err error) {
-	err = _d.generator.generate("CompleteTasksLessThan").inject(func() error {
-		i1, err = _d.TaskStore.CompleteTasksLessThan(ctx, request)
+func (d faultInjectionTaskStore) CompleteTasksLessThan(ctx context.Context, request *_sourcePersistence.CompleteTasksLessThanRequest) (i1 int, err error) {
+	err = d.generator.generate("CompleteTasksLessThan").inject(func() error {
+		i1, err = d.TaskStore.CompleteTasksLessThan(ctx, request)
 		return err
 	})
 	return
 }
 
 // CountTaskQueuesByBuildId wraps TaskStore.CountTaskQueuesByBuildId.
-func (_d faultInjectionTaskStore) CountTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.CountTaskQueuesByBuildIdRequest) (i1 int, err error) {
-	err = _d.generator.generate("CountTaskQueuesByBuildId").inject(func() error {
-		i1, err = _d.TaskStore.CountTaskQueuesByBuildId(ctx, request)
+func (d faultInjectionTaskStore) CountTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.CountTaskQueuesByBuildIdRequest) (i1 int, err error) {
+	err = d.generator.generate("CountTaskQueuesByBuildId").inject(func() error {
+		i1, err = d.TaskStore.CountTaskQueuesByBuildId(ctx, request)
 		return err
 	})
 	return
 }
 
 // CreateTaskQueue wraps TaskStore.CreateTaskQueue.
-func (_d faultInjectionTaskStore) CreateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalCreateTaskQueueRequest) (err error) {
-	err = _d.generator.generate("CreateTaskQueue").inject(func() error {
-		err = _d.TaskStore.CreateTaskQueue(ctx, request)
+func (d faultInjectionTaskStore) CreateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalCreateTaskQueueRequest) (err error) {
+	err = d.generator.generate("CreateTaskQueue").inject(func() error {
+		err = d.TaskStore.CreateTaskQueue(ctx, request)
 		return err
 	})
 	return
 }
 
 // CreateTasks wraps TaskStore.CreateTasks.
-func (_d faultInjectionTaskStore) CreateTasks(ctx context.Context, request *_sourcePersistence.InternalCreateTasksRequest) (cp1 *_sourcePersistence.CreateTasksResponse, err error) {
-	err = _d.generator.generate("CreateTasks").inject(func() error {
-		cp1, err = _d.TaskStore.CreateTasks(ctx, request)
+func (d faultInjectionTaskStore) CreateTasks(ctx context.Context, request *_sourcePersistence.InternalCreateTasksRequest) (cp1 *_sourcePersistence.CreateTasksResponse, err error) {
+	err = d.generator.generate("CreateTasks").inject(func() error {
+		cp1, err = d.TaskStore.CreateTasks(ctx, request)
 		return err
 	})
 	return
 }
 
 // DeleteTaskQueue wraps TaskStore.DeleteTaskQueue.
-func (_d faultInjectionTaskStore) DeleteTaskQueue(ctx context.Context, request *_sourcePersistence.DeleteTaskQueueRequest) (err error) {
-	err = _d.generator.generate("DeleteTaskQueue").inject(func() error {
-		err = _d.TaskStore.DeleteTaskQueue(ctx, request)
+func (d faultInjectionTaskStore) DeleteTaskQueue(ctx context.Context, request *_sourcePersistence.DeleteTaskQueueRequest) (err error) {
+	err = d.generator.generate("DeleteTaskQueue").inject(func() error {
+		err = d.TaskStore.DeleteTaskQueue(ctx, request)
 		return err
 	})
 	return
 }
 
 // GetTaskQueue wraps TaskStore.GetTaskQueue.
-func (_d faultInjectionTaskStore) GetTaskQueue(ctx context.Context, request *_sourcePersistence.InternalGetTaskQueueRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueResponse, err error) {
-	err = _d.generator.generate("GetTaskQueue").inject(func() error {
-		ip1, err = _d.TaskStore.GetTaskQueue(ctx, request)
+func (d faultInjectionTaskStore) GetTaskQueue(ctx context.Context, request *_sourcePersistence.InternalGetTaskQueueRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueResponse, err error) {
+	err = d.generator.generate("GetTaskQueue").inject(func() error {
+		ip1, err = d.TaskStore.GetTaskQueue(ctx, request)
 		return err
 	})
 	return
 }
 
 // GetTaskQueueUserData wraps TaskStore.GetTaskQueueUserData.
-func (_d faultInjectionTaskStore) GetTaskQueueUserData(ctx context.Context, request *_sourcePersistence.GetTaskQueueUserDataRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueUserDataResponse, err error) {
-	err = _d.generator.generate("GetTaskQueueUserData").inject(func() error {
-		ip1, err = _d.TaskStore.GetTaskQueueUserData(ctx, request)
+func (d faultInjectionTaskStore) GetTaskQueueUserData(ctx context.Context, request *_sourcePersistence.GetTaskQueueUserDataRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueUserDataResponse, err error) {
+	err = d.generator.generate("GetTaskQueueUserData").inject(func() error {
+		ip1, err = d.TaskStore.GetTaskQueueUserData(ctx, request)
 		return err
 	})
 	return
 }
 
 // GetTaskQueuesByBuildId wraps TaskStore.GetTaskQueuesByBuildId.
-func (_d faultInjectionTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.GetTaskQueuesByBuildIdRequest) (sa1 []string, err error) {
-	err = _d.generator.generate("GetTaskQueuesByBuildId").inject(func() error {
-		sa1, err = _d.TaskStore.GetTaskQueuesByBuildId(ctx, request)
+func (d faultInjectionTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.GetTaskQueuesByBuildIdRequest) (sa1 []string, err error) {
+	err = d.generator.generate("GetTaskQueuesByBuildId").inject(func() error {
+		sa1, err = d.TaskStore.GetTaskQueuesByBuildId(ctx, request)
 		return err
 	})
 	return
 }
 
 // GetTasks wraps TaskStore.GetTasks.
-func (_d faultInjectionTaskStore) GetTasks(ctx context.Context, request *_sourcePersistence.GetTasksRequest) (ip1 *_sourcePersistence.InternalGetTasksResponse, err error) {
-	err = _d.generator.generate("GetTasks").inject(func() error {
-		ip1, err = _d.TaskStore.GetTasks(ctx, request)
+func (d faultInjectionTaskStore) GetTasks(ctx context.Context, request *_sourcePersistence.GetTasksRequest) (ip1 *_sourcePersistence.InternalGetTasksResponse, err error) {
+	err = d.generator.generate("GetTasks").inject(func() error {
+		ip1, err = d.TaskStore.GetTasks(ctx, request)
 		return err
 	})
 	return
 }
 
 // ListTaskQueue wraps TaskStore.ListTaskQueue.
-func (_d faultInjectionTaskStore) ListTaskQueue(ctx context.Context, request *_sourcePersistence.ListTaskQueueRequest) (ip1 *_sourcePersistence.InternalListTaskQueueResponse, err error) {
-	err = _d.generator.generate("ListTaskQueue").inject(func() error {
-		ip1, err = _d.TaskStore.ListTaskQueue(ctx, request)
+func (d faultInjectionTaskStore) ListTaskQueue(ctx context.Context, request *_sourcePersistence.ListTaskQueueRequest) (ip1 *_sourcePersistence.InternalListTaskQueueResponse, err error) {
+	err = d.generator.generate("ListTaskQueue").inject(func() error {
+		ip1, err = d.TaskStore.ListTaskQueue(ctx, request)
 		return err
 	})
 	return
 }
 
 // ListTaskQueueUserDataEntries wraps TaskStore.ListTaskQueueUserDataEntries.
-func (_d faultInjectionTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, request *_sourcePersistence.ListTaskQueueUserDataEntriesRequest) (ip1 *_sourcePersistence.InternalListTaskQueueUserDataEntriesResponse, err error) {
-	err = _d.generator.generate("ListTaskQueueUserDataEntries").inject(func() error {
-		ip1, err = _d.TaskStore.ListTaskQueueUserDataEntries(ctx, request)
+func (d faultInjectionTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, request *_sourcePersistence.ListTaskQueueUserDataEntriesRequest) (ip1 *_sourcePersistence.InternalListTaskQueueUserDataEntriesResponse, err error) {
+	err = d.generator.generate("ListTaskQueueUserDataEntries").inject(func() error {
+		ip1, err = d.TaskStore.ListTaskQueueUserDataEntries(ctx, request)
 		return err
 	})
 	return
 }
 
 // UpdateTaskQueue wraps TaskStore.UpdateTaskQueue.
-func (_d faultInjectionTaskStore) UpdateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueRequest) (up1 *_sourcePersistence.UpdateTaskQueueResponse, err error) {
-	err = _d.generator.generate("UpdateTaskQueue").inject(func() error {
-		up1, err = _d.TaskStore.UpdateTaskQueue(ctx, request)
+func (d faultInjectionTaskStore) UpdateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueRequest) (up1 *_sourcePersistence.UpdateTaskQueueResponse, err error) {
+	err = d.generator.generate("UpdateTaskQueue").inject(func() error {
+		up1, err = d.TaskStore.UpdateTaskQueue(ctx, request)
 		return err
 	})
 	return
 }
 
 // UpdateTaskQueueUserData wraps TaskStore.UpdateTaskQueueUserData.
-func (_d faultInjectionTaskStore) UpdateTaskQueueUserData(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueUserDataRequest) (err error) {
-	err = _d.generator.generate("UpdateTaskQueueUserData").inject(func() error {
-		err = _d.TaskStore.UpdateTaskQueueUserData(ctx, request)
+func (d faultInjectionTaskStore) UpdateTaskQueueUserData(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueUserDataRequest) (err error) {
+	err = d.generator.generate("UpdateTaskQueueUserData").inject(func() error {
+		err = d.TaskStore.UpdateTaskQueueUserData(ctx, request)
 		return err
 	})
 	return
