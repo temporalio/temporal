@@ -132,7 +132,7 @@ func (c Category) Type() CategoryType {
 }
 
 func (c Category) MarshalText() (text []byte, err error) {
-	return []byte(fmt.Sprintf("[id:%d][type:%s][name:%s]", c.id, c.cType, c.name)), nil
+	return []byte(fmt.Sprintf("[id:%d,type:%s,name:%s]", c.id, c.cType, c.name)), nil
 }
 
 func (t CategoryType) String() string {
