@@ -361,35 +361,37 @@ func (d *DeploymentWorkflowRunner) syncToTaskQueues0(ctx workflow.Context) error
 
 func (d *DeploymentWorkflowRunner) syncToTaskQueues1(ctx workflow.Context) error {
 	const batchSize = 100
-	type nameDataPair struct {
+	type syncTq struct {
 		name string
+		typ  enumspb.TaskQueueType
 		data *deploymentspb.TaskQueueData
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	tqNames := workflow.DeterministicKeys(d.State.TaskQueueFamilies)
 
-	for _, tqType := range []enumspb.TaskQueueType{
-		// Sync and wait for workflow task queues, then activity task queues, to ensure that
-		// workflows don't bounce between deployments due to activity/wft starts.
-		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-	} {
-		var toSync []nameDataPair
+	// Sync and wait for workflow task queues, then activity+nexus task queues, to ensure that
+	// workflows don't bounce between deployments due to activity/wft starts.
+	for _, doWorkflow := range []bool{true, false} {
+		var toSync []syncTq
 		for _, tqName := range tqNames {
-			if data := d.State.TaskQueueFamilies[tqName].TaskQueues[int32(tqType)]; data != nil {
-				toSync = append(toSync, nameDataPair{name: tqName, data: data})
+			byType := d.State.TaskQueueFamilies[tqName].TaskQueues
+			for _, tqTypeInt := range workflow.DeterministicKeys(byType) {
+				tqType := enumspb.TaskQueueType(tqTypeInt)
+				if doWorkflow == (tqType == enumspb.TASK_QUEUE_TYPE_WORKFLOW) {
+					toSync = append(toSync, syncTq{name: tqName, typ: tqType, data: byType[tqTypeInt]})
+				}
 			}
 		}
 
 		for batch := range slices.Chunk(toSync, batchSize) {
 			syncReq := &deploymentspb.SyncUserDataRequest{
 				Deployment: d.State.Deployment,
-				Sync: util.MapSlice(batch, func(pair nameDataPair) *deploymentspb.SyncUserDataRequest_SyncUserData {
+				Sync: util.MapSlice(batch, func(syncTq syncTq) *deploymentspb.SyncUserDataRequest_SyncUserData {
 					return &deploymentspb.SyncUserDataRequest_SyncUserData{
-						Name: pair.name,
-						Type: tqType,
-						Data: d.dataWithTime(pair.data),
+						Name: syncTq.name,
+						Type: syncTq.typ,
+						Data: d.dataWithTime(syncTq.data),
 					}
 				}),
 			}
