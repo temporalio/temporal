@@ -232,7 +232,7 @@ type (
 	// create the shard with the returned value.
 	InternalGetOrCreateShardRequest struct {
 		ShardID          int32
-		CreateShardInfo  func() (rangeID int64, shardInfo *commonpb.DataBlob, err error) `json:"-"`
+		CreateShardInfo  func() (rangeID int64, shardInfo *commonpb.DataBlob, err error) `json:"-"` // cannot be serialized otherwise
 		LifecycleContext context.Context                                                 // cancelled when shard is unloaded
 	}
 
