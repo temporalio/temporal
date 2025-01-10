@@ -729,56 +729,56 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	}
-	deploymentA := &deploymentpb.Deployment{
+	deployment1 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("A"),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
-	deploymentB := &deploymentpb.Deployment{
+	deployment2 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("B"),
+		BuildId:    tv.WithBuildIDNumber(2).BuildID(),
 	}
-	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
+	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deploymentA,
+			Deployment: deployment1,
 		},
 	}
-	pinnedOptsB := &workflowpb.WorkflowExecutionOptions{
+	pinnedOpts2 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deploymentB,
+			Deployment: deployment2,
 		},
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(ctx, deploymentA, tq)
-	s.createDeploymentAndWaitForExist(ctx, deploymentB, tq)
+	s.createDeploymentAndWaitForExist(ctx, deployment1, tq)
+	s.createDeploymentAndWaitForExist(ctx, deployment2, tq)
 
-	// 1. Set pinned override A --> describe workflow shows the override + deployment A is reachable
+	// 1. Set pinned override 1 --> describe workflow shows the override + deployment 1 is reachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                s.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
-		WorkflowExecutionOptions: pinnedOptsA,
+		WorkflowExecutionOptions: pinnedOpts1,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	s.NoError(err)
-	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
-	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsA.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
-	s.checkDeploymentReachability(ctx, deploymentB, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts1))
+	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOpts1.GetVersioningOverride())
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+	s.checkDeploymentReachability(ctx, deployment2, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 
-	// 3. Set pinned override B --> describe workflow shows the override + deployment B is reachable, A unreachable
+	// 3. Set pinned override 2 --> describe workflow shows the override + deployment 2 is reachable, 1 unreachable
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                s.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
-		WorkflowExecutionOptions: pinnedOptsB,
+		WorkflowExecutionOptions: pinnedOpts2,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	s.NoError(err)
-	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsB))
-	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsB.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
-	s.checkDeploymentReachability(ctx, deploymentB, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts2))
+	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOpts2.GetVersioningOverride())
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+	s.checkDeploymentReachability(ctx, deployment2, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpinned() {
@@ -847,21 +847,21 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 			Deployment: nil,
 		},
 	}
-	deploymentA := &deploymentpb.Deployment{
+	deployment1 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("A"),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
-	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
+	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deploymentA,
+			Deployment: deployment1,
 		},
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(ctx, deploymentA, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, deployment1, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
-	// 1. Set unpinned override --> describe workflow shows the override + deploymentA is unreachable
+	// 1. Set unpinned override --> describe workflow shows the override + deployment1 is unreachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                s.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
@@ -871,19 +871,19 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 	s.NoError(err)
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
 	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 
-	// 1. Set pinned override A --> describe workflow shows the override + deploymentA is reachable
+	// 1. Set pinned override 1 --> describe workflow shows the override + deployment1 is reachable
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                s.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
-		WorkflowExecutionOptions: pinnedOptsA,
+		WorkflowExecutionOptions: pinnedOpts1,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	s.NoError(err)
-	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
-	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsA.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts1))
+	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOpts1.GetVersioningOverride())
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinned() {
@@ -907,33 +907,33 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 			Deployment: nil,
 		},
 	}
-	deploymentA := &deploymentpb.Deployment{
+	deployment1 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("A"),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
-	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
+	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deploymentA,
+			Deployment: deployment1,
 		},
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(ctx, deploymentA, tq)
+	s.createDeploymentAndWaitForExist(ctx, deployment1, tq)
 
-	// 1. Set pinned override A --> describe workflow shows the override + deploymentA is reachable
+	// 1. Set pinned override 1 --> describe workflow shows the override + deployment1 is reachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                s.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
-		WorkflowExecutionOptions: pinnedOptsA,
+		WorkflowExecutionOptions: pinnedOpts1,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	s.NoError(err)
-	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
-	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsA.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts1))
+	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOpts1.GetVersioningOverride())
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 
-	// 1. Set unpinned override --> describe workflow shows the override + deploymentA is unreachable
+	// 1. Set unpinned override --> describe workflow shows the override + deployment1 is unreachable
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                s.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
@@ -943,7 +943,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	s.NoError(err)
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
 	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 }
 
 func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
@@ -1225,11 +1225,11 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	dep1 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("1"),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
 	dep2 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("2"),
+		BuildId:    tv.WithBuildIDNumber(2).BuildID(),
 	}
 
 	// set to 1
@@ -1344,11 +1344,11 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 
 	dep1 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("1"),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
 	dep2 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("2"),
+		BuildId:    tv.WithBuildIDNumber(2).BuildID(),
 	}
 
 	// set to 1 with some metadata
