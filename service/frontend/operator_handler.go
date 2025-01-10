@@ -630,6 +630,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 			ConcurrentDeleteExecutionsActivities: h.config.DeleteNamespaceConcurrentDeleteExecutionsActivities(),
 		},
 		NamespaceDeleteDelay: namespaceDeleteDelay,
+		CurrentClusterName:   h.clusterMetadata.GetCurrentClusterName(),
 	}
 
 	sdkClient := h.sdkClientFactory.GetSystemClient()

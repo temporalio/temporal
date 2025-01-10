@@ -26,6 +26,7 @@ package deletenamespace
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -55,6 +56,8 @@ type (
 		// after all namespace resources (i.e. workflow executions) are deleted.
 		// Default is 0, means, namespace will be deleted immediately.
 		NamespaceDeleteDelay time.Duration
+
+		CurrentClusterName string
 
 		DeleteExecutionsConfig deleteexecutions.DeleteExecutionsConfig
 	}
@@ -104,7 +107,13 @@ func validateParams(params *DeleteNamespaceWorkflowParams) error {
 	return nil
 }
 
-func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace.Name, nsClusters []string) error {
+func validateNamespace(
+	ctx workflow.Context,
+	nsID namespace.ID,
+	nsName namespace.Name,
+	currentClusterName string,
+	nsClusters []string,
+) error {
 
 	if nsName == primitives.SystemLocalNamespace || nsID == primitives.SystemNamespaceID {
 		return errors.NewFailedPrecondition("unable to delete system namespace", nil)
@@ -116,7 +125,7 @@ func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace
 	//  - If namespace is active in the current cluster, then it technically can be deleted (and
 	//    in this case it will be deleted from this cluster only because delete operation is not replicated),
 	//    but this is confusing for the users, as they might expect that namespace is deleted from all clusters.
-	if len(nsClusters) > 1 {
+	if len(nsClusters) > 1 && slices.Contains(nsClusters, currentClusterName) {
 		return errors.NewFailedPrecondition(fmt.Sprintf("namespace %s is replicated in several clusters [%s]: remove all other cluster and retry", nsName, strings.Join(nsClusters, ",")), nil)
 	}
 
@@ -170,7 +179,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	params.NamespaceID = namespaceInfo.NamespaceID
 
 	// Step 1.1. Validate namespace.
-	if err = validateNamespace(ctx, params.NamespaceID, params.Namespace, namespaceInfo.Clusters); err != nil {
+	if err = validateNamespace(ctx, params.NamespaceID, params.Namespace, params.CurrentClusterName, namespaceInfo.Clusters); err != nil {
 		return result, err
 	}
 
