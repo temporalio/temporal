@@ -44,7 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -63,7 +63,7 @@ type (
 		mockShardManager     *persistence.MockShardManager
 		mockExecutionManager *persistence.MockExecutionManager
 		mockNamespaceCache   *namespace.MockRegistry
-		mockHistoryEngine    *history.MockEngine
+		mockHistoryEngine    *historyi.MockEngine
 
 		timeSource *clock.EventTimeSource
 	}
@@ -104,7 +104,7 @@ func (s *contextSuite) SetupTest() {
 
 	s.mockExecutionManager = shardContext.Resource.ExecutionMgr
 	s.mockShardManager = shardContext.Resource.ShardMgr
-	s.mockHistoryEngine = history.NewMockEngine(s.controller)
+	s.mockHistoryEngine = historyi.NewMockEngine(s.controller)
 	shardContext.engineFuture.Set(s.mockHistoryEngine, nil)
 }
 

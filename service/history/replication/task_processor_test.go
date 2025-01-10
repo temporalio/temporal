@@ -55,7 +55,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/configs"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -71,7 +71,7 @@ type (
 		controller                  *gomock.Controller
 		mockResource                *resourcetest.Test
 		mockShard                   *shard.ContextTest
-		mockEngine                  *history.MockEngine
+		mockEngine                  *historyi.MockEngine
 		mockNamespaceCache          *namespace.MockRegistry
 		mockClientBean              *client.MockBean
 		mockAdminClient             *adminservicemock.MockAdminServiceClient
@@ -118,7 +118,7 @@ func (s *taskProcessorSuite) SetupTest() {
 		},
 		s.config,
 	)
-	s.mockEngine = history.NewMockEngine(s.controller)
+	s.mockEngine = historyi.NewMockEngine(s.controller)
 	s.mockResource = s.mockShard.Resource
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockClientBean = s.mockResource.ClientBean

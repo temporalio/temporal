@@ -74,7 +74,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -117,7 +117,7 @@ type (
 		contextTaggedLogger log.Logger
 		throttledLogger     log.Logger
 		engineFactory       EngineFactory
-		engineFuture        *future.FutureImpl[history.Engine]
+		engineFuture        *future.FutureImpl[historyi.Engine]
 		queueMetricEmitter  sync.Once
 		finalizer           *finalizer.Finalizer
 
@@ -187,7 +187,7 @@ type (
 	contextRequest interface{}
 
 	contextRequestAcquire    struct{}
-	contextRequestAcquired   struct{ engine history.Engine }
+	contextRequestAcquired   struct{ engine historyi.Engine }
 	contextRequestLost       struct{}
 	contextRequestStop       struct{ reason stopReason }
 	contextRequestFinishStop struct{}
@@ -278,7 +278,7 @@ func (s *ContextImpl) GetPingChecks() []pingable.Check {
 
 func (s *ContextImpl) GetEngine(
 	ctx context.Context,
-) (history.Engine, error) {
+) (historyi.Engine, error) {
 	return s.engineFuture.Get(ctx)
 }
 
@@ -1461,7 +1461,7 @@ func (s *ContextImpl) maybeRecordShardAcquisitionLatency(ownershipChanged bool) 
 	}
 }
 
-func (s *ContextImpl) createEngine() history.Engine {
+func (s *ContextImpl) createEngine() historyi.Engine {
 	s.contextTaggedLogger.Info("", tag.LifeCycleStarting, tag.ComponentShardEngine)
 	engine := s.engineFactory.CreateEngine(s)
 	engine.Start()
@@ -1987,7 +1987,7 @@ func (s *ContextImpl) acquireShard() {
 		s.contextTaggedLogger.Info("Acquired shard")
 
 		// The first time we get the shard, we have to create the engine
-		var engine history.Engine
+		var engine historyi.Engine
 		if !s.engineFuture.Ready() {
 			s.maybeRecordShardAcquisitionLatency(ownershipChanged)
 			engine = s.createEngine()
@@ -2121,7 +2121,7 @@ func newContext(
 		handoverNamespaces:      make(map[namespace.Name]*namespaceHandOverInfo),
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
-		engineFuture:            future.NewFuture[history.Engine](),
+		engineFuture:            future.NewFuture[historyi.Engine](),
 		queueMetricEmitter:      sync.Once{},
 		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,

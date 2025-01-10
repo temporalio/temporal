@@ -55,7 +55,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/history/configs"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -69,7 +69,7 @@ type (
 
 		controller          *gomock.Controller
 		mockResource        *resourcetest.Test
-		mockHistoryEngine   *history.MockEngine
+		mockHistoryEngine   *historyi.MockEngine
 		mockClusterMetadata *cluster.MockMetadata
 		mockServiceResolver *membership.MockServiceResolver
 
@@ -134,7 +134,7 @@ func (s *controllerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resourcetest.NewTest(s.controller, primitives.HistoryService)
-	s.mockHistoryEngine = history.NewMockEngine(s.controller)
+	s.mockHistoryEngine = historyi.NewMockEngine(s.controller)
 	s.mockEngineFactory = NewMockEngineFactory(s.controller)
 
 	s.mockShardManager = s.mockResource.ShardMgr
@@ -172,12 +172,12 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 	s.config.NumberOfShards = numShards
 
 	var myShards []int32
-	historyEngines := make(map[int32]*history.MockEngine)
+	historyEngines := make(map[int32]*historyi.MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		hostID := shardID % 4
 		if hostID == 0 {
 			myShards = append(myShards, shardID)
-			mockEngine := history.NewMockEngine(s.controller)
+			mockEngine := historyi.NewMockEngine(s.controller)
 			historyEngines[shardID] = mockEngine
 			s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 		} else {
@@ -208,12 +208,12 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 	}
 
 	var myShards []int32
-	historyEngines := make(map[int32]*history.MockEngine)
+	historyEngines := make(map[int32]*historyi.MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		hostID := shardID % 4
 		if hostID == 0 {
 			myShards = append(myShards, shardID)
-			mockEngine := history.NewMockEngine(s.controller)
+			mockEngine := historyi.NewMockEngine(s.controller)
 			historyEngines[shardID] = mockEngine
 			s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 		} else {
@@ -258,9 +258,9 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 	numShards := int32(2)
 	s.config.NumberOfShards = numShards
 
-	historyEngines := make(map[int32]*history.MockEngine)
+	historyEngines := make(map[int32]*historyi.MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		mockEngine := history.NewMockEngine(s.controller)
+		mockEngine := historyi.NewMockEngine(s.controller)
 		historyEngines[shardID] = mockEngine
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
@@ -288,9 +288,9 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 	numShards := int32(2)
 	s.config.NumberOfShards = numShards
 
-	historyEngines := make(map[int32]*history.MockEngine)
+	historyEngines := make(map[int32]*historyi.MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		mockEngine := history.NewMockEngine(s.controller)
+		mockEngine := historyi.NewMockEngine(s.controller)
 		historyEngines[shardID] = mockEngine
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
@@ -324,9 +324,9 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		s.mockHostInfoProvider,
 		s.metricsTestHandler,
 	)
-	historyEngines := make(map[int32]*history.MockEngine)
+	historyEngines := make(map[int32]*historyi.MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		mockEngine := history.NewMockEngine(s.controller)
+		mockEngine := historyi.NewMockEngine(s.controller)
 		historyEngines[shardID] = mockEngine
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
@@ -427,9 +427,9 @@ func (s *controllerSuite) TestShardControllerClosed() {
 		s.metricsTestHandler,
 	)
 
-	historyEngines := make(map[int32]*history.MockEngine)
+	historyEngines := make(map[int32]*historyi.MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		mockEngine := history.NewMockEngine(s.controller)
+		mockEngine := historyi.NewMockEngine(s.controller)
 		historyEngines[shardID] = mockEngine
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
@@ -472,7 +472,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 func (s *controllerSuite) TestShardExplicitUnload() {
 	s.config.NumberOfShards = 1
 
-	mockEngine := history.NewMockEngine(s.controller)
+	mockEngine := historyi.NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 	s.setupMocksForAcquireShard(1, mockEngine, 5, 6, false)
 
@@ -493,7 +493,7 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 	s.config.NumberOfShards = 1
 
-	mockEngine := history.NewMockEngine(s.controller)
+	mockEngine := historyi.NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 
 	shardID := int32(1)
@@ -534,7 +534,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 	s.config.NumberOfShards = 1
 
-	mockEngine := history.NewMockEngine(s.controller)
+	mockEngine := historyi.NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 
 	shardID := int32(1)
@@ -602,8 +602,8 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 		queueStates := s.queueStates()
 
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).AnyTimes()
-		s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).DoAndReturn(func(shard Context) history.Engine {
-			mockEngine := history.NewMockEngine(disconnectedMockController)
+		s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).DoAndReturn(func(shard Context) historyi.Engine {
+			mockEngine := historyi.NewMockEngine(disconnectedMockController)
 			status := new(int32)
 			// notification step is done after engine is created, so may not be called when test finishes
 			mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).MaxTimes(2)
@@ -733,8 +733,8 @@ func (s *controllerSuite) TestShardLingerTimeout() {
 	timeLimit := 1 * time.Second
 	s.config.ShardLingerTimeLimit = dynamicconfig.GetDurationPropertyFn(timeLimit)
 
-	historyEngines := make(map[int32]*history.MockEngine)
-	mockEngine := history.NewMockEngine(s.controller)
+	historyEngines := make(map[int32]*historyi.MockEngine)
+	mockEngine := historyi.NewMockEngine(s.controller)
 	historyEngines[shardID] = mockEngine
 	s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
@@ -780,8 +780,8 @@ func (s *controllerSuite) TestShardLingerSuccess() {
 	checkQPS := 5
 	s.config.ShardLingerOwnershipCheckQPS = dynamicconfig.GetIntPropertyFn(checkQPS)
 
-	historyEngines := make(map[int32]*history.MockEngine)
-	mockEngine := history.NewMockEngine(s.controller)
+	historyEngines := make(map[int32]*historyi.MockEngine)
+	mockEngine := historyi.NewMockEngine(s.controller)
 	historyEngines[shardID] = mockEngine
 
 	mockEngine.EXPECT().Start().MinTimes(1)
@@ -880,7 +880,7 @@ func (s *controllerSuite) TestShardCounter() {
 // safe to call this multiple times throughout a test.
 func (s *controllerSuite) setupAndAcquireShards(numShards int) {
 	s.config.NumberOfShards = int32(numShards)
-	mockEngine := history.NewMockEngine(s.controller)
+	mockEngine := historyi.NewMockEngine(s.controller)
 	for shardID := 1; shardID <= numShards; shardID++ {
 		s.setupMocksForAcquireShard(int32(shardID), mockEngine, 5, 6, false)
 	}
@@ -889,7 +889,7 @@ func (s *controllerSuite) setupAndAcquireShards(numShards int) {
 
 func (s *controllerSuite) setupMocksForAcquireShard(
 	shardID int32,
-	mockEngine *history.MockEngine,
+	mockEngine *historyi.MockEngine,
 	currentRangeID, newRangeID int64,
 	required bool,
 ) {

@@ -53,7 +53,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -83,7 +83,7 @@ type (
 		sourceCluster           string
 		sourceShardID           int32
 		shard                   shard.Context
-		historyEngine           history.Engine
+		historyEngine           historyi.Engine
 		historySerializer       serialization.Serializer
 		config                  *configs.Config
 		metricsHandler          metrics.Handler
@@ -117,7 +117,7 @@ type (
 func NewTaskProcessor(
 	sourceShardID int32,
 	shard shard.Context,
-	historyEngine history.Engine,
+	historyEngine historyi.Engine,
 	config *configs.Config,
 	metricsHandler metrics.Handler,
 	replicationTaskFetcher taskFetcher,

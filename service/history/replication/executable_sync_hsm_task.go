@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -133,7 +133,7 @@ func (e *ExecutableSyncHSMTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	return engine.SyncHSM(ctx, &history.SyncHSMRequest{
+	return engine.SyncHSM(ctx, &historyi.SyncHSMRequest{
 		WorkflowKey:         e.WorkflowKey,
 		StateMachineNode:    e.taskAttr.StateMachineNode,
 		EventVersionHistory: e.taskAttr.VersionHistory,
