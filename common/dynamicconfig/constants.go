@@ -866,9 +866,9 @@ and deployment interaction in matching and history.`,
 	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
-		false,
-		`EnableNexus toggles all Nexus functionality on the server. Note that toggling this requires restarting
-server hosts for it to take effect.`,
+		true,
+		`Toggles all Nexus functionality on the server. Note that toggling this requires restarting server hosts for it
+		to take effect.`,
 	)
 
 	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
@@ -954,7 +954,7 @@ Wildcards (*) are expanded to allow any substring. By default blacklist is empty
 
 	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
 		"frontend.enableExecuteMultiOperation",
-		false,
+		true,
 		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
 The API is under active development.`,
 	)
@@ -1014,6 +1014,11 @@ Default is 4.`,
 		`DeleteNamespaceNamespaceDeleteDelay is a duration for how long namespace stays in database
 after all namespace resources (i.e. workflow executions) are deleted.
 Default is 0, means, namespace will be deleted immediately.`,
+	)
+	ProtectedNamespaces = NewGlobalTypedSetting(
+		"worker.protectedNamespaces",
+		([]string)(nil),
+		`List of namespace names that can't be deleted.`,
 	)
 
 	// keys for matching
@@ -1222,6 +1227,11 @@ duration since last poll exceeds this threshold.`,
 		"matching.listNexusEndpointsLongPollTimeout",
 		5*time.Minute-10*time.Second,
 		`MatchingListNexusEndpointsLongPollTimeout is the max length of long polls for ListNexusEndpoints calls.`,
+	)
+	MatchingNexusEndpointsRefreshInterval = NewGlobalDurationSetting(
+		"matching.nexusEndpointsRefreshInterval",
+		10*time.Second,
+		`Time to wait between calls to check that the in-memory view of Nexus endpoints matches the persisted state.`,
 	)
 	MatchingMembershipUnloadDelay = NewGlobalDurationSetting(
 		"matching.membershipUnloadDelay",
@@ -2292,7 +2302,7 @@ that task will be sent to DLQ.`,
 	)
 	ReplicationLowPriorityTaskParallelism = NewGlobalIntSetting(
 		"history.ReplicationLowPriorityTaskParallelism",
-		4,
+		1,
 		`ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel`,
 	)
 

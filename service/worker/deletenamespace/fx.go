@@ -46,21 +46,27 @@ import (
 type (
 	// deleteNamespaceComponent represent background work needed for delete namespace.
 	deleteNamespaceComponent struct {
-		atWorkerCfg       sdkworker.Options
-		visibilityManager manager.VisibilityManager
-		metadataManager   persistence.MetadataManager
-		historyClient     resource.HistoryClient
-		metricsHandler    metrics.Handler
-		logger            log.Logger
+		atWorkerCfg          sdkworker.Options
+		visibilityManager    manager.VisibilityManager
+		metadataManager      persistence.MetadataManager
+		nexusEndpointManager persistence.NexusEndpointManager
+		historyClient        resource.HistoryClient
+		metricsHandler       metrics.Handler
+		logger               log.Logger
+
+		protectedNamespaces                       dynamicconfig.TypedPropertyFn[[]string]
+		allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn
+		nexusEndpointListDefaultPageSize          dynamicconfig.IntPropertyFn
 	}
 	componentParams struct {
 		fx.In
-		DynamicCollection *dynamicconfig.Collection
-		VisibilityManager manager.VisibilityManager
-		MetadataManager   persistence.MetadataManager
-		HistoryClient     resource.HistoryClient
-		MetricsHandler    metrics.Handler
-		Logger            log.Logger
+		DynamicCollection    *dynamicconfig.Collection
+		VisibilityManager    manager.VisibilityManager
+		MetadataManager      persistence.MetadataManager
+		NexusEndpointManager persistence.NexusEndpointManager
+		HistoryClient        resource.HistoryClient
+		MetricsHandler       metrics.Handler
+		Logger               log.Logger
 	}
 )
 
@@ -70,12 +76,16 @@ func newComponent(
 	params componentParams,
 ) workercommon.WorkerComponent {
 	return &deleteNamespaceComponent{
-		atWorkerCfg:       dynamicconfig.WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
-		visibilityManager: params.VisibilityManager,
-		metadataManager:   params.MetadataManager,
-		historyClient:     params.HistoryClient,
-		metricsHandler:    params.MetricsHandler,
-		logger:            params.Logger,
+		atWorkerCfg:          dynamicconfig.WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
+		visibilityManager:    params.VisibilityManager,
+		metadataManager:      params.MetadataManager,
+		nexusEndpointManager: params.NexusEndpointManager,
+		historyClient:        params.HistoryClient,
+		metricsHandler:       params.MetricsHandler,
+		logger:               params.Logger,
+		protectedNamespaces:  dynamicconfig.ProtectedNamespaces.Get(params.DynamicCollection),
+		allowDeleteNamespaceIfNexusEndpointTarget: dynamicconfig.AllowDeleteNamespaceIfNexusEndpointTarget.Get(params.DynamicCollection),
+		nexusEndpointListDefaultPageSize:          dynamicconfig.NexusEndpointListDefaultPageSize.Get(params.DynamicCollection),
 	}
 }
 
@@ -114,15 +124,21 @@ func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercomm
 }
 
 func (wc *deleteNamespaceComponent) deleteNamespaceLocalActivities() *localActivities {
-	return NewLocalActivities(wc.metadataManager, wc.metricsHandler, wc.logger)
+	return newLocalActivities(
+		wc.metadataManager,
+		wc.nexusEndpointManager,
+		wc.logger,
+		wc.protectedNamespaces,
+		wc.allowDeleteNamespaceIfNexusEndpointTarget,
+		wc.nexusEndpointListDefaultPageSize)
 }
 
 func (wc *deleteNamespaceComponent) reclaimResourcesActivities() *reclaimresources.Activities {
-	return reclaimresources.NewActivities(wc.visibilityManager, wc.metricsHandler, wc.logger)
+	return reclaimresources.NewActivities(wc.visibilityManager, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) reclaimResourcesLocalActivities() *reclaimresources.LocalActivities {
-	return reclaimresources.NewLocalActivities(wc.visibilityManager, wc.metadataManager, wc.metricsHandler, wc.logger)
+	return reclaimresources.NewLocalActivities(wc.visibilityManager, wc.metadataManager, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) deleteExecutionsActivities() *deleteexecutions.Activities {

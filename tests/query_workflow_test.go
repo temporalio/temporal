@@ -28,6 +28,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -35,12 +37,21 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -188,10 +199,11 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 		},
 	}
 
-	for _, tc := range testCases {
+	for tci, tc := range testCases {
 		s.T().Run(tc.testName, func(t *testing.T) {
+			tv = tv.WithWorkflowIDNumber(tci)
 			workflowOptions := sdkclient.StartWorkflowOptions{
-				ID:         tv.WorkflowID(t.Name()),
+				ID:         tv.WorkflowID(),
 				TaskQueue:  s.TaskQueue(),
 				StartDelay: tc.startDelay,
 			}
@@ -207,7 +219,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 			assert.NotNil(t, workflowRun)
 			assert.NotEmpty(t, workflowRun.GetRunID())
 
-			queryResp, err := s.SdkClient().QueryWorkflow(ctx, tv.WorkflowID(t.Name()), workflowRun.GetRunID(), tv.QueryType())
+			queryResp, err := s.SdkClient().QueryWorkflow(ctx, tv.WorkflowID(), workflowRun.GetRunID(), tv.QueryType())
 
 			if tc.err != nil {
 				assert.Error(t, err)
@@ -356,4 +368,126 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 	_, err = s.SdkClient().QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)
 	s.ErrorContains(err, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted.Error())
+}
+
+func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, "workflow")
+	s.NoError(err)
+
+	// Create a channel for errors generated in background goroutines.
+	errChan := make(chan error, 1)
+
+	// First query, should come in the workflow task Queries field and responded to via the RespondWorkflowTaskCompleted
+	// API.
+	// Query the workflow in the background to have the query delivered with the first workflow task in the Queries map.
+	go func() {
+		_, err := s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+			Namespace: s.Namespace(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowRun.GetID(),
+			},
+			Query: &querypb.WorkflowQuery{
+				QueryType: "dont-care",
+			},
+		})
+		errChan <- err
+	}()
+
+	// Hope that 3 seconds will be enough for history to record the query and attach it to the pending workflow task.
+	// There's really no other way to ensure that the query is included in the task unfortunately.
+	util.InterruptibleSleep(ctx, 3*time.Second)
+
+	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+		Identity:  s.T().Name(),
+	})
+	s.NoError(err)
+	s.Len(task.Queries, 1)
+	qKey := slices.Collect(maps.Keys(task.Queries))[0]
+
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: task.TaskToken,
+		Identity:  s.T().Name(),
+		QueryResults: map[string]*querypb.WorkflowQueryResult{
+			qKey: {
+				ResultType:   enumspb.QUERY_RESULT_TYPE_FAILED,
+				ErrorMessage: "my error message",
+				Failure: &failurepb.Failure{
+					Message: "my failure error message",
+				},
+			},
+		},
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{},
+			},
+		},
+	})
+	s.NoError(err)
+
+	select {
+	case err = <-errChan:
+	case <-ctx.Done():
+		// Abort and fail the test.
+		s.NoError(ctx.Err())
+	}
+
+	var query1FailedErr *serviceerror.QueryFailed
+	s.ErrorAs(err, &query1FailedErr)
+	s.Equal("my error message", query1FailedErr.Message)
+	s.Equal("my failure error message", query1FailedErr.Failure.Message)
+
+	// Second query, should come in the workflow task Query field and responded to via the RespondQueryTaskCompleted
+	// API.
+	go func() {
+		task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+			Identity:  s.T().Name(),
+		})
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		_, err = s.FrontendClient().RespondQueryTaskCompleted(ctx, &workflowservice.RespondQueryTaskCompletedRequest{
+			Namespace:     s.Namespace(),
+			TaskToken:     task.TaskToken,
+			CompletedType: enumspb.QUERY_RESULT_TYPE_FAILED,
+			ErrorMessage:  "my error message",
+			Failure: &failurepb.Failure{
+				Message: "my failure error message",
+			},
+		})
+
+		errChan <- err
+	}()
+
+	_, err = s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
+		Namespace: s.Namespace(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Query: &querypb.WorkflowQuery{
+			QueryType: "dont-care",
+		},
+	})
+
+	var query2FailedErr *serviceerror.QueryFailed
+	s.ErrorAs(err, &query2FailedErr)
+	s.Equal("my error message", query2FailedErr.Message)
+	s.Equal("my failure error message", query2FailedErr.Failure.Message)
+
+	select {
+	case err = <-errChan:
+		s.NoError(err)
+	case <-ctx.Done():
+		// Abort and fail the test.
+		s.NoError(ctx.Err())
+	}
 }

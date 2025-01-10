@@ -805,8 +805,14 @@ func (ms *MutableStateImpl) UpdateResetRunID(runID string) {
 
 // IsResetRun returns true if this run is the result of a reset operation.
 // A run is a reset run if OriginalExecutionRunID points to another run.
+//
+// This method only works for workflows started by server version 1.27.0+.
+// Older workflows don't have OriginalExecutionRunID set in mutable state,
+// and this method will NOT try to load WorkflowExecutionStarted event to
+// get that information.
 func (ms *MutableStateImpl) IsResetRun() bool {
-	return ms.GetExecutionInfo().GetOriginalExecutionRunId() != ms.GetExecutionState().GetRunId()
+	originalExecutionRunID := ms.GetExecutionInfo().GetOriginalExecutionRunId()
+	return len(originalExecutionRunID) != 0 && originalExecutionRunID != ms.GetExecutionState().GetRunId()
 }
 
 func (ms *MutableStateImpl) GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
@@ -1712,6 +1718,11 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.Stamp = incomingActivityInfo.GetStamp()
 
 	ai.Paused = incomingActivityInfo.GetPaused()
+
+	ai.RetryInitialInterval = incomingActivityInfo.GetRetryInitialInterval()
+	ai.RetryMaximumInterval = incomingActivityInfo.GetRetryMaximumInterval()
+	ai.RetryMaximumAttempts = incomingActivityInfo.GetRetryMaximumAttempts()
+	ai.RetryBackoffCoefficient = incomingActivityInfo.GetRetryBackoffCoefficient()
 
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
@@ -4298,7 +4309,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 	if ms.executionInfo.UpdateInfos == nil {
 		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
 	}
-	updateID := attrs.GetAcceptedRequest().GetMeta().GetUpdateId()
+	// NOTE: `attrs.GetAcceptedRequest().GetMeta().GetUpdateId()` was used here before, but that is problematic
+	// in a reset/conflict resolution scenario where there is no `acceptedRequest` since the previously written
+	// UpdateAdmitted event already contains the Update payload.
+	updateID := attrs.GetProtocolInstanceId()
 	var sizeDelta int
 	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		sizeBefore := ui.Size()

@@ -102,6 +102,11 @@ func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	s.Equal(id, wfInfo.RootExecution.GetWorkflowId())
 	s.Equal(we.RunId, wfInfo.RootExecution.GetRunId())
 	s.Equal(we.RunId, wfInfo.GetFirstRunId())
+	s.NotNil(dweResponse.WorkflowExtendedInfo)
+	s.Nil(dweResponse.WorkflowExtendedInfo.LastResetTime) // workflow was not reset
+	s.Nil(dweResponse.WorkflowExtendedInfo.ExecutionExpirationTime)
+	s.NotNil(dweResponse.WorkflowExtendedInfo.RunExpirationTime)
+	s.NotNil(dweResponse.WorkflowExtendedInfo.OriginalStartTime)
 
 	// workflow logic
 	workflowComplete := false

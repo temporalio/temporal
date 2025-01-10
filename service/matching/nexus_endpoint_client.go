@@ -35,9 +35,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/internal/goro"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -79,16 +84,22 @@ type (
 		endpointsByName     map[string]*persistencespb.NexusEndpointEntry
 		tableVersionChanged chan struct{}
 
+		refreshLock              sync.Mutex // protects refreshHandle which is updated whenever node gains/loses ownership
+		refreshHandle            *goro.Handle
+		endpointsRefreshInterval dynamicconfig.DurationPropertyFn
+
 		persistence p.NexusEndpointManager
 	}
 )
 
 func newEndpointClient(
+	endpointsRefreshInterval dynamicconfig.DurationPropertyFn,
 	persistence p.NexusEndpointManager,
 ) *nexusEndpointClient {
 	return &nexusEndpointClient{
-		persistence:         persistence,
-		tableVersionChanged: make(chan struct{}),
+		endpointsRefreshInterval: endpointsRefreshInterval,
+		persistence:              persistence,
+		tableVersionChanged:      make(chan struct{}),
 	}
 }
 
@@ -359,4 +370,56 @@ func (m *nexusEndpointClient) resetCacheStateLocked() {
 	m.endpointEntries = []*persistencespb.NexusEndpointEntry{}
 	m.endpointsByID = make(map[string]*persistencespb.NexusEndpointEntry)
 	m.endpointsByName = make(map[string]*persistencespb.NexusEndpointEntry)
+}
+
+// notifyOwnershipChanged starts or stops a background routine which watches the Nexus endpoints table version for
+// changes. This is only expected to be called from matchingEngineImpl.notifyNexusEndpointsOwnershipChange()
+func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
+	var oldHandle *goro.Handle
+
+	m.refreshLock.Lock()
+	if isOwner && m.refreshHandle == nil {
+		// Just acquired ownership. Start refresh loop on table version to catch any updates from previous owner.
+		backgroundCtx := headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemBackgroundCallerInfo,
+		)
+		m.refreshHandle = goro.NewHandle(backgroundCtx)
+		m.refreshHandle.Go(m.refreshTableVersion)
+	} else if !isOwner && m.refreshHandle != nil {
+		// Just lost ownership. Stop table version refresh loop.
+		oldHandle = m.refreshHandle
+		m.refreshHandle = nil
+	}
+	m.refreshLock.Unlock()
+
+	if oldHandle != nil {
+		oldHandle.Cancel()
+		<-oldHandle.Done()
+	}
+}
+
+func (m *nexusEndpointClient) refreshTableVersion(ctx context.Context) error {
+	for ctx.Err() == nil {
+		m.checkTableVersion(ctx)
+		util.InterruptibleSleep(ctx, backoff.Jitter(m.endpointsRefreshInterval(), 0.2))
+	}
+	return ctx.Err()
+}
+
+func (m *nexusEndpointClient) checkTableVersion(ctx context.Context) {
+	// Acquire lock to make sure we are not in the middle of an update.
+	m.Lock()
+	defer m.Unlock()
+
+	resp, err := m.persistence.ListNexusEndpoints(ctx, &p.ListNexusEndpointsRequest{
+		LastKnownTableVersion: 0,
+		PageSize:              0,
+	})
+	if err != nil || resp.TableVersion != m.tableVersion {
+		m.hasLoadedEndpoints.Store(false)
+		ch := m.tableVersionChanged
+		m.tableVersionChanged = make(chan struct{})
+		close(ch)
+	}
 }
