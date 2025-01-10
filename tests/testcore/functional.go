@@ -72,7 +72,7 @@ func (s *FunctionalSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 	s.UpdateUtils = updateutils.New(s.T())
-	s.TaskPoller = taskpoller.New(s.T(), s.client, s.namespace)
+	s.TaskPoller = taskpoller.New(s.T(), s.client, s.Namespace().String())
 }
 
 func (s *FunctionalSuite) SendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,

@@ -282,7 +282,7 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 func (s *AddTasksSuite) newSDKClient() sdkclient.Client {
 	client, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	s.NoError(err)
 	return client

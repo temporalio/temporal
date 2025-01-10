@@ -128,7 +128,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
@@ -184,7 +184,7 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
 	for i := 0; i < numOfRetry; i++ {
 		startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 		resp, err := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Namespace:       s.Namespace(),
+			Namespace:       s.Namespace().String(),
 			MaximumPageSize: testcore.DefaultPageSize,
 			StartTimeFilter: startFilter,
 			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
@@ -299,7 +299,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueue,
 		StickyTaskQueue:     taskQueue,
 		Identity:            "worker1",
@@ -321,7 +321,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running' and BinaryChecksums = 'binary-v1'`, wt),
 	}
@@ -330,7 +330,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 
 	// verify DescribeWorkflowExecution
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -411,7 +411,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	query1 := fmt.Sprintf(`CustomIntField = %d`, 1)
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     query1,
 	}
@@ -504,7 +504,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	// Exact match Keyword (supported)
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     `CustomKeywordField = "justice for all"`,
 	}
@@ -528,7 +528,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 
 	// Partial match on Keyword (not supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     `CustomKeywordField = "justice"`,
 	}
@@ -538,7 +538,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 
 	// Inordered match on Keyword (not supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     `CustomKeywordField = "all for justice"`,
 	}
@@ -548,7 +548,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 
 	// Prefix search
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     `CustomKeywordField STARTS_WITH "justice"`,
 	}
@@ -560,7 +560,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.ProtoEqual(searchAttr, resp.Executions[0].GetSearchAttributes())
 
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     fmt.Sprintf(`WorkflowId = %q AND CustomKeywordField NOT STARTS_WITH "justice"`, id),
 	}
@@ -589,7 +589,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	// Exact match String (supported)
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     `CustomTextField = "nothing else matters"`,
 	}
@@ -613,7 +613,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 
 	// Partial match on String (supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     `CustomTextField = "nothing"`,
 	}
@@ -623,7 +623,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 
 	// Inordered match on String (supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     `CustomTextField = "else nothing matters"`,
 	}
@@ -652,7 +652,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 	var nextPageToken []byte
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace:     s.Namespace(),
+		Namespace:     s.Namespace().String(),
 		PageSize:      int32(testcore.DefaultPageSize),
 		NextPageToken: nextPageToken,
 		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = "Running"`, wt),
@@ -732,7 +732,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	query1 := fmt.Sprintf(queryTemplate, wt, searchattribute.CloseTime, asc)
 	var openExecutions []*workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  pageSize,
 		Query:     query1,
 	}
@@ -844,14 +844,14 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 	var nextPageToken []byte
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace:     s.Namespace(),
+		Namespace:     s.Namespace().String(),
 		PageSize:      int32(pageSize),
 		NextPageToken: nextPageToken,
 		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wType),
 	}
 
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
-		Namespace:     s.Namespace(),
+		Namespace:     s.Namespace().String(),
 		PageSize:      int32(pageSize),
 		NextPageToken: nextPageToken,
 		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wType),
@@ -917,12 +917,12 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string, isScan bool) {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     query,
 	}
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  testcore.DefaultPageSize,
 		Query:     query,
 	}
@@ -974,7 +974,7 @@ func (s *AdvancedVisibilitySuite) TestScanWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -1029,7 +1029,7 @@ func (s *AdvancedVisibilitySuite) TestScanWorkflow_PageToken() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
@@ -1063,7 +1063,7 @@ func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
 
 	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Query:     query,
 	}
 	var resp *workflowservice.CountWorkflowExecutionsResponse
@@ -1100,7 +1100,7 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 			_, err := s.FrontendClient().TerminateWorkflowExecution(
 				testcore.NewContext(),
 				&workflowservice.TerminateWorkflowExecutionRequest{
-					Namespace: s.Namespace(),
+					Namespace: s.Namespace().String(),
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: wfid,
 						RunId:      we.RunId,
@@ -1113,7 +1113,7 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 
 	query := fmt.Sprintf(`WorkflowType = %q GROUP BY ExecutionStatus`, wt)
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Query:     query,
 	}
 	var resp *workflowservice.CountWorkflowExecutionsResponse
@@ -1171,7 +1171,7 @@ func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -1195,7 +1195,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -1266,7 +1266,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueue,
 		StickyTaskQueue:     taskQueue,
 		Identity:            identity,
@@ -1298,7 +1298,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// verify upsert data is on ES
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
@@ -1366,7 +1366,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// verify search attributes are unset
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
@@ -1390,7 +1390,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// verify query by unset search attribute
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running' and CustomTextField is null and CustomIntField is null`, wt),
 	}
@@ -1408,7 +1408,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// verify search attributes from DescribeWorkflowExecution
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -1452,7 +1452,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// verify search attributes from DescribeWorkflowExecution
 	descRequest = &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -1486,7 +1486,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -1554,7 +1554,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueue,
 		StickyTaskQueue:     taskQueue,
 		Identity:            identity,
@@ -1595,7 +1595,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 	// verify memo data is on ES
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
@@ -1641,7 +1641,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 	// verify memo data is on ES
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
@@ -1672,7 +1672,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -1756,7 +1756,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -1787,7 +1787,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueue,
 		StickyTaskQueue:     taskQueue,
 		Identity:            identity,
@@ -1799,7 +1799,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
+	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
@@ -1811,12 +1811,12 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: search attribute INVALIDKEY is not defined"}}`, historyEvents)
 	} else {
-		s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.Namespace()))
+		s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.Namespace().String()))
 		s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY"}}`, s.Namespace()), historyEvents)
+  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY"}}`, s.Namespace().String()), historyEvents)
 	}
 }
 
@@ -1862,7 +1862,7 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 			resp, err := s.FrontendClient().ListWorkflowExecutions(
 				ctx,
 				&workflowservice.ListWorkflowExecutionsRequest{
-					Namespace: s.Namespace(),
+					Namespace: s.Namespace().String(),
 					Query:     fmt.Sprintf("WorkflowType = %q", wfType),
 					PageSize:  testcore.DefaultPageSize,
 				},
@@ -1887,7 +1887,7 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 			resp, err := s.FrontendClient().ListWorkflowExecutions(
 				ctx,
 				&workflowservice.ListWorkflowExecutionsRequest{
-					Namespace: s.Namespace(),
+					Namespace: s.Namespace().String(),
 					Query:     fmt.Sprintf("WorkflowType = %q", childWfType),
 					PageSize:  testcore.DefaultPageSize,
 				},
@@ -1936,12 +1936,12 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 	_, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
-	pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{Namespace: s.Namespace(), TaskQueue: request.TaskQueue, Identity: id}
+	pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{Namespace: s.Namespace().String(), TaskQueue: request.TaskQueue, Identity: id}
 	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
 	s.Greater(len(task.TaskToken), 0)
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		Identity:           id,
 		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.0"},
 		TaskToken:          task.TaskToken,
@@ -1954,14 +1954,14 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 		worker_versioning.UnversionedBuildIdSearchAttribute("1.0"),
 	}, buildIDs)
 
-	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{Namespace: s.Namespace(), WorkflowExecution: task.WorkflowExecution, SignalName: "continue"})
+	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{Namespace: s.Namespace().String(), WorkflowExecution: task.WorkflowExecution, SignalName: "continue"})
 	s.NoError(err)
 
 	task, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
 	s.Greater(len(task.TaskToken), 0)
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		Identity:           id,
 		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.1"},
 		TaskToken:          task.TaskToken,
@@ -1992,7 +1992,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 	s.Equal([]string{}, buildIDs)
 
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		Identity:           id,
 		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.2"},
 		TaskToken:          task.TaskToken,
@@ -2011,7 +2011,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 	for minor := 1; minor <= 2; minor++ {
 		s.Eventually(func() bool {
 			response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace(),
+				Namespace: s.Namespace().String(),
 				Query:     fmt.Sprintf("BuildIds = '%s'", worker_versioning.UnversionedBuildIdSearchAttribute(fmt.Sprintf("1.%d", minor))),
 				PageSize:  testcore.DefaultPageSize,
 			})
@@ -2075,7 +2075,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 
 	// Declare v1
 	_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: buildIdv1,
@@ -2115,7 +2115,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 
 	// Update sets with v1.1
 	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
 			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
@@ -2177,7 +2177,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	// We should have 3 runs with the v1.1 search attribute: First and second run in chain, and single child
 	s.Eventually(func() bool {
 		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(buildIdv11)),
 			PageSize:  testcore.DefaultPageSize,
 		})
@@ -2217,7 +2217,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 
 	// Declare v1
 	_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: buildIdv1,
@@ -2251,7 +2251,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	<-startedCh
 
 	resetResult, err := s.sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:                 s.Namespace(),
+		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: id},
 		WorkflowTaskFinishEventId: 3,
 	})
@@ -2261,7 +2261,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 
 	s.Eventually(func() bool {
 		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Query:     fmt.Sprintf("BuildIds = %q AND RunId = %q", worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1), resetResult.RunId),
 			PageSize:  testcore.DefaultPageSize,
 		})
@@ -2292,7 +2292,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 
 	// Declare v1
 	_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: buildIdv1,
@@ -2328,7 +2328,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 
 	s.Eventually(func() bool {
 		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1)),
 			PageSize:  testcore.DefaultPageSize,
 		})
@@ -2354,7 +2354,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	var err error
 
 	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: tq1,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v0,
@@ -2362,7 +2362,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	})
 	s.Require().NoError(err)
 	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: tq1,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
 			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
@@ -2373,7 +2373,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	})
 	s.Require().NoError(err)
 	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: tq2,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v0,
@@ -2383,7 +2383,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 
 	// Map v0 to a third queue to test limit enforcement
 	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: tq3,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v0,
@@ -2394,7 +2394,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	var reachabilityResponse *workflowservice.GetWorkerTaskReachabilityResponse
 
 	reachabilityResponse, err = s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace:    s.Namespace(),
+		Namespace:    s.Namespace().String(),
 		BuildIds:     []string{v0},
 		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 	})
@@ -2411,7 +2411,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	// Start a workflow on tq1 and verify it affects the reachability of v0.1
 	_, err = s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:    uuid.New(),
-		Namespace:    s.Namespace(),
+		Namespace:    s.Namespace().String(),
 		WorkflowId:   testcore.RandomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq1, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -2423,14 +2423,14 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 
 	// Complete the workflow and verify it affects reachability of v0.1
 	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace:                 s.Namespace(),
+		Namespace:                 s.Namespace().String(),
 		TaskQueue:                 &taskqueuepb.TaskQueue{Name: tq1, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{BuildId: v01, UseVersioning: true},
 	})
 	s.Require().NoError(err)
 	s.Require().NotEmpty(task.GetTaskToken())
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		TaskToken:          task.TaskToken,
 		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: v01, UseVersioning: true},
 		Commands: []*commandpb.Command{{
@@ -2445,7 +2445,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 
 	// Make v1 default for queue 1
 	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: tq1,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: buildIdv1,
@@ -2470,7 +2470,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInName
 	buildId := s.T().Name() + "v0"
 
 	reachabilityResponse, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace:    s.Namespace(),
+		Namespace:    s.Namespace().String(),
 		BuildIds:     []string{buildId},
 		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 	})
@@ -2489,7 +2489,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 
 	checkReachability := func() {
 		reachabilityResponse, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-			Namespace:  s.Namespace(),
+			Namespace:  s.Namespace().String(),
 			BuildIds:   []string{v01},
 			TaskQueues: []string{tq},
 		})
@@ -2505,7 +2505,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 
 	// Same but with a versioned task queue
 	_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v0,
@@ -2519,7 +2519,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_EmptyBuildIds() {
 	ctx := testcore.NewContext()
 
 	_, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	var invalidArgument *serviceerror.InvalidArgument
 	s.Require().ErrorAs(err, &invalidArgument)
@@ -2529,7 +2529,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds() {
 	ctx := testcore.NewContext()
 
 	_, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		BuildIds:  []string{"", "v1"},
 	})
 	var invalidArgument *serviceerror.InvalidArgument
@@ -2540,7 +2540,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNames
 	ctx := testcore.NewContext()
 
 	_, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		BuildIds:  []string{""},
 	})
 	var invalidArgument *serviceerror.InvalidArgument
@@ -2553,7 +2553,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 
 	_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:    uuid.New(),
-		Namespace:    s.Namespace(),
+		Namespace:    s.Namespace().String(),
 		WorkflowId:   testcore.RandomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -2564,13 +2564,13 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_OPEN_WORKFLOWS)
 
 	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.Require().NoError(err)
 	s.Require().NotEmpty(task.GetTaskToken())
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskToken: task.TaskToken,
 		Commands: []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -2584,7 +2584,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 
 	// Make the task queue versioned and rerun our assertion
 	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: s.T().Name() + "-v0",
@@ -2610,7 +2610,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	var err error
 
 	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: buildIdv0,
@@ -2618,7 +2618,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	})
 	s.Require().NoError(err)
 	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: buildIdv1,
@@ -2644,7 +2644,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	s.Require().Equal([]string{buildIdv1}, compatibility.Sets[0].BuildIDs)
 	// Make sure the build ID was removed from the build ID->task queue mapping
 	res, err := s.sdkClient.WorkflowService().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		BuildIds:  []string{buildIdv0},
 	})
 	s.Require().NoError(err)
@@ -2660,7 +2660,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	workflowID := "test-schedule-" + uuid.New()
 
 	schedule := &workflowservice.CreateScheduleRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		RequestId:  uuid.New(),
 		ScheduleId: scheduleID,
 		Schedule: &schedulepb.Schedule{
@@ -2686,7 +2686,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	s.NoError(err)
 
 	listRequest := &workflowservice.ListSchedulesRequest{
-		Namespace:       s.Namespace(),
+		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 1,
 		Query:           fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, scheduleID),
 	}
@@ -2744,7 +2744,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {
 	s.Require().Eventually(func() bool {
 		reachabilityResponse, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-			Namespace:    s.Namespace(),
+			Namespace:    s.Namespace().String(),
 			BuildIds:     []string{buildId},
 			TaskQueues:   []string{taskQueue},
 			Reachability: expectedReachability[len(expectedReachability)-1],
@@ -2773,7 +2773,7 @@ func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQue
 
 func (s *AdvancedVisibilitySuite) getBuildIds(ctx context.Context, execution *commonpb.WorkflowExecution) []string {
 	description, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: execution,
 	})
 	s.NoError(err)
@@ -2817,14 +2817,14 @@ func (s *AdvancedVisibilitySuite) addCustomKeywordSearchAttribute(ctx context.Co
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			attrName: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	s.NoError(err)
 
 	// Wait for search attribute to be available
 	s.Eventually(func() bool {
 		descResp, err := s.OperatorClient().ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 		})
 		if err != nil {
 			return false

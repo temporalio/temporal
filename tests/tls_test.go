@@ -64,7 +64,7 @@ func (s *TLSFunctionalSuite) SetupTest() {
 	var err error
 	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
 		},
@@ -104,7 +104,7 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	calls := s.trackAuthInfoByCall()
 
 	// Confirm non-HTTPS call is rejected with 400
-	resp, err := http.Get("http://" + s.HttpAPIAddress() + "/namespaces/" + s.Namespace() + "/workflows")
+	resp, err := http.Get("http://" + s.HttpAPIAddress() + "/namespaces/" + s.Namespace().String() + "/workflows")
 	s.Require().NoError(err)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 
@@ -116,7 +116,7 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	}
 
 	// Make a list call
-	req, err := http.NewRequest("GET", "https://"+s.HttpAPIAddress()+"/namespaces/"+s.Namespace()+"/workflows", nil)
+	req, err := http.NewRequest("GET", "https://"+s.HttpAPIAddress()+"/namespaces/"+s.Namespace().String()+"/workflows", nil)
 	s.Require().NoError(err)
 	resp, err = httpClient.Do(req)
 	s.Require().NoError(err)

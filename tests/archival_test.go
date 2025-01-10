@@ -104,34 +104,32 @@ func (s *ArchivalSuite) SetupTest() {
 func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
 	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
-	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-timer-queue-processor-workflow-id"
 	workflowType := "archival-timer-queue-processor-type"
 	taskQueue := "archival-timer-queue-processor-task-queue"
 	numActivities := 1
 	numRuns := 1
-	workflowInfo := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace(), namespaceID, numActivities, numRuns)[0]
+	workflowInfo := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace().String(), s.ArchivalNamespaceID().String(), numActivities, numRuns)[0]
 
-	s.True(s.isArchived(s.ArchivalNamespace(), workflowInfo.execution))
+	s.True(s.isArchived(s.ArchivalNamespace().String(), workflowInfo.execution))
 	s.True(s.isHistoryDeleted(workflowInfo))
-	s.True(s.isMutableStateDeleted(namespaceID, workflowInfo.execution))
+	s.True(s.isMutableStateDeleted(s.ArchivalNamespaceID().String(), workflowInfo.execution))
 }
 
 func (s *ArchivalSuite) TestArchival_ContinueAsNew() {
 	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
-	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-continueAsNew-workflow-id"
 	workflowType := "archival-continueAsNew-workflow-type"
 	taskQueue := "archival-continueAsNew-task-queue"
 	numActivities := 1
 	numRuns := 5
-	workflowInfos := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace(), namespaceID, numActivities, numRuns)
+	workflowInfos := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace().String(), s.ArchivalNamespaceID().String(), numActivities, numRuns)
 
 	for _, workflowInfo := range workflowInfos {
-		s.True(s.isArchived(s.ArchivalNamespace(), workflowInfo.execution))
+		s.True(s.isArchived(s.ArchivalNamespace().String(), workflowInfo.execution))
 		s.True(s.isHistoryDeleted(workflowInfo))
-		s.True(s.isMutableStateDeleted(namespaceID, workflowInfo.execution))
+		s.True(s.isMutableStateDeleted(s.ArchivalNamespaceID().String(), workflowInfo.execution))
 	}
 }
 
@@ -140,30 +138,28 @@ func (s *ArchivalSuite) TestArchival_ArchiverWorker() {
 
 	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
-	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-archiver-worker-workflow-id"
 	workflowType := "archival-archiver-worker-workflow-type"
 	taskQueue := "archival-archiver-worker-task-queue"
 	numActivities := 10
-	workflowInfo := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace(), namespaceID, numActivities, 1)[0]
+	workflowInfo := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace().String(), s.ArchivalNamespaceID().String(), numActivities, 1)[0]
 
-	s.True(s.isArchived(s.ArchivalNamespace(), workflowInfo.execution))
+	s.True(s.isArchived(s.ArchivalNamespace().String(), workflowInfo.execution))
 	s.True(s.isHistoryDeleted(workflowInfo))
-	s.True(s.isMutableStateDeleted(namespaceID, workflowInfo.execution))
+	s.True(s.isMutableStateDeleted(s.ArchivalNamespaceID().String(), workflowInfo.execution))
 }
 
 func (s *ArchivalSuite) TestVisibilityArchival() {
 	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetVisibilityConfig().ClusterConfiguredForArchival())
 
-	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-visibility-workflow-id"
 	workflowType := "archival-visibility-workflow-type"
 	taskQueue := "archival-visibility-task-queue"
 	numActivities := 3
 	numRuns := 5
 	startTime := time.Now().UnixNano()
-	s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace(), namespaceID, numActivities, numRuns)
-	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskQueue, s.ArchivalNamespace(), namespaceID, numActivities, numRuns)
+	s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace().String(), s.ArchivalNamespaceID().String(), numActivities, numRuns)
+	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskQueue, s.ArchivalNamespace().String(), s.ArchivalNamespaceID().String(), numActivities, numRuns)
 	endTime := time.Now().UnixNano()
 
 	var executions []*workflowpb.WorkflowExecutionInfo
@@ -171,7 +167,7 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 	for i := 0; i != retryLimit; i++ {
 		executions = []*workflowpb.WorkflowExecutionInfo{}
 		request := &workflowservice.ListArchivedWorkflowExecutionsRequest{
-			Namespace: s.ArchivalNamespace(),
+			Namespace: s.ArchivalNamespace().String(),
 			PageSize:  2,
 			Query:     fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType),
 		}
@@ -226,10 +222,9 @@ func (s *ArchivalSuite) isArchived(namespace string, execution *commonpb.Workflo
 		if i > 0 {
 			time.Sleep(retryBackoffTime) //nolint:forbidigo
 		}
-		namespaceID := s.GetNamespaceID(namespace)
 		var historyResponse *archiver.GetHistoryResponse
 		historyResponse, err = historyArchiver.Get(ctx, historyURI, &archiver.GetHistoryRequest{
-			NamespaceID: namespaceID,
+			NamespaceID: s.NamespaceID().String(),
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
 			PageSize:    1,
@@ -245,7 +240,7 @@ func (s *ArchivalSuite) isArchived(namespace string, execution *commonpb.Workflo
 			ctx,
 			visibilityURI,
 			&archiver.QueryVisibilityRequest{
-				NamespaceID: namespaceID,
+				NamespaceID: s.NamespaceID().String(),
 				PageSize:    1,
 				Query: fmt.Sprintf(
 					"WorkflowId = '%s' and RunId = '%s'",
@@ -271,9 +266,8 @@ func (s *ArchivalSuite) isArchived(namespace string, execution *commonpb.Workflo
 func (s *ArchivalSuite) isHistoryDeleted(
 	workflowInfo archivalWorkflowInfo,
 ) bool {
-	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	shardID := common.WorkflowIDToHistoryShard(
-		namespaceID,
+		s.ArchivalNamespaceID().String(),
 		workflowInfo.execution.WorkflowId,
 		s.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)

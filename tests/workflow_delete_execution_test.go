@@ -71,7 +71,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 	for i := 0; i < numExecutions; i++ {
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
-			Namespace:    s.Namespace(),
+			Namespace:    s.Namespace().String(),
 			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
@@ -94,7 +94,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           tv.TaskQueue(),
 		Identity:            tv.WorkerIdentity(),
 		WorkflowTaskHandler: wtHandler,
@@ -114,7 +114,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 				visibilityResponse, err := s.FrontendClient().ListWorkflowExecutions(
 					testcore.NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
-						Namespace:     s.Namespace(),
+						Namespace:     s.Namespace().String(),
 						PageSize:      1,
 						NextPageToken: nil,
 						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
@@ -135,7 +135,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 	// Delete workflow executions.
 	for _, we := range wes {
 		_, err := s.FrontendClient().DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: we.WorkflowId,
 				RunId:      we.RunId,
@@ -151,7 +151,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 				describeResponse, err := s.FrontendClient().DescribeWorkflowExecution(
 					testcore.NewContext(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
-						Namespace: s.Namespace(),
+						Namespace: s.Namespace().String(),
 						Execution: we,
 					},
 				)
@@ -172,7 +172,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 		historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(
 			testcore.NewContext(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace: s.Namespace(),
+				Namespace: s.Namespace().String(),
 				Execution: we,
 			},
 		)
@@ -186,7 +186,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 				visibilityResponse, err := s.FrontendClient().ListWorkflowExecutions(
 					testcore.NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
-						Namespace:     s.Namespace(),
+						Namespace:     s.Namespace().String(),
 						PageSize:      1,
 						NextPageToken: nil,
 						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
@@ -215,7 +215,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 	for i := 0; i < numExecutions; i++ {
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
-			Namespace:    s.Namespace(),
+			Namespace:    s.Namespace().String(),
 			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
@@ -235,7 +235,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 				visibilityResponse, err := s.FrontendClient().ListWorkflowExecutions(
 					testcore.NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
-						Namespace:     s.Namespace(),
+						Namespace:     s.Namespace().String(),
 						PageSize:      1,
 						NextPageToken: nil,
 						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
@@ -253,7 +253,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 	// Delete workflow executions.
 	for _, we := range wes {
 		_, err := s.FrontendClient().DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-			Namespace:         s.Namespace(),
+			Namespace:         s.Namespace().String(),
 			WorkflowExecution: we,
 		})
 		s.NoError(err)
@@ -266,7 +266,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 				describeResponse, err := s.FrontendClient().DescribeWorkflowExecution(
 					testcore.NewContext(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
-						Namespace: s.Namespace(),
+						Namespace: s.Namespace().String(),
 						Execution: we,
 					},
 				)
@@ -287,7 +287,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 		historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(
 			testcore.NewContext(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace: s.Namespace(),
+				Namespace: s.Namespace().String(),
 				Execution: we,
 			},
 		)
@@ -301,7 +301,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 				visibilityResponse, err := s.FrontendClient().ListWorkflowExecutions(
 					testcore.NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
-						Namespace:     s.Namespace(),
+						Namespace:     s.Namespace().String(),
 						PageSize:      1,
 						NextPageToken: nil,
 						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
@@ -330,7 +330,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 	for i := 0; i < numExecutions; i++ {
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
-			Namespace:    s.Namespace(),
+			Namespace:    s.Namespace().String(),
 			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
@@ -350,7 +350,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 				visibilityResponse, err := s.FrontendClient().ListWorkflowExecutions(
 					testcore.NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
-						Namespace:     s.Namespace(),
+						Namespace:     s.Namespace().String(),
 						PageSize:      1,
 						NextPageToken: nil,
 						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),
@@ -375,13 +375,13 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 
 	for i, we := range wes {
 		_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace:         s.Namespace(),
+			Namespace:         s.Namespace().String(),
 			WorkflowExecution: we,
 		})
 		s.NoError(err)
 		s.Logger.Warn("Execution is terminated", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 		_, err = s.FrontendClient().DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-			Namespace:         s.Namespace(),
+			Namespace:         s.Namespace().String(),
 			WorkflowExecution: we,
 		})
 		s.NoError(err)
@@ -395,7 +395,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 				describeResponse, err := s.FrontendClient().DescribeWorkflowExecution(
 					testcore.NewContext(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
-						Namespace: s.Namespace(),
+						Namespace: s.Namespace().String(),
 						Execution: we,
 					},
 				)
@@ -416,7 +416,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 		historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(
 			testcore.NewContext(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
-				Namespace: s.Namespace(),
+				Namespace: s.Namespace().String(),
 				Execution: we,
 			},
 		)
@@ -430,7 +430,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 				visibilityResponse, err := s.FrontendClient().ListWorkflowExecutions(
 					testcore.NewContext(),
 					&workflowservice.ListWorkflowExecutionsRequest{
-						Namespace:     s.Namespace(),
+						Namespace:     s.Namespace().String(),
 						PageSize:      1,
 						NextPageToken: nil,
 						Query:         fmt.Sprintf("WorkflowId='%s'", we.WorkflowId),

@@ -90,7 +90,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState() {
 	var response1 *adminservice.DescribeMutableStateResponse
 	for {
 		response1, err = s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -104,7 +104,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState() {
 	}
 
 	_, err = s.AdminClient().RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -113,7 +113,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState() {
 	s.NoError(err)
 
 	response2, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

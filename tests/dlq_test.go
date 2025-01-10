@@ -170,7 +170,7 @@ func (s *DLQSuite) SetupSuite() {
 	)
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	s.NoError(err)
 	s.worker = sdkworker.New(sdkClient, taskQueue, sdkworker.Options{})
@@ -516,7 +516,7 @@ func (s *DLQSuite) verifyRunIsInDLQ(
 func (s *DLQSuite) executeWorkflow(ctx context.Context, workflowID string) sdkclient.WorkflowRun {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	s.NoError(err)
 

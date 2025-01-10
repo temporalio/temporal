@@ -111,7 +111,7 @@ func (s *ClientFunctionalSuite) SetupTest() {
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))

@@ -61,7 +61,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	defer cancel()
 	tv := testvars.New(s.T()).
 		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace()))
+		WithNamespaceName(s.Namespace())
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
@@ -84,7 +84,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
 
-	hist := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
+	hist := s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
 	s.EqualHistoryEventsPrefix(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled`, hist)
@@ -101,7 +101,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
 	defer cancel()
 	tv := testvars.New(s.T()).
 		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace()))
+		WithNamespaceName(s.Namespace())
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
@@ -154,7 +154,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
   6 WorkflowTaskStarted
   7 WorkflowTaskCompleted
   8 WorkflowExecutionUpdateAccepted
-  9 WorkflowExecutionTimedOut`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+  9 WorkflowExecutionTimedOut`, s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
 }
 
 // TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted executes an update, and while WF awaits
@@ -165,7 +165,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	defer cancel()
 	tv := testvars.New(s.T()).
 		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace()))
+		WithNamespaceName(namespace.Name(s.Namespace().String()))
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
@@ -214,7 +214,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	6 WorkflowTaskStarted
 	7 WorkflowTaskCompleted
 	8 WorkflowExecutionUpdateAccepted
-	9 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+	9 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
 }
 
 func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmitted() {
@@ -229,7 +229,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmi
 
 	tv := testvars.New(s.T()).
 		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace()))
+		WithNamespaceName(namespace.Name(s.Namespace().String()))
 
 	rootCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -287,9 +287,9 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmi
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 MarkerRecorded
-  6 WorkflowExecutionContinuedAsNew`, s.GetHistory(s.Namespace(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
+  6 WorkflowExecutionContinuedAsNew`, s.GetHistory(s.Namespace().String(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
 
-	hist2 := s.GetHistory(s.Namespace(), tv.WithRunID(secondRunID).WorkflowExecution())
+	hist2 := s.GetHistory(s.Namespace().String(), tv.WithRunID(secondRunID).WorkflowExecution())
 	s.EqualHistoryEventsPrefix(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -316,7 +316,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWithRetryAfterUpdateA
 
 	tv := testvars.New(s.T()).
 		WithTaskQueue(s.TaskQueue()).
-		WithNamespaceName(namespace.Name(s.Namespace()))
+		WithNamespaceName(namespace.Name(s.Namespace().String()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -369,14 +369,14 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWithRetryAfterUpdateA
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
-  5 WorkflowExecutionTimedOut`, s.GetHistory(s.Namespace(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
+  5 WorkflowExecutionTimedOut`, s.GetHistory(s.Namespace().String(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionUpdateAccepted
-  6 WorkflowExecutionUpdateCompleted`, s.GetHistory(s.Namespace(), tv.WithRunID(secondRunID).WorkflowExecution()))
+  6 WorkflowExecutionUpdateCompleted`, s.GetHistory(s.Namespace().String(), tv.WithRunID(secondRunID).WorkflowExecution()))
 }
 
 func (s *UpdateWorkflowSdkSuite) startWorkflow(ctx context.Context, tv *testvars.TestVars, workflowFn any) sdkclient.WorkflowRun {
