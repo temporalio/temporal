@@ -108,7 +108,7 @@ import (
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
@@ -188,7 +188,7 @@ func NewEngineWithShardContext(
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 	testHooks testhooks.TestHooks,
-) history.Engine {
+) historyi.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
@@ -766,14 +766,14 @@ func (e *historyEngineImpl) SyncActivities(
 
 func (e *historyEngineImpl) SyncHSM(
 	ctx context.Context,
-	request *history.SyncHSMRequest,
+	request *historyi.SyncHSMRequest,
 ) error {
 	return e.nDCHSMStateReplicator.SyncHSMState(ctx, request)
 }
 
 func (e *historyEngineImpl) BackfillHistoryEvents(
 	ctx context.Context,
-	request *history.BackfillHistoryEventsRequest,
+	request *historyi.BackfillHistoryEventsRequest,
 ) error {
 	return e.nDCHistoryReplicator.BackfillHistoryEvents(ctx, request)
 }

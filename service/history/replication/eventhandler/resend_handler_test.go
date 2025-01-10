@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 )
@@ -73,7 +73,7 @@ type (
 		logger         log.Logger
 		config         *configs.Config
 		resendHandler  ResendHandler
-		engine         *history.MockEngine
+		engine         *historyi.MockEngine
 		historyFetcher *MockHistoryPaginatedFetcher
 		importer       *MockEventImporter
 	}
@@ -124,7 +124,7 @@ func (s *resendHandlerSuite) SetupTest() {
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
-	s.engine = history.NewMockEngine(s.controller)
+	s.engine = historyi.NewMockEngine(s.controller)
 	s.serializer = serialization.NewSerializer()
 	s.importer = NewMockEventImporter(s.controller)
 	s.resendHandler = NewResendHandler(
@@ -132,7 +132,7 @@ func (s *resendHandlerSuite) SetupTest() {
 		s.mockClientBean,
 		s.serializer,
 		s.mockClusterMetadata,
-		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (history.Engine, error) {
+		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error) {
 			return s.engine, nil
 		},
 		s.historyFetcher,

@@ -64,7 +64,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -120,7 +120,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
 
-	mockEngine := history.NewMockEngine(s.controller)
+	mockEngine := historyi.NewMockEngine(s.controller)
 	mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 	mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockShard.SetEngineForTesting(mockEngine)

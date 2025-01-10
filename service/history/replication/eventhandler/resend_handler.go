@@ -46,11 +46,11 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
-	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (history.Engine, error)
+	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error)
 	ResendHandler         interface {
 		ResendHistoryEvents(
 			ctx context.Context,
@@ -82,7 +82,7 @@ func NewResendHandler(
 	clientBean client.Bean,
 	serializer serialization.Serializer,
 	clusterMetadata cluster.Metadata,
-	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (history.Engine, error),
+	historyEngineProvider func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error),
 	remoteHistoryFetcher HistoryPaginatedFetcher,
 	importer EventImporter,
 	logger log.Logger,

@@ -46,7 +46,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -160,7 +160,7 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Process() {
 	).AnyTimes()
 
 	shardContext := shard.NewMockContext(s.controller)
-	engine := history.NewMockEngine(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
@@ -209,7 +209,7 @@ func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Success() {
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	shardContext := shard.NewMockContext(s.controller)
-	engine := history.NewMockEngine(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,

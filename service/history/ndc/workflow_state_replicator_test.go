@@ -55,7 +55,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -571,11 +571,11 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_SyncHSM(
 	})
 	mockMutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(namespaceID, s.workflowID, s.runID)).AnyTimes()
 
-	engine := history.NewMockEngine(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.mockShard.SetEngineForTesting(engine)
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	s.NoError(err)
-	engine.EXPECT().SyncHSM(gomock.Any(), &history.SyncHSMRequest{
+	engine.EXPECT().SyncHSM(gomock.Any(), &historyi.SyncHSMRequest{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID, s.workflowID, s.runID),
 		StateMachineNode: &persistencespb.StateMachineNode{
 			Children: request.WorkflowState.ExecutionInfo.SubStateMachinesByType,

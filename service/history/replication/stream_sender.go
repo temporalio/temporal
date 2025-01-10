@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -66,7 +66,7 @@ type (
 	StreamSenderImpl struct {
 		server                  historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
 		shardContext            shard.Context
-		historyEngine           history.Engine
+		historyEngine           historyi.Engine
 		taskConverter           SourceTaskConverter
 		metrics                 metrics.Handler
 		logger                  log.Logger
@@ -86,7 +86,7 @@ type (
 func NewStreamSender(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 	shardContext shard.Context,
-	historyEngine history.Engine,
+	historyEngine historyi.Engine,
 	taskConverter SourceTaskConverter,
 	clientClusterName string,
 	clientClusterShardCount int32,

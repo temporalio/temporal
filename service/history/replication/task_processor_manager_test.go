@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/configs"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -57,7 +57,7 @@ type (
 
 		controller                        *gomock.Controller
 		mockShard                         *shard.MockContext
-		mockEngine                        *history.MockEngine
+		mockEngine                        *historyi.MockEngine
 		mockClientBean                    *client.MockBean
 		mockClusterMetadata               *cluster.MockMetadata
 		mockHistoryClient                 *historyservicemock.MockHistoryServiceClient
@@ -96,7 +96,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 	s.shardID = rand.Int31()
 	s.shardOwner = "test-shard-owner"
 	s.mockShard = shard.NewMockContext(s.controller)
-	s.mockEngine = history.NewMockEngine(s.controller)
+	s.mockEngine = historyi.NewMockEngine(s.controller)
 	s.mockClientBean = client.NewMockBean(s.controller)
 
 	s.mockReplicationTaskExecutor = NewMockTaskExecutor(s.controller)

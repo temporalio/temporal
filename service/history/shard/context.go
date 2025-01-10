@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
-	history "go.temporal.io/server/service/history/interfaces"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -79,7 +79,7 @@ type (
 		GetSearchAttributesMapperProvider() searchattribute.MapperProvider
 		GetArchivalMetadata() archiver.ArchivalMetadata
 
-		GetEngine(ctx context.Context) (history.Engine, error)
+		GetEngine(ctx context.Context) (historyi.Engine, error)
 
 		AssertOwnership(ctx context.Context) error
 		NewVectorClock() (*clockspb.VectorClock, error)
