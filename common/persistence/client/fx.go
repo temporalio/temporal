@@ -206,7 +206,7 @@ func DataStoreFactoryProvider(
 	}
 
 	if otel.IsEnabled(tracerProvider) {
-		dataStoreFactory = telemetry.NewTelemetryDataStoreFactory(dataStoreFactory, tracerProvider.Tracer("persistence"))
+		dataStoreFactory = telemetry.NewTelemetryDataStoreFactory(dataStoreFactory, logger, tracerProvider.Tracer("persistence"))
 	}
 
 	return dataStoreFactory

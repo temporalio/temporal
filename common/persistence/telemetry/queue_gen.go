@@ -33,11 +33,12 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/telemetry"
 )
@@ -46,11 +47,16 @@ import (
 type telemetryQueue struct {
 	_sourcePersistence.Queue
 	tracer    trace.Tracer
+	logger    log.Logger
 	debugMode bool
 }
 
 // newTelemetryQueue returns telemetryQueue.
-func newTelemetryQueue(base _sourcePersistence.Queue, tracer trace.Tracer) telemetryQueue {
+func newTelemetryQueue(
+	base _sourcePersistence.Queue,
+	logger log.Logger,
+	tracer trace.Tracer,
+) telemetryQueue {
 	return telemetryQueue{
 		Queue:     base,
 		tracer:    tracer,
@@ -75,7 +81,7 @@ func (d telemetryQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int6
 
 		requestPayload, err := json.MarshalIndent(messageID, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize int64 for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize int64 for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
@@ -102,7 +108,7 @@ func (d telemetryQueue) DeleteMessagesBefore(ctx context.Context, messageID int6
 
 		requestPayload, err := json.MarshalIndent(messageID, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize int64 for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize int64 for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
@@ -129,7 +135,7 @@ func (d telemetryQueue) EnqueueMessage(ctx context.Context, blob *commonpb.DataB
 
 		requestPayload, err := json.MarshalIndent(blob, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *commonpb.DataBlob for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *commonpb.DataBlob for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
@@ -156,14 +162,14 @@ func (d telemetryQueue) EnqueueMessageToDLQ(ctx context.Context, blob *commonpb.
 
 		requestPayload, err := json.MarshalIndent(blob, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *commonpb.DataBlob for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *commonpb.DataBlob for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
 
-		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		responsePayload, err := json.MarshalIndent(i1, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize int64 for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
@@ -188,9 +194,9 @@ func (d telemetryQueue) GetAckLevels(ctx context.Context) (ip1 *_sourcePersisten
 
 	if d.debugMode {
 
-		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalQueueMetadata for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
@@ -215,9 +221,9 @@ func (d telemetryQueue) GetDLQAckLevels(ctx context.Context) (ip1 *_sourcePersis
 
 	if d.debugMode {
 
-		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalQueueMetadata for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
@@ -244,7 +250,7 @@ func (d telemetryQueue) Init(ctx context.Context, blob *commonpb.DataBlob) (err 
 
 		requestPayload, err := json.MarshalIndent(blob, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *commonpb.DataBlob for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *commonpb.DataBlob for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
@@ -271,7 +277,7 @@ func (d telemetryQueue) RangeDeleteMessagesFromDLQ(ctx context.Context, firstMes
 
 		requestPayload, err := json.MarshalIndent(firstMessageID, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize int64 for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize int64 for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
@@ -298,14 +304,14 @@ func (d telemetryQueue) ReadMessages(ctx context.Context, lastMessageID int64, m
 
 		requestPayload, err := json.MarshalIndent(lastMessageID, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize int64 for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize int64 for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
 
-		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		responsePayload, err := json.MarshalIndent(qpa1, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize []*_sourcePersistence.QueueMessage for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
@@ -332,14 +338,14 @@ func (d telemetryQueue) ReadMessagesFromDLQ(ctx context.Context, firstMessageID 
 
 		requestPayload, err := json.MarshalIndent(firstMessageID, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize int64 for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize int64 for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
 
-		responsePayload, err := json.MarshalIndent(ba1, "", "    ")
+		responsePayload, err := json.MarshalIndent(qpa1, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize []byte for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize []*_sourcePersistence.QueueMessage for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
@@ -366,7 +372,7 @@ func (d telemetryQueue) UpdateAckLevel(ctx context.Context, metadata *_sourcePer
 
 		requestPayload, err := json.MarshalIndent(metadata, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.InternalQueueMetadata for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalQueueMetadata for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
@@ -393,7 +399,7 @@ func (d telemetryQueue) UpdateDLQAckLevel(ctx context.Context, metadata *_source
 
 		requestPayload, err := json.MarshalIndent(metadata, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.InternalQueueMetadata for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalQueueMetadata for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}

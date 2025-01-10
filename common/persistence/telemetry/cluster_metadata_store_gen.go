@@ -33,10 +33,11 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/telemetry"
 )
@@ -45,11 +46,16 @@ import (
 type telemetryClusterMetadataStore struct {
 	_sourcePersistence.ClusterMetadataStore
 	tracer    trace.Tracer
+	logger    log.Logger
 	debugMode bool
 }
 
 // newTelemetryClusterMetadataStore returns telemetryClusterMetadataStore.
-func newTelemetryClusterMetadataStore(base _sourcePersistence.ClusterMetadataStore, tracer trace.Tracer) telemetryClusterMetadataStore {
+func newTelemetryClusterMetadataStore(
+	base _sourcePersistence.ClusterMetadataStore,
+	logger log.Logger,
+	tracer trace.Tracer,
+) telemetryClusterMetadataStore {
 	return telemetryClusterMetadataStore{
 		ClusterMetadataStore: base,
 		tracer:               tracer,
@@ -74,7 +80,7 @@ func (d telemetryClusterMetadataStore) DeleteClusterMetadata(ctx context.Context
 
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.InternalDeleteClusterMetadataRequest for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalDeleteClusterMetadataRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
@@ -101,14 +107,14 @@ func (d telemetryClusterMetadataStore) GetClusterMembers(ctx context.Context, re
 
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.GetClusterMembersRequest for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.GetClusterMembersRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
 
-		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		responsePayload, err := json.MarshalIndent(gp1, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.GetClusterMembersResponse for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
@@ -135,14 +141,14 @@ func (d telemetryClusterMetadataStore) GetClusterMetadata(ctx context.Context, r
 
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.InternalGetClusterMetadataRequest for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalGetClusterMetadataRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
 
-		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalGetClusterMetadataResponse for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
@@ -169,14 +175,14 @@ func (d telemetryClusterMetadataStore) ListClusterMetadata(ctx context.Context, 
 
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.InternalListClusterMetadataRequest for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalListClusterMetadataRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
 
-		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalListClusterMetadataResponse for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
@@ -203,7 +209,7 @@ func (d telemetryClusterMetadataStore) PruneClusterMembership(ctx context.Contex
 
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.PruneClusterMembershipRequest for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.PruneClusterMembershipRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
@@ -230,14 +236,14 @@ func (d telemetryClusterMetadataStore) SaveClusterMetadata(ctx context.Context, 
 
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.InternalSaveClusterMetadataRequest for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalSaveClusterMetadataRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
 
-		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		responsePayload, err := json.MarshalIndent(b1, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize bool for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
@@ -264,7 +270,7 @@ func (d telemetryClusterMetadataStore) UpsertClusterMembership(ctx context.Conte
 
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.UpsertClusterMembershipRequest for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.UpsertClusterMembershipRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}

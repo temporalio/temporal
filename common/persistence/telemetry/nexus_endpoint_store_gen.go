@@ -33,10 +33,11 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/telemetry"
 )
@@ -45,11 +46,16 @@ import (
 type telemetryNexusEndpointStore struct {
 	_sourcePersistence.NexusEndpointStore
 	tracer    trace.Tracer
+	logger    log.Logger
 	debugMode bool
 }
 
 // newTelemetryNexusEndpointStore returns telemetryNexusEndpointStore.
-func newTelemetryNexusEndpointStore(base _sourcePersistence.NexusEndpointStore, tracer trace.Tracer) telemetryNexusEndpointStore {
+func newTelemetryNexusEndpointStore(
+	base _sourcePersistence.NexusEndpointStore,
+	logger log.Logger,
+	tracer trace.Tracer,
+) telemetryNexusEndpointStore {
 	return telemetryNexusEndpointStore{
 		NexusEndpointStore: base,
 		tracer:             tracer,
@@ -74,7 +80,7 @@ func (d telemetryNexusEndpointStore) CreateOrUpdateNexusEndpoint(ctx context.Con
 
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.InternalCreateOrUpdateNexusEndpointRequest for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalCreateOrUpdateNexusEndpointRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
@@ -101,7 +107,7 @@ func (d telemetryNexusEndpointStore) DeleteNexusEndpoint(ctx context.Context, re
 
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.DeleteNexusEndpointRequest for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.DeleteNexusEndpointRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
@@ -128,14 +134,14 @@ func (d telemetryNexusEndpointStore) GetNexusEndpoint(ctx context.Context, reque
 
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.GetNexusEndpointRequest for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.GetNexusEndpointRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
 
-		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalNexusEndpoint for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
@@ -162,14 +168,14 @@ func (d telemetryNexusEndpointStore) ListNexusEndpoints(ctx context.Context, req
 
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize *_sourcePersistence.ListNexusEndpointsRequest for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.ListNexusEndpointsRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
 
-		responsePayload, err := json.MarshalIndent(err, "", "    ")
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
-			fmt.Println("failed to serialize error for OTEL span: " + err.Error())
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalListNexusEndpointsResponse for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}

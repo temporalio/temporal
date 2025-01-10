@@ -4,11 +4,16 @@
 type {{$decorator}} struct {
     {{.Interface.Type}}
     tracer trace.Tracer
+    logger log.Logger
     debugMode bool
 }
 
 // new{{upFirst $decorator}} returns {{$decorator}}.
-func new{{upFirst $decorator}} (base {{.Interface.Type}}, tracer trace.Tracer) {{$decorator}} {
+func new{{upFirst $decorator}} (
+    base {{.Interface.Type}},
+    logger log.Logger,
+    tracer trace.Tracer,
+) {{$decorator}} {
     return {{$decorator}} {
         {{.Interface.Name}}: base,
         tracer: tracer,
@@ -39,16 +44,16 @@ func new{{upFirst $decorator}} (base {{.Interface.Type}}, tracer trace.Tracer) {
                 {{ $request := (index $method.Params 1) }}
                 requestPayload, err := json.MarshalIndent({{ $request.Name }}, "", "    ")
                 if err != nil {
-                    fmt.Println("failed to serialize {{$request.Type}} for OTEL span: " + err.Error())
+                    d.logger.Error("failed to serialize {{$request.Type}} for OTEL span", tag.Error(err))
                 } else {
                     span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
                 }
                 {{end}}
                 {{- if (gt (len $method.Results) 1) }}
-                {{ $result := (index $method.Results 1) }}
+                {{ $result := (index $method.Results 0) }}
                 responsePayload, err := json.MarshalIndent({{ $result.Name }}, "", "    ")
                 if err != nil {
-                    fmt.Println("failed to serialize {{$result.Type}} for OTEL span: " + err.Error())
+                    d.logger.Error("failed to serialize {{$result.Type}} for OTEL span", tag.Error(err))
                 } else {
                     span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
                 }
