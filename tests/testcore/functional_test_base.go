@@ -385,12 +385,12 @@ func (s *FunctionalTestBase) registerNamespace(
 }
 
 func (s *FunctionalTestBase) markNamespaceAsDeleted(
-	namespace namespace.Name,
+	nsName namespace.Name,
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
 	_, err := s.client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace.String(),
+		Namespace: nsName.String(),
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
 			State: enumspb.NAMESPACE_STATE_DELETED,
 		},
