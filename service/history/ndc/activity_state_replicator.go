@@ -363,6 +363,11 @@ func (r *ActivityStateReplicatorImpl) compareActivity(
 		return true
 	}
 
+	if activityInfo.Stamp > stamp {
+		// stamp changed, should update activity
+		return false
+	}
+
 	// activityInfo.Version == version
 	if activityInfo.Attempt > attempt {
 		// this should not retry, can be caused by failover or reset
