@@ -364,7 +364,7 @@ func (r *ActivityStateReplicatorImpl) compareActivity(
 	}
 
 	if activityInfo.Stamp > stamp {
-		// stamp changed, should update activity
+		// stamp is older than we have, should not update activity
 		return false
 	}
 
