@@ -155,7 +155,7 @@ func (s *activityReplicatorStateSuite) TestActivity_DifferentStamp() {
 	localActivityInfo := &persistencespb.ActivityInfo{
 		Version: version,
 		Attempt: attempt,
-		Stamp:   stamp + 1,
+		Stamp:   stamp - 1,
 	}
 
 	apply := s.nDCActivityStateReplicator.compareActivity(
