@@ -32,22 +32,34 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/telemetry"
 )
 
 // telemetryMetadataStore implements MetadataStore interface instrumented with OpenTelemetry.
 type telemetryMetadataStore struct {
 	_sourcePersistence.MetadataStore
-	tracer trace.Tracer
+	tracer    trace.Tracer
+	logger    log.Logger
+	debugMode bool
 }
 
 // newTelemetryMetadataStore returns telemetryMetadataStore.
-func newTelemetryMetadataStore(base _sourcePersistence.MetadataStore, tracer trace.Tracer) telemetryMetadataStore {
+func newTelemetryMetadataStore(
+	base _sourcePersistence.MetadataStore,
+	logger log.Logger,
+	tracer trace.Tracer,
+) telemetryMetadataStore {
 	return telemetryMetadataStore{
 		MetadataStore: base,
 		tracer:        tracer,
+		debugMode:     telemetry.DebugMode(),
 	}
 }
 
@@ -56,9 +68,30 @@ func (d telemetryMetadataStore) CreateNamespace(ctx context.Context, request *_s
 	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/CreateNamespace")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("CreateNamespace"))
+
 	cp1, err = d.MetadataStore.CreateNamespace(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalCreateNamespaceRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(cp1, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.CreateNamespaceResponse for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -69,9 +102,23 @@ func (d telemetryMetadataStore) DeleteNamespace(ctx context.Context, request *_s
 	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/DeleteNamespace")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("DeleteNamespace"))
+
 	err = d.MetadataStore.DeleteNamespace(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.DeleteNamespaceRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -82,9 +129,23 @@ func (d telemetryMetadataStore) DeleteNamespaceByName(ctx context.Context, reque
 	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/DeleteNamespaceByName")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("DeleteNamespaceByName"))
+
 	err = d.MetadataStore.DeleteNamespaceByName(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.DeleteNamespaceByNameRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -95,9 +156,23 @@ func (d telemetryMetadataStore) GetMetadata(ctx context.Context) (gp1 *_sourcePe
 	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/GetMetadata")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetMetadata"))
+
 	gp1, err = d.MetadataStore.GetMetadata(ctx)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		responsePayload, err := json.MarshalIndent(gp1, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.GetMetadataResponse for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -108,9 +183,30 @@ func (d telemetryMetadataStore) GetNamespace(ctx context.Context, request *_sour
 	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/GetNamespace")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetNamespace"))
+
 	ip1, err = d.MetadataStore.GetNamespace(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.GetNamespaceRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalGetNamespaceResponse for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -121,9 +217,30 @@ func (d telemetryMetadataStore) ListNamespaces(ctx context.Context, request *_so
 	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/ListNamespaces")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("ListNamespaces"))
+
 	ip1, err = d.MetadataStore.ListNamespaces(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalListNamespacesRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalListNamespacesResponse for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -134,9 +251,23 @@ func (d telemetryMetadataStore) RenameNamespace(ctx context.Context, request *_s
 	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/RenameNamespace")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("RenameNamespace"))
+
 	err = d.MetadataStore.RenameNamespace(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalRenameNamespaceRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -147,9 +278,23 @@ func (d telemetryMetadataStore) UpdateNamespace(ctx context.Context, request *_s
 	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/UpdateNamespace")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("UpdateNamespace"))
+
 	err = d.MetadataStore.UpdateNamespace(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalUpdateNamespaceRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return

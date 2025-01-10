@@ -32,22 +32,34 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/telemetry"
 )
 
 // telemetryShardStore implements ShardStore interface instrumented with OpenTelemetry.
 type telemetryShardStore struct {
 	_sourcePersistence.ShardStore
-	tracer trace.Tracer
+	tracer    trace.Tracer
+	logger    log.Logger
+	debugMode bool
 }
 
 // newTelemetryShardStore returns telemetryShardStore.
-func newTelemetryShardStore(base _sourcePersistence.ShardStore, tracer trace.Tracer) telemetryShardStore {
+func newTelemetryShardStore(
+	base _sourcePersistence.ShardStore,
+	logger log.Logger,
+	tracer trace.Tracer,
+) telemetryShardStore {
 	return telemetryShardStore{
 		ShardStore: base,
 		tracer:     tracer,
+		debugMode:  telemetry.DebugMode(),
 	}
 }
 
@@ -56,9 +68,23 @@ func (d telemetryShardStore) AssertShardOwnership(ctx context.Context, request *
 	ctx, span := d.tracer.Start(ctx, "persistence.ShardStore/AssertShardOwnership")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ShardStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("AssertShardOwnership"))
+
 	err = d.ShardStore.AssertShardOwnership(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.AssertShardOwnershipRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -69,9 +95,30 @@ func (d telemetryShardStore) GetOrCreateShard(ctx context.Context, request *_sou
 	ctx, span := d.tracer.Start(ctx, "persistence.ShardStore/GetOrCreateShard")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ShardStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetOrCreateShard"))
+
 	ip1, err = d.ShardStore.GetOrCreateShard(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalGetOrCreateShardRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalGetOrCreateShardResponse for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -82,9 +129,23 @@ func (d telemetryShardStore) UpdateShard(ctx context.Context, request *_sourcePe
 	ctx, span := d.tracer.Start(ctx, "persistence.ShardStore/UpdateShard")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("ShardStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("UpdateShard"))
+
 	err = d.ShardStore.UpdateShard(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalUpdateShardRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return

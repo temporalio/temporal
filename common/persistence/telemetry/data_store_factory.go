@@ -26,12 +26,14 @@ package telemetry
 
 import (
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 )
 
 type (
 	TelemetryDataStoreFactory struct {
 		baseFactory persistence.DataStoreFactory
+		logger      log.Logger
 		tracer      trace.Tracer
 
 		taskStore          persistence.TaskStore
@@ -47,10 +49,12 @@ type (
 
 func NewTelemetryDataStoreFactory(
 	baseFactory persistence.DataStoreFactory,
+	logger log.Logger,
 	tracer trace.Tracer,
 ) *TelemetryDataStoreFactory {
 	return &TelemetryDataStoreFactory{
 		baseFactory: baseFactory,
+		logger:      logger,
 		tracer:      tracer,
 	}
 }
@@ -65,7 +69,7 @@ func (d *TelemetryDataStoreFactory) NewTaskStore() (persistence.TaskStore, error
 		if err != nil {
 			return nil, err
 		}
-		d.taskStore = newTelemetryTaskStore(baseStore, d.tracer)
+		d.taskStore = newTelemetryTaskStore(baseStore, d.logger, d.tracer)
 	}
 	return d.taskStore, nil
 }
@@ -76,7 +80,7 @@ func (d *TelemetryDataStoreFactory) NewShardStore() (persistence.ShardStore, err
 		if err != nil {
 			return nil, err
 		}
-		d.shardStore = newTelemetryShardStore(baseStore, d.tracer)
+		d.shardStore = newTelemetryShardStore(baseStore, d.logger, d.tracer)
 	}
 	return d.shardStore, nil
 }
@@ -87,7 +91,7 @@ func (d *TelemetryDataStoreFactory) NewMetadataStore() (persistence.MetadataStor
 		if err != nil {
 			return nil, err
 		}
-		d.metadataStore = newTelemetryMetadataStore(baseStore, d.tracer)
+		d.metadataStore = newTelemetryMetadataStore(baseStore, d.logger, d.tracer)
 	}
 	return d.metadataStore, nil
 }
@@ -98,7 +102,7 @@ func (d *TelemetryDataStoreFactory) NewExecutionStore() (persistence.ExecutionSt
 		if err != nil {
 			return nil, err
 		}
-		d.executionStore = newTelemetryExecutionStore(baseStore, d.tracer)
+		d.executionStore = newTelemetryExecutionStore(baseStore, d.logger, d.tracer)
 	}
 	return d.executionStore, nil
 }
@@ -109,7 +113,7 @@ func (d *TelemetryDataStoreFactory) NewQueue(queueType persistence.QueueType) (p
 		if err != nil {
 			return baseQueue, err
 		}
-		d.queue = newTelemetryQueue(baseQueue, d.tracer)
+		d.queue = newTelemetryQueue(baseQueue, d.logger, d.tracer)
 	}
 	return d.queue, nil
 }
@@ -120,7 +124,7 @@ func (d *TelemetryDataStoreFactory) NewQueueV2() (persistence.QueueV2, error) {
 		if err != nil {
 			return baseQueue, err
 		}
-		d.queueV2 = newTelemetryQueueV2(baseQueue, d.tracer)
+		d.queueV2 = newTelemetryQueueV2(baseQueue, d.logger, d.tracer)
 	}
 	return d.queueV2, nil
 }
@@ -131,7 +135,7 @@ func (d *TelemetryDataStoreFactory) NewClusterMetadataStore() (persistence.Clust
 		if err != nil {
 			return nil, err
 		}
-		d.clusterMDStore = newTelemetryClusterMetadataStore(baseStore, d.tracer)
+		d.clusterMDStore = newTelemetryClusterMetadataStore(baseStore, d.logger, d.tracer)
 	}
 	return d.clusterMDStore, nil
 }
@@ -142,7 +146,7 @@ func (d *TelemetryDataStoreFactory) NewNexusEndpointStore() (persistence.NexusEn
 		if err != nil {
 			return nil, err
 		}
-		d.nexusEndpointStore = newTelemetryNexusEndpointStore(baseStore, d.tracer)
+		d.nexusEndpointStore = newTelemetryNexusEndpointStore(baseStore, d.logger, d.tracer)
 	}
 	return d.nexusEndpointStore, nil
 }

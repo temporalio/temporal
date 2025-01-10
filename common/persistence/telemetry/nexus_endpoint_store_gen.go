@@ -32,22 +32,34 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/telemetry"
 )
 
 // telemetryNexusEndpointStore implements NexusEndpointStore interface instrumented with OpenTelemetry.
 type telemetryNexusEndpointStore struct {
 	_sourcePersistence.NexusEndpointStore
-	tracer trace.Tracer
+	tracer    trace.Tracer
+	logger    log.Logger
+	debugMode bool
 }
 
 // newTelemetryNexusEndpointStore returns telemetryNexusEndpointStore.
-func newTelemetryNexusEndpointStore(base _sourcePersistence.NexusEndpointStore, tracer trace.Tracer) telemetryNexusEndpointStore {
+func newTelemetryNexusEndpointStore(
+	base _sourcePersistence.NexusEndpointStore,
+	logger log.Logger,
+	tracer trace.Tracer,
+) telemetryNexusEndpointStore {
 	return telemetryNexusEndpointStore{
 		NexusEndpointStore: base,
 		tracer:             tracer,
+		debugMode:          telemetry.DebugMode(),
 	}
 }
 
@@ -56,9 +68,23 @@ func (d telemetryNexusEndpointStore) CreateOrUpdateNexusEndpoint(ctx context.Con
 	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/CreateOrUpdateNexusEndpoint")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("NexusEndpointStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("CreateOrUpdateNexusEndpoint"))
+
 	err = d.NexusEndpointStore.CreateOrUpdateNexusEndpoint(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalCreateOrUpdateNexusEndpointRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -69,9 +95,23 @@ func (d telemetryNexusEndpointStore) DeleteNexusEndpoint(ctx context.Context, re
 	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/DeleteNexusEndpoint")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("NexusEndpointStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("DeleteNexusEndpoint"))
+
 	err = d.NexusEndpointStore.DeleteNexusEndpoint(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.DeleteNexusEndpointRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
 	}
 
 	return
@@ -82,9 +122,30 @@ func (d telemetryNexusEndpointStore) GetNexusEndpoint(ctx context.Context, reque
 	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/GetNexusEndpoint")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("NexusEndpointStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("GetNexusEndpoint"))
+
 	ip1, err = d.NexusEndpointStore.GetNexusEndpoint(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.GetNexusEndpointRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalNexusEndpoint for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
@@ -95,9 +156,30 @@ func (d telemetryNexusEndpointStore) ListNexusEndpoints(ctx context.Context, req
 	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/ListNexusEndpoints")
 	defer span.End()
 
+	span.SetAttributes(attribute.Key("persistence.store").String("NexusEndpointStore"))
+	span.SetAttributes(attribute.Key("persistence.method").String("ListNexusEndpoints"))
+
 	ip1, err = d.NexusEndpointStore.ListNexusEndpoints(ctx, request)
 	if err != nil {
 		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.ListNexusEndpointsRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalListNexusEndpointsResponse for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
 	}
 
 	return
