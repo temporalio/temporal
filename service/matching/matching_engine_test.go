@@ -3935,10 +3935,10 @@ func (m *testTaskManager) UpdateTaskQueueUserData(_ context.Context, request *pe
 		}
 		tlm := m.getQueueManager(dbq)
 		tlm.Lock()
-		defer tlm.Unlock()
 		newData := common.CloneProto(update.UserData)
 		newData.Version++
 		tlm.userData = newData
+		tlm.Unlock()
 	}
 	return nil
 }

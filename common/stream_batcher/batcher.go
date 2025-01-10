@@ -66,11 +66,11 @@ type BatcherOptions struct {
 
 // NewBatcher creates a Batcher. `fn` is the processing function, `opts` are the timing options.
 // `clock` is usually clock.NewRealTimeSource but can be a fake time source for testing.
-func NewBatcher[T, R any](fn func([]T) R, opts BatcherOptions, clock clock.TimeSource) *Batcher[T, R] {
+func NewBatcher[T, R any](fn func([]T) R, opts BatcherOptions, timeSource clock.TimeSource) *Batcher[T, R] {
 	return &Batcher[T, R]{
 		fn:         fn,
 		opts:       opts,
-		timeSource: clock,
+		timeSource: timeSource,
 		submitC:    make(chan batchPair[T, R]),
 	}
 }
@@ -122,8 +122,8 @@ func (b *Batcher[T, R]) loop(runningC *chan struct{}) {
 		// store nil so that Add knows it should start a goroutine
 		b.running.Store(nil)
 		// if Add loaded s.running after we decided to stop but before we Stored nil, so it
-		// thought we were running when we're not, then we need to wait it up so that can start
-		// us again.
+		// thought we were running when we're not, then we need to wake it up so that it can
+		// start us again.
 		close(*runningC)
 	}()
 
@@ -145,8 +145,8 @@ func (b *Batcher[T, R]) loop(runningC *chan struct{}) {
 		}
 		idleT.Stop()
 
-		// try to add more items. stop after a gap of MaxGap, total time of MaxTotalWait, or
-		// MaxItems items.
+		// try to add more items. stop after a gap of MinDelay, total time of MaxDelay,
+		// or MaxItems items.
 		maxWaitC, maxWaitT := b.timeSource.NewTimer(b.opts.MaxDelay)
 	loop:
 		for len(items) < b.opts.MaxItems {

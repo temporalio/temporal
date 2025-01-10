@@ -165,8 +165,8 @@ type (
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
 		replicationLock sync.Mutex
-		// Serialize and batch user data updates. Key: namespace id as string.
-		userDataUpdateBatchers collection.SyncMap[string, *stream_batcher.Batcher[*userDataUpdate, error]]
+		// Serialize and batch user data updates by namespace.
+		userDataUpdateBatchers collection.SyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]]
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
 	}
@@ -248,7 +248,7 @@ func NewEngine(
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		userDataUpdateBatchers:    collection.NewSyncMap[string, *stream_batcher.Batcher[*userDataUpdate, error]](),
+		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -1805,7 +1805,7 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
-	namespaceId := request.NamespaceId
+	namespaceId := namespace.ID(request.NamespaceId)
 	persistenceErr, ctxErr := e.getUserDataBatcher(namespaceId).Add(ctx, &userDataUpdate{
 		taskQueue: request.GetTaskQueue(),
 		update: persistence.SingleTaskQueueUserDataUpdate{
@@ -2134,7 +2134,7 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
 
-func (e *matchingEngineImpl) getUserDataBatcher(namespaceId string) *stream_batcher.Batcher[*userDataUpdate, error] {
+func (e *matchingEngineImpl) getUserDataBatcher(namespaceId namespace.ID) *stream_batcher.Batcher[*userDataUpdate, error] {
 	// Note that values are never removed from this map. The batcher's goroutine will exit
 	// after the idle time, though, which gets most of the desired resource savings.
 	if batcher, ok := e.userDataUpdateBatchers.Get(namespaceId); ok {
@@ -2148,10 +2148,10 @@ func (e *matchingEngineImpl) getUserDataBatcher(namespaceId string) *stream_batc
 	return batcher
 }
 
-func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId string, batch []*userDataUpdate) error {
+func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, batch []*userDataUpdate) error {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-	// TODO: should use namespace id here
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespaceId))
+	// TODO: should use namespace name here
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespaceId.String()))
 	defer cancel()
 
 	// convert to map
@@ -2162,7 +2162,7 @@ func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId string, batch 
 
 	// now apply the batch of updates
 	return e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-		NamespaceID: namespaceId,
+		NamespaceID: namespaceId.String(),
 		Updates:     updatesMap,
 	})
 }

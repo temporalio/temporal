@@ -35,6 +35,9 @@ import (
 	"go.temporal.io/server/common/clock"
 )
 
+// this test uses time.Sleep to allow goroutines to get into a blocked state
+//
+//nolint:forbidigo
 func TestStreamBatcher_MinDelay(t *testing.T) {
 	clk := clock.NewEventTimeSource()
 
@@ -101,6 +104,9 @@ func TestStreamBatcher_MinDelay(t *testing.T) {
 	wg.Wait()
 }
 
+// this test uses time.Sleep to allow goroutines to get into a blocked state
+//
+//nolint:forbidigo
 func TestStreamBatcher_MaxDelay(t *testing.T) {
 	clk := clock.NewEventTimeSource()
 
@@ -184,6 +190,9 @@ func TestStreamBatcher_MaxDelay(t *testing.T) {
 	wg.Wait()
 }
 
+// this test uses time.Sleep to allow goroutines to get into a blocked state
+//
+//nolint:forbidigo
 func TestStreamBatcher_MaxItems(t *testing.T) {
 	clk := clock.NewEventTimeSource()
 
