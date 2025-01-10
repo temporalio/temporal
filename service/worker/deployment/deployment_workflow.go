@@ -303,9 +303,9 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 
 		// sync to task queues
 		if workflow.GetVersion(ctx, "syncToTaskQueues", workflow.DefaultVersion, 0) == workflow.DefaultVersion {
-			err = d.syncToTaskQueues1(ctx)
+			err = d.syncToTaskQueues0(ctx)
 		} else {
-			err = d.syncToTaskQueues2(ctx)
+			err = d.syncToTaskQueues1(ctx)
 		}
 		if err != nil {
 			// TODO: if this fails, should we roll back anything?
@@ -329,7 +329,7 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 	}, nil
 }
 
-func (d *DeploymentWorkflowRunner) syncToTaskQueues1(ctx workflow.Context) error {
+func (d *DeploymentWorkflowRunner) syncToTaskQueues0(ctx workflow.Context) error {
 	syncReq := &deploymentspb.SyncUserDataRequest{
 		Deployment: d.State.Deployment,
 	}
@@ -359,7 +359,7 @@ func (d *DeploymentWorkflowRunner) syncToTaskQueues1(ctx workflow.Context) error
 	return nil
 }
 
-func (d *DeploymentWorkflowRunner) syncToTaskQueues2(ctx workflow.Context) error {
+func (d *DeploymentWorkflowRunner) syncToTaskQueues1(ctx workflow.Context) error {
 	const batchSize = 100
 	type nameDataPair struct {
 		name string
