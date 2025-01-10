@@ -1719,6 +1719,11 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 
 	ai.Paused = incomingActivityInfo.GetPaused()
 
+	ai.RetryInitialInterval = incomingActivityInfo.GetRetryInitialInterval()
+	ai.RetryMaximumInterval = incomingActivityInfo.GetRetryMaximumInterval()
+	ai.RetryMaximumAttempts = incomingActivityInfo.GetRetryMaximumAttempts()
+	ai.RetryBackoffCoefficient = incomingActivityInfo.GetRetryBackoffCoefficient()
+
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
 	ms.approximateSize += ai.Size()
