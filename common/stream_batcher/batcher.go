@@ -35,10 +35,10 @@ import (
 // The processing function will be called on batches of items in a single-threaded manner, and
 // Add will block while fn is running.
 type Batcher[T, R any] struct {
-	fn    func([]T) R          // batch executor function
-	opts  BatcherOptions       // timing/size options
-	clock clock.TimeSource     // clock for testing
-	ch    chan batchPair[T, R] // channel for submitting items
+	fn         func([]T) R          // batch executor function
+	opts       BatcherOptions       // timing/size options
+	timeSource clock.TimeSource     // clock for testing
+	submitC    chan batchPair[T, R] // channel for submitting items
 	// keeps track of goroutine state:
 	// if goroutine is not running, running == nil.
 	// if it is running, running points to a channel that will be closed when the goroutine exits.
@@ -68,10 +68,10 @@ type BatcherOptions struct {
 // `clock` is usually clock.NewRealTimeSource but can be a fake time source for testing.
 func NewBatcher[T, R any](fn func([]T) R, opts BatcherOptions, clock clock.TimeSource) *Batcher[T, R] {
 	return &Batcher[T, R]{
-		fn:    fn,
-		opts:  opts,
-		clock: clock,
-		ch:    make(chan batchPair[T, R]),
+		fn:         fn,
+		opts:       opts,
+		timeSource: clock,
+		submitC:    make(chan batchPair[T, R]),
 	}
 }
 
@@ -79,22 +79,22 @@ func NewBatcher[T, R any](fn func([]T) R, opts BatcherOptions, clock clock.TimeS
 // canceled or times out. It returns two values: the value that the batch processor returned,
 // and a context error. Even if Add returns a context error, the item may still be processed in
 // the future!
-func (s *Batcher[T, R]) Add(ctx context.Context, t T) (R, error) {
+func (b *Batcher[T, R]) Add(ctx context.Context, t T) (R, error) {
 	resp := make(chan R)
 	pair := batchPair[T, R]{resp: resp, item: t}
 
 	for {
-		runningC := s.running.Load()
+		runningC := b.running.Load()
 		for runningC == nil {
 			// goroutine is not running, try to start it
 			newRunningC := make(chan struct{})
-			if s.running.CompareAndSwap(nil, &newRunningC) {
+			if b.running.CompareAndSwap(nil, &newRunningC) {
 				// we were the first one to notice the nil, start it now
-				go s.loop(&newRunningC)
+				go b.loop(&newRunningC)
 			}
 			// if CompareAndSwap failed, someone else was calling Add at the same time and
 			// started the goroutine already. reload to get the new running channel.
-			runningC = s.running.Load()
+			runningC = b.running.Load()
 		}
 
 		select {
@@ -102,7 +102,7 @@ func (s *Batcher[T, R]) Add(ctx context.Context, t T) (R, error) {
 			// we loaded a non-nil running channel, but it closed while we're waiting to
 			// submit. the goroutine must have just exited. try again.
 			continue
-		case s.ch <- pair:
+		case b.submitC <- pair:
 			select {
 			case r := <-resp:
 				return r, nil
@@ -117,10 +117,10 @@ func (s *Batcher[T, R]) Add(ctx context.Context, t T) (R, error) {
 	}
 }
 
-func (s *Batcher[T, R]) loop(runningC *chan struct{}) {
+func (b *Batcher[T, R]) loop(runningC *chan struct{}) {
 	defer func() {
 		// store nil so that Add knows it should start a goroutine
-		s.running.Store(nil)
+		b.running.Store(nil)
 		// if Add loaded s.running after we decided to stop but before we Stored nil, so it
 		// thought we were running when we're not, then we need to wait it up so that can start
 		// us again.
@@ -135,9 +135,9 @@ func (s *Batcher[T, R]) loop(runningC *chan struct{}) {
 		items, resps = items[:0], resps[:0]
 
 		// wait for first item. if no item after a while, exit the goroutine
-		idleC, idleT := s.clock.NewTimer(s.opts.IdleTime)
+		idleC, idleT := b.timeSource.NewTimer(b.opts.IdleTime)
 		select {
-		case pair := <-s.ch:
+		case pair := <-b.submitC:
 			items = append(items, pair.item)
 			resps = append(resps, pair.resp)
 		case <-idleC:
@@ -147,12 +147,12 @@ func (s *Batcher[T, R]) loop(runningC *chan struct{}) {
 
 		// try to add more items. stop after a gap of MaxGap, total time of MaxTotalWait, or
 		// MaxItems items.
-		maxWaitC, maxWaitT := s.clock.NewTimer(s.opts.MaxDelay)
+		maxWaitC, maxWaitT := b.timeSource.NewTimer(b.opts.MaxDelay)
 	loop:
-		for len(items) < s.opts.MaxItems {
-			gapC, gapT := s.clock.NewTimer(s.opts.MinDelay)
+		for len(items) < b.opts.MaxItems {
+			gapC, gapT := b.timeSource.NewTimer(b.opts.MinDelay)
 			select {
-			case pair := <-s.ch:
+			case pair := <-b.submitC:
 				items = append(items, pair.item)
 				resps = append(resps, pair.resp)
 			case <-gapC:
@@ -166,7 +166,7 @@ func (s *Batcher[T, R]) loop(runningC *chan struct{}) {
 		maxWaitT.Stop()
 
 		// process batch
-		r := s.fn(items)
+		r := b.fn(items)
 
 		// send responses
 		for _, resp := range resps {
