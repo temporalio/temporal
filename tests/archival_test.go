@@ -317,7 +317,7 @@ func (s *ArchivalSuite) isMutableStateDeleted(namespaceID namespace.ID, executio
 
 func (s *ArchivalSuite) startAndFinishWorkflow(
 	id, wt, tq string,
-	namespace namespace.Name,
+	nsName namespace.Name,
 	numActivities, numRuns int,
 ) []archivalWorkflowInfo {
 	identity := "worker1"
@@ -326,7 +326,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           namespace.String(),
+		Namespace:           nsName.String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -347,7 +347,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 	runCounter := 1
 
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		branchToken, err := s.getBranchToken(namespace, task.WorkflowExecution)
+		branchToken, err := s.getBranchToken(nsName, task.WorkflowExecution)
 		s.NoError(err)
 
 		workflowInfos[runCounter-1] = archivalWorkflowInfo{
@@ -411,7 +411,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           namespace.String(),
+		Namespace:           nsName.String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -446,12 +446,12 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 }
 
 func (s *ArchivalSuite) getBranchToken(
-	namespace namespace.Name,
+	nsName namespace.Name,
 	execution *commonpb.WorkflowExecution,
 ) ([]byte, error) {
 
 	descResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
-		Namespace: namespace.String(),
+		Namespace: nsName.String(),
 		Execution: execution,
 	})
 	if err != nil {
