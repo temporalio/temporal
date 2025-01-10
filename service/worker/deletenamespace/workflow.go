@@ -25,9 +25,8 @@
 package deletenamespace
 
 import (
-	stderrors "errors"
 	"fmt"
-	"strings"
+	"slices"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -96,32 +95,26 @@ var (
 
 func validateParams(params *DeleteNamespaceWorkflowParams) error {
 	if params.Namespace.IsEmpty() && params.NamespaceID.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace or namespace ID is required", "", nil)
+		return errors.NewInvalidArgument("namespace or namespace ID is required", nil)
 	}
-
 	if !params.Namespace.IsEmpty() && !params.NamespaceID.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("only one of namespace or namespace ID must be set", "", nil)
+		return errors.NewInvalidArgument("only one of namespace or namespace ID must be set", nil)
 	}
-
 	params.DeleteExecutionsConfig.ApplyDefaults()
-
 	return nil
 }
 
-func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace.Name, nsClusters []string) error {
+func validateNamespace(ctx workflow.Context, nsInfo getNamespaceInfoResult) error {
 
-	if nsName == primitives.SystemLocalNamespace || nsID == primitives.SystemNamespaceID {
-		return temporal.NewNonRetryableApplicationError("unable to delete system namespace", errors.ValidationErrorErrType, nil, nil)
+	if nsInfo.Namespace == primitives.SystemLocalNamespace || nsInfo.NamespaceID == primitives.SystemNamespaceID {
+		return errors.NewFailedPrecondition("unable to delete system namespace", nil)
 	}
 
-	// Disable namespace deletion if namespace is replicate because:
-	//  - If namespace is passive in the current cluster, then WF executions will keep coming from
-	//    the active cluster and namespace will never be deleted (ReclaimResourcesWorkflow will fail).
-	//  - If namespace is active in the current cluster, then it technically can be deleted (and
-	//    in this case it will be deleted from this cluster only because delete operation is not replicated),
-	//    but this is confusing for the users, as they might expect that namespace is deleted from all clusters.
-	if len(nsClusters) > 1 {
-		return temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is replicated in several clusters [%s]: remove all other cluster and retry", nsName, strings.Join(nsClusters, ",")), errors.ValidationErrorErrType, nil)
+	// Prevent namespace deletion if namespace is passive in the current cluster,
+	// because then WF executions will keep coming from the active cluster and
+	// namespace will never be deleted (ReclaimResourcesWorkflow will fail).
+	if slices.Contains(nsInfo.Clusters, nsInfo.CurrentCluster) && nsInfo.ActiveCluster != nsInfo.CurrentCluster {
+		return errors.NewFailedPrecondition(fmt.Sprintf("namespace %[1]s is passive in current cluster %[2]s: remove cluster %[2]s from cluster list or make namespace active in this cluster and retry", nsInfo.Namespace, nsInfo.CurrentCluster), nil)
 	}
 
 	// NOTE: there is very little chance that another cluster is added after the check above,
@@ -130,13 +123,15 @@ func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace
 	var la *localActivities
 
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err := workflow.ExecuteLocalActivity(ctx1, la.ValidateProtectedNamespacesActivity, nsName).Get(ctx, nil)
+	err := workflow.ExecuteLocalActivity(ctx1, la.ValidateProtectedNamespacesActivity, nsInfo.Namespace).Get(ctx, nil)
 	if err != nil {
-		var appErr *temporal.ApplicationError
-		if stderrors.As(err, &appErr) {
-			return appErr
-		}
-		return fmt.Errorf("%w: ValidateProtectedNamespacesActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return err
+	}
+
+	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+	err = workflow.ExecuteLocalActivity(ctx2, la.ValidateNexusEndpointsActivity, nsInfo.NamespaceID, nsInfo.Namespace).Get(ctx, nil)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -166,25 +161,22 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	var namespaceInfo getNamespaceInfoResult
 	err := workflow.ExecuteLocalActivity(ctx1, la.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
 	if err != nil {
-		ns := params.Namespace.String()
-		if ns == "" {
-			ns = params.NamespaceID.String()
-		}
-		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", ns), errors.ValidationErrorErrType, err)
-	}
-	params.Namespace = namespaceInfo.Namespace
-	params.NamespaceID = namespaceInfo.NamespaceID
-
-	// Step 1.1. Validate namespace.
-	if err := validateNamespace(ctx, params.NamespaceID, params.Namespace, namespaceInfo.Clusters); err != nil {
 		return result, err
 	}
+
+	// Step 1.1. Validate namespace.
+	if err = validateNamespace(ctx, namespaceInfo); err != nil {
+		return result, err
+	}
+
+	params.Namespace = namespaceInfo.Namespace
+	params.NamespaceID = namespaceInfo.NamespaceID
 
 	// Step 2. Mark namespace as deleted.
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx2, la.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
 	if err != nil {
-		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 
 	result.DeletedNamespaceID = params.NamespaceID
@@ -193,13 +185,13 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	ctx3 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx3, la.GenerateDeletedNamespaceNameActivity, params.NamespaceID, params.Namespace).Get(ctx, &result.DeletedNamespace)
 	if err != nil {
-		return result, fmt.Errorf("%w: GenerateDeletedNamespaceNameActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 
 	ctx31 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx31, la.RenameNamespaceActivity, params.Namespace, result.DeletedNamespace).Get(ctx, nil)
 	if err != nil {
-		return result, fmt.Errorf("%w: RenameNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 
 	// Step 4. Reclaim workflow resources asynchronously.
@@ -215,9 +207,9 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 		NamespaceDeleteDelay: params.NamespaceDeleteDelay,
 	})
 	var reclaimResourcesExecution workflow.Execution
-	if err := reclaimResourcesFuture.GetChildWorkflowExecution().Get(ctx, &reclaimResourcesExecution); err != nil {
-		logger.Error("Unable to execute child workflow.", tag.Error(err))
-		return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, reclaimresources.WorkflowName, err)
+	if err = reclaimResourcesFuture.GetChildWorkflowExecution().Get(ctx, &reclaimResourcesExecution); err != nil {
+		logger.Error("Child workflow error.", tag.Error(err))
+		return result, err
 	}
 	logger.Info("Child workflow executed successfully.", tag.NewStringTag("wf-child-type", reclaimresources.WorkflowName))
 

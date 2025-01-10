@@ -30,6 +30,8 @@ import (
 	"fmt"
 	"slices"
 
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
@@ -56,6 +58,7 @@ type (
 		clusterMetadata            *cluster.Config
 		persistenceFactoryProvider persistenceClient.FactoryProviderFn
 		metricsHandler             metrics.Handler
+		tracerProvider             trace.TracerProvider
 	}
 )
 
@@ -178,6 +181,7 @@ func initSystemNamespaces(
 		customDataStoreFactory,
 		logger,
 		metricsHandler,
+		noop.NewTracerProvider(),
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,

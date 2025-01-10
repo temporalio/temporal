@@ -556,7 +556,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        tv.NamespaceName().String(),
 		Description:                      tv.Any().String(),
-		WorkflowExecutionRetentionPeriod: tv.InfiniteTimeout(),
+		WorkflowExecutionRetentionPeriod: tv.Any().InfiniteTimeout(),
 		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
 		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
 	})
@@ -570,7 +570,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
 	s.Error(err)
 	s.Nil(delResp)
 
-	var invalidArgErr *serviceerror.InvalidArgument
-	s.ErrorAs(err, &invalidArgErr)
-	s.Equal(fmt.Sprintf("namespace %s is protected from deletion", tv.NamespaceName().String()), invalidArgErr.Message)
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPreconditionErr)
+	s.Equal(fmt.Sprintf("namespace %s is protected from deletion", tv.NamespaceName().String()), failedPreconditionErr.Message)
 }

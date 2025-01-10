@@ -38,6 +38,8 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/metric"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
@@ -423,10 +425,15 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 	return obj.Spec.Decode(e.Spec)
 }
 
-func debugMode() bool {
+func DebugMode() bool {
 	isDebug, err := strconv.ParseBool(os.Getenv(debugModeEnvVar))
 	if err != nil {
 		return false
 	}
 	return isDebug
+}
+
+func IsEnabled(tp trace.TracerProvider) bool {
+	_, isNoop := tp.(noop.TracerProvider)
+	return !isNoop
 }

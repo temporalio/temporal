@@ -26,7 +26,6 @@ package tests
 
 import (
 	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -73,14 +72,14 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
 			Namespace:    s.Namespace(),
-			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			Identity:     tv.WorkerIdentity(),
 		})
 		s.NoError(err)
 		wes = append(wes, &commonpb.WorkflowExecution{
-			WorkflowId: tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId: tv.WithWorkflowIDNumber(i).WorkflowID(),
 			RunId:      we.RunId,
 		})
 	}
@@ -217,14 +216,14 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
 			Namespace:    s.Namespace(),
-			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			Identity:     tv.WorkerIdentity(),
 		})
 		s.NoError(err)
 		wes = append(wes, &commonpb.WorkflowExecution{
-			WorkflowId: tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId: tv.WithWorkflowIDNumber(i).WorkflowID(),
 			RunId:      we.RunId,
 		})
 	}
@@ -332,14 +331,14 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
 			Namespace:    s.Namespace(),
-			WorkflowId:   tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			Identity:     tv.WorkerIdentity(),
 		})
 		s.NoError(err)
 		wes = append(wes, &commonpb.WorkflowExecution{
-			WorkflowId: tv.WorkflowID(strconv.Itoa(i)),
+			WorkflowId: tv.WithWorkflowIDNumber(i).WorkflowID(),
 			RunId:      we.RunId,
 		})
 	}

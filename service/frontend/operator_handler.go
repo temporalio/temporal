@@ -26,10 +26,10 @@ package frontend
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"sync/atomic"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	svc "go.temporal.io/server/client"
@@ -608,47 +607,15 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 ) (_ *operatorservice.DeleteNamespaceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
-	// validate request
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
-	if !h.config.AllowDeleteNamespaceIfNexusEndpointTarget() {
-		// Get the namespace name in case the request is to delete by ID so we can verify that this namespace is not
-		// associated with a Nexus endpoint.
-		requestNSName := request.GetNamespace()
-		if request.GetNamespaceId() != "" {
-			nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-			if err != nil {
-				return nil, err
-			}
-			requestNSName = nsName.String()
-		}
-
-		// Prevent deletion of a namespace that is targeted by a Nexus endpoint.
-		var nextPageToken []byte
-		for {
-			resp, err := h.nexusEndpointClient.List(ctx, &operatorservice.ListNexusEndpointsRequest{
-				// Don't specify PageSize and fallback to default.
-				NextPageToken: nextPageToken,
-			})
-			if err != nil {
-				return nil, err
-			}
-			for _, entry := range resp.GetEndpoints() {
-				if nsName := entry.GetSpec().GetTarget().GetWorker().GetNamespace(); nsName == requestNSName {
-					return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot delete a namespace that is a target of a Nexus endpoint (%s)", entry.GetSpec().GetName()))
-				}
-			}
-			nextPageToken = resp.NextPageToken
-			if len(nextPageToken) == 0 {
-				break
-			}
-		}
-	}
-
-	namespaceDeleteDelay := h.config.DeleteNamespaceNamespaceDeleteDelay()
-	if request.NamespaceDeleteDelay != nil {
+	// If NamespaceDeleteDelay is not provided, the default delay configured in the cluster should be used.
+	var namespaceDeleteDelay time.Duration
+	if request.NamespaceDeleteDelay == nil {
+		namespaceDeleteDelay = h.config.DeleteNamespaceNamespaceDeleteDelay()
+	} else {
 		namespaceDeleteDelay = request.NamespaceDeleteDelay.AsDuration()
 	}
 
@@ -679,16 +646,11 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, deletenamespace.WorkflowName, err))
 	}
 
-	// Wait for workflow to complete.
+	// Wait for the workflow to complete.
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		// Special handling for validation errors. Convert them to InvalidArgument.
-		var appErr *temporal.ApplicationError
-		if errors.As(err, &appErr) && appErr.Type() == delnserrors.ValidationErrorErrType {
-			return nil, serviceerror.NewInvalidArgument(appErr.Message())
-		}
-		return nil, serviceerror.NewSystemWorkflow(&commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}, err)
+		return nil, delnserrors.ToServiceError(err, run.GetID(), run.GetRunID())
 	}
 
 	return &operatorservice.DeleteNamespaceResponse{
