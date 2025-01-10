@@ -26,7 +26,7 @@ package deletenamespace
 
 import (
 	"fmt"
-	"strings"
+	"slices"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -104,20 +104,17 @@ func validateParams(params *DeleteNamespaceWorkflowParams) error {
 	return nil
 }
 
-func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace.Name, nsClusters []string) error {
+func validateNamespace(ctx workflow.Context, nsInfo getNamespaceInfoResult) error {
 
-	if nsName == primitives.SystemLocalNamespace || nsID == primitives.SystemNamespaceID {
+	if nsInfo.Namespace == primitives.SystemLocalNamespace || nsInfo.NamespaceID == primitives.SystemNamespaceID {
 		return errors.NewFailedPrecondition("unable to delete system namespace", nil)
 	}
 
-	// Disable namespace deletion if namespace is replicate because:
-	//  - If namespace is passive in the current cluster, then WF executions will keep coming from
-	//    the active cluster and namespace will never be deleted (ReclaimResourcesWorkflow will fail).
-	//  - If namespace is active in the current cluster, then it technically can be deleted (and
-	//    in this case it will be deleted from this cluster only because delete operation is not replicated),
-	//    but this is confusing for the users, as they might expect that namespace is deleted from all clusters.
-	if len(nsClusters) > 1 {
-		return errors.NewFailedPrecondition(fmt.Sprintf("namespace %s is replicated in several clusters [%s]: remove all other cluster and retry", nsName, strings.Join(nsClusters, ",")), nil)
+	// Prevent namespace deletion if namespace is passive in the current cluster,
+	// because then WF executions will keep coming from the active cluster and
+	// namespace will never be deleted (ReclaimResourcesWorkflow will fail).
+	if slices.Contains(nsInfo.Clusters, nsInfo.CurrentCluster) && nsInfo.ActiveCluster != nsInfo.CurrentCluster {
+		return errors.NewFailedPrecondition(fmt.Sprintf("namespace %[1]s is passive in current cluster %[2]s: remove cluster %[2]s from cluster list or make namespace active in this cluster and retry", nsInfo.Namespace, nsInfo.CurrentCluster), nil)
 	}
 
 	// NOTE: there is very little chance that another cluster is added after the check above,
@@ -126,13 +123,13 @@ func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace
 	var la *localActivities
 
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err := workflow.ExecuteLocalActivity(ctx1, la.ValidateProtectedNamespacesActivity, nsName).Get(ctx, nil)
+	err := workflow.ExecuteLocalActivity(ctx1, la.ValidateProtectedNamespacesActivity, nsInfo.Namespace).Get(ctx, nil)
 	if err != nil {
 		return err
 	}
 
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx2, la.ValidateNexusEndpointsActivity, nsID, nsName).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx2, la.ValidateNexusEndpointsActivity, nsInfo.NamespaceID, nsInfo.Namespace).Get(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -166,13 +163,14 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	if err != nil {
 		return result, err
 	}
-	params.Namespace = namespaceInfo.Namespace
-	params.NamespaceID = namespaceInfo.NamespaceID
 
 	// Step 1.1. Validate namespace.
-	if err = validateNamespace(ctx, params.NamespaceID, params.Namespace, namespaceInfo.Clusters); err != nil {
+	if err = validateNamespace(ctx, namespaceInfo); err != nil {
 		return result, err
 	}
+
+	params.Namespace = namespaceInfo.Namespace
+	params.NamespaceID = namespaceInfo.NamespaceID
 
 	// Step 2. Mark namespace as deleted.
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
