@@ -357,6 +357,10 @@ func IsServiceHandlerRetryableError(err error) bool {
 	return false
 }
 
+func IsNamespaceHandoverError(err error) bool {
+	return err.Error() == ErrNamespaceHandover.Error()
+}
+
 func IsStickyWorkerUnavailable(err error) bool {
 	switch err.(type) {
 	case *serviceerrors.StickyWorkerUnavailable:
