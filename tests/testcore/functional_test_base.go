@@ -167,7 +167,6 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 		dynamicconfig.TaskQueueScannerEnabled.Key():  false,
 		dynamicconfig.ExecutionsScannerEnabled.Key(): false,
 		dynamicconfig.BuildIdScavengerEnabled.Key():  false,
-		dynamicconfig.EnableNexus.Key():              true,
 		// Better to read through in tests than add artificial sleeps (which is what we previously had).
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
 	})

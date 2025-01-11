@@ -188,6 +188,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		assert.NoError(t, err)
+		if err != nil {
+			return
+		}
 		assert.Equal(t, 1, len(desc.PendingNexusOperations))
 		if len(desc.PendingNexusOperations) < 1 {
 			return
@@ -440,7 +443,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			},
 		},
 	}
-	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	h := nexustest.Handler{
 		OnStartOperation: func(
@@ -454,7 +457,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			s.Len(options.Links, 1)
 			var links []*commonpb.Link
 			for _, nexusLink := range options.Links {
-				link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+				link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 				s.NoError(err)
 				links = append(links, &commonpb.Link{
 					Variant: &commonpb.Link_WorkflowEvent_{
@@ -1464,7 +1467,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	s.NoError(err)
 
 	canStartCh <- struct{}{}
-	<-cancelSentCh
+	s.WaitForChannel(ctx, cancelSentCh)
 
 	// Terminate the workflow for good measure.
 	err = s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
@@ -1793,22 +1796,20 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 		{
 			outcome: "fail-handler-internal",
 			checkPendingError: func(t *testing.T, pendingErr error) {
-				var handlerErr *nexus.HandlerError
-				require.ErrorAs(t, pendingErr, &handlerErr)
-				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				var appErr *temporal.ApplicationError
-				require.ErrorAs(t, handlerErr.Cause, &appErr)
+				require.ErrorAs(t, pendingErr, &appErr)
+				require.Equal(t, "handler error (INTERNAL): intentional internal error", appErr.Message())
+				require.ErrorAs(t, appErr.Unwrap(), &appErr)
 				require.Equal(t, "intentional internal error", appErr.Message())
 			},
 		},
 		{
 			outcome: "fail-handler-app-error",
 			checkPendingError: func(t *testing.T, pendingErr error) {
-				var handlerErr *nexus.HandlerError
-				require.ErrorAs(t, pendingErr, &handlerErr)
-				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				var appErr *temporal.ApplicationError
-				require.ErrorAs(t, handlerErr.Cause, &appErr)
+				require.ErrorAs(t, pendingErr, &appErr)
+				require.Equal(t, "handler error (INTERNAL): app error", appErr.Message())
+				require.ErrorAs(t, appErr.Unwrap(), &appErr)
 				require.Equal(t, "app error", appErr.Message())
 				require.Equal(t, "TestError", appErr.Type())
 				var details string
@@ -1821,11 +1822,10 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 			checkWorkflowError: func(t *testing.T, wfErr error) {
 				var opErr *temporal.NexusOperationError
 				require.ErrorAs(t, wfErr, &opErr)
-				var handlerErr *nexus.HandlerError
-				require.ErrorAs(t, opErr, &handlerErr)
-				require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
 				var appErr *temporal.ApplicationError
-				require.ErrorAs(t, handlerErr.Cause, &appErr)
+				require.ErrorAs(t, opErr, &appErr)
+				require.Equal(t, "handler error (BAD_REQUEST): bad request", appErr.Message())
+				require.ErrorAs(t, appErr.Unwrap(), &appErr)
 				require.Equal(t, "bad request", appErr.Message())
 
 			},
@@ -1868,7 +1868,13 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 				require.EventuallyWithT(t, func(t *assert.CollectT) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 					require.NoError(t, err)
+					if err != nil {
+						return
+					}
 					assert.Len(t, desc.PendingNexusOperations, 1)
+					if len(desc.PendingNexusOperations) != 1 {
+						return
+					}
 					f = desc.PendingNexusOperations[0].LastAttemptFailure
 					assert.NotNil(t, f)
 
@@ -2095,12 +2101,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	}, callerWF)
 	s.NoError(err)
 
-	var handlerErr *nexus.HandlerError
-	s.ErrorAs(run.Get(ctx, nil), &handlerErr)
-	s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
 	var appErr *temporal.ApplicationError
-	s.ErrorAs(handlerErr.Cause, &appErr)
-	s.Equal(appErr.Message(), "fail me")
+	s.ErrorAs(run.Get(ctx, nil), &appErr)
+	s.Equal("handler error (BAD_REQUEST): fail me", appErr.Message())
+	s.ErrorAs(appErr.Unwrap(), &appErr)
+	s.Equal("fail me", appErr.Message())
 	var failure nexus.Failure
 	s.NoError(appErr.Details(&failure))
 	s.Equal(map[string]string{"key": "val"}, failure.Metadata)

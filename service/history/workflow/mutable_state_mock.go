@@ -38,7 +38,6 @@ import (
 	reflect "reflect"
 	time "time"
 
-	nexus "github.com/nexus-rpc/sdk-go/nexus"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
 	deployment "go.temporal.io/api/deployment/v1"
@@ -402,6 +401,18 @@ func (m *MockMutableState) AddHistorySize(size int64) {
 func (mr *MockMutableStateMockRecorder) AddHistorySize(size any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddHistorySize", reflect.TypeOf((*MockMutableState)(nil).AddHistorySize), size)
+}
+
+// AddReapplyCandidateEvent mocks base method.
+func (m *MockMutableState) AddReapplyCandidateEvent(event *history.HistoryEvent) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddReapplyCandidateEvent", event)
+}
+
+// AddReapplyCandidateEvent indicates an expected call of AddReapplyCandidateEvent.
+func (mr *MockMutableStateMockRecorder) AddReapplyCandidateEvent(event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddReapplyCandidateEvent", reflect.TypeOf((*MockMutableState)(nil).AddReapplyCandidateEvent), event)
 }
 
 // AddRecordMarkerEvent mocks base method.
@@ -2052,21 +2063,6 @@ func (mr *MockMutableStateMockRecorder) GetFirstRunID(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFirstRunID", reflect.TypeOf((*MockMutableState)(nil).GetFirstRunID), ctx)
 }
 
-// GetHSMCompletionCallbackArg mocks base method.
-func (m *MockMutableState) GetHSMCompletionCallbackArg(ctx context.Context) (*persistence.HSMCompletionCallbackArg, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHSMCompletionCallbackArg", ctx)
-	ret0, _ := ret[0].(*persistence.HSMCompletionCallbackArg)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetHSMCompletionCallbackArg indicates an expected call of GetHSMCompletionCallbackArg.
-func (mr *MockMutableStateMockRecorder) GetHSMCompletionCallbackArg(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHSMCompletionCallbackArg", reflect.TypeOf((*MockMutableState)(nil).GetHSMCompletionCallbackArg), ctx)
-}
-
 // GetHistorySize mocks base method.
 func (m *MockMutableState) GetHistorySize() int64 {
 	m.ctrl.T.Helper()
@@ -2196,21 +2192,6 @@ func (mr *MockMutableStateMockRecorder) GetNextEventID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextEventID", reflect.TypeOf((*MockMutableState)(nil).GetNextEventID))
 }
 
-// GetNexusCompletion mocks base method.
-func (m *MockMutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNexusCompletion", ctx)
-	ret0, _ := ret[0].(nexus.OperationCompletion)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetNexusCompletion indicates an expected call of GetNexusCompletion.
-func (mr *MockMutableStateMockRecorder) GetNexusCompletion(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusCompletion", reflect.TypeOf((*MockMutableState)(nil).GetNexusCompletion), ctx)
-}
-
 // GetPendingActivityInfos mocks base method.
 func (m *MockMutableState) GetPendingActivityInfos() map[int64]*persistence.ActivityInfo {
 	m.ctrl.T.Helper()
@@ -2321,6 +2302,20 @@ func (m *MockMutableState) GetQueryRegistry() QueryRegistry {
 func (mr *MockMutableStateMockRecorder) GetQueryRegistry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueryRegistry", reflect.TypeOf((*MockMutableState)(nil).GetQueryRegistry))
+}
+
+// GetReapplyCandidateEvents mocks base method.
+func (m *MockMutableState) GetReapplyCandidateEvents() []*history.HistoryEvent {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReapplyCandidateEvents")
+	ret0, _ := ret[0].([]*history.HistoryEvent)
+	return ret0
+}
+
+// GetReapplyCandidateEvents indicates an expected call of GetReapplyCandidateEvents.
+func (mr *MockMutableStateMockRecorder) GetReapplyCandidateEvents() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReapplyCandidateEvents", reflect.TypeOf((*MockMutableState)(nil).GetReapplyCandidateEvents))
 }
 
 // GetRequestCancelInfo mocks base method.

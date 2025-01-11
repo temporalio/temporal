@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
@@ -151,8 +150,6 @@ type (
 	ActivityUpdater func(*persistencespb.ActivityInfo, MutableState) error
 
 	MutableState interface {
-		callbacks.CanGetNexusCompletion
-		callbacks.CanGetHSMCompletionCallbackArg
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 
@@ -450,5 +447,8 @@ type (
 		// If there is a pending workflow task that is not started yet, it'll be rescheduled after
 		// transition start.
 		StartDeploymentTransition(deployment *deploymentpb.Deployment) error
+
+		AddReapplyCandidateEvent(event *historypb.HistoryEvent)
+		GetReapplyCandidateEvents() []*historypb.HistoryEvent
 	}
 )

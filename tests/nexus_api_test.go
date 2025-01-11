@@ -40,15 +40,16 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporalnexus"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	cnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -92,7 +93,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			},
 		},
 	}
-	callerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(callerLink)
+	callerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(callerLink)
 
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  "handler-ns",
@@ -105,7 +106,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			},
 		},
 	}
-	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	type testcase struct {
 		outcome   string
@@ -820,6 +821,54 @@ func (s *NexusApiTestSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTokenM
 		Error:     &nexuspb.HandlerError{},
 	})
 	s.ErrorContains(err, "Operation requested with a token from a different namespace.")
+}
+
+func (s *NexusApiTestSuite) TestNexus_RespondNexusTaskMethods_ValidateFailureDetailsJSON() {
+	ctx := testcore.NewContext()
+
+	tt := tokenspb.NexusTask{
+		NamespaceId: s.GetNamespaceID(s.Namespace()),
+		TaskQueue:   "test",
+		TaskId:      uuid.NewString(),
+	}
+	ttBytes, err := tt.Marshal()
+	s.NoError(err)
+
+	_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		Namespace: s.Namespace(),
+		Identity:  uuid.NewString(),
+		TaskToken: ttBytes,
+		Response: &nexuspb.Response{
+			Variant: &nexuspb.Response_StartOperation{
+				StartOperation: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_OperationError{
+						OperationError: &nexuspb.UnsuccessfulOperationError{
+							OperationState: string(nexus.OperationStateFailed),
+							Failure: &nexuspb.Failure{
+								Details: []byte("not valid JSON"),
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.Equal("failure details must be JSON serializable", invalidArgumentErr.Message)
+
+	_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
+		Namespace: s.Namespace(),
+		Identity:  uuid.NewString(),
+		TaskToken: ttBytes,
+		Error: &nexuspb.HandlerError{
+			Failure: &nexuspb.Failure{
+				Details: []byte("not valid JSON"),
+			},
+		},
+	})
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.Equal("failure details must be JSON serializable", invalidArgumentErr.Message)
 }
 
 func (s *NexusApiTestSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFound() {

@@ -95,6 +95,21 @@ func (c *retryableClient) CancelOutstandingPoll(
 	return resp, err
 }
 
+func (c *retryableClient) CheckTaskQueueUserDataPropagation(
+	ctx context.Context,
+	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CheckTaskQueueUserDataPropagationResponse, error) {
+	var resp *matchingservice.CheckTaskQueueUserDataPropagationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CheckTaskQueueUserDataPropagation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,

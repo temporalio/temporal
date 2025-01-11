@@ -570,6 +570,9 @@ func (r *WorkflowStateReplicatorImpl) backFillEvents(
 		}
 		events = append(events, e)
 	}
+	if len(events) == 0 {
+		return nil
+	}
 	var newRunEvents []*historypb.HistoryEvent
 	var newRunID string
 	if newRunInfo != nil {
@@ -808,6 +811,13 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			if err != nil {
 				return err
 			}
+			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
+			if err != nil {
+				return err
+			}
+			for _, event := range events {
+				localMutableState.AddReapplyCandidateEvent(event)
+			}
 			_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 				ShardID:           r.shardContext.GetShardID(),
 				IsNewBranch:       isNewBranch,
@@ -827,6 +837,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			}
 			prevTxnID = txnID
 			isNewBranch = false
+
 			localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(historyBlob.rawHistory.Data))
 		}
 		return nil
@@ -852,6 +863,9 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		txnID, err := r.shardContext.GenerateTaskID()
 		if err != nil {
 			return err
+		}
+		for _, event := range events {
+			localMutableState.AddReapplyCandidateEvent(event)
 		}
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
@@ -933,24 +947,6 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 		return err
 	}
 
-	lastFirstTxnID, err := r.backfillHistory(
-		ctx,
-		sourceCluster,
-		namespaceID,
-		workflowID,
-		runID,
-		// TODO: The original run id is in the workflow started history event but not in mutable state.
-		// Use the history tree id to be the original run id.
-		// https://github.com/temporalio/temporal/issues/6501
-		branchInfo.GetTreeId(),
-		lastEventItem.GetEventId(),
-		lastEventItem.GetVersion(),
-		newHistoryBranchToken,
-	)
-	if err != nil {
-		return err
-	}
-
 	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -962,17 +958,40 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 		r.logger,
 		ns,
 		sourceMutableState,
-		lastFirstTxnID,
+		common.EmptyEventTaskID, // will be updated below
 		lastEventItem.GetVersion(),
 	)
 	if err != nil {
 		return err
 	}
 
+	lastFirstTxnID, err := r.backfillHistory(
+		ctx,
+		sourceCluster,
+		namespaceID,
+		workflowID,
+		runID,
+		// TODO: The original run id is in the workflow started history event but not in mutable state.
+		// Use the history tree id to be the original run id.
+		// https://github.com/temporalio/temporal/issues/6501
+		branchInfo.GetTreeId(),
+		mutableState,
+		lastEventItem.GetEventId(),
+		lastEventItem.GetVersion(),
+		newHistoryBranchToken,
+		isStateBased,
+	)
+	if err != nil {
+		return err
+	}
+
+	mutableState.GetExecutionInfo().LastFirstEventTxnId = lastFirstTxnID
+
 	err = mutableState.SetCurrentBranchToken(newHistoryBranchToken)
 	if err != nil {
 		return err
 	}
+
 	if newRunInfo != nil {
 		err = r.createNewRunWorkflow(
 			ctx,
@@ -1070,9 +1089,11 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	workflowID string,
 	runID string,
 	originalRunID string,
+	mutableState *workflow.MutableStateImpl,
 	lastEventID int64,
 	lastEventVersion int64,
 	branchToken []byte,
+	isStateBased bool,
 ) (taskID int64, retError error) {
 
 	if runID != originalRunID {
@@ -1150,6 +1171,18 @@ BackfillLoop:
 			return common.EmptyEventTaskID, err
 		}
 
+		if isStateBased {
+			// If backfill suceeds but later event reapply fails, during task's next retry,
+			// we still need to reapply events that have been stored in local DB.
+			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
+			if err != nil {
+				return common.EmptyEventTaskID, err
+			}
+			for _, event := range events {
+				mutableState.AddReapplyCandidateEvent(event)
+			}
+		}
+
 		if historyBlob.nodeID <= lastBatchNodeID {
 			// The history batch already in DB.
 			if len(sortedAncestors) > sortedAncestorsIdx {
@@ -1203,6 +1236,7 @@ BackfillLoop:
 		if err != nil {
 			return common.EmptyEventTaskID, err
 		}
+
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
 			IsNewBranch:       prevBranchID != branchID,

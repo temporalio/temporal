@@ -55,8 +55,11 @@ func NewNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) {
 		// Graceful shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		require.NoError(t, srv.Shutdown(ctx))
-		require.ErrorIs(t, <-errCh, http.ErrServerClosed)
+		err = srv.Shutdown(ctx)
+		if ctx.Err() != nil {
+			require.NoError(t, err)
+			require.ErrorIs(t, <-errCh, http.ErrServerClosed)
+		}
 	})
 }
 

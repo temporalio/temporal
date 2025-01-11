@@ -10,3 +10,7 @@ scrape_configs:
       - targets:
           # port should match value from server config listenAddress.
           - host.docker.internal:8000
+  - job_name: tempo
+    static_configs:
+      - targets:
+          - host.docker.internal:3200
