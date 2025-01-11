@@ -385,7 +385,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	// Query the workflow in the background to have the query delivered with the first workflow task in the Queries map.
 	go func() {
 		_, err := s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowRun.GetID(),
 			},
@@ -401,7 +401,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	util.InterruptibleSleep(ctx, 3*time.Second)
 
 	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
 		Identity:  s.T().Name(),
 	})
@@ -446,7 +446,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	// API.
 	go func() {
 		task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
 			Identity:  s.T().Name(),
 		})
@@ -456,7 +456,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 		}
 
 		_, err = s.FrontendClient().RespondQueryTaskCompleted(ctx, &workflowservice.RespondQueryTaskCompletedRequest{
-			Namespace:     s.Namespace(),
+			Namespace:     s.Namespace().String(),
 			TaskToken:     task.TaskToken,
 			CompletedType: enumspb.QUERY_RESULT_TYPE_FAILED,
 			ErrorMessage:  "my error message",
@@ -469,7 +469,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	}()
 
 	_, err = s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 		},

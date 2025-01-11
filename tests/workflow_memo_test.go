@@ -73,7 +73,7 @@ func (s *WorkflowMemoTestSuite) TestStartWithMemo() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -111,7 +111,7 @@ func (s *WorkflowMemoTestSuite) TestSignalWithStartWithMemo() {
 	signalInput := payloads.EncodeString("my signal input")
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -156,7 +156,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -169,7 +169,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 	s.Eventually(
 		func() bool {
 			resp, err1 := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-				Namespace:       s.Namespace(),
+				Namespace:       s.Namespace().String(),
 				MaximumPageSize: 100,
 				StartTimeFilter: &filterpb.StartTimeFilter{
 					EarliestTime: nil,
@@ -200,7 +200,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 
 	// verify DescribeWorkflowExecution result: workflow running
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: execution,
 	}
 	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
@@ -213,7 +213,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 	s.NoError(err)
 
 	// verify history
-	historyEvents := s.GetHistory(s.Namespace(), execution)
+	historyEvents := s.GetHistory(s.Namespace().String(), execution)
 	s.EqualHistoryEvents(expectedHistory, historyEvents)
 
 	// verify DescribeWorkflowExecution result: workflow closed, but close visibility task not completed
@@ -226,7 +226,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 	s.Eventually(
 		func() bool {
 			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-				Namespace:       s.Namespace(),
+				Namespace:       s.Namespace().String(),
 				MaximumPageSize: 100,
 				StartTimeFilter: &filterpb.StartTimeFilter{
 					EarliestTime: nil,

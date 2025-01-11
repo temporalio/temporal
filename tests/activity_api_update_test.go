@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -56,7 +55,7 @@ type ActivityApiUpdateClientTestSuite struct {
 func (s *ActivityApiUpdateClientTestSuite) SetupSuite() {
 	s.ClientFunctionalSuite.SetupSuite()
 	s.OverrideDynamicConfig(dynamicconfig.ActivityAPIsEnabled, true)
-	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
+	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
 }
 
 func (s *ActivityApiUpdateClientTestSuite) SetupTest() {
@@ -141,7 +140,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 	}, 10*time.Second, 500*time.Millisecond)
 
 	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 		ActivityOptions: &activitypb.ActivityOptions{
@@ -219,7 +218,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 
 	// update schedule_to_close_timeout
 	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 		ActivityOptions: &activitypb.ActivityOptions{
@@ -298,7 +297,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	// also update retry policy interval, make it shorter
 	newScheduleToCloseTimeout := 10 * time.Second
 	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 		ActivityOptions: &activitypb.ActivityOptions{

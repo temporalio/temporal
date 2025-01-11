@@ -463,7 +463,7 @@ func (s *Versioning3Suite) nexusTaskStaysOnCurrentDeployment() {
 	tv2 := tv1.WithBuildIDNumber(2)
 
 	nexusRequest := &matchingservice.DispatchNexusTaskRequest{
-		NamespaceId: s.GetNamespaceID(s.Namespace()),
+		NamespaceId: s.NamespaceID().String(),
 		TaskQueue:   tv1.TaskQueue(),
 		Request: &nexuspb.Request{
 			Header: map[string]string{
@@ -752,7 +752,7 @@ func (s *Versioning3Suite) setCurrentDeployment(
 	defer cancel()
 	_, err := s.FrontendClient().SetCurrentDeployment(ctx,
 		&workflowservice.SetCurrentDeploymentRequest{
-			Namespace:  s.Namespace(),
+			Namespace:  s.Namespace().String(),
 			Deployment: deployment,
 		})
 	s.NoError(err)
@@ -770,7 +770,7 @@ func (s *Versioning3Suite) updateTaskQueueDeploymentData(
 	for _, t := range tqTypes {
 		_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
 			ctx, &matchingservice.SyncDeploymentUserDataRequest{
-				NamespaceId:   s.GetNamespaceID(s.Namespace()),
+				NamespaceId:   s.NamespaceID().String(),
 				TaskQueue:     tv.TaskQueue().GetName(),
 				TaskQueueType: t,
 				Deployment:    tv.Deployment(),
@@ -794,7 +794,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 ) {
 	dwf, err := s.FrontendClient().DescribeWorkflowExecution(
 		context.Background(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: tv.WorkflowID(),
 			},
@@ -944,7 +944,7 @@ func (s *Versioning3Suite) startWorkflow(
 ) *commonpb.WorkflowExecution {
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
 		TaskQueue:           tv.TaskQueue(),
@@ -967,7 +967,7 @@ func (s *Versioning3Suite) queryWorkflow(
 	tv *testvars.TestVars,
 ) (*workflowservice.QueryWorkflowResponse, error) {
 	request := &workflowservice.QueryWorkflowRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: tv.WorkflowExecution(),
 		Query: &querypb.WorkflowQuery{
 			QueryType: tv.Any().String(),
@@ -1002,7 +1002,7 @@ func (s *Versioning3Suite) pollWftAndHandle(
 	async chan<- interface{},
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	d := tv.Deployment()
 	tq := tv.TaskQueue()
 	if sticky {
@@ -1039,7 +1039,7 @@ func (s *Versioning3Suite) pollWftAndHandleQueries(
 	async chan<- interface{},
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondQueryTaskCompletedResponse) {
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	d := tv.Deployment()
 	tq := tv.TaskQueue()
 	if sticky {
@@ -1075,7 +1075,7 @@ func (s *Versioning3Suite) pollNexusTaskAndHandle(
 	async chan<- interface{},
 	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondNexusTaskCompletedResponse) {
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	d := tv.Deployment()
 	tq := tv.TaskQueue()
 	if sticky {
@@ -1110,7 +1110,7 @@ func (s *Versioning3Suite) pollActivityAndHandle(
 	async chan<- interface{},
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) {
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	d := tv.Deployment()
 	f := func() {
 		_, err := poller.PollActivityTask(
@@ -1140,7 +1140,7 @@ func (s *Versioning3Suite) idlePollWorkflow(
 	timeout time.Duration,
 	unexpectedTaskMessage string,
 ) {
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	d := tv.Deployment()
 	_, _ = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
@@ -1166,7 +1166,7 @@ func (s *Versioning3Suite) idlePollActivity(
 	timeout time.Duration,
 	unexpectedTaskMessage string,
 ) {
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	d := tv.Deployment()
 	_, _ = poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{
@@ -1195,7 +1195,7 @@ func (s *Versioning3Suite) idlePollNexus(
 	timeout time.Duration,
 	unexpectedTaskMessage string,
 ) {
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	d := tv.Deployment()
 	_, _ = poller.PollNexusTask(
 		&workflowservice.PollNexusTaskQueueRequest{
@@ -1222,7 +1222,7 @@ func (s *Versioning3Suite) verifyWorkflowStickyQueue(
 ) {
 	ms, err := s.GetTestCluster().HistoryClient().GetMutableState(
 		context.Background(), &historyservice.GetMutableStateRequest{
-			NamespaceId: s.GetNamespaceID(s.Namespace()),
+			NamespaceId: s.NamespaceID().String(),
 			Execution:   we,
 		},
 	)
@@ -1235,7 +1235,7 @@ func (s *Versioning3Suite) verifyWorkflowStickyQueue(
 func (s *Versioning3Suite) warmUpSticky(
 	tv *testvars.TestVars,
 ) {
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	_, _ = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: tv.StickyTaskQueue(),
@@ -1273,8 +1273,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 			remaining[partAndType{i, tqt}] = struct{}{}
 		}
 	}
-	nsId := s.GetNamespaceID(s.Namespace())
-	f, err := tqid.NewTaskQueueFamily(nsId, tv.TaskQueue().GetName())
+	f, err := tqid.NewTaskQueueFamily(s.NamespaceID().String(), tv.TaskQueue().GetName())
 	deployment := tv.Deployment()
 	s.Eventually(func() bool {
 		for pt := range remaining {
@@ -1285,7 +1284,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 			res, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(
 				ctx,
 				&matchingservice.GetTaskQueueUserDataRequest{
-					NamespaceId:   nsId,
+					NamespaceId:   s.NamespaceID().String(),
 					TaskQueue:     partition.RpcName(),
 					TaskQueueType: partition.TaskType(),
 				})

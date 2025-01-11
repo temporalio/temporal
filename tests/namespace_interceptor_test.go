@@ -53,7 +53,7 @@ func TestNamespaceInterceptorTestSuite(t *testing.T) {
 func (s *NamespaceInterceptorTestSuite) TestServerRejectsInvalidRequests() {
 	sut := newSystemUnderTestConnector(s)
 
-	customersNamespace := namespace.Name(s.Namespace())
+	customersNamespace := s.Namespace()
 	err := sut.startWorkflowExecution(customersNamespace)
 	s.NoError(err)
 
