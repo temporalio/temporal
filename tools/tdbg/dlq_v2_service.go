@@ -193,6 +193,10 @@ func (ac *DLQV2Service) ReadMessages(c *cli.Context) (err error) {
 			}
 			res, err := adminClient.GetDLQTasks(ctx, request)
 			if err != nil {
+				// If the DLQ does not exist yet, it's effectively empty, so we can safely return without an error.
+				if strings.Contains(err.Error(), "queue not found:") {
+					return nil, nil, nil
+				}
 				return nil, nil, fmt.Errorf("call to GetDLQTasks from ReadMessages failed: %w", err)
 			}
 			return res.DlqTasks, res.NextPageToken, nil

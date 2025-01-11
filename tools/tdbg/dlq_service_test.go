@@ -224,6 +224,14 @@ func TestDLQCommand_V2(t *testing.T) {
 			},
 		},
 		{
+			name: "GetDLQTasks on empty queue",
+			override: func(p *dlqTestParams) {
+				p.command = "read"
+				p.dlqType = "1"
+				p.adminClient.err = errors.New(" GetDLQTasks failed. Error: queue not found:")
+			},
+		},
+		{
 			name: "purge invalid last message ID",
 			override: func(p *dlqTestParams) {
 				p.command = "purge"
