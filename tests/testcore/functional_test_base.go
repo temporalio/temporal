@@ -58,7 +58,6 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/environment"
 	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -195,16 +194,22 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 	s.httpAPIAddress = cluster.Host().FrontendHTTPAddress()
 
 	s.namespace = namespace.Name(RandomizeStr("namespace"))
-	s.namespaceID, err = s.registerNamespaceWithDefaults(s.Namespace())
+	s.namespaceID, err = s.registerNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	s.foreignNamespace = namespace.Name(RandomizeStr("foreign-namespace"))
-	_, err = s.registerNamespaceWithDefaults(s.ForeignNamespace())
+	_, err = s.registerNamespace(s.ForeignNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	if clusterConfig.EnableArchival {
 		s.archivalNamespace = namespace.Name(RandomizeStr("archival-enabled-namespace"))
-		s.archivalNamespaceID, err = s.registerArchivalNamespace(s.ArchivalNamespace())
+		s.archivalNamespaceID, err = s.registerNamespace(
+			s.ArchivalNamespace(),
+			0, // Archive right away.
+			enumspb.ARCHIVAL_STATE_ENABLED,
+			s.testCluster.archiverBase.historyURI,
+			s.testCluster.archiverBase.visibilityURI,
+		)
 		s.Require().NoError(err)
 	}
 }
@@ -246,10 +251,6 @@ func (s *FunctionalTestBase) checkTestShard() {
 		s.T().Skipf("Skipping %s in test shard %d/%d (it runs in %d)", s.T().Name(), index+1, total, testIndex+1)
 	}
 	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index+1, total)
-}
-
-func (s *FunctionalTestBase) registerNamespaceWithDefaults(name namespace.Name) (namespace.ID, error) {
-	return s.registerNamespace(name, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, "")
 }
 
 func ApplyTestClusterParams(options []Option) TestClusterParams {
@@ -331,57 +332,65 @@ func (s *FunctionalTestBase) TearDownSuite() {
 	s.adminClient = nil
 }
 
+// Register namespace using persistence API because:
+//  1. The Retention period is set to 0 for archival tests, and this can't be done through FE,
+//  2. Update search attributes would require an extra API call,
+//  3. One more extra API call would be necessary to get namespace.ID.
 func (s *FunctionalTestBase) registerNamespace(
 	nsName namespace.Name,
-	retention time.Duration,
-	historyArchivalState enumspb.ArchivalState,
+	retentionDays int32,
+	archivalState enumspb.ArchivalState,
 	historyArchivalURI string,
-	visibilityArchivalState enumspb.ArchivalState,
 	visibilityArchivalURI string,
 ) (namespace.ID, error) {
-	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
-	defer cancel()
-	_, err := s.client.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        nsName.String(),
-		Description:                      "namespace for functional tests",
-		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
-		HistoryArchivalState:             historyArchivalState,
-		HistoryArchivalUri:               historyArchivalURI,
-		VisibilityArchivalState:          visibilityArchivalState,
-		VisibilityArchivalUri:            visibilityArchivalURI,
-	})
-
-	if err != nil {
-		return namespace.EmptyID, err
-	}
-
-	// Set up default alias for custom search attributes.
-	_, err = s.client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: nsName.String(),
-		Config: &namespacepb.NamespaceConfig{
-			CustomSearchAttributeAliases: map[string]string{
-				"Bool01":     "CustomBoolField",
-				"Datetime01": "CustomDatetimeField",
-				"Double01":   "CustomDoubleField",
-				"Int01":      "CustomIntField",
-				"Keyword01":  "CustomKeywordField",
-				"Text01":     "CustomTextField",
+	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
+	nsID := namespace.ID(uuid.New())
+	namespaceRequest := &persistence.CreateNamespaceRequest{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:          nsID.String(),
+				Name:        nsName.String(),
+				State:       enumspb.NAMESPACE_STATE_REGISTERED,
+				Description: "namespace for functional tests",
 			},
+			Config: &persistencespb.NamespaceConfig{
+				Retention:               timestamp.DurationFromDays(retentionDays),
+				HistoryArchivalState:    archivalState,
+				HistoryArchivalUri:      historyArchivalURI,
+				VisibilityArchivalState: archivalState,
+				VisibilityArchivalUri:   visibilityArchivalURI,
+				BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+				CustomSearchAttributeAliases: map[string]string{
+					"Bool01":     "CustomBoolField",
+					"Datetime01": "CustomDatetimeField",
+					"Double01":   "CustomDoubleField",
+					"Int01":      "CustomIntField",
+					"Keyword01":  "CustomKeywordField",
+					"Text01":     "CustomTextField",
+				},
+			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: currentClusterName,
+				Clusters: []string{
+					currentClusterName,
+				},
+			},
+
+			FailoverVersion: common.EmptyVersion,
 		},
-	})
-	if err != nil {
-		return namespace.EmptyID, err
+		IsGlobalNamespace: false,
 	}
-
-	descResp, err := s.client.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: nsName.String(),
-	})
+	_, err := s.testCluster.testBase.MetadataManager.CreateNamespace(context.Background(), namespaceRequest)
 
 	if err != nil {
 		return namespace.EmptyID, err
 	}
 
-	return namespace.ID(descResp.NamespaceInfo.GetId()), nil
+	s.Logger.Info("Register namespace succeeded",
+		tag.WorkflowNamespace(nsName.String()),
+		tag.WorkflowNamespaceID(nsID.String()),
+	)
+	return nsID, nil
 }
 
 func (s *FunctionalTestBase) markNamespaceAsDeleted(
@@ -453,50 +462,6 @@ func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration
 	s.T().Helper()
 	s.Greater(value, target-tolerance)
 	s.Less(value, target+tolerance)
-}
-
-// To register archival namespace we can't use frontend API as the retention period is set to 0 for testing,
-// and request will be rejected by frontend. Here we make a call directly to persistence to register
-// the namespace.
-func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace namespace.Name) (namespace.ID, error) {
-	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
-	namespaceRequest := &persistence.CreateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:    uuid.New(),
-				Name:  archivalNamespace.String(),
-				State: enumspb.NAMESPACE_STATE_REGISTERED,
-			},
-			Config: &persistencespb.NamespaceConfig{
-				Retention:               timestamp.DurationFromDays(0),
-				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
-				HistoryArchivalUri:      s.testCluster.archiverBase.historyURI,
-				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
-				VisibilityArchivalUri:   s.testCluster.archiverBase.visibilityURI,
-				BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
-			},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: currentClusterName,
-				Clusters: []string{
-					currentClusterName,
-				},
-			},
-
-			FailoverVersion: common.EmptyVersion,
-		},
-		IsGlobalNamespace: false,
-	}
-	response, err := s.testCluster.testBase.MetadataManager.CreateNamespace(context.Background(), namespaceRequest)
-
-	if err != nil {
-		return namespace.EmptyID, err
-	}
-
-	s.Logger.Info("Register namespace succeeded",
-		tag.WorkflowNamespace(archivalNamespace.String()),
-		tag.WorkflowNamespaceID(response.ID),
-	)
-	return namespace.ID(response.ID), nil
 }
 
 // Overrides one dynamic config setting for the duration of this test (or sub-test). The change
