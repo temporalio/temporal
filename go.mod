@@ -2,6 +2,8 @@ module go.temporal.io/server
 
 go 1.23.2
 
+toolchain go1.24rc1
+
 retract (
 	v1.26.1 // Contains retractions only.
 	v1.26.0 // Published accidentally.
