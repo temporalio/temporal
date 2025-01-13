@@ -540,7 +540,7 @@ func (t *resetTest) reset(eventId int64) string {
 func (t *resetTest) run() {
 	t.totalSignals = 2
 	t.totalUpdates = 2
-	t.tv = t.WorkflowUpdateBaseSuite.startWorkflow(t.tv)
+	t.WorkflowUpdateBaseSuite.startWorkflow(t.tv)
 
 	poller := &testcore.TaskPoller{
 		Client:              t.FrontendClient(),
@@ -686,8 +686,8 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 		- depending on the reapply type, the buffered signal is applied post-reset or not
 	*/
 
-	tv = s.startWorkflow(tv)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(tv.RunID()))
+	runID := s.startWorkflow(tv)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(runID))
 
 	var resetRunID string
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -700,31 +700,23 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 			// (1) send Signal
 			_, err := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
 				&workflowservice.SignalWorkflowExecutionRequest{
-					RequestId: uuid.New(),
-					Namespace: s.Namespace().String(),
-					WorkflowExecution: &commonpb.WorkflowExecution{
-						WorkflowId: tv.WorkflowID(),
-						RunId:      tv.RunID(),
-					},
-					SignalName: "random signal name",
-					Input: &commonpb.Payloads{Payloads: []*commonpb.Payload{{
-						Data: []byte("random data"),
-					}}},
-					Identity: tv.WorkerIdentity(),
+					RequestId:         tv.Any().String(),
+					Namespace:         s.Namespace().String(),
+					WorkflowExecution: tv.WorkflowExecution(),
+					SignalName:        tv.Any().String(),
+					Input:             tv.Any().Payloads(),
+					Identity:          tv.WorkerIdentity(),
 				})
 			s.NoError(err)
 
 			// (2) send Reset
 			resp, err := s.FrontendClient().ResetWorkflowExecution(testcore.NewContext(),
 				&workflowservice.ResetWorkflowExecutionRequest{
-					Namespace: s.Namespace().String(),
-					WorkflowExecution: &commonpb.WorkflowExecution{
-						WorkflowId: tv.WorkflowID(),
-						RunId:      tv.RunID(),
-					},
+					Namespace:                 s.Namespace().String(),
+					WorkflowExecution:         tv.WorkflowExecution(),
 					Reason:                    "reset execution from test",
 					WorkflowTaskFinishEventId: 3,
-					RequestId:                 uuid.New(),
+					RequestId:                 tv.Any().String(),
 					ResetReapplyType:          reapplyType,
 				})
 			s.NoError(err)
