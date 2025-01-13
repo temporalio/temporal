@@ -169,31 +169,12 @@ func recordActivityTaskStarted(
 		return nil, false, serviceerror.NewNotFound(errorMessage)
 	}
 
-	// TODO (shahab): support independent activities. Independent activities do not need all
-	// the deployment validations and do not start workflow transition.
-
 	wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 	wfDeployment := mutableState.GetEffectiveDeployment()
 	pollerDeployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
-	// Effective behavior and deployment of the workflow when History scheduled the WFT.
-	scheduledBehavior := request.GetVersionDirective().GetBehavior()
-	if scheduledBehavior != wfBehavior &&
-		// Verisoning 3 pre-release (v1.26, Dec 2024) is not populating request.VersionDirective so
-		// we skip this check until a v1.28 if scheduledBehavior is unspecified.
-		// TODO (shahab): remove this line after v1.27 is released.
-		scheduledBehavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		// This must be an AT scheduled before the workflow changes behavior. Matching can drop it.
-		return nil, false, serviceerrors.NewObsoleteMatchingTask("wrong directive behavior")
-	}
-	scheduledDeployment := request.GetVersionDirective().GetDeployment()
-	if scheduledDeployment == nil {
-		// TODO: remove this once the ScheduledDeployment field is removed from proto
-		scheduledDeployment = request.GetScheduledDeployment()
-	}
-	if !scheduledDeployment.Equal(wfDeployment) {
-		// This must be an AT scheduled before the workflow transitions to the current
-		// deployment. Matching can drop it.
-		return nil, false, serviceerrors.NewObsoleteMatchingTask("wrong directive deployment")
+	err = worker_versioning.ValidateTaskVersionDirective(request.GetVersionDirective(), wfBehavior, wfDeployment, request.ScheduledDeployment)
+	if err != nil {
+		return nil, false, err
 	}
 
 	if mutableState.GetDeploymentTransition() != nil {
@@ -249,8 +230,11 @@ func recordActivityTaskStarted(
 			taggedMetrics,
 			namespaceName,
 			// passing the root partition all the time as we don't care about partition ID in this metric
-			tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(), ai.GetTaskQueue()).TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
-			shardContext.GetConfig().BreakdownMetricsByTaskQueue(namespaceName, ai.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+			tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(),
+				ai.GetTaskQueue()).TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
+			shardContext.GetConfig().BreakdownMetricsByTaskQueue(namespaceName,
+				ai.GetTaskQueue(),
+				enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 		),
 	).Record(scheduleToStartLatency)
 

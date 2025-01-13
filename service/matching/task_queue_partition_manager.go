@@ -376,6 +376,7 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 			// Finish the task because now it is copied to the other backlog. It should be considered
 			// invalid because a poller did not receive the task.
 			task.finish(nil, false)
+			return nil
 		}
 		err = syncMatchQueue.DispatchSpooledTask(ctx, task, userDataChanged)
 		if err != errInterrupted {
@@ -799,7 +800,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	wfBehavior := directive.GetBehavior()
 	deployment := directive.GetDeployment()
 
-	perTypeUserData, perTypeUserDataChanged, err := pm.getPerTypeUserData()
+	perTypeUserData, userDataChanged, err := pm.getPerTypeUserData()
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -829,10 +830,10 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			if forwardInfo == nil {
 				// Task is not forwarded, so it can be spooled if sync match fails.
 				// Spool queue and sync match queue is the same for pinned workflows.
-				return pinnedQueue, pinnedQueue, perTypeUserDataChanged, nil
+				return pinnedQueue, pinnedQueue, userDataChanged, nil
 			} else {
 				// Forwarded from child partition - only do sync match.
-				return nil, pinnedQueue, perTypeUserDataChanged, nil
+				return nil, pinnedQueue, userDataChanged, nil
 			}
 		}
 	}
@@ -849,17 +850,17 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			}
 
 			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
-			return pm.defaultQueue, pm.defaultQueue, perTypeUserDataChanged, nil
+			return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
 		}
 
 		currentDeploymentQueue, err := pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
 		if forwardInfo == nil {
 			// Task is not forwarded, so it can be spooled if sync match fails.
 			// Unpinned tasks are spooled in default queue
-			return pm.defaultQueue, currentDeploymentQueue, perTypeUserDataChanged, err
+			return pm.defaultQueue, currentDeploymentQueue, userDataChanged, err
 		} else {
 			// Forwarded from child partition - only do sync match.
-			return nil, currentDeploymentQueue, perTypeUserDataChanged, err
+			return nil, currentDeploymentQueue, userDataChanged, err
 		}
 	}
 
@@ -883,7 +884,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	if directive.GetBuildId() == nil {
 		// The task belongs to an unversioned execution. Keep using unversioned. But also return
 		// userDataChanged so if current deployment is set, the task redirects to that deployment.
-		return pm.defaultQueue, pm.defaultQueue, perTypeUserDataChanged, nil
+		return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
 	}
 
 	userData, userDataChanged, err := pm.userDataManager.GetUserData()

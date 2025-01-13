@@ -170,25 +170,9 @@ func Invoke(
 			wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 			wfDeployment := mutableState.GetEffectiveDeployment()
 			pollerDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
-			// Effective behavior and deployment of the workflow when History scheduled the WFT.
-			scheduledBehavior := req.GetVersionDirective().GetBehavior()
-			if scheduledBehavior != wfBehavior &&
-				// Verisoning 3 pre-release (v1.26, Dec 2024) is not populating req.VersionDirective so
-				// we skip this check until a v1.28 if scheduledBehavior is unspecified.
-				// TODO (shahab): remove this line after v1.27 is released.
-				scheduledBehavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-				// This must be an AT scheduled before the workflow changes behavior. Matching can drop it.
-				return nil, serviceerrors.NewObsoleteMatchingTask("wrong directive behavior")
-			}
-			scheduledDeployment := req.GetVersionDirective().GetDeployment()
-			if scheduledDeployment == nil {
-				// TODO: remove this once the ScheduledDeployment field is removed from proto
-				scheduledDeployment = req.GetScheduledDeployment()
-			}
-			if !scheduledDeployment.Equal(wfDeployment) {
-				// This must be an AT scheduled before the workflow transitions to the current
-				// deployment. Matching can drop it.
-				return nil, serviceerrors.NewObsoleteMatchingTask("wrong directive deployment")
+			err = worker_versioning.ValidateTaskVersionDirective(req.GetVersionDirective(), wfBehavior, wfDeployment, req.ScheduledDeployment)
+			if err != nil {
+				return nil, err
 			}
 
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
