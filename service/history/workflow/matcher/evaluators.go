@@ -214,7 +214,7 @@ func (m *MutableStateMatchEvaluator) compareWorkflowID(workflowID string, operat
 
 func (m *MutableStateMatchEvaluator) compareWorkflowString(inStr string, expectedStr string, operation string, fieldName string) (bool, error) {
 	if len(inStr) == 0 {
-		return false, NewMatcherError(fmt.Sprintf("%s cannot be empty", fieldName))
+		return false, NewMatcherError("%s cannot be empty", fieldName)
 	}
 	switch operation {
 	case sqlparser.EqualStr:

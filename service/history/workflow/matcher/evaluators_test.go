@@ -27,7 +27,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	enumsspb "go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
@@ -46,24 +46,24 @@ func TestMutableStateMatchEvaluator(t *testing.T) {
 		expectedMatch bool
 		expectedError bool
 	}{
-		//{
-		//	name:          "empty query",
-		//	query:         "",
-		//	expectedMatch: false,
-		//	expectedError: true,
-		//},
-		//{
-		//	name:          "absent where clause",
-		//	query:         "",
-		//	expectedMatch: false,
-		//	expectedError: true,
-		//},
-		//{
-		//	name:          "workflow id where clause",
-		//	query:         fmt.Sprintf("where %s = 'workflow_id'", WorkflowID),
-		//	expectedMatch: true,
-		//	expectedError: false,
-		//},
+		{
+			name:          "empty query",
+			query:         "",
+			expectedMatch: false,
+			expectedError: true,
+		},
+		{
+			name:          "absent where clause",
+			query:         "",
+			expectedMatch: false,
+			expectedError: true,
+		},
+		{
+			name:          "workflow id where clause",
+			query:         fmt.Sprintf("where %s = 'workflow_id'", WorkflowID),
+			expectedMatch: true,
+			expectedError: false,
+		},
 		{
 			name:          "workflow id where clause - starts_with",
 			query:         fmt.Sprintf("where %s starts_with 'workflow_'", WorkflowID),
@@ -175,7 +175,7 @@ func TestMutableStateMatchEvaluator(t *testing.T) {
 
 	ws := &persistencespb.WorkflowExecutionState{
 		StartTime: timestamppb.New(startTime),
-		Status:    enumsspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}
 
 	we := &persistencespb.WorkflowExecutionInfo{
