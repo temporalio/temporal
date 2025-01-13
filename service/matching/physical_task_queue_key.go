@@ -31,7 +31,7 @@ import (
 	"strconv"
 	"strings"
 
-	"go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/tqid"
 )
@@ -114,7 +114,7 @@ func BuildIdQueueKey(p tqid.Partition, buildId string) *PhysicalTaskQueueKey {
 }
 
 // DeploymentQueueKey returns a PhysicalTaskQueueKey of a task queue partition for a deployment.
-func DeploymentQueueKey(p tqid.Partition, deployment *deployment.Deployment) *PhysicalTaskQueueKey {
+func DeploymentQueueKey(p tqid.Partition, deployment *deploymentpb.Deployment) *PhysicalTaskQueueKey {
 	return &PhysicalTaskQueueKey{
 		partition: p,
 		version: PhysicalTaskQueueVersion{
@@ -263,9 +263,9 @@ func (v PhysicalTaskQueueVersion) IsVersioned() bool {
 	return v.versionSet != "" || v.buildId != ""
 }
 
-func (v PhysicalTaskQueueVersion) Deployment() *deployment.Deployment {
+func (v PhysicalTaskQueueVersion) Deployment() *deploymentpb.Deployment {
 	if len(v.deploymentSeriesName) > 0 {
-		return &deployment.Deployment{
+		return &deploymentpb.Deployment{
 			SeriesName: v.deploymentSeriesName,
 			BuildId:    v.buildId,
 		}

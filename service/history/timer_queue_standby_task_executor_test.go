@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	historypb "go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -1672,11 +1672,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 
 	ms := workflow.NewMockMutableState(s.controller)
 	info := &persistencespb.WorkflowExecutionInfo{
-		VersionHistories: &historypb.VersionHistories{
+		VersionHistories: &historyspb.VersionHistories{
 			CurrentVersionHistoryIndex: 0,
-			Histories: []*historypb.VersionHistory{
+			Histories: []*historyspb.VersionHistory{
 				{
-					Items: []*historypb.VersionHistoryItem{
+					Items: []*historyspb.VersionHistoryItem{
 						{EventId: 1, Version: 2},
 					},
 				},
@@ -1781,11 +1781,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 		TransitionHistory: []*persistencespb.VersionedTransition{
 			{NamespaceFailoverVersion: 2, TransitionCount: 2},
 		},
-		VersionHistories: &historypb.VersionHistories{
+		VersionHistories: &historyspb.VersionHistories{
 			CurrentVersionHistoryIndex: 0,
-			Histories: []*historypb.VersionHistory{
+			Histories: []*historyspb.VersionHistory{
 				{
-					Items: []*historypb.VersionHistoryItem{
+					Items: []*historyspb.VersionHistoryItem{
 						{EventId: 1, Version: 2},
 					},
 				},

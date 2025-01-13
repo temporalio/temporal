@@ -30,9 +30,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/nexus/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -174,7 +174,7 @@ func (s *MatchingSuite) TestCreate() {
 	s.NotNil(entry.Endpoint.CreatedTime)
 	s.NotEmpty(entry.Id)
 	s.Equal(entry.Endpoint.Spec.Name, endpointName)
-	s.Equal(entry.Endpoint.Spec.Target.GetWorker().NamespaceId, s.GetNamespaceID(s.Namespace()))
+	s.Equal(entry.Endpoint.Spec.Target.GetWorker().NamespaceId, s.NamespaceID().String())
 
 	_, err := s.GetTestCluster().MatchingClient().CreateNexusEndpoint(testcore.NewContext(), &matchingservice.CreateNexusEndpointRequest{
 		Spec: &persistencespb.NexusEndpointSpec{
@@ -182,7 +182,7 @@ func (s *MatchingSuite) TestCreate() {
 			Target: &persistencespb.NexusEndpointTarget{
 				Variant: &persistencespb.NexusEndpointTarget_Worker_{
 					Worker: &persistencespb.NexusEndpointTarget_Worker{
-						NamespaceId: s.GetNamespaceID(s.Namespace()),
+						NamespaceId: s.NamespaceID().String(),
 						TaskQueue:   "dont-care",
 					},
 				},
@@ -213,7 +213,7 @@ func (s *MatchingSuite) TestUpdate() {
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
-								NamespaceId: s.GetNamespaceID(s.Namespace()),
+								NamespaceId: s.NamespaceID().String(),
 								TaskQueue:   s.defaultTaskQueue().Name,
 							},
 						},
@@ -238,7 +238,7 @@ func (s *MatchingSuite) TestUpdate() {
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
-								NamespaceId: s.GetNamespaceID(s.Namespace()),
+								NamespaceId: s.NamespaceID().String(),
 								TaskQueue:   s.defaultTaskQueue().Name,
 							},
 						},
@@ -260,7 +260,7 @@ func (s *MatchingSuite) TestUpdate() {
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
-								NamespaceId: s.GetNamespaceID(s.Namespace()),
+								NamespaceId: s.NamespaceID().String(),
 								TaskQueue:   s.defaultTaskQueue().Name,
 							},
 						},
@@ -479,12 +479,12 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "valid create",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: endpointName,
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -499,19 +499,19 @@ func (s *OperatorSuite) TestCreate() {
 				s.NotNil(resp.Endpoint.CreatedTime)
 				s.NotEmpty(resp.Endpoint.Id)
 				s.Equal(resp.Endpoint.Spec.Name, endpointName)
-				s.Equal(resp.Endpoint.Spec.Target.GetWorker().Namespace, s.Namespace())
+				s.Equal(resp.Endpoint.Spec.Target.GetWorker().Namespace, s.Namespace().String())
 				s.Equal("/"+commonnexus.RouteDispatchNexusTaskByEndpoint.Path(resp.Endpoint.Id), resp.Endpoint.UrlPrefix)
 			},
 		},
 		{
 			name: "invalid: name already in use",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: endpointName,
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -526,11 +526,11 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: name unset",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+				Spec: &nexuspb.EndpointSpec{
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -545,12 +545,12 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: name too long",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: string(make([]byte, 300)),
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -565,12 +565,12 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: malformed name",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: "test_\n```\n",
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -585,11 +585,11 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: namespace unset",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: testcore.RandomizeStr(endpointName),
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -604,11 +604,11 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: namespace not found",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: testcore.RandomizeStr(endpointName),
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
 								Namespace: "missing-namespace",
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
@@ -624,12 +624,12 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: task queue unset",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: testcore.RandomizeStr(endpointName),
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
+								Namespace: s.Namespace().String(),
 							},
 						},
 					},
@@ -643,12 +643,12 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: task queue too long",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: testcore.RandomizeStr(endpointName),
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
+								Namespace: s.Namespace().String(),
 								TaskQueue: string(make([]byte, 1005)),
 							},
 						},
@@ -663,11 +663,11 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: empty URL",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: testcore.RandomizeStr(endpointName),
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_External_{
-							External: &nexus.EndpointTarget_External{},
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_External_{
+							External: &nexuspb.EndpointTarget_External{},
 						},
 					},
 				},
@@ -680,11 +680,11 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: URL too long",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: testcore.RandomizeStr(endpointName),
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_External_{
-							External: &nexus.EndpointTarget_External{
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_External_{
+							External: &nexuspb.EndpointTarget_External{
 								Url: "http://foo/" + strings.Repeat("pattern", 4096/len("pattern")),
 							},
 						},
@@ -699,11 +699,11 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: URL invalid",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: testcore.RandomizeStr(endpointName),
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_External_{
-							External: &nexus.EndpointTarget_External{
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_External_{
+							External: &nexuspb.EndpointTarget_External{
 								Url: "-http://foo",
 							},
 						},
@@ -718,11 +718,11 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: URL invalid scheme",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: testcore.RandomizeStr(endpointName),
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_External_{
-							External: &nexus.EndpointTarget_External{
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_External_{
+							External: &nexuspb.EndpointTarget_External{
 								Url: "smtp://foo",
 							},
 						},
@@ -737,17 +737,17 @@ func (s *OperatorSuite) TestCreate() {
 		{
 			name: "invalid: description too large",
 			request: &operatorservice.CreateNexusEndpointRequest{
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: testcore.RandomizeStr(endpointName),
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
 					},
-					Description: &common.Payload{
+					Description: &commonpb.Payload{
 						Data: make([]byte, 20001),
 					},
 				},
@@ -782,12 +782,12 @@ func (s *OperatorSuite) TestUpdate() {
 			request: &operatorservice.UpdateNexusEndpointRequest{
 				Version: 1,
 				Id:      endpoint.Id,
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: updatedName,
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -807,12 +807,12 @@ func (s *OperatorSuite) TestUpdate() {
 			request: &operatorservice.UpdateNexusEndpointRequest{
 				Version: 1,
 				Id:      "not-found",
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: updatedName,
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -829,12 +829,12 @@ func (s *OperatorSuite) TestUpdate() {
 			request: &operatorservice.UpdateNexusEndpointRequest{
 				Version: 1,
 				Id:      endpoint.Id,
-				Spec: &nexus.EndpointSpec{
+				Spec: &nexuspb.EndpointSpec{
 					Name: updatedName,
-					Target: &nexus.EndpointTarget{
-						Variant: &nexus.EndpointTarget_Worker_{
-							Worker: &nexus.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+					Target: &nexuspb.EndpointTarget{
+						Variant: &nexuspb.EndpointTarget_Worker_{
+							Worker: &nexuspb.EndpointTarget_Worker{
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -1062,7 +1062,7 @@ func (s *NexusEndpointFunctionalSuite) createNexusEndpoint(name string) *persist
 				Target: &persistencespb.NexusEndpointTarget{
 					Variant: &persistencespb.NexusEndpointTarget_Worker_{
 						Worker: &persistencespb.NexusEndpointTarget_Worker{
-							NamespaceId: s.GetNamespaceID(s.Namespace()),
+							NamespaceId: s.NamespaceID().String(),
 							TaskQueue:   s.defaultTaskQueue().Name,
 						},
 					},

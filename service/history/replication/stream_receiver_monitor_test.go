@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	repicationpb "go.temporal.io/server/api/replication/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -105,8 +105,8 @@ func (s *streamReceiverMonitorSuite) SetupTest() {
 	streamClient.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
 	streamClient.EXPECT().Recv().Return(&adminservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-			Messages: &repicationpb.WorkflowReplicationMessages{
-				ReplicationTasks:           []*repicationpb.ReplicationTask{},
+			Messages: &replicationspb.WorkflowReplicationMessages{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{},
 				ExclusiveHighWatermark:     100,
 				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
 			},

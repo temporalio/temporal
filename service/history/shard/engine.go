@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	workflowpb "go.temporal.io/server/api/workflow/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -81,7 +81,7 @@ type (
 		ReplicateHistoryEvents(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
-			baseExecutionInfo *workflowpb.BaseExecutionInfo,
+			baseExecutionInfo *workflowspb.BaseExecutionInfo,
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			historyEvents [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
@@ -162,7 +162,7 @@ type (
 
 		SourceClusterName   string
 		VersionedHistory    *persistencespb.VersionedTransition
-		BaseExecutionInfo   *workflowpb.BaseExecutionInfo
+		BaseExecutionInfo   *workflowspb.BaseExecutionInfo
 		VersionHistoryItems []*historyspb.VersionHistoryItem
 
 		Events    [][]*historypb.HistoryEvent

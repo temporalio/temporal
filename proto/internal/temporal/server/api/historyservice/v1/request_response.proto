@@ -560,6 +560,7 @@ message DescribeWorkflowExecutionResponse {
     temporal.api.workflow.v1.PendingWorkflowTaskInfo pending_workflow_task = 5;
     repeated temporal.api.workflow.v1.CallbackInfo callbacks = 6;
     repeated temporal.api.workflow.v1.PendingNexusOperationInfo pending_nexus_operations = 7;
+    temporal.api.workflow.v1.WorkflowExecutionExtendedInfo workflow_extended_info = 8;
 }
 
 message ReplicateEventsV2Request {
@@ -631,6 +632,12 @@ message SyncActivityRequest {
     int32 stamp = 20;
     // Indicates if the activity is paused.
     bool paused = 21;
+
+    // Retry policy for the activity.
+    google.protobuf.Duration retry_initial_interval = 22;
+    google.protobuf.Duration retry_maximum_interval = 23;
+    int32 retry_maximum_attempts = 24;
+    double retry_backoff_coefficient = 25;
 }
 
 message SyncActivitiesRequest {
@@ -667,6 +674,11 @@ message ActivitySyncInfo {
     int32 stamp = 20;
     // Indicates if the activity is paused.
     bool paused = 21;
+    // Retry policy for the activity. It needs to be replicated now, since the activity properties can be updated.
+    google.protobuf.Duration retry_initial_interval = 22;
+    google.protobuf.Duration retry_maximum_interval = 23;
+    int32 retry_maximum_attempts = 24;
+    double retry_backoff_coefficient = 25;
 
 }
 

@@ -67,7 +67,7 @@ func (s *EagerWorkflowTestSuite) startEagerWorkflow(baseOptions *workflowservice
 	options.RequestEagerExecution = true
 
 	if options.GetNamespace() == "" {
-		options.Namespace = s.Namespace()
+		options.Namespace = s.Namespace().String()
 	}
 	if options.Identity == "" {
 		options.Identity = "test"
@@ -96,7 +96,7 @@ func (s *EagerWorkflowTestSuite) respondWorkflowTaskCompleted(task *workflowserv
 	payloads, err := dataConverter.ToPayloads(result)
 	s.Require().NoError(err)
 	completion := workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Identity:  "test",
 		TaskToken: task.TaskToken,
 		Commands: []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION, Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
@@ -111,7 +111,7 @@ func (s *EagerWorkflowTestSuite) respondWorkflowTaskCompleted(task *workflowserv
 
 func (s *EagerWorkflowTestSuite) pollWorkflowTaskQueue() *workflowservice.PollWorkflowTaskQueueResponse {
 	task, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: s.defaultTaskQueue(),
 		Identity:  "test",
 	})
@@ -121,7 +121,7 @@ func (s *EagerWorkflowTestSuite) pollWorkflowTaskQueue() *workflowservice.PollWo
 }
 
 func (s *EagerWorkflowTestSuite) getWorkflowStringResult(workflowID, runID string) string {
-	c, err := client.Dial(client.Options{HostPort: s.FrontendGRPCAddress(), Namespace: s.Namespace()})
+	c, err := client.Dial(client.Options{HostPort: s.FrontendGRPCAddress(), Namespace: s.Namespace().String()})
 	s.Require().NoError(err)
 	run := c.GetWorkflow(testcore.NewContext(), workflowID, runID)
 	var result string

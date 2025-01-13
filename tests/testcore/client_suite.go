@@ -85,7 +85,6 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
-		dynamicconfig.EnableNexus.Key():                                     true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
@@ -112,7 +111,7 @@ func (s *ClientFunctionalSuite) SetupTest() {
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))

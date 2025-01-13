@@ -29,7 +29,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/api/command/v1"
+	commandpb "go.temporal.io/api/command/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
 )
@@ -54,8 +54,8 @@ func TestDisableEagerActivityDispatchForBuggyClients(t *testing.T) {
 	for _, testCase := range cases {
 		ctx := headers.SetVersionsForTests(context.Background(), testCase.sdkVersion, testCase.sdkName, headers.SupportedServerVersions, headers.AllFeatures)
 		req := &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Commands: []*command.Command{
-				{Attributes: &command.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &command.ScheduleActivityTaskCommandAttributes{RequestEagerExecution: true}}},
+			Commands: []*commandpb.Command{
+				{Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{RequestEagerExecution: true}}},
 			},
 		}
 		overrides.DisableEagerActivityDispatchForBuggyClients(ctx, req)

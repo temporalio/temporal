@@ -277,7 +277,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 				logger:         s.mockShard.GetLogger(),
 			}
 
-			ref, _, err := stateMachineTask(s.mockShard, task)
+			ref, _, err := StateMachineTask(s.mockShard.StateMachineRegistry(), task)
 			require.NoError(t, err)
 			node, err := mutableState.HSM().Child(ref.StateMachinePath())
 			require.NoError(t, err)
@@ -394,7 +394,7 @@ func TestAccess(t *testing.T) {
 			}
 
 			task := snapshot.Tasks[tasks.CategoryOutbound][0]
-			ref, _, err := stateMachineTask(s.mockShard, task)
+			ref, _, err := StateMachineTask(s.mockShard.StateMachineRegistry(), task)
 			require.NoError(t, err)
 			err = exec.Access(context.Background(), ref, tc.accessType, tc.accessor)
 			tc.assertOutcome(t, err)

@@ -75,6 +75,11 @@ func handleUnsuccessfulOperationError(
 	if err != nil {
 		return hsm.TransitionOutput{}, err
 	}
+	failure, err := commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError)
+	if err != nil {
+		return hsm.TransitionOutput{}, err
+	}
+
 	switch opFailedError.State { // nolint:exhaustive
 	case nexus.OperationStateFailed:
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
@@ -82,11 +87,7 @@ func handleUnsuccessfulOperationError(
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 				NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-					Failure: nexusOperationFailure(
-						operation,
-						eventID,
-						commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
-					),
+					Failure:          nexusOperationFailure(operation, eventID, failure),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},
@@ -105,11 +106,7 @@ func handleUnsuccessfulOperationError(
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
 				NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
-					Failure: nexusOperationFailure(
-						operation,
-						eventID,
-						commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
-					),
+					Failure:          nexusOperationFailure(operation, eventID, failure),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},

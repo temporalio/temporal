@@ -379,6 +379,25 @@ func (mr *MockClientMockRecorder) ListWorkflow(arg0, arg1 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkflow", reflect.TypeOf((*MockClient)(nil).ListWorkflow), arg0, arg1)
 }
 
+// NewWithStartWorkflowOperation mocks base method.
+func (m *MockClient) NewWithStartWorkflowOperation(arg0 client.StartWorkflowOptions, arg1 any, arg2 ...any) client.WithStartWorkflowOperation {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "NewWithStartWorkflowOperation", varargs...)
+	ret0, _ := ret[0].(client.WithStartWorkflowOperation)
+	return ret0
+}
+
+// NewWithStartWorkflowOperation indicates an expected call of NewWithStartWorkflowOperation.
+func (mr *MockClientMockRecorder) NewWithStartWorkflowOperation(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewWithStartWorkflowOperation", reflect.TypeOf((*MockClient)(nil).NewWithStartWorkflowOperation), varargs...)
+}
+
 // OperatorService mocks base method.
 func (m *MockClient) OperatorService() operatorservice.OperatorServiceClient {
 	m.ctrl.T.Helper()
@@ -561,6 +580,21 @@ func (mr *MockClientMockRecorder) TerminateWorkflow(arg0, arg1, arg2, arg3 any, 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflow", reflect.TypeOf((*MockClient)(nil).TerminateWorkflow), varargs...)
+}
+
+// UpdateWithStartWorkflow mocks base method.
+func (m *MockClient) UpdateWithStartWorkflow(arg0 context.Context, arg1 client.UpdateWithStartWorkflowOptions) (client.WorkflowUpdateHandle, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWithStartWorkflow", arg0, arg1)
+	ret0, _ := ret[0].(client.WorkflowUpdateHandle)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWithStartWorkflow indicates an expected call of UpdateWithStartWorkflow.
+func (mr *MockClientMockRecorder) UpdateWithStartWorkflow(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWithStartWorkflow", reflect.TypeOf((*MockClient)(nil).UpdateWithStartWorkflow), arg0, arg1)
 }
 
 // UpdateWorkerBuildIdCompatibility mocks base method.

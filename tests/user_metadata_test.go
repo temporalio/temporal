@@ -71,12 +71,11 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 
 	s.Run("StartWorkflowExecution records UserMetadata", func() {
 		tv := testvars.New(s.T())
-		id := tv.WorkflowID("functional-user-metadata-StartWorkflowExecution")
 		metadata := prepareTestUserMetadata()
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
-			Namespace:    s.Namespace(),
-			WorkflowId:   id,
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   tv.WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			UserMetadata: metadata,
@@ -86,19 +85,18 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(s.FrontendClient(), s.Namespace(), id, we.RunId)
+		describeInfo, err := getDescribeWorkflowExecutionInfo(s.FrontendClient(), s.Namespace().String(), tv.WorkflowID(), we.RunId)
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
 
 	s.Run("SignalWithStartWorkflowExecution records UserMetadata", func() {
 		tv := testvars.New(s.T())
-		id := tv.WorkflowID("functional-user-metadata-SignalWithStartWorkflowExecution")
 		metadata := prepareTestUserMetadata()
 		request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
-			Namespace:    s.Namespace(),
-			WorkflowId:   id,
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   tv.WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			SignalName:   "TEST-SIGNAL",
@@ -109,33 +107,32 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(s.FrontendClient(), s.Namespace(), id, we.RunId)
+		describeInfo, err := getDescribeWorkflowExecutionInfo(s.FrontendClient(), s.Namespace().String(), tv.WorkflowID(), we.RunId)
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
 
 	s.Run("ExecuteMultiOperation records UserMetadata", func() {
 		tv := testvars.New(s.T())
-		id := tv.WorkflowID("functional-user-metadata-ExecuteMultiOperation")
 		metadata := prepareTestUserMetadata()
 		startWorkflowRequest := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.New(),
-			Namespace:    s.Namespace(),
-			WorkflowId:   id,
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   tv.WorkflowID(),
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			UserMetadata: metadata,
 		}
 		updateWorkflowRequest := &workflowservice.UpdateWorkflowExecutionRequest{
-			Namespace:         s.Namespace(),
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id},
+			Namespace:         s.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
 			Request: &updatepb.Request{
 				Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
 				Input: &updatepb.Input{Name: "NAME"},
 			},
 		}
 		request := &workflowservice.ExecuteMultiOperationRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
 				{ // start workflow operation
 					Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
@@ -154,7 +151,7 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(s.FrontendClient(), s.Namespace(), id, "")
+		describeInfo, err := getDescribeWorkflowExecutionInfo(s.FrontendClient(), s.Namespace().String(), tv.WorkflowID(), "")
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})

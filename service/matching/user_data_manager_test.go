@@ -26,8 +26,10 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,6 +47,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/util"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -53,7 +56,7 @@ func createUserDataManager(
 	t *testing.T,
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
-) *userDataManagerImpl {
+) (m *userDataManagerImpl) {
 	t.Helper()
 
 	logger := log.NewTestLogger()
@@ -62,7 +65,24 @@ func createUserDataManager(
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns, nil).AnyTimes()
-	return newUserDataManager(tm, testOpts.matchingClientMock, testOpts.dbq.Partition(), newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns), logger, mockNamespaceCache)
+
+	var onFatalErr func(unloadCause)
+	if testOpts.expectUserDataError {
+		var fatalErrCalled atomic.Bool
+		onFatalErr = func(unloadCause) {
+			fatalErrCalled.Store(true)
+			m.Stop() // this would normally go through the engine+pm but just skip to Stop in test
+		}
+		t.Cleanup(func() {
+			if !fatalErrCalled.Load() {
+				t.Fatal("user data manager did not call onFatalErr")
+			}
+		})
+	} else {
+		onFatalErr = func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
+	}
+
+	return newUserDataManager(tm, testOpts.matchingClientMock, onFatalErr, testOpts.dbq.Partition(), newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns), logger, mockNamespaceCache)
 }
 
 func TestUserData_LoadOnInit(t *testing.T) {
@@ -95,6 +115,132 @@ func TestUserData_LoadOnInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+}
+
+func TestUserData_LoadOnInit_Refresh(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	ctx := context.Background()
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.dbq = dbq
+	tqCfg.expectUserDataError = false
+
+	data1 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    mkUserData(1),
+	}
+
+	m := createUserDataManager(t, controller, tqCfg)
+	m.config.GetUserDataInitialRefresh = time.Millisecond
+	m.config.GetUserDataRefresh = dynamicconfig.GetDurationPropertyFn(time.Millisecond)
+	tm := m.store.(*testTaskManager)
+
+	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: defaultNamespaceId,
+			TaskQueue:   defaultRootTqID,
+			UserData:    data1,
+		}))
+	data1.Version++
+
+	m.Start()
+
+	require.NoError(t, m.WaitUntilInitialized(ctx))
+
+	// should be refreshing quickly
+	require.Eventually(t, func() bool {
+		return tm.getGetUserDataCount(dbq) >= 5
+	}, time.Second, time.Millisecond)
+
+	// should still have version 2
+	userData, _, err := m.GetUserData()
+	require.NoError(t, err)
+	require.Equal(t, data1, userData)
+
+	// pretend someone else managed to update data
+	data2 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 2,
+		Data:    mkUserData(2),
+	}
+	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: defaultNamespaceId,
+			TaskQueue:   defaultRootTqID,
+			UserData:    data2,
+		}))
+	data2.Version++
+
+	// eventually it will notice and reload the data
+	require.Eventually(t, func() bool {
+		userData, _, err := m.GetUserData()
+		return err == nil && userData.Version == data2.Version
+	}, time.Second, time.Millisecond)
+
+	m.Stop()
+}
+
+func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	ctx := context.Background()
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.dbq = dbq
+	tqCfg.expectUserDataError = true
+
+	data5 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 5,
+		Data:    mkUserData(5),
+	}
+
+	m := createUserDataManager(t, controller, tqCfg)
+	m.config.GetUserDataInitialRefresh = time.Millisecond
+	m.config.GetUserDataRefresh = dynamicconfig.GetDurationPropertyFn(time.Millisecond)
+	tm := m.store.(*testTaskManager)
+
+	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: defaultNamespaceId,
+			TaskQueue:   defaultRootTqID,
+			UserData:    data5,
+		}))
+	data5.Version++
+
+	m.Start()
+
+	require.NoError(t, m.WaitUntilInitialized(ctx))
+
+	// should be refreshing quickly
+	require.Eventually(t, func() bool {
+		return tm.getGetUserDataCount(dbq) >= 5
+	}, time.Second, time.Millisecond)
+
+	// should still have version 6
+	userData, _, err := m.GetUserData()
+	require.NoError(t, err)
+	require.Equal(t, data5, userData)
+
+	// data in db has older version
+	data4 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 4,
+		Data:    mkUserData(4),
+	}
+	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: defaultNamespaceId,
+			TaskQueue:   defaultRootTqID,
+			UserData:    data4,
+		}))
+	data4.Version++
+
+	// it should unload the task queue
+	require.Eventually(t, func() bool {
+		_, _, err := m.GetUserData()
+		return errors.Is(err, errTaskQueueClosed)
+	}, time.Second, time.Millisecond)
 }
 
 func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
@@ -588,7 +734,7 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = subTqId
 	subTq := createUserDataManager(t, controller, tqCfg)
-	err := subTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+	_, err := subTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		return data, false, nil
 	})
 	require.Error(t, err)
@@ -598,7 +744,7 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	actTqCfg := defaultTqmTestOpts(controller)
 	actTqCfg.dbq = actTqId
 	actTq := createUserDataManager(t, controller, actTqCfg)
-	err = actTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+	_, err = actTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		return data, false, nil
 	})
 	require.Error(t, err)
@@ -678,10 +824,11 @@ func TestUserData_Propagation(t *testing.T) {
 
 	const iters = 5
 	for iter := 0; iter < iters; iter++ {
-		err := managers[0].UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		newVersion, err := managers[0].UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 			return data, false, nil
 		})
 		require.NoError(t, err)
+		require.Equal(t, int64(iter+1), newVersion)
 		start := time.Now()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			for i := 1; i < N; i++ {
@@ -692,4 +839,110 @@ func TestUserData_Propagation(t *testing.T) {
 		}, 5*time.Second, 10*time.Millisecond, "failed to propagate")
 		t.Log("Propagation time:", time.Since(start))
 	}
+}
+
+func TestUserData_CheckPropagation(t *testing.T) {
+	t.Parallel()
+
+	const N = 7
+
+	ctx := context.Background()
+	controller := gomock.NewController(t)
+	opts := defaultTqmTestOpts(controller)
+
+	keys := make([]*PhysicalTaskQueueKey, N)
+	for i := range keys {
+		keys[i] = newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, i)
+	}
+
+	managers := make([]*userDataManagerImpl, N)
+	var tm *testTaskManager
+	for i := range managers {
+		optsi := *opts // share config and mock client
+		optsi.dbq = keys[i]
+		managers[i] = createUserDataManager(t, controller, &optsi)
+		if i == 0 {
+			// only the root uses persistence
+			tm = managers[0].store.(*testTaskManager)
+		}
+		// use two levels
+		managers[i].config.ForwarderMaxChildrenPerNode = dynamicconfig.GetIntPropertyFn(3)
+		// override timeouts to run faster
+		managers[i].config.GetUserDataMinWaitTime = 5 * time.Millisecond
+		managers[i].config.GetUserDataRetryPolicy = backoff.NewConstantDelayRetryPolicy(5 * time.Millisecond)
+		managers[i].logger = log.With(managers[i].logger, tag.HostID(fmt.Sprintf("%d", i)))
+	}
+
+	type checkKey struct{}
+	ctxFromCheck := context.WithValue(ctx, checkKey{}, true)
+
+	var failing atomic.Bool
+	failing.Store(true)
+
+	// hook up "rpcs"
+	opts.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+			// inject failures for propagation rpcs but not check rpcs
+			if ctx.Value(checkKey{}) == nil && failing.Load() {
+				util.InterruptibleSleep(ctx, 10*time.Millisecond)
+				return nil, serviceerror.NewUnavailable("timeout")
+			}
+			p, err := tqid.NormalPartitionFromRpcName(req.TaskQueue, req.NamespaceId, req.TaskQueueType)
+			require.NoError(t, err)
+			require.Equal(t, enumspb.TASK_QUEUE_TYPE_WORKFLOW, p.TaskType())
+			res, err := managers[p.PartitionId()].HandleGetUserDataRequest(ctx, req)
+			return res, err
+		},
+	).AnyTimes()
+	opts.matchingClientMock.EXPECT().UpdateTaskQueueUserData(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, req *matchingservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
+			err := tm.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+				NamespaceID:     req.NamespaceId,
+				TaskQueue:       req.TaskQueue,
+				UserData:        req.UserData,
+				BuildIdsAdded:   req.BuildIdsAdded,
+				BuildIdsRemoved: req.BuildIdsRemoved,
+			})
+			return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
+		},
+	).AnyTimes()
+
+	defer time.Sleep(50 * time.Millisecond) //nolint:forbidigo // extra buffer to let goroutines exit after manager.Stop()
+	for i := range managers {
+		managers[i].Start()
+		defer managers[i].Stop() //nolint:revive
+	}
+
+	newVersion, err := managers[0].UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		return data, false, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), newVersion)
+
+	checkReturned := make(chan error)
+	go func() {
+		// only check workflow, not activity partitions
+		checkReturned <- managers[0].CheckTaskQueueUserDataPropagation(ctxFromCheck, newVersion, N, 0)
+	}()
+
+	// CheckTaskQueueUserDataPropagation should not return within 100ms
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo // need to sleep for negative check
+	select {
+	case <-checkReturned:
+		t.Fatal("check should not have returned")
+	default:
+	}
+
+	// unblock propagation
+	failing.Store(false)
+
+	// CheckTaskQueueUserDataPropagation should return soon
+	require.Eventually(t, func() bool {
+		select {
+		case err := <-checkReturned:
+			return err == nil
+		default:
+			return false
+		}
+	}, 100*time.Millisecond, 5*time.Millisecond, "CheckTaskQueueUserDataPropagation did not return fast enough")
 }

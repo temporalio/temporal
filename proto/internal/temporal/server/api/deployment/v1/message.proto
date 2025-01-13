@@ -136,6 +136,16 @@ message SyncUserDataRequest {
     }
 }
 
+// used as deployment workflow activity output:
+message SyncUserDataResponse {
+    map<string, int64> task_queue_max_versions = 1;
+}
+
+// used as deployment workflow activity input:
+message CheckUserDataPropagationRequest {
+    map<string, int64> task_queue_max_versions = 1;
+}
+
 // used as deployment series workflow update input:
 message SetCurrentDeploymentArgs {
     string identity = 1;
