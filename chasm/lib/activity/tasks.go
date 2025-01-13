@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/service/history/chasm"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/service/history/consts"
 )
 
@@ -21,7 +21,7 @@ func (h *DispatchTaskHandler) Validate(
 	activity *Activity,
 	task *DispatchTask,
 ) error {
-	if !activity.State.StartedTime.AsTime().IsZero() {
+	if !activity.Data.StartedTime.AsTime().IsZero() {
 		return consts.ErrStaleReference
 	}
 
@@ -33,7 +33,7 @@ func (h *DispatchTaskHandler) Execute(
 	activityRef chasm.ComponentRef,
 	t *DispatchTask,
 ) error {
-	addTaskRequest, _, err := chasm.UpdateComponent(
+	addTaskRequest, err := chasm.ReadComponent(
 		ctx,
 		activityRef,
 		(*Activity).GetDispatchInfo,

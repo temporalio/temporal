@@ -2,7 +2,7 @@ package activity
 
 import (
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/service/history/chasm"
+	"go.temporal.io/server/chasm"
 	"go.uber.org/fx"
 )
 

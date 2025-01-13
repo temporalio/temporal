@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/service/history/chasm"
+	"go.temporal.io/server/chasm"
 )
 
 // This will be nexus
@@ -129,10 +129,10 @@ func (h *ActivityHandler) GetActivityResult(
 	resp, _, err := chasm.PollComponent(
 		ctx,
 		request.RefToken,
-		func(a *Activity, ctx chasm.Context, _ *GetActivityResultRequest) bool {
-			return a.LifecycleState() == chasm.LifecycleStateCompleted
+		func(a *Activity, ctx chasm.Context, _ *GetActivityResultRequest) (struct{}, bool, error) {
+			return struct{}{}, a.LifecycleState() == chasm.LifecycleStateCompleted, nil
 		},
-		func(a *Activity, ctx chasm.MutableContext, _ *GetActivityResultRequest) (*GetActivityResultResponse, error) {
+		func(a *Activity, ctx chasm.MutableContext, _ *GetActivityResultRequest, _ struct{}) (*GetActivityResultResponse, error) {
 			outputPayload, err := a.Output.Get(ctx)
 			resp.Output = outputPayload.Data
 			return resp, err

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/common/v1"
-	"go.temporal.io/server/service/history/chasm"
+	"go.temporal.io/server/chasm"
 )
 
 type EventNotifier interface {

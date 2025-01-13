@@ -37,8 +37,8 @@ type engine interface {
 	pollComponent(
 		context.Context,
 		ComponentRef,
-		func(Context, Component) bool,
-		func(MutableContext, Component) error,
+		func(Context, Component) (any, bool, error),
+		func(MutableContext, Component, any) error,
 		...TransitionOption,
 	) (ComponentRef, error)
 }
@@ -207,11 +207,11 @@ type PollComponentRequest[C Component, I any, O any] struct {
 	Input       I
 }
 
-func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
+func PollComponent[C Component, R []byte | ComponentRef, I any, O any, T any](
 	ctx context.Context,
 	r R,
-	predicateFn func(C, Context, I) bool,
-	operationFn func(C, MutableContext, I) (O, error),
+	predicateFn func(C, Context, I) (T, bool, error),
+	operationFn func(C, MutableContext, I, T) (O, error),
 	input I,
 	opts ...TransitionOption,
 ) (O, []byte, error) {
@@ -225,12 +225,12 @@ func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 	newRef, err := engineFromContext(ctx).pollComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) bool {
+		func(ctx Context, c Component) (any, bool, error) {
 			return predicateFn(c.(C), ctx, input)
 		},
-		func(ctx MutableContext, c Component) error {
+		func(ctx MutableContext, c Component, t any) error {
 			var err error
-			output, err = operationFn(c.(C), ctx, input)
+			output, err = operationFn(c.(C), ctx, input, t.(T))
 			return err
 		},
 		opts...,

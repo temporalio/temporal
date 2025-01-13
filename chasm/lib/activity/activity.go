@@ -6,7 +6,7 @@ import (
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/service/history/chasm"
+	"go.temporal.io/server/chasm"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -20,7 +20,7 @@ type (
 		//
 		// Framework will try to recognize the type and do serialization/deserialization
 		// proto.Message is recommended so the component get compatibility if state definition changes
-		State persistencepb.ActivityInfo // proto.Message
+		Data persistencepb.ActivityInfo // proto.Message
 
 		// At the end of a transition, framework will use reflection to understant the component
 		// tree structure.
@@ -68,7 +68,7 @@ func (i *Activity) Schedule(
 ) (*ScheduleResponse, error) {
 	// also validate current state etc.
 
-	i.State.ScheduledTime = timestamppb.New(chasmContext.Now(i))
+	i.Data.ScheduledTime = timestamppb.New(chasmContext.Now(i))
 	i.Input = chasm.NewDataField(chasmContext, &common.Payload{
 		Data: req.Input,
 	})
@@ -96,7 +96,7 @@ func (i *Activity) Schedule(
 }
 
 func (i *Activity) GetDispatchInfo(
-	chasmContext chasm.MutableContext,
+	chasmContext chasm.Context,
 	t *DispatchTask,
 ) (*matchingservice.AddActivityTaskRequest, error) {
 	panic("not implemented")
@@ -108,7 +108,7 @@ func (i *Activity) RecordStarted(
 ) (*RecordStartedResponse, error) {
 
 	// only this field will be updated
-	i.State.StartedTime = timestamppb.New(chasmContext.Now(i))
+	i.Data.StartedTime = timestamppb.New(chasmContext.Now(i))
 	// update other states
 
 	payload, err := i.Input.Get(chasmContext)
