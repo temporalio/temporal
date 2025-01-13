@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -71,7 +72,7 @@ type (
 		controller         *gomock.Controller
 		shardContext       *shard.ContextTest
 		workflowCache      *wcache.MockCache
-		mockEngine         *shard.MockEngine
+		mockEngine         *historyi.MockEngine
 		progressCache      *MockProgressCache
 		executionManager   *persistence.MockExecutionManager
 		syncStateRetriever *MockSyncStateRetriever
@@ -148,7 +149,7 @@ func (s *rawTaskConverterSuite) SetupTest() {
 	s.executionManager = s.shardContext.Resource.ExecutionMgr
 	s.logger = s.shardContext.GetLogger()
 
-	s.mockEngine = shard.NewMockEngine(s.controller)
+	s.mockEngine = historyi.NewMockEngine(s.controller)
 	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockEngine.EXPECT().Stop().AnyTimes()
 	s.shardContext.SetEngineForTesting(s.mockEngine)

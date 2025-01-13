@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
@@ -138,7 +138,7 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 		return err
 	}
 
-	return engine.BackfillHistoryEvents(ctx, &shard.BackfillHistoryEventsRequest{
+	return engine.BackfillHistoryEvents(ctx, &historyi.BackfillHistoryEventsRequest{
 		WorkflowKey:         e.WorkflowKey,
 		SourceClusterName:   e.SourceClusterName(),
 		VersionedHistory:    e.ReplicationTask().VersionedTransition,
