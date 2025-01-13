@@ -34,8 +34,10 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	querypb "go.temporal.io/api/query/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -253,6 +255,19 @@ func (tv *TestVars) Deployment() *deploymentpb.Deployment {
 	}
 }
 
+func (tv *TestVars) DeploymentTransition() *workflowpb.DeploymentTransition {
+	return &workflowpb.DeploymentTransition{
+		Deployment: tv.Deployment(),
+	}
+}
+
+func (tv *TestVars) VersioningOverridePinned() *workflowpb.VersioningOverride {
+	return &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+		Deployment: tv.Deployment(),
+	}
+}
+
 func (tv *TestVars) TaskQueue() *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{
 		Name: getOrCreate(tv, "task_queue", tv.uniqueString, tv.stringNSetter),
@@ -350,12 +365,27 @@ func (tv *TestVars) QueryType() string {
 	return getOrCreate(tv, "query_type", tv.uniqueString, tv.stringNSetter)
 }
 
+func (tv *TestVars) Query() *querypb.WorkflowQuery {
+	return &querypb.WorkflowQuery{
+		QueryType: tv.QueryType(),
+		QueryArgs: tv.Any().Payloads(),
+	}
+}
+
 func (tv *TestVars) SignalName() string {
 	return getOrCreate(tv, "signal_name", tv.uniqueString, tv.stringNSetter)
 }
 
 func (tv *TestVars) IndexName() string {
 	return getOrCreate(tv, "index_name", tv.uniqueString, tv.stringNSetter)
+}
+
+func (tv *TestVars) Service() string {
+	return getOrCreate(tv, "service", tv.uniqueString, tv.stringNSetter)
+}
+
+func (tv *TestVars) Operation() string {
+	return getOrCreate(tv, "operation", tv.uniqueString, tv.stringNSetter)
 }
 
 // ----------- Generic methods ------------
