@@ -53,7 +53,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type WorkerDeploymentStoreClient interface {
+type DeploymentStoreClient interface {
 	RegisterTaskQueueWorker(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -122,8 +122,12 @@ type WorkerDeploymentStoreClient interface {
 	) (*deploymentspb.SyncDeploymentStateResponse, error)
 }
 
-// implements WorkerDeploymentStoreClient
-type WorkerDeploymentClientImpl struct {
+type ErrMaxTaskQueuesInDeployment struct{ error }
+
+type ErrRegister struct{ error }
+
+// implements DeploymentStoreClient
+type DeploymentClientImpl struct {
 	logger                    log.Logger
 	historyClient             historyservice.HistoryServiceClient
 	visibilityManager         manager.VisibilityManager
@@ -133,9 +137,11 @@ type WorkerDeploymentClientImpl struct {
 	reachabilityCache         reachabilityCache
 }
 
-var _ DeploymentStoreClient = (*WorkerDeploymentClientImpl)(nil)
+var _ DeploymentStoreClient = (*DeploymentClientImpl)(nil)
 
-func (d *WorkerDeploymentClientImpl) RegisterTaskQueueWorker(
+var errRetry = errors.New("retry update")
+
+func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deployment *deploymentpb.Deployment,
@@ -178,7 +184,7 @@ func (d *WorkerDeploymentClientImpl) RegisterTaskQueueWorker(
 	return nil
 }
 
-func (d *WorkerDeploymentClientImpl) DescribeDeployment(
+func (d *DeploymentClientImpl) DescribeDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -225,11 +231,11 @@ func (d *WorkerDeploymentClientImpl) DescribeDeployment(
 		return nil, err
 	}
 
-	return workerDeploymentStateToInfo(queryResponse.DeploymentLocalState), nil
+	return stateToInfo(queryResponse.DeploymentLocalState), nil
 }
 
 // TODO (carly): pass deployment instead of seriesName + buildId in all these APIs -- separate PR
-func (d *WorkerDeploymentClientImpl) GetDeploymentReachability(
+func (d *DeploymentClientImpl) GetDeploymentReachability(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -263,7 +269,7 @@ func (d *WorkerDeploymentClientImpl) GetDeploymentReachability(
 	}, nil
 }
 
-func (d *WorkerDeploymentClientImpl) GetCurrentDeployment(
+func (d *DeploymentClientImpl) GetCurrentDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -320,7 +326,7 @@ func (d *WorkerDeploymentClientImpl) GetCurrentDeployment(
 	return deploymentInfo, nil
 }
 
-func (d *WorkerDeploymentClientImpl) ListDeployments(
+func (d *DeploymentClientImpl) ListDeployments(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -370,7 +376,7 @@ func (d *WorkerDeploymentClientImpl) ListDeployments(
 	return deployments, persistenceResp.NextPageToken, nil
 }
 
-func (d *WorkerDeploymentClientImpl) SetCurrentDeployment(
+func (d *DeploymentClientImpl) SetCurrentDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deployment *deploymentpb.Deployment,
@@ -422,10 +428,10 @@ func (d *WorkerDeploymentClientImpl) SetCurrentDeployment(
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, nil, err
 	}
-	return workerDeploymentStateToInfo(res.CurrentDeploymentState), workerDeploymentStateToInfo(res.PreviousDeploymentState), nil
+	return stateToInfo(res.CurrentDeploymentState), stateToInfo(res.PreviousDeploymentState), nil
 }
 
-func (d *WorkerDeploymentClientImpl) StartDeploymentSeries(
+func (d *DeploymentClientImpl) StartDeploymentSeries(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -473,7 +479,7 @@ func (d *WorkerDeploymentClientImpl) StartDeploymentSeries(
 	return err
 }
 
-func (d *WorkerDeploymentClientImpl) SyncDeploymentWorkflowFromSeries(
+func (d *DeploymentClientImpl) SyncDeploymentWorkflowFromSeries(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deployment *deploymentpb.Deployment,
@@ -527,7 +533,7 @@ func (d *WorkerDeploymentClientImpl) SyncDeploymentWorkflowFromSeries(
 	return &res, nil
 }
 
-func (d *WorkerDeploymentClientImpl) updateWithStartDeployment(
+func (d *DeploymentClientImpl) updateWithStartDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deployment *deploymentpb.Deployment,
@@ -577,7 +583,7 @@ func (d *WorkerDeploymentClientImpl) updateWithStartDeployment(
 	)
 }
 
-func (d *WorkerDeploymentClientImpl) updateWithStartDeploymentSeries(
+func (d *DeploymentClientImpl) updateWithStartDeploymentSeries(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -619,7 +625,7 @@ func (d *WorkerDeploymentClientImpl) updateWithStartDeploymentSeries(
 	)
 }
 
-func (d *WorkerDeploymentClientImpl) updateWithStart(
+func (d *DeploymentClientImpl) updateWithStart(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	workflowType string,
@@ -719,7 +725,7 @@ func (d *WorkerDeploymentClientImpl) updateWithStart(
 	return outcome, err
 }
 
-func (d *WorkerDeploymentClientImpl) buildInitialDeploymentMemo(deployment *deploymentpb.Deployment) (*commonpb.Memo, error) {
+func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deploymentpb.Deployment) (*commonpb.Memo, error) {
 	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.DeploymentWorkflowMemo{
 		Deployment:          deployment,
 		CreateTime:          timestamppb.Now(),
@@ -736,7 +742,7 @@ func (d *WorkerDeploymentClientImpl) buildInitialDeploymentMemo(deployment *depl
 	}, nil
 }
 
-func (d *WorkerDeploymentClientImpl) buildInitialDeploymentSeriesMemo(seriesName string) (*commonpb.Memo, error) {
+func (d *DeploymentClientImpl) buildInitialDeploymentSeriesMemo(seriesName string) (*commonpb.Memo, error) {
 	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.DeploymentSeriesWorkflowMemo{
 		SeriesName: seriesName,
 	})
@@ -751,13 +757,13 @@ func (d *WorkerDeploymentClientImpl) buildInitialDeploymentSeriesMemo(seriesName
 	}, nil
 }
 
-func (d *WorkerDeploymentClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
+func (d *DeploymentClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
 	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
 	return sa
 }
 
-func (d *WorkerDeploymentClientImpl) record(operation string, retErr *error, args ...any) func() {
+func (d *DeploymentClientImpl) record(operation string, retErr *error, args ...any) func() {
 	start := time.Now()
 	return func() {
 		elapsed := time.Since(start)
@@ -781,7 +787,7 @@ func (d *WorkerDeploymentClientImpl) record(operation string, retErr *error, arg
 	}
 }
 
-func workerDeploymentStateToInfo(state *deploymentspb.DeploymentLocalState) *deploymentpb.DeploymentInfo {
+func stateToInfo(state *deploymentspb.DeploymentLocalState) *deploymentpb.DeploymentInfo {
 	if state == nil {
 		return nil
 	}
