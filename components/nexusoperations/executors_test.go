@@ -417,7 +417,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
-			listenAddr := nexustest.AllocListenAddress(t)
+			listenAddr := nexustest.AllocListenAddress()
 			h := handler{}
 			h.OnStartOperation = func(
 				ctx context.Context,
@@ -716,7 +716,7 @@ func TestProcessCancelationTask(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
-			listenAddr := nexustest.AllocListenAddress(t)
+			listenAddr := nexustest.AllocListenAddress()
 			h := handler{}
 			h.OnCancelOperation = tc.onCancelOperation
 			nexustest.NewNexusServer(t, listenAddr, h)
