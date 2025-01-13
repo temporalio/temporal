@@ -1367,7 +1367,7 @@ func (s *Versioning3Suite) validateBacklogCount(
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-			Namespace:              s.Namespace(),
+			Namespace:              s.Namespace().String(),
 			TaskQueue:              tv.TaskQueue(),
 			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 			Versions:               nil, // default version, in this case unversioned queue
