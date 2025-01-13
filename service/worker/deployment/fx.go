@@ -105,21 +105,34 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
-	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
-	registry.RegisterWorkflowWithOptions(DeploymentSeriesWorkflow, workflow.RegisterOptions{Name: DeploymentSeriesWorkflowType})
-
-	deploymentActivities := &DeploymentActivities{
+	registry.RegisterWorkflowWithOptions(WorkerDeploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
+	registry.RegisterWorkflowWithOptions(WorkerBuildWorkflow, workflow.RegisterOptions{Name: WorkerBuildWorkflowType})
+	workerDeploymentActivities := &WorkerDeploymentActivities{
 		namespace:        ns,
 		deploymentClient: s.activityDeps.DeploymentClient,
 		matchingClient:   s.activityDeps.MatchingClient,
 	}
-	registry.RegisterActivity(deploymentActivities)
+	registry.RegisterActivity(workerDeploymentActivities)
 
-	deploymentSeriesActivities := &DeploymentSeriesActivities{
+	workerBuildActivities := &WorkerBuildActivities{
 		namespace:        ns,
 		deploymentClient: s.activityDeps.DeploymentClient,
 	}
-	registry.RegisterActivity(deploymentSeriesActivities)
+	registry.RegisterActivity(workerBuildActivities)
 
+	// [cleanup-wv] Pre-release deployment APIs, clean up later
+	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
+	registry.RegisterWorkflowWithOptions(DeploymentSeriesWorkflow, workflow.RegisterOptions{Name: DeploymentSeriesWorkflowType})
+	legacyDeploymentActivities := &DeploymentActivities{
+		namespace:        ns,
+		deploymentClient: s.activityDeps.DeploymentClient,
+		matchingClient:   s.activityDeps.MatchingClient,
+	}
+	registry.RegisterActivity(legacyDeploymentActivities)
+	legacyDeploymentSeriesActivities := &DeploymentSeriesActivities{
+		namespace:        ns,
+		deploymentClient: s.activityDeps.DeploymentClient,
+	}
+	registry.RegisterActivity(legacyDeploymentSeriesActivities)
 	return nil
 }
