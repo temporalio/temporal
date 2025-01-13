@@ -7,6 +7,8 @@ import (
 )
 
 type Library struct {
+	chasm.UnimplementedLibrary
+
 	matchingClient matchingservice.MatchingServiceClient
 }
 
@@ -45,7 +47,7 @@ func (l Library) Tasks() []chasm.RegistrableTask {
 var Module = fx.Options(
 	fx.Invoke(
 		func(registry chasm.Registry, matchingClient matchingservice.MatchingServiceClient) {
-			registry.RegisterLibrary(Library{matchingClient})
+			registry.RegisterLibrary(Library{matchingClient: matchingClient})
 		},
 	),
 )

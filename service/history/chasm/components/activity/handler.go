@@ -74,7 +74,7 @@ func (h *ActivityHandler) NewActivity(
 		return nil, err
 	}
 
-	resp.RefToken = activityRef.Serialize()
+	resp.RefToken = activityRef
 	return resp, err
 }
 
@@ -84,14 +84,9 @@ func (h *ActivityHandler) RecordStarted(
 ) (*RecordStartedResponse, error) {
 	// resp := &RecordStartedResponse{}
 
-	ref, err := chasm.DeserializeComponentRef(request.RefToken)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, startedActivityRef, err := chasm.UpdateComponent(
+	resp, startedActivityRefToken, err := chasm.UpdateComponent(
 		ctx,
-		ref,
+		request.RefToken,
 		(*Activity).RecordStarted,
 		request,
 		// chasm.EngineEagerLoadOption([]chasm.ComponentPath{
@@ -99,7 +94,7 @@ func (h *ActivityHandler) RecordStarted(
 		// }),
 	)
 
-	resp.RefToken = startedActivityRef.Serialize()
+	resp.RefToken = startedActivityRefToken
 	return resp, err
 }
 
@@ -107,14 +102,9 @@ func (h *ActivityHandler) RecordCompleted(
 	ctx context.Context,
 	request *RecordCompletedRequest,
 ) (*RecordCompletedResponse, error) {
-	ref, err := chasm.DeserializeComponentRef(request.RefToken)
-	if err != nil {
-		return nil, err
-	}
-
 	resp, _, err := chasm.UpdateComponent(
 		ctx,
-		ref,
+		request.RefToken,
 		(*Activity).RecordCompleted,
 		request,
 	)
@@ -134,15 +124,11 @@ func (h *ActivityHandler) GetActivityResult(
 	ctx context.Context,
 	request *GetActivityResultRequest,
 ) (*GetActivityResultResponse, error) {
-	ref, err := chasm.DeserializeComponentRef(request.RefToken)
-	if err != nil {
-		return nil, err
-	}
 
 	var resp *GetActivityResultResponse
-	if resp, _, err = chasm.PollComponent(
+	resp, _, err := chasm.PollComponent(
 		ctx,
-		ref,
+		request.RefToken,
 		func(a *Activity, ctx chasm.Context, _ *GetActivityResultRequest) bool {
 			return a.LifecycleState() == chasm.LifecycleStateCompleted
 		},
@@ -152,9 +138,6 @@ func (h *ActivityHandler) GetActivityResult(
 			return resp, err
 		},
 		request,
-	); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	)
+	return resp, err
 }

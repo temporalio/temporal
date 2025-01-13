@@ -49,7 +49,7 @@ func NewScheduledActivity(
 		// we need to give some guidance here, likely the implementation of the
 		// notifier will just be the parent component itself (say Workflow),
 		// as the handling logic will need to change the state of the parent component
-		activity.EventNotifier = chasm.NewComponentPointer(chasmContext, params.notifier)
+		activity.EventNotifier = chasm.NewComponentPointerField(chasmContext, params.notifier)
 	}
 
 	_, err := activity.Schedule(chasmContext, &ScheduleRequest{
@@ -69,7 +69,7 @@ func (i *Activity) Schedule(
 	// also validate current state etc.
 
 	i.State.ScheduledTime = timestamppb.New(chasmContext.Now(i))
-	i.Input = chasm.NewData(chasmContext, &common.Payload{
+	i.Input = chasm.NewDataField(chasmContext, &common.Payload{
 		Data: req.Input,
 	})
 
@@ -142,7 +142,7 @@ func (i *Activity) RecordCompleted(
 	output := &common.Payload{
 		Data: req.Output,
 	}
-	i.Output = chasm.NewData(chasmContext, output)
+	i.Output = chasm.NewDataField(chasmContext, output)
 
 	completedEvent := ActivityCompletedEvent{
 		Output: output,

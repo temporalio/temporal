@@ -95,7 +95,7 @@ func NewEntity[C Component, I any, O any](
 	newFn func(MutableContext, I) (C, O, error),
 	input I,
 	opts ...TransitionOption,
-) (O, ComponentRef, error) {
+) (O, []byte, error) {
 	var output O
 	ref, err := engineFromContext(ctx).newInstance(
 		ctx,
@@ -108,7 +108,7 @@ func NewEntity[C Component, I any, O any](
 		},
 		opts...,
 	)
-	return output, ref, err
+	return output, ref.Serialize(), err
 }
 
 func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
@@ -118,7 +118,7 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 	updateFn func(C, MutableContext, I) (O2, error),
 	input I,
 	opts ...TransitionOption,
-) (O1, O2, ComponentRef, error) {
+) (O1, O2, []byte, error) {
 	var output1 O1
 	var output2 O2
 	ref, err := engineFromContext(ctx).updateWithNewInstance(
@@ -137,7 +137,7 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 		},
 		opts...,
 	)
-	return output1, output2, ref, err
+	return output1, output2, ref.Serialize(), err
 }
 
 // TODO:
@@ -145,16 +145,21 @@ func UpdateWithNewEntity[C Component, I any, O1 any, O2 any](
 //   - consider remove ComponentRef from the return value and allow components to get
 //     the ref in the transition function. There are some caveats there, check the
 //     comment of the NewRef method in MutableContext.
-//   - Take in a encoded ref instead of a ComponentRef as input? lose some type safety?
-func UpdateComponent[C Component, I any, O any](
+func UpdateComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
-	ref ComponentRef,
+	r R,
 	updateFn func(C, MutableContext, I) (O, error),
 	input I,
 	opts ...TransitionOption,
-) (O, ComponentRef, error) {
+) (O, []byte, error) {
 	var output O
-	ref, err := engineFromContext(ctx).updateComponent(
+
+	ref, err := convertComponentRef(r)
+	if err != nil {
+		return output, nil, err
+	}
+
+	newRef, err := engineFromContext(ctx).updateComponent(
 		ctx,
 		ref,
 		func(ctx MutableContext, c Component) error {
@@ -164,18 +169,25 @@ func UpdateComponent[C Component, I any, O any](
 		},
 		opts...,
 	)
-	return output, ref, err
+
+	return output, newRef.Serialize(), err
 }
 
-func ReadComponent[C Component, I any, O any](
+func ReadComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
-	ref ComponentRef,
+	r R,
 	readFn func(C, Context, I) (O, error),
 	input I,
 	opts ...TransitionOption,
 ) (O, error) {
 	var output O
-	err := engineFromContext(ctx).readComponent(
+
+	ref, err := convertComponentRef(r)
+	if err != nil {
+		return output, err
+	}
+
+	err = engineFromContext(ctx).readComponent(
 		ctx,
 		ref,
 		func(ctx Context, c Component) error {
@@ -195,16 +207,22 @@ type PollComponentRequest[C Component, I any, O any] struct {
 	Input       I
 }
 
-func PollComponent[C Component, I any, O any](
+func PollComponent[C Component, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
-	ref ComponentRef,
+	r R,
 	predicateFn func(C, Context, I) bool,
 	operationFn func(C, MutableContext, I) (O, error),
 	input I,
 	opts ...TransitionOption,
-) (O, ComponentRef, error) {
+) (O, []byte, error) {
 	var output O
-	ref, err := engineFromContext(ctx).pollComponent(
+
+	ref, err := convertComponentRef(r)
+	if err != nil {
+		return output, nil, err
+	}
+
+	newRef, err := engineFromContext(ctx).pollComponent(
 		ctx,
 		ref,
 		func(ctx Context, c Component) bool {
@@ -217,7 +235,17 @@ func PollComponent[C Component, I any, O any](
 		},
 		opts...,
 	)
-	return output, ref, err
+	return output, newRef.Serialize(), err
+}
+
+func convertComponentRef[R []byte | ComponentRef](
+	r R,
+) (ComponentRef, error) {
+	if refToken, ok := any(r).([]byte); ok {
+		return DeserializeComponentRef(refToken)
+	}
+
+	return any(r).(ComponentRef), nil
 }
 
 type engineCtxKeyType string

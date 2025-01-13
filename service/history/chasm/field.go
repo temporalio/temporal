@@ -16,7 +16,7 @@ type fieldInternal struct {
 	fieldType int // data, component, componentPointer
 	component reflect.Value
 
-	dirty bool
+	// backingNode *nodeInfo
 }
 
 func (d *Field[T]) Get(Context) (T, error) {
@@ -33,46 +33,45 @@ func (d *Field[T]) Get(Context) (T, error) {
 // that may contain other information like ref count etc.
 // most importantly, the framework needs to know when it's safe to delete the data.
 // i.e. the lifecycle of that data component reaches completed.
-func NewData[D proto.Message](
+func NewDataField[D proto.Message](
 	ctx MutableContext,
 	d D,
 ) *Field[D] {
 	return &Field[D]{}
 }
 
-type componentOptions struct {
+type componentFieldOptions struct {
 	detached bool
 }
 
-type ComponentOption func(*componentOptions)
+type ComponentFieldOption func(*componentFieldOptions)
 
-func ComponentOptionDetached() ComponentOption {
-	return func(o *componentOptions) {
+func ComponentFieldDetached() ComponentFieldOption {
+	return func(o *componentFieldOptions) {
 		o.detached = true
 	}
 }
 
-func NewComponent[C Component](
+func NewComponentField[C Component](
 	ctx MutableContext,
 	c C,
-	options ...ComponentOption,
+	options ...ComponentFieldOption,
 ) *Field[C] {
 	return &Field[C]{
 		Internal: fieldInternal{
-			dirty:     true,
 			component: reflect.ValueOf(c),
 		},
 	}
 }
 
-func NewComponentPointer[C Component](
+func NewComponentPointerField[C Component](
 	ctx MutableContext,
 	c C,
 ) *Field[C] {
 	panic("not implemented")
 }
 
-func NewDataPointer[D proto.Message](
+func NewDataPointerField[D proto.Message](
 	ctx MutableContext,
 	d D,
 ) *Field[D] {

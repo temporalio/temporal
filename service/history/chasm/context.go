@@ -6,7 +6,7 @@ import (
 )
 
 type Context interface {
-	// Context is not binded to any component,
+	// Context is not bound to any component,
 	// so all methods needs to take in component as a parameter
 
 	// NOTE: component created in the current transaction won't have a ref

@@ -18,6 +18,8 @@ type ComponentRef struct {
 	// or maybe make it specific
 	// routingKey string
 
+	shardID int32
+
 	// From the component name, we can find the component struct definition
 	// use reflection to find sub-components and understand if those sub-components
 	// needs to be loaded or not. we only need to do this for sub-components of the component.
@@ -27,8 +29,7 @@ type ComponentRef struct {
 	componentInitialVT *persistencespb.VersionedTransition // this identifies a component
 	entityLastUpdateVT *persistencespb.VersionedTransition // this is consistency token
 
-	// TODO: need a function ptr to the task validation logic
-	// or maybe put that in to the context.
+	validationFn func(Context, Component) error
 }
 
 // In V1, if you don't have a ref,
@@ -46,6 +47,9 @@ func NewComponentRef(
 }
 
 func (r *ComponentRef) Serialize() []byte {
+	if r == nil {
+		return nil
+	}
 	panic("not implemented")
 }
 

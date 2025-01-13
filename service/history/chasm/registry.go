@@ -11,7 +11,21 @@ type Library interface {
 	Components() []RegistrableComponent
 	Tasks() []RegistrableTask
 	// Service()
+
+	mustEmbedUnimplementedLibrary()
 }
+
+type UnimplementedLibrary struct{}
+
+func (UnimplementedLibrary) Components() []RegistrableComponent {
+	return nil
+}
+
+func (UnimplementedLibrary) Tasks() []RegistrableTask {
+	return nil
+}
+
+func (UnimplementedLibrary) mustEmbedUnimplementedLibrary() {}
 
 type RegistrableComponent struct {
 }
