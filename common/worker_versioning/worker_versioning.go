@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -285,4 +286,38 @@ func FindCurrentDeployment(deployments *persistencespb.DeploymentData) *deployme
 		}
 	}
 	return currentDeployment
+}
+
+func ValidateTaskVersionDirective(
+	directive *taskqueuespb.TaskVersionDirective,
+	wfBehavior enumspb.VersioningBehavior,
+	wfDeployment *deploymentpb.Deployment,
+	scheduledDeployment *deploymentpb.Deployment,
+) error {
+	// Effective behavior and deployment of the workflow when History scheduled the WFT.
+	directiveBehavior := directive.GetBehavior()
+	if directiveBehavior != wfBehavior &&
+		// Verisoning 3 pre-release (v1.26, Dec 2024) is not populating request.VersionDirective so
+		// we skip this check until v1.28 if directiveBehavior is unspecified.
+		// TODO (shahab): remove this line after v1.27 is released.
+		directiveBehavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		// This must be a task scheduled before the workflow changes behavior. Matching can drop it.
+		return serviceerrors.NewObsoleteMatchingTask(fmt.Sprintf(
+			"task was scheduled when workflow had versioning behavior %s, now it has versioning behavior %s.",
+			directiveBehavior, wfBehavior))
+	}
+
+	directiveDeployment := directive.GetDeployment()
+	if directiveDeployment == nil {
+		// TODO: remove this once the ScheduledDeployment field is removed from proto
+		directiveDeployment = scheduledDeployment
+	}
+	if !directiveDeployment.Equal(wfDeployment) {
+		// This must be a task scheduled before the workflow transitions to the current
+		// deployment. Matching can drop it.
+		return serviceerrors.NewObsoleteMatchingTask(fmt.Sprintf(
+			"task was scheduled when workflow was on build %s, now it is on build %s.",
+			directiveDeployment.GetBuildId(), wfDeployment.GetBuildId()))
+	}
+	return nil
 }

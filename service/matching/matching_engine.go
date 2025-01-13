@@ -2443,7 +2443,9 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		RequestId:           uuid.New(),
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
+		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
 		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
+		VersionDirective:    task.event.Data.VersionDirective,
 	}
 
 	return e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
@@ -2466,7 +2468,9 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
 		Stamp:               task.event.Data.GetStamp(),
+		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
 		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
+		VersionDirective:    task.event.Data.VersionDirective,
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)
