@@ -700,7 +700,7 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 			// (1) send Signal
 			_, err := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
 				&workflowservice.SignalWorkflowExecutionRequest{
-					RequestId:         tv.Any().String(),
+					RequestId:         tv.RequestID(),
 					Namespace:         s.Namespace().String(),
 					WorkflowExecution: tv.WorkflowExecution(),
 					SignalName:        tv.Any().String(),
