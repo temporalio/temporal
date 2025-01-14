@@ -105,6 +105,7 @@ func (x *TaskQueueData) GetLastBecameCurrentTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// Local state for Worker Deployment Version
 type VersionLocalState struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -336,6 +337,7 @@ func (x *WorkflowArgs) GetState() *LocalState {
 	return nil
 }
 
+// Local state for Worker Deployment
 type LocalState struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
