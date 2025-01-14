@@ -1,0 +1,34 @@
+{{ $decorator := (or .Vars.DecoratorName (printf "faultInjection%s" .Interface.Name)) }}
+
+type (
+    // {{$decorator}} implements {{.Interface.Name}} interface with fault injection.
+    {{$decorator}} struct {
+        {{.Interface.Type}}
+        generator faultGenerator
+    }
+)
+
+// new{{upFirst $decorator}} returns {{$decorator}}.
+func new{{upFirst $decorator}} (
+    baseStore {{.Interface.Type}},
+    generator faultGenerator,
+) *{{$decorator}} {
+    return &{{$decorator}} {
+        {{.Interface.Name}}: baseStore,
+        generator: generator,
+    }
+}
+
+{{range $method := .Interface.Methods}}
+    {{if (and $method.AcceptsContext (gt (len $method.Params) 1)) }}
+        {{ $methodIdent := (printf "%s.%s" $.Interface.Name $method.Name) }}
+        // {{$method.Name}} wraps {{ (printf "%s.%s" $.Interface.Name $method.Name) }}.
+        func (d {{$decorator}}) {{$method.Declaration}} {
+            err = d.generator.generate("{{ $method.Name }}").inject(func() error {
+                {{$method.ResultsNames}} = d.{{$.Interface.Name}}.{{$method.Call}}
+                return err
+            })
+            return
+        }
+    {{end}}
+{{end}}
