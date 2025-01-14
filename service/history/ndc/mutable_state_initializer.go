@@ -30,7 +30,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -273,7 +273,7 @@ func (r *MutableStateInitializerImpl) deserializeBackfillToken(
 
 	historyBackfillToken := &MutableStateToken{}
 	if err := json.Unmarshal(token, historyBackfillToken); err != nil {
-		return nil, 0, 0, false, serialization.NewDeserializationError(enums.ENCODING_TYPE_JSON, err)
+		return nil, 0, 0, false, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_JSON, err)
 	}
 	err := proto.Unmarshal(historyBackfillToken.MutableStateRow, mutableState)
 	if err == nil {
@@ -282,7 +282,7 @@ func (r *MutableStateInitializerImpl) deserializeBackfillToken(
 		err = utf8validator.Validate(mutableState, utf8validator.SourceRPCRequest)
 	}
 	if err != nil {
-		return nil, 0, 0, false, serialization.NewDeserializationError(enums.ENCODING_TYPE_PROTO3, err)
+		return nil, 0, 0, false, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	return mutableState, historyBackfillToken.DBRecordVersion, historyBackfillToken.DBHistorySize, historyBackfillToken.ExistsInDB, nil
 }

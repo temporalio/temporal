@@ -31,7 +31,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -161,11 +161,11 @@ func (q *queueV2) ReadMessages(
 	}
 	var messages []persistence.QueueV2Message
 	for _, row := range rows {
-		encoding, err := enums.EncodingTypeFromString(row.MessageEncoding)
+		encoding, err := enumspb.EncodingTypeFromString(row.MessageEncoding)
 		if err != nil {
 			return nil, serialization.NewUnknownEncodingTypeError(row.MessageEncoding)
 		}
-		encodingType := enums.EncodingType(encoding)
+		encodingType := enumspb.EncodingType(encoding)
 		message := persistence.QueueV2Message{
 			MetaData: persistence.MessageMetadata{ID: row.MessageID},
 			Data: &commonpb.DataBlob{
@@ -216,7 +216,7 @@ func (q *queueV2) CreateQueue(
 		QueueType:        request.QueueType,
 		QueueName:        request.QueueName,
 		MetadataPayload:  bytes,
-		MetadataEncoding: enums.ENCODING_TYPE_PROTO3.String(),
+		MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
 	}
 	_, err := q.Db.InsertIntoQueueV2Metadata(ctx, &row)
 	if q.Db.IsDupEntryError(err) {
@@ -312,7 +312,7 @@ func (q *queueV2) RangeDeleteMessages(
 			QueueType:        request.QueueType,
 			QueueName:        request.QueueName,
 			MetadataPayload:  bytes,
-			MetadataEncoding: enums.ENCODING_TYPE_PROTO3.String(),
+			MetadataEncoding: enumspb.ENCODING_TYPE_PROTO3.String(),
 		}
 		_, err = tx.UpdateQueueV2Metadata(ctx, &row)
 		if err != nil {
@@ -367,19 +367,19 @@ func (q *queueV2) getQueueMetadata(
 }
 
 func (q queueV2) extractQueueMetadata(metadataRow *sqlplugin.QueueV2MetadataRow) (*persistencespb.Queue, error) {
-	if metadataRow.MetadataEncoding != enums.ENCODING_TYPE_PROTO3.String() {
+	if metadataRow.MetadataEncoding != enumspb.ENCODING_TYPE_PROTO3.String() {
 		return nil, fmt.Errorf(
 			"queue with type %v and name %v has invalid encoding: %w",
 			metadataRow.QueueType,
 			metadataRow.QueueName,
-			serialization.NewUnknownEncodingTypeError(metadataRow.MetadataEncoding, enums.ENCODING_TYPE_PROTO3),
+			serialization.NewUnknownEncodingTypeError(metadataRow.MetadataEncoding, enumspb.ENCODING_TYPE_PROTO3),
 		)
 	}
 	qm := &persistencespb.Queue{}
 	err := qm.Unmarshal(metadataRow.MetadataPayload)
 	if err != nil {
 		return nil, serialization.NewDeserializationError(
-			enums.ENCODING_TYPE_PROTO3,
+			enumspb.ENCODING_TYPE_PROTO3,
 			fmt.Errorf("unmarshal payload for queue with type %v and name %v failed: %w",
 				metadataRow.QueueType,
 				metadataRow.QueueName,

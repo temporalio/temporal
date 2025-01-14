@@ -44,9 +44,10 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflow/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
@@ -62,18 +63,36 @@ type NexusStateReplicationSuite struct {
 
 func TestNexusStateReplicationTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(NexusStateReplicationSuite))
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &NexusStateReplicationSuite{}
+			s.enableTransitionHistory = tc.enableTransitionHistory
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *NexusStateReplicationSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		// Make sure we don't hit the rate limiter in tests
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
-		dynamicconfig.EnableNexus.Key():                  true,
-		dynamicconfig.RefreshNexusEndpointsMinWait.Key(): 1 * time.Millisecond,
-		callbacks.AllowedAddresses.Key():                 []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
+		callbacks.AllowedAddresses.Key():                                               []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
-	s.setupSuite([]string{"nexus_state_replication_active", "nexus_state_replication_standby"})
+	suffix := "_" + common.GenerateRandomString(5)
+	s.setupSuite([]string{"nexus_state_replication_active" + suffix, "nexus_state_replication_standby" + suffix})
 }
 
 func (s *NexusStateReplicationSuite) SetupTest() {
@@ -114,7 +133,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	ctx := testcore.NewContext()
@@ -267,7 +286,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 			return nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	ctx := testcore.NewContext()
@@ -452,7 +471,7 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	s.waitCallback(ctx, sdkClient2, &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(),
 		RunId:      startResp.GetRunId(),
-	}, func(callback *workflow.CallbackInfo) bool {
+	}, func(callback *workflowpb.CallbackInfo) bool {
 		return callback.Attempt > 2
 	})
 
@@ -468,7 +487,7 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 		s.waitCallback(ctx, sdkClient, &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      startResp.GetRunId(),
-		}, func(callback *workflow.CallbackInfo) bool {
+		}, func(callback *workflowpb.CallbackInfo) bool {
 			return callback.State == enumspb.CALLBACK_STATE_SUCCEEDED
 		})
 	}
@@ -520,7 +539,7 @@ func (s *NexusStateReplicationSuite) waitCallback(
 	ctx context.Context,
 	sdkClient sdkclient.Client,
 	execution *commonpb.WorkflowExecution,
-	condition func(callback *workflow.CallbackInfo) bool,
+	condition func(callback *workflowpb.CallbackInfo) bool,
 ) {
 	s.Eventually(func() bool {
 		descResp, err := sdkClient.DescribeWorkflowExecution(ctx, execution.WorkflowId, execution.RunId)
@@ -550,10 +569,11 @@ func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context,
 }
 
 func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, callbackUrl, callbackToken string) {
-	completion := &nexus.OperationCompletionUnsuccessful{
-		State:   nexus.OperationStateCanceled,
-		Failure: &nexus.Failure{Message: "operation canceled"},
-	}
+	completion, err := nexus.NewOperationCompletionUnsuccessful(
+		nexus.NewCanceledOperationError(errors.New("operation canceled")),
+		nexus.OperationCompletionUnsuccessfulOptions{},
+	)
+	s.NoError(err)
 	req, err := nexus.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
 	s.NoError(err)
 	if callbackToken != "" {

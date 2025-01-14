@@ -109,7 +109,7 @@ func newBacklogManager(
 	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
-	bmg.taskAckManager = newAckManager(bmg)
+	bmg.taskAckManager = newAckManager(bmg.db, logger)
 	bmg.taskGC = newTaskGC(bmg.db, config)
 
 	return bmg

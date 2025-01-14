@@ -27,7 +27,6 @@ package workflow
 import (
 	"time"
 
-	"go.temporal.io/server/api/persistence/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -56,7 +55,7 @@ func convertSyncActivityInfos(
 }
 
 func SanitizeMutableState(
-	workflowMutableState *persistence.WorkflowMutableState,
+	workflowMutableState *persistencespb.WorkflowMutableState,
 ) error {
 	// Some values stored in mutable state are cluster or shard specific.
 	// E.g task status (if task is created or not), taskID (derived from shard rangeID), txnID (derived from shard rangeID), etc.
@@ -74,7 +73,7 @@ func SanitizeMutableState(
 	workflowMutableState.ExecutionInfo.StateMachineTimers = nil
 	workflowMutableState.ExecutionInfo.TaskGenerationShardClockTimestamp = common.EmptyEventTaskID
 
-	rootNode := persistence.StateMachineNode{
+	rootNode := persistencespb.StateMachineNode{
 		Children: workflowMutableState.ExecutionInfo.SubStateMachinesByType,
 	}
 	SanitizeStateMachineNode(&rootNode)
@@ -83,7 +82,7 @@ func SanitizeMutableState(
 }
 
 func SanitizeStateMachineNode(
-	node *persistence.StateMachineNode,
+	node *persistencespb.StateMachineNode,
 ) {
 	if node == nil {
 		return

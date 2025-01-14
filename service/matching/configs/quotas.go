@@ -56,6 +56,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/ForceLoadTaskQueuePartition":            1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData":                1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData":             1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueUserDataPropagation":      1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/PollNexusTaskQueue":                     1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskCompleted":              1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskFailed":                 1,

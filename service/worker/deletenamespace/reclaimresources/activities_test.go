@@ -54,7 +54,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewNoopLogger(),
+		logger:            log.NewTestLogger(),
 	}
 
 	err := a.EnsureNoExecutionsAdvVisibilityActivity(context.Background(), "namespace-id", "namespace", 0)
@@ -79,7 +79,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_ExecutionsExist(t *testing.T) 
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewNoopLogger(),
+		logger:            log.NewTestLogger(),
 	}
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 
@@ -108,7 +108,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NotDeletedExecutionsExist(t *t
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewNoopLogger(),
+		logger:            log.NewTestLogger(),
 	}
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 

@@ -48,7 +48,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/debug"
@@ -170,7 +170,7 @@ func (s *DLQSuite) SetupSuite() {
 	)
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	s.NoError(err)
 	s.worker = sdkworker.New(sdkClient, taskQueue, sdkworker.Options{})
@@ -331,8 +331,8 @@ func (s *DLQSuite) TestPurgeRealWorkflow() {
 
 	// Run DescribeJob and validate
 	response := s.describeJob(ctx, token)
-	s.Equal(enums.DLQ_OPERATION_TYPE_PURGE, response.OperationType)
-	s.Equal(enums.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
+	s.Equal(enumsspb.DLQ_OPERATION_TYPE_PURGE, response.OperationType)
+	s.Equal(enumsspb.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
 	s.Equal(dlqMessageID, response.MaxMessageId)
 	s.Equal(dlqMessageID, response.LastProcessedMessageId)
 	s.Equal(int64(1), response.MessagesProcessed)
@@ -380,8 +380,8 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 
 	// Run DescribeJob and validate
 	response := s.describeJob(ctx, token)
-	s.Equal(enums.DLQ_OPERATION_TYPE_MERGE, response.OperationType)
-	s.Equal(enums.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
+	s.Equal(enumsspb.DLQ_OPERATION_TYPE_MERGE, response.OperationType)
+	s.Equal(enumsspb.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
 	s.Equal(dlqMessageID, response.MaxMessageId)
 	s.Equal(dlqMessageID, response.LastProcessedMessageId)
 	s.Equal(int64(numWorkflows), response.MessagesProcessed)
@@ -516,7 +516,7 @@ func (s *DLQSuite) verifyRunIsInDLQ(
 func (s *DLQSuite) executeWorkflow(ctx context.Context, workflowID string) sdkclient.WorkflowRun {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	s.NoError(err)
 
@@ -683,7 +683,7 @@ func (s *DLQSuite) verifyNumTasks(file *os.File, expectedNumTasks int) {
 	for i, task := range dlqTasks {
 		s.Equal(int64(persistence.FirstQueueMessageID+i), task.MessageID)
 		taskInfo := task.Payload
-		s.Equal(enums.TASK_TYPE_TRANSFER_WORKFLOW_TASK, taskInfo.TaskType)
+		s.Equal(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK, taskInfo.TaskType)
 		s.Equal("test-namespace", taskInfo.NamespaceId)
 		s.Equal("test-workflow-id", taskInfo.WorkflowId)
 		s.Equal("test-run-id", taskInfo.RunId)

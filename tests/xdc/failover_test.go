@@ -40,6 +40,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	querypb "go.temporal.io/api/query/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -70,7 +71,25 @@ type (
 
 func TestFuncClustersTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(FunctionalClustersTestSuite))
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &FunctionalClustersTestSuite{}
+			s.enableTransitionHistory = tc.enableTransitionHistory
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *FunctionalClustersTestSuite) SetupSuite() {
@@ -480,11 +499,11 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	client2 := s.cluster2.FrontendClient() // standby
 
 	// Start a workflow
-	id := "functional-sticky-workflow-task-workflow-failover-test"
-	wt := "functional-sticky-workflow-task-workflow-failover-test-type"
-	tq := "functional-sticky-workflow-task-workflow-failover-test-taskqueue"
-	stq1 := "functional-sticky-workflow-task-workflow-failover-test-taskqueue-sticky1"
-	stq2 := "functional-sticky-workflow-task-workflow-failover-test-taskqueue-sticky2"
+	id := "functional-sticky-workflow-task-workflow-failover-test-" + "TransitionHistory" + strconv.FormatBool(s.enableTransitionHistory)
+	wt := id + "-type"
+	tq := id + "-taskqueue"
+	stq1 := id + "-taskqueue-sticky1"
+	stq2 := id + "-taskqueue-sticky2"
 	identity1 := "worker1"
 	identity2 := "worker2"
 
@@ -2902,6 +2921,32 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	}
 	verifyHistory(workflowID, run1.GetRunID())
 	verifyHistory(workflowID, resp.GetRunId())
+}
+
+func (s *FunctionalClustersTestSuite) TestBlockNamespaceDeleteInPassiveCluster() {
+	namespace := "test-namespace-for-fail-over-" + common.GenerateRandomString(5)
+	client1 := s.cluster1.FrontendClient() // active
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		IsGlobalNamespace:                true,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[1], // [0] is active, [1] is passive
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
+	}
+	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
+	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
+
+	resp, err := s.cluster1.OperatorClient().DeleteNamespace(
+		testcore.NewContext(),
+		&operatorservice.DeleteNamespaceRequest{
+			Namespace: namespace,
+		})
+	s.Error(err)
+	s.Nil(resp)
+	s.Contains(err.Error(), "is passive in current cluster")
+	s.Contains(err.Error(), "make namespace active in this cluster and retry")
 }
 
 func (s *FunctionalClustersTestSuite) getHistory(client workflowservice.WorkflowServiceClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {

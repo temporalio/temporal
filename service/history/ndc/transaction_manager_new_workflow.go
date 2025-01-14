@@ -220,19 +220,40 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	currentWorkflow.GetReleaseFn()(nil)
 	currentWorkflow = nil
 
-	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
+	ms := targetWorkflow.GetMutableState()
+
+	eventReapplyCandidates := ms.GetReapplyCandidateEvents()
+	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := ms.CloseTransactionAsSnapshot(
 		targetWorkflowPolicy,
 	)
 	if err != nil {
 		return err
 	}
 
-	if err := targetWorkflow.GetContext().ReapplyEvents(
-		ctx,
-		r.shardContext,
-		targetWorkflowEventsSeq,
-	); err != nil {
-		return err
+	if len(targetWorkflowEventsSeq) != 0 {
+		if err := targetWorkflow.GetContext().ReapplyEvents(
+			ctx,
+			r.shardContext,
+			targetWorkflowEventsSeq,
+		); err != nil {
+			return err
+		}
+	} else if len(eventReapplyCandidates) != 0 {
+		eventsToApply := []*persistence.WorkflowEvents{
+			{
+				NamespaceID: ms.GetExecutionInfo().NamespaceId,
+				WorkflowID:  ms.GetExecutionInfo().WorkflowId,
+				RunID:       ms.GetExecutionState().RunId,
+				Events:      eventReapplyCandidates,
+			},
+		}
+		if err := targetWorkflow.GetContext().ReapplyEvents(
+			ctx,
+			r.shardContext,
+			eventsToApply,
+		); err != nil {
+			return err
+		}
 	}
 
 	// target workflow is in zombie state, no need to update current record.
@@ -245,7 +266,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
-		targetWorkflow.GetMutableState(),
+		ms,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
 	)

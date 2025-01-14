@@ -25,8 +25,8 @@ package tasks
 import (
 	"time"
 
-	enums "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -35,7 +35,7 @@ type StateMachineTask struct {
 	definition.WorkflowKey
 	VisibilityTimestamp time.Time
 	TaskID              int64
-	Info                *persistence.StateMachineTaskInfo
+	Info                *persistencespb.StateMachineTaskInfo
 }
 
 var _ HasStateMachineTaskType = &StateMachineTask{}
@@ -75,8 +75,8 @@ func (*StateMachineOutboundTask) GetCategory() Category {
 	return CategoryOutbound
 }
 
-func (*StateMachineOutboundTask) GetType() enums.TaskType {
-	return enums.TASK_TYPE_STATE_MACHINE_OUTBOUND
+func (*StateMachineOutboundTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND
 }
 
 func (t *StateMachineOutboundTask) GetKey() Key {
@@ -98,8 +98,8 @@ func (*StateMachineTimerTask) GetCategory() Category {
 	return CategoryTimer
 }
 
-func (*StateMachineTimerTask) GetType() enums.TaskType {
-	return enums.TASK_TYPE_STATE_MACHINE_TIMER
+func (*StateMachineTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_STATE_MACHINE_TIMER
 }
 
 func (t *StateMachineTimerTask) GetKey() Key {

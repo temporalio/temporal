@@ -1,8 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2021 Datadog, Inc.
-//
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,54 +22,62 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package temporalite
+package persistence
 
 import (
-	"fmt"
-	"net"
+	"testing"
+
+	"go.temporal.io/api/serviceerror"
 )
 
-func NewPortProvider() *PortProvider {
-	return &PortProvider{}
-}
-
-type PortProvider struct {
-	listeners []*net.TCPListener
-}
-
-// GetFreePort finds an open port on the system which is ready to use.
-func (p *PortProvider) GetFreePort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
-	if err != nil {
-		if addr, err = net.ResolveTCPAddr("tcp6", "[::1]:0"); err != nil {
-			return 0, fmt.Errorf("failed to get free port: %w", err)
-		}
+func Test_isUnhealthyError(t *testing.T) {
+	type args struct {
+		err error
 	}
-
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "nil error",
+			args: args{err: nil},
+			want: false,
+		},
+		{
+			name: "context canceled error",
+			args: args{err: &serviceerror.Canceled{
+				Message: "context canceled",
+			}},
+			want: true,
+		},
+		{
+			name: "context deadline exceeded error",
+			args: args{err: &serviceerror.DeadlineExceeded{
+				Message: "context deadline exceeded",
+			}},
+			want: true,
+		},
+		{
+			name: "AppendHistoryTimeoutError",
+			args: args{err: &AppendHistoryTimeoutError{
+				Msg: "append history timeout",
+			}},
+			want: true,
+		},
+		{
+			name: "InvalidPersistenceRequestError",
+			args: args{err: &InvalidPersistenceRequestError{
+				Msg: "invalid persistence request",
+			}},
+			want: false,
+		},
 	}
-
-	p.listeners = append(p.listeners, l)
-
-	return l.Addr().(*net.TCPAddr).Port, nil
-}
-
-// MustGetFreePort calls GetFreePort, panicking on error.
-func (p *PortProvider) MustGetFreePort() int {
-	port, err := p.GetFreePort()
-	if err != nil {
-		panic(err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isUnhealthyError(tt.args.err); got != tt.want {
+				t.Errorf("isUnhealthyError() = %v, want %v", got, tt.want)
+			}
+		})
 	}
-	return port
-}
-
-func (p *PortProvider) Close() error {
-	for _, l := range p.listeners {
-		if err := l.Close(); err != nil {
-			return err
-		}
-	}
-	return nil
 }

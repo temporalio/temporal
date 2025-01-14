@@ -36,8 +36,9 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/temporalnexus"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/token/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -53,7 +54,7 @@ import (
 var ErrOperationTimeoutBelowMin = errors.New("remaining operation timeout is less than required minimum")
 
 // ClientProvider provides a nexus client for a given endpoint.
-type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error)
+type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error)
 
 type TaskExecutorOptions struct {
 	fx.In
@@ -169,7 +170,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	smRef := common.CloneProto(ref.StateMachineRef)
 	smRef.MachineTransitionCount = 0
 
-	token, err := e.CallbackTokenGenerator.Tokenize(&token.NexusOperationCompletion{
+	token, err := e.CallbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
 		NamespaceId: ref.WorkflowKey.NamespaceID,
 		WorkflowId:  ref.WorkflowKey.WorkflowID,
 		RunId:       ref.WorkflowKey.RunID,
@@ -299,7 +300,7 @@ func (e taskExecutor) loadOperationArgs(
 		args.scheduleToCloseTimeout = event.GetNexusOperationScheduledEventAttributes().GetScheduleToCloseTimeout().AsDuration()
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
-		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		args.nexusLink = temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 			Namespace:  ns.Name().String(),
 			WorkflowId: ref.WorkflowKey.WorkflowID,
 			RunId:      ref.WorkflowKey.RunID,
@@ -331,7 +332,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				for _, nexusLink := range result.Links {
 					switch nexusLink.Type {
 					case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-						link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+						link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 						if err != nil {
 							// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
 							// so ignoring the error for now; we will revisit how to handle these errors later.
@@ -378,36 +379,44 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 }
 
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
-	var handlerError *nexus.HandlerError
-	var opFailedError *nexus.UnsuccessfulOperationError
+	var handlerErr *nexus.HandlerError
+	var opFailedErr *nexus.UnsuccessfulOperationError
 
-	if errors.As(callErr, &opFailedError) {
-		return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceResponse)
-	} else if errors.As(callErr, &handlerError) {
-		if !isRetryableHandlerError(handlerError.Type) {
+	if errors.As(callErr, &opFailedErr) {
+		return handleUnsuccessfulOperationError(node, operation, opFailedErr, CompletionSourceResponse)
+	} else if errors.As(callErr, &handlerErr) {
+		if !isRetryableHandlerError(handlerErr.Type) {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 			// Although Failure is nullable, Nexus SDK is expected to always populate this field
-			return handleNonRetryableStartOperationError(env, node, operation, handlerError.Failure.Message)
+			return handleNonRetryableStartOperationError(env, node, operation, handlerErr)
 		}
 		// Fall through to the AttemptFailed transition.
 	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
-		return handleNonRetryableStartOperationError(env, node, operation, callErr.Error())
+		return handleNonRetryableStartOperationError(env, node, operation, callErr)
 	} else if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
 		// Operation timeout is not retryable
-		return handleNonRetryableStartOperationError(env, node, operation, callErr.Error())
+		return handleNonRetryableStartOperationError(env, node, operation, callErr)
+	}
+	failure, err := callErrToFailure(callErr, true)
+	if err != nil {
+		return hsm.TransitionOutput{}, err
 	}
 	return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
 		Time:        env.Now(),
-		Err:         callErr,
+		Failure:     failure,
 		Node:        node,
 		RetryPolicy: e.Config.RetryPolicy(),
 	})
 }
 
-func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, message string) (hsm.TransitionOutput, error) {
+func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+	if err != nil {
+		return hsm.TransitionOutput{}, err
+	}
+	failure, err := callErrToFailure(callErr, true)
 	if err != nil {
 		return hsm.TransitionOutput{}, err
 	}
@@ -415,14 +424,7 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 		Failure: nexusOperationFailure(
 			operation,
 			eventID,
-			&failurepb.Failure{
-				Message: message,
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-						NonRetryable: true,
-					},
-				},
-			},
+			failure,
 		),
 		ScheduledEventId: eventID,
 		RequestId:        operation.RequestId,
@@ -591,26 +593,22 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
-				if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
-					return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
-						Time: env.Now(),
-						Err:  callErr,
-						Node: n,
-					})
-				}
 				var handlerErr *nexus.HandlerError
-				if errors.As(callErr, &handlerErr) {
-					if !isRetryableHandlerError(handlerErr.Type) {
-						return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
-							Time: env.Now(),
-							Err:  callErr,
-							Node: n,
-						})
-					}
+				isRetryable := !errors.Is(callErr, ErrOperationTimeoutBelowMin) && (!errors.As(callErr, &handlerErr) || isRetryableHandlerError(handlerErr.Type))
+				failure, err := callErrToFailure(callErr, isRetryable)
+				if err != nil {
+					return hsm.TransitionOutput{}, err
+				}
+				if !isRetryable {
+					return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
+						Time:    env.Now(),
+						Failure: failure,
+						Node:    n,
+					})
 				}
 				return TransitionCancelationAttemptFailed.Apply(c, EventCancelationAttemptFailed{
 					Time:        env.Now(),
-					Err:         callErr,
+					Failure:     failure,
 					Node:        n,
 					RetryPolicy: e.Config.RetryPolicy(),
 				})
@@ -742,4 +740,46 @@ func isDestinationDown(err error) bool {
 		return false
 	}
 	return true
+}
+
+func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
+	var handlerErr *nexus.HandlerError
+	if errors.As(callErr, &handlerErr) {
+		failure := &failurepb.Failure{
+			Message: handlerErr.Error(),
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					Type:         "NexusHandlerError",
+					NonRetryable: !retryable,
+				},
+			},
+			// TODO: Replace with the FailureInfo below once there are more SDKs that support NexusHandlerFailureInfo in
+			// the wild.
+			// FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+			// 	NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+			// 		Type: string(handlerErr.Type),
+			// 	},
+			// },
+		}
+
+		var failureError *nexus.FailureError
+		if errors.As(handlerErr.Cause, &failureError) {
+			var err error
+			failure.Cause, err = commonnexus.NexusFailureToAPIFailure(failureError.Failure, retryable)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return failure, nil
+	}
+
+	return &failurepb.Failure{
+		Message: callErr.Error(),
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				Type:         "CallError",
+				NonRetryable: !retryable,
+			},
+		},
+	}, nil
 }

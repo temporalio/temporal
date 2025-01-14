@@ -556,6 +556,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
@@ -683,6 +684,8 @@ func OperatorHandlerProvider(
 }
 
 func HandlerProvider(
+	cfg *config.Config,
+	serviceName primitives.ServiceName,
 	dcRedirectionPolicy config.DCRedirectionPolicy,
 	serviceConfig *Config,
 	versionChecker *VersionChecker,
@@ -735,6 +738,7 @@ func HandlerProvider(
 		membershipMonitor,
 		healthInterceptor,
 		scheduleSpecBuilder,
+		httpEnabled(cfg, serviceName),
 	)
 	return wfHandler
 }
@@ -796,6 +800,15 @@ func MuxRouterProvider() *mux.Router {
 	return mux.NewRouter().UseEncodedPath()
 }
 
+func httpEnabled(cfg *config.Config, serviceName primitives.ServiceName) bool {
+	// If the service is not the frontend service, HTTP API is disabled
+	if serviceName != primitives.FrontendService {
+		return false
+	}
+	// If HTTP API port is 0, it is disabled
+	return cfg.Services[string(serviceName)].RPC.HTTPPort != 0
+}
+
 // HTTPAPIServerProvider provides an HTTP API server if enabled or nil
 // otherwise.
 func HTTPAPIServerProvider(
@@ -812,15 +825,10 @@ func HTTPAPIServerProvider(
 	logger log.Logger,
 	router *mux.Router,
 ) (*HTTPAPIServer, error) {
-	// If the service is not the frontend service, HTTP API is disabled
-	if serviceName != primitives.FrontendService {
+	if !httpEnabled(cfg, serviceName) {
 		return nil, nil
 	}
-	// If HTTP API port is 0, it is disabled
 	rpcConfig := cfg.Services[string(serviceName)].RPC
-	if rpcConfig.HTTPPort == 0 {
-		return nil, nil
-	}
 	return NewHTTPAPIServer(
 		serviceConfig,
 		rpcConfig,

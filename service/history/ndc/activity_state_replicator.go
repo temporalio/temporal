@@ -155,6 +155,10 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 			LastAttemptCompleteTime:    request.LastAttemptCompleteTime,
 			Stamp:                      request.Stamp,
 			Paused:                     request.Paused,
+			RetryInitialInterval:       request.RetryInitialInterval,
+			RetryMaximumInterval:       request.RetryMaximumInterval,
+			RetryMaximumAttempts:       request.RetryMaximumAttempts,
+			RetryBackoffCoefficient:    request.RetryBackoffCoefficient,
 		},
 	)
 	if err != nil {
@@ -300,6 +304,7 @@ func (r *ActivityStateReplicatorImpl) syncSingleActivityState(
 	if shouldApply := r.compareActivity(
 		activitySyncInfo.GetVersion(),
 		activitySyncInfo.GetAttempt(),
+		activitySyncInfo.GetStamp(),
 		timestamp.TimeValue(activitySyncInfo.GetLastHeartbeatTime()),
 		activityInfo,
 	); !shouldApply {
@@ -338,6 +343,7 @@ func (r *ActivityStateReplicatorImpl) syncSingleActivityState(
 func (r *ActivityStateReplicatorImpl) compareActivity(
 	version int64,
 	attempt int32,
+	stamp int32,
 	lastHeartbeatTime time.Time,
 	activityInfo *persistencespb.ActivityInfo,
 ) bool {
@@ -350,6 +356,16 @@ func (r *ActivityStateReplicatorImpl) compareActivity(
 	if activityInfo.Version < version {
 		// incoming version larger then local version, should update activity
 		return true
+	}
+
+	if activityInfo.Stamp < stamp {
+		// stamp changed, should update activity
+		return true
+	}
+
+	if activityInfo.Stamp > stamp {
+		// stamp is older than we have, should not update activity
+		return false
 	}
 
 	// activityInfo.Version == version

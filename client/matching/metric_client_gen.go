@@ -61,6 +61,20 @@ func (c *metricClient) CancelOutstandingPoll(
 	return c.client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
+func (c *metricClient) CheckTaskQueueUserDataPropagation(
+	ctx context.Context,
+	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CheckTaskQueueUserDataPropagationResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCheckTaskQueueUserDataPropagation")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CheckTaskQueueUserDataPropagation(ctx, request, opts...)
+}
+
 func (c *metricClient) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,

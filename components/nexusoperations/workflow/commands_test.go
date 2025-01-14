@@ -30,7 +30,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -273,7 +273,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 					Endpoint:  "endpoint",
 					Service:   "service",
 					Operation: "op",
-					Input: &common.Payload{
+					Input: &commonpb.Payload{
 						Data: []byte("ab"),
 					},
 				},
@@ -411,18 +411,18 @@ func TestHandleScheduleCommand(t *testing.T) {
 			Endpoint:  "endpoint",
 			Service:   "service",
 			Operation: "op",
-			Input:     &common.Payload{},
+			Input:     &commonpb.Payload{},
 			NexusHeader: map[string]string{
 				"key": "value",
 			},
 			ScheduleToCloseTimeout: durationpb.New(time.Hour),
 		}
 		userMetadata := &sdkpb.UserMetadata{
-			Summary: &common.Payload{
+			Summary: &commonpb.Payload{
 				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 				Data:     []byte(`Test summary Data`),
 			},
-			Details: &common.Payload{
+			Details: &commonpb.Payload{
 				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 				Data:     []byte(`Test Details Data`),
 			},
@@ -583,11 +583,11 @@ func TestHandleCancelCommand(t *testing.T) {
 			},
 		})
 		userMetadata := &sdkpb.UserMetadata{
-			Summary: &common.Payload{
+			Summary: &commonpb.Payload{
 				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 				Data:     []byte(`Test summary Data`),
 			},
-			Details: &common.Payload{
+			Details: &commonpb.Payload{
 				Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 				Data:     []byte(`Test Details Data`),
 			},

@@ -32,7 +32,7 @@ import (
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	"go.temporal.io/api/replication/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -263,7 +263,7 @@ func (ns *Namespace) IsOnCluster(clusterName string) bool {
 }
 
 // FailoverHistory returns the a copy of failover history for this namespace.
-func (ns *Namespace) FailoverHistory() []*replication.FailoverStatus {
+func (ns *Namespace) FailoverHistory() []*replicationpb.FailoverStatus {
 	return convertFailoverHistoryToReplicationProto(
 		ns.replicationConfig.GetFailoverHistory(),
 	)

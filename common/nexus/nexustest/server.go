@@ -32,14 +32,11 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/internal/temporalite"
+	"go.temporal.io/server/internal/freeport"
 )
 
-func AllocListenAddress(t *testing.T) string {
-	pp := temporalite.NewPortProvider()
-	listenAddr := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
-	require.NoError(t, pp.Close())
-	return listenAddr
+func AllocListenAddress() string {
+	return fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
 }
 
 func NewNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) {
@@ -58,8 +55,11 @@ func NewNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) {
 		// Graceful shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		require.NoError(t, srv.Shutdown(ctx))
-		require.ErrorIs(t, <-errCh, http.ErrServerClosed)
+		err = srv.Shutdown(ctx)
+		if ctx.Err() != nil {
+			require.NoError(t, err)
+			require.ErrorIs(t, <-errCh, http.ErrServerClosed)
+		}
 	})
 }
 

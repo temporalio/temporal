@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -361,12 +362,22 @@ func (r *registry) Len() int {
 	return len(r.updates)
 }
 
-// remover is called when Update gets into terminal state (completed or rejected).
+// remover is called when an Update gets into a terminal state (completed or rejected).
 func (r *registry) remover(id string) updateOpt {
 	return withCompletionCallback(
 		func() {
+			if r.updates == nil {
+				return
+			}
+
+			// A rejected update is *not* counted as a completed update
+			// as that would negatively impact the registry's rate limit.
+			if upd := r.updates[id]; upd != nil && upd.acceptedEventID != common.EmptyEventID {
+				r.completedCount++
+			}
+
+			// The update was either discarded or persisted; no need to keep it here anymore.
 			delete(r.updates, id)
-			r.completedCount++
 		},
 	)
 }
@@ -387,7 +398,8 @@ func (r *registry) checkTotalLimit() error {
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
-			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
+			fmt.Sprintf("The limit on the total number of distinct updates in this workflow has been reached (%v). "+
+				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process", r.maxTotal()),
 		)
 	}
 	return nil

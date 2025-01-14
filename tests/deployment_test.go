@@ -28,9 +28,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,6 +68,10 @@ tests to write:
 2. Tests to register worker in a deployment and using DescribeDeployment for verification
 */
 
+const (
+	maxConcurrentBatchOps = 3
+)
+
 type (
 	DeploymentSuite struct {
 		testcore.FunctionalTestBase
@@ -100,6 +106,9 @@ func (s *DeploymentSuite) SetupSuite() {
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Key(): 1,
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
+
+		// Reduce the chance of hitting max batch job limit in tests
+		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): maxConcurrentBatchOps,
 	}
 	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
@@ -114,7 +123,7 @@ func (s *DeploymentSuite) SetupTest() {
 	s.setAssertions()
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
@@ -132,7 +141,21 @@ func (s *DeploymentSuite) TearDownTest() {
 func (s *DeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
 	deployment *deploymentpb.Deployment) {
 	_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
+		TaskQueue: taskQueue,
+		Identity:  "random",
+		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			UseVersioning:        true,
+			BuildId:              deployment.BuildId,
+			DeploymentSeriesName: deployment.SeriesName,
+		},
+	})
+}
+
+func (s *DeploymentSuite) pollActivityFromDeployment(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
+	deployment *deploymentpb.Deployment) {
+	_, _ = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  "random",
 		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
@@ -167,11 +190,10 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 		a := assert.New(t)
 
 		resp, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
-			Namespace:  s.Namespace(),
+			Namespace:  s.Namespace().String(),
 			Deployment: workerDeployment,
 		})
 		a.NoError(err)
-		a.NotNil(resp.GetDeploymentInfo())
 		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
 
 		a.Equal(seriesName, resp.GetDeploymentInfo().GetDeployment().GetSeriesName())
@@ -190,26 +212,17 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPollers() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
+	tv := testvars.New(s)
+	d := tv.Deployment()
 
-	// presence of internally used delimiters (:) or escape
-	// characters shouldn't break functionality
-	seriesName := testcore.RandomizeStr("my-series|:|:")
-	buildID := testcore.RandomizeStr("bgt:|")
-
-	taskQueue := &taskqueuepb.TaskQueue{Name: "deployment-test", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	workerDeployment := &deploymentpb.Deployment{
-		SeriesName: seriesName,
-		BuildId:    buildID,
-	}
-	numberOfDeployments := 1
-
-	root, err := tqid.PartitionFromProto(taskQueue, s.Namespace(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	root, err := tqid.PartitionFromProto(tv.TaskQueue(), s.Namespace().String(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.NoError(err)
 	// Making concurrent polls to 4 partitions, 3 polls to each
 	for p := 0; p < 4; p++ {
+		tq := &taskqueuepb.TaskQueue{Name: root.TaskQueue().NormalPartition(p).RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 		for i := 0; i < 3; i++ {
-			tq := &taskqueuepb.TaskQueue{Name: root.TaskQueue().NormalPartition(p).RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-			s.pollFromDeployment(ctx, tq, workerDeployment)
+			go s.pollFromDeployment(ctx, tq, d)
+			go s.pollActivityFromDeployment(ctx, tq, d)
 		}
 	}
 
@@ -218,24 +231,21 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPol
 		a := assert.New(t)
 
 		resp, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
-			Namespace:  s.Namespace(),
-			Deployment: workerDeployment,
+			Namespace:  s.Namespace().String(),
+			Deployment: d,
 		})
 		if !a.NoError(err) {
 			return
 		}
-		a.NotNil(resp.GetDeploymentInfo())
 		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
 
-		a.Equal(seriesName, resp.GetDeploymentInfo().GetDeployment().GetSeriesName())
-		a.Equal(buildID, resp.GetDeploymentInfo().GetDeployment().GetBuildId())
+		a.True(d.Equal(resp.GetDeploymentInfo().GetDeployment()))
 
-		if !a.Equal(numberOfDeployments, len(resp.GetDeploymentInfo().GetTaskQueueInfos())) {
+		if !a.Equal(2, len(resp.GetDeploymentInfo().GetTaskQueueInfos())) {
 			return
 		}
-		a.Equal(taskQueue.Name, resp.GetDeploymentInfo().GetTaskQueueInfos()[0].Name)
+		a.Equal(tv.TaskQueue().GetName(), resp.GetDeploymentInfo().GetTaskQueueInfos()[0].Name)
 		a.Equal(false, resp.GetDeploymentInfo().GetIsCurrent())
-		// todo (Shivam) - please add a check for current time
 	}, time.Second*10, time.Millisecond*1000)
 }
 
@@ -257,7 +267,7 @@ func (s *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 
 	// GetCurrentDeployment on a non-existing series returns an error
 	resp, err := s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		SeriesName: seriesName,
 	})
 	s.Error(err)
@@ -272,7 +282,7 @@ func (s *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 		a := assert.New(t)
 
 		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Query:     query,
 		})
 		a.NoError(err)
@@ -281,7 +291,7 @@ func (s *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 
 	// Fetch series workflow's current deployment - will be nil since we haven't set it
 	resp, err = s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		SeriesName: seriesName,
 	})
 	s.NoError(err)
@@ -307,6 +317,21 @@ func (s *DeploymentSuite) verifyDeploymentListInfo(expectedDeploymentListInfo *d
 	return true
 }
 
+func (s *DeploymentSuite) listDeploymentsAll(ctx context.Context, request *workflowservice.ListDeploymentsRequest) ([]*deploymentpb.DeploymentListInfo, error) {
+	var resp *workflowservice.ListDeploymentsResponse
+	var err error
+	var deployments []*deploymentpb.DeploymentListInfo
+	for resp == nil || len(resp.NextPageToken) > 0 {
+		resp, err = s.FrontendClient().ListDeployments(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		deployments = append(deployments, resp.GetDeployments()...)
+		request.NextPageToken = resp.NextPageToken
+	}
+	return deployments, nil
+}
+
 // verifyDeployments does the following:
 // - makes a list deployments call with/without seriesFilter
 // - validates the response with expectedDeployments
@@ -316,25 +341,19 @@ func (s *DeploymentSuite) verifyDeployments(ctx context.Context, request *workfl
 	// list deployment call
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
-
-		resp, err := s.FrontendClient().ListDeployments(ctx, request)
+		actualDeployments, err := s.listDeploymentsAll(ctx, request)
 		a.NoError(err)
-		a.NotNil(resp)
-		if resp == nil {
-			return
-		}
-		a.NotNil(resp.GetDeployments())
-
+		a.NotNil(actualDeployments)
 		// check to stop eventuallyWithT from panicking since
 		// it collects all possible errors
-		if len(resp.GetDeployments()) < 1 {
+		if len(actualDeployments) < 1 {
 			return
 		}
 
 		for _, expectedDeploymentListInfo := range expectedDeployments {
 
 			deploymentListInfoValidated := false
-			for _, receivedDeploymentListInfo := range resp.GetDeployments() {
+			for _, receivedDeploymentListInfo := range actualDeployments {
 
 				deploymentListInfoValidated = deploymentListInfoValidated ||
 					s.verifyDeploymentListInfo(expectedDeploymentListInfo, receivedDeploymentListInfo)
@@ -347,7 +366,7 @@ func (s *DeploymentSuite) verifyDeployments(ctx context.Context, request *workfl
 // startDeploymentsAndValidateList does the following:
 // - starts deployment workflow(s)
 // - calls verifyDeployments which lists + validates Deployments
-func (s *DeploymentSuite) startDeploymentsAndValidateList(deploymentInfo []*deploymentpb.DeploymentListInfo, seriesFilter string) {
+func (s *DeploymentSuite) startDeploymentsAndValidateList(deploymentInfo []*deploymentpb.DeploymentListInfo, seriesFilter string, pageSize int32) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -360,7 +379,8 @@ func (s *DeploymentSuite) startDeploymentsAndValidateList(deploymentInfo []*depl
 
 	var expectedDeployments []*deploymentpb.DeploymentListInfo
 	request := &workflowservice.ListDeploymentsRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
+		PageSize:  pageSize,
 	}
 	if seriesFilter != "" {
 		request.SeriesName = seriesFilter
@@ -401,18 +421,23 @@ func (s *DeploymentSuite) buildDeploymentInfo(numberOfDeployments int) []*deploy
 
 func (s *DeploymentSuite) TestListDeployments_VerifySingleDeployment() {
 	deploymentInfo := s.buildDeploymentInfo(1)
-	s.startDeploymentsAndValidateList(deploymentInfo, "")
+	s.startDeploymentsAndValidateList(deploymentInfo, "", 0)
 }
 
-func (s *DeploymentSuite) TestListDeployments_MultipleDeployments() {
+func (s *DeploymentSuite) TestListDeployments_MultipleDeploymentsOnePage() {
 	deploymentInfo := s.buildDeploymentInfo(5)
-	s.startDeploymentsAndValidateList(deploymentInfo, "")
+	s.startDeploymentsAndValidateList(deploymentInfo, "", 0)
+}
+
+func (s *DeploymentSuite) TestListDeployments_MultipleDeploymentsMultiplePages() {
+	deploymentInfo := s.buildDeploymentInfo(5)
+	s.startDeploymentsAndValidateList(deploymentInfo, "", 2)
 }
 
 func (s *DeploymentSuite) TestListDeployments_MultipleDeployments_WithSeriesFilter() {
 	deploymentInfo := s.buildDeploymentInfo(2)
 	seriesFilter := deploymentInfo[0].Deployment.SeriesName
-	s.startDeploymentsAndValidateList(deploymentInfo, seriesFilter)
+	s.startDeploymentsAndValidateList(deploymentInfo, seriesFilter, 0)
 }
 
 // TODO Shivam - refactor the above test cases TestListDeployments_WithSeriesNameFilter + TestListDeployments_WithoutSeriesNameFilter
@@ -457,7 +482,7 @@ func (s *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 		},
 	}
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
 		WorkflowExecutionOptions: updateOpts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
@@ -485,7 +510,7 @@ func (s *DeploymentSuite) TestGetDeploymentReachability_NotFound() {
 	seriesName := testcore.RandomizeStr("my-series|:|:")
 	buildID := testcore.RandomizeStr("bgt:|")
 	resp, err := s.FrontendClient().GetDeploymentReachability(ctx, &workflowservice.GetDeploymentReachabilityRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Deployment: &deploymentpb.Deployment{
 			SeriesName: seriesName,
 			BuildId:    buildID,
@@ -505,7 +530,7 @@ func (s *DeploymentSuite) checkDescribeWorkflowAfterOverride(
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Execution: wf,
 		})
 		a.NoError(err)
@@ -523,7 +548,7 @@ func (s *DeploymentSuite) checkDeploymentReachability(
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		resp, err := s.FrontendClient().GetDeploymentReachability(ctx, &workflowservice.GetDeploymentReachabilityRequest{
-			Namespace:  s.Namespace(),
+			Namespace:  s.Namespace().String(),
 			Deployment: deploy,
 		})
 		a.NoError(err)
@@ -538,7 +563,7 @@ func (s *DeploymentSuite) checkSDKGetWorkflowExecutionOptions(ctx context.Contex
 	expectedOpts *workflowpb.WorkflowExecutionOptions,
 ) {
 	getResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        wf,
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{}},
@@ -560,13 +585,12 @@ func (s *DeploymentSuite) createDeploymentAndWaitForExist(
 		a := assert.New(t)
 
 		resp, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
-			Namespace:  s.Namespace(),
+			Namespace:  s.Namespace().String(),
 			Deployment: deployment,
 		})
 		a.NoError(err)
-		a.NotNil(resp.GetDeploymentInfo())
 		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
-	}, time.Second*5, time.Millisecond*200)
+	}, time.Second*5, time.Millisecond*100)
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnset() {
@@ -590,7 +614,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnse
 
 	// 1. Set unpinned override --> describe workflow shows the override
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
 		WorkflowExecutionOptions: unpinnedOpts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
@@ -602,7 +626,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnse
 
 	// 2. Unset using empty update opts with mutation mask --> describe workflow shows no more override
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
@@ -646,7 +670,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 
 	// 1. Set pinned override on our new unversioned workflow --> describe workflow shows the override + deployment is reachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
 		WorkflowExecutionOptions: pinnedOpts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
@@ -659,7 +683,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 
 	// 2. Unset with empty update opts with mutation mask --> describe workflow shows no more override + deployment is unreachable
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
@@ -700,7 +724,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
 
 	// 1. Pinned update with empty mask --> describe workflow shows no change
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
 		WorkflowExecutionOptions: pinnedOpts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{}},
@@ -726,56 +750,56 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	}
-	deploymentA := &deploymentpb.Deployment{
+	deployment1 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("A"),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
-	deploymentB := &deploymentpb.Deployment{
+	deployment2 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("B"),
+		BuildId:    tv.WithBuildIDNumber(2).BuildID(),
 	}
-	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
+	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deploymentA,
+			Deployment: deployment1,
 		},
 	}
-	pinnedOptsB := &workflowpb.WorkflowExecutionOptions{
+	pinnedOpts2 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deploymentB,
+			Deployment: deployment2,
 		},
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(ctx, deploymentA, tq)
-	s.createDeploymentAndWaitForExist(ctx, deploymentB, tq)
+	s.createDeploymentAndWaitForExist(ctx, deployment1, tq)
+	s.createDeploymentAndWaitForExist(ctx, deployment2, tq)
 
-	// 1. Set pinned override A --> describe workflow shows the override + deployment A is reachable
+	// 1. Set pinned override 1 --> describe workflow shows the override + deployment 1 is reachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
-		WorkflowExecutionOptions: pinnedOptsA,
+		WorkflowExecutionOptions: pinnedOpts1,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	s.NoError(err)
-	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
-	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsA.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
-	s.checkDeploymentReachability(ctx, deploymentB, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts1))
+	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOpts1.GetVersioningOverride())
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+	s.checkDeploymentReachability(ctx, deployment2, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 
-	// 3. Set pinned override B --> describe workflow shows the override + deployment B is reachable, A unreachable
+	// 3. Set pinned override 2 --> describe workflow shows the override + deployment 2 is reachable, 1 unreachable
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
-		WorkflowExecutionOptions: pinnedOptsB,
+		WorkflowExecutionOptions: pinnedOpts2,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	s.NoError(err)
-	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsB))
-	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsB.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
-	s.checkDeploymentReachability(ctx, deploymentB, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts2))
+	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOpts2.GetVersioningOverride())
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+	s.checkDeploymentReachability(ctx, deployment2, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpinned() {
@@ -801,7 +825,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpin
 
 	// 1. Set unpinned override --> describe workflow shows the override
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
 		WorkflowExecutionOptions: unpinnedOpts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
@@ -812,7 +836,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpin
 
 	// 1. Set unpinned override --> describe workflow shows the override
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
 		WorkflowExecutionOptions: unpinnedOpts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
@@ -844,23 +868,23 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 			Deployment: nil,
 		},
 	}
-	deploymentA := &deploymentpb.Deployment{
+	deployment1 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("A"),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
-	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
+	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deploymentA,
+			Deployment: deployment1,
 		},
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(ctx, deploymentA, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, deployment1, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
-	// 1. Set unpinned override --> describe workflow shows the override + deploymentA is unreachable
+	// 1. Set unpinned override --> describe workflow shows the override + deployment1 is unreachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
 		WorkflowExecutionOptions: unpinnedOpts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
@@ -868,19 +892,19 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 	s.NoError(err)
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
 	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 
-	// 1. Set pinned override A --> describe workflow shows the override + deploymentA is reachable
+	// 1. Set pinned override 1 --> describe workflow shows the override + deployment1 is reachable
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
-		WorkflowExecutionOptions: pinnedOptsA,
+		WorkflowExecutionOptions: pinnedOpts1,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	s.NoError(err)
-	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
-	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsA.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts1))
+	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOpts1.GetVersioningOverride())
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinned() {
@@ -904,35 +928,35 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 			Deployment: nil,
 		},
 	}
-	deploymentA := &deploymentpb.Deployment{
+	deployment1 := &deploymentpb.Deployment{
 		SeriesName: series,
-		BuildId:    tv.BuildId("A"),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
-	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
+	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deploymentA,
+			Deployment: deployment1,
 		},
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(ctx, deploymentA, tq)
+	s.createDeploymentAndWaitForExist(ctx, deployment1, tq)
 
-	// 1. Set pinned override A --> describe workflow shows the override + deploymentA is reachable
+	// 1. Set pinned override 1 --> describe workflow shows the override + deployment1 is reachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
-		WorkflowExecutionOptions: pinnedOptsA,
+		WorkflowExecutionOptions: pinnedOpts1,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	s.NoError(err)
-	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
-	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsA.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts1))
+	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOpts1.GetVersioningOverride())
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 
-	// 1. Set unpinned override --> describe workflow shows the override + deploymentA is unreachable
+	// 1. Set unpinned override --> describe workflow shows the override + deployment1 is unreachable
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        unversionedWFExec,
 		WorkflowExecutionOptions: unpinnedOpts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
@@ -940,7 +964,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	s.NoError(err)
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
 	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
-	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+	s.checkDeploymentReachability(ctx, deployment1, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 }
 
 func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
@@ -982,8 +1006,8 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 
 	// start batch update-options operation
 	batchJobId := uuid.New()
-	_, err := s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
-		Namespace:  s.Namespace(),
+	err := s.startBatchJobWithinConcurrentJobLimit(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace:  s.Namespace().String(),
 		JobId:      batchJobId,
 		Reason:     "test",
 		Executions: workflows,
@@ -1010,8 +1034,8 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 
 	// unset with empty update opts with mutation mask
 	batchJobId = uuid.New()
-	_, err = s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
-		Namespace:  s.Namespace(),
+	err = s.startBatchJobWithinConcurrentJobLimit(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace:  s.Namespace().String(),
 		JobId:      batchJobId,
 		Reason:     "test",
 		Executions: workflows,
@@ -1037,11 +1061,25 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 	s.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 }
 
+func (s *DeploymentSuite) startBatchJobWithinConcurrentJobLimit(ctx context.Context, req *workflowservice.StartBatchOperationRequest) error {
+	var err error
+	s.Eventually(func() bool {
+		_, err = s.FrontendClient().StartBatchOperation(ctx, req)
+		if err == nil {
+			return true
+		} else if strings.Contains(err.Error(), "Max concurrent batch operations is reached") {
+			return false // retry
+		}
+		return true
+	}, 5*time.Second, 500*time.Millisecond)
+	return err
+}
+
 func (s *DeploymentSuite) checkListAndWaitForBatchCompletion(ctx context.Context, jobId string) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		listResp, err := s.FrontendClient().ListBatchOperations(ctx, &workflowservice.ListBatchOperationsRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 		})
 		a.NoError(err)
 		a.Greater(len(listResp.GetOperationInfo()), 0)
@@ -1052,7 +1090,7 @@ func (s *DeploymentSuite) checkListAndWaitForBatchCompletion(ctx context.Context
 
 	for {
 		descResp, err := s.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			JobId:     jobId,
 		})
 		s.NoError(err)
@@ -1145,7 +1183,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_ChildWorkflowWithSD
 
 	// set override on parent
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
 		WorkflowExecutionOptions: pinnedOptsA,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
@@ -1179,7 +1217,7 @@ func (s *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
 	s.createDeploymentAndWaitForExist(ctx, deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	resp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		WorkflowId:         "test-workflow-id1",
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -1208,7 +1246,7 @@ func (s *DeploymentSuite) TestStartWorkflowExecution_WithUnpinnedOverride() {
 	}
 
 	resp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		WorkflowId:         "test-workflow-id2",
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -1244,7 +1282,7 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverrid
 	s.createDeploymentAndWaitForExist(ctx, deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	resp, err := s.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		WorkflowId:         "test-workflow-id3",
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -1276,7 +1314,7 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverr
 	}
 
 	resp, err := s.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		WorkflowId:         "test-workflow-id4",
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -1305,16 +1343,16 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	dep1 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("1"),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
 	dep2 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("2"),
+		BuildId:    tv.WithBuildIDNumber(2).BuildID(),
 	}
 
 	// set to 1
 	res, err := s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		Deployment: dep1,
 		Identity:   "test",
 	})
@@ -1325,7 +1363,7 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	// describe 1 should say it's current (no delay)
 	desc, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		Deployment: dep1,
 	})
 	s.NoError(err)
@@ -1333,7 +1371,7 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	// get current should return 1 (no delay)
 	cur, err := s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		SeriesName: tv.DeploymentSeries(),
 	})
 	s.NoError(err)
@@ -1343,7 +1381,7 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		list, err := s.FrontendClient().ListDeployments(ctx, &workflowservice.ListDeploymentsRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 		})
 		a.NoError(err)
 		found, isCurrent1 := 0, false
@@ -1359,7 +1397,7 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	// now set to 2
 	res, err = s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		Deployment: dep2,
 		Identity:   "test",
 	})
@@ -1371,7 +1409,7 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	// describe 1 should say it's not current (no delay)
 	desc, err = s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		Deployment: dep1,
 	})
 	s.NoError(err)
@@ -1379,7 +1417,7 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	// describe 2 should say it's not current (no delay)
 	desc, err = s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		Deployment: dep2,
 	})
 	s.NoError(err)
@@ -1387,7 +1425,7 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	// get current should return 2 (no delay)
 	cur, err = s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		SeriesName: tv.DeploymentSeries(),
 	})
 	s.NoError(err)
@@ -1397,7 +1435,7 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		list, err := s.FrontendClient().ListDeployments(ctx, &workflowservice.ListDeploymentsRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 		})
 		a.NoError(err)
 		found, isCurrent1, isCurrent2 := 0, false, false
@@ -1424,16 +1462,16 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 
 	dep1 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("1"),
+		BuildId:    tv.WithBuildIDNumber(1).BuildID(),
 	}
 	dep2 := &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
-		BuildId:    tv.BuildId("2"),
+		BuildId:    tv.WithBuildIDNumber(2).BuildID(),
 	}
 
 	// set to 1 with some metadata
 	_, err := s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		Deployment: dep1,
 		Identity:   "test",
 		UpdateMetadata: &deploymentpb.UpdateDeploymentMetadata{
@@ -1448,7 +1486,7 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 
 	// set to 2
 	_, err = s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		Deployment: dep2,
 		Identity:   "test",
 	})
@@ -1456,7 +1494,7 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 
 	// set back to 1 with different metadata
 	_, err = s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		Deployment: dep1,
 		Identity:   "test",
 		UpdateMetadata: &deploymentpb.UpdateDeploymentMetadata{
@@ -1470,7 +1508,7 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 	s.NoError(err)
 
 	cur, err := s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		SeriesName: tv.DeploymentSeries(),
 	})
 	s.NoError(err)
@@ -1485,5 +1523,11 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 // do not grow larger that DB column limit (currently as low as 272 chars).
 func (s *DeploymentSuite) Name() string {
 	fullName := s.T().Name()
-	return fullName[len(fullName)-30:]
+	if len(fullName) <= 30 {
+		return fullName
+	}
+	return fmt.Sprintf("%s-%08x",
+		fullName[len(fullName)-21:],
+		farm.Fingerprint32([]byte(fullName)),
+	)
 }

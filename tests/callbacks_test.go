@@ -46,7 +46,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/internal/temporalite"
+	"go.temporal.io/server/internal/freeport"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -176,7 +176,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 			}
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:           uuid.New(),
-				Namespace:           s.Namespace(),
+				Namespace:           s.Namespace().String(),
 				WorkflowId:          testcore.RandomizeStr(s.T().Name()),
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -195,7 +195,6 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 }
 
 func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
@@ -247,10 +246,9 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 			ctx := testcore.NewContext()
 			sdkClient, err := client.Dial(client.Options{
 				HostPort:  s.FrontendGRPCAddress(),
-				Namespace: s.Namespace(),
+				Namespace: s.Namespace().String(),
 			})
 			s.NoError(err)
-			pp := temporalite.NewPortProvider()
 
 			taskQueue := testcore.RandomizeStr(s.T().Name())
 			workflowType := "test"
@@ -259,8 +257,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				requestCh:         make(chan *nexus.CompletionRequest, 1),
 				requestCompleteCh: make(chan error, 1),
 			}
-			callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
-			s.NoError(pp.Close())
+			callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
 			shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
 			t.Cleanup(func() {
 				require.NoError(t, shutdownServer())
@@ -273,7 +270,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:          uuid.New(),
-				Namespace:          s.Namespace(),
+				Namespace:          s.Namespace().String(),
 				WorkflowId:         testcore.RandomizeStr(s.T().Name()),
 				WorkflowType:       &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -337,7 +334,6 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 }
 
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
@@ -346,10 +342,9 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	ctx := testcore.NewContext()
 	sdkClient, err := client.Dial(client.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	s.NoError(err)
-	pp := temporalite.NewPortProvider()
 
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 
@@ -357,8 +352,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		requestCh:         make(chan *nexus.CompletionRequest, 1),
 		requestCompleteCh: make(chan error, 1),
 	}
-	callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
-	s.NoError(pp.Close())
+	callbackAddress := fmt.Sprintf("localhost:%d", freeport.MustGetFreePort())
 	shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
 	s.T().Cleanup(func() {
 		require.NoError(s.T(), shutdownServer())
@@ -383,7 +377,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.New(),
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		WorkflowId:         testcore.RandomizeStr(s.T().Name()),
 		WorkflowType:       &commonpb.WorkflowType{Name: "longRunningWorkflow"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -414,12 +408,12 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
   			2 WorkflowTaskScheduled
   			3 WorkflowTaskStarted
   			4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(s.Namespace(), workflowExecution),
+		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
 	resetWfResponse, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 
 		WorkflowExecution:         workflowExecution,
 		Reason:                    "TestNexusResetWorkflowWithCallback",

@@ -26,7 +26,7 @@ package workflow
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentspb "go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm"
 )
 
 func failWorkflowTask(
@@ -208,7 +209,7 @@ func (mse MutableStateWithEffects) CanAddEvent() bool {
 //     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
 //
 // Note: Deployment objects are immutable, never change their fields.
-func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) *deploymentspb.Deployment {
+func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) *deploymentpb.Deployment {
 	if versioningInfo == nil {
 		return nil
 	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
@@ -235,4 +236,23 @@ func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecution
 		return override.GetBehavior()
 	}
 	return versioningInfo.GetBehavior()
+}
+
+// shouldReapplyEvent returns true if the event should be reapplied to the workflow execution.
+func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
+	switch event.GetEventType() { // nolint:exhaustive
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+		return true
+	}
+
+	// events registered in the hsm framework that are potentially cherry-pickable
+	if _, ok := stateMachineRegistry.EventDefinition(event.GetEventType()); ok {
+		return true
+	}
+
+	return false
 }

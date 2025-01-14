@@ -53,7 +53,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -197,6 +197,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMembershipMonitor(),
 		healthInterceptor,
 		scheduler.NewSpecBuilder(),
+		true,
 	)
 }
 
@@ -2069,8 +2070,7 @@ func (s *WorkflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.SupportsSchedules)
 	s.True(resp.Capabilities.EncodedFailureAttributes)
 	s.True(resp.Capabilities.UpsertMemo)
-	// Nexus is enabled by a dynamic config feature flag which defaults to false.
-	s.False(resp.Capabilities.Nexus)
+	s.True(resp.Capabilities.Nexus)
 }
 
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
@@ -3190,7 +3190,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 
 	expectedMatchingRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
 		NamespaceId: s.testNamespaceID.String(),
-		TaskQueuePartition: &taskqueue.TaskQueuePartition{
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 			TaskQueue:     stickyTaskQueue,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		},

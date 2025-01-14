@@ -84,6 +84,11 @@ var (
 		9000,
 		`VisibilityPersistenceMaxWriteQPS is the max QPC system host can query visibility DB for write.`,
 	)
+	VisibilityPersistenceSlowQueryThreshold = NewGlobalDurationSetting(
+		"system.visibilityPersistenceSlowQueryThreshold",
+		time.Second,
+		`VisibilityPersistenceSlowQueryThreshold is the threshold above which a query is considered slow and logged.`,
+	)
 	EnableReadFromSecondaryVisibility = NewNamespaceBoolSetting(
 		"system.enableReadFromSecondaryVisibility",
 		false,
@@ -861,9 +866,9 @@ and deployment interaction in matching and history.`,
 	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
-		false,
-		`EnableNexus toggles all Nexus functionality on the server. Note that toggling this requires restarting
-server hosts for it to take effect.`,
+		true,
+		`Toggles all Nexus functionality on the server. Note that toggling this requires restarting server hosts for it
+		to take effect.`,
 	)
 
 	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
@@ -893,6 +898,12 @@ used when the first cache layer has a miss. Requires server restart for change t
 		30*time.Second,
 		`The TTL of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
 used when the first cache layer has a miss. Requires server restart for change to be applied.`,
+	)
+	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSetting(
+		"frontend.nexusRequestHeadersBlacklist",
+		[]string(nil),
+		`Nexus request headers to be removed before being sent to a user handler.
+Wildcards (*) are expanded to allow any substring. By default blacklist is empty.`,
 	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
@@ -943,7 +954,7 @@ used when the first cache layer has a miss. Requires server restart for change t
 
 	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
 		"frontend.enableExecuteMultiOperation",
-		false,
+		true,
 		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
 The API is under active development.`,
 	)
@@ -976,26 +987,26 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		100,
 		`DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
-Default value is 100.`,
+Default value is 100. Despite starting with 'frontend.' this setting is used by a worker and can be changed while namespace is deleted.`,
 	)
 	DeleteNamespacePageSize = NewGlobalIntSetting(
 		"frontend.deleteNamespaceDeletePageSize",
 		1000,
 		`DeleteNamespacePageSize is a page size to read executions from visibility for delete executions activity.
-Default value is 1000.`,
+Default value is 1000. Read once before delete of specified namespace is started.`,
 	)
 	DeleteNamespacePagesPerExecution = NewGlobalIntSetting(
 		"frontend.deleteNamespacePagesPerExecution",
 		256,
 		`DeleteNamespacePagesPerExecution is a number of pages before returning ContinueAsNew from delete executions activity.
-Default value is 256.`,
+Default value is 256. Read once before delete of specified namespace is started.`,
 	)
 	DeleteNamespaceConcurrentDeleteExecutionsActivities = NewGlobalIntSetting(
 		"frontend.deleteNamespaceConcurrentDeleteExecutionsActivities",
 		4,
 		`DeleteNamespaceConcurrentDeleteExecutionsActivities is a number of concurrent delete executions activities.
 Must be not greater than 256 and number of worker cores in the cluster.
-Default is 4.`,
+Default is 4. Read once before delete of specified namespace is started.`,
 	)
 	DeleteNamespaceNamespaceDeleteDelay = NewGlobalDurationSetting(
 		"frontend.deleteNamespaceNamespaceDeleteDelay",
@@ -1003,6 +1014,11 @@ Default is 4.`,
 		`DeleteNamespaceNamespaceDeleteDelay is a duration for how long namespace stays in database
 after all namespace resources (i.e. workflow executions) are deleted.
 Default is 0, means, namespace will be deleted immediately.`,
+	)
+	ProtectedNamespaces = NewGlobalTypedSetting(
+		"worker.protectedNamespaces",
+		([]string)(nil),
+		`List of namespace names that can't be deleted.`,
 	)
 
 	// keys for matching
@@ -1185,6 +1201,11 @@ This can help reduce effects of task queue movement.`,
 		5*time.Minute-10*time.Second,
 		`MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.`,
 	)
+	MatchingGetUserDataRefresh = NewGlobalDurationSetting(
+		"matching.getUserDataRefresh",
+		5*time.Minute,
+		`MatchingGetUserDataRefresh is how often the user data owner refreshes data from persistence.`,
+	)
 	MatchingBacklogNegligibleAge = NewTaskQueueDurationSetting(
 		"matching.backlogNegligibleAge",
 		5*time.Second,
@@ -1206,6 +1227,11 @@ duration since last poll exceeds this threshold.`,
 		"matching.listNexusEndpointsLongPollTimeout",
 		5*time.Minute-10*time.Second,
 		`MatchingListNexusEndpointsLongPollTimeout is the max length of long polls for ListNexusEndpoints calls.`,
+	)
+	MatchingNexusEndpointsRefreshInterval = NewGlobalDurationSetting(
+		"matching.nexusEndpointsRefreshInterval",
+		10*time.Second,
+		`Time to wait between calls to check that the in-memory view of Nexus endpoints matches the persisted state.`,
 	)
 	MatchingMembershipUnloadDelay = NewGlobalDurationSetting(
 		"matching.membershipUnloadDelay",
@@ -2276,7 +2302,7 @@ that task will be sent to DLQ.`,
 	)
 	ReplicationLowPriorityTaskParallelism = NewGlobalIntSetting(
 		"history.ReplicationLowPriorityTaskParallelism",
-		4,
+		1,
 		`ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel`,
 	)
 

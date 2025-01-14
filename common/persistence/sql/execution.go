@@ -33,7 +33,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -685,7 +685,7 @@ func (m *sqlExecutionStore) GetCurrentExecution(
 
 	return &p.InternalGetCurrentExecutionResponse{
 		RunID: row.RunID.String(),
-		ExecutionState: &persistence.WorkflowExecutionState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
 			CreateRequestId: row.CreateRequestID,
 			State:           row.State,
 			Status:          row.Status,
@@ -728,7 +728,7 @@ func (m *sqlExecutionStore) ListConcreteExecutions(
 	return nil, serviceerror.NewUnimplemented("ListConcreteExecutions is not implemented")
 }
 
-func getStartTimeFromState(state *persistence.WorkflowExecutionState) *time.Time {
+func getStartTimeFromState(state *persistencespb.WorkflowExecutionState) *time.Time {
 	if state == nil || state.StartTime == nil {
 		return nil
 	}
