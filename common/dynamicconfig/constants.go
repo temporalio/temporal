@@ -987,26 +987,26 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		100,
 		`DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
-Default value is 100.`,
+Default value is 100. Despite starting with 'frontend.' this setting is used by a worker and can be changed while namespace is deleted.`,
 	)
 	DeleteNamespacePageSize = NewGlobalIntSetting(
 		"frontend.deleteNamespaceDeletePageSize",
 		1000,
 		`DeleteNamespacePageSize is a page size to read executions from visibility for delete executions activity.
-Default value is 1000.`,
+Default value is 1000. Read once before delete of specified namespace is started.`,
 	)
 	DeleteNamespacePagesPerExecution = NewGlobalIntSetting(
 		"frontend.deleteNamespacePagesPerExecution",
 		256,
 		`DeleteNamespacePagesPerExecution is a number of pages before returning ContinueAsNew from delete executions activity.
-Default value is 256.`,
+Default value is 256. Read once before delete of specified namespace is started.`,
 	)
 	DeleteNamespaceConcurrentDeleteExecutionsActivities = NewGlobalIntSetting(
 		"frontend.deleteNamespaceConcurrentDeleteExecutionsActivities",
 		4,
 		`DeleteNamespaceConcurrentDeleteExecutionsActivities is a number of concurrent delete executions activities.
 Must be not greater than 256 and number of worker cores in the cluster.
-Default is 4.`,
+Default is 4. Read once before delete of specified namespace is started.`,
 	)
 	DeleteNamespaceNamespaceDeleteDelay = NewGlobalDurationSetting(
 		"frontend.deleteNamespaceNamespaceDeleteDelay",
