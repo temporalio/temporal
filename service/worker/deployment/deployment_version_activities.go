@@ -39,7 +39,7 @@ type (
 	}
 )
 
-func (a *DeploymentVersionActivities) SyncDeployment(ctx context.Context, args *deploymentspb.SyncDeploymentStateActivityArgs) (*deploymentspb.SyncDeploymentStateActivityResult, error) {
+func (a *DeploymentVersionActivities) SyncDeploymentVersion(ctx context.Context, args *deploymentspb.SyncDeploymentStateActivityArgs) (*deploymentspb.SyncDeploymentStateActivityResult, error) {
 	identity := "deployment series workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
 	res, err := a.deploymentClient.SyncDeploymentWorkflowFromSeries(
 		ctx,
