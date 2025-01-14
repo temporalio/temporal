@@ -136,6 +136,13 @@ func (s *ClientFunctionalSuite) TearDownTest() {
 	}
 }
 
+func (s *ClientFunctionalSuite) SetupSubTest() {
+	// Because we override `s.Assertions` with `require.Assertions` on test level (above),
+	// it needs to be done on subtest level too. Otherwise, any failed `assert` in
+	// subtest will fail the entire test (not subtest) immediately without running other subtests.
+	s.Assertions = require.New(s.T())
+}
+
 func (s *ClientFunctionalSuite) EventuallySucceeds(ctx context.Context, operationCtx backoff.OperationCtx) {
 	s.T().Helper()
 	s.NoError(backoff.ThrottleRetryContext(

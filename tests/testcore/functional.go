@@ -75,6 +75,13 @@ func (s *FunctionalSuite) SetupTest() {
 	s.TaskPoller = taskpoller.New(s.T(), s.client, s.Namespace().String())
 }
 
+func (s *FunctionalSuite) SetupSubTest() {
+	// Because we override `s.Assertions` with `require.Assertions` on test level (above),
+	// it needs to be done on subtest level too. Otherwise, any failed `assert` in
+	// subtest will fail the entire test (not subtest) immediately without running other subtests.
+	s.Assertions = require.New(s.T())
+}
+
 func (s *FunctionalSuite) SendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
 	_, err := s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
