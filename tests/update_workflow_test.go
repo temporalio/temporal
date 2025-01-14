@@ -122,21 +122,21 @@ func (s *UpdateWorkflowSuite) speculativeWorkflowTaskOutcomes(
 
 func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_AcceptComplete() {
 	testCases := []struct {
-		Name       string
-		ApplyRunID func(tv *testvars.TestVars, runID string) *testvars.TestVars
+		name     string
+		useRunID bool
 	}{
 		{
-			Name:       "with RunID",
-			ApplyRunID: func(tv *testvars.TestVars, runID string) *testvars.TestVars { return tv.WithRunID(runID) },
+			name:     "with RunID",
+			useRunID: true,
 		},
 		{
-			Name:       "without RunID",
-			ApplyRunID: func(tv *testvars.TestVars, _ string) *testvars.TestVars { return tv },
+			name:     "without RunID",
+			useRunID: false,
 		},
 	}
 
 	for _, tc := range testCases {
-		s.Run(tc.Name, func() {
+		s.Run(tc.name, func() {
 			tv := testvars.New(s.T())
 
 			runID := s.startWorkflow(tv)
@@ -202,7 +202,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Ac
 			_, err := poller.PollAndProcessWorkflowTask()
 			s.NoError(err)
 
-			updateResultCh := s.sendUpdateNoError(tc.ApplyRunID(tv, runID))
+			updateResultCh := s.sendUpdateNoError(s.useRunID(tv, tc.useRunID, runID))
 
 			// Process update in workflow.
 			res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
@@ -229,7 +229,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Ac
 			s.Equal(1, commits)
 			s.Equal(0, rollbacks)
 
-			events := s.GetHistory(s.Namespace().String(), tc.ApplyRunID(tv, runID).WorkflowExecution())
+			events := s.GetHistory(s.Namespace().String(), s.useRunID(tv, tc.useRunID, runID).WorkflowExecution())
 
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -248,21 +248,21 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Ac
 
 func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NotEmptySpeculativeWorkflowTask_AcceptComplete() {
 	testCases := []struct {
-		Name       string
-		ApplyRunID func(tv *testvars.TestVars, runID string) *testvars.TestVars
+		name     string
+		useRunID bool
 	}{
 		{
-			Name:       "with RunID",
-			ApplyRunID: func(tv *testvars.TestVars, runID string) *testvars.TestVars { return tv.WithRunID(runID) },
+			name:     "with RunID",
+			useRunID: true,
 		},
 		{
-			Name:       "without RunID",
-			ApplyRunID: func(tv *testvars.TestVars, _ string) *testvars.TestVars { return tv },
+			name:     "without RunID",
+			useRunID: false,
 		},
 	}
 
 	for _, tc := range testCases {
-		s.Run(tc.Name, func() {
+		s.Run(tc.name, func() {
 			tv := testvars.New(s.T())
 
 			runID := s.startWorkflow(tv)
@@ -335,7 +335,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NotEmptySpeculativeWorkflowTask
 			_, err := poller.PollAndProcessWorkflowTask()
 			s.NoError(err)
 
-			updateResultCh := s.sendUpdateNoError(tc.ApplyRunID(tv, runID))
+			updateResultCh := s.sendUpdateNoError(s.useRunID(tv, tc.useRunID, runID))
 
 			// Process update in workflow.
 			res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
@@ -348,7 +348,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NotEmptySpeculativeWorkflowTask
 			s.Equal(2, wtHandlerCalls)
 			s.Equal(2, msgHandlerCalls)
 
-			events := s.GetHistory(s.Namespace().String(), tc.ApplyRunID(tv, runID).WorkflowExecution())
+			events := s.GetHistory(s.Namespace().String(), s.useRunID(tv, tc.useRunID, runID).WorkflowExecution())
 
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -369,21 +369,21 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NotEmptySpeculativeWorkflowTask
 func (s *UpdateWorkflowSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTask_AcceptComplete() {
 
 	testCases := []struct {
-		Name       string
-		ApplyRunID func(tv *testvars.TestVars, runID string) *testvars.TestVars
+		name     string
+		useRunID bool
 	}{
 		{
-			Name:       "with RunID",
-			ApplyRunID: func(tv *testvars.TestVars, runID string) *testvars.TestVars { return tv.WithRunID(runID) },
+			name:     "with RunID",
+			useRunID: true,
 		},
 		{
-			Name:       "without RunID",
-			ApplyRunID: func(tv *testvars.TestVars, _ string) *testvars.TestVars { return tv },
+			name:     "without RunID",
+			useRunID: false,
 		},
 	}
 
 	for _, tc := range testCases {
-		s.Run(tc.Name, func() {
+		s.Run(tc.name, func() {
 			tv := testvars.New(s.T())
 
 			runID := s.startWorkflow(tv)
@@ -435,7 +435,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTas
 				T:                   s.T(),
 			}
 
-			updateResultCh := s.sendUpdateNoError(tc.ApplyRunID(tv, runID))
+			updateResultCh := s.sendUpdateNoError(s.useRunID(tv, tc.useRunID, runID))
 
 			// Process update in workflow.
 			res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
@@ -449,7 +449,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTas
 			s.Equal(1, wtHandlerCalls)
 			s.Equal(1, msgHandlerCalls)
 
-			events := s.GetHistory(s.Namespace().String(), tc.ApplyRunID(tv, runID).WorkflowExecution())
+			events := s.GetHistory(s.Namespace().String(), s.useRunID(tv, tc.useRunID, runID).WorkflowExecution())
 
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -466,21 +466,21 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_FirstNormalScheduledWorkflowTas
 func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_AcceptComplete() {
 
 	testCases := []struct {
-		Name       string
-		ApplyRunID func(tv *testvars.TestVars, runID string) *testvars.TestVars
+		name     string
+		useRunID bool
 	}{
 		{
-			Name:       "with RunID",
-			ApplyRunID: func(tv *testvars.TestVars, runID string) *testvars.TestVars { return tv.WithRunID(runID) },
+			name:     "with RunID",
+			useRunID: true,
 		},
 		{
-			Name:       "without RunID",
-			ApplyRunID: func(tv *testvars.TestVars, _ string) *testvars.TestVars { return tv },
+			name:     "without RunID",
+			useRunID: false,
 		},
 	}
 
 	for _, tc := range testCases {
-		s.Run(tc.Name, func() {
+		s.Run(tc.name, func() {
 			tv := testvars.New(s.T())
 
 			runID := s.startWorkflow(tv)
@@ -549,7 +549,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_Acc
 			err = s.SendSignal(s.Namespace().String(), tv.WorkflowExecution(), tv.Any().String(), tv.Any().Payloads(), tv.Any().String())
 			s.NoError(err)
 
-			updateResultCh := s.sendUpdateNoError(tc.ApplyRunID(tv, runID))
+			updateResultCh := s.sendUpdateNoError(s.useRunID(tv, tc.useRunID, runID))
 
 			// Process update in workflow. It will be attached to existing WT.
 			res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
@@ -563,7 +563,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_NormalScheduledWorkflowTask_Acc
 			s.Equal(2, wtHandlerCalls)
 			s.Equal(2, msgHandlerCalls)
 
-			events := s.GetHistory(s.Namespace().String(), tc.ApplyRunID(tv, runID).WorkflowExecution())
+			events := s.GetHistory(s.Namespace().String(), s.useRunID(tv, tc.useRunID, runID).WorkflowExecution())
 
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -1342,21 +1342,21 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 
 func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_AcceptComplete() {
 	testCases := []struct {
-		Name       string
-		ApplyRunID func(tv *testvars.TestVars, runID string) *testvars.TestVars
+		name     string
+		useRunID bool
 	}{
 		{
-			Name:       "with RunID",
-			ApplyRunID: func(tv *testvars.TestVars, runID string) *testvars.TestVars { return tv.WithRunID(runID) },
+			name:     "with RunID",
+			useRunID: true,
 		},
 		{
-			Name:       "without RunID",
-			ApplyRunID: func(tv *testvars.TestVars, _ string) *testvars.TestVars { return tv },
+			name:     "without RunID",
+			useRunID: false,
 		},
 	}
 
 	for _, tc := range testCases {
-		s.Run(tc.Name, func() {
+		s.Run(tc.name, func() {
 			tv := testvars.New(s.T())
 
 			runID := s.startWorkflow(tv)
@@ -1401,7 +1401,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 			// This is to make sure that sticky poller above reached server first.
 			// And when update comes, stick poller is already available.
 			time.Sleep(500 * time.Millisecond) //nolint:forbidigo
-			updateResult := <-s.sendUpdateNoError(tc.ApplyRunID(tv, runID))
+			updateResult := <-s.sendUpdateNoError(s.useRunID(tv, tc.useRunID, runID))
 
 			s.EqualValues("success-result-of-"+tv.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
@@ -1415,7 +1415,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 			  7 WorkflowTaskCompleted
 			  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
 			  9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
-			`, s.GetHistory(s.Namespace().String(), tc.ApplyRunID(tv, runID).WorkflowExecution()))
+			`, s.GetHistory(s.Namespace().String(), s.useRunID(tv, tc.useRunID, runID).WorkflowExecution()))
 		})
 	}
 }
@@ -3031,7 +3031,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates()
 	type completionCommand struct {
 		name        string
 		finalStatus enumspb.WorkflowExecutionStatus
-		applyRunID  func(tv *testvars.TestVars, runID string) *testvars.TestVars
+		useRunID    bool
 		command     func(tv *testvars.TestVars) *commandpb.Command
 	}
 	testCases := []testCase{
@@ -3084,7 +3084,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates()
 		{
 			name:        "workflow completed",
 			finalStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			applyRunID:  func(tv *testvars.TestVars, _ string) *testvars.TestVars { return tv },
+			useRunID:    false,
 			command: func(_ *testvars.TestVars) *commandpb.Command {
 				return &commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -3095,7 +3095,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates()
 		{
 			name:        "workflow continued as new with runID",
 			finalStatus: enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
-			applyRunID:  func(tv *testvars.TestVars, runID string) *testvars.TestVars { return tv.WithRunID(runID) },
+			useRunID:    true,
 			command: func(tv *testvars.TestVars) *commandpb.Command {
 				return &commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
@@ -3109,7 +3109,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates()
 		{
 			name:        "workflow continued as new without runID",
 			finalStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, // This is the status of new run because update doesn't go to particular runID.
-			applyRunID:  func(tv *testvars.TestVars, _ string) *testvars.TestVars { return tv },
+			useRunID:    false,
 			command: func(tv *testvars.TestVars) *commandpb.Command {
 				return &commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
@@ -3123,7 +3123,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates()
 		{
 			name:        "workflow failed",
 			finalStatus: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-			applyRunID:  func(tv *testvars.TestVars, _ string) *testvars.TestVars { return tv },
+			useRunID:    true,
 			command: func(tv *testvars.TestVars) *commandpb.Command {
 				return &commandpb.Command{
 					CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
@@ -3187,7 +3187,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates()
 				_, err := poller.PollAndProcessWorkflowTask()
 				s.NoError(err)
 
-				updateResultCh := s.sendUpdate(testcore.NewContext(), wfCC.applyRunID(tv, runID))
+				updateResultCh := s.sendUpdate(testcore.NewContext(), s.useRunID(tv, wfCC.useRunID, runID))
 
 				// Complete workflow.
 				_, err = poller.PollAndProcessWorkflowTask()
@@ -3219,7 +3219,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates()
 				// Check that update didn't block workflow completion.
 				descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 					Namespace: s.Namespace().String(),
-					Execution: wfCC.applyRunID(tv, runID).WorkflowExecution(),
+					Execution: s.useRunID(tv, wfCC.useRunID, runID).WorkflowExecution(),
 				})
 				s.NoError(err)
 				s.Equal(wfCC.finalStatus, descResp.WorkflowExecutionInfo.Status)
@@ -5372,4 +5372,11 @@ func (s *UpdateWorkflowSuite) closeShard(wid string) {
 		ShardId: common.WorkflowIDToHistoryShard(resp.NamespaceInfo.Id, wid, s.GetTestClusterConfig().HistoryConfig.NumHistoryShards),
 	})
 	s.NoError(err)
+}
+
+func (s *UpdateWorkflowSuite) useRunID(tv *testvars.TestVars, useRunID bool, runID string) *testvars.TestVars {
+	if useRunID {
+		return tv.WithRunID(runID)
+	}
+	return tv
 }
