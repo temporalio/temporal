@@ -204,7 +204,7 @@ func CompletionHandler(
 			if opFailedError != nil {
 				return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceCallback)
 			}
-			return handleSuccessfulOperationResult(node, operation, result, links, CompletionSourceCallback)
+			return handleSuccessfulOperationResult(node, operation, result, nil, CompletionSourceCallback)
 		})
 		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion.
 		if errors.Is(err, hsm.ErrInvalidTransition) {
