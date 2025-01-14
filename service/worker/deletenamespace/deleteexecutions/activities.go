@@ -69,8 +69,11 @@ type (
 	}
 
 	DeleteExecutionsActivityParams struct {
-		Namespace     namespace.Name
-		NamespaceID   namespace.ID
+		Namespace   namespace.Name
+		NamespaceID namespace.ID
+		// Deprecated.
+		// TODO: remove after 1.27 release.
+		RPS           int
 		ListPageSize  int
 		NextPageToken []byte
 	}

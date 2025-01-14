@@ -67,6 +67,7 @@ func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, DeleteExecutionsActivityParams{
 		Namespace:     "namespace",
 		NamespaceID:   "namespace-id",
+		RPS:           100,
 		ListPageSize:  1000,
 		NextPageToken: nil,
 	}).Return(DeleteExecutionsActivityResult{
