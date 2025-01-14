@@ -39,13 +39,14 @@ import (
 
 type (
 	FunctionalSuite struct {
+		FunctionalTestBase
+
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
 		protorequire.ProtoAssertions
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
-		FunctionalTestBase
 
 		TaskPoller *taskpoller.TaskPoller
 	}
