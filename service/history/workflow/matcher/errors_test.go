@@ -95,7 +95,7 @@ func TestWrapMatcherError(t *testing.T) {
 		got := wrapMatcherError("prefix", originalErr)
 		assert.NotNil(t, got)
 
-		var matcherErr Error
+		var matcherErr *Error
 		assert.ErrorAs(t, got, &matcherErr)
 
 		// Check if message is wrapped properly
