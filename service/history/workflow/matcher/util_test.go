@@ -37,9 +37,16 @@ func TestExtractStringValue(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name:     "empty string",
-			input:    "",
-			expected: "",
+			name:        "empty string",
+			input:       "",
+			expected:    "",
+			expectError: true,
+		},
+		{
+			name:        "empty quoted string",
+			input:       "",
+			expected:    "",
+			expectError: true,
 		},
 		{
 			name:     "quoted string",
