@@ -1,0 +1,180 @@
+// The MIT License
+//
+// Copyright (c) 2024 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.worker_deployment.v1;
+
+option go_package = "go.temporal.io/server/api/worker_deployment/v1;worker_deployment";
+
+import "temporal/api/enums/v1/task_queue.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/api/deployment/v1/message.proto";
+import "temporal/api/common/v1/message.proto";
+
+// Data for each deployment+task queue pair. This is stored in each deployment (for each task
+// queue), and synced to task queue user data (for each deployment).
+message TaskQueueData {
+    google.protobuf.Timestamp first_poller_time = 1;
+    google.protobuf.Timestamp last_became_current_time = 2;
+}
+
+message VersionLocalState {
+    temporal.api.deployment.v1.Deployment deployment = 1;
+    map<string, TaskQueueFamilyData> task_queue_families = 2;
+
+    bool is_current = 3;
+    google.protobuf.Timestamp last_became_current_time = 6;
+
+    google.protobuf.Timestamp create_time = 4;
+    map<string, temporal.api.common.v1.Payload> metadata = 5;
+
+    bool started_series_workflow = 7;
+
+    message TaskQueueFamilyData {
+        // Key: enums.TaskQueueType, Value: TaskQueueData
+        // All fields in TaskQueueData are valid except last_became_current_time, the source of
+        // truth for that is the value at the root of DeploymentLocalState.
+        map<int32, TaskQueueData> task_queues = 1;
+    }
+}
+
+// used as Worker Deployment Version workflow input:
+message VersionWorkflowArgs {
+    string namespace_name = 1;
+    string namespace_id = 2;
+    VersionLocalState state = 3;
+}
+
+// used as Worker Deployment workflow input:
+message WorkflowArgs {
+    string namespace_name = 1;
+    string namespace_id = 2;
+    string series_name = 3;
+    LocalState state = 4;
+}
+
+message LocalState {
+    string current_build_id = 1;
+    google.protobuf.Timestamp current_changed_time = 2;
+}
+
+// used as Worker Deployment Version workflow update input:
+message RegisterWorkerInVersionArgs {
+    string task_queue_name = 1;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    google.protobuf.Timestamp first_poller_time = 3;
+    int32 max_task_queues = 4;
+}
+
+// used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
+message SyncVersionStateArgs {
+    SetCurrent set_current = 1;
+    // currently, update_metadata will only be set if set_current.last_became_current_time is
+    // present. this could change in the future.
+    temporal.api.deployment.v1.UpdateDeploymentMetadata update_metadata = 2;
+
+    message SetCurrent {
+        // If last_became_current_time is present, then set the deployment's
+        // last_became_current_time to it and set is_current true. If it's missing,
+        // set is_current false.
+        google.protobuf.Timestamp last_became_current_time = 1;
+    }
+}
+
+// used as Worker Deployment workflow update response (sent from Worker Deployment workflow):
+message SyncVersionStateResponse {
+    LocalState worker_deployment_local_state = 1;
+}
+
+// used as Worker Deployment Version workflow query response:
+message QueryDescribeVersionResponse {
+    VersionLocalState worker_deployment_version_local_state = 1;
+}
+
+// used as Worker Deployment Version workflow memo:
+message VersionWorkflowMemo {
+    temporal.api.deployment.v1.Deployment deployment = 1;
+    google.protobuf.Timestamp create_time = 2;
+    bool is_current_deployment = 3;
+}
+
+// used as Worker Deployment Version workflow activity input:
+message StartDeploymentRequest {
+    string series_name = 1;
+    string request_id = 2;
+}
+
+// used as Worker Deployment Version workflow activity input:
+message SyncUserDataRequest {
+    temporal.api.deployment.v1.Deployment deployment = 1;
+    repeated SyncUserData sync= 2;
+
+    message SyncUserData {
+        string name = 1;
+        temporal.api.enums.v1.TaskQueueType type = 2;
+        TaskQueueData data = 3;
+    }
+}
+
+// used as Worker Deployment Version workflow activity output:
+message SyncUserDataResponse {
+    map<string, int64> task_queue_max_versions = 1;
+}
+
+// used as Worker Deployment Version workflow activity input:
+message CheckUserDataPropagationRequest {
+    map<string, int64> task_queue_max_versions = 1;
+}
+
+// used as Worker Deployment workflow update input:
+message SetCurrentVersionArgs {
+    string identity = 1;
+    string build_id = 2;
+    temporal.api.deployment.v1.UpdateDeploymentMetadata update_metadata = 3;
+    string request_id = 4;
+}
+
+// used as Worker Deployment update response:
+message SetCurrentVersionResponse {
+    LocalState current_worker_deployment_state = 1;
+    LocalState previous_worker_deployment_state = 2;
+}
+
+// used as Worker Deployment activity input:
+message SyncStateActivityArgs {
+    temporal.api.deployment.v1.Deployment deployment = 1;
+    SyncVersionStateArgs args = 2;
+    string request_id = 3;
+}
+
+// used as Worker Deployment activity result:
+message SyncStateActivityResult {
+    LocalState worker_deployment_state = 1;
+}
+
+// used as deployment series workflow memo:
+message DeploymentSeriesWorkflowMemo {
+    string series_name = 1;
+    string current_build_id = 2;
+    google.protobuf.Timestamp current_changed_time = 3;
+}
