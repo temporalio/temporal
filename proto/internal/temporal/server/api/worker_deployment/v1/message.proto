@@ -39,6 +39,7 @@ message TaskQueueData {
     google.protobuf.Timestamp last_became_current_time = 2;
 }
 
+// Local state for Worker Deployment Version
 message VersionLocalState {
     temporal.api.deployment.v1.Deployment deployment = 1;
     map<string, TaskQueueFamilyData> task_queue_families = 2;
@@ -74,6 +75,7 @@ message WorkflowArgs {
     LocalState state = 4;
 }
 
+// Local state for Worker Deployment
 message LocalState {
     string current_build_id = 1;
     google.protobuf.Timestamp current_changed_time = 2;
