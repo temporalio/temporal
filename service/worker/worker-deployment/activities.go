@@ -35,7 +35,7 @@ import (
 type (
 	Activities struct {
 		namespace        *namespace.Namespace
-		deploymentClient StoreClient
+		deploymentClient Client
 	}
 )
 
