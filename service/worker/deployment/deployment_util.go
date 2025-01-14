@@ -40,8 +40,8 @@ import (
 
 const (
 	// Workflow types
-	WorkerDeploymentWorkflowType = "temporal-sys-worker-deployment-workflow"
-	WorkerBuildWorkflowType      = "temporal-sys-worker-build-workflow"
+	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
+	WorkerDeploymentVersionWorkflowType = "temporal-sys-worker-deployment-version-workflow"
 
 	// [cleanup-wv]
 	DeploymentWorkflowType       = "temporal-sys-deployment-workflow"

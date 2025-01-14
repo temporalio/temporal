@@ -106,7 +106,7 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(WorkerDeploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
-	registry.RegisterWorkflowWithOptions(DeploymentVersionWorkflow, workflow.RegisterOptions{Name: WorkerBuildWorkflowType})
+	registry.RegisterWorkflowWithOptions(DeploymentVersionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
 	workerDeploymentActivities := &WorkerDeploymentActivities{
 		namespace:        ns,
 		deploymentClient: s.activityDeps.DeploymentClient,
