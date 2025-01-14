@@ -122,12 +122,12 @@ func (s *WorkflowUpdateBaseSuite) waitUpdateAdmitted(tv *testvars.TestVars) {
 	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", tv.UpdateID())
 }
 
-func (s *WorkflowUpdateBaseSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {
+func (s *WorkflowUpdateBaseSuite) startWorkflow(tv *testvars.TestVars) string {
 	s.T().Helper()
 	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), s.startWorkflowRequest(tv))
 	s.NoError(err)
 
-	return tv.WithRunID(startResp.GetRunId())
+	return startResp.GetRunId()
 }
 
 func (s *WorkflowUpdateBaseSuite) startWorkflowRequest(tv *testvars.TestVars) *workflowservice.StartWorkflowExecutionRequest {
