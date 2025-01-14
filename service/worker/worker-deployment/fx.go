@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package deployment
+package workerdeployment
 
 import (
 	sdkworker "go.temporal.io/sdk/worker"
@@ -46,11 +46,11 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler   metrics.Handler
-		Logger           log.Logger
-		ClientFactory    sdk.ClientFactory
-		MatchingClient   resource.MatchingClient
-		DeploymentClient DeploymentStoreClient
+		MetricsHandler         metrics.Handler
+		Logger                 log.Logger
+		ClientFactory          sdk.ClientFactory
+		MatchingClient         resource.MatchingClient
+		WorkerDeploymentClient Client
 	}
 
 	fxResult struct {
@@ -61,16 +61,16 @@ type (
 
 var Module = fx.Options(
 	fx.Provide(NewResult),
-	fx.Provide(DeploymentStoreClientProvider),
+	fx.Provide(ClientProvider),
 )
 
-func DeploymentStoreClientProvider(
+func ClientProvider(
 	logger log.Logger,
 	historyClient resource.HistoryClient,
 	visibilityManager manager.VisibilityManager,
 	dc *dynamicconfig.Collection,
-) DeploymentStoreClient {
-	return &DeploymentClientImpl{
+) Client {
+	return &ClientImpl{
 		logger:                logger,
 		historyClient:         historyClient,
 		visibilityManager:     visibilityManager,
@@ -105,21 +105,21 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
-	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
-	registry.RegisterWorkflowWithOptions(WorkerDeploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
+	registry.RegisterWorkflowWithOptions(VersionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
+	registry.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 
-	deploymentActivities := &DeploymentActivities{
+	versionActivities := &VersionActivities{
 		namespace:        ns,
-		deploymentClient: s.activityDeps.DeploymentClient,
+		deploymentClient: s.activityDeps.WorkerDeploymentClient,
 		matchingClient:   s.activityDeps.MatchingClient,
 	}
-	registry.RegisterActivity(deploymentActivities)
+	registry.RegisterActivity(versionActivities)
 
-	WorkerDeploymentActivities := &WorkerDeploymentActivities{
+	activities := &Activities{
 		namespace:        ns,
-		deploymentClient: s.activityDeps.DeploymentClient,
+		deploymentClient: s.activityDeps.WorkerDeploymentClient,
 	}
-	registry.RegisterActivity(WorkerDeploymentActivities)
+	registry.RegisterActivity(activities)
 
 	return nil
 }

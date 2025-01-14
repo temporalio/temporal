@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package deployment
+package workerdeployment
 
 import (
 	"testing"
@@ -46,7 +46,7 @@ func TestWorkerDeploymentSuite(t *testing.T) {
 func (s *WorkerDeploymentSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
-	s.env.RegisterWorkflow(WorkerDeploymentWorkflow)
+	s.env.RegisterWorkflow(Workflow)
 }
 
 func (s *WorkerDeploymentSuite) TearDownTest() {

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package deployment
+package workerdeployment
 
 import (
 	"strings"
@@ -60,7 +60,7 @@ type (
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 		VisibilityManager  *manager.MockVisibilityManager
 		workerDeployment   *deploymentpb.Deployment
-		deploymentClient   *DeploymentClientImpl
+		deploymentClient   *ClientImpl
 		sync.Mutex
 	}
 )
@@ -84,7 +84,7 @@ func (d *deploymentWorkflowClientSuite) SetupTest() {
 		SeriesName: testDeployment,
 		BuildId:    testBuildID,
 	}
-	d.deploymentClient = &DeploymentClientImpl{
+	d.deploymentClient = &ClientImpl{
 		historyClient:     d.mockHistoryClient,
 		visibilityManager: d.VisibilityManager,
 	}
@@ -104,7 +104,7 @@ func TestDeploymentWorkflowClientSuite(t *testing.T) {
 	suite.Run(t, d)
 }
 
-func (d *deploymentWorkflowClientSuite) TestValidateDeploymentWfParams() {
+func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 	testCases := []struct {
 		Description   string
 		FieldName     string
@@ -113,19 +113,19 @@ func (d *deploymentWorkflowClientSuite) TestValidateDeploymentWfParams() {
 	}{
 		{
 			Description:   "Empty Field",
-			FieldName:     SeriesFieldName,
+			FieldName:     WorkerDeploymentFieldName,
 			Input:         "",
 			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeployment cannot be empty"),
 		},
 		{
 			Description:   "Large Field",
-			FieldName:     SeriesFieldName,
+			FieldName:     WorkerDeploymentFieldName,
 			Input:         strings.Repeat("s", 1000),
 			ExpectedError: serviceerror.NewInvalidArgument("size of WorkerDeployment larger than the maximum allowed"),
 		},
 		{
 			Description:   "Valid field",
-			FieldName:     SeriesFieldName,
+			FieldName:     WorkerDeploymentFieldName,
 			Input:         "A",
 			ExpectedError: nil,
 		},
@@ -134,7 +134,7 @@ func (d *deploymentWorkflowClientSuite) TestValidateDeploymentWfParams() {
 	for _, test := range testCases {
 		fieldName := test.FieldName
 		field := test.Input
-		err := ValidateDeploymentWfParams(fieldName, field, testMaxIDLengthLimit)
+		err := ValidateVersionWfParams(fieldName, field, testMaxIDLengthLimit)
 
 		if test.ExpectedError == nil {
 			d.NoError(err)
@@ -147,7 +147,7 @@ func (d *deploymentWorkflowClientSuite) TestValidateDeploymentWfParams() {
 	}
 }
 
-func (d *deploymentWorkflowClientSuite) TestGenerateDeploymentWorkflowID() {
+func (d *deploymentWorkflowClientSuite) TestGenerateVersionWorkflowID() {
 	testCases := []struct {
 		series, buildID string
 		expected        string
@@ -175,6 +175,6 @@ func (d *deploymentWorkflowClientSuite) TestGenerateDeploymentWorkflowID() {
 	}
 
 	for _, test := range testCases {
-		d.Equal(test.expected, GenerateDeploymentWorkflowID(test.series, test.buildID))
+		d.Equal(test.expected, GenerateVersionWorkflowID(test.series, test.buildID))
 	}
 }

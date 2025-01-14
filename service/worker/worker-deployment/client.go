@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package deployment
+package workerdeployment
 
 import (
 	"context"
@@ -38,8 +38,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	worker_deploymentspb "go.temporal.io/server/api/worker_deployment/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -53,7 +53,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type DeploymentStoreClient interface {
+type Client interface {
 	RegisterTaskQueueWorker(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -65,20 +65,20 @@ type DeploymentStoreClient interface {
 		requestID string,
 	) error
 
-	DescribeDeployment(
+	DescribeVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
 		buildID string,
 	) (*deploymentpb.DeploymentInfo, error)
 
-	GetCurrentDeployment(
+	GetCurrentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
 	) (*deploymentpb.DeploymentInfo, error)
 
-	ListDeployments(
+	ListVersions(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
@@ -86,14 +86,14 @@ type DeploymentStoreClient interface {
 		nextPageToken []byte,
 	) ([]*deploymentpb.DeploymentListInfo, []byte, error)
 
-	GetDeploymentReachability(
+	GetVersionReachability(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
 		buildID string,
 	) (*workflowservice.GetDeploymentReachabilityResponse, error)
 
-	SetCurrentDeployment(
+	SetCurrentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deployment *deploymentpb.Deployment,
@@ -102,8 +102,8 @@ type DeploymentStoreClient interface {
 		requestID string,
 	) (*deploymentpb.DeploymentInfo, *deploymentpb.DeploymentInfo, error)
 
-	// Only used internally by deployment workflow:
-	StartWorkerDeployment(
+	// Only used internally by Worker Deployment Version workflow:
+	Start(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
@@ -111,23 +111,23 @@ type DeploymentStoreClient interface {
 		requestID string,
 	) error
 
-	// Only used internally by deployment series workflow:
-	SyncDeploymentWorkflowFromSeries(
+	// Only used internally by WorkerDeployment workflow:
+	SyncVersionWorkflowFromWorkerDeployment(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deployment *deploymentpb.Deployment,
-		args *deploymentspb.SyncDeploymentStateArgs,
+		args *worker_deploymentspb.SyncVersionStateArgs,
 		identity string,
 		requestID string,
-	) (*deploymentspb.SyncDeploymentStateResponse, error)
+	) (*worker_deploymentspb.SyncVersionStateResponse, error)
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
 
 type ErrRegister struct{ error }
 
-// implements DeploymentStoreClient
-type DeploymentClientImpl struct {
+// ClientImpl implements StoreClient
+type ClientImpl struct {
 	logger                    log.Logger
 	historyClient             historyservice.HistoryServiceClient
 	visibilityManager         manager.VisibilityManager
@@ -137,11 +137,11 @@ type DeploymentClientImpl struct {
 	reachabilityCache         reachabilityCache
 }
 
-var _ DeploymentStoreClient = (*DeploymentClientImpl)(nil)
+var _ Client = (*ClientImpl)(nil)
 
 var errRetry = errors.New("retry update")
 
-func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
+func (d *ClientImpl) RegisterTaskQueueWorker(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deployment *deploymentpb.Deployment,
@@ -154,7 +154,7 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	//revive:disable-next-line:defer
 	defer d.record("RegisterTaskQueueWorker", &retErr, taskQueueName, taskQueueType, identity)()
 
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInDeploymentArgs{
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&worker_deploymentspb.RegisterWorkerInVersionArgs{
 		TaskQueueName:   taskQueueName,
 		TaskQueueType:   taskQueueType,
 		FirstPollerTime: timestamppb.New(firstPoll),
@@ -164,7 +164,7 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 		return err
 	}
 
-	outcome, err := d.updateWithStartDeployment(ctx, namespaceEntry, deployment, &updatepb.Request{
+	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, deployment, &updatepb.Request{
 		Input: &updatepb.Input{Name: RegisterWorkerInDeployment, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	}, identity, requestID)
@@ -172,7 +172,7 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 		return err
 	}
 
-	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInDeploymentType {
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
 		// translate to client-side error type
 		return ErrMaxTaskQueuesInDeployment{error: errors.New(failure.Message)}
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
@@ -184,7 +184,7 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	return nil
 }
 
-func (d *DeploymentClientImpl) DescribeDeployment(
+func (d *ClientImpl) DescribeVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -194,16 +194,16 @@ func (d *DeploymentClientImpl) DescribeDeployment(
 	defer d.record("DescribeDeployment", &retErr, seriesName, buildID)()
 
 	// validating params
-	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.maxIDLengthLimit())
+	err := ValidateVersionWfParams(WorkerDeploymentFieldName, seriesName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
-	err = ValidateDeploymentWfParams(BuildIDFieldName, buildID, d.maxIDLengthLimit())
+	err = ValidateVersionWfParams(BuildIDFieldName, buildID, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	deploymentWorkflowID := GenerateDeploymentWorkflowID(seriesName, buildID)
+	deploymentWorkflowID := GenerateVersionWorkflowID(seriesName, buildID)
 
 	req := &historyservice.QueryWorkflowRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -212,7 +212,7 @@ func (d *DeploymentClientImpl) DescribeDeployment(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: deploymentWorkflowID,
 			},
-			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
+			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
 		},
 	}
 
@@ -225,17 +225,17 @@ func (d *DeploymentClientImpl) DescribeDeployment(
 		return nil, err
 	}
 
-	var queryResponse deploymentspb.QueryDescribeDeploymentResponse
+	var queryResponse worker_deploymentspb.QueryDescribeVersionResponse
 	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
 		return nil, err
 	}
 
-	return stateToInfo(queryResponse.DeploymentLocalState), nil
+	return stateToInfo(queryResponse.VersionState), nil
 }
 
 // TODO (carly): pass deployment instead of seriesName + buildId in all these APIs -- separate PR
-func (d *DeploymentClientImpl) GetDeploymentReachability(
+func (d *ClientImpl) GetVersionReachability(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -244,7 +244,7 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 	//revive:disable-next-line:defer
 	defer d.record("GetDeploymentReachability", &retErr, seriesName, buildID)()
 
-	deployInfo, err := d.DescribeDeployment(ctx, namespaceEntry, seriesName, buildID)
+	deployInfo, err := d.DescribeVersion(ctx, namespaceEntry, seriesName, buildID)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +269,7 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 	}, nil
 }
 
-func (d *DeploymentClientImpl) GetCurrentDeployment(
+func (d *ClientImpl) GetCurrentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -278,12 +278,12 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(
 	defer d.record("GetCurrentDeployment", &retErr, seriesName)()
 
 	// Validating params
-	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.maxIDLengthLimit())
+	err := ValidateVersionWfParams(WorkerDeploymentFieldName, seriesName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	workflowID := GenerateWorkerDeploymentWorkflowID(seriesName)
+	workflowID := GenerateWorkflowID(seriesName)
 	resp, err := d.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: namespaceEntry.ID().String(),
 		Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -307,7 +307,7 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(
 		// memo missing, series has no set current deployment
 		return nil, nil
 	}
-	var memo deploymentspb.WorkerDeploymentWorkflowMemo
+	var memo worker_deploymentspb.WorkflowMemo
 	err = sdk.PreferProtoDataConverter.FromPayload(val, &memo)
 	if err != nil {
 		return nil, err
@@ -318,7 +318,7 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(
 		return nil, nil
 	}
 
-	deploymentInfo, err := d.DescribeDeployment(ctx, namespaceEntry, seriesName, memo.CurrentBuildId)
+	deploymentInfo, err := d.DescribeVersion(ctx, namespaceEntry, seriesName, memo.CurrentBuildId)
 	if err != nil {
 		return nil, nil
 	}
@@ -326,7 +326,7 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(
 	return deploymentInfo, nil
 }
 
-func (d *DeploymentClientImpl) ListDeployments(
+func (d *ClientImpl) ListVersions(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -338,7 +338,7 @@ func (d *DeploymentClientImpl) ListDeployments(
 
 	query := ""
 	if seriesName != "" {
-		query = BuildQueryWithSeriesFilter(seriesName)
+		query = BuildQueryWithWorkerDeploymentFilter(seriesName)
 	} else {
 		query = DeploymentVisibilityBaseListQuery
 	}
@@ -363,12 +363,12 @@ func (d *DeploymentClientImpl) ListDeployments(
 
 	deployments := make([]*deploymentpb.DeploymentListInfo, len(persistenceResp.Executions))
 	for i, ex := range persistenceResp.Executions {
-		workflowMemo := DecodeDeploymentMemo(ex.GetMemo())
+		versionWorkflowMemo := DecodeVersionMemo(ex.GetMemo())
 
 		deploymentListInfo := &deploymentpb.DeploymentListInfo{
-			Deployment: workflowMemo.Deployment,
-			CreateTime: workflowMemo.CreateTime,
-			IsCurrent:  workflowMemo.IsCurrentDeployment,
+			Deployment: versionWorkflowMemo.Deployment,
+			CreateTime: versionWorkflowMemo.CreateTime,
+			IsCurrent:  versionWorkflowMemo.IsCurrentDeployment,
 		}
 		deployments[i] = deploymentListInfo
 	}
@@ -376,7 +376,7 @@ func (d *DeploymentClientImpl) ListDeployments(
 	return deployments, persistenceResp.NextPageToken, nil
 }
 
-func (d *DeploymentClientImpl) SetCurrentDeployment(
+func (d *ClientImpl) SetCurrentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deployment *deploymentpb.Deployment,
@@ -387,7 +387,7 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentDeployment", &retErr, namespaceEntry.Name(), deployment, identity)()
 
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentDeploymentArgs{
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&worker_deploymentspb.SetCurrentVersionArgs{
 		Identity:       identity,
 		BuildId:        deployment.BuildId,
 		UpdateMetadata: updateMetadata,
@@ -401,7 +401,7 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 		namespaceEntry,
 		deployment.SeriesName,
 		&updatepb.Request{
-			Input: &updatepb.Input{Name: SetCurrentDeployment, Args: updatePayload},
+			Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
 			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 		},
 		identity,
@@ -424,14 +424,14 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 		return nil, nil, serviceerror.NewInternal("outcome missing success and failure")
 	}
 
-	var res deploymentspb.SetCurrentDeploymentResponse
+	var res worker_deploymentspb.SetCurrentVersionResponse
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, nil, err
 	}
-	return stateToInfo(res.CurrentDeploymentState), stateToInfo(res.PreviousDeploymentState), nil
+	return stateToInfo(res.CurrentVersionState), stateToInfo(res.PreviousVersionState), nil
 }
 
-func (d *DeploymentClientImpl) StartWorkerDeployment(
+func (d *ClientImpl) Start(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -439,11 +439,11 @@ func (d *DeploymentClientImpl) StartWorkerDeployment(
 	requestID string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("StartWorkerDeployment", &retErr, namespaceEntry.Name(), seriesName, identity)()
+	defer d.record("StartDeploymentSeries", &retErr, namespaceEntry.Name(), seriesName, identity)()
 
-	workflowID := GenerateWorkerDeploymentWorkflowID(seriesName)
+	workflowID := GenerateWorkflowID(seriesName)
 
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(&worker_deploymentspb.WorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
 		SeriesName:    seriesName,
@@ -452,7 +452,7 @@ func (d *DeploymentClientImpl) StartWorkerDeployment(
 		return err
 	}
 
-	memo, err := d.buildInitialWorkerDeploymentMemo(seriesName)
+	memo, err := d.buildInitialMemo(seriesName)
 	if err != nil {
 		return err
 	}
@@ -479,14 +479,14 @@ func (d *DeploymentClientImpl) StartWorkerDeployment(
 	return err
 }
 
-func (d *DeploymentClientImpl) SyncDeploymentWorkflowFromSeries(
+func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deployment *deploymentpb.Deployment,
-	args *deploymentspb.SyncDeploymentStateArgs,
+	args *worker_deploymentspb.SyncVersionStateArgs,
 	identity string,
 	requestID string,
-) (_ *deploymentspb.SyncDeploymentStateResponse, retErr error) {
+) (_ *worker_deploymentspb.SyncVersionStateResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SyncDeploymentWorkflowFromSeries", &retErr, namespaceEntry.Name(), deployment, args, identity)()
 
@@ -494,12 +494,12 @@ func (d *DeploymentClientImpl) SyncDeploymentWorkflowFromSeries(
 	if err != nil {
 		return nil, err
 	}
-	outcome, err := d.updateWithStartDeployment(
+	outcome, err := d.updateWithStartWorkerDeploymentVersion(
 		ctx,
 		namespaceEntry,
 		deployment,
 		&updatepb.Request{
-			Input: &updatepb.Input{Name: SyncDeploymentState, Args: updatePayload},
+			Input: &updatepb.Input{Name: SyncVersionState, Args: updatePayload},
 			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 		},
 		identity,
@@ -526,14 +526,14 @@ func (d *DeploymentClientImpl) SyncDeploymentWorkflowFromSeries(
 		return nil, serviceerror.NewInternal("outcome missing success and failure")
 	}
 
-	var res deploymentspb.SyncDeploymentStateResponse
+	var res worker_deploymentspb.SyncVersionStateResponse
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
 }
 
-func (d *DeploymentClientImpl) updateWithStartDeployment(
+func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deployment *deploymentpb.Deployment,
@@ -542,21 +542,21 @@ func (d *DeploymentClientImpl) updateWithStartDeployment(
 	requestID string,
 ) (*updatepb.Outcome, error) {
 	// validate params which are used for building workflowIDs
-	err := ValidateDeploymentWfParams(SeriesFieldName, deployment.SeriesName, d.maxIDLengthLimit())
+	err := ValidateVersionWfParams(WorkerDeploymentFieldName, deployment.SeriesName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
-	err = ValidateDeploymentWfParams(BuildIDFieldName, deployment.BuildId, d.maxIDLengthLimit())
+	err = ValidateVersionWfParams(BuildIDFieldName, deployment.BuildId, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	workflowID := GenerateDeploymentWorkflowID(deployment.SeriesName, deployment.BuildId)
+	workflowID := GenerateVersionWorkflowID(deployment.SeriesName, deployment.BuildId)
 
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeploymentWorkflowArgs{
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(&worker_deploymentspb.VersionWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
-		State: &deploymentspb.DeploymentLocalState{
+		VersionState: &worker_deploymentspb.VersionLocalState{
 			Deployment: deployment,
 			CreateTime: timestamppb.Now(),
 		},
@@ -565,7 +565,7 @@ func (d *DeploymentClientImpl) updateWithStartDeployment(
 		return nil, err
 	}
 
-	memo, err := d.buildInitialDeploymentMemo(deployment)
+	memo, err := d.buildInitialVersionMemo(deployment)
 	if err != nil {
 		return nil, err
 	}
@@ -573,7 +573,7 @@ func (d *DeploymentClientImpl) updateWithStartDeployment(
 	return d.updateWithStart(
 		ctx,
 		namespaceEntry,
-		DeploymentWorkflowType,
+		WorkerDeploymentVersionWorkflowType,
 		workflowID,
 		memo,
 		input,
@@ -583,7 +583,7 @@ func (d *DeploymentClientImpl) updateWithStartDeployment(
 	)
 }
 
-func (d *DeploymentClientImpl) updateWithStartWorkerDeployment(
+func (d *ClientImpl) updateWithStartWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
@@ -592,13 +592,13 @@ func (d *DeploymentClientImpl) updateWithStartWorkerDeployment(
 	requestID string,
 ) (*updatepb.Outcome, error) {
 	// validate params which are used for building workflowIDs
-	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.maxIDLengthLimit())
+	err := ValidateVersionWfParams(WorkerDeploymentFieldName, seriesName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	workflowID := GenerateWorkerDeploymentWorkflowID(seriesName)
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
+	workflowID := GenerateWorkflowID(seriesName)
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(&worker_deploymentspb.WorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
 		SeriesName:    seriesName,
@@ -607,7 +607,7 @@ func (d *DeploymentClientImpl) updateWithStartWorkerDeployment(
 		return nil, err
 	}
 
-	memo, err := d.buildInitialWorkerDeploymentMemo(seriesName)
+	memo, err := d.buildInitialMemo(seriesName)
 	if err != nil {
 		return nil, err
 	}
@@ -625,7 +625,7 @@ func (d *DeploymentClientImpl) updateWithStartWorkerDeployment(
 	)
 }
 
-func (d *DeploymentClientImpl) updateWithStart(
+func (d *ClientImpl) updateWithStart(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	workflowType string,
@@ -725,8 +725,8 @@ func (d *DeploymentClientImpl) updateWithStart(
 	return outcome, err
 }
 
-func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deploymentpb.Deployment) (*commonpb.Memo, error) {
-	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.DeploymentWorkflowMemo{
+func (d *ClientImpl) buildInitialVersionMemo(deployment *deploymentpb.Deployment) (*commonpb.Memo, error) {
+	pl, err := sdk.PreferProtoDataConverter.ToPayload(&worker_deploymentspb.VersionWorkflowMemo{
 		Deployment:          deployment,
 		CreateTime:          timestamppb.Now(),
 		IsCurrentDeployment: false,
@@ -737,13 +737,13 @@ func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deployment
 
 	return &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
-			DeploymentMemoField: pl,
+			WorkerDeploymentMemoField: pl,
 		},
 	}, nil
 }
 
-func (d *DeploymentClientImpl) buildInitialWorkerDeploymentMemo(seriesName string) (*commonpb.Memo, error) {
-	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.WorkerDeploymentWorkflowMemo{
+func (d *ClientImpl) buildInitialMemo(seriesName string) (*commonpb.Memo, error) {
+	pl, err := sdk.PreferProtoDataConverter.ToPayload(&worker_deploymentspb.WorkflowMemo{
 		SeriesName: seriesName,
 	})
 	if err != nil {
@@ -757,13 +757,13 @@ func (d *DeploymentClientImpl) buildInitialWorkerDeploymentMemo(seriesName strin
 	}, nil
 }
 
-func (d *DeploymentClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
+func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
+	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
 	return sa
 }
 
-func (d *DeploymentClientImpl) record(operation string, retErr *error, args ...any) func() {
+func (d *ClientImpl) record(operation string, retErr *error, args ...any) func() {
 	start := time.Now()
 	return func() {
 		elapsed := time.Since(start)
@@ -787,7 +787,7 @@ func (d *DeploymentClientImpl) record(operation string, retErr *error, args ...a
 	}
 }
 
-func stateToInfo(state *deploymentspb.DeploymentLocalState) *deploymentpb.DeploymentInfo {
+func stateToInfo(state *worker_deploymentspb.VersionLocalState) *deploymentpb.DeploymentInfo {
 	if state == nil {
 		return nil
 	}

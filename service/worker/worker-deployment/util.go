@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package deployment
+package workerdeployment
 
 import (
 	"fmt"
@@ -32,7 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	worker_deploymentspb "go.temporal.io/server/api/worker_deployment/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -40,64 +40,64 @@ import (
 
 const (
 	// Workflow types
-	DeploymentWorkflowType       = "temporal-sys-deployment-workflow"
-	WorkerDeploymentWorkflowType = "temporal-sys-deployment-series-workflow"
+	WorkerDeploymentVersionWorkflowType = "temporal-sys-worker-deployment-version-workflow"
+	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
 
 	// Namespace division
-	DeploymentNamespaceDivision = "TemporalDeployment"
+	WorkerDeploymentNamespaceDivision = "TemporalDeployment" // todo: this is the same as the namespace division for the pre-release deployment APIs
 
 	// Updates
-	RegisterWorkerInDeployment = "register-task-queue-worker" // for deployment wf
-	SyncDeploymentState        = "sync-deployment-state"      // for deployment wfs
-	SetCurrentDeployment       = "set-current-deployment"     // for series wfs
+	RegisterWorkerInDeployment = "register-task-queue-worker" // for Worker Deployment Version wf
+	SyncVersionState           = "sync-version-state"         // for Worker Deployment Version wfs
+	SetCurrentVersion          = "set-current-version"        // for Worker Deployment wfs
 
 	// Signals
-	ForceCANSignalName = "force-continue-as-new" // for deployment _and_ series wfs
+	ForceCANSignalName = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
 
 	// Queries
-	QueryDescribeDeployment = "describe-deployment" // for deployment wf
-	QueryCurrentDeployment  = "current-deployment"  // for series wf
+	QueryDescribeVersion = "describe-version" // for Worker Deployment Version wf
+	QueryCurrentVersion  = "current-version"  // for series wf
 
 	// Memos
-	DeploymentMemoField       = "DeploymentMemo"       // for deployment wf
-	WorkerDeploymentMemoField = "WorkerDeploymentMemo" // for deployment series wf
+	WorkerDeploymentVersionMemoField = "WorkerDeploymentVersionMemo" // for Worker Deployment Version wf
+	WorkerDeploymentMemoField        = "WorkerDeploymentMemo"        // for Worker Deployment wf
 
 	// Prefixes, Delimeters and Keys
-	DeploymentWorkflowIDPrefix       = "temporal-sys-deployment"
-	WorkerDeploymentWorkflowIDPrefix = "temporal-sys-deployment-series"
-	DeploymentWorkflowIDDelimeter    = ":"
-	DeploymentWorkflowIDEscape       = "|"
-	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
-	SeriesFieldName                  = "WorkerDeployment"
-	BuildIDFieldName                 = "BuildID"
+	WorkerDeploymentVersionWorkflowIDPrefix      = "temporal-sys-worker-deployment-version"
+	WorkerDeploymentWorkflowIDPrefix             = "temporal-sys-worker-deployment"
+	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
+	WorkerDeploymentVersionWorkflowIDEscape      = "|"
+	WorkerDeploymentVersionWorkflowIDInitialSize = (2 * len(WorkerDeploymentVersionWorkflowIDDelimeter)) + len(WorkerDeploymentVersionWorkflowIDPrefix)
+	WorkerDeploymentFieldName                    = "WorkerDeployment"
+	BuildIDFieldName                             = "BuildID"
 
 	// Application error names for rejected updates
-	errNoChangeType                  = "errNoChange"
-	errMaxTaskQueuesInDeploymentType = "errMaxTaskQueuesInDeployment"
+	errNoChangeType               = "errNoChange"
+	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 )
 
 var (
 	DeploymentVisibilityBaseListQuery = fmt.Sprintf(
 		"%s = '%s' AND %s = '%s' AND %s = '%s'",
 		searchattribute.WorkflowType,
-		DeploymentWorkflowType,
+		WorkerDeploymentVersionWorkflowType,
 		searchattribute.TemporalNamespaceDivision,
-		DeploymentNamespaceDivision,
+		WorkerDeploymentNamespaceDivision,
 		searchattribute.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
 )
 
-// ValidateDeploymentWfParams is a helper that verifies if the fields used for generating
-// deployment related workflowID's are valid
-func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit int) error {
+// ValidateVersionWfParams is a helper that verifies if the fields used for generating
+// Worker Deployment Version related workflowID's are valid
+func ValidateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
 	}
 
 	// Length of each field should be: (MaxIDLengthLimit - prefix and delimeter length) / 2
-	if len(field) > (maxIDLengthLimit-DeploymentWorkflowIDInitialSize)/2 {
+	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
 	}
 
@@ -108,47 +108,49 @@ func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit
 // EscapeChar is a helper which escapes the DeploymentWorkflowIDDelimeter character
 // in the input string
 func escapeChar(s string) string {
-	s = strings.Replace(s, DeploymentWorkflowIDEscape, DeploymentWorkflowIDEscape+DeploymentWorkflowIDEscape, -1)
-	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, DeploymentWorkflowIDEscape+DeploymentWorkflowIDDelimeter, -1)
+	s = strings.Replace(s, WorkerDeploymentVersionWorkflowIDEscape, WorkerDeploymentVersionWorkflowIDEscape+WorkerDeploymentVersionWorkflowIDEscape, -1)
+	s = strings.Replace(s, WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionWorkflowIDDelimeter+WorkerDeploymentVersionWorkflowIDDelimeter, -1)
 	return s
 }
 
-func GenerateWorkerDeploymentWorkflowID(WorkerDeploymentName string) string {
+// GenerateWorkflowID is a helper that generates a system accepted
+// workflowID which are used in our Worker Deployment workflows
+func GenerateWorkflowID(WorkerDeploymentName string) string {
 	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	escapedSeriesName := escapeChar(WorkerDeploymentName)
-	return WorkerDeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName
+	escapedWorkerDeploymentName := escapeChar(WorkerDeploymentName)
+	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedWorkerDeploymentName
 }
 
-// GenerateDeploymentWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our deployment workflows
-func GenerateDeploymentWorkflowID(seriesName string, buildID string) string {
+// GenerateVersionWorkflowID is a helper that generates a system accepted
+// workflowID which are used in our Worker Deployment Version workflows
+func GenerateVersionWorkflowID(seriesName string, buildID string) string {
 	escapedSeriesName := escapeChar(seriesName)
 	escapedBuildId := escapeChar(buildID)
 
-	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName + DeploymentWorkflowIDDelimeter + escapedBuildId
+	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedSeriesName + WorkerDeploymentVersionWorkflowIDDelimeter + escapedBuildId
 }
 
-func GenerateDeploymentWorkflowIDForPatternMatching(seriesName string) string {
+func GenerateVersionWorkflowIDForPatternMatching(seriesName string) string {
 	escapedSeriesName := escapeChar(seriesName)
 
-	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName + DeploymentWorkflowIDDelimeter
+	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedSeriesName + WorkerDeploymentVersionWorkflowIDDelimeter
 }
 
-// BuildQueryWithSeriesFilter is a helper which builds a query for pattern matching based on the
-// provided seriesName
-func BuildQueryWithSeriesFilter(seriesName string) string {
-	workflowID := GenerateDeploymentWorkflowIDForPatternMatching(seriesName)
-	escapedSeriesEntry := sqlparser.String(sqlparser.NewStrVal([]byte(workflowID)))
+// BuildQueryWithWorkerDeploymentFilter is a helper which builds a query for pattern matching based on the
+// provided workerDeploymentName
+func BuildQueryWithWorkerDeploymentFilter(workerDeploymentName string) string {
+	workflowID := GenerateVersionWorkflowIDForPatternMatching(workerDeploymentName)
+	escapedWorkerDeploymentEntry := sqlparser.String(sqlparser.NewStrVal([]byte(workflowID)))
 
-	query := fmt.Sprintf("%s AND %s STARTS_WITH %s", DeploymentVisibilityBaseListQuery, searchattribute.WorkflowID, escapedSeriesEntry)
+	query := fmt.Sprintf("%s AND %s STARTS_WITH %s", DeploymentVisibilityBaseListQuery, searchattribute.WorkflowID, escapedWorkerDeploymentEntry)
 	return query
 }
 
-func DecodeDeploymentMemo(memo *commonpb.Memo) *deploymentspb.DeploymentWorkflowMemo {
-	var workflowMemo deploymentspb.DeploymentWorkflowMemo
-	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[DeploymentMemoField], &workflowMemo)
+func DecodeVersionMemo(memo *commonpb.Memo) *worker_deploymentspb.VersionWorkflowMemo {
+	var versionWorkflowMemo worker_deploymentspb.VersionWorkflowMemo
+	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[WorkerDeploymentVersionMemoField], &versionWorkflowMemo)
 	if err != nil {
 		return nil
 	}
-	return &workflowMemo
+	return &versionWorkflowMemo
 }

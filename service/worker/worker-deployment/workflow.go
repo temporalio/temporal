@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package deployment
+package workerdeployment
 
 import (
 	"github.com/pborman/uuid"
@@ -32,15 +32,15 @@ import (
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	worker_deploymentspb "go.temporal.io/server/api/worker_deployment/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
-	// DeploymentWorkflowRunner holds the local state while running a deployment-series workflow
-	WorkerDeploymentWorkflowRunner struct {
-		*deploymentspb.DeploymentSeriesWorkflowArgs
-		a              *WorkerDeploymentActivities
+	// WorkflowRunner holds the local state while running a deployment-series workflow
+	WorkflowRunner struct {
+		*worker_deploymentspb.WorkflowArgs
+		a              *Activities
 		logger         sdklog.Logger
 		metrics        sdkclient.MetricsHandler
 		lock           workflow.Mutex
@@ -48,26 +48,26 @@ type (
 	}
 )
 
-func WorkerDeploymentWorkflow(ctx workflow.Context, args *deploymentspb.DeploymentSeriesWorkflowArgs) error {
-	deploymentWorkflowNameRunner := &WorkerDeploymentWorkflowRunner{
-		DeploymentSeriesWorkflowArgs: args,
+func Workflow(ctx workflow.Context, args *worker_deploymentspb.WorkflowArgs) error {
+	workflowRunner := &WorkflowRunner{
+		WorkflowArgs: args,
 
 		a:       nil,
 		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
 		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
 		lock:    workflow.NewMutex(ctx),
 	}
-	return deploymentWorkflowNameRunner.run(ctx)
+	return workflowRunner.run(ctx)
 }
 
-func (d *WorkerDeploymentWorkflowRunner) run(ctx workflow.Context) error {
+func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.State == nil {
-		d.State = &deploymentspb.SeriesLocalState{}
+		d.State = &worker_deploymentspb.LocalState{}
 	}
 
 	var pendingUpdates int
 
-	err := workflow.SetQueryHandler(ctx, QueryCurrentDeployment, func() (string, error) {
+	err := workflow.SetQueryHandler(ctx, QueryCurrentVersion, func() (string, error) {
 		return d.State.CurrentBuildId, nil
 	})
 	if err != nil {
@@ -77,7 +77,7 @@ func (d *WorkerDeploymentWorkflowRunner) run(ctx workflow.Context) error {
 
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
-		SetCurrentDeployment,
+		SetCurrentVersion,
 		d.handleSetCurrent,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateSetCurrent,
@@ -96,10 +96,10 @@ func (d *WorkerDeploymentWorkflowRunner) run(ctx workflow.Context) error {
 	// Note, if update requests come in faster than they
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
-	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflow, d.DeploymentSeriesWorkflowArgs)
+	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkflowArgs)
 }
 
-func (d *WorkerDeploymentWorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentDeploymentArgs) error {
+func (d *WorkflowRunner) validateSetCurrent(args *worker_deploymentspb.SetCurrentVersionArgs) error {
 	if d.State.CurrentBuildId != args.BuildId {
 		return nil
 	}
@@ -107,7 +107,7 @@ func (d *WorkerDeploymentWorkflowRunner) validateSetCurrent(args *deploymentspb.
 	return temporal.NewApplicationError("no change", errNoChangeType)
 }
 
-func (d *WorkerDeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentDeploymentArgs) (*deploymentspb.SetCurrentDeploymentResponse, error) {
+func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *worker_deploymentspb.SetCurrentVersionArgs) (*worker_deploymentspb.SetCurrentVersionResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -120,7 +120,7 @@ func (d *WorkerDeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, 
 		d.lock.Unlock()
 	}()
 
-	var curState, prevState *deploymentspb.DeploymentLocalState
+	var curState, prevState *worker_deploymentspb.VersionLocalState
 	prevCurrent := d.State.CurrentBuildId
 
 	// update local state
@@ -133,47 +133,47 @@ func (d *WorkerDeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, 
 	}
 
 	// tell new current that it's current
-	if curState, err = d.syncDeployment(ctx, d.State.CurrentBuildId, args.UpdateMetadata); err != nil {
+	if curState, err = d.syncVersion(ctx, d.State.CurrentBuildId, args.UpdateMetadata); err != nil {
 		return nil, err
 	}
 
 	if prevCurrent != "" {
 		// tell previous current that it's no longer current
-		if prevState, err = d.syncDeployment(ctx, prevCurrent, nil); err != nil {
+		if prevState, err = d.syncVersion(ctx, prevCurrent, nil); err != nil {
 			return nil, err
 		}
 	}
 
-	return &deploymentspb.SetCurrentDeploymentResponse{
-		CurrentDeploymentState:  curState,
-		PreviousDeploymentState: prevState,
+	return &worker_deploymentspb.SetCurrentVersionResponse{
+		CurrentVersionState:  curState,
+		PreviousVersionState: prevState,
 	}, nil
 }
 
-func (d *WorkerDeploymentWorkflowRunner) syncDeployment(ctx workflow.Context, buildId string, updateMetadata *deploymentpb.UpdateDeploymentMetadata) (*deploymentspb.DeploymentLocalState, error) {
+func (d *WorkflowRunner) syncVersion(ctx workflow.Context, buildId string, updateMetadata *deploymentpb.UpdateDeploymentMetadata) (*worker_deploymentspb.VersionLocalState, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
-	setCur := &deploymentspb.SyncDeploymentStateArgs_SetCurrent{}
+	setCur := &worker_deploymentspb.SyncVersionStateArgs_SetCurrent{}
 	if d.State.CurrentBuildId == buildId {
 		setCur.LastBecameCurrentTime = d.State.CurrentChangedTime
 	}
 
-	var res deploymentspb.SyncDeploymentStateActivityResult
-	err := workflow.ExecuteActivity(activityCtx, d.a.SyncDeployment, &deploymentspb.SyncDeploymentStateActivityArgs{
+	var res worker_deploymentspb.SyncVersionStateActivityResult
+	err := workflow.ExecuteActivity(activityCtx, d.a.SyncWorkerDeploymentVersion, &worker_deploymentspb.SyncVersionStateActivityArgs{
 		Deployment: &deploymentpb.Deployment{
 			SeriesName: d.SeriesName,
 			BuildId:    buildId,
 		},
-		Args: &deploymentspb.SyncDeploymentStateArgs{
+		Args: &worker_deploymentspb.SyncVersionStateArgs{
 			SetCurrent:     setCur,
 			UpdateMetadata: updateMetadata,
 		},
 		RequestId: d.newUUID(ctx),
 	}).Get(ctx, &res)
-	return res.State, err
+	return res.VersionState, err
 }
 
-func (d *WorkerDeploymentWorkflowRunner) newUUID(ctx workflow.Context) string {
+func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
 	var val string
 	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
 		return uuid.New()
@@ -181,9 +181,9 @@ func (d *WorkerDeploymentWorkflowRunner) newUUID(ctx workflow.Context) string {
 	return val
 }
 
-func (d *WorkerDeploymentWorkflowRunner) updateMemo(ctx workflow.Context) error {
+func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 	return workflow.UpsertMemo(ctx, map[string]any{
-		WorkerDeploymentMemoField: &deploymentspb.DeploymentSeriesWorkflowMemo{
+		WorkerDeploymentMemoField: &worker_deploymentspb.WorkflowMemo{
 			SeriesName:         d.SeriesName,
 			CurrentBuildId:     d.State.CurrentBuildId,
 			CurrentChangedTime: d.State.CurrentChangedTime,

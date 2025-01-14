@@ -22,26 +22,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package deployment
+package workerdeployment
 
 import (
 	"context"
 
 	"go.temporal.io/sdk/activity"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	worker_deploymentspb "go.temporal.io/server/api/worker_deployment/v1"
 	"go.temporal.io/server/common/namespace"
 )
 
 type (
-	WorkerDeploymentActivities struct {
+	Activities struct {
 		namespace        *namespace.Namespace
-		deploymentClient DeploymentStoreClient
+		deploymentClient StoreClient
 	}
 )
 
-func (a *WorkerDeploymentActivities) SyncDeployment(ctx context.Context, args *deploymentspb.SyncDeploymentStateActivityArgs) (*deploymentspb.SyncDeploymentStateActivityResult, error) {
+func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *worker_deploymentspb.SyncVersionStateActivityArgs) (*worker_deploymentspb.SyncVersionStateActivityResult, error) {
 	identity := "deployment series workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	res, err := a.deploymentClient.SyncDeploymentWorkflowFromSeries(
+	res, err := a.deploymentClient.SyncVersionWorkflowFromWorkerDeployment(
 		ctx,
 		a.namespace,
 		args.Deployment,
@@ -52,7 +52,7 @@ func (a *WorkerDeploymentActivities) SyncDeployment(ctx context.Context, args *d
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentspb.SyncDeploymentStateActivityResult{
-		State: res.DeploymentLocalState,
+	return &worker_deploymentspb.SyncVersionStateActivityResult{
+		VersionState: res.VersionState,
 	}, nil
 }

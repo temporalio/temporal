@@ -63,7 +63,7 @@ message VersionLocalState {
 message VersionWorkflowArgs {
     string namespace_name = 1;
     string namespace_id = 2;
-    VersionLocalState state = 3;
+    VersionLocalState version_state = 3;
 }
 
 // used as Worker Deployment workflow input:
@@ -104,12 +104,12 @@ message SyncVersionStateArgs {
 
 // used as Worker Deployment workflow update response (sent from Worker Deployment workflow):
 message SyncVersionStateResponse {
-    LocalState worker_deployment_local_state = 1;
+    VersionLocalState version_state = 1;
 }
 
 // used as Worker Deployment Version workflow query response:
 message QueryDescribeVersionResponse {
-    VersionLocalState worker_deployment_version_local_state = 1;
+    VersionLocalState version_state = 1;
 }
 
 // used as Worker Deployment Version workflow memo:
@@ -120,7 +120,7 @@ message VersionWorkflowMemo {
 }
 
 // used as Worker Deployment Version workflow activity input:
-message StartDeploymentRequest {
+message StartWorkerDeploymentRequest {
     string series_name = 1;
     string request_id = 2;
 }
@@ -157,20 +157,20 @@ message SetCurrentVersionArgs {
 
 // used as Worker Deployment update response:
 message SetCurrentVersionResponse {
-    LocalState current_worker_deployment_state = 1;
-    LocalState previous_worker_deployment_state = 2;
+    VersionLocalState current_version_state = 1;
+    VersionLocalState previous_version_state = 2;
 }
 
 // used as Worker Deployment activity input:
-message SyncStateActivityArgs {
+message SyncVersionStateActivityArgs {
     temporal.api.deployment.v1.Deployment deployment = 1;
     SyncVersionStateArgs args = 2;
     string request_id = 3;
 }
 
 // used as Worker Deployment activity result:
-message SyncStateActivityResult {
-    LocalState worker_deployment_state = 1;
+message SyncVersionStateActivityResult {
+    VersionLocalState version_state = 1;
 }
 
 // used as Worker Deployment workflow memo:
