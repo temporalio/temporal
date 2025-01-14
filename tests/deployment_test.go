@@ -46,8 +46,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
-	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
@@ -1101,103 +1099,6 @@ func (s *DeploymentSuite) checkListAndWaitForBatchCompletion(ctx context.Context
 			return
 		}
 	}
-}
-
-func (s *DeploymentSuite) waitForChan(ctx context.Context, ch chan struct{}) {
-	s.T().Helper()
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		s.FailNow("context timeout")
-	}
-}
-
-func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_ChildWorkflowWithSDK() {
-	s.T().Skip("needs new sdk with deployment pollers to work")
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	deploymentA := &deploymentpb.Deployment{
-		SeriesName: "seriesName",
-		BuildId:    "A",
-	}
-	override := &workflowpb.VersioningOverride{
-		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-		Deployment: deploymentA,
-	}
-	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
-		VersioningOverride: override,
-	}
-	tqName := "test-tq-child-override"
-
-	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(context.Background(), deploymentA, &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
-
-	// define parent and child worfklows
-	parentStarted := make(chan struct{}, 1)
-	childOverrideValidated := make(chan struct{}, 1)
-	child := func(cctx workflow.Context) (string, error) {
-		// no worker will take this, since we can't make a pinned worker with the old sdk
-		return "hello", nil
-	}
-	parent := func(ctx workflow.Context) error {
-		parentStarted <- struct{}{}
-		// after the test receives "parentStarted", we set the pinned override, and this workflow will
-		// make no more progress by itself, since we have no sdk workers that can handle this
-		// wait for signal
-		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
-
-		// check that parent's override is set
-		parentWE := workflow.GetInfo(ctx).WorkflowExecution
-		s.checkDescribeWorkflowAfterOverride(
-			context.Background(),
-			&commonpb.WorkflowExecution{WorkflowId: parentWE.ID, RunId: parentWE.RunID},
-			override)
-
-		// run child workflow
-		fut := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			TaskQueue: tqName,
-		}), "child")
-
-		// check that child's override is set
-		var childWE workflow.Execution
-		s.NoError(fut.GetChildWorkflowExecution().Get(ctx, &childWE))
-		s.checkDescribeWorkflowAfterOverride(
-			context.Background(),
-			&commonpb.WorkflowExecution{WorkflowId: childWE.ID, RunId: childWE.RunID},
-			override)
-		childOverrideValidated <- struct{}{}
-		return nil
-	}
-
-	unversionedWorker := worker.New(s.sdkClient, tqName, worker.Options{MaxConcurrentWorkflowTaskPollers: numPollers})
-	unversionedWorker.RegisterWorkflowWithOptions(parent, workflow.RegisterOptions{Name: "parent"})
-	unversionedWorker.RegisterWorkflowWithOptions(child, workflow.RegisterOptions{Name: "child"})
-	s.NoError(unversionedWorker.Start())
-	defer unversionedWorker.Stop()
-
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tqName}, "parent")
-	s.NoError(err)
-	// wait for parent to start
-	s.waitForChan(ctx, parentStarted)
-	close(parentStarted) // force panic if replayed
-
-	// set override on parent
-	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:                s.Namespace().String(),
-		WorkflowExecution:        &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
-		WorkflowExecutionOptions: pinnedOptsA,
-		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
-	})
-	s.NoError(err)
-	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
-
-	// unblock the parent workflow so it will start its child
-	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
-
-	// wait for child override to be validated (parent workflow might not complete, because no worker is polling
-	// that matches the child)
-	s.waitForChan(ctx, childOverrideValidated)
-	close(childOverrideValidated) // force panic if replayed
 }
 
 func (s *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
