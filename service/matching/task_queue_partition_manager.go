@@ -118,7 +118,7 @@ func newTaskQueuePartitionManager(
 }
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
-	pm.engine.updateTaskQueuePartitionGauge(pm, 1)
+	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
 	pm.defaultQueue.Start()
 }
@@ -133,7 +133,7 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	}
 	pm.defaultQueue.Stop(unloadCause)
 	pm.userDataManager.Stop()
-	pm.engine.updateTaskQueuePartitionGauge(pm, -1)
+	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, -1)
 }
 
 func (pm *taskQueuePartitionManagerImpl) Namespace() *namespace.Namespace {
