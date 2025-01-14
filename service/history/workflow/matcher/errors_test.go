@@ -70,7 +70,7 @@ func TestNewMatcherError(t *testing.T) {
 			err := NewMatcherError(tt.format, tt.args...)
 
 			assert.Error(t, err)
-			assert.ErrorAs(t, err, matchErr)
+			assert.ErrorAs(t, err, &matchErr)
 			assert.Equal(t, tt.expectedMsg, matchErr.Error())
 		})
 	}
