@@ -2045,10 +2045,8 @@ func (ms *MutableStateImpl) IsWorkflowCloseAttempted() bool {
 func (ms *MutableStateImpl) IsSignalRequested(
 	requestID string,
 ) bool {
-	if _, ok := ms.pendingSignalRequestedIDs[requestID]; ok {
-		return true
-	}
-	return false
+	_, ok := ms.pendingSignalRequestedIDs[requestID]
+	return ok
 }
 
 func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
@@ -2329,32 +2327,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
-	coll := callbacks.MachineCollection(ms.HSM())
-	for idx, cb := range event.GetCompletionCallbacks() {
-		persistenceCB := &persistencespb.Callback{}
-		switch variant := cb.Variant.(type) {
-		case *commonpb.Callback_Nexus_:
-			persistenceCB.Variant = &persistencespb.Callback_Nexus_{
-				Nexus: &persistencespb.Callback_Nexus{
-					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
-				},
-			}
-		case *commonpb.Callback_Internal_:
-			err := proto.Unmarshal(cb.GetInternal().GetData(), persistenceCB)
-			if err != nil {
-				return err
-			}
-		}
-		machine := callbacks.NewCallback(startEvent.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
-		// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
-		// IDs that are deterministically created across clusters.
-		// TODO: Replicate the state machine state and allocate a uuid there instead of relying on history event
-		// replication.
-		id := fmt.Sprintf("%d-%d-%d", startEvent.GetVersion(), startEvent.GetEventId(), idx)
-		if _, err := coll.Add(id, machine); err != nil {
-			return err
-		}
+	if err := ms.addCompletionCallbacks(startEvent, event.GetCompletionCallbacks()); err != nil {
+		return err
 	}
 	if err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -2477,6 +2451,40 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.approximateSize += ms.executionInfo.Size()
 
 	ms.writeEventToCache(startEvent)
+	return nil
+}
+
+func (ms *MutableStateImpl) addCompletionCallbacks(
+	event *historypb.HistoryEvent,
+	completionCallbaks []*commonpb.Callback,
+) error {
+	coll := callbacks.MachineCollection(ms.HSM())
+	for idx, cb := range completionCallbaks {
+		persistenceCB := &persistencespb.Callback{}
+		switch variant := cb.Variant.(type) {
+		case *commonpb.Callback_Nexus_:
+			persistenceCB.Variant = &persistencespb.Callback_Nexus_{
+				Nexus: &persistencespb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		case *commonpb.Callback_Internal_:
+			err := proto.Unmarshal(cb.GetInternal().GetData(), persistenceCB)
+			if err != nil {
+				return err
+			}
+		}
+		machine := callbacks.NewCallback(event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
+		// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
+		// IDs that are deterministically created across clusters.
+		// TODO: Replicate the state machine state and allocate a uuid there instead of relying on history event
+		// replication.
+		id := fmt.Sprintf("%d-%d-%d", event.GetVersion(), event.GetEventId(), idx)
+		if _, err := coll.Add(id, machine); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -4410,19 +4418,24 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
 	attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
-	override := attributes.GetVersioningOverride()
+	var err error
 	if attributes.GetUnsetVersioningOverride() {
-		override = nil
-	} else if override == nil {
-		return nil
+		err = ms.updateVersioningOverride(nil)
+	} else if attributes.GetVersioningOverride() != nil {
+		err = ms.updateVersioningOverride(attributes.GetVersioningOverride())
 	}
+	return err
+}
 
+func (ms *MutableStateImpl) updateVersioningOverride(
+	versioningOverride *workflowpb.VersioningOverride,
+) error {
 	previousEffectiveDeployment := ms.GetEffectiveDeployment()
 	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
 		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 	}
-	ms.GetExecutionInfo().VersioningInfo.VersioningOverride = override
+	ms.GetExecutionInfo().VersioningInfo.VersioningOverride = versioningOverride
 
 	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
 		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
