@@ -39,7 +39,7 @@ import (
 type (
 	// DeploymentWorkflowRunner holds the local state while running a deployment-series workflow
 	WorkerDeploymentWorkflowRunner struct {
-		*deploymentspb.WorkerDeploymentWorkflowArgs
+		*deploymentspb.DeploymentSeriesWorkflowArgs
 		a              *WorkerDeploymentActivities
 		logger         sdklog.Logger
 		metrics        sdkclient.MetricsHandler
@@ -48,9 +48,9 @@ type (
 	}
 )
 
-func WorkerDeploymentWorkflow(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+func WorkerDeploymentWorkflow(ctx workflow.Context, args *deploymentspb.DeploymentSeriesWorkflowArgs) error {
 	deploymentWorkflowNameRunner := &WorkerDeploymentWorkflowRunner{
-		WorkerDeploymentWorkflowArgs: args,
+		DeploymentSeriesWorkflowArgs: args,
 
 		a:       nil,
 		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
@@ -96,7 +96,7 @@ func (d *WorkerDeploymentWorkflowRunner) run(ctx workflow.Context) error {
 	// Note, if update requests come in faster than they
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
-	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflow, d.WorkerDeploymentWorkflowArgs)
+	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflow, d.DeploymentSeriesWorkflowArgs)
 }
 
 func (d *WorkerDeploymentWorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentDeploymentArgs) error {
@@ -183,7 +183,7 @@ func (d *WorkerDeploymentWorkflowRunner) newUUID(ctx workflow.Context) string {
 
 func (d *WorkerDeploymentWorkflowRunner) updateMemo(ctx workflow.Context) error {
 	return workflow.UpsertMemo(ctx, map[string]any{
-		WorkerDeploymentMemoField: &deploymentspb.WorkerDeploymentWorkflowMemo{
+		WorkerDeploymentMemoField: &deploymentspb.DeploymentSeriesWorkflowMemo{
 			SeriesName:         d.SeriesName,
 			CurrentBuildId:     d.State.CurrentBuildId,
 			CurrentChangedTime: d.State.CurrentChangedTime,

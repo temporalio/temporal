@@ -31,8 +31,9 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 
-// Data for each deployment+task queue pair. This is stored in each deployment (for each task
-// queue), and synced to task queue user data (for each deployment).
+// Data for each worker deployment version + task queue pair.
+// This is stored in each worker deployment version (for each task queue),
+// and synced to task queue user data (for each worker deployment version).
 message TaskQueueData {
     google.protobuf.Timestamp first_poller_time = 1;
     google.protobuf.Timestamp last_became_current_time = 2;
@@ -172,8 +173,8 @@ message SyncStateActivityResult {
     LocalState worker_deployment_state = 1;
 }
 
-// used as deployment series workflow memo:
-message DeploymentSeriesWorkflowMemo {
+// used as Worker Deployment workflow memo:
+message WorkflowMemo {
     string series_name = 1;
     string current_build_id = 2;
     google.protobuf.Timestamp current_changed_time = 3;
