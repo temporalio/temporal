@@ -293,7 +293,7 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 	c.backlogMgr.Start()
 	c.logger.Info("Started physicalTaskQueueManager", tag.LifeCycleStarted, tag.Cause(c.config.loadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
-	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, 1)
+	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, 1)
 }
 
 // Stop does not unload the queue from its partition. It is intended to be called by the partition manager when
@@ -311,7 +311,7 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	c.liveness.Stop()
 	c.logger.Info("Stopped physicalTaskQueueManager", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
-	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, -1)
+	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, -1)
 }
 
 func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
