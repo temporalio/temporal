@@ -458,14 +458,14 @@ func (h *nexusHandler) StartOperation(
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
 
-func parseLinks(links []*nexuspb.Link, log log.Logger) []nexus.Link {
+func parseLinks(links []*nexuspb.Link, logger log.Logger) []nexus.Link {
 	var nexusLinks []nexus.Link
 	for _, link := range links {
 		linkURL, err := url.Parse(link.Url)
 		if err != nil {
 			// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
 			// so ignoring the error for now; we will revisit how to handle these errors later.
-			log.Error(fmt.Sprintf("failed to parse link url: %s", link.Url), tag.Error(err))
+			logger.Error(fmt.Sprintf("failed to parse link url: %s", link.Url), tag.Error(err))
 			continue
 		}
 		nexusLinks = append(nexusLinks, nexus.Link{
