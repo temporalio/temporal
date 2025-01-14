@@ -426,27 +426,14 @@ func (h *nexusHandler) StartOperation(
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("sync_success"))
 			return &nexus.HandlerStartOperationResultSync[any]{
 				Value: t.SyncSuccess.GetPayload(),
+				Links: parseLinks(t.SyncSuccess.GetLinks(), oc.logger),
 			}, nil
 
 		case *nexuspb.StartOperationResponse_AsyncSuccess:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("async_success"))
-			var nexusLinks []nexus.Link
-			for _, link := range t.AsyncSuccess.GetLinks() {
-				linkURL, err := url.Parse(link.Url)
-				if err != nil {
-					// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
-					// so ignoring the error for now; we will revisit how to handle these errors later.
-					oc.logger.Error(fmt.Sprintf("failed to parse link url: %s", link.Url), tag.Error(err))
-					continue
-				}
-				nexusLinks = append(nexusLinks, nexus.Link{
-					URL:  linkURL,
-					Type: link.GetType(),
-				})
-			}
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationID: t.AsyncSuccess.GetOperationId(),
-				Links:       nexusLinks,
+				Links:       parseLinks(t.AsyncSuccess.GetLinks(), oc.logger),
 			}, nil
 
 		case *nexuspb.StartOperationResponse_OperationError:
@@ -469,6 +456,24 @@ func (h *nexusHandler) StartOperation(
 	oc.nexusContext.setFailureSource(failureSourceWorker)
 
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
+}
+
+func parseLinks(links []*nexuspb.Link, log log.Logger) []nexus.Link {
+	var nexusLinks []nexus.Link
+	for _, link := range links {
+		linkURL, err := url.Parse(link.Url)
+		if err != nil {
+			// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
+			// so ignoring the error for now; we will revisit how to handle these errors later.
+			log.Error(fmt.Sprintf("failed to parse link url: %s", link.Url), tag.Error(err))
+			continue
+		}
+		nexusLinks = append(nexusLinks, nexus.Link{
+			URL:  linkURL,
+			Type: link.GetType(),
+		})
+	}
+	return nexusLinks
 }
 
 // forwardStartOperation forwards the StartOperation request to the active cluster using an HTTP request.
