@@ -61,7 +61,6 @@ func Test_DeleteNamespaceWorkflow_ByName(t *testing.T) {
 		Namespace:   "namespace-delete-220878",
 		NamespaceID: "namespace-id",
 		Config: deleteexecutions.DeleteExecutionsConfig{
-			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
@@ -107,7 +106,6 @@ func Test_DeleteNamespaceWorkflow_ByID(t *testing.T) {
 		Namespace:   "namespace-delete-220878",
 		NamespaceID: "namespace-id",
 		Config: deleteexecutions.DeleteExecutionsConfig{
-			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,

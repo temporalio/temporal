@@ -128,7 +128,6 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		deleteExecutionsFuture := workflow.ExecuteActivity(ctx1, a.DeleteExecutionsActivity, &DeleteExecutionsActivityParams{
 			Namespace:     params.Namespace,
 			NamespaceID:   params.NamespaceID,
-			RPS:           params.Config.DeleteActivityRPS,
 			ListPageSize:  params.Config.PageSize,
 			NextPageToken: nextPageToken,
 		})

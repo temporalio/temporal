@@ -624,7 +624,6 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		Namespace:   namespace.Name(request.GetNamespace()),
 		NamespaceID: namespace.ID(request.GetNamespaceId()),
 		DeleteExecutionsConfig: deleteexecutions.DeleteExecutionsConfig{
-			DeleteActivityRPS:                    h.config.DeleteNamespaceDeleteActivityRPS(),
 			PageSize:                             h.config.DeleteNamespacePageSize(),
 			PagesPerExecution:                    h.config.DeleteNamespacePagesPerExecution(),
 			ConcurrentDeleteExecutionsActivities: h.config.DeleteNamespaceConcurrentDeleteExecutionsActivities(),

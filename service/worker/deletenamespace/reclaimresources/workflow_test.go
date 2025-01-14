@@ -58,7 +58,6 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 		Namespace:   "namespace",
 		NamespaceID: "namespace-id",
 		Config: deleteexecutions.DeleteExecutionsConfig{
-			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
@@ -108,7 +107,6 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 		Namespace:   "namespace",
 		NamespaceID: "namespace-id",
 		Config: deleteexecutions.DeleteExecutionsConfig{
-			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
@@ -156,7 +154,6 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 		Namespace:   "namespace",
 		NamespaceID: "namespace-id",
 		Config: deleteexecutions.DeleteExecutionsConfig{
-			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
@@ -252,7 +249,6 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 		Namespace:   "namespace",
 		NamespaceID: "namespace-id",
 		Config: deleteexecutions.DeleteExecutionsConfig{
-			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
@@ -329,7 +325,6 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 		Namespace:   "namespace",
 		NamespaceID: "namespace-id",
 		Config: deleteexecutions.DeleteExecutionsConfig{
-			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,

@@ -33,6 +33,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -47,8 +48,11 @@ type (
 	Activities struct {
 		visibilityManager manager.VisibilityManager
 		historyClient     historyservice.HistoryServiceClient
-		metricsHandler    metrics.Handler
-		logger            log.Logger
+
+		deleteActivityRPS dynamicconfig.TypedSubscribable[int]
+
+		metricsHandler metrics.Handler
+		logger         log.Logger
 	}
 
 	LocalActivities struct {
@@ -67,7 +71,6 @@ type (
 	DeleteExecutionsActivityParams struct {
 		Namespace     namespace.Name
 		NamespaceID   namespace.ID
-		RPS           int
 		ListPageSize  int
 		NextPageToken []byte
 	}
@@ -81,12 +84,14 @@ type (
 func NewActivities(
 	visibilityManager manager.VisibilityManager,
 	historyClient historyservice.HistoryServiceClient,
+	deleteActivityRPS dynamicconfig.TypedSubscribable[int],
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *Activities {
 	return &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
+		deleteActivityRPS: deleteActivityRPS,
 		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
@@ -180,7 +185,15 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		logger.Error("Unable to list all workflow executions.", tag.Error(err))
 		return result, err
 	}
-	rateLimiter := quotas.NewRateLimiter(float64(params.RPS), params.RPS)
+	var rateLimiter *quotas.RateLimiterImpl
+	deleteRPS, cancelDeleteRPSWatch := a.deleteActivityRPS(func(newRPS int) {
+		if rateLimiter != nil {
+			rateLimiter.SetRPS(float64(newRPS))
+		}
+	})
+	defer cancelDeleteRPSWatch()
+	rateLimiter = quotas.NewRateLimiter(float64(deleteRPS), deleteRPS)
+
 	for _, execution := range resp.Executions {
 		err = rateLimiter.Wait(ctx)
 		if err != nil {
