@@ -37,8 +37,8 @@ import (
 )
 
 type (
-	// WorkerBuildWorkflowRunner holds the local state while running a deployment-series workflow
-	WorkerBuildWorkflowRunner struct {
+	// DeploymentVersionWorkflowRunner holds the local state while running a deployment-series workflow
+	DeploymentVersionWorkflowRunner struct {
 		*deploymentspb.DeploymentSeriesWorkflowArgs
 		a              *DeploymentSeriesActivities
 		logger         sdklog.Logger
@@ -48,8 +48,8 @@ type (
 	}
 )
 
-func WorkerBuildWorkflow(ctx workflow.Context, args *deploymentspb.DeploymentSeriesWorkflowArgs) error {
-	deploymentWorkflowNameRunner := &WorkerBuildWorkflowRunner{
+func DeploymentVersionWorkflow(ctx workflow.Context, args *deploymentspb.DeploymentSeriesWorkflowArgs) error {
+	deploymentWorkflowNameRunner := &DeploymentVersionWorkflowRunner{
 		DeploymentSeriesWorkflowArgs: args,
 
 		a:       nil,
@@ -60,7 +60,7 @@ func WorkerBuildWorkflow(ctx workflow.Context, args *deploymentspb.DeploymentSer
 	return deploymentWorkflowNameRunner.run(ctx)
 }
 
-func (d *WorkerBuildWorkflowRunner) run(ctx workflow.Context) error {
+func (d *DeploymentVersionWorkflowRunner) run(ctx workflow.Context) error {
 	if d.State == nil {
 		d.State = &deploymentspb.SeriesLocalState{}
 	}
@@ -99,7 +99,7 @@ func (d *WorkerBuildWorkflowRunner) run(ctx workflow.Context) error {
 	return workflow.NewContinueAsNewError(ctx, DeploymentSeriesWorkflow, d.DeploymentSeriesWorkflowArgs)
 }
 
-func (d *WorkerBuildWorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentDeploymentArgs) error {
+func (d *DeploymentVersionWorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentDeploymentArgs) error {
 	if d.State.CurrentBuildId != args.BuildId {
 		return nil
 	}
@@ -107,7 +107,7 @@ func (d *WorkerBuildWorkflowRunner) validateSetCurrent(args *deploymentspb.SetCu
 	return temporal.NewApplicationError("no change", errNoChangeType)
 }
 
-func (d *WorkerBuildWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentDeploymentArgs) (*deploymentspb.SetCurrentDeploymentResponse, error) {
+func (d *DeploymentVersionWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentDeploymentArgs) (*deploymentspb.SetCurrentDeploymentResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -150,7 +150,7 @@ func (d *WorkerBuildWorkflowRunner) handleSetCurrent(ctx workflow.Context, args 
 	}, nil
 }
 
-func (d *WorkerBuildWorkflowRunner) syncDeployment(ctx workflow.Context, buildId string, updateMetadata *deploymentpb.UpdateDeploymentMetadata) (*deploymentspb.DeploymentLocalState, error) {
+func (d *DeploymentVersionWorkflowRunner) syncDeployment(ctx workflow.Context, buildId string, updateMetadata *deploymentpb.UpdateDeploymentMetadata) (*deploymentspb.DeploymentLocalState, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
 	setCur := &deploymentspb.SyncDeploymentStateArgs_SetCurrent{}
@@ -173,7 +173,7 @@ func (d *WorkerBuildWorkflowRunner) syncDeployment(ctx workflow.Context, buildId
 	return res.State, err
 }
 
-func (d *WorkerBuildWorkflowRunner) newUUID(ctx workflow.Context) string {
+func (d *DeploymentVersionWorkflowRunner) newUUID(ctx workflow.Context) string {
 	var val string
 	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
 		return uuid.New()
@@ -181,7 +181,7 @@ func (d *WorkerBuildWorkflowRunner) newUUID(ctx workflow.Context) string {
 	return val
 }
 
-func (d *WorkerBuildWorkflowRunner) updateMemo(ctx workflow.Context) error {
+func (d *DeploymentVersionWorkflowRunner) updateMemo(ctx workflow.Context) error {
 	return workflow.UpsertMemo(ctx, map[string]any{
 		DeploymentSeriesMemoField: &deploymentspb.DeploymentSeriesWorkflowMemo{
 			SeriesName:         d.SeriesName,

@@ -59,21 +59,21 @@ func (a *WorkerDeploymentActivities) SyncUserData(ctx context.Context, input *de
 	var lock sync.Mutex
 	maxVersionByName := make(map[string]int64)
 
-	for _, sync := range input.Sync {
+	for _, syncData := range input.Sync {
 		go func() {
-			logger.Info("syncing task queue userdata for deployment", "taskQueue", sync.Name, "type", sync.Type)
+			logger.Info("syncing task queue userdata for deployment", "taskQueue", syncData.Name, "type", syncData.Type)
 			res, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 				NamespaceId:   a.namespace.ID().String(),
-				TaskQueue:     sync.Name,
-				TaskQueueType: sync.Type,
+				TaskQueue:     syncData.Name,
+				TaskQueueType: syncData.Type,
 				Deployment:    input.Deployment,
-				Data:          sync.Data,
+				Data:          syncData.Data,
 			})
 			if err != nil {
-				logger.Error("syncing task queue userdata", "taskQueue", sync.Name, "type", sync.Type, "error", err)
+				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
 			} else {
 				lock.Lock()
-				maxVersionByName[sync.Name] = max(maxVersionByName[sync.Name], res.Version)
+				maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
 				lock.Unlock()
 			}
 			errs <- err
