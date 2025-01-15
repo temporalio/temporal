@@ -156,7 +156,7 @@ func (m *MutableStateMatchEvaluator) evaluateComparison(expr sqlparser.Expr) (bo
 		return m.compareStartTime(valStr, op)
 
 	default:
-		return false, fmt.Errorf("unknown filter name: %s", colNameStr)
+		return false, fmt.Errorf("unknown or unsupported search attribute name: %s", colNameStr)
 	}
 }
 
