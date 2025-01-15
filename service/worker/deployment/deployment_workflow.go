@@ -41,8 +41,8 @@ import (
 )
 
 type (
-	// WorkerDeploymentWorkflowRunner holds the local state for a deployment workflow
-	WorkerDeploymentWorkflowRunner struct {
+	// DeploymentWorkflowRunner holds the local state for a deployment workflow
+	DeploymentWorkflowRunner struct {
 		*deploymentspb.DeploymentWorkflowArgs
 		a                *DeploymentActivities
 		logger           sdklog.Logger
@@ -63,7 +63,7 @@ var (
 	}
 )
 
-func WorkerDeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deploymentspb.DeploymentWorkflowArgs) error {
+func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deploymentspb.DeploymentWorkflowArgs) error {
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
 		DeploymentWorkflowArgs: deploymentWorkflowArgs,
 
@@ -75,7 +75,7 @@ func WorkerDeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *depl
 	return deploymentWorkflowRunner.run(ctx)
 }
 
-func (d *WorkerDeploymentWorkflowRunner) listenToSignals(ctx workflow.Context) {
+func (d *DeploymentWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	// Fetch signal channels
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	forceCAN := false
@@ -94,7 +94,7 @@ func (d *WorkerDeploymentWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	d.signalsCompleted = true
 }
 
-func (d *WorkerDeploymentWorkflowRunner) run(ctx workflow.Context) error {
+func (d *DeploymentWorkflowRunner) run(ctx workflow.Context) error {
 	if d.State == nil {
 		d.State = &deploymentspb.DeploymentLocalState{}
 	}
@@ -165,7 +165,7 @@ func (d *WorkerDeploymentWorkflowRunner) run(ctx workflow.Context) error {
 	return workflow.NewContinueAsNewError(ctx, DeploymentWorkflow, d.DeploymentWorkflowArgs)
 }
 
-func (d *WorkerDeploymentWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInDeploymentArgs) error {
+func (d *DeploymentWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInDeploymentArgs) error {
 	if _, ok := d.State.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
 		return temporal.NewApplicationError("task queue already exists in deployment", errNoChangeType)
 	}
@@ -178,7 +178,7 @@ func (d *WorkerDeploymentWorkflowRunner) validateRegisterWorker(args *deployment
 	return nil
 }
 
-func (d *WorkerDeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInDeploymentArgs) error {
+func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInDeploymentArgs) error {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -245,7 +245,7 @@ func (d *WorkerDeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Conte
 	return nil
 }
 
-func (d *WorkerDeploymentWorkflowRunner) validateSyncState(args *deploymentspb.SyncDeploymentStateArgs) error {
+func (d *DeploymentWorkflowRunner) validateSyncState(args *deploymentspb.SyncDeploymentStateArgs) error {
 	if set := args.SetCurrent; set != nil {
 		if set.LastBecameCurrentTime == nil {
 			if d.State.IsCurrent {
@@ -267,7 +267,7 @@ func (d *WorkerDeploymentWorkflowRunner) validateSyncState(args *deploymentspb.S
 	return temporal.NewApplicationError("no change", errNoChangeType, res)
 }
 
-func (d *WorkerDeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *deploymentspb.SyncDeploymentStateArgs) (*deploymentspb.SyncDeploymentStateResponse, error) {
+func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *deploymentspb.SyncDeploymentStateArgs) (*deploymentspb.SyncDeploymentStateResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -346,20 +346,20 @@ func (d *WorkerDeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, a
 	}, nil
 }
 
-func (d *WorkerDeploymentWorkflowRunner) dataWithTime(data *deploymentspb.TaskQueueData) *deploymentspb.TaskQueueData {
+func (d *DeploymentWorkflowRunner) dataWithTime(data *deploymentspb.TaskQueueData) *deploymentspb.TaskQueueData {
 	data = common.CloneProto(data)
 	data.LastBecameCurrentTime = d.State.LastBecameCurrentTime
 	return data
 }
 
-func (d *WorkerDeploymentWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescribeDeploymentResponse, error) {
+func (d *DeploymentWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescribeDeploymentResponse, error) {
 	return &deploymentspb.QueryDescribeDeploymentResponse{
 		DeploymentLocalState: d.State,
 	}, nil
 }
 
 // updateMemo should be called whenever the workflow updates its local state
-func (d *WorkerDeploymentWorkflowRunner) updateMemo(ctx workflow.Context) error {
+func (d *DeploymentWorkflowRunner) updateMemo(ctx workflow.Context) error {
 	return workflow.UpsertMemo(ctx, map[string]any{
 		DeploymentMemoField: &deploymentspb.DeploymentWorkflowMemo{
 			Deployment:          d.State.Deployment,
@@ -369,7 +369,7 @@ func (d *WorkerDeploymentWorkflowRunner) updateMemo(ctx workflow.Context) error 
 	})
 }
 
-func (d *WorkerDeploymentWorkflowRunner) newUUID(ctx workflow.Context) string {
+func (d *DeploymentWorkflowRunner) newUUID(ctx workflow.Context) string {
 	var val string
 	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
 		return uuid.New()

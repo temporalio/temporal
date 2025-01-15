@@ -105,34 +105,21 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
-	registry.RegisterWorkflowWithOptions(WorkerDeploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
-	registry.RegisterWorkflowWithOptions(DeploymentVersionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
-	workerDeploymentActivities := &WorkerDeploymentActivities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.DeploymentClient,
-		matchingClient:   s.activityDeps.MatchingClient,
-	}
-	registry.RegisterActivity(workerDeploymentActivities)
-
-	workerBuildActivities := &DeploymentVersionActivities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.DeploymentClient,
-	}
-	registry.RegisterActivity(workerBuildActivities)
-
-	// [cleanup-wv] Pre-release deployment APIs, clean up later
 	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
 	registry.RegisterWorkflowWithOptions(DeploymentSeriesWorkflow, workflow.RegisterOptions{Name: DeploymentSeriesWorkflowType})
-	legacyDeploymentActivities := &DeploymentActivities{
+
+	deploymentActivities := &DeploymentActivities{
 		namespace:        ns,
 		deploymentClient: s.activityDeps.DeploymentClient,
 		matchingClient:   s.activityDeps.MatchingClient,
 	}
-	registry.RegisterActivity(legacyDeploymentActivities)
-	legacyDeploymentSeriesActivities := &DeploymentSeriesActivities{
+	registry.RegisterActivity(deploymentActivities)
+
+	deploymentSeriesActivities := &DeploymentSeriesActivities{
 		namespace:        ns,
 		deploymentClient: s.activityDeps.DeploymentClient,
 	}
-	registry.RegisterActivity(legacyDeploymentSeriesActivities)
+	registry.RegisterActivity(deploymentSeriesActivities)
+
 	return nil
 }
