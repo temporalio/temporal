@@ -147,6 +147,7 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 	}
 }
 
+//nolint:revive
 func (d *deploymentWorkflowClientSuite) TestGenerateVersionWorkflowID() {
 	//testCases := []struct {
 	//	series, buildID string

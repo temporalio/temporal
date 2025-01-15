@@ -789,6 +789,7 @@ func (d *ClientImpl) record(operation string, retErr *error, args ...any) func()
 	}
 }
 
+//nolint:staticcheck
 func stateToInfo(state *deploymentspb.VersionLocalState) *deploymentpb.DeploymentInfo {
 	if state == nil {
 		return nil
@@ -800,7 +801,7 @@ func stateToInfo(state *deploymentspb.VersionLocalState) *deploymentpb.Deploymen
 			element := &deploymentpb.DeploymentInfo_TaskQueueInfo{
 				Name: taskQueueName,
 				Type: enumspb.TaskQueueType(taskQueueType),
-				//FirstPollerTime: taskQueueInfo.FirstPollerTime,
+				// FirstPollerTime: taskQueueInfo.FirstPollerTime,
 			}
 			taskQueues = append(taskQueues, element)
 		}

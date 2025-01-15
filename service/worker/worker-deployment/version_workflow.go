@@ -335,15 +335,15 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	}
 
 	// apply changes to metadata
-	//if d.VersionState.Metadata == nil && args.UpdateMetadata != nil {
+	// if d.VersionState.Metadata == nil && args.UpdateMetadata != nil {
 	//	d.VersionState.Metadata = make(map[string]*commonpb.Payload)
-	//}
-	//for key, payload := range args.UpdateMetadata.GetUpsertEntries() {
+	// }
+	// for key, payload := range args.UpdateMetadata.GetUpsertEntries() {
 	//	d.VersionState.Metadata[key] = payload
-	//}
-	//for _, key := range args.UpdateMetadata.GetRemoveEntries() {
+	// }
+	// for _, key := range args.UpdateMetadata.GetRemoveEntries() {
 	//	delete(d.VersionState.Metadata, key)
-	//}
+	// }
 
 	return &deploymentspb.SyncVersionStateResponse{
 		VersionState: d.VersionState,
