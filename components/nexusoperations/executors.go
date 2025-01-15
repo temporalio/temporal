@@ -241,6 +241,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 			} else {
 				result = &nexus.ClientStartOperationResult[*commonpb.Payload]{
 					Successful: payload,
+					Links:      rawResult.Links,
 				}
 			}
 		}
@@ -327,8 +328,9 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 			if err != nil {
 				return hsm.TransitionOutput{}, err
 			}
-			if result.Pending != nil {
-				var links []*commonpb.Link
+
+			var links []*commonpb.Link
+			if result.Links != nil {
 				for _, nexusLink := range result.Links {
 					switch nexusLink.Type {
 					case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
@@ -352,6 +354,9 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 						e.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
 					}
 				}
+			}
+
+			if result.Pending != nil {
 				// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
 				// to allow it to complete via callback.
 				event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
@@ -373,7 +378,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				})
 			}
 			// Operation completed synchronously. Store the result and update the state machine.
-			return handleSuccessfulOperationResult(node, operation, result.Successful, CompletionSourceResponse)
+			return handleSuccessfulOperationResult(node, operation, result.Successful, links, CompletionSourceResponse)
 		})
 	})
 }

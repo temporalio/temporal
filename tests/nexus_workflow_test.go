@@ -214,9 +214,21 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
+	handlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  "handler-ns",
+		WorkflowId: "handler-wf-id",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+	handlerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
+			return &nexus.HandlerStartOperationResultSync[any]{Value: "result", Links: []nexus.Link{handlerNexusLink}}, nil
 		},
 	}
 	listenAddr := nexustest.AllocListenAddress()
@@ -287,6 +299,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 		return e.GetNexusOperationCompletedEventAttributes() != nil
 	})
 	s.Greater(completedEventIdx, 0)
+	s.Len(pollResp.History.Events[completedEventIdx].GetLinks(), 1)
+	protorequire.ProtoEqual(s.T(), handlerLink, pollResp.History.Events[completedEventIdx].GetLinks()[0].GetWorkflowEvent())
 
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
