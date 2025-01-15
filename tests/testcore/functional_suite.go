@@ -38,5 +38,5 @@ type (
 
 func (s *FunctionalSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-	s.TaskPoller = taskpoller.New(s.T(), s.client, s.Namespace().String())
+	s.TaskPoller = taskpoller.New(s.T(), s.frontendClient, s.Namespace().String())
 }

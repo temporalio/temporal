@@ -2792,7 +2792,7 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
-	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
+	s.Require().FailNowf("", "ES max result window size hasn't reach target size within %v", numOfRetry*waitTimeInMs*time.Millisecond)
 }
 
 func (s *AdvancedVisibilitySuite) addCustomKeywordSearchAttribute(ctx context.Context, attrName string) {

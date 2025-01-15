@@ -138,8 +138,10 @@ type (
 
 	// HistoryConfig contains configs for history service
 	HistoryConfig struct {
-		NumHistoryShards           int32
-		NumHistoryHosts            int
+		NumHistoryShards int32
+		NumHistoryHosts  int
+
+		// TODO: Remove all this limits and replace them with consts in sizelimit_tests.go
 		HistoryCountLimitError     int
 		HistoryCountLimitWarn      int
 		HistorySizeLimitError      int
