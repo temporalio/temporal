@@ -169,10 +169,10 @@ func (s *DLQSuite) SetupSuite() {
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.worker = sdkworker.New(sdkClient, taskQueue, sdkworker.Options{})
 	s.worker.RegisterWorkflow(myWorkflow)
-	s.NoError(s.worker.Start())
+	s.Require().NoError(s.worker.Start())
 }
 
 func (s *DLQSuite) TearDownSuite() {

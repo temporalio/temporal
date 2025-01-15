@@ -118,22 +118,18 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		s.updateMaxResultWindow()
 	}
 
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sdkClient = sdkClient
-	sysSDKClient, err := sdkclient.Dial(sdkclient.Options{
+	s.Require().NoError(err)
+
+	s.sysSDKClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: primitives.SystemLocalNamespace,
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sysSDKClient = sysSDKClient
+	s.Require().NoError(err)
 }
 
 func (s *AdvancedVisibilitySuite) TearDownSuite() {

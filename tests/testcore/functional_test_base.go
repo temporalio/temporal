@@ -584,10 +584,11 @@ func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{
 	}
 }
 
-func (s *FunctionalTestBase) SendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
+// TODO: change to nsName namespace.Name
+func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
 	_, err := s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         namespace,
+		Namespace:         nsName,
 		WorkflowExecution: execution,
 		SignalName:        signalName,
 		Input:             input,
