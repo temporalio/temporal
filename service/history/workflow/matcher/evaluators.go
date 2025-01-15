@@ -108,7 +108,7 @@ func (m *MutableStateMatchEvaluator) evaluateOr(expr sqlparser.Expr) (bool, erro
 		return false, NewMatcherError("%v is not an 'or' expression", sqlparser.String(expr))
 	}
 
-	if leftResult, err := m.evaluate(andExpr.Left); err != nil || !leftResult {
+	if leftResult, err := m.evaluate(andExpr.Left); err != nil || leftResult {
 		return leftResult, err
 	}
 	// if left is false, then right must be evaluated
