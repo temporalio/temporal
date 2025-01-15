@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
