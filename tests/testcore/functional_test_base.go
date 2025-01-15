@@ -65,17 +65,21 @@ import (
 )
 
 type (
-	// FunctionalTestBase is a testcore struct for functional tests
 	FunctionalTestBase struct {
 		suite.Suite
 
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-		// not merely log an error
+		// `suite.Suite` embeds `*assert.Assertions` which, by default, makes all asserts (like `s.NoError(err)`)
+		// only log the error, continue test execution, and only then fail the test.
+		// This is not desired behavior in most cases. The idiomatic way to change this behavior
+		// is to replace `*assert.Assertions` with `*require.Assertions` by embedding it in every test suite
+		// (or base struct of every test suite).
 		*require.Assertions
+
 		protorequire.ProtoAssertions
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
 
+		// TODO (alex): export these fields and remove the getters.
 		testClusterFactory  TestClusterFactory
 		testCluster         *TestCluster
 		testClusterConfig   *TestClusterConfig
@@ -90,7 +94,7 @@ type (
 		archivalNamespace   namespace.Name
 		archivalNamespaceID namespace.ID
 	}
-	// TestClusterParams contains the variables which are used to configure test suites via the TestClusterOption type.
+	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
 		ServiceOptions         map[primitives.ServiceName][]fx.Option
 		DynamicConfigOverrides map[dynamicconfig.Key]any
@@ -186,7 +190,7 @@ func (s *FunctionalTestBase) SetupTestCluster(clusterConfigFile string, options 
 
 	params := ApplyTestClusterOptions(options)
 
-	s.setupLogger()
+	s.Logger = log.NewTestLogger()
 
 	clusterConfig, err := ReadTestClusterConfig(clusterConfigFile)
 	s.Require().NoError(err)
@@ -309,15 +313,6 @@ func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 		opt(&params)
 	}
 	return params
-}
-
-// setupLogger sets the Logger for the test suite.
-// If the Logger is already set, this method does nothing.
-// If the Logger is not set, this method creates a new log.TestLogger which logs to stdout and stderr.
-func (s *FunctionalTestBase) setupLogger() {
-	if s.Logger == nil {
-		s.Logger = log.NewTestLogger()
-	}
 }
 
 // ReadTestClusterConfig return test cluster config

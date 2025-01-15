@@ -111,7 +111,7 @@ func (s *ScheduleFunctionalSuite) SetupTest() {
 	s.taskQueue = testcore.RandomizeStr("tq")
 	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{})
 	err = s.worker.Start()
-	s.Require().NoError(err)
+	s.NoError(err)
 }
 
 func (s *ScheduleFunctionalSuite) TearDownTest() {
