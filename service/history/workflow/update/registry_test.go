@@ -213,6 +213,7 @@ func TestFindOrCreate(t *testing.T) {
 	tv1 := tv.WithUpdateIDNumber(1)
 	tv2 := tv.WithUpdateIDNumber(2)
 	tv3 := tv.WithUpdateIDNumber(3)
+	tv4 := tv.WithUpdateIDNumber(4)
 
 	t.Run("find stored update", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
@@ -304,7 +305,7 @@ func TestFindOrCreate(t *testing.T) {
 			limit += 1
 
 			_, existed, err = reg.FindOrCreate(context.Background(), tv2.UpdateID())
-			require.NoError(t, err, "creating update #2 should have beeen created after limit increase")
+			require.NoError(t, err, "update #2 should have beeen created after limit increase")
 			require.False(t, existed)
 			require.Equal(t, 2, reg.Len())
 		})
@@ -313,9 +314,18 @@ func TestFindOrCreate(t *testing.T) {
 			assertRejectUpdateInRegistry(t, reg, evStore, upd1)
 
 			_, existed, err = reg.FindOrCreate(context.Background(), tv3.UpdateID())
-			require.NoError(t, err, "update #3 should be created after #1 completed")
+			require.NoError(t, err, "update #3 should have been created after #1 completed")
 			require.False(t, existed)
 			require.Equal(t, 2, reg.Len())
+		})
+
+		t.Run("disable limit by setting it to zero", func(t *testing.T) {
+			limit = 0
+
+			_, _, err = reg.FindOrCreate(context.Background(), tv4.UpdateID())
+			require.NoError(t, err, "update #4 should have been created")
+			require.False(t, existed)
+			require.Equal(t, 3, reg.Len())
 		})
 	})
 

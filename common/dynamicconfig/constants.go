@@ -1989,7 +1989,7 @@ archivalQueueProcessor`,
 	WorkflowExecutionMaxInFlightUpdates = NewNamespaceIntSetting(
 		"history.maxInFlightUpdates",
 		10,
-		`WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution.`,
+		`WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution. Set to zero to disable limit.`,
 	)
 	WorkflowExecutionMaxTotalUpdates = NewNamespaceIntSetting(
 		"history.maxTotalUpdates",

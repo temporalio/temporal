@@ -167,7 +167,7 @@ func NewRegistry(
 		updates:         make(map[string]*Update),
 		store:           store,
 		instrumentation: noopInstrumentation,
-		maxInFlight:     func() int { return math.MaxInt },
+		maxInFlight:     func() int { return 0 }, // ie disabled
 		maxTotal:        func() int { return math.MaxInt },
 		failoverVersion: store.GetCurrentVersion(),
 	}
@@ -383,15 +383,27 @@ func (r *registry) remover(id string) updateOpt {
 }
 
 func (r *registry) checkLimits() error {
-	if len(r.updates) >= r.maxInFlight() {
+	if err := r.checkInflightLimit(); err != nil {
+		return err
+	}
+	return r.checkTotalLimit()
+}
+
+func (r *registry) checkInflightLimit() error {
+	maxInFlight := r.maxInFlight()
+	if maxInFlight == 0 {
+		// limit is disabled
+		return nil
+	}
+	if len(r.updates) >= maxInFlight {
 		r.instrumentation.countRateLimited()
 		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
+			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", maxInFlight),
 		}
 	}
-	return r.checkTotalLimit()
+	return nil
 }
 
 func (r *registry) checkTotalLimit() error {
