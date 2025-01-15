@@ -23,10 +23,10 @@
 package matcher
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/api/serviceerror"
 )
 
 // TestNewMatcherError ensures that NewMatcherError formats its output correctly
@@ -35,7 +35,7 @@ func TestNewMatcherError(t *testing.T) {
 	tests := []struct {
 		name        string
 		format      string
-		args        []interface{}
+		args        []any
 		expectedMsg string
 	}{
 		{
@@ -47,7 +47,7 @@ func TestNewMatcherError(t *testing.T) {
 		{
 			name:        "formatted message",
 			format:      "value = %d, str = %s",
-			args:        []interface{}{42, "hello"},
+			args:        []any{42, "hello"},
 			expectedMsg: "value = 42, str = hello",
 		},
 		{
@@ -59,14 +59,14 @@ func TestNewMatcherError(t *testing.T) {
 		{
 			name:        "multiple format specifiers",
 			format:      "%s: %s -> %d",
-			args:        []interface{}{"error", "some detail", 123},
+			args:        []any{"error", "some detail", 123},
 			expectedMsg: "error: some detail -> 123",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var matchErr *Error
+			var matchErr *serviceerror.InvalidArgument
 			err := NewMatcherError(tt.format, tt.args...)
 
 			assert.Error(t, err)
@@ -74,32 +74,4 @@ func TestNewMatcherError(t *testing.T) {
 			assert.Equal(t, tt.expectedMsg, matchErr.Error())
 		})
 	}
-}
-
-// TestWrapMatcherError ensures that wrapMatcherError behaves correctly under multiple scenarios.
-func TestWrapMatcherError(t *testing.T) {
-	t.Run("err is nil", func(t *testing.T) {
-		var err error
-		got := wrapMatcherError("some message", err)
-		assert.Nil(t, got)
-	})
-
-	t.Run("err is non-matcher error", func(t *testing.T) {
-		originalErr := errors.New("some error")
-		got := wrapMatcherError("prefix", originalErr)
-		assert.Equal(t, originalErr, got)
-	})
-
-	t.Run("err is matcher error", func(t *testing.T) {
-		originalErr := &Error{message: "matcher error"} // Adjust field name if needed
-		got := wrapMatcherError("prefix", originalErr)
-		assert.NotNil(t, got)
-
-		var matcherErr *Error
-		assert.ErrorAs(t, got, &matcherErr)
-
-		// Check if message is wrapped properly
-		expectedMsg := "prefix: matcher error"
-		assert.Equal(t, expectedMsg, matcherErr.Error())
-	})
 }

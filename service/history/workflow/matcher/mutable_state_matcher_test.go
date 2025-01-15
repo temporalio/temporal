@@ -62,13 +62,13 @@ func TestMatchMutableState(t *testing.T) {
 		},
 		{
 			name:          "acceptance - positive",
-			query:         "where WorkflowId = 'workflow_id'",
+			query:         "WorkflowId = 'workflow_id'",
 			expectedMatch: true,
 			expectedError: false,
 		},
 		{
 			name:          "acceptance - negative",
-			query:         "where WorkflowId != 'other_workflow_id' ",
+			query:         "WorkflowId != 'other_workflow_id' ",
 			expectedMatch: true,
 			expectedError: false,
 		},

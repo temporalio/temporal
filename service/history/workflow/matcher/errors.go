@@ -23,16 +23,9 @@
 package matcher
 
 import (
-	"errors"
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-)
-
-type (
-	Error struct {
-		message string
-	}
 )
 
 var (
@@ -41,23 +34,7 @@ var (
 	invalidExpressionErrMessage = "invalid expression"
 )
 
-func NewMatcherError(format string, a ...interface{}) error {
+func NewMatcherError(format string, a ...any) error {
 	message := fmt.Sprintf(format, a...)
-	return &Error{message: message}
-}
-
-func (c *Error) Error() string {
-	return c.message
-}
-
-func (c *Error) ToInvalidArgument() error {
-	return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid query: %v", c))
-}
-
-func wrapMatcherError(message string, err error) error {
-	var matcherErr *Error
-	if errors.As(err, &matcherErr) {
-		return NewMatcherError("%s: %v", message, matcherErr)
-	}
-	return err
+	return serviceerror.NewInvalidArgument(message)
 }

@@ -34,7 +34,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestMutableStateMatchEvaluator(t *testing.T) {
+func TestBasicMutableStateMatchEvaluator(t *testing.T) {
 
 	startTimeStr := "2023-10-26T14:30:00Z"
 	beforeTimeStr := "2023-10-26T13:00:00Z"
@@ -53,118 +53,130 @@ func TestMutableStateMatchEvaluator(t *testing.T) {
 			expectedError: true,
 		},
 		{
-			name:          "absent where clause",
+			name:          "query start with where",
 			query:         "",
 			expectedMatch: false,
 			expectedError: true,
 		},
 		{
-			name:          "workflow id where clause",
-			query:         fmt.Sprintf("where %s = 'workflow_id'", WorkflowID),
+			name:          "query start with select",
+			query:         "",
+			expectedMatch: false,
+			expectedError: true,
+		},
+		{
+			name:          "workflow id",
+			query:         fmt.Sprintf("%s = 'workflow_id'", WorkflowID),
 			expectedMatch: true,
 			expectedError: false,
 		},
 		{
-			name:          "workflow id where clause - starts_with",
-			query:         fmt.Sprintf("where %s starts_with 'workflow_'", WorkflowID),
+			name:          "workflow id - starts_with",
+			query:         fmt.Sprintf("%s starts_with 'workflow_'", WorkflowID),
 			expectedMatch: true,
 			expectedError: false,
 		},
 		{
-			name:          "workflow id where clause - not starts_with",
-			query:         fmt.Sprintf("where %s not starts_with 'other_workflow_'", WorkflowID),
+			name:          "workflow id - not starts_with",
+			query:         fmt.Sprintf("%s not starts_with 'other_workflow_'", WorkflowID),
 			expectedMatch: true,
 			expectedError: false,
 		},
 		{
-			name:          "workflow type where clause",
-			query:         fmt.Sprintf("where %s = 'workflow_type'", WorkflowTypeName),
+			name:          "workflow type",
+			query:         fmt.Sprintf("%s = 'workflow_type'", WorkflowTypeName),
 			expectedMatch: true,
 			expectedError: false,
 		},
 		{
-			name:          "workflow status where clause",
-			query:         fmt.Sprintf("where %s = 'Running'", WorkflowExecutionStatus),
+			name:          "workflow status",
+			query:         fmt.Sprintf("%s = 'Running'", WorkflowExecutionStatus),
 			expectedMatch: true,
 			expectedError: false,
 		},
 		{
-			name:          "workflow start time where = clause",
-			query:         fmt.Sprintf("where %s = '%s'", WorkflowStartTime, startTimeStr),
-			expectedMatch: true,
-			expectedError: false,
-		},
-		{
-			name:          "workflow start time where >= clause",
-			query:         fmt.Sprintf("where %s >= '%s'", WorkflowStartTime, startTimeStr),
-			expectedMatch: true,
-			expectedError: false,
-		},
-		{
-			name:          "workflow start time where >= clause, after",
-			query:         fmt.Sprintf("where %s >= '%s'", WorkflowStartTime, afterTimeStr),
+			name:          "workflow status - negative",
+			query:         fmt.Sprintf("%s = 'Terminated'", WorkflowExecutionStatus),
 			expectedMatch: false,
 			expectedError: false,
 		},
 		{
-			name:          "workflow start time where >= clause, before",
-			query:         fmt.Sprintf("where %s >= '%s'", WorkflowStartTime, beforeTimeStr),
+			name:          "workflow start time",
+			query:         fmt.Sprintf("%s = '%s'", WorkflowStartTime, startTimeStr),
+			expectedMatch: true,
+			expectedError: false,
+		},
+		{
+			name:          "workflow start time, >= clause, equal",
+			query:         fmt.Sprintf("%s >= '%s'", WorkflowStartTime, startTimeStr),
+			expectedMatch: true,
+			expectedError: false,
+		},
+		{
+			name:          "workflow start time, >= clause, after",
+			query:         fmt.Sprintf("%s >= '%s'", WorkflowStartTime, afterTimeStr),
+			expectedMatch: false,
+			expectedError: false,
+		},
+		{
+			name:          "workflow start time, >= clause, before",
+			query:         fmt.Sprintf("%s >= '%s'", WorkflowStartTime, beforeTimeStr),
 			expectedMatch: true,
 			expectedError: false,
 		},
 
 		{
-			name:          "workflow start time where > clause, after",
-			query:         fmt.Sprintf("where %s > '%s'", WorkflowStartTime, afterTimeStr),
+			name:          "workflow start time, > clause, equal",
+			query:         fmt.Sprintf("%s > '%s'", WorkflowStartTime, startTimeStr),
 			expectedMatch: false,
 			expectedError: false,
 		},
 		{
-			name:          "workflow start time where > clause, after",
-			query:         fmt.Sprintf("where %s > '%s'", WorkflowStartTime, afterTimeStr),
+			name:          "workflow start time, > clause, after",
+			query:         fmt.Sprintf("%s > '%s'", WorkflowStartTime, afterTimeStr),
 			expectedMatch: false,
 			expectedError: false,
 		},
 		{
-			name:          "workflow start time where > clause, before",
-			query:         fmt.Sprintf("where %s >= '%s'", WorkflowStartTime, beforeTimeStr),
+			name:          "workflow start time, > clause, before",
+			query:         fmt.Sprintf("%s >= '%s'", WorkflowStartTime, beforeTimeStr),
 			expectedMatch: true,
 			expectedError: false,
 		},
 
 		{
-			name:          "workflow start time where <= clause",
-			query:         fmt.Sprintf("where %s <= '%s'", WorkflowStartTime, startTimeStr),
+			name:          "workflow start time, <= clause, equal",
+			query:         fmt.Sprintf("%s <= '%s'", WorkflowStartTime, startTimeStr),
 			expectedMatch: true,
 			expectedError: false,
 		},
 		{
-			name:          "workflow start time where <= clause, after",
-			query:         fmt.Sprintf("where %s <= '%s'", WorkflowStartTime, afterTimeStr),
+			name:          "workflow start time, <= clause, after",
+			query:         fmt.Sprintf("%s <= '%s'", WorkflowStartTime, afterTimeStr),
 			expectedMatch: true,
 			expectedError: false,
 		},
 		{
-			name:          "workflow start time where <= clause, before",
-			query:         fmt.Sprintf("where %s <= '%s'", WorkflowStartTime, beforeTimeStr),
+			name:          "workflow start time, <= clause, before",
+			query:         fmt.Sprintf("%s <= '%s'", WorkflowStartTime, beforeTimeStr),
 			expectedMatch: false,
 			expectedError: false,
 		},
 		{
-			name:          "workflow start time where < clause",
-			query:         fmt.Sprintf("where %s < '%s'", WorkflowStartTime, startTimeStr),
+			name:          "workflow start time < clause, equal",
+			query:         fmt.Sprintf("%s < '%s'", WorkflowStartTime, startTimeStr),
 			expectedMatch: false,
 			expectedError: false,
 		},
 		{
-			name:          "workflow start time where < clause, after",
-			query:         fmt.Sprintf("where %s < '%s'", WorkflowStartTime, afterTimeStr),
+			name:          "workflow start time, < clause, after",
+			query:         fmt.Sprintf("%s < '%s'", WorkflowStartTime, afterTimeStr),
 			expectedMatch: true,
 			expectedError: false,
 		},
 		{
 			name:          "workflow start time where < clause, before",
-			query:         fmt.Sprintf("where %s < '%s'", WorkflowStartTime, beforeTimeStr),
+			query:         fmt.Sprintf("%s < '%s'", WorkflowStartTime, beforeTimeStr),
 			expectedMatch: false,
 			expectedError: false,
 		},
@@ -201,4 +213,87 @@ func TestMutableStateMatchEvaluator(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAdvancedMutableStateMatchEvaluator(t *testing.T) {
+
+	startTimeStr := "2023-10-26T14:30:00Z"
+	beforeTimeStr := "2023-10-26T13:00:00Z"
+	afterTimeStr := "2023-10-26T15:00:00Z"
+	tests := []struct {
+		name          string
+		query         string
+		expectedMatch bool
+		expectedError bool
+	}{
+		{
+			name:          "workflow start time between clause, match",
+			query:         fmt.Sprintf("%s between '%s' and '%s'", WorkflowStartTime, beforeTimeStr, afterTimeStr),
+			expectedMatch: true,
+			expectedError: false,
+		},
+		{
+			name:          "workflow start time between clause, miss",
+			query:         fmt.Sprintf("%s between '%s' and '%s'", WorkflowStartTime, afterTimeStr, "2023-10-26T16:00:00Z"),
+			expectedMatch: false,
+			expectedError: false,
+		},
+		{
+			name:          "workflow start time between clause, inclusive left",
+			query:         fmt.Sprintf("%s between '%s' and '%s'", WorkflowStartTime, beforeTimeStr, startTimeStr),
+			expectedMatch: true,
+			expectedError: false,
+		},
+		{
+			name:          "workflow start time between clause, inclusive right",
+			query:         fmt.Sprintf("%s between '%s' and '%s'", WorkflowStartTime, startTimeStr, afterTimeStr),
+			expectedMatch: true,
+			expectedError: false,
+		},
+		{
+			name:          "workflow start time not between clause, miss",
+			query:         fmt.Sprintf("%s not between '%s' and '%s'", WorkflowStartTime, beforeTimeStr, afterTimeStr),
+			expectedMatch: false,
+			expectedError: false,
+		},
+		{
+			name:          "workflow start time not between clause, match",
+			query:         fmt.Sprintf("%s not between '%s' and '%s'", WorkflowStartTime, afterTimeStr, "2023-10-26T16:00:00Z"),
+			expectedMatch: true,
+			expectedError: false,
+		},
+	}
+
+	startTime, err := convertToTime(fmt.Sprintf("'%s'", startTimeStr))
+	assert.NoError(t, err)
+
+	ws := &persistencespb.WorkflowExecutionState{
+		StartTime: timestamppb.New(startTime),
+		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}
+
+	we := &persistencespb.WorkflowExecutionInfo{
+		WorkflowId:       "workflow_id",
+		WorkflowTypeName: "workflow_type",
+	}
+
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	ms := workflow.NewMockMutableState(controller)
+	ms.EXPECT().GetExecutionState().Return(ws).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(we).AnyTimes()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match, err := MatchMutableState(ms, tt.query)
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedMatch, match)
+			}
+		})
+	}
+
 }

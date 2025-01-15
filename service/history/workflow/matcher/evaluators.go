@@ -108,12 +108,8 @@ func (m *MutableStateMatchEvaluator) evaluateOr(expr sqlparser.Expr) (bool, erro
 		return false, NewMatcherError("%v is not an 'and' expression", sqlparser.String(expr))
 	}
 
-	leftResult, err := m.evaluate(andExpr.Left)
-	if err != nil {
-		return false, err
-	}
-	if leftResult {
-		return leftResult, nil
+	if leftResult, err := m.evaluate(andExpr.Left); err != nil || !leftResult {
+		return leftResult, err
 	}
 	// if left is false, then right must be evaluated
 	return m.evaluate(andExpr.Right)
@@ -277,5 +273,7 @@ func (m *MutableStateMatchEvaluator) compareStartTime(val string, operation stri
 
 func (m *MutableStateMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toTime time.Time) (bool, error) {
 	startTime := m.ms.GetExecutionState().StartTime.AsTime()
-	return startTime.After(fromTime) && startTime.Before(toTime), nil
+	lc := startTime.Compare(fromTime)
+	rc := startTime.Compare(toTime)
+	return lc >= 0 && rc <= 0, nil
 }

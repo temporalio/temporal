@@ -99,12 +99,13 @@ func prepareQuery(query string) (string, error) {
 		return "", nil
 	}
 
-	if !strings.HasPrefix(strings.ToLower(query), "where ") {
-		return "", fmt.Errorf("invalid query: %s", query)
+	if strings.HasPrefix(strings.ToLower(query), "where ") ||
+		strings.HasPrefix(strings.ToLower(query), "select ") {
+		return "", fmt.Errorf("invalid filter: %s", query)
 	}
 
 	// sqlparser can't parse just WHERE clause but instead accepts only valid SQL statement.
-	query = fmt.Sprintf("select * from table1 %s", query)
+	query = fmt.Sprintf("select * from table1 where %s", query)
 
 	return query, nil
 }
