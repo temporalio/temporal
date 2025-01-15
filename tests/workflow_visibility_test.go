@@ -43,7 +43,7 @@ import (
 )
 
 type WorkflowVisibilityTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestWorkflowVisibilityTestSuite(t *testing.T) {

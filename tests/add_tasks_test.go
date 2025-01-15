@@ -57,7 +57,7 @@ import (
 type (
 	// AddTasksSuite is a separate suite because we need to override the history service's executable wrapper.
 	AddTasksSuite struct {
-		testcore.FunctionalSuite
+		testcore.FunctionalTestSuite
 
 		shardController *faultyShardController
 		worker          worker.Worker
@@ -142,7 +142,7 @@ func (e *noopExecutor) shouldExecute(task tasks.Task) bool {
 // SetupSuite creates the test cluster and registers the executorWrapper with the history service.
 func (s *AddTasksSuite) SetupSuite() {
 	// Set up the test cluster and register our executable wrapper.
-	s.FunctionalSuite.SetupDefaultTestCluster(testcore.WithFxOptionsForService(
+	s.FunctionalTestSuite.SetupDefaultTestCluster(testcore.WithFxOptionsForService(
 		primitives.HistoryService,
 		fx.Provide(
 			func() queues.ExecutorWrapper {
@@ -163,7 +163,7 @@ func (s *AddTasksSuite) SetupSuite() {
 
 func (s *AddTasksSuite) TearDownSuite() {
 	s.sdkClient.Close()
-	s.FunctionalSuite.TearDownSuite()
+	s.FunctionalTestSuite.TearDownSuite()
 }
 
 func (s *AddTasksSuite) TestAddTasks_Ok() {

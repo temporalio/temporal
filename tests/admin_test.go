@@ -40,7 +40,7 @@ import (
 )
 
 type AdminTestSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestAdminTestSuite(t *testing.T) {

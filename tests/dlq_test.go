@@ -70,7 +70,7 @@ import (
 
 type (
 	DLQSuite struct {
-		testcore.FunctionalSuite
+		testcore.FunctionalTestSuite
 
 		dlq              persistence.HistoryTaskQueueManager
 		dlqTasks         chan tasks.Task
@@ -127,7 +127,7 @@ func (s *DLQSuite) SetupSuite() {
 	s.dlqTasks = make(chan tasks.Task)
 	testPrefix := "dlq-test-terminal-wfts-"
 	s.failingWorkflowIDPrefix.Store(&testPrefix)
-	s.FunctionalSuite.SetupDefaultTestCluster(
+	s.FunctionalTestSuite.SetupDefaultTestCluster(
 		testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
@@ -177,7 +177,7 @@ func (s *DLQSuite) SetupSuite() {
 
 func (s *DLQSuite) TearDownSuite() {
 	s.worker.Stop()
-	s.FunctionalSuite.TearDownSuite()
+	s.FunctionalTestSuite.TearDownSuite()
 }
 
 func myWorkflow(workflow.Context) (string, error) {
@@ -185,7 +185,7 @@ func myWorkflow(workflow.Context) (string, error) {
 }
 
 func (s *DLQSuite) SetupTest() {
-	s.FunctionalSuite.SetupTest()
+	s.FunctionalTestSuite.SetupTest()
 
 	s.deleteBlockCh = make(chan interface{})
 	close(s.deleteBlockCh)

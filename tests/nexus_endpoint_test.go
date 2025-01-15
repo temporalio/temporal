@@ -59,7 +59,7 @@ func TestNexusEndpointsFunctionalSuite(t *testing.T) {
 }
 
 type NexusEndpointFunctionalSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 type CommonSuite struct {

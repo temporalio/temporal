@@ -43,7 +43,7 @@ import (
 )
 
 type ActivityApiPauseClientTestSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 	tv                     *testvars.TestVars
 	initialRetryInterval   time.Duration
 	scheduleToCloseTimeout time.Duration
@@ -53,13 +53,13 @@ type ActivityApiPauseClientTestSuite struct {
 }
 
 func (s *ActivityApiPauseClientTestSuite) SetupSuite() {
-	s.ClientFunctionalSuite.SetupSuite()
+	s.FunctionalTestSdkSuite.SetupSuite()
 	s.OverrideDynamicConfig(dynamicconfig.ActivityAPIsEnabled, true)
 	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
 }
 
 func (s *ActivityApiPauseClientTestSuite) SetupTest() {
-	s.ClientFunctionalSuite.SetupTest()
+	s.FunctionalTestSdkSuite.SetupTest()
 
 	s.initialRetryInterval = 1 * time.Second
 	s.scheduleToCloseTimeout = 30 * time.Minute

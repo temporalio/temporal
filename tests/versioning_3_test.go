@@ -71,7 +71,7 @@ const (
 )
 
 type Versioning3Suite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
@@ -94,7 +94,7 @@ func (s *Versioning3Suite) SetupSuite() {
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
 	}
-	s.FunctionalSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {

@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -48,7 +47,7 @@ var (
 )
 
 type ClientDataConverterTestSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestClientDataConverterTestSuite(t *testing.T) {
@@ -111,17 +110,14 @@ func (s *ClientDataConverterTestSuite) startWorkerWithDataConverter(tl string, d
 		Namespace:     s.Namespace().String(),
 		DataConverter: dataConverter,
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
+	s.NoError(err)
 
 	newWorker := worker.New(sdkClient, tl, worker.Options{})
 	newWorker.RegisterActivity(testActivity)
 	newWorker.RegisterWorkflow(testChildWorkflow)
 
-	if err := newWorker.Start(); err != nil {
-		s.Logger.Fatal("Error when start worker with data converter", tag.Error(err))
-	}
+	err = newWorker.Start()
+	s.NoError(err)
 	return sdkClient, newWorker
 }
 
@@ -184,9 +180,7 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverter() {
 	s.Worker().RegisterWorkflow(testDataConverterWorkflow)
 	s.Worker().RegisterActivity(testActivity)
 	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
-	if err != nil {
-		s.Logger.Fatal("Start workflow with err", tag.Error(err))
-	}
+	s.NoError(err)
 	s.NotNil(we)
 	s.True(we.GetRunID() != "")
 
@@ -222,9 +216,7 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverterFailed() {
 	s.Worker().RegisterWorkflow(testDataConverterWorkflow)
 	s.Worker().RegisterActivity(testActivity)
 	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
-	if err != nil {
-		s.Logger.Fatal("Start workflow with err", tag.Error(err))
-	}
+	s.NoError(err)
 	s.NotNil(we)
 	s.True(we.GetRunID() != "")
 
@@ -273,9 +265,7 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverterWithChild() {
 	s.Worker().RegisterWorkflow(testChildWorkflow)
 
 	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
-	if err != nil {
-		s.Logger.Fatal("Start workflow with err", tag.Error(err))
-	}
+	s.NoError(err)
 	s.NotNil(we)
 	s.True(we.GetRunID() != "")
 

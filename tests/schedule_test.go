@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
@@ -73,7 +72,7 @@ worker restart/long-poll activity failure:
 
 type (
 	ScheduleFunctionalSuite struct {
-		testcore.FunctionalSuite
+		testcore.FunctionalTestSuite
 
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
@@ -89,31 +88,30 @@ func TestScheduleFunctionalSuite(t *testing.T) {
 
 func (s *ScheduleFunctionalSuite) SetupSuite() {
 	if testcore.UsingSQLAdvancedVisibility() {
-		s.FunctionalSuite.SetupTestCluster("testdata/cluster.yaml")
+		s.FunctionalTestSuite.SetupTestCluster("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
 	} else {
-		s.FunctionalSuite.SetupTestCluster("testdata/es_cluster.yaml")
+		s.FunctionalTestSuite.SetupTestCluster("testdata/es_cluster.yaml")
 		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
 	}
 }
 
 func (s *ScheduleFunctionalSuite) SetupTest() {
-	s.FunctionalSuite.SetupTest()
+	s.FunctionalTestSuite.SetupTest()
+	s.dataConverter = testcore.NewTestDataConverter()
 
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:      s.FrontendGRPCAddress(),
 		Namespace:     s.Namespace().String(),
 		DataConverter: s.dataConverter,
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sdkClient = sdkClient
+	s.NoError(err)
+
 	s.taskQueue = testcore.RandomizeStr("tq")
 	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{})
-	if err = s.worker.Start(); err != nil {
-		s.Logger.Fatal("Error when starting worker", tag.Error(err))
-	}
+	err = s.worker.Start()
+	s.Require().NoError(err)
 }
 
 func (s *ScheduleFunctionalSuite) TearDownTest() {

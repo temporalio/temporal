@@ -63,7 +63,7 @@ import (
 )
 
 type VersioningIntegSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 	sdkClient sdkclient.Client
 }
 
@@ -124,20 +124,18 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// behaviour related to versioning
 		dynamicconfig.TaskQueueInfoByBuildIdTTL.Key(): 0 * time.Second,
 	}
-	s.FunctionalSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *VersioningIntegSuite) SetupTest() {
-	s.FunctionalSuite.SetupTest()
+	s.FunctionalTestSuite.SetupTest()
 
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sdkClient = sdkClient
+	s.NoError(err)
 }
 
 func (s *VersioningIntegSuite) TearDownTest() {

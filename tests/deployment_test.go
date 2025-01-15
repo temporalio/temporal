@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
@@ -71,7 +70,7 @@ const (
 
 type (
 	DeploymentSuite struct {
-		testcore.FunctionalSuite
+		testcore.FunctionalTestSuite
 		sdkClient sdkclient.Client
 	}
 )
@@ -82,7 +81,7 @@ func TestDeploymentSuite(t *testing.T) {
 }
 
 func (s *DeploymentSuite) SetupSuite() {
-	s.FunctionalSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	s.FunctionalTestSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
@@ -104,16 +103,14 @@ func (s *DeploymentSuite) SetupSuite() {
 }
 
 func (s *DeploymentSuite) SetupTest() {
-	s.FunctionalSuite.SetupTest()
+	s.FunctionalTestSuite.SetupTest()
 
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sdkClient = sdkClient
+	s.NoError(err)
 }
 
 func (s *DeploymentSuite) TearDownTest() {

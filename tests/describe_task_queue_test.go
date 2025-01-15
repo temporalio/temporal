@@ -44,7 +44,7 @@ import (
 
 type (
 	DescribeTaskQueueSuite struct {
-		testcore.FunctionalSuite
+		testcore.FunctionalTestSuite
 	}
 )
 

@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -69,9 +68,7 @@ func (s *TLSFunctionalSuite) SetupTest() {
 			TLS: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
 		},
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
+	s.NoError(err)
 }
 
 func (s *TLSFunctionalSuite) TearDownTest() {

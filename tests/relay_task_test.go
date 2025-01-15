@@ -41,7 +41,7 @@ import (
 )
 
 type RelayTaskTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestRelayTaskTestSuite(t *testing.T) {

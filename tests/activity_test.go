@@ -61,11 +61,11 @@ import (
 )
 
 type ActivityTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 type ActivityClientTestSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestActivityTestSuite(t *testing.T) {
@@ -313,9 +313,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -1242,9 +1240,7 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")

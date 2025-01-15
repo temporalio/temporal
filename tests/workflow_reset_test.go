@@ -45,7 +45,7 @@ import (
 
 // Tests workflow reset feature
 type WorkflowResetSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestWorkflowResetTestSuite(t *testing.T) {

@@ -65,7 +65,7 @@ const (
 
 type (
 	ArchivalSuite struct {
-		testcore.FunctionalSuite
+		testcore.FunctionalTestSuite
 	}
 
 	archivalWorkflowInfo struct {
@@ -81,7 +81,7 @@ func TestArchivalSuite(t *testing.T) {
 }
 
 func (s *ArchivalSuite) SetupSuite() {
-	s.FunctionalSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	s.FunctionalTestSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
 	}))
 }

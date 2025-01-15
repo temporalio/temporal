@@ -52,15 +52,15 @@ import (
 )
 
 type RawHistorySuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 type RawHistoryClientSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 type GetHistoryFunctionalSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestRawHistorySuite(t *testing.T) {
@@ -82,7 +82,7 @@ func (s *RawHistorySuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.SendRawWorkflowHistory.Key(): true,
 	}
-	s.FunctionalSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_All() {
@@ -663,9 +663,7 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -740,9 +738,7 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse_MultipleBranches() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")

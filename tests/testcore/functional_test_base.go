@@ -129,11 +129,11 @@ func (s *FunctionalTestBase) GetTestClusterConfig() *TestClusterConfig {
 	return s.testClusterConfig
 }
 
-func (s *FunctionalTestBase) FrontendClient() FrontendClient {
+func (s *FunctionalTestBase) FrontendClient() workflowservice.WorkflowServiceClient {
 	return s.frontendClient
 }
 
-func (s *FunctionalTestBase) AdminClient() AdminClient {
+func (s *FunctionalTestBase) AdminClient() adminservice.AdminServiceClient {
 	return s.adminClient
 }
 

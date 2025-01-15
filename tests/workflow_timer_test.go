@@ -42,7 +42,7 @@ import (
 )
 
 type WorkflowTimerTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestWorkflowTimerTestSuite(t *testing.T) {

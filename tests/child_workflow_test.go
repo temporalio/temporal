@@ -50,7 +50,7 @@ import (
 )
 
 type ChildWorkflowSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestChildWorkflowSuite(t *testing.T) {

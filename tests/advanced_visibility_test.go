@@ -74,7 +74,7 @@ const (
 )
 
 type AdvancedVisibilitySuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 
 	isElasticsearchEnabled bool
 
@@ -105,11 +105,11 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 	}
 
 	if testcore.UsingSQLAdvancedVisibility() {
-		s.FunctionalSuite.SetupTestCluster("testdata/cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+		s.FunctionalTestSuite.SetupTestCluster("testdata/cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
 		s.isElasticsearchEnabled = false
 	} else {
-		s.FunctionalSuite.SetupTestCluster("testdata/es_cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+		s.FunctionalTestSuite.SetupTestCluster("testdata/es_cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
 		s.isElasticsearchEnabled = true
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
@@ -134,11 +134,11 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 
 func (s *AdvancedVisibilitySuite) TearDownSuite() {
 	s.sdkClient.Close()
-	s.FunctionalSuite.TearDownSuite()
+	s.FunctionalTestSuite.TearDownSuite()
 }
 
 func (s *AdvancedVisibilitySuite) SetupTest() {
-	s.FunctionalSuite.SetupTest()
+	s.FunctionalTestSuite.SetupTest()
 
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"

@@ -55,7 +55,7 @@ import (
 
 type (
 	namespaceTestSuite struct {
-		testcore.FunctionalSuite
+		testcore.FunctionalTestSuite
 	}
 )
 

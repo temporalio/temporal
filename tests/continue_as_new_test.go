@@ -48,7 +48,7 @@ import (
 )
 
 type ContinueAsNewTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestContinueAsNewTestSuite(t *testing.T) {
