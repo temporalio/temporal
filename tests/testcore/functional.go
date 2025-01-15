@@ -66,8 +66,20 @@ func (s *FunctionalSuite) TearDownSuite() {
 
 func (s *FunctionalSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
+	s.initAssertions()
+}
 
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+func (s *FunctionalSuite) SetupSubTest() {
+	s.initAssertions()
+}
+
+func (s *FunctionalSuite) initAssertions() {
+	// `s.Assertions` (as well as other test helpers which depends on `s.T()`) must be initialized on
+	// both test and subtest levels (but not suite level, where `s.T()` is `nil`).
+	//
+	// If these helpers are not reinitialized on subtest level, any failed `assert` in
+	// subtest will fail the entire test (not subtest) immediately without running other subtests.
+
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
