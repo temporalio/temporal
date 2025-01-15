@@ -123,10 +123,6 @@ func TestDLQSuite(t *testing.T) {
 
 func (s *DLQSuite) SetupSuite() {
 	s.setAssertions()
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.HistoryTaskDLQEnabled.Key(): true,
-	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	s.dlqTasks = make(chan tasks.Task)
 	testPrefix := "dlq-test-terminal-wfts-"
 	s.failingWorkflowIDPrefix.Store(&testPrefix)
@@ -162,6 +158,10 @@ func (s *DLQSuite) SetupSuite() {
 			fx.Populate(&s.sdkClientFactory),
 		),
 	)
+	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
+		dynamicconfig.HistoryTaskDLQEnabled.Key(): true,
+	})
+
 	s.tdbgApp = tdbgtest.NewCliApp(
 		func(params *tdbg.Params) {
 			params.ClientFactory = tdbg.NewClientFactory(tdbg.WithFrontendAddress(s.FrontendGRPCAddress()))

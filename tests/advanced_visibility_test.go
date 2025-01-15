@@ -98,20 +98,6 @@ func TestAdvancedVisibilitySuite(t *testing.T) {
 
 // This cluster use customized threshold for history config
 func (s *AdvancedVisibilitySuite) SetupSuite() {
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.VisibilityDisableOrderByClause.Key():             false,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
-		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
-		dynamicconfig.ReachabilityTaskQueueScanLimit.Key():             2,
-		dynamicconfig.ReachabilityQueryBuildIdLimit.Key():              1,
-		dynamicconfig.BuildIdScavengerEnabled.Key():                    true,
-		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
-		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
-	}
-
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-
 	if testcore.UsingSQLAdvancedVisibility() {
 		s.FunctionalTestBase.SetupSuite("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
@@ -125,6 +111,18 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		// Probably can be removed and replaced with assert on items count in response.
 		s.updateMaxResultWindow()
 	}
+
+	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
+		dynamicconfig.VisibilityDisableOrderByClause.Key():             false,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
+		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
+		dynamicconfig.ReachabilityTaskQueueScanLimit.Key():             2,
+		dynamicconfig.ReachabilityQueryBuildIdLimit.Key():              1,
+		dynamicconfig.BuildIdScavengerEnabled.Key():                    true,
+		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
+		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
+	})
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),

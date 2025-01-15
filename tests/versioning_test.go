@@ -85,7 +85,9 @@ func TestVersioningFunctionalSuite(t *testing.T) {
 }
 
 func (s *VersioningIntegSuite) SetupSuite() {
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+	// TODO: functional_suite?
+	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
@@ -125,9 +127,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// this is overridden since we don't want caching to be enabled while testing DescribeTaskQueue
 		// behaviour related to versioning
 		dynamicconfig.TaskQueueInfoByBuildIdTTL.Key(): 0 * time.Second,
-	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+	})
 }
 
 func (s *VersioningIntegSuite) TearDownSuite() {

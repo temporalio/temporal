@@ -79,16 +79,15 @@ type (
 func TestArchivalSuite(t *testing.T) {
 	// TODO: archival doesn't support parallel yet: t.Parallel()
 	s := new(ArchivalSuite)
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.RetentionTimerJitterDuration.Key():  time.Second,
-		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
-	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	suite.Run(t, s)
 }
 
 func (s *ArchivalSuite) SetupSuite() {
+	// TODO: fuunctional_suite?
 	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
+		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
+	})
 }
 
 func (s *ArchivalSuite) TearDownSuite() {

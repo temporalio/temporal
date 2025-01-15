@@ -27,7 +27,6 @@ package testcore
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
@@ -35,7 +34,7 @@ import (
 
 type FunctionalTestBaseSuite struct {
 	FunctionalTestBase
-	*require.Assertions
+
 	frontendServiceName primitives.ServiceName
 	matchingServiceName primitives.ServiceName
 	historyServiceName  primitives.ServiceName
@@ -62,8 +61,6 @@ func (s *FunctionalTestBaseSuite) TearDownSuite() {
 
 func (s *FunctionalTestBaseSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-
-	s.Assertions = require.New(s.T())
 }
 
 func (s *FunctionalTestBaseSuite) TestWithFxOptionsForService() {

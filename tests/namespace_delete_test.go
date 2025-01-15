@@ -86,13 +86,13 @@ func (s *namespaceTestSuite) SetupSuite() {
 
 	if testcore.UsingSQLAdvancedVisibility() {
 		var err error
-		s.clusterConfig, err = testcore.GetTestClusterConfig("testdata/cluster.yaml")
+		s.clusterConfig, err = testcore.ReadTestClusterConfig("testdata/cluster.yaml")
 		s.Require().NoError(err)
 		s.logger.Info(fmt.Sprintf("Running delete namespace tests with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
 	} else {
 		var err error
 		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
-		s.clusterConfig, err = testcore.GetTestClusterConfig("testdata/es_cluster.yaml")
+		s.clusterConfig, err = testcore.ReadTestClusterConfig("testdata/es_cluster.yaml")
 		s.Require().NoError(err)
 		s.logger.Info("Running delete namespace tests with Elasticsearch persistence")
 	}

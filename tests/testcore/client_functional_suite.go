@@ -30,7 +30,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -38,7 +37,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 )
@@ -46,11 +44,6 @@ import (
 type (
 	ClientFunctionalSuite struct {
 		FunctionalTestBase
-
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-		// not merely log an error
-		*require.Assertions
-		historyrequire.HistoryRequire
 
 		sdkClient sdkclient.Client
 		worker    worker.Worker
@@ -76,8 +69,10 @@ func (s *ClientFunctionalSuite) TaskQueue() string {
 }
 
 func (s *ClientFunctionalSuite) SetupSuite() {
+	s.FunctionalTestBase.SetupSuite("testdata/client_cluster.yaml")
+
 	// these limits are higher in production, but our tests would take too long if we set them that high
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+	s.testClusterConfig.SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.NumPendingChildExecutionsLimitError.Key():             ClientSuiteLimit,
 		dynamicconfig.NumPendingActivitiesLimitError.Key():                  ClientSuiteLimit,
 		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              ClientSuiteLimit,
@@ -87,9 +82,9 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	s.FunctionalTestBase.SetupSuite("testdata/client_cluster.yaml")
+		// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
+		nexusoperations.CallbackURLTemplate.Key(): "http://" + s.HttpAPIAddress() + "/namespaces/{{.NamespaceName}}/nexus/callback",
+	})
 }
 
 func (s *ClientFunctionalSuite) TearDownSuite() {
@@ -99,27 +94,20 @@ func (s *ClientFunctionalSuite) TearDownSuite() {
 func (s *ClientFunctionalSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 
-	s.initAssertions()
-
-	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
-	s.OverrideDynamicConfig(
-		nexusoperations.CallbackURLTemplate,
-		"http://"+s.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
-
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
 	}
-	s.sdkClient = sdkClient
 	s.taskQueue = RandomizeStr("tq")
 
 	// We need to set this timeout to 0 to disable the deadlock detector. Otherwise, the deadlock detector will cause
 	// TestTooManyChildWorkflows to fail because it thinks there is a deadlock due to the blocked child workflows.
 	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{DeadlockDetectionTimeout: 0})
-	if err := s.worker.Start(); err != nil {
+	if err = s.worker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker", tag.Error(err))
 	}
 }
@@ -134,18 +122,7 @@ func (s *ClientFunctionalSuite) TearDownTest() {
 }
 
 func (s *ClientFunctionalSuite) SetupSubTest() {
-	s.initAssertions()
-}
-
-func (s *ClientFunctionalSuite) initAssertions() {
-	// `s.Assertions` (as well as other test helpers which depends on `s.T()`) must be initialized on
-	// both test and subtest levels (but not suite level, where `s.T()` is `nil`).
-	//
-	// If these helpers are not reinitialized on subtest level, any failed `assert` in
-	// subtest will fail the entire test (not subtest) immediately without running other subtests.
-
-	s.Assertions = require.New(s.T())
-	s.HistoryRequire = historyrequire.New(s.T())
+	s.FunctionalTestBase.SetupSubTest()
 }
 
 func (s *ClientFunctionalSuite) EventuallySucceeds(ctx context.Context, operationCtx backoff.OperationCtx) {
@@ -188,15 +165,3 @@ func (s *ClientFunctionalSuite) HistoryContainsFailureCausedBy(
 		return fmt.Errorf("did not find a failed task whose cause was %q", cause)
 	})
 }
-
-// Uncomment if you need to debug history.
-// func (s *ClientFunctionalSuite) printHistory(workflowID string, runID string) {
-// 	iter := s.sdkClient.GetWorkflowHistory(context.Background(), workflowID, runID, false, 0)
-// 	history := &historypb.History{}
-// 	for iter.HasNext() {
-// 		event, err := iter.Next()
-// 		s.NoError(err)
-// 		history.Events = append(history.Events, event)
-// 	}
-// 	common.PrettyPrintHistory(history, s.Logger)
-// }

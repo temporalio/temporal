@@ -30,6 +30,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"testing"
@@ -103,7 +104,7 @@ type (
 		ESConfig               *esclient.Config
 		MockAdminClient        map[string]adminservice.AdminServiceClient
 		FaultInjection         config.FaultInjection `yaml:"faultInjection"`
-		DynamicConfigOverrides map[dynamicconfig.Key]interface{}
+		DynamicConfigOverrides map[dynamicconfig.Key]any
 		GenerateMTLS           bool
 		EnableMetricsCapture   bool
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
@@ -126,6 +127,10 @@ const (
 	httpProtocol transferProtocol = "http"
 	grpcProtocol transferProtocol = "grpc"
 )
+
+func (c *TestClusterConfig) SetDynamicConfigOverrides(dynamicConfig map[dynamicconfig.Key]any) {
+	maps.Copy(c.DynamicConfigOverrides, dynamicConfig)
+}
 
 func (a *ArchiverBase) Metadata() archiver.ArchivalMetadata {
 	return a.metadata

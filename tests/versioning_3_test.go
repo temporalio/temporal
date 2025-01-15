@@ -82,7 +82,9 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 }
 
 func (s *Versioning3Suite) SetupSuite() {
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+	// TODO: functional_suite
+	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
@@ -95,9 +97,7 @@ func (s *Versioning3Suite) SetupSuite() {
 		// this is overridden for tests using RunTestWithMatchingBehavior
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
-	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+	})
 }
 
 func (s *Versioning3Suite) TearDownSuite() {

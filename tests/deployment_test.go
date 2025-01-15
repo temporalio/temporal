@@ -89,7 +89,9 @@ func TestDeploymentSuite(t *testing.T) {
 
 func (s *DeploymentSuite) SetupSuite() {
 	s.setAssertions()
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+	// TODO: functional suite?
+	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
@@ -107,9 +109,7 @@ func (s *DeploymentSuite) SetupSuite() {
 
 		// Reduce the chance of hitting max batch job limit in tests
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): maxConcurrentBatchOps,
-	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+	})
 }
 
 func (s *DeploymentSuite) TearDownSuite() {

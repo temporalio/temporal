@@ -83,11 +83,11 @@ func TestGetHistoryFunctionalSuite(t *testing.T) {
 }
 
 func (s *RawHistorySuite) SetupSuite() {
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.SendRawWorkflowHistory.Key(): true,
-	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
+	// TODO: functional suite
 	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
+		dynamicconfig.SendRawWorkflowHistory.Key(): true,
+	})
 }
 
 func (s *RawHistorySuite) TearDownSuite() {
