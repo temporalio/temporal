@@ -54,7 +54,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"

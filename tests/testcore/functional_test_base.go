@@ -178,7 +178,7 @@ func (s *FunctionalTestBase) TearDownSuite() {
 }
 
 func (s *FunctionalTestBase) SetupDefaultTestCluster(options ...TestClusterOption) {
-	// TODO: rename es_cluster.yaml to default_cluster.yaml
+	// TODO (alex): rename es_cluster.yaml to default_cluster.yaml
 	s.SetupTestCluster("testdata/es_cluster.yaml", options...)
 }
 func (s *FunctionalTestBase) SetupTestCluster(clusterConfigFile string, options ...TestClusterOption) {
@@ -197,7 +197,7 @@ func (s *FunctionalTestBase) SetupTestCluster(clusterConfigFile string, options 
 		clusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
 
-	// TODO: clusterConfig shouldn't have DC at all.
+	// TODO (alex): clusterConfig shouldn't have DC at all.
 	maps.Copy(clusterConfig.DynamicConfigOverrides, map[dynamicconfig.Key]any{
 		dynamicconfig.HistoryScannerEnabled.Key():    false,
 		dynamicconfig.TaskQueueScannerEnabled.Key():  false,
@@ -580,7 +580,7 @@ func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{
 	}
 }
 
-// TODO: change to nsName namespace.Name
+// TODO (alex): change to nsName namespace.Name
 func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
 	_, err := s.frontendClient.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{

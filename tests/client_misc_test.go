@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
@@ -1028,7 +1027,7 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 
 			oldWorker := worker.New(s.SdkClient(), taskQueue, worker.Options{})
 			oldWorker.RegisterWorkflow(workflowFn)
-			err = oldWorker.Start()
+			err := oldWorker.Start()
 			s.NoError(err)
 
 			id := "test-sticky-delay" + tt.name

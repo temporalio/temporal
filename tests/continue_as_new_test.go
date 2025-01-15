@@ -693,7 +693,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NotNil(definition.completedEvent)
 	completedAttributes := definition.completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()
 	s.Equal(s.Namespace().String(), completedAttributes.Namespace)
-	// TODO: change to s.Equal(s.Namespace()ID) once it is available.
+	s.Equal(s.NamespaceID().String(), completedAttributes.NamespaceId)
 	s.NotEmpty(completedAttributes.Namespace)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.NotEqual(

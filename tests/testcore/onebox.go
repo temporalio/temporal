@@ -141,7 +141,7 @@ type (
 		NumHistoryShards int32
 		NumHistoryHosts  int
 
-		// TODO: Remove all this limits and replace them with consts in sizelimit_tests.go
+		// TODO (alex): Remove all this limits and replace them with consts in sizelimit_tests.go
 		HistoryCountLimitError     int
 		HistoryCountLimitWarn      int
 		HistorySizeLimitError      int
