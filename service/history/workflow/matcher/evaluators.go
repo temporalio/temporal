@@ -103,7 +103,7 @@ func (m *MutableStateMatchEvaluator) evaluateAnd(expr sqlparser.Expr) (bool, err
 	return m.evaluate(andExpr.Right)
 }
 func (m *MutableStateMatchEvaluator) evaluateOr(expr sqlparser.Expr) (bool, error) {
-	andExpr, ok := expr.(*sqlparser.AndExpr)
+	orExpr, ok := expr.(*sqlparser.OrExpr)
 	if !ok {
 		return false, NewMatcherError("%v is not an 'and' expression", sqlparser.String(expr))
 	}
