@@ -249,10 +249,7 @@ func (m *MutableStateMatchEvaluator) compareStartTime(val string, operation stri
 	startTime := m.ms.GetExecutionState().StartTime.AsTime()
 	switch operation {
 	case sqlparser.GreaterEqualStr:
-		if startTime == expectedTime {
-			return true, nil
-		}
-		return startTime.After(expectedTime), nil
+		return startTime.Compare(expectedTime) >= 0, nil
 	case sqlparser.LessEqualStr:
 		if startTime == expectedTime {
 			return true, nil
