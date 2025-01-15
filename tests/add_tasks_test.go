@@ -273,6 +273,6 @@ func (s *AddTasksSuite) newSDKClient() sdkclient.Client {
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 	return client
 }

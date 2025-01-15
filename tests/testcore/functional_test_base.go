@@ -342,7 +342,7 @@ func ReadTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	}
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 	var clusterConfig TestClusterConfig
-	if err := yaml.Unmarshal(confContent, &clusterConfig); err != nil {
+	if err = yaml.Unmarshal(confContent, &clusterConfig); err != nil {
 		return nil, fmt.Errorf("failed to decode test cluster config %s: %w", configLocation, err)
 	}
 
@@ -355,7 +355,7 @@ func ReadTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 		}
 
 		var fiOptions TestClusterConfig
-		if err := yaml.Unmarshal(fiConfigContent, &fiOptions); err != nil {
+		if err = yaml.Unmarshal(fiConfigContent, &fiOptions); err != nil {
 			return nil, fmt.Errorf("failed to decode test cluster fault injection config %s: %w", TestFlags.FaultInjectionConfigFile, err)
 		}
 		clusterConfig.FaultInjection = fiOptions.FaultInjection
@@ -372,12 +372,8 @@ func (s *FunctionalTestBase) TearDownCluster() {
 	}
 
 	if s.testCluster != nil {
-		s.NoError(s.testCluster.TearDownCluster())
-		s.testCluster = nil
+		s.Require().NoError(s.testCluster.TearDownCluster())
 	}
-
-	s.frontendClient = nil
-	s.adminClient = nil
 }
 
 // Register namespace using persistence API because:
