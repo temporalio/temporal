@@ -3903,9 +3903,11 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 	if request.GetRequest().GetInput() == nil {
 		return errUpdateInputNotSet
 	}
-
 	if request.GetRequest().GetInput().GetName() == "" {
 		return errUpdateNameNotSet
+	}
+	if strings.HasPrefix(request.GetRequest().GetInput().GetName(), "temporal-sys-") {
+		return errUpdateNameInvalid
 	}
 
 	if request.GetWaitPolicy() == nil {

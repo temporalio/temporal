@@ -101,6 +101,7 @@ var (
 	errUpdateMetaNotSet       = serviceerror.NewInvalidArgument("Update meta is not set on request.")
 	errUpdateInputNotSet      = serviceerror.NewInvalidArgument("Update input is not set on request.")
 	errUpdateNameNotSet       = serviceerror.NewInvalidArgument("Update name is not set on request.")
+	errUpdateNameInvalid      = serviceerror.NewInvalidArgument("Update name is not allowed to start with 'temporal-sys-'.")
 	errUpdateIDTooLong        = serviceerror.NewInvalidArgument("UpdateId length exceeds limit.")
 	errUpdateRefNotSet        = serviceerror.NewInvalidArgument("UpdateRef is not set on request.")
 	errUpdateWaitPolicyNotSet = serviceerror.NewInvalidArgument("WaitPolicy is not set on request.")
