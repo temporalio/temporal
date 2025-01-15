@@ -47,7 +47,7 @@ func TestFunctionalTestBaseSuite(t *testing.T) {
 }
 
 func (s *FunctionalTestBaseSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupTestCluster("testdata/es_cluster.yaml",
+	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/es_cluster.yaml",
 		WithFxOptionsForService(primitives.FrontendService, fx.Populate(&s.frontendServiceName)),
 		WithFxOptionsForService(primitives.MatchingService, fx.Populate(&s.matchingServiceName)),
 		WithFxOptionsForService(primitives.HistoryService, fx.Populate(&s.historyServiceName)),

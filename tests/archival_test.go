@@ -81,7 +81,7 @@ func TestArchivalSuite(t *testing.T) {
 }
 
 func (s *ArchivalSuite) SetupSuite() {
-	s.FunctionalTestSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
 	}))
 }

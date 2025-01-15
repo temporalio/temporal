@@ -81,7 +81,7 @@ func (s *FunctionalTestSdkSuite) SetupSuite() {
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 
-	s.FunctionalTestBase.SetupTestCluster("testdata/client_cluster.yaml", WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/client_cluster.yaml", WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *FunctionalTestSdkSuite) SetupTest() {

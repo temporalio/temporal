@@ -61,7 +61,7 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 
 // This cluster use customized threshold for history config
 func (s *SizeLimitFunctionalSuite) SetupSuite() {
-	s.FunctionalTestSuite.SetupTestCluster("testdata/sizelimit_cluster.yaml")
+	s.FunctionalTestSuite.SetupSuiteWithCluster("testdata/sizelimit_cluster.yaml")
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {

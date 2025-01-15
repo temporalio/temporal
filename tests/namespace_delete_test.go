@@ -73,10 +73,10 @@ func (s *namespaceTestSuite) SetupSuite() {
 	}
 
 	if testcore.UsingSQLAdvancedVisibility() {
-		s.SetupTestCluster("testdata/cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+		s.SetupSuiteWithCluster("testdata/cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 		s.Logger.Info(fmt.Sprintf("Running delete namespace tests with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
 	} else {
-		s.SetupTestCluster("testdata/es_cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+		s.SetupSuiteWithCluster("testdata/es_cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 	}
 }
 

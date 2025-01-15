@@ -105,11 +105,11 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 	}
 
 	if testcore.UsingSQLAdvancedVisibility() {
-		s.FunctionalTestSuite.SetupTestCluster("testdata/cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+		s.FunctionalTestSuite.SetupSuiteWithCluster("testdata/cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
 		s.isElasticsearchEnabled = false
 	} else {
-		s.FunctionalTestSuite.SetupTestCluster("testdata/es_cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+		s.FunctionalTestSuite.SetupSuiteWithCluster("testdata/es_cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
 		s.isElasticsearchEnabled = true
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,

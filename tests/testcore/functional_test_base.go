@@ -79,7 +79,9 @@ type (
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
 
-		// TODO (alex): export these fields and remove the getters.
+		Logger log.Logger
+
+		// Test cluster configuration.
 		testClusterFactory  TestClusterFactory
 		testCluster         *TestCluster
 		testClusterConfig   *TestClusterConfig
@@ -87,7 +89,6 @@ type (
 		adminClient         adminservice.AdminServiceClient
 		operatorClient      operatorservice.OperatorServiceClient
 		httpAPIAddress      string
-		Logger              log.Logger
 		namespace           namespace.Name
 		namespaceID         namespace.ID
 		foreignNamespace    namespace.Name
@@ -121,7 +122,11 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 
 func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestClusterOption {
 	return func(params *TestClusterParams) {
-		params.DynamicConfigOverrides = overrides
+		if params.DynamicConfigOverrides == nil {
+			params.DynamicConfigOverrides = overrides
+		} else {
+			maps.Copy(params.DynamicConfigOverrides, overrides)
+		}
 	}
 }
 
@@ -174,35 +179,40 @@ func (s *FunctionalTestBase) FrontendGRPCAddress() string {
 }
 
 func (s *FunctionalTestBase) SetupSuite() {
-	s.SetupDefaultTestCluster()
+	s.SetupSuiteWithDefaultCluster()
 }
 
 func (s *FunctionalTestBase) TearDownSuite() {
 	s.TearDownCluster()
 }
 
-func (s *FunctionalTestBase) SetupDefaultTestCluster(options ...TestClusterOption) {
+func (s *FunctionalTestBase) SetupSuiteWithDefaultCluster(options ...TestClusterOption) {
 	// TODO (alex): rename es_cluster.yaml to default_cluster.yaml
-	s.SetupTestCluster("testdata/es_cluster.yaml", options...)
+	// TODO (alex): reduce the number of configs or may be get rid of it completely.
+	// TODO (alex): or replace clusterConfigFile param with WithClusterConfigFile option with default value.
+	s.SetupSuiteWithCluster("testdata/es_cluster.yaml", options...)
 }
-func (s *FunctionalTestBase) SetupTestCluster(clusterConfigFile string, options ...TestClusterOption) {
-	s.testClusterFactory = NewTestClusterFactory()
-
+func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, options ...TestClusterOption) {
 	params := ApplyTestClusterOptions(options)
 
-	s.Logger = log.NewTestLogger()
+	// Logger might be already set by the test suite.
+	if s.Logger == nil {
+		s.Logger = log.NewTestLogger()
+	}
 
-	clusterConfig, err := ReadTestClusterConfig(clusterConfigFile)
+	// Setup test cluster.
+	var err error
+	s.testClusterConfig, err = readTestClusterConfig(clusterConfigFile)
 	s.Require().NoError(err)
-	s.Require().Empty(clusterConfig.DeprecatedFrontendAddress, "Functional tests against external frontends are not supported")
-	s.Require().Empty(clusterConfig.DeprecatedClusterNo, "ClusterNo should not be present in cluster config files")
+	s.Require().Empty(s.testClusterConfig.DeprecatedFrontendAddress, "Functional tests against external frontends are not supported")
+	s.Require().Empty(s.testClusterConfig.DeprecatedClusterNo, "ClusterNo should not be present in cluster config files")
 
-	if clusterConfig.DynamicConfigOverrides == nil {
-		clusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]any)
+	if s.testClusterConfig.DynamicConfigOverrides == nil {
+		s.testClusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
 
 	// TODO (alex): clusterConfig shouldn't have DC at all.
-	maps.Copy(clusterConfig.DynamicConfigOverrides, map[dynamicconfig.Key]any{
+	maps.Copy(s.testClusterConfig.DynamicConfigOverrides, map[dynamicconfig.Key]any{
 		dynamicconfig.HistoryScannerEnabled.Key():    false,
 		dynamicconfig.TaskQueueScannerEnabled.Key():  false,
 		dynamicconfig.ExecutionsScannerEnabled.Key(): false,
@@ -213,20 +223,17 @@ func (s *FunctionalTestBase) SetupTestCluster(clusterConfigFile string, options 
 		dynamicconfig.EnableEagerWorkflowStart.Key():                true,
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key():     true,
 	})
-	maps.Copy(clusterConfig.DynamicConfigOverrides, params.DynamicConfigOverrides)
+	maps.Copy(s.testClusterConfig.DynamicConfigOverrides, params.DynamicConfigOverrides)
 
-	clusterConfig.ServiceFxOptions = params.ServiceOptions
-	clusterConfig.EnableMetricsCapture = true
-	s.testClusterConfig = clusterConfig
+	s.testClusterConfig.ServiceFxOptions = params.ServiceOptions
+	s.testClusterConfig.EnableMetricsCapture = true
 
-	cluster, err := s.testClusterFactory.NewCluster(s.T(), clusterConfig, s.Logger)
+	s.testClusterFactory = NewTestClusterFactory()
+
+	s.testCluster, err = s.testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
 	s.Require().NoError(err)
-	s.testCluster = cluster
-	s.frontendClient = s.testCluster.FrontendClient()
-	s.adminClient = s.testCluster.AdminClient()
-	s.operatorClient = s.testCluster.OperatorClient()
-	s.httpAPIAddress = cluster.Host().FrontendHTTPAddress()
 
+	// Setup test cluster namespaces.
 	s.namespace = namespace.Name(RandomizeStr("namespace"))
 	s.namespaceID, err = s.registerNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
@@ -235,7 +242,7 @@ func (s *FunctionalTestBase) SetupTestCluster(clusterConfigFile string, options 
 	_, err = s.registerNamespace(s.ForeignNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
-	if clusterConfig.EnableArchival {
+	if s.testClusterConfig.EnableArchival {
 		s.archivalNamespace = namespace.Name(RandomizeStr("archival-enabled-namespace"))
 		s.archivalNamespaceID, err = s.registerNamespace(
 			s.ArchivalNamespace(),
@@ -246,6 +253,13 @@ func (s *FunctionalTestBase) SetupTestCluster(clusterConfigFile string, options 
 		)
 		s.Require().NoError(err)
 	}
+
+	// Setup test cluster clients.
+	s.frontendClient = s.testCluster.FrontendClient()
+	s.adminClient = s.testCluster.AdminClient()
+	s.operatorClient = s.testCluster.OperatorClient()
+	s.httpAPIAddress = s.testCluster.Host().FrontendHTTPAddress()
+
 }
 
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
@@ -315,8 +329,7 @@ func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 	return params
 }
 
-// ReadTestClusterConfig return test cluster config
-func ReadTestClusterConfig(configFile string) (*TestClusterConfig, error) {
+func readTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	environment.SetupEnv()
 
 	configLocation := configFile
