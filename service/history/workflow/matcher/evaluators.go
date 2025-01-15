@@ -33,10 +33,10 @@ import (
 
 // Supported Fields
 const (
-	WorkflowID              = "WorkflowId"
-	WorkflowTypeName        = "WorkflowType"
-	WorkflowStartTime       = "StartTime"
-	WorkflowExecutionStatus = "ExecutionStatus"
+	WorkflowID              = searchattribute.WorkflowId
+	WorkflowTypeName        = searchattribute.WorkflowType
+	WorkflowStartTime       = searchattribute.StartTime
+	WorkflowExecutionStatus = searchattribute.ExecutionStatus
 )
 
 type (
