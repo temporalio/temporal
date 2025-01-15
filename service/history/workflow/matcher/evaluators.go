@@ -208,7 +208,7 @@ func (m *MutableStateMatchEvaluator) compareWorkflowID(workflowID string, operat
 	return m.compareWorkflowString(workflowID, existingWorkflowId, operation, WorkflowID)
 }
 
-func (m *MutableStateMatchEvaluator) compareWorkflowString(inStr string, expectedStr string, operation string, fieldName string) (bool, error) {
+func (m *MutableStateMatchEvaluator) compareString(inStr string, expectedStr string, operation string, fieldName string) (bool, error) {
 	if len(inStr) == 0 {
 		return false, NewMatcherError("%s cannot be empty", fieldName)
 	}
