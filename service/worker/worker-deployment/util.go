@@ -32,7 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	worker_deploymentspb "go.temporal.io/server/api/worker_deployment/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -146,8 +146,8 @@ func BuildQueryWithWorkerDeploymentFilter(workerDeploymentName string) string {
 	return query
 }
 
-func DecodeVersionMemo(memo *commonpb.Memo) *worker_deploymentspb.VersionWorkflowMemo {
-	var versionWorkflowMemo worker_deploymentspb.VersionWorkflowMemo
+func DecodeVersionMemo(memo *commonpb.Memo) *deploymentspb.VersionWorkflowMemo {
+	var versionWorkflowMemo deploymentspb.VersionWorkflowMemo
 	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[WorkerDeploymentVersionMemoField], &versionWorkflowMemo)
 	if err != nil {
 		return nil

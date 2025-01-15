@@ -28,7 +28,7 @@ import (
 	"context"
 
 	"go.temporal.io/sdk/activity"
-	worker_deploymentspb "go.temporal.io/server/api/worker_deployment/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -39,12 +39,13 @@ type (
 	}
 )
 
-func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *worker_deploymentspb.SyncVersionStateActivityArgs) (*worker_deploymentspb.SyncVersionStateActivityResult, error) {
+func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
 	identity := "deployment series workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
 	res, err := a.deploymentClient.SyncVersionWorkflowFromWorkerDeployment(
 		ctx,
 		a.namespace,
-		args.Deployment,
+		args.DeploymentName,
+		args.Version,
 		args.Args,
 		identity,
 		args.RequestId,
@@ -52,7 +53,7 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *work
 	if err != nil {
 		return nil, err
 	}
-	return &worker_deploymentspb.SyncVersionStateActivityResult{
+	return &deploymentspb.SyncVersionStateActivityResult{
 		VersionState: res.VersionState,
 	}, nil
 }

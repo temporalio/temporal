@@ -30,8 +30,8 @@ import (
 	"sync"
 
 	"go.temporal.io/sdk/activity"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	worker_deploymentspb "go.temporal.io/server/api/worker_deployment/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
 )
@@ -44,14 +44,20 @@ type (
 	}
 )
 
-func (a *VersionActivities) StartWorkerDeploymentWorkflow(ctx context.Context, input *worker_deploymentspb.StartWorkerDeploymentRequest) error {
+func (a *VersionActivities) StartWorkerDeploymentWorkflow(
+	ctx context.Context,
+	input *deploymentspb.StartWorkerDeploymentRequest,
+) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("starting deployment series workflow", "seriesName", input.SeriesName)
+	logger.Info("starting deployment workflow", "deploymentName", input.DeploymentName)
 	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.deploymentClient.Start(ctx, a.namespace, input.SeriesName, identity, input.RequestId)
+	return a.deploymentClient.Start(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
 }
 
-func (a *VersionActivities) SyncWorkerDeploymentUserData(ctx context.Context, input *worker_deploymentspb.SyncUserDataRequest) (*worker_deploymentspb.SyncUserDataResponse, error) {
+func (a *VersionActivities) SyncWorkerDeploymentUserData(
+	ctx context.Context,
+	input *deploymentspb.SyncWorkerDeploymentUserDataRequest,
+) (*deploymentspb.SyncWorkerDeploymentUserDataResponse, error) {
 	logger := activity.GetLogger(ctx)
 
 	errs := make(chan error)
@@ -60,13 +66,13 @@ func (a *VersionActivities) SyncWorkerDeploymentUserData(ctx context.Context, in
 	maxVersionByName := make(map[string]int64)
 
 	for _, e := range input.Sync {
-		go func(syncData *worker_deploymentspb.SyncUserDataRequest_SyncUserData) {
+		go func(syncData *deploymentspb.SyncWorkerDeploymentUserDataRequest_SyncUserData) {
 			logger.Info("syncing task queue userdata for deployment", "taskQueue", syncData.Name, "type", syncData.Type)
 			res, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 				NamespaceId:   a.namespace.ID().String(),
 				TaskQueue:     syncData.Name,
 				TaskQueueType: syncData.Type,
-				Deployment:    input.Deployment,
+				//Deployment:    input.Deployment,
 				//Data:          syncData.Data,
 			})
 			if err != nil {
@@ -87,10 +93,10 @@ func (a *VersionActivities) SyncWorkerDeploymentUserData(ctx context.Context, in
 	if err != nil {
 		return nil, err
 	}
-	return &worker_deploymentspb.SyncUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
+	return &deploymentspb.SyncWorkerDeploymentUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
 }
 
-func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context.Context, input *worker_deploymentspb.CheckUserDataPropagationRequest) error {
+func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context.Context, input *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
 	logger := activity.GetLogger(ctx)
 
 	errs := make(chan error)
