@@ -258,10 +258,10 @@ func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersio
 			}
 		}
 	}
-	//if args.UpdateMetadata != nil {
+	// if args.UpdateMetadata != nil {
 	//	// can't compare payloads, just assume it changes something
 	//	return nil
-	//}
+	// }
 	// return current state along with "no change"
 	res := &deploymentspb.SyncVersionStateResponse{VersionState: d.VersionState}
 	return temporal.NewApplicationError("no change", errNoChangeType, res)

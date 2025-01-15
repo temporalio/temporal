@@ -796,7 +796,7 @@ func stateToInfo(state *deploymentspb.VersionLocalState) *deploymentpb.Deploymen
 
 	taskQueues := make([]*deploymentpb.DeploymentInfo_TaskQueueInfo, 0, len(state.TaskQueueFamilies)*2)
 	for taskQueueName, taskQueueFamilyInfo := range state.TaskQueueFamilies {
-		for taskQueueType, _ := range taskQueueFamilyInfo.TaskQueues {
+		for taskQueueType := range taskQueueFamilyInfo.TaskQueues {
 			element := &deploymentpb.DeploymentInfo_TaskQueueInfo{
 				Name: taskQueueName,
 				Type: enumspb.TaskQueueType(taskQueueType),

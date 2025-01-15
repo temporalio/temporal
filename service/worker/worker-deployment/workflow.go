@@ -119,29 +119,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.lock.Unlock()
 	}()
 
-	//var curState, prevState *deploymentspb.VersionLocalState
-	//prevCurrent := d.State.CurrentVersion
-	//
-	//// update local state
-	//d.State.CurrentVersion = args.Version
-	//d.State.CurrentChangedTime = timestamppb.New(workflow.Now(ctx))
-	//
-	//// update memo
-	//if err = d.updateMemo(ctx); err != nil {
-	//	return nil, err
-	//}
-	//
-	//// tell new current that it's current
-	//if curState, err = d.syncVersion(ctx, d.State.CurrentBuildId, args.UpdateMetadata); err != nil {
-	//	return nil, err
-	//}
-	//
-	//if prevCurrent != "" {
-	//	// tell previous current that it's no longer current
-	//	if prevState, err = d.syncVersion(ctx, prevCurrent, nil); err != nil {
-	//		return nil, err
-	//	}
-	//}
+	// do work
 
 	return &deploymentspb.SetCurrentVersionResponse{}, nil
 }

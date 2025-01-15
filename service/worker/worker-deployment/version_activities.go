@@ -72,8 +72,8 @@ func (a *VersionActivities) SyncWorkerDeploymentUserData(
 				NamespaceId:   a.namespace.ID().String(),
 				TaskQueue:     syncData.Name,
 				TaskQueueType: syncData.Type,
-				//Deployment:    input.Deployment,
-				//Data:          syncData.Data,
+				// Deployment:    input.Deployment,
+				// Data:          syncData.Data,
 			})
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
