@@ -40,7 +40,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -71,8 +70,8 @@ import (
 
 type (
 	DLQSuite struct {
-		testcore.FunctionalTestBase
-		*require.Assertions
+		testcore.FunctionalSuite
+
 		dlq              persistence.HistoryTaskQueueManager
 		dlqTasks         chan tasks.Task
 		writer           bytes.Buffer
@@ -122,12 +121,14 @@ func TestDLQSuite(t *testing.T) {
 }
 
 func (s *DLQSuite) SetupSuite() {
-	s.setAssertions()
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.HistoryTaskDLQEnabled.Key(): true,
+	}
 	s.dlqTasks = make(chan tasks.Task)
 	testPrefix := "dlq-test-terminal-wfts-"
 	s.failingWorkflowIDPrefix.Store(&testPrefix)
-	s.FunctionalTestBase.SetupSuite(
-		"testdata/es_cluster.yaml",
+	s.FunctionalSuite.SetupDefaultTestCluster(
+		testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
 			fx.Provide(
@@ -158,10 +159,6 @@ func (s *DLQSuite) SetupSuite() {
 			fx.Populate(&s.sdkClientFactory),
 		),
 	)
-	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
-		dynamicconfig.HistoryTaskDLQEnabled.Key(): true,
-	})
-
 	s.tdbgApp = tdbgtest.NewCliApp(
 		func(params *tdbg.Params) {
 			params.ClientFactory = tdbg.NewClientFactory(tdbg.WithFrontendAddress(s.FrontendGRPCAddress()))
@@ -180,7 +177,7 @@ func (s *DLQSuite) SetupSuite() {
 
 func (s *DLQSuite) TearDownSuite() {
 	s.worker.Stop()
-	s.FunctionalTestBase.TearDownSuite()
+	s.FunctionalSuite.TearDownSuite()
 }
 
 func myWorkflow(workflow.Context) (string, error) {
@@ -188,15 +185,10 @@ func myWorkflow(workflow.Context) (string, error) {
 }
 
 func (s *DLQSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
+	s.FunctionalSuite.SetupTest()
 
-	s.setAssertions()
 	s.deleteBlockCh = make(chan interface{})
 	close(s.deleteBlockCh)
-}
-
-func (s *DLQSuite) setAssertions() {
-	s.Assertions = require.New(s.T())
 }
 
 func (s *DLQSuite) TestReadArtificialDLQTasks() {

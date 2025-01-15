@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -74,9 +73,8 @@ worker restart/long-poll activity failure:
 
 type (
 	ScheduleFunctionalSuite struct {
-		protorequire.ProtoAssertions
-		historyrequire.HistoryRequire
-		testcore.FunctionalTestBase
+		testcore.FunctionalSuite
+
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
 		taskQueue     string
@@ -91,24 +89,17 @@ func TestScheduleFunctionalSuite(t *testing.T) {
 
 func (s *ScheduleFunctionalSuite) SetupSuite() {
 	if testcore.UsingSQLAdvancedVisibility() {
-		s.FunctionalTestBase.SetupSuite("testdata/cluster.yaml")
+		s.FunctionalSuite.SetupTestCluster("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
 	} else {
-		s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+		s.FunctionalSuite.SetupTestCluster("testdata/es_cluster.yaml")
 		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
 	}
 }
 
-func (s *ScheduleFunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
 func (s *ScheduleFunctionalSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
+	s.FunctionalSuite.SetupTest()
 
-	s.ProtoAssertions = protorequire.New(s.T())
-	s.HistoryRequire = historyrequire.New(s.T())
-	s.dataConverter = testcore.NewTestDataConverter()
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:      s.FrontendGRPCAddress(),
 		Namespace:     s.Namespace().String(),
@@ -120,7 +111,7 @@ func (s *ScheduleFunctionalSuite) SetupTest() {
 	s.sdkClient = sdkClient
 	s.taskQueue = testcore.RandomizeStr("tq")
 	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{})
-	if err := s.worker.Start(); err != nil {
+	if err = s.worker.Start(); err != nil {
 		s.Logger.Fatal("Error when starting worker", tag.Error(err))
 	}
 }

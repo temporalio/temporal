@@ -51,11 +51,11 @@ func TestTLSFunctionalSuite(t *testing.T) {
 }
 
 func (s *TLSFunctionalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/tls_cluster.yaml")
+	s.FunctionalTestBase.SetupTestCluster("testdata/tls_cluster.yaml")
 }
 
 func (s *TLSFunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
+	s.FunctionalTestBase.TearDownCluster()
 }
 
 func (s *TLSFunctionalSuite) SetupTest() {

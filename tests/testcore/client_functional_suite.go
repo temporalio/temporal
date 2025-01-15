@@ -69,10 +69,8 @@ func (s *ClientFunctionalSuite) TaskQueue() string {
 }
 
 func (s *ClientFunctionalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/client_cluster.yaml")
-
 	// these limits are higher in production, but our tests would take too long if we set them that high
-	s.testClusterConfig.SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.NumPendingChildExecutionsLimitError.Key():             ClientSuiteLimit,
 		dynamicconfig.NumPendingActivitiesLimitError.Key():                  ClientSuiteLimit,
 		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              ClientSuiteLimit,
@@ -82,17 +80,18 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-		// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
-		nexusoperations.CallbackURLTemplate.Key(): "http://" + s.HttpAPIAddress() + "/namespaces/{{.NamespaceName}}/nexus/callback",
-	})
-}
+	}
 
-func (s *ClientFunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
+	s.FunctionalTestBase.SetupTestCluster("testdata/client_cluster.yaml", WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *ClientFunctionalSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
+
+	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
+	s.OverrideDynamicConfig(
+		nexusoperations.CallbackURLTemplate,
+		"http://"+s.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	var err error
 	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
@@ -119,10 +118,6 @@ func (s *ClientFunctionalSuite) TearDownTest() {
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
-}
-
-func (s *ClientFunctionalSuite) SetupSubTest() {
-	s.FunctionalTestBase.SetupSubTest()
 }
 
 func (s *ClientFunctionalSuite) EventuallySucceeds(ctx context.Context, operationCtx backoff.OperationCtx) {

@@ -90,11 +90,12 @@ type (
 		archivalNamespace   namespace.Name
 		archivalNamespaceID namespace.ID
 	}
-	// TestClusterParams contains the variables which are used to configure test suites via the Option type.
+	// TestClusterParams contains the variables which are used to configure test suites via the TestClusterOption type.
 	TestClusterParams struct {
-		ServiceOptions map[primitives.ServiceName][]fx.Option
+		ServiceOptions         map[primitives.ServiceName][]fx.Option
+		DynamicConfigOverrides map[dynamicconfig.Key]any
 	}
-	Option func(params *TestClusterParams)
+	TestClusterOption func(params *TestClusterParams)
 )
 
 // WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
@@ -108,9 +109,15 @@ type (
 // This is similar to the pattern of plumbing dependencies through the TestClusterConfig, but it's much more convenient,
 // scalable and flexible. The reason we need to do this on a per-service basis is that there are separate fx apps for
 // each one.
-func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) Option {
+func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
+	}
+}
+
+func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.DynamicConfigOverrides = overrides
 	}
 }
 
@@ -162,22 +169,35 @@ func (s *FunctionalTestBase) FrontendGRPCAddress() string {
 	return s.GetTestCluster().Host().FrontendGRPCAddress()
 }
 
-func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options ...Option) {
+func (s *FunctionalTestBase) SetupSuite() {
+	s.SetupDefaultTestCluster()
+}
+
+func (s *FunctionalTestBase) TearDownSuite() {
+	s.TearDownCluster()
+}
+
+func (s *FunctionalTestBase) SetupDefaultTestCluster(options ...TestClusterOption) {
+	// TODO: rename es_cluster.yaml to default_cluster.yaml
+	s.SetupTestCluster("testdata/es_cluster.yaml", options...)
+}
+func (s *FunctionalTestBase) SetupTestCluster(clusterConfigFile string, options ...TestClusterOption) {
 	s.testClusterFactory = NewTestClusterFactory()
 
-	params := ApplyTestClusterParams(options)
+	params := ApplyTestClusterOptions(options)
 
 	s.setupLogger()
 
-	clusterConfig, err := ReadTestClusterConfig(defaultClusterConfigFile)
+	clusterConfig, err := ReadTestClusterConfig(clusterConfigFile)
 	s.Require().NoError(err)
-	s.Empty(clusterConfig.DeprecatedFrontendAddress, "Functional tests against external frontends are not supported")
-	s.Empty(clusterConfig.DeprecatedClusterNo, "ClusterNo should not be present in cluster config files")
+	s.Require().Empty(clusterConfig.DeprecatedFrontendAddress, "Functional tests against external frontends are not supported")
+	s.Require().Empty(clusterConfig.DeprecatedClusterNo, "ClusterNo should not be present in cluster config files")
 
 	if clusterConfig.DynamicConfigOverrides == nil {
-		clusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
+		clusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
 
+	// TODO: clusterConfig shouldn't have DC at all.
 	maps.Copy(clusterConfig.DynamicConfigOverrides, map[dynamicconfig.Key]any{
 		dynamicconfig.HistoryScannerEnabled.Key():    false,
 		dynamicconfig.TaskQueueScannerEnabled.Key():  false,
@@ -189,6 +209,7 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 		dynamicconfig.EnableEagerWorkflowStart.Key():                true,
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key():     true,
 	})
+	maps.Copy(clusterConfig.DynamicConfigOverrides, params.DynamicConfigOverrides)
 
 	clusterConfig.ServiceFxOptions = params.ServiceOptions
 	clusterConfig.EnableMetricsCapture = true
@@ -280,7 +301,7 @@ func (s *FunctionalTestBase) checkTestShard() {
 	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index+1, total)
 }
 
-func ApplyTestClusterParams(options []Option) TestClusterParams {
+func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 	params := TestClusterParams{
 		ServiceOptions: make(map[primitives.ServiceName][]fx.Option),
 	}
@@ -343,7 +364,7 @@ func ReadTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	return &clusterConfig, nil
 }
 
-func (s *FunctionalTestBase) TearDownSuite() {
+func (s *FunctionalTestBase) TearDownCluster() {
 	s.Require().NoError(s.markNamespaceAsDeleted(s.Namespace()))
 	s.Require().NoError(s.markNamespaceAsDeleted(s.ForeignNamespace()))
 	if s.ArchivalNamespace() != namespace.EmptyName {

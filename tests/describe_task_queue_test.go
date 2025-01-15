@@ -29,7 +29,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -45,29 +44,13 @@ import (
 
 type (
 	DescribeTaskQueueSuite struct {
-		*require.Assertions
-		testcore.FunctionalTestBase
+		testcore.FunctionalSuite
 	}
 )
 
 func TestDescribeTaskQueueSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(DescribeTaskQueueSuite))
-}
-
-func (s *DescribeTaskQueueSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
-
-func (s *DescribeTaskQueueSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *DescribeTaskQueueSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
 }
 
 func (s *DescribeTaskQueueSuite) TestNonRootLegacy() {

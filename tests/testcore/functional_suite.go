@@ -36,19 +36,7 @@ type (
 	}
 )
 
-func (s *FunctionalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
-
-func (s *FunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
 func (s *FunctionalSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 	s.TaskPoller = taskpoller.New(s.T(), s.client, s.Namespace().String())
-}
-
-func (s *FunctionalSuite) SetupSubTest() {
-	s.FunctionalTestBase.SetupSubTest()
 }

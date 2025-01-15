@@ -63,9 +63,7 @@ import (
 )
 
 type VersioningIntegSuite struct {
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-	// not merely log an error
-	testcore.FunctionalTestBase
+	testcore.FunctionalSuite
 	sdkClient sdkclient.Client
 }
 
@@ -85,9 +83,7 @@ func TestVersioningFunctionalSuite(t *testing.T) {
 }
 
 func (s *VersioningIntegSuite) SetupSuite() {
-	// TODO: functional_suite?
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
@@ -127,15 +123,12 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// this is overridden since we don't want caching to be enabled while testing DescribeTaskQueue
 		// behaviour related to versioning
 		dynamicconfig.TaskQueueInfoByBuildIdTTL.Key(): 0 * time.Second,
-	})
-}
-
-func (s *VersioningIntegSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
+	}
+	s.FunctionalSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *VersioningIntegSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
+	s.FunctionalSuite.SetupTest()
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),

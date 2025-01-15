@@ -75,6 +75,7 @@ import (
 
 type (
 	NDCFunctionalTestSuite struct {
+		// TODO: use functional suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions

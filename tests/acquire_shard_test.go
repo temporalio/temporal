@@ -57,7 +57,7 @@ func (s *AcquireShardSuiteBase) SetupSuite() {
 func (s *AcquireShardSuiteBase) TearDownSuite() {
 	// we need to wait for all components to start before we can safely tear down
 	time.Sleep(time.Second * 5) //nolint:forbidigo
-	s.FunctionalTestBase.TearDownSuite()
+	s.FunctionalTestBase.TearDownCluster()
 }
 
 // newLogRecorder creates a new log recorder. It records all the logs to the given channel.
@@ -126,7 +126,7 @@ func TestAcquireShard_OwnershipLostErrorSuite(t *testing.T) {
 // SetupSuite reads the shard ownership lost error fault injection config from the testdata folder.
 func (s *OwnershipLostErrorSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuite("testdata/acquire_shard_ownership_lost_error.yaml")
+	s.FunctionalTestBase.SetupTestCluster("testdata/acquire_shard_ownership_lost_error.yaml")
 }
 
 // TestDoesNotRetry verifies that we do not retry acquiring the shard when we get an ownership lost error.
@@ -175,7 +175,7 @@ func TestAcquireShard_DeadlineExceededErrorSuite(t *testing.T) {
 // SetupSuite reads the deadline exceeded error targeted fault injection config from the test data folder.
 func (s *DeadlineExceededErrorSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuite("testdata/acquire_shard_deadline_exceeded_error.yaml")
+	s.FunctionalTestBase.SetupTestCluster("testdata/acquire_shard_deadline_exceeded_error.yaml")
 }
 
 // TestDoesRetry verifies that we do retry acquiring the shard when we get a deadline exceeded error because that should
@@ -226,7 +226,7 @@ func TestAcquireShard_EventualSuccess(t *testing.T) {
 // the next call to return a successful response.
 func (s *EventualSuccessSuite) SetupSuite() {
 	s.AcquireShardSuiteBase.SetupSuite()
-	s.FunctionalTestBase.SetupSuite("testdata/acquire_shard_eventual_success.yaml")
+	s.FunctionalTestBase.SetupTestCluster("testdata/acquire_shard_eventual_success.yaml")
 }
 
 // TestEventuallySucceeds verifies that we eventually succeed in acquiring the shard when we get a deadline exceeded

@@ -30,7 +30,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"path"
 	"testing"
@@ -127,10 +126,6 @@ const (
 	httpProtocol transferProtocol = "http"
 	grpcProtocol transferProtocol = "grpc"
 )
-
-func (c *TestClusterConfig) SetDynamicConfigOverrides(dynamicConfig map[dynamicconfig.Key]any) {
-	maps.Copy(c.DynamicConfigOverrides, dynamicConfig)
-}
 
 func (a *ArchiverBase) Metadata() archiver.ArchivalMetadata {
 	return a.metadata

@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -40,7 +39,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -61,27 +59,7 @@ func TestNexusEndpointsFunctionalSuite(t *testing.T) {
 }
 
 type NexusEndpointFunctionalSuite struct {
-	testcore.FunctionalTestBase
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-	// not merely log an error
-	*require.Assertions
-	protorequire.ProtoAssertions
-}
-
-func (s *NexusEndpointFunctionalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
-
-func (s *NexusEndpointFunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *NexusEndpointFunctionalSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
-	s.ProtoAssertions = protorequire.New(s.T())
+	testcore.FunctionalSuite
 }
 
 type CommonSuite struct {

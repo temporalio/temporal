@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -66,8 +65,7 @@ const (
 
 type (
 	ArchivalSuite struct {
-		*require.Assertions
-		testcore.FunctionalTestBase
+		testcore.FunctionalSuite
 	}
 
 	archivalWorkflowInfo struct {
@@ -83,22 +81,9 @@ func TestArchivalSuite(t *testing.T) {
 }
 
 func (s *ArchivalSuite) SetupSuite() {
-	// TODO: fuunctional_suite?
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	s.FunctionalSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
-	})
-}
-
-func (s *ArchivalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *ArchivalSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
+	}))
 }
 
 func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {

@@ -58,6 +58,7 @@ import (
 
 type (
 	namespaceTestSuite struct {
+		// TODO: functional suite. why not? reason?
 		*require.Assertions
 		suite.Suite
 

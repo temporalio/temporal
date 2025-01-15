@@ -35,7 +35,6 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -72,15 +71,10 @@ const (
 
 type (
 	DeploymentSuite struct {
-		testcore.FunctionalTestBase
-		*require.Assertions
+		testcore.FunctionalSuite
 		sdkClient sdkclient.Client
 	}
 )
-
-func (s *DeploymentSuite) setAssertions() {
-	s.Assertions = require.New(s.T())
-}
 
 func TestDeploymentSuite(t *testing.T) {
 	t.Parallel()
@@ -88,10 +82,7 @@ func TestDeploymentSuite(t *testing.T) {
 }
 
 func (s *DeploymentSuite) SetupSuite() {
-	s.setAssertions()
-	// TODO: functional suite?
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	s.FunctionalSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
@@ -109,16 +100,12 @@ func (s *DeploymentSuite) SetupSuite() {
 
 		// Reduce the chance of hitting max batch job limit in tests
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): maxConcurrentBatchOps,
-	})
-}
-
-func (s *DeploymentSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
+	}))
 }
 
 func (s *DeploymentSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-	s.setAssertions()
+	s.FunctionalSuite.SetupTest()
+
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),

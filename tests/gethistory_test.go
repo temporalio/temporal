@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -48,15 +47,12 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type RawHistorySuite struct {
-	*require.Assertions
-	testcore.FunctionalTestBase
-	historyrequire.HistoryRequire
+	testcore.FunctionalSuite
 }
 
 type RawHistoryClientSuite struct {
@@ -83,22 +79,10 @@ func TestGetHistoryFunctionalSuite(t *testing.T) {
 }
 
 func (s *RawHistorySuite) SetupSuite() {
-	// TODO: functional suite
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-	s.GetTestClusterConfig().SetDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.SendRawWorkflowHistory.Key(): true,
-	})
-}
-
-func (s *RawHistorySuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *RawHistorySuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	s.Assertions = require.New(s.T())
-	s.HistoryRequire = historyrequire.New(s.T())
+	}
+	s.FunctionalSuite.SetupDefaultTestCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_All() {
