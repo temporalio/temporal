@@ -337,7 +337,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		tc.ms.EXPECT().IsWorkflowExecutionRunning().AnyTimes().Return(true)
 
 		t.Log("create the expected protocol instance")
-		_, _, err := tc.updates.FindOrCreate(context.Background(), updateID, 0)
+		_, _, err := tc.updates.FindOrCreate(context.Background(), updateID)
 		require.NoError(t, err)
 
 		t.Log("delivering an acceptance message to an update in the admitted state should cause a protocol error")
@@ -380,7 +380,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		tc.ms.EXPECT().AddWorkflowExecutionUpdateAcceptedEvent(updateID, msgID, int64(2208), gomock.Any()).Return(&historypb.HistoryEvent{}, nil)
 
 		t.Log("create the expected protocol instance")
-		upd, _, err := tc.updates.FindOrCreate(context.Background(), updateID, 0)
+		upd, _, err := tc.updates.FindOrCreate(context.Background(), updateID)
 		require.NoError(t, err)
 		err = upd.Admit(req, workflow.WithEffects(effect.Immediate(context.Background()), tc.handler.mutableState))
 		require.NoError(t, err)
