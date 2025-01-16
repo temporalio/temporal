@@ -81,7 +81,7 @@ func TestDeploymentSuite(t *testing.T) {
 }
 
 func (s *DeploymentSuite) SetupSuite() {
-	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
@@ -99,7 +99,9 @@ func (s *DeploymentSuite) SetupSuite() {
 
 		// Reduce the chance of hitting max batch job limit in tests
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): maxConcurrentBatchOps,
-	}))
+	}
+
+	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *DeploymentSuite) SetupTest() {

@@ -36,6 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -59,6 +60,14 @@ type WorkflowDeleteExecutionSuite struct {
 func TestWorkflowDeleteExecutionSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(WorkflowDeleteExecutionSuite))
+}
+
+func (s *WorkflowDeleteExecutionSuite) SetupSuite() {
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.TransferProcessorUpdateAckInterval.Key():   1 * time.Second,
+		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(): 1 * time.Second,
+	}
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {

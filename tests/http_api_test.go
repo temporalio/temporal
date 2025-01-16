@@ -309,7 +309,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Shorthand(contentType string, pr
 }
 
 func (s *HttpApiTestSuite) TestHTTPHostValidation() {
-	s.GetTestCluster().OverrideDynamicConfig(s.T(), dynamicconfig.FrontendHTTPAllowedHosts, []string{"allowed"})
+	s.OverrideDynamicConfig(dynamicconfig.FrontendHTTPAllowedHosts, []string{"allowed"})
 	{
 		req, err := http.NewRequest("GET", "/system-info", nil)
 		s.Require().NoError(err)
