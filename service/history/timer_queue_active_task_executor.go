@@ -447,9 +447,11 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 		return err
 	}
 	if mutableState == nil {
+		release(nil)
 		return consts.ErrWorkflowExecutionNotFound
 	}
 	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil)
 		return consts.ErrWorkflowCompleted
 	}
 
@@ -479,6 +481,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 
 	if mutableState.HadOrHasWorkflowTask() {
 		// already has workflow task
+		release(nil)
 		return errNoTimerFired
 	}
 
