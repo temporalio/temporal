@@ -25,10 +25,6 @@ type (
 
 	generatorTaskExecutor struct {
 		GeneratorTaskExecutorOptions
-
-		// Prepended with common scheduler attributes. Should be set by every buffer
-		// task.
-		logger log.Logger
 	}
 )
 
@@ -45,7 +41,8 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 	if err != nil {
 		return err
 	}
-	e.logger = newTaggedLogger(e.BaseLogger, scheduler)
+	// Prepended with common scheduler attributes.
+	logger := newTaggedLogger(e.BaseLogger, scheduler)
 
 	generator, err := e.loadGenerator(node)
 	if err != nil {
@@ -54,17 +51,17 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 
 	// If we have no last processed time, this is a new schedule.
 	if generator.LastProcessedTime == nil {
-		generator.LastProcessedTime = timestamppb.Now()
+		generator.LastProcessedTime = timestamppb.New(env.Now())
 		// TODO - update schedule info with create time
 
-		e.logSchedule("Starting schedule", scheduler)
+		e.logSchedule(logger, "Starting schedule", scheduler)
 	}
 
 	// Process time range between last high water mark and system time.
 	t1 := generator.LastProcessedTime.AsTime()
 	t2 := env.Now().UTC()
 	if t2.Before(t1) {
-		e.logger.Warn("Time went backwards",
+		logger.Warn("Time went backwards",
 			tag.NewStringTag("time", t1.String()),
 			tag.NewStringTag("time", t2.String()))
 		t2 = t1
@@ -73,7 +70,7 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 	res, err := e.SpecProcessor.ProcessTimeRange(scheduler, t1, t2, false, nil)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
-		e.logger.Error("Error processing time range", tag.Error(err))
+		logger.Error("Error processing time range", tag.Error(err))
 
 		return fmt.Errorf(
 			"%w: %w",
@@ -93,8 +90,8 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 	}
 	err = hsm.MachineTransition(executorNode, func(e Executor) (hsm.TransitionOutput, error) {
 		return TransitionExecute.Apply(e, EventExecute{
-			Node:            executorNode,
-			BufferedActions: res.BufferedStarts,
+			Node:           executorNode,
+			BufferedStarts: res.BufferedStarts,
 		})
 	})
 	if err != nil {
@@ -111,7 +108,7 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 		g.LastProcessedTime = timestamppb.New(res.LastActionTime)
 		g.NextInvocationTime = timestamppb.New(wakeupTime)
 
-		e.logger.Debug("Sleeping after buffering",
+		logger.Debug("Sleeping after buffering",
 			tag.NewTimeTag("wakeupTime", wakeupTime))
 
 		return g.output()
@@ -126,11 +123,11 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 	return nil
 }
 
-func (e generatorTaskExecutor) logSchedule(msg string, scheduler Scheduler) {
+func (e generatorTaskExecutor) logSchedule(logger log.Logger, msg string, scheduler Scheduler) {
 	// Log spec as json since it's more readable than the Go representation.
 	specJson, _ := protojson.Marshal(scheduler.Schedule.Spec)
 	policiesJson, _ := protojson.Marshal(scheduler.Schedule.Policies)
-	e.logger.Debug(msg,
+	logger.Debug(msg,
 		tag.NewStringTag("spec", string(specJson)),
 		tag.NewStringTag("policies", string(policiesJson)))
 }
