@@ -5342,21 +5342,41 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 
 	s.Run("return update rate limit error", func() {
 		// lower maximum total number of updates for testing purposes
-		maxTotalUpdates := 0
+		maxTotalUpdates := 1
 		cleanup := s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, maxTotalUpdates)
 		defer cleanup()
 
+		ctx := testcore.NewContext()
 		tv := testvars.New(s.T())
-
 		startReq := startWorkflowReq(tv)
-		updateReq := s.updateWorkflowRequest(tv,
-			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-		err := (<-sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)).err
-		s.Error(err)
-		errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
-		s.Len(errs, 2)
-		s.Equal("Operation was aborted.", errs[0].Error())
-		s.Contains(errs[1].Error(), "limit on the total number of distinct updates in this workflow has been reached")
+		startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+
+		// allows 1st
+		updateReq := s.updateWorkflowRequest(tv.WithUpdateIDNumber(0),
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
+		uwsCh := sendUpdateWithStart(ctx, startReq, updateReq)
+		_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
+				}, nil
+			})
+		uwsRes := <-uwsCh
+		s.NoError(uwsRes.err)
+
+		// denies 2nd
+		updateReq = s.updateWorkflowRequest(tv.WithUpdateIDNumber(1), updateReq.WaitPolicy)
+		select {
+		case <-sendUpdateWithStart(ctx, startReq, updateReq):
+			err = (<-sendUpdateWithStart(ctx, startReq, updateReq)).err
+			s.Error(err)
+			errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
+			s.Len(errs, 2)
+			s.Equal("Operation was aborted.", errs[0].Error())
+			s.Contains(errs[1].Error(), "limit on the total number of distinct updates in this workflow has been reached")
+		case <-ctx.Done():
+			s.Fail("timed out waiting for update")
+		}
 	})
 }
 
