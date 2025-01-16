@@ -133,12 +133,8 @@ type (
 		clusterMetadata                 cluster.Metadata
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
-<<<<<<< HEAD
-		deploymentStoreClient           deployment.DeploymentStoreClient
-=======
 		deploymentStoreClient           deployment.DeploymentStoreClient // [cleanup-wv-pre-release]
 		workerDeploymentClient          workerdeployment.Client
->>>>>>> 9bae8ae984 (renaming deployment entity wfs)
 		archiverProvider                provider.ArchiverProvider
 		payloadSerializer               serialization.Serializer
 		namespaceRegistry               namespace.Registry

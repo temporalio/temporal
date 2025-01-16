@@ -74,25 +74,11 @@ type Client interface {
 		version string,
 	) (*deploymentpb.WorkerDeploymentVersionInfo, error)
 
-	ListVersions(
-		ctx context.Context,
-		namespaceEntry *namespace.Namespace,
-		seriesName string,
-		pageSize int,
-		nextPageToken []byte,
-	) ([]*deploymentpb.DeploymentListInfo, []byte, error)
-
-	GetVersionReachability(
-		ctx context.Context,
-		namespaceEntry *namespace.Namespace,
-		seriesName string,
-		buildID string,
-	) (*workflowservice.GetDeploymentReachabilityResponse, error)
-
 	SetCurrentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		deployment *deploymentpb.Deployment,
+		deploymentName string,
+		version string,
 		updateMetadata *deploymentpb.UpdateDeploymentMetadata,
 		identity string,
 		requestID string,
@@ -292,7 +278,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	requestID string,
 ) (_ *deploymentpb.WorkerDeploymentVersionInfo, _ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("SetCurrentDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
+	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
 		Identity:  identity,
