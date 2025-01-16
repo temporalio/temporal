@@ -134,7 +134,8 @@ func (u *Updater) ApplyRequest(
 	}
 
 	u.wfKey = ms.GetWorkflowKey()
-	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
+	updateRequest := u.req.GetRequest().GetRequest()
+	updateID := updateRequest.GetMeta().GetUpdateId()
 
 	if !ms.IsWorkflowExecutionRunning() {
 		// If the WF is not running anymore, use an existing Update, if it exists for the requested ID.
@@ -174,10 +175,12 @@ func (u *Updater) ApplyRequest(
 		alreadyExisted bool
 		err            error
 	)
-	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
+	// Calling Size() is returning a cached value when being called on a decoded proto message, ie performant.
+	requestPayloadBytes := updateRequest.Size()
+	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID, requestPayloadBytes); err != nil {
 		return nil, err
 	}
-	if err = u.upd.Admit(u.req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
 	}
 

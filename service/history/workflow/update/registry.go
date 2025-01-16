@@ -54,7 +54,7 @@ type (
 		// return value (bool) indicates whether the Update returned already
 		// existed and was found (true) or was not found and has been newly
 		// created (false).
-		FindOrCreate(ctx context.Context, updateID string) (_ *Update, alreadyExisted bool, _ error)
+		FindOrCreate(ctx context.Context, updateID string, payloadBytes int) (_ *Update, alreadyExisted bool, _ error)
 
 		// Find an existing Update in this Registry.
 		// Returns nil if Update doesn't exist.
@@ -110,11 +110,12 @@ type (
 		// and completed Updates are loaded. Practically it is a Mutable State.
 		store UpdateStore
 
-		instrumentation instrumentation
-		maxInFlight     func() int
-		maxTotal        func() int
-		completedCount  int
-		failoverVersion int64
+		instrumentation      instrumentation
+		maxInFlight          func() int
+		maxTotal             func() int
+		maxRegistrySizeLimit func() int
+		completedCount       int
+		failoverVersion      int64
 	}
 
 	Option func(*registry)
@@ -127,6 +128,14 @@ var _ Registry = (*registry)(nil)
 func WithInFlightLimit(f func() int) Option {
 	return func(r *registry) {
 		r.maxInFlight = f
+	}
+}
+
+// WithRegistrySizeLimit provides an optional limit to the total payload size of incomplete
+// Updates that a Registry instance will allow.
+func WithRegistrySizeLimit(f func() int) Option {
+	return func(r *registry) {
+		r.maxRegistrySizeLimit = f
 	}
 }
 
@@ -164,12 +173,13 @@ func NewRegistry(
 	opts ...Option,
 ) Registry {
 	r := &registry{
-		updates:         make(map[string]*Update),
-		store:           store,
-		instrumentation: noopInstrumentation,
-		maxInFlight:     func() int { return 0 }, // ie disabled
-		maxTotal:        func() int { return math.MaxInt },
-		failoverVersion: store.GetCurrentVersion(),
+		updates:              make(map[string]*Update),
+		store:                store,
+		instrumentation:      noopInstrumentation,
+		maxRegistrySizeLimit: func() int { return 0 },           // ie disabled
+		maxInFlight:          func() int { return 0 },           // ie disabled
+		maxTotal:             func() int { return math.MaxInt }, // ie limitless
+		failoverVersion:      store.GetCurrentVersion(),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -212,11 +222,11 @@ func NewRegistry(
 	return r
 }
 
-func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
+func (r *registry) FindOrCreate(ctx context.Context, id string, payloadBytes int) (*Update, bool, error) {
 	if upd := r.Find(ctx, id); upd != nil {
 		return upd, true, nil
 	}
-	if err := r.checkLimits(); err != nil {
+	if err := r.checkLimits(payloadBytes); err != nil {
 		return nil, false, err
 	}
 	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
@@ -382,11 +392,14 @@ func (r *registry) remover(id string) updateOpt {
 	)
 }
 
-func (r *registry) checkLimits() error {
+func (r *registry) checkLimits(payloadBytes int) error {
 	if err := r.checkInflightLimit(); err != nil {
 		return err
 	}
-	return r.checkTotalLimit()
+	if err := r.checkTotalLimit(); err != nil {
+		return err
+	}
+	return r.checkRegistrySizeLimit(payloadBytes) // last, as it's the most expensive check
 }
 
 func (r *registry) checkInflightLimit() error {
@@ -402,6 +415,20 @@ func (r *registry) checkInflightLimit() error {
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", maxInFlight),
 		}
+	}
+	return nil
+}
+
+func (r *registry) checkRegistrySizeLimit(payloadBytes int) error {
+	maxRegistrySize := r.maxRegistrySizeLimit()
+	if maxRegistrySize == 0 {
+		// limit is disabled
+		return nil
+	}
+	registrySize := r.GetSize()
+	if registrySize+payloadBytes >= maxRegistrySize {
+		r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes)
+		// TODO: return serviceerror.ResourceExhausted
 	}
 	return nil
 }

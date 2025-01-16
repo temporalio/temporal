@@ -363,8 +363,9 @@ type Config struct {
 	ArchivalBackendMaxRPS                               dynamicconfig.FloatPropertyFn
 	ArchivalQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 
-	WorkflowExecutionMaxInFlightUpdates dynamicconfig.IntPropertyFnWithNamespaceFilter
-	WorkflowExecutionMaxTotalUpdates    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxInFlightUpdates        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxInFlightUpdatePayloads dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxTotalUpdates           dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -674,8 +675,9 @@ func NewConfig(
 		ArchivalQueueMaxReaderCount:                         dynamicconfig.ArchivalQueueMaxReaderCount.Get(dc),
 
 		// workflow update related
-		WorkflowExecutionMaxInFlightUpdates: dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
-		WorkflowExecutionMaxTotalUpdates:    dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
+		WorkflowExecutionMaxInFlightUpdates:        dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
+		WorkflowExecutionMaxInFlightUpdatePayloads: dynamicconfig.WorkflowExecutionMaxInFlightUpdatePayloads.Get(dc),
+		WorkflowExecutionMaxTotalUpdates:           dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
 
 		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
