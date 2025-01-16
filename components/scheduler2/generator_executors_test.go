@@ -87,13 +87,15 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	require.True(t, generator.NextInvocationTime.AsTime().After(newHighWatermark))
 
 	// A single task should have been enqueued.
-	outputs := generatorNode.Outputs()
-	require.Equal(t, 1, len(outputs))
-	require.Equal(t, 1, len(outputs[0].Outputs))
-	require.Equal(t, 1, len(outputs[0].Outputs[0].Tasks))
+	opLog, err := generatorNode.Outputs()
+	require.NoError(t, err)
+	require.Equal(t, 1, len(opLog))
+	output, ok := opLog[0].(hsm.TransitionOperation)
+	require.True(t, ok)
+	require.Equal(t, 1, len(output.Output.Tasks))
 
 	// The buffer task should have a deadline on our next invocation time.
-	task := outputs[0].Outputs[0].Tasks[0]
+	task := output.Output.Tasks[0]
 	require.Equal(t, scheduler2.TaskTypeBuffer, task.Type())
 	require.Equal(t, generator.NextInvocationTime.AsTime(), task.Deadline())
 }
