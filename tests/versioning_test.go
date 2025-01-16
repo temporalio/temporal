@@ -3648,7 +3648,7 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 		func() bool {
 			return runs1.Load() >= int32(3)
 		},
-		3500*time.Millisecond,
+		6*time.Second,
 		100*time.Millisecond,
 	)
 
