@@ -39,6 +39,8 @@ var (
 	// 2. Per test suite using SetupSuiteWithCluster() and WithDynamicConfigOverrides() option.
 	// 3. Per test using s.OverrideDynamicConfig() method.
 	// 4. Per specific cluster per test (if test has more than one default cluster) using cluster.OverrideDynamicConfig() method.
+	//
+	// NOTE: settings which are not really dynamic (requires server restart to take effect) can't be overridden on test level.
 	dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendRPS.Key():                                         3000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
@@ -64,11 +66,18 @@ var (
 		dynamicconfig.TaskQueueScannerEnabled.Key():                             false,
 		dynamicconfig.ExecutionsScannerEnabled.Key():                            false,
 		dynamicconfig.BuildIdScavengerEnabled.Key():                             false,
+
 		// Better to read through in tests than add artificial sleeps (which is what we previously had).
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
-		dynamicconfig.RetentionTimerJitterDuration.Key():            time.Second,
-		dynamicconfig.EnableEagerWorkflowStart.Key():                true,
-		dynamicconfig.FrontendEnableExecuteMultiOperation.Key():     true,
-		dynamicconfig.ActivityAPIsEnabled.Key():                     true,
+
+		// These 2 are needed for DeleteWorkflowExecution and DeleteNamespace tests.
+		// They are not really dynamic and can't be set on test level after the cluster has started.
+		dynamicconfig.TransferProcessorUpdateAckInterval.Key():   1 * time.Second,
+		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(): 1 * time.Second,
+
+		dynamicconfig.RetentionTimerJitterDuration.Key():        time.Second,
+		dynamicconfig.EnableEagerWorkflowStart.Key():            true,
+		dynamicconfig.FrontendEnableExecuteMultiOperation.Key(): true,
+		dynamicconfig.ActivityAPIsEnabled.Key():                 true,
 	}
 )

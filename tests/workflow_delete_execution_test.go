@@ -62,14 +62,6 @@ func TestWorkflowDeleteExecutionSuite(t *testing.T) {
 	suite.Run(t, new(WorkflowDeleteExecutionSuite))
 }
 
-func (s *WorkflowDeleteExecutionSuite) SetupSuite() {
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.TransferProcessorUpdateAckInterval.Key():   1 * time.Second,
-		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(): 1 * time.Second,
-	}
-	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-}
-
 func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
 	tv := testvars.New(s.T())
 
