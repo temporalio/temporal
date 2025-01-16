@@ -696,6 +696,11 @@ pollLoop:
 					tag.Error(err),
 				)
 				task.finish(nil, false)
+			case *serviceerror.ResourceExhausted:
+				// If history returns one ResourceExhausted, it's likely to return more if we retry
+				// immediately. Instead, return the error to the client which will back off.
+				task.finish(err, false)
+				return nil, err
 			default:
 				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
@@ -894,6 +899,11 @@ pollLoop:
 					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
 				)
 				task.finish(nil, false)
+			case *serviceerror.ResourceExhausted:
+				// If history returns one ResourceExhausted, it's likely to return more if we retry
+				// immediately. Instead, return the error to the client which will back off.
+				task.finish(err, false)
+				return nil, err
 			default:
 				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
