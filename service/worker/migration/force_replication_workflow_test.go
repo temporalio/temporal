@@ -56,7 +56,7 @@ import (
 func TestForceReplicationWorkflow(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
-	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: ForceTaskQueueUserDataReplicationWorkflow})
+	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 	namespaceID := uuid.New()
 
 	var a *activities
@@ -234,7 +234,7 @@ func testRunForceReplicationForContinueAsNew(t *testing.T,
 ) (*ForceReplicationParams, ForceReplicationStatus) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
-	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: ForceTaskQueueUserDataReplicationWorkflow})
+	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 	namespaceID := uuid.New()
 
 	var a *activities
@@ -307,7 +307,7 @@ func TestForceReplicationWorkflow_InvalidInput(t *testing.T) {
 func TestForceReplicationWorkflow_ListWorkflowsError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
-	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: ForceTaskQueueUserDataReplicationWorkflow})
+	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 	namespaceID := uuid.New()
 
 	var a *activities
@@ -338,7 +338,7 @@ func TestForceReplicationWorkflow_ListWorkflowsError(t *testing.T) {
 func TestForceReplicationWorkflow_GenerateReplicationTaskRetryableError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
-	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: ForceTaskQueueUserDataReplicationWorkflow})
+	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 	namespaceID := uuid.New()
 
 	var a *activities
@@ -386,7 +386,7 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskRetryableError(t *testi
 func TestForceReplicationWorkflow_GenerateReplicationTaskNonRetryableError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
-	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: ForceTaskQueueUserDataReplicationWorkflow})
+	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 	namespaceID := uuid.New()
 
 	var a *activities
@@ -441,7 +441,7 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskNonRetryableError(t *te
 func TestForceReplicationWorkflow_VerifyReplicationTaskNonRetryableError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
-	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: ForceTaskQueueUserDataReplicationWorkflow})
+	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 	namespaceID := uuid.New()
 
 	var a *activities
@@ -497,7 +497,7 @@ func TestForceReplicationWorkflow_VerifyReplicationTaskNonRetryableError(t *test
 func TestForceReplicationWorkflow_TaskQueueReplicationFailure(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
-	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: ForceTaskQueueUserDataReplicationWorkflow})
+	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
 	namespaceID := uuid.New()
 
 	var a *activities
