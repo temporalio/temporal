@@ -39,6 +39,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+	"google.golang.org/grpc/metadata"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -52,7 +54,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"google.golang.org/grpc/metadata"
 )
 
 type (
