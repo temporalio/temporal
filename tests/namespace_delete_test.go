@@ -70,6 +70,9 @@ func (s *namespaceTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		// Run tests at full speed.
 		dynamicconfig.DeleteNamespaceDeleteActivityRPS.Key(): 1000000,
+
+		dynamicconfig.TransferProcessorUpdateAckInterval.Key():   1 * time.Second,
+		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(): 1 * time.Second,
 	}
 
 	if testcore.UsingSQLAdvancedVisibility() {

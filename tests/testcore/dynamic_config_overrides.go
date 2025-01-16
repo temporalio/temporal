@@ -32,15 +32,21 @@ import (
 )
 
 var (
-	// Functional tests don't use any dynamic config files. All settings get their default values
-	// (defined where setting is declared), besides those which are overridden.
+	// Functional tests don't use dynamic config files. All settings get their default values
+	// defined in common/dynamicconfig/constants.go.
 	// There are 4 ways to override a setting:
 	// 1. Globally using this file. Every test suite creates a new test cluster using this overrides.
-	// 2. Per test suite using SetupSuiteWithCluster() and WithDynamicConfigOverrides() option.
-	// 3. Per test using s.OverrideDynamicConfig() method.
-	// 4. Per specific cluster per test (if test has more than one default cluster) using cluster.OverrideDynamicConfig() method.
+	// 2. Per test suite using FunctionalTestBase.SetupSuiteWithCluster() and WithDynamicConfigOverrides() option.
+	// 3. Per test using FunctionalTestBase.OverrideDynamicConfig() method.
+	// 4. Per specific cluster per test (if test has more than one cluster) using TestCluster.OverrideDynamicConfig() method.
 	//
-	// NOTE: settings which are not really dynamic (requires server restart to take effect) can't be overridden on test level.
+	// NOTE1: settings which are not really dynamic (requires server restart to take effect) can't be overridden on test level,
+	//        i.e., must be overridden globally (1) or per test suite (2).
+	// NOTE2: per test overrides change value for the cluster, therefore, it affects not only specific test, but
+	//        all tests for this suite. Automatic cleanup reverts previous value and tests don't affect each other.
+	//        But it means that tests in the same suite can be run in parallel.This is not a problem because testify
+	//        doesn't allow parallel execution of tests in the same suite anyway. If one day, it will be allowed,
+	//        unique namespaces with overrides per namespace should be used for tests which require different settings.
 	dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendRPS.Key():                                         3000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
@@ -69,11 +75,6 @@ var (
 
 		// Better to read through in tests than add artificial sleeps (which is what we previously had).
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
-
-		// These 2 are needed for DeleteWorkflowExecution and DeleteNamespace tests.
-		// They are not really dynamic and can't be set on test level after the cluster has started.
-		dynamicconfig.TransferProcessorUpdateAckInterval.Key():   1 * time.Second,
-		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(): 1 * time.Second,
 
 		dynamicconfig.RetentionTimerJitterDuration.Key():        time.Second,
 		dynamicconfig.EnableEagerWorkflowStart.Key():            true,
