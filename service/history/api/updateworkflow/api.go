@@ -175,9 +175,7 @@ func (u *Updater) ApplyRequest(
 		alreadyExisted bool
 		err            error
 	)
-	// Calling Size() is returning a cached value when being called on a decoded proto message, ie performant.
-	requestPayloadBytes := updateRequest.Size()
-	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID, requestPayloadBytes); err != nil {
+	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 		return nil, err
 	}
 	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {

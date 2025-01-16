@@ -1999,7 +1999,7 @@ archivalQueueProcessor`,
 	WorkflowExecutionMaxTotalUpdates = NewNamespaceIntSetting(
 		"history.maxTotalUpdates",
 		2000,
-		`WorkflowExecutionMaxTotalUpdates is the max number of updates that any given workflow execution can receive.`,
+		`WorkflowExecutionMaxTotalUpdates is the max number of updates that any given workflow execution can receive. Set to zero to disable.`,
 	)
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(

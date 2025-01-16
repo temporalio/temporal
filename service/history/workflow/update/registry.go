@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 
 	"go.opentelemetry.io/otel/trace"
@@ -54,7 +53,7 @@ type (
 		// return value (bool) indicates whether the Update returned already
 		// existed and was found (true) or was not found and has been newly
 		// created (false).
-		FindOrCreate(ctx context.Context, updateID string, payloadBytes int) (_ *Update, alreadyExisted bool, _ error)
+		FindOrCreate(ctx context.Context, updateID string) (_ *Update, alreadyExisted bool, _ error)
 
 		// Find an existing Update in this Registry.
 		// Returns nil if Update doesn't exist.
@@ -176,9 +175,9 @@ func NewRegistry(
 		updates:              make(map[string]*Update),
 		store:                store,
 		instrumentation:      noopInstrumentation,
-		maxRegistrySizeLimit: func() int { return 0 },           // ie disabled
-		maxInFlight:          func() int { return 0 },           // ie disabled
-		maxTotal:             func() int { return math.MaxInt }, // ie limitless
+		maxRegistrySizeLimit: func() int { return 0 }, // ie disabled
+		maxInFlight:          func() int { return 0 }, // ie disabled
+		maxTotal:             func() int { return 0 }, // ie disabled
 		failoverVersion:      store.GetCurrentVersion(),
 	}
 	for _, opt := range opts {
@@ -222,14 +221,14 @@ func NewRegistry(
 	return r
 }
 
-func (r *registry) FindOrCreate(ctx context.Context, id string, payloadBytes int) (*Update, bool, error) {
+func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, error) {
 	if upd := r.Find(ctx, id); upd != nil {
 		return upd, true, nil
 	}
-	if err := r.checkLimits(payloadBytes); err != nil {
+	if err := r.checkLimits(); err != nil {
 		return nil, false, err
 	}
-	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	upd := New(id, r.remover(id), r.payloadSizeLimiter(), withInstrumentation(&r.instrumentation))
 	r.updates[id] = upd
 	return upd, false, nil
 }
@@ -392,14 +391,11 @@ func (r *registry) remover(id string) updateOpt {
 	)
 }
 
-func (r *registry) checkLimits(payloadBytes int) error {
+func (r *registry) checkLimits() error {
 	if err := r.checkInflightLimit(); err != nil {
 		return err
 	}
-	if err := r.checkTotalLimit(); err != nil {
-		return err
-	}
-	return r.checkRegistrySizeLimit(payloadBytes) // last, as it's the most expensive check
+	return r.checkTotalLimit()
 }
 
 func (r *registry) checkInflightLimit() error {
@@ -419,26 +415,36 @@ func (r *registry) checkInflightLimit() error {
 	return nil
 }
 
-func (r *registry) checkRegistrySizeLimit(payloadBytes int) error {
-	maxRegistrySize := r.maxRegistrySizeLimit()
-	if maxRegistrySize == 0 {
-		// limit is disabled
-		return nil
-	}
-	registrySize := r.GetSize()
-	if registrySize+payloadBytes >= maxRegistrySize {
-		r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes)
-		// TODO: return serviceerror.ResourceExhausted
-	}
-	return nil
+func (r *registry) payloadSizeLimiter() updateOpt {
+	return withLimitChecker(
+		func(req *updatepb.Request) error {
+			maxRegistrySize := r.maxRegistrySizeLimit()
+			if maxRegistrySize == 0 {
+				// limit is disabled
+				return nil
+			}
+			registrySize := r.GetSize()
+			payloadBytes := req.Size()
+			if registrySize+payloadBytes >= maxRegistrySize {
+				r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes)
+				// TODO: return serviceerror.ResourceExhausted
+			}
+			return nil
+		},
+	)
 }
 
 func (r *registry) checkTotalLimit() error {
-	if len(r.updates)+r.completedCount >= r.maxTotal() {
+	maxTotal := r.maxTotal()
+	if maxTotal == 0 {
+		// limit is disabled
+		return nil
+	}
+	if len(r.updates)+r.completedCount >= maxTotal {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("The limit on the total number of distinct updates in this workflow has been reached (%v). "+
-				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process", r.maxTotal()),
+				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process", maxTotal),
 		)
 	}
 	return nil
