@@ -91,6 +91,7 @@ import (
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
+	workerdeployment "go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -132,7 +133,12 @@ type (
 		clusterMetadata                 cluster.Metadata
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
+<<<<<<< HEAD
 		deploymentStoreClient           deployment.DeploymentStoreClient
+=======
+		deploymentStoreClient           deployment.DeploymentStoreClient // [cleanup-wv-pre-release]
+		workerDeploymentClient          workerdeployment.Client
+>>>>>>> 9bae8ae984 (renaming deployment entity wfs)
 		archiverProvider                provider.ArchiverProvider
 		payloadSerializer               serialization.Serializer
 		namespaceRegistry               namespace.Registry
@@ -163,6 +169,7 @@ func NewWorkflowHandler(
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
 	deploymentStoreClient deployment.DeploymentStoreClient,
+	workerDeploymentClient workerdeployment.Client,
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
 	namespaceRegistry namespace.Registry,
@@ -203,6 +210,7 @@ func NewWorkflowHandler(
 		historyClient:                   historyClient,
 		matchingClient:                  matchingClient,
 		deploymentStoreClient:           deploymentStoreClient,
+		workerDeploymentClient:          workerDeploymentClient,
 		archiverProvider:                archiverProvider,
 		payloadSerializer:               payloadSerializer,
 		namespaceRegistry:               namespaceRegistry,
@@ -3158,6 +3166,7 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 	}, nil
 }
 
+// [cleanup-wv-pre-release]
 func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *workflowservice.GetCurrentDeploymentRequest) (_ *workflowservice.GetCurrentDeploymentResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
@@ -3188,6 +3197,7 @@ func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *wo
 	}, nil
 }
 
+// [cleanup-wv-pre-release]
 func (wh *WorkflowHandler) ListDeployments(
 	ctx context.Context,
 	request *workflowservice.ListDeploymentsRequest,
@@ -3231,6 +3241,7 @@ func (wh *WorkflowHandler) ListDeployments(
 	}, nil
 }
 
+// [cleanup-wv-pre-release]
 func (wh *WorkflowHandler) GetDeploymentReachability(
 	ctx context.Context,
 	request *workflowservice.GetDeploymentReachabilityRequest,
@@ -3265,6 +3276,7 @@ func (wh *WorkflowHandler) GetDeploymentReachability(
 	return resp, nil
 }
 
+// [cleanup-wv-pre-release]
 func (wh *WorkflowHandler) SetCurrentDeployment(ctx context.Context, request *workflowservice.SetCurrentDeploymentRequest) (_ *workflowservice.SetCurrentDeploymentResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
@@ -3304,6 +3316,43 @@ func (wh *WorkflowHandler) SetCurrentDeployment(ctx context.Context, request *wo
 		CurrentDeploymentInfo:  current,
 		PreviousDeploymentInfo: previous,
 	}, nil
+}
+
+// Versioning-3 Public-Preview API's
+
+func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DescribeWorkerDeploymentVersionRequest) (_ *workflowservice.DescribeWorkerDeploymentVersionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	// TODO (Shivam): do we wanna change the config for public-preview?
+	if !wh.config.EnableDeployments(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	workerDeploymentVersionInfo, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request.Version)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DescribeWorkerDeploymentVersionResponse{
+		WorkerDeploymentVersionInfo: workerDeploymentVersionInfo,
+	}, nil
+}
+
+// TODO (Shivam): Implement this
+func (wh *WorkflowHandler) SetCurrentDeploymentVersion(ctx context.Context, request *workflowservice.SetCurrentDeploymentVersionRequest) (_ *workflowservice.SetCurrentDeploymentVersionResponse, retError error) {
+	return nil, nil
 }
 
 // Returns the schedule description and current state of an existing schedule.

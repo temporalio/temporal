@@ -32,12 +32,25 @@ import (
 
 var (
 	errDeploymentsNotAllowed = serviceerror.NewPermissionDenied("deployments are disabled on this namespace", "")
-	errMissingDeployment     = serviceerror.NewInvalidArgument("missing deployment")
+	// [cleanup-wv-pre-release]
+	errMissingDeployment = serviceerror.NewInvalidArgument("missing deployment")
+
+	errMissingDeploymentVersion = serviceerror.NewInvalidArgument("missing deployment version")
 )
 
+// [cleanup-wv-pre-release]
 func findDeployment(deployments *persistencespb.DeploymentData, deployment *deploymentpb.Deployment) int {
 	for i, d := range deployments.GetDeployments() {
 		if d.Deployment.Equal(deployment) {
+			return i
+		}
+	}
+	return -1
+}
+
+func findDeploymentVersion(deploymentVersionData *persistencespb.DeploymentVersionData, deploymentName string, version string) int {
+	for i, d := range deploymentVersionData.GetDeploymentVersions() {
+		if d.DeploymentName == deploymentName && d.Version == version {
 			return i
 		}
 	}

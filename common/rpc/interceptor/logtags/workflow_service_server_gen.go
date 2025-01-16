@@ -56,6 +56,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 		return nil
 	case *workflowservice.DescribeTaskQueueRequest:
 		return nil
+	case *workflowservice.DescribeWorkerDeploymentVersionRequest:
+		return nil
 	case *workflowservice.DescribeWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
@@ -195,6 +197,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 	case *workflowservice.ScanWorkflowExecutionsRequest:
 		return nil
 	case *workflowservice.SetCurrentDeploymentRequest:
+		return nil
+	case *workflowservice.SetCurrentDeploymentVersionRequest:
 		return nil
 	case *workflowservice.ShutdownWorkerRequest:
 		return nil
