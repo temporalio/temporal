@@ -700,6 +700,11 @@ pollLoop:
 					tag.Error(err),
 				)
 				task.finish(nil, false)
+			case *serviceerror.ResourceExhausted:
+				// If history returns one ResourceExhausted, it's likely to return more if we retry
+				// immediately. Instead, return the error to the client which will back off.
+				task.finish(err, false)
+				return nil, err
 			default:
 				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
@@ -898,6 +903,11 @@ pollLoop:
 					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
 				)
 				task.finish(nil, false)
+			case *serviceerror.ResourceExhausted:
+				// If history returns one ResourceExhausted, it's likely to return more if we retry
+				// immediately. Instead, return the error to the client which will back off.
+				task.finish(err, false)
+				return nil, err
 			default:
 				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
@@ -2443,7 +2453,9 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		RequestId:           uuid.New(),
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
+		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
 		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
+		VersionDirective:    task.event.Data.VersionDirective,
 	}
 
 	return e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
@@ -2466,7 +2478,9 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
 		Stamp:               task.event.Data.GetStamp(),
+		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
 		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
+		VersionDirective:    task.event.Data.VersionDirective,
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)

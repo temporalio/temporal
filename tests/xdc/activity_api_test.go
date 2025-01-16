@@ -159,9 +159,10 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		ActivityOptions: &activitypb.ActivityOptions{
 			RetryPolicy: &commonpb.RetryPolicy{
 				InitialInterval: durationpb.New(2 * time.Second),
+				MaximumAttempts: 10,
 			},
 		},
-		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval", "retry_policy.maximum_attempts"}},
 	}
 	respUpdate, err := s.cluster1.Host().FrontendClient().UpdateActivityOptionsById(ctx, updateRequest)
 	s.NoError(err)
@@ -196,6 +197,8 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	s.Equal(1, len(description.PendingActivities))
 	s.True(description.PendingActivities[0].Paused)
 	s.Equal(int32(1), description.PendingActivities[0].Attempt)
+	s.Equal(int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+	s.Equal(int32(10), description.PendingActivities[0].MaximumAttempts)
 
 	// start worker2
 	worker2 := sdkworker.New(standbyClient, taskQueue, sdkworker.Options{})

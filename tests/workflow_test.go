@@ -56,7 +56,7 @@ import (
 )
 
 type WorkflowTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestWorkflowTestSuite(t *testing.T) {
@@ -71,7 +71,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 	makeRequest := func() *workflowservice.StartWorkflowExecutionRequest {
 		return &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:          uuid.New(),
-			Namespace:          s.Namespace(),
+			Namespace:          s.Namespace().String(),
 			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
 			WorkflowType:       &commonpb.WorkflowType{Name: wt},
 			TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -88,7 +88,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 		s.True(we.Started)
 
 		// Validate the default value for WorkflowTaskTimeoutSeconds
-		historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
+		historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: request.WorkflowId,
 			RunId:      we.RunId,
 		})
@@ -155,7 +155,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:          uuid.New(),
-				Namespace:          s.Namespace(),
+				Namespace:          s.Namespace().String(),
 				WorkflowId:         id,
 				WorkflowType:       &commonpb.WorkflowType{Name: "functional-start-workflow-terminate-test-type"},
 				TaskQueue:          &taskqueuepb.TaskQueue{Name: "functional-start-workflow-terminate-test-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -175,7 +175,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 			s.NotEqual(we0.RunId, we1.RunId)
 
 			descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: s.Namespace(),
+				Namespace: s.Namespace().String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we0.RunId,
@@ -185,7 +185,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
 
 			descResp, err = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: s.Namespace(),
+				Namespace: s.Namespace().String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: id,
 					RunId:      we1.RunId,
@@ -208,7 +208,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecutionWithDelay() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.New(),
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		WorkflowId:         id,
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -235,7 +235,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecutionWithDelay() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		StickyTaskQueue:     &taskqueuepb.TaskQueue{Name: stickyTq, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: tl},
 		Identity:            identity,
@@ -249,7 +249,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecutionWithDelay() {
 	s.GreaterOrEqual(delayEndTime.Sub(reqStartTime), startDelay)
 
 	descResp, descErr := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we0.RunId,
@@ -268,7 +268,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -321,7 +321,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -335,7 +335,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 	s.NoError(err)
 
 	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -349,7 +349,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
-		historyEvents = s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
+		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		})
@@ -376,7 +376,7 @@ StartNewExecutionLoop:
 	for i := 0; i < 10; i++ {
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:           uuid.New(),
-			Namespace:           s.Namespace(),
+			Namespace:           s.Namespace().String(),
 			WorkflowId:          id,
 			WorkflowType:        &commonpb.WorkflowType{Name: wt},
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -411,7 +411,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -473,7 +473,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -509,7 +509,7 @@ func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -547,7 +547,7 @@ func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -579,7 +579,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -639,7 +639,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -658,7 +658,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 			_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithExpectedAttemptCount(2))
 		}
 		if err != nil {
-			s.PrintHistoryEventsCompact(s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
+			s.PrintHistoryEventsCompact(s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
 			}))
@@ -690,7 +690,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 	maximumAttempts := 5
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -739,7 +739,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -749,7 +749,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 
 	describeWorkflowExecution := func(execution *commonpb.WorkflowExecution) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Execution: execution,
 		})
 	}
@@ -757,7 +757,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 	for i := 1; i <= maximumAttempts; i++ {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.NoError(err)
-		events := s.GetHistory(s.Namespace(), executions[i-1])
+		events := s.GetHistory(s.Namespace().String(), executions[i-1])
 		if i == maximumAttempts {
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"Attempt":%d}
@@ -791,7 +791,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 
 	// Check run id links
 	for i := 0; i < maximumAttempts; i++ {
-		events := s.GetHistory(s.Namespace(), executions[i])
+		events := s.GetHistory(s.Namespace().String(), executions[i])
 		if i == 0 {
 			s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":""}
@@ -821,7 +821,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		oldSDKCtx := headers.SetVersionsForTests(ctx, "1.3.1", headers.ClientNameJavaSDK, headers.SupportedServerVersions, "")
 		resp, err := s.FrontendClient().GetWorkflowExecutionHistory(oldSDKCtx, &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:              s.Namespace(),
+			Namespace:              s.Namespace().String(),
 			Execution:              executions[i],
 			MaximumPageSize:        5,
 			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
@@ -876,7 +876,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 	// Fail using attempt
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -902,7 +902,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 	wtHandler := workflowImpl(5, "retryable-error", false, &executions)
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -912,7 +912,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events := s.GetHistory(s.Namespace(), executions[0])
+	events := s.GetHistory(s.Namespace().String(), executions[0])
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Attempt":1}
   2 WorkflowTaskScheduled
@@ -922,7 +922,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events = s.GetHistory(s.Namespace(), executions[1])
+	events = s.GetHistory(s.Namespace().String(), executions[1])
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Attempt":2}
   2 WorkflowTaskScheduled
@@ -932,7 +932,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events = s.GetHistory(s.Namespace(), executions[2])
+	events = s.GetHistory(s.Namespace().String(), executions[2])
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Attempt":3}
   2 WorkflowTaskScheduled
@@ -943,7 +943,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 	// Fail error reason
 	request = &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -969,7 +969,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 	wtHandler = workflowImpl(5, "bad-bug", true, &executions)
 	poller = &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -979,7 +979,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetryFailures() {
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events = s.GetHistory(s.Namespace(), executions[0])
+	events = s.GetHistory(s.Namespace().String(), executions[0])
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Attempt":1}
   2 WorkflowTaskScheduled

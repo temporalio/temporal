@@ -37,7 +37,7 @@ var (
 
 func findDeployment(deployments *persistencespb.DeploymentData, deployment *deploymentpb.Deployment) int {
 	for i, d := range deployments.GetDeployments() {
-		if d.Deployment.SeriesName == deployment.SeriesName && d.Deployment.BuildId == deployment.BuildId {
+		if d.Deployment.Equal(deployment) {
 			return i
 		}
 	}

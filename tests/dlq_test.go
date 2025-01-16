@@ -40,7 +40,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -71,8 +70,8 @@ import (
 
 type (
 	DLQSuite struct {
-		testcore.FunctionalTestBase
-		*require.Assertions
+		testcore.FunctionalTestSuite
+
 		dlq              persistence.HistoryTaskQueueManager
 		dlqTasks         chan tasks.Task
 		writer           bytes.Buffer
@@ -122,16 +121,14 @@ func TestDLQSuite(t *testing.T) {
 }
 
 func (s *DLQSuite) SetupSuite() {
-	s.setAssertions()
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.HistoryTaskDLQEnabled.Key(): true,
 	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	s.dlqTasks = make(chan tasks.Task)
 	testPrefix := "dlq-test-terminal-wfts-"
 	s.failingWorkflowIDPrefix.Store(&testPrefix)
-	s.FunctionalTestBase.SetupSuite(
-		"testdata/es_cluster.yaml",
+	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(
+		testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
 			fx.Provide(
@@ -170,17 +167,17 @@ func (s *DLQSuite) SetupSuite() {
 	)
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.worker = sdkworker.New(sdkClient, taskQueue, sdkworker.Options{})
 	s.worker.RegisterWorkflow(myWorkflow)
-	s.NoError(s.worker.Start())
+	s.Require().NoError(s.worker.Start())
 }
 
 func (s *DLQSuite) TearDownSuite() {
 	s.worker.Stop()
-	s.FunctionalTestBase.TearDownSuite()
+	s.FunctionalTestSuite.TearDownSuite()
 }
 
 func myWorkflow(workflow.Context) (string, error) {
@@ -188,15 +185,10 @@ func myWorkflow(workflow.Context) (string, error) {
 }
 
 func (s *DLQSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
+	s.FunctionalTestSuite.SetupTest()
 
-	s.setAssertions()
 	s.deleteBlockCh = make(chan interface{})
 	close(s.deleteBlockCh)
-}
-
-func (s *DLQSuite) setAssertions() {
-	s.Assertions = require.New(s.T())
 }
 
 func (s *DLQSuite) TestReadArtificialDLQTasks() {
@@ -516,7 +508,7 @@ func (s *DLQSuite) verifyRunIsInDLQ(
 func (s *DLQSuite) executeWorkflow(ctx context.Context, workflowID string) sdkclient.WorkflowRun {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	s.NoError(err)
 

@@ -37,14 +37,13 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type ActivityApiPauseClientTestSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 	tv                     *testvars.TestVars
 	initialRetryInterval   time.Duration
 	scheduleToCloseTimeout time.Duration
@@ -54,13 +53,13 @@ type ActivityApiPauseClientTestSuite struct {
 }
 
 func (s *ActivityApiPauseClientTestSuite) SetupSuite() {
-	s.ClientFunctionalSuite.SetupSuite()
+	s.FunctionalTestSdkSuite.SetupSuite()
 	s.OverrideDynamicConfig(dynamicconfig.ActivityAPIsEnabled, true)
-	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
+	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
 }
 
 func (s *ActivityApiPauseClientTestSuite) SetupTest() {
-	s.ClientFunctionalSuite.SetupTest()
+	s.FunctionalTestSdkSuite.SetupTest()
 
 	s.initialRetryInterval = 1 * time.Second
 	s.scheduleToCloseTimeout = 30 * time.Minute
@@ -134,7 +133,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 
 	// pause activity
 	pauseRequest := &workflowservice.PauseActivityByIdRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 	}
@@ -162,7 +161,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 
 	// unpause the activity
 	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 		Operation: &workflowservice.UnpauseActivityByIdRequest_Resume{
@@ -230,7 +229,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 
 	// pause activity
 	pauseRequest := &workflowservice.PauseActivityByIdRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 	}
@@ -250,7 +249,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 
 	// unpause the activity
 	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 		Operation: &workflowservice.UnpauseActivityByIdRequest_Resume{
@@ -322,7 +321,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 
 	// pause activity
 	pauseRequest := &workflowservice.PauseActivityByIdRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 	}
@@ -332,7 +331,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 
 	// unpause the activity, and set noWait flag
 	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 		Operation: &workflowservice.UnpauseActivityByIdRequest_Resume{
@@ -405,7 +404,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 
 	// pause activity
 	pauseRequest := &workflowservice.PauseActivityByIdRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 	}
@@ -427,7 +426,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 
 	// unpause the activity with reset, and set noWait flag
 	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 		Operation: &workflowservice.UnpauseActivityByIdRequest_Reset_{

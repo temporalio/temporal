@@ -610,6 +610,7 @@ func ApplyClusterMetadataConfigProvider(
 		customDataStoreFactory,
 		logger,
 		metricsHandler,
+		noop.NewTracerProvider(),
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,

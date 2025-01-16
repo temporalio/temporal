@@ -65,6 +65,7 @@ import (
 )
 
 type AdvVisCrossDCTestSuite struct {
+	// TODO (alex): use FunctionalTestSuite
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
