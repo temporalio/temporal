@@ -96,11 +96,11 @@ func (m *MutableStateMatchEvaluator) evaluateAnd(expr sqlparser.Expr) (bool, err
 	if err != nil {
 		return false, err
 	}
-	if leftResult == false {
-		return leftResult, nil
+	if leftResult {
+		// if left is true, then right must be evaluated
+		return m.evaluate(andExpr.Right)
 	}
-	// if left is true, then right must be evaluated
-	return m.evaluate(andExpr.Right)
+	return false, nil
 }
 func (m *MutableStateMatchEvaluator) evaluateOr(expr sqlparser.Expr) (bool, error) {
 	orExpr, ok := expr.(*sqlparser.OrExpr)
