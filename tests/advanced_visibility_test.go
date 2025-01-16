@@ -36,7 +36,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -60,7 +59,6 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
@@ -76,12 +74,8 @@ const (
 )
 
 type AdvancedVisibilitySuite struct {
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-	// not merely log an error
-	*require.Assertions
-	protorequire.ProtoAssertions
-	historyrequire.HistoryRequire
-	testcore.FunctionalTestBase
+	testcore.FunctionalTestSuite
+
 	isElasticsearchEnabled bool
 
 	testSearchAttributeKey string
@@ -110,14 +104,12 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 	}
 
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-
 	if testcore.UsingSQLAdvancedVisibility() {
-		s.FunctionalTestBase.SetupSuite("testdata/cluster.yaml")
+		s.FunctionalTestSuite.SetupSuiteWithCluster("testdata/cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
 		s.isElasticsearchEnabled = false
 	} else {
-		s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+		s.FunctionalTestSuite.SetupSuiteWithCluster("testdata/es_cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
 		s.isElasticsearchEnabled = true
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
@@ -126,36 +118,28 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		s.updateMaxResultWindow()
 	}
 
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sdkClient = sdkClient
-	sysSDKClient, err := sdkclient.Dial(sdkclient.Options{
+	s.Require().NoError(err)
+
+	s.sysSDKClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: primitives.SystemLocalNamespace,
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sysSDKClient = sysSDKClient
+	s.Require().NoError(err)
 }
 
 func (s *AdvancedVisibilitySuite) TearDownSuite() {
 	s.sdkClient.Close()
-	s.FunctionalTestBase.TearDownSuite()
+	s.FunctionalTestSuite.TearDownSuite()
 }
 
 func (s *AdvancedVisibilitySuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
+	s.FunctionalTestSuite.SetupTest()
 
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
-	s.ProtoAssertions = protorequire.New(s.T())
-	s.HistoryRequire = historyrequire.New(s.T())
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
 }
@@ -2808,7 +2792,7 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
-	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
+	s.Require().FailNowf("", "ES max result window size hasn't reach target size within %v", numOfRetry*waitTimeInMs*time.Millisecond)
 }
 
 func (s *AdvancedVisibilitySuite) addCustomKeywordSearchAttribute(ctx context.Context, attrName string) {

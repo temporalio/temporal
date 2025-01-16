@@ -54,11 +54,11 @@ import (
 )
 
 type CronTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 type CronTestClientSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestCronTestSuite(t *testing.T) {

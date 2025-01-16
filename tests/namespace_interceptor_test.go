@@ -42,7 +42,7 @@ import (
 )
 
 type NamespaceInterceptorTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestNamespaceInterceptorTestSuite(t *testing.T) {

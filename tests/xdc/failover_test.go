@@ -2325,16 +2325,6 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(2, lastAttemptCount)
 }
 
-// Uncomment if you need to debug history.
-// func (s *funcClustersTestSuite) printHistory(frontendClient workflowservice.WorkflowServiceClient, namespace, workflowID, runID string) {
-// 	events := s.getHistory(frontendClient, namespace, &commonpb.WorkflowExecution{
-// 		WorkflowId: workflowID,
-// 		RunId:      runID,
-// 	})
-// 	history := &historypb.History{Events: events}
-// 	common.PrettyPrintHistory(history, s.logger)
-// }
-
 func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

@@ -43,7 +43,7 @@ import (
 )
 
 type StickyTqTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestStickyTqTestSuite(t *testing.T) {

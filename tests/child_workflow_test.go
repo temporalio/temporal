@@ -50,7 +50,7 @@ import (
 )
 
 type ChildWorkflowSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestChildWorkflowSuite(t *testing.T) {
@@ -368,7 +368,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	s.NotNil(childCompletedEventFromParent)
 	completedAttributes := childCompletedEventFromParent.GetChildWorkflowExecutionCompletedEventAttributes()
 	s.Equal(s.Namespace().String(), completedAttributes.Namespace)
-	// TODO: change to s.Equal(s.Namespace()ID) once it is available.
+	s.Equal(s.NamespaceID().String(), completedAttributes.NamespaceId)
 	s.NotEmpty(completedAttributes.NamespaceId)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)

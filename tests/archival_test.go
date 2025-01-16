@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -66,8 +65,7 @@ const (
 
 type (
 	ArchivalSuite struct {
-		*require.Assertions
-		testcore.FunctionalTestBase
+		testcore.FunctionalTestSuite
 	}
 
 	archivalWorkflowInfo struct {
@@ -79,27 +77,13 @@ type (
 func TestArchivalSuite(t *testing.T) {
 	// TODO: archival doesn't support parallel yet: t.Parallel()
 	s := new(ArchivalSuite)
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.RetentionTimerJitterDuration.Key():  time.Second,
-		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
-	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	suite.Run(t, s)
 }
 
 func (s *ArchivalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
-
-func (s *ArchivalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *ArchivalSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
+	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
+		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
+	}))
 }
 
 func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {

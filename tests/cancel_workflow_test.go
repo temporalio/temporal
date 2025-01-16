@@ -46,7 +46,7 @@ import (
 )
 
 type CancelWorkflowSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestCancelWorkflowSuite(t *testing.T) {

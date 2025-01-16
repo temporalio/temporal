@@ -46,7 +46,7 @@ import (
 )
 
 type DescribeTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestDescribeTestSuite(t *testing.T) {

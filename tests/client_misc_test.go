@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
@@ -60,7 +59,7 @@ import (
 )
 
 type ClientMiscTestSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 	maxPendingSignals         int
 	maxPendingCancelRequests  int
 	maxPendingActivities      int
@@ -73,7 +72,7 @@ func TestClientMiscTestSuite(t *testing.T) {
 }
 
 func (s *ClientMiscTestSuite) SetupSuite() {
-	s.ClientFunctionalSuite.SetupSuite()
+	s.FunctionalTestSdkSuite.SetupSuite()
 	s.maxPendingSignals = testcore.ClientSuiteLimit
 	s.maxPendingCancelRequests = testcore.ClientSuiteLimit
 	s.maxPendingActivities = testcore.ClientSuiteLimit
@@ -546,9 +545,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 		WorkflowTaskTimeout: 10 * time.Second,
 		WorkflowRunTimeout:  10 * time.Second,
 	}, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	// Block until first workflow task started.
 	<-readyToSendUpdate
@@ -646,9 +643,7 @@ func (s *ClientMiscTestSuite) Test_CancelActivityAndTimerBeforeComplete() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 	err = workflowRun.Get(ctx, nil)
 	s.NoError(err)
 }
@@ -694,9 +689,7 @@ func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
 
 	ctx := context.Background()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -781,9 +774,7 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -850,9 +841,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -959,9 +948,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 		WorkflowRunTimeout:  10 * time.Second,
 	}
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -1040,9 +1027,8 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 
 			oldWorker := worker.New(s.SdkClient(), taskQueue, worker.Options{})
 			oldWorker.RegisterWorkflow(workflowFn)
-			if err := oldWorker.Start(); err != nil {
-				s.Logger.Fatal("Error when start worker", tag.Error(err))
-			}
+			err := oldWorker.Start()
+			s.NoError(err)
 
 			id := "test-sticky-delay" + tt.name
 			workflowOptions := sdkclient.StartWorkflowOptions{
@@ -1053,12 +1039,10 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-			if err != nil {
-				s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-			}
+			s.NoError(err)
 
 			s.NotNil(workflowRun)
-			s.True(workflowRun.GetRunID() != "")
+			s.NotEmpty(workflowRun.GetRunID())
 
 			s.Eventually(func() bool {
 				// wait until first workflow task completed (so we know sticky is set on workflow)
@@ -1082,9 +1066,8 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 			// start a new worker
 			newWorker := worker.New(s.SdkClient(), taskQueue, worker.Options{})
 			newWorker.RegisterWorkflow(workflowFn)
-			if err := newWorker.Start(); err != nil {
-				s.Logger.Fatal("Error when start worker", tag.Error(err))
-			}
+			err = newWorker.Start()
+			s.NoError(err)
 			defer newWorker.Stop()
 
 			startTime := time.Now()

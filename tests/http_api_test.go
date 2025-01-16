@@ -67,7 +67,7 @@ func jsonPayload(data string) *commonpb.Payloads {
 }
 
 type HttpApiTestSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestHttpApiTestSuite(t *testing.T) {

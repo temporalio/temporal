@@ -51,7 +51,7 @@ import (
 )
 
 type WorkflowFailuresTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestWorkflowFailuresTestSuite(t *testing.T) {

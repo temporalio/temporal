@@ -41,7 +41,7 @@ import (
 )
 
 type MaxBufferedEventSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestMaxBufferedEventSuite(t *testing.T) {

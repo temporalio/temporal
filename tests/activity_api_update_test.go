@@ -48,18 +48,18 @@ import (
 )
 
 type ActivityApiUpdateClientTestSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 	tv *testvars.TestVars
 }
 
 func (s *ActivityApiUpdateClientTestSuite) SetupSuite() {
-	s.ClientFunctionalSuite.SetupSuite()
+	s.FunctionalTestSdkSuite.SetupSuite()
 	s.OverrideDynamicConfig(dynamicconfig.ActivityAPIsEnabled, true)
 	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
 }
 
 func (s *ActivityApiUpdateClientTestSuite) SetupTest() {
-	s.ClientFunctionalSuite.SetupTest()
+	s.FunctionalTestSdkSuite.SetupTest()
 }
 
 func TestActivityApiUpdateClientTestSuite(t *testing.T) {

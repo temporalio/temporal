@@ -30,31 +30,23 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 )
 
 type (
-	ClientFunctionalSuite struct {
-		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-		// not merely log an error
-		*require.Assertions
+	FunctionalTestSdkSuite struct {
 		FunctionalTestBase
-		historyrequire.HistoryRequire
+
 		sdkClient sdkclient.Client
 		worker    worker.Worker
 		taskQueue string
-
-		baseConfigPath string
 	}
 )
 
@@ -63,19 +55,19 @@ var (
 	ErrEncodingIsNotSupported = errors.New("payload encoding is not supported")
 )
 
-func (s *ClientFunctionalSuite) Worker() worker.Worker {
+func (s *FunctionalTestSdkSuite) Worker() worker.Worker {
 	return s.worker
 }
 
-func (s *ClientFunctionalSuite) SdkClient() sdkclient.Client {
+func (s *FunctionalTestSdkSuite) SdkClient() sdkclient.Client {
 	return s.sdkClient
 }
 
-func (s *ClientFunctionalSuite) TaskQueue() string {
+func (s *FunctionalTestSdkSuite) TaskQueue() string {
 	return s.taskQueue
 }
 
-func (s *ClientFunctionalSuite) SetupSuite() {
+func (s *FunctionalTestSdkSuite) SetupSuite() {
 	// these limits are higher in production, but our tests would take too long if we set them that high
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.NumPendingChildExecutionsLimitError.Key():             ClientSuiteLimit,
@@ -88,43 +80,34 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	s.FunctionalTestBase.SetupSuite("testdata/client_cluster.yaml")
+
+	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/client_cluster.yaml", WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
-func (s *ClientFunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *ClientFunctionalSuite) SetupTest() {
+func (s *FunctionalTestSdkSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-
-	s.initAssertions()
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
 	s.OverrideDynamicConfig(
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sdkClient = sdkClient
+	s.NoError(err)
 	s.taskQueue = RandomizeStr("tq")
 
 	// We need to set this timeout to 0 to disable the deadlock detector. Otherwise, the deadlock detector will cause
 	// TestTooManyChildWorkflows to fail because it thinks there is a deadlock due to the blocked child workflows.
 	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{DeadlockDetectionTimeout: 0})
-	if err := s.worker.Start(); err != nil {
-		s.Logger.Fatal("Error when start worker", tag.Error(err))
-	}
+	err = s.worker.Start()
+	s.NoError(err)
 }
 
-func (s *ClientFunctionalSuite) TearDownTest() {
+func (s *FunctionalTestSdkSuite) TearDownTest() {
 	if s.worker != nil {
 		s.worker.Stop()
 	}
@@ -133,22 +116,7 @@ func (s *ClientFunctionalSuite) TearDownTest() {
 	}
 }
 
-func (s *ClientFunctionalSuite) SetupSubTest() {
-	s.initAssertions()
-}
-
-func (s *ClientFunctionalSuite) initAssertions() {
-	// `s.Assertions` (as well as other test helpers which depends on `s.T()`) must be initialized on
-	// both test and subtest levels (but not suite level, where `s.T()` is `nil`).
-	//
-	// If these helpers are not reinitialized on subtest level, any failed `assert` in
-	// subtest will fail the entire test (not subtest) immediately without running other subtests.
-
-	s.Assertions = require.New(s.T())
-	s.HistoryRequire = historyrequire.New(s.T())
-}
-
-func (s *ClientFunctionalSuite) EventuallySucceeds(ctx context.Context, operationCtx backoff.OperationCtx) {
+func (s *FunctionalTestSdkSuite) EventuallySucceeds(ctx context.Context, operationCtx backoff.OperationCtx) {
 	s.T().Helper()
 	s.NoError(backoff.ThrottleRetryContext(
 		ctx,
@@ -161,7 +129,7 @@ func (s *ClientFunctionalSuite) EventuallySucceeds(ctx context.Context, operatio
 	))
 }
 
-func (s *ClientFunctionalSuite) HistoryContainsFailureCausedBy(
+func (s *FunctionalTestSdkSuite) HistoryContainsFailureCausedBy(
 	ctx context.Context,
 	workflowId string,
 	cause enumspb.WorkflowTaskFailedCause,
@@ -188,15 +156,3 @@ func (s *ClientFunctionalSuite) HistoryContainsFailureCausedBy(
 		return fmt.Errorf("did not find a failed task whose cause was %q", cause)
 	})
 }
-
-// Uncomment if you need to debug history.
-// func (s *ClientFunctionalSuite) printHistory(workflowID string, runID string) {
-// 	iter := s.sdkClient.GetWorkflowHistory(context.Background(), workflowID, runID, false, 0)
-// 	history := &historypb.History{}
-// 	for iter.HasNext() {
-// 		event, err := iter.Next()
-// 		s.NoError(err)
-// 		history.Events = append(history.Events, event)
-// 	}
-// 	common.PrettyPrintHistory(history, s.Logger)
-// }

@@ -46,11 +46,9 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -74,9 +72,8 @@ worker restart/long-poll activity failure:
 
 type (
 	ScheduleFunctionalSuite struct {
-		protorequire.ProtoAssertions
-		historyrequire.HistoryRequire
-		testcore.FunctionalTestBase
+		testcore.FunctionalTestSuite
+
 		sdkClient     sdkclient.Client
 		worker        worker.Worker
 		taskQueue     string
@@ -91,38 +88,30 @@ func TestScheduleFunctionalSuite(t *testing.T) {
 
 func (s *ScheduleFunctionalSuite) SetupSuite() {
 	if testcore.UsingSQLAdvancedVisibility() {
-		s.FunctionalTestBase.SetupSuite("testdata/cluster.yaml")
+		s.FunctionalTestSuite.SetupSuiteWithCluster("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
 	} else {
-		s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+		s.FunctionalTestSuite.SetupSuiteWithCluster("testdata/es_cluster.yaml")
 		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
 	}
 }
 
-func (s *ScheduleFunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
 func (s *ScheduleFunctionalSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	s.ProtoAssertions = protorequire.New(s.T())
-	s.HistoryRequire = historyrequire.New(s.T())
+	s.FunctionalTestSuite.SetupTest()
 	s.dataConverter = testcore.NewTestDataConverter()
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:      s.FrontendGRPCAddress(),
 		Namespace:     s.Namespace().String(),
 		DataConverter: s.dataConverter,
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sdkClient = sdkClient
+	s.NoError(err)
+
 	s.taskQueue = testcore.RandomizeStr("tq")
 	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{})
-	if err := s.worker.Start(); err != nil {
-		s.Logger.Fatal("Error when starting worker", tag.Error(err))
-	}
+	err = s.worker.Start()
+	s.NoError(err)
 }
 
 func (s *ScheduleFunctionalSuite) TearDownTest() {
