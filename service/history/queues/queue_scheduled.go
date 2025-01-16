@@ -305,13 +305,17 @@ func (p *scheduledQueue) lookAheadTask() {
 // the reference time. The precision of the comparison is millisecond.
 // This function takes task as input and uses task's fire time (scheduled time)
 // as the minimal reference time to handle clock skew issue.
-// This check is only meaning for tasks with CategoryTypeScheduled as Immediate tasks
-// can be executed at any time.
+// This check is only meaning for tasks with CategoryTypeScheduled and always
+// return false for immediate tasks as they can be executed at any time.
 func IsTimeExpired(
 	task tasks.Task,
 	referenceTime time.Time,
 	testingTime time.Time,
 ) bool {
+	if task.GetCategory().Type() == tasks.CategoryTypeImmediate {
+		return false
+	}
+
 	// NOTE: Persistence layer may lose precision when persisting the task, which essentially moves
 	// task fire time backward. But we are already performing truncation here, so doesn't need to
 	// account for that.
