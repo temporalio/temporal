@@ -37,16 +37,6 @@ enum ChecksumFlavor {
     CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY = 1;
 }
 
-// State of a scheduler.
-enum SchedulerState {
-    // Default value, unspecified state.
-    SCHEDULER_STATE_UNSPECIFIED = 0;
-    // Scheduler is waiting to be activated after the specified amount of time.
-    SCHEDULER_STATE_WAITING = 1;
-    // Scheduler is actively executing logic.
-    SCHEDULER_STATE_EXECUTING = 2;
-}
-
 // State for the state machine scheduler's Executor.
 enum SchedulerExecutorState {
     // Default value, unspecified state.

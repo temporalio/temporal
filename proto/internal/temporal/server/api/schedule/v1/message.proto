@@ -27,11 +27,12 @@ package temporal.server.api.schedule.v1;
 option go_package = "go.temporal.io/server/api/schedule/v1;schedule";
 
 import "temporal/api/common/v1/message.proto";
-import "temporal/api/failure/v1/message.proto";
 import "temporal/api/enums/v1/schedule.proto";
 import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/failure/v1/message.proto";
 import "temporal/api/schedule/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
+import "temporal/server/api/enums/v1/common.proto";
 
 import "google/protobuf/timestamp.proto";
 
