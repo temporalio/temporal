@@ -86,6 +86,10 @@ const (
 	versioningPollerSeenWindow        = 70 * time.Second
 	recordTaskStartedDefaultTimeout   = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
+
+	// How long to wait before returning an empty poll reply when we get
+	// ResourceExhausted from RecordTaskStarted.
+	resourceExhaustedWaitTime = 1 * time.Second
 )
 
 type (
@@ -700,6 +704,16 @@ pollLoop:
 					tag.Error(err),
 				)
 				task.finish(nil, false)
+			case *serviceerror.ResourceExhausted:
+				// If history returns ResourceExhausted, then we need to write the task back so
+				// we don't lose it, so call finish with a non-nil error.
+				// Also, if it returns one ResourceExhausted, it's likely to return more if we
+				// retry immediately. So instead of going back for another task, return to the
+				// client and let the client retry. To further slow down the cycle, wait up to
+				// one second before returning (as long as we have time in our context).
+				task.finish(err, false)
+				waitOnResourceExhausted(ctx)
+				return nil, err
 			default:
 				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
@@ -898,6 +912,16 @@ pollLoop:
 					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
 				)
 				task.finish(nil, false)
+			case *serviceerror.ResourceExhausted:
+				// If history returns ResourceExhausted, then we need to write the task back so
+				// we don't lose it, so call finish with a non-nil error.
+				// Also, if it returns one ResourceExhausted, it's likely to return more if we
+				// retry immediately. So instead of going back for another task, return to the
+				// client and let the client retry. To further slow down the cycle, wait up to
+				// one second before returning (as long as we have time in our context).
+				task.finish(err, false)
+				waitOnResourceExhausted(ctx)
+				return nil, err
 			default:
 				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
@@ -2525,4 +2549,14 @@ func largerBacklogAge(rootBacklogAge *durationpb.Duration, currentPartitionAge *
 		return rootBacklogAge
 	}
 	return currentPartitionAge
+}
+
+func waitOnResourceExhausted(ctx context.Context) {
+	wait := resourceExhaustedWaitTime
+	if deadline, ok := ctx.Deadline(); ok {
+		wait = min(wait, time.Until(deadline)-returnEmptyTaskTimeBudget)
+	}
+	if wait > 0 {
+		util.InterruptibleSleep(ctx, wait)
+	}
 }
