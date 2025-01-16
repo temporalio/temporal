@@ -28,12 +28,13 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 // Supported Fields
 const (
-	WorkflowID              = searchattribute.WorkflowId
+	WorkflowID              = searchattribute.WorkflowID
 	WorkflowTypeName        = searchattribute.WorkflowType
 	WorkflowStartTime       = searchattribute.StartTime
 	WorkflowExecutionStatus = searchattribute.ExecutionStatus
@@ -92,27 +93,25 @@ func (m *MutableStateMatchEvaluator) evaluateAnd(expr sqlparser.Expr) (bool, err
 		return false, NewMatcherError("%v is not an 'and' expression", sqlparser.String(expr))
 	}
 
-	leftResult, err := m.evaluate(andExpr.Left)
-	if err != nil {
-		return false, err
+	if leftResult, err := m.evaluate(andExpr.Left); err != nil || !leftResult {
+		return leftResult, err
 	}
-	if leftResult {
-		// if left is true, then right must be evaluated
-		return m.evaluate(andExpr.Right)
-	}
-	return false, nil
+
+	// if left is true, then right must be evaluated
+	return m.evaluate(andExpr.Right)
 }
+
 func (m *MutableStateMatchEvaluator) evaluateOr(expr sqlparser.Expr) (bool, error) {
 	orExpr, ok := expr.(*sqlparser.OrExpr)
 	if !ok {
 		return false, NewMatcherError("%v is not an 'or' expression", sqlparser.String(expr))
 	}
 
-	if leftResult, err := m.evaluate(andExpr.Left); err != nil || leftResult {
+	if leftResult, err := m.evaluate(orExpr.Left); err != nil || leftResult {
 		return leftResult, err
 	}
 	// if left is false, then right must be evaluated
-	return m.evaluate(andExpr.Right)
+	return m.evaluate(orExpr.Right)
 }
 
 func (m *MutableStateMatchEvaluator) evaluateComparison(expr sqlparser.Expr) (bool, error) {
@@ -168,7 +167,7 @@ func (m *MutableStateMatchEvaluator) evaluateRange(expr sqlparser.Expr) (bool, e
 
 	colName, ok := rangeCond.Left.(*sqlparser.ColName)
 	if !ok {
-		return false, fmt.Errorf("invalid filter name: %s", sqlparser.String(rangeCond.Left))
+		return false, fmt.Errorf("unknown or unsupported search attribute name: %s", sqlparser.String(rangeCond.Left))
 	}
 	colNameStr := sqlparser.String(colName)
 
@@ -194,18 +193,18 @@ func (m *MutableStateMatchEvaluator) evaluateRange(expr sqlparser.Expr) (bool, e
 		}
 
 	default:
-		return false, fmt.Errorf("unknown filter name: %s", colNameStr)
+		return false, fmt.Errorf("unknown or unsupported search attribute name: %s", colNameStr)
 	}
 }
 
 func (m *MutableStateMatchEvaluator) compareWorkflowType(workflowType string, operation string) (bool, error) {
 	existingWorkflowType := m.ms.GetExecutionInfo().WorkflowTypeName
-	return m.compareWorkflowString(existingWorkflowType, workflowType, operation, WorkflowTypeName)
+	return m.compareString(existingWorkflowType, workflowType, operation, WorkflowTypeName)
 }
 
 func (m *MutableStateMatchEvaluator) compareWorkflowID(workflowID string, operation string) (bool, error) {
 	existingWorkflowId := m.ms.GetExecutionInfo().WorkflowId
-	return m.compareWorkflowString(workflowID, existingWorkflowId, operation, WorkflowID)
+	return m.compareString(workflowID, existingWorkflowId, operation, WorkflowID)
 }
 
 func (m *MutableStateMatchEvaluator) compareString(inStr string, expectedStr string, operation string, fieldName string) (bool, error) {

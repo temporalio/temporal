@@ -180,6 +180,48 @@ func TestBasicMutableStateMatchEvaluator(t *testing.T) {
 			expectedMatch: false,
 			expectedError: false,
 		},
+		{
+			name:          "test AND, true",
+			query:         fmt.Sprintf("%s = 'workflow_id' AND %s = 'workflow_type'", WorkflowID, WorkflowTypeName),
+			expectedMatch: true,
+			expectedError: false,
+		},
+		{
+			name:          "test AND, false, left cause",
+			query:         fmt.Sprintf("%s = 'workflow_id_unknown' AND %s = 'workflow_type'", WorkflowID, WorkflowTypeName),
+			expectedMatch: false,
+			expectedError: false,
+		},
+		{
+			name:          "test and, false, right cause",
+			query:         fmt.Sprintf("%s = 'workflow_id' AND %s = 'workflow_type_unknown'", WorkflowID, WorkflowTypeName),
+			expectedMatch: false,
+			expectedError: false,
+		},
+		{
+			name:          "test OR, true",
+			query:         fmt.Sprintf("%s = 'workflow_id' OR %s = 'workflow_type'", WorkflowID, WorkflowTypeName),
+			expectedMatch: true,
+			expectedError: false,
+		},
+		{
+			name:          "test OR, true, left only",
+			query:         fmt.Sprintf("%s = 'workflow_id' OR %s = 'workflow_type_unknown'", WorkflowID, WorkflowTypeName),
+			expectedMatch: true,
+			expectedError: false,
+		},
+		{
+			name:          "test OR, true, right only",
+			query:         fmt.Sprintf("%s = 'workflow_id_unknown' OR %s = 'workflow_type'", WorkflowID, WorkflowTypeName),
+			expectedMatch: true,
+			expectedError: false,
+		},
+		{
+			name:          "test OR, false",
+			query:         fmt.Sprintf("%s = 'workflow_id_unknown' OR %s = 'workflow_type_unknown'", WorkflowID, WorkflowTypeName),
+			expectedMatch: false,
+			expectedError: false,
+		},
 	}
 
 	startTime, err := convertToTime(fmt.Sprintf("'%s'", startTimeStr))
