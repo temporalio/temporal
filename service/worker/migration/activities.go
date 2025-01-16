@@ -484,7 +484,6 @@ func (a *activities) CountWorkflow(ctx context.Context, request *workflowservice
 func (a *activities) GenerateReplicationTasks(ctx context.Context, request *generateReplicationTasksRequest) error {
 	ctx = a.setCallerInfoForServerAPI(ctx, namespace.ID(request.NamespaceID))
 	rateLimiter := quotas.NewRateLimiter(request.RPS, int(math.Ceil(request.RPS)))
-	getParentInfoRateLimiter := quotas.NewRateLimiter(request.GetParentInfoRPS, int(math.Ceil(request.GetParentInfoRPS)))
 
 	start := time.Now()
 	defer func() {
@@ -498,19 +497,9 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 		}
 	}
 
-	executionDedupMap := make(map[definition.WorkflowKey]struct{})
 	for i := startIndex; i < len(request.Executions); i++ {
 		var executionCandidates []definition.WorkflowKey
-		if request.EnableParentInfo {
-			var err error
-			executionCandidates, err = a.generateExecutionsToReplicate(ctx, getParentInfoRateLimiter, executionDedupMap, request.NamespaceID, request.Executions[i])
-			if err != nil {
-				a.logger.Error("force-replication failed to generate replication task", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(request.Executions[i].WorkflowId), tag.WorkflowRunID(request.Executions[i].RunId), tag.Error(err))
-				return err
-			}
-		} else {
-			executionCandidates = []definition.WorkflowKey{definition.NewWorkflowKey(request.NamespaceID, request.Executions[i].GetWorkflowId(), request.Executions[i].GetRunId())}
-		}
+		executionCandidates = []definition.WorkflowKey{definition.NewWorkflowKey(request.NamespaceID, request.Executions[i].GetWorkflowId(), request.Executions[i].GetRunId())}
 
 		for _, we := range executionCandidates {
 			if err := a.generateWorkflowReplicationTask(ctx, rateLimiter, we); err != nil {
