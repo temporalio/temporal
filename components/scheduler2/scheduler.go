@@ -201,6 +201,13 @@ func (s Scheduler) overlapPolicy() enumspb.ScheduleOverlapPolicy {
 	return policy
 }
 
+func (s Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {
+	if overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
+		overlapPolicy = s.overlapPolicy()
+	}
+	return overlapPolicy
+}
+
 // validateCachedState clears cached fields whenever the Scheduler's
 // ConflictToken doesn't match its cacheConflictToken field. Validation is only
 // as effective as the Scheduler's backing persisted state is up-to-date.
