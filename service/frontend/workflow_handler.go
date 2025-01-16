@@ -119,35 +119,35 @@ type (
 		workflowservice.UnsafeWorkflowServiceServer
 		status int32
 
-		tokenSerializer                                   common.TaskTokenSerializer
-		config                                            *Config
-		versionChecker                                    headers.VersionChecker
-		namespaceHandler                                  *namespaceHandler
-		getDefaultWorkflowRetrySettings                   dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
-		allowReusePolicyRejectWithConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
-		visibilityMgr                                     manager.VisibilityManager
-		logger                                            log.Logger
-		throttledLogger                                   log.Logger
-		persistenceExecutionName                          string
-		clusterMetadataManager                            persistence.ClusterMetadataManager
-		clusterMetadata                                   cluster.Metadata
-		historyClient                                     historyservice.HistoryServiceClient
-		matchingClient                                    matchingservice.MatchingServiceClient
-		deploymentStoreClient                             deployment.DeploymentStoreClient
-		archiverProvider                                  provider.ArchiverProvider
-		payloadSerializer                                 serialization.Serializer
-		namespaceRegistry                                 namespace.Registry
-		saMapperProvider                                  searchattribute.MapperProvider
-		saProvider                                        searchattribute.Provider
-		saValidator                                       *searchattribute.Validator
-		archivalMetadata                                  archiver.ArchivalMetadata
-		healthServer                                      *health.Server
-		overrides                                         *Overrides
-		membershipMonitor                                 membership.Monitor
-		healthInterceptor                                 *interceptor.HealthInterceptor
-		scheduleSpecBuilder                               *scheduler.SpecBuilder
-		outstandingPollers                                collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
-		httpEnabled                                       bool
+		tokenSerializer                                  common.TaskTokenSerializer
+		config                                           *Config
+		versionChecker                                   headers.VersionChecker
+		namespaceHandler                                 *namespaceHandler
+		getDefaultWorkflowRetrySettings                  dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+		enableReusePolicyRejectOnConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
+		visibilityMgr                                    manager.VisibilityManager
+		logger                                           log.Logger
+		throttledLogger                                  log.Logger
+		persistenceExecutionName                         string
+		clusterMetadataManager                           persistence.ClusterMetadataManager
+		clusterMetadata                                  cluster.Metadata
+		historyClient                                    historyservice.HistoryServiceClient
+		matchingClient                                   matchingservice.MatchingServiceClient
+		deploymentStoreClient                            deployment.DeploymentStoreClient
+		archiverProvider                                 provider.ArchiverProvider
+		payloadSerializer                                serialization.Serializer
+		namespaceRegistry                                namespace.Registry
+		saMapperProvider                                 searchattribute.MapperProvider
+		saProvider                                       searchattribute.Provider
+		saValidator                                      *searchattribute.Validator
+		archivalMetadata                                 archiver.ArchivalMetadata
+		healthServer                                     *health.Server
+		overrides                                        *Overrides
+		membershipMonitor                                membership.Monitor
+		healthInterceptor                                *interceptor.HealthInterceptor
+		scheduleSpecBuilder                              *scheduler.SpecBuilder
+		outstandingPollers                               collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
+		httpEnabled                                      bool
 	}
 )
 
@@ -193,8 +193,8 @@ func NewWorkflowHandler(
 			timeSource,
 			config,
 		),
-		getDefaultWorkflowRetrySettings:                   config.DefaultWorkflowRetryPolicy,
-		allowReusePolicyRejectWithConflictPolicyTerminate: config.AllowReusePolicyRejectWithConflictPolicyTerminate,
+		getDefaultWorkflowRetrySettings:                  config.DefaultWorkflowRetryPolicy,
+		enableReusePolicyRejectOnConflictPolicyTerminate: config.EnableReusePolicyRejectOnConflictPolicyTerminate,
 		visibilityMgr:            visibilityMgr,
 		logger:                   logger,
 		throttledLogger:          throttledLogger,
@@ -4792,7 +4792,7 @@ func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 	}
 	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING &&
 		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE &&
-		!wh.allowReusePolicyRejectWithConflictPolicyTerminate(namespaceName.String()) {
+		wh.enableReusePolicyRejectOnConflictPolicyTerminate(namespaceName.String()) {
 		return errIncompatibleIDReusePolicyRejectDuplicate
 	}
 	return nil

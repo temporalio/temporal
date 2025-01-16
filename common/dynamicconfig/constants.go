@@ -2078,11 +2078,12 @@ the user has not specified an explicit RetryPolicy`,
 		`DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
 where the user has set an explicit RetryPolicy, but not specified all the fields`,
 	)
-	AllowReusePolicyRejectWithConflictPolicyTerminate = NewNamespaceTypedSetting(
+	EnableReusePolicyRejectOnConflictPolicyTerminate = NewNamespaceTypedSetting(
 		"history.allowReusePolicyRejectWithConflictPolicyTerminate",
-		false,
-		`Allows to use WorkflowIdReusePolicy RejectDuplicate with WorkflowIdReusePolicy TerminateExisting.
-If false, an invalid argument error is returned.`,
+		true,
+		`Enables the use of WorkflowIdReusePolicy RejectDuplicate and RejectDuplicateFailedOnly with WorkflowIdReusePolicy TerminateExisting.
+If true (the default), RejectDuplicate is disallowed and RejectDuplicateFailedOnly will be honored after TerminateExisting is applied.
+This configuration will be become the default behavior in the next release and removed subsequently.`,
 	)
 	AllowResetWithPendingChildren = NewNamespaceBoolSetting(
 		"history.allowResetWithPendingChildren",
