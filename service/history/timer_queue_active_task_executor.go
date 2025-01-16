@@ -171,9 +171,8 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
-	referenceTime := t.shardContext.GetTimeSource().Now()
+	referenceTime := t.Now()
 	timerFired := false
-
 Loop:
 	for _, timerSequenceID := range timerSequence.LoadAndSortUserTimers() {
 		timerInfo, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.EventID)
@@ -183,7 +182,7 @@ Loop:
 			return serviceerror.NewInternal(errString)
 		}
 
-		if !queues.IsTimeExpired(referenceTime, timerSequenceID.Timestamp) {
+		if !queues.IsTimeExpired(task, referenceTime, timerSequenceID.Timestamp) {
 			// Timer sequence IDs are sorted; once we encounter a timer whose
 			// sequence ID has not expired, all subsequent timers will not have
 			// expired.
@@ -231,7 +230,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
-	referenceTime := t.shardContext.GetTimeSource().Now()
+	referenceTime := t.Now()
 	updateMutableState := false
 	scheduleWorkflowTask := false
 
@@ -242,7 +241,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// created.
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 	ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
-	if isHeartBeatTask && ok && queues.IsTimeExpired(task.GetVisibilityTime(), heartbeatTimeoutVis) {
+	if isHeartBeatTask && ok && queues.IsTimeExpired(task, task.GetVisibilityTime(), heartbeatTimeoutVis) {
 		if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(
 			ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
 			return err
@@ -252,7 +251,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 
 Loop:
 	for _, timerSequenceID := range timerSequence.LoadAndSortActivityTimers() {
-		if !queues.IsTimeExpired(referenceTime, timerSequenceID.Timestamp) {
+		if !queues.IsTimeExpired(task, referenceTime, timerSequenceID.Timestamp) {
 			// timer sequence IDs are sorted, once there is one timer
 			// sequence ID not expired, all after that wil not expired
 			break Loop
@@ -618,7 +617,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		return err
 	}
 
-	if !t.isValidWorkflowRunTimeoutTask(mutableState) {
+	if !t.isValidWorkflowRunTimeoutTask(mutableState, task) {
 		return nil
 	}
 
@@ -628,7 +627,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	initiator := enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED
 
 	wfExpTime := mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
-	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(t.shardContext.GetTimeSource().Now()) {
+	if wfExpTime == nil || wfExpTime.AsTime().IsZero() || wfExpTime.AsTime().After(t.Now()) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)
 		if backoffInterval != backoff.NoBackoff {
 			// We have a retry policy and we should retry.
@@ -678,7 +677,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		mutableState.GetNamespaceEntry(),
 		mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		t.shardContext.GetTimeSource().Now(),
+		t.Now(),
 		mutableState,
 	)
 	if err != nil {
@@ -802,6 +801,7 @@ func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
 		ctx,
 		wfCtx,
 		ms,
+		task,
 		func(node *hsm.Node, task hsm.Task) error {
 			return t.shardContext.StateMachineRegistry().ExecuteTimerTask(t, node, task)
 		},
