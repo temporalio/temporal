@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	apischedule "go.temporal.io/api/schedule/v1"
-	srvschedule "go.temporal.io/server/api/schedule/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	v1scheduler "go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -18,10 +18,10 @@ func TestUseScheduledActionPeek(t *testing.T) {
 
 	// Starts paused, with unlimited actions.
 	scheduler := Scheduler{
-		SchedulerInternal: &srvschedule.SchedulerInternal{
+		SchedulerInternal: &schedulespb.SchedulerInternal{
 			ConflictToken: initialConflictToken,
-			Schedule: &apischedule.Schedule{
-				State: &apischedule.ScheduleState{
+			Schedule: &schedulepb.Schedule{
+				State: &schedulepb.ScheduleState{
 					Paused:           true,
 					LimitedActions:   false,
 					RemainingActions: initialRemainingActions,
@@ -63,17 +63,17 @@ func TestUseScheduledActionPeek(t *testing.T) {
 
 func TestCompiledSpec(t *testing.T) {
 	const initialConflictToken int64 = 0
-	initialInterval := apischedule.IntervalSpec{
+	initialInterval := schedulepb.IntervalSpec{
 		Interval: durationpb.New(time.Minute),
 		Phase:    durationpb.New(0),
 	}
 
 	scheduler := Scheduler{
-		SchedulerInternal: &srvschedule.SchedulerInternal{
+		SchedulerInternal: &schedulespb.SchedulerInternal{
 			ConflictToken: initialConflictToken,
-			Schedule: &apischedule.Schedule{
-				Spec: &apischedule.ScheduleSpec{
-					Interval: []*apischedule.IntervalSpec{&initialInterval},
+			Schedule: &schedulepb.Schedule{
+				Spec: &schedulepb.ScheduleSpec{
+					Interval: []*schedulepb.IntervalSpec{&initialInterval},
 				},
 			},
 		},

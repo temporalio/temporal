@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/components/scheduler2"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -29,7 +30,9 @@ func TestExecuteBufferTask_ProcessTimeRangeFails(t *testing.T) {
 	env := fakeEnv{}
 	registry := newRegistry(t)
 	ctrl := gomock.NewController(t)
-	root := newSchedulerTree(t, registry, defaultSchedule(), nil)
+	backend := &hsmtest.NodeBackend{}
+	root := newRoot(t, registry, backend)
+	schedulerNode := newSchedulerTree(t, registry, root, defaultSchedule(), nil)
 
 	// If ProcessTimeRange fails, we should fail the task as an internal error.
 	specProcessor := scheduler2.NewMockSpecProcessor(ctrl)
@@ -38,7 +41,7 @@ func TestExecuteBufferTask_ProcessTimeRangeFails(t *testing.T) {
 	).Return(nil, errors.New("processTimeRange bug"))
 
 	registerGeneratorExecutor(t, ctrl, registry, specProcessor)
-	generatorNode, err := root.Child([]hsm.Key{scheduler2.GeneratorMachineKey})
+	generatorNode, err := schedulerNode.Child([]hsm.Key{scheduler2.GeneratorMachineKey})
 	require.NoError(t, err)
 
 	// Execute the buffer task.
@@ -50,12 +53,14 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	env := fakeEnv{}
 	registry := newRegistry(t)
 	ctrl := gomock.NewController(t)
-	root := newSchedulerTree(t, registry, defaultSchedule(), nil)
+	backend := &hsmtest.NodeBackend{}
+	root := newRoot(t, registry, backend)
+	schedulerNode := newSchedulerTree(t, registry, root, defaultSchedule(), nil)
 
 	// Use a real SpecProcessor.
 	specProcessor := newTestSpecProcessor(ctrl)
 	registerGeneratorExecutor(t, ctrl, registry, specProcessor.SpecProcessor)
-	generatorNode, err := root.Child([]hsm.Key{scheduler2.GeneratorMachineKey})
+	generatorNode, err := schedulerNode.Child([]hsm.Key{scheduler2.GeneratorMachineKey})
 	require.NoError(t, err)
 
 	// Move high water mark back in time (Generator always compares high water mark
@@ -71,7 +76,7 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 
 	// Buffering should have resulted in buffered starts being applied to the
 	// Executor.
-	executorNode, err := root.Child([]hsm.Key{scheduler2.ExecutorMachineKey})
+	executorNode, err := schedulerNode.Child([]hsm.Key{scheduler2.ExecutorMachineKey})
 	require.NoError(t, err)
 	executor, err := hsm.MachineData[scheduler2.Executor](executorNode)
 	require.NoError(t, err)
@@ -86,16 +91,24 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	require.True(t, newHighWatermark.After(highWatermark))
 	require.True(t, generator.NextInvocationTime.AsTime().After(newHighWatermark))
 
-	// A single task should have been enqueued.
-	opLog, err := generatorNode.Outputs()
+	// We should have enqueued an Execute task, and another Buffer task.
+	opLog, err := root.Outputs()
 	require.NoError(t, err)
-	require.Equal(t, 1, len(opLog))
+	require.Equal(t, 2, len(opLog))
+
+	// The execute task should be scheduled immediately.
 	output, ok := opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
 	require.Equal(t, 1, len(output.Output.Tasks))
+	task := output.Output.Tasks[0]
+	require.Equal(t, scheduler2.TaskTypeExecute, task.Type())
+	require.Equal(t, hsm.Immediate, task.Deadline())
 
 	// The buffer task should have a deadline on our next invocation time.
-	task := output.Output.Tasks[0]
+	output, ok = opLog[1].(hsm.TransitionOperation)
+	require.True(t, ok)
+	require.Equal(t, 1, len(output.Output.Tasks))
+	task = output.Output.Tasks[0]
 	require.Equal(t, scheduler2.TaskTypeBuffer, task.Type())
 	require.Equal(t, generator.NextInvocationTime.AsTime(), task.Deadline())
 }

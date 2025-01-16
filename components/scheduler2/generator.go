@@ -3,7 +3,7 @@ package scheduler2
 import (
 	"fmt"
 
-	schedspb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -14,7 +14,7 @@ type (
 	// to the schedule's specification. Manually requested actions (from an immediate
 	// request or backfill) are separately handled in the Backfiller sub state machine.
 	Generator struct {
-		*schedspb.GeneratorInternal
+		*schedulespb.GeneratorInternal
 	}
 
 	// The machine definition provides serialization/deserialization and type information.
@@ -44,7 +44,7 @@ var (
 // be parented under a Scheduler root node.
 func NewGenerator() *Generator {
 	return &Generator{
-		GeneratorInternal: &schedspb.GeneratorInternal{
+		GeneratorInternal: &schedulespb.GeneratorInternal{
 			NextInvocationTime: timestamppb.Now(),
 			LastProcessedTime:  timestamppb.Now(),
 		},
@@ -73,7 +73,7 @@ func (generatorMachineDefinition) Serialize(state any) ([]byte, error) {
 }
 
 func (generatorMachineDefinition) Deserialize(body []byte) (any, error) {
-	state := &schedspb.GeneratorInternal{}
+	state := &schedulespb.GeneratorInternal{}
 	return Generator{
 		GeneratorInternal: state,
 	}, proto.Unmarshal(body, state)

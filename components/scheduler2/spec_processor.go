@@ -3,7 +3,7 @@ package scheduler2
 import (
 	"time"
 
-	schedpb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -44,7 +44,7 @@ type (
 	ProcessedTimeRange struct {
 		NextWakeupTime time.Time
 		LastActionTime time.Time
-		BufferedStarts []*schedpb.BufferedStart
+		BufferedStarts []*schedulespb.BufferedStart
 	}
 )
 
@@ -86,7 +86,7 @@ func (s SpecProcessorImpl) ProcessTimeRange(
 	lastAction := start
 	var next scheduler1.GetNextTimeResult
 	var err error
-	var bufferedStarts []*schedpb.BufferedStart
+	var bufferedStarts []*schedulespb.BufferedStart
 	for next, err = s.getNextTime(scheduler, start); err == nil && !(next.Next.IsZero() || next.Next.After(end)); next, err = s.getNextTime(scheduler, next.Next) {
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
 			// If we've received an update that took effect after the LastProcessedTime high
@@ -106,7 +106,7 @@ func (s SpecProcessorImpl) ProcessTimeRange(
 			continue
 		}
 
-		bufferedStarts = append(bufferedStarts, &schedpb.BufferedStart{
+		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,

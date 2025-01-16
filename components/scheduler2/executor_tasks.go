@@ -5,7 +5,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	schedpb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -25,7 +25,7 @@ type (
 		Node *hsm.Node
 
 		Deadline       time.Time
-		BufferedStarts []*schedpb.BufferedStart
+		BufferedStarts []*schedulespb.BufferedStart
 	}
 
 	// EventWait is fired when the executor should return to a waiting state until
@@ -61,8 +61,15 @@ func (ExecuteTask) Validate(_ *persistencespb.StateMachineRef, node *hsm.Node) e
 
 func (e Executor) tasks() ([]hsm.Task, error) {
 	if e.State() == enumsspb.SCHEDULER_EXECUTOR_STATE_EXECUTING {
+		// If NextInvocationTime is nil/0, set deadline to the sentinel Immediate value,
+		// instead of to the UNIX epoch after converting from protobuf timestamp.
+		deadline := hsm.Immediate
+		if e.GetNextInvocationTime().GetSeconds() > 0 {
+			deadline = e.GetNextInvocationTime().AsTime().UTC()
+		}
+
 		return []hsm.Task{ExecuteTask{
-			deadline: e.NextInvocationTime.AsTime(),
+			deadline: deadline,
 		}}, nil
 	}
 	return nil, nil

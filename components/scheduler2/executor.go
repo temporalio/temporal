@@ -5,7 +5,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	schedspb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -14,7 +14,7 @@ import (
 type (
 	// The Executor sub state machine is responsible for executing buffered actions.
 	Executor struct {
-		*schedspb.ExecutorInternal
+		*schedulespb.ExecutorInternal
 	}
 
 	// The machine definition provides serialization/deserialization and type information.
@@ -40,10 +40,10 @@ var (
 func NewExecutor() *Executor {
 	var zero time.Time
 	return &Executor{
-		ExecutorInternal: &schedspb.ExecutorInternal{
+		ExecutorInternal: &schedulespb.ExecutorInternal{
 			State:              enumsspb.SCHEDULER_EXECUTOR_STATE_WAITING,
 			NextInvocationTime: timestamppb.New(zero),
-			BufferedStarts:     []*schedspb.BufferedStart{},
+			BufferedStarts:     []*schedulespb.BufferedStart{},
 		},
 	}
 }
@@ -72,7 +72,7 @@ func (executorMachineDefinition) Serialize(state any) ([]byte, error) {
 }
 
 func (executorMachineDefinition) Deserialize(body []byte) (any, error) {
-	state := &schedspb.ExecutorInternal{}
+	state := &schedulespb.ExecutorInternal{}
 	return Executor{state}, proto.Unmarshal(body, state)
 }
 

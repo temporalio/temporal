@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/schedule/v1"
-	schedspb "go.temporal.io/server/api/schedule/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
@@ -26,7 +26,7 @@ type (
 	// sub state machines). The Scheduler state machine is only responsible for creating
 	// the singleton sub state machines.
 	Scheduler struct {
-		*schedspb.SchedulerInternal
+		*schedulespb.SchedulerInternal
 
 		// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
 		cacheConflictToken int64
@@ -56,21 +56,21 @@ var (
 // state machines).
 func NewScheduler(
 	namespace, namespaceID, scheduleID string,
-	sched *schedule.Schedule,
-	patch *schedule.SchedulePatch,
+	sched *schedulepb.Schedule,
+	patch *schedulepb.SchedulePatch,
 ) *Scheduler {
 	var zero time.Time
 	return &Scheduler{
-		SchedulerInternal: &schedspb.SchedulerInternal{
+		SchedulerInternal: &schedulespb.SchedulerInternal{
 			Schedule: sched,
-			Info: &schedule.ScheduleInfo{
+			Info: &schedulepb.ScheduleInfo{
 				ActionCount:         0,
 				MissedCatchupWindow: 0,
 				OverlapSkipped:      0,
 				BufferDropped:       0,
 				BufferSize:          0,
-				RunningWorkflows:    []*common.WorkflowExecution{},
-				RecentActions:       []*schedule.ScheduleActionResult{},
+				RunningWorkflows:    []*commonpb.WorkflowExecution{},
+				RecentActions:       []*schedulepb.ScheduleActionResult{},
 				FutureActionTimes:   []*timestamppb.Timestamp{},
 				CreateTime:          timestamppb.Now(),
 				UpdateTime:          timestamppb.New(zero),
@@ -125,7 +125,7 @@ func (schedulerMachineDefinition) Serialize(state any) ([]byte, error) {
 }
 
 func (schedulerMachineDefinition) Deserialize(body []byte) (any, error) {
-	state := &schedspb.SchedulerInternal{}
+	state := &schedulespb.SchedulerInternal{}
 	return Scheduler{
 		SchedulerInternal: state,
 		compiledSpec:      nil,
