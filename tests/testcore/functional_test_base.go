@@ -83,23 +83,22 @@ type (
 		Logger log.Logger
 
 		// Test cluster configuration.
-		testClusterFactory  TestClusterFactory
-		testCluster         *TestCluster
-		testClusterConfig   *TestClusterConfig
-		frontendClient      workflowservice.WorkflowServiceClient
-		adminClient         adminservice.AdminServiceClient
-		operatorClient      operatorservice.OperatorServiceClient
-		httpAPIAddress      string
-		namespace           namespace.Name
-		namespaceID         namespace.ID
-		foreignNamespace    namespace.Name
-		archivalNamespace   namespace.Name
-		archivalNamespaceID namespace.ID
+		testClusterFactory TestClusterFactory
+		testCluster        *TestCluster
+		testClusterConfig  *TestClusterConfig
+		frontendClient     workflowservice.WorkflowServiceClient
+		adminClient        adminservice.AdminServiceClient
+		operatorClient     operatorservice.OperatorServiceClient
+		httpAPIAddress     string
+		namespace          namespace.Name
+		namespaceID        namespace.ID
+		foreignNamespace   namespace.Name
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
 		ServiceOptions         map[primitives.ServiceName][]fx.Option
 		DynamicConfigOverrides map[dynamicconfig.Key]any
+		ArchivalEnabled        bool
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -128,6 +127,12 @@ func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestCluster
 		} else {
 			maps.Copy(params.DynamicConfigOverrides, overrides)
 		}
+	}
+}
+
+func WithArchivalEnabled() TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.ArchivalEnabled = true
 	}
 }
 
@@ -161,14 +166,6 @@ func (s *FunctionalTestBase) Namespace() namespace.Name {
 
 func (s *FunctionalTestBase) NamespaceID() namespace.ID {
 	return s.namespaceID
-}
-
-func (s *FunctionalTestBase) ArchivalNamespace() namespace.Name {
-	return s.archivalNamespace
-}
-
-func (s *FunctionalTestBase) ArchivalNamespaceID() namespace.ID {
-	return s.archivalNamespaceID
 }
 
 func (s *FunctionalTestBase) ForeignNamespace() namespace.Name {
@@ -217,6 +214,7 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 
 	s.testClusterConfig.ServiceFxOptions = params.ServiceOptions
 	s.testClusterConfig.EnableMetricsCapture = true
+	s.testClusterConfig.EnableArchival = params.ArchivalEnabled
 
 	s.testClusterFactory = NewTestClusterFactory()
 
@@ -225,24 +223,12 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 
 	// Setup test cluster namespaces.
 	s.namespace = namespace.Name(RandomizeStr("namespace"))
-	s.namespaceID, err = s.registerNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.namespaceID, err = s.RegisterNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	s.foreignNamespace = namespace.Name(RandomizeStr("foreign-namespace"))
-	_, err = s.registerNamespace(s.ForeignNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	_, err = s.RegisterNamespace(s.ForeignNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
-
-	if s.testClusterConfig.EnableArchival {
-		s.archivalNamespace = namespace.Name(RandomizeStr("archival-enabled-namespace"))
-		s.archivalNamespaceID, err = s.registerNamespace(
-			s.ArchivalNamespace(),
-			0, // Archive right away.
-			enumspb.ARCHIVAL_STATE_ENABLED,
-			s.testCluster.archiverBase.historyURI,
-			s.testCluster.archiverBase.visibilityURI,
-		)
-		s.Require().NoError(err)
-	}
 
 	// Setup test cluster clients.
 	s.frontendClient = s.testCluster.FrontendClient()
@@ -360,11 +346,8 @@ func readTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 }
 
 func (s *FunctionalTestBase) TearDownCluster() {
-	s.Require().NoError(s.markNamespaceAsDeleted(s.Namespace()))
-	s.Require().NoError(s.markNamespaceAsDeleted(s.ForeignNamespace()))
-	if s.ArchivalNamespace() != namespace.EmptyName {
-		s.Require().NoError(s.markNamespaceAsDeleted(s.ArchivalNamespace()))
-	}
+	s.Require().NoError(s.MarkNamespaceAsDeleted(s.Namespace()))
+	s.Require().NoError(s.MarkNamespaceAsDeleted(s.ForeignNamespace()))
 
 	if s.testCluster != nil {
 		s.Require().NoError(s.testCluster.TearDownCluster())
@@ -375,7 +358,7 @@ func (s *FunctionalTestBase) TearDownCluster() {
 //  1. The Retention period is set to 0 for archival tests, and this can't be done through FE,
 //  2. Update search attributes would require an extra API call,
 //  3. One more extra API call would be necessary to get namespace.ID.
-func (s *FunctionalTestBase) registerNamespace(
+func (s *FunctionalTestBase) RegisterNamespace(
 	nsName namespace.Name,
 	retentionDays int32,
 	archivalState enumspb.ArchivalState,
@@ -432,7 +415,7 @@ func (s *FunctionalTestBase) registerNamespace(
 	return nsID, nil
 }
 
-func (s *FunctionalTestBase) markNamespaceAsDeleted(
+func (s *FunctionalTestBase) MarkNamespaceAsDeleted(
 	nsName namespace.Name,
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)

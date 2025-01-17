@@ -561,7 +561,7 @@ func (tc *TestCluster) TestBase() *persistencetests.TestBase {
 	return tc.testBase
 }
 
-func (tc *TestCluster) ArchivalBase() *ArchiverBase {
+func (tc *TestCluster) ArchiverBase() *ArchiverBase {
 	return tc.archiverBase
 }
 

@@ -149,7 +149,6 @@ type (
 
 	// WorkerConfig is the config for the worker service
 	WorkerConfig struct {
-		EnableArchiver   bool
 		EnableReplicator bool
 		NumWorkers       int
 		DisableWorker    bool // overrides NumWorkers
