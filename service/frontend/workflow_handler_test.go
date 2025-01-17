@@ -667,7 +667,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReuse
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
 	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.StartWorkflowExecutionResponse{Started: true}, nil)
 
-	config.EnableReusePolicyRejectOnConflictPolicyTerminate = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.FollowReusePolicyRejectAfterConflictPolicyTerminate = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh = s.getWorkflowHandler(config)
 	_, err = wh.StartWorkflowExecution(context.Background(), req)
 	s.NoError(err)
