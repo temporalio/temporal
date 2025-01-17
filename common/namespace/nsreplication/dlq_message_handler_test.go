@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package nsreplication
 
 import (
 	"context"
@@ -46,7 +46,7 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		mockReplicationTaskExecutor *MockReplicationTaskExecutor
+		mockReplicationTaskExecutor *MockTaskExecutor
 		mockReplicationQueue        *persistence.MockNamespaceReplicationQueue
 		dlqMessageHandler           *dlqMessageHandlerImpl
 	}
@@ -69,7 +69,7 @@ func (s *dlqMessageHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	logger := log.NewTestLogger()
-	s.mockReplicationTaskExecutor = NewMockReplicationTaskExecutor(s.controller)
+	s.mockReplicationTaskExecutor = NewMockTaskExecutor(s.controller)
 	s.mockReplicationQueue = persistence.NewMockNamespaceReplicationQueue(s.controller)
 
 	s.dlqMessageHandler = NewDLQMessageHandler(

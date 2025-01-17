@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -119,7 +120,7 @@ type (
 		esConfig                         *esclient.Config
 		esClient                         esclient.Client
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
-		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
@@ -177,7 +178,7 @@ type (
 		ESConfig                         *esclient.Config
 		ESClient                         esclient.Client
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
-		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		NamespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
