@@ -74,13 +74,7 @@ func (s *namespaceTestSuite) SetupSuite() {
 		dynamicconfig.TransferProcessorUpdateAckInterval.Key():   1 * time.Second,
 		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(): 1 * time.Second,
 	}
-
-	if testcore.UsingSQLAdvancedVisibility() {
-		s.SetupSuiteWithCluster("testdata/cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-		s.Logger.Info(fmt.Sprintf("Running delete namespace tests with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
-	} else {
-		s.SetupSuiteWithCluster("testdata/es_cluster.yaml", testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-	}
+	s.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {

@@ -127,7 +127,7 @@ func (s *DLQSuite) SetupSuite() {
 	s.dlqTasks = make(chan tasks.Task)
 	testPrefix := "dlq-test-terminal-wfts-"
 	s.failingWorkflowIDPrefix.Store(&testPrefix)
-	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(
 		testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
@@ -177,7 +177,7 @@ func (s *DLQSuite) SetupSuite() {
 
 func (s *DLQSuite) TearDownSuite() {
 	s.worker.Stop()
-	s.FunctionalTestSuite.TearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func myWorkflow(workflow.Context) (string, error) {

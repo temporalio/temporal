@@ -258,7 +258,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		indexName string
 		esClient  esclient.Client
 	)
-	if !UsingSQLAdvancedVisibility() && options.ESConfig != nil {
+	if !UseSQLVisibility() && options.ESConfig != nil {
 		// Randomize index name to avoid cross tests interference.
 		for k, v := range options.ESConfig.Indices {
 			options.ESConfig.Indices[k] = fmt.Sprintf("%v-%v", v, uuid.New())
@@ -543,7 +543,7 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 func (tc *TestCluster) TearDownCluster() error {
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
-	if !UsingSQLAdvancedVisibility() && tc.host.esConfig != nil {
+	if !UseSQLVisibility() && tc.host.esConfig != nil {
 		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
 			errs = multierr.Combine(errs, err)
 		}
