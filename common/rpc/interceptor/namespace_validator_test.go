@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasktoken"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -80,7 +81,7 @@ func (s *namespaceValidatorSuite) TearDownTest() {
 }
 
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotSet() {
-	taskToken, _ := common.NewProtoTaskTokenSerializer().Serialize(&tokenspb.Task{
+	taskToken, _ := tasktoken.NewSerializer().Serialize(&tokenspb.Task{
 		NamespaceId: "",
 		WorkflowId:  "wid",
 	})
@@ -156,7 +157,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_NamespaceNotFoun
 	s.False(handlerCalled)
 
 	s.mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("not-found-namespace-id")).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
-	taskToken, _ := common.NewProtoTaskTokenSerializer().Serialize(&tokenspb.Task{
+	taskToken, _ := tasktoken.NewSerializer().Serialize(&tokenspb.Task{
 		NamespaceId: "not-found-namespace-id",
 	})
 	tokenReq := &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -436,7 +437,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 }
 
 func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromToken() {
-	taskToken, _ := common.NewProtoTaskTokenSerializer().Serialize(&tokenspb.Task{
+	taskToken, _ := tasktoken.NewSerializer().Serialize(&tokenspb.Task{
 		NamespaceId: "test-namespace-id",
 	})
 
@@ -634,7 +635,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_TokenNamespaceEn
 	}
 
 	for _, testCase := range testCases {
-		taskToken, _ := common.NewProtoTaskTokenSerializer().Serialize(&tokenspb.Task{
+		taskToken, _ := tasktoken.NewSerializer().Serialize(&tokenspb.Task{
 			NamespaceId: testCase.tokenNamespaceID.String(),
 		})
 		tokenNamespace := namespace.FromPersistentState(

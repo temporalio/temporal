@@ -119,7 +119,7 @@ type (
 		workflowservice.UnsafeWorkflowServiceServer
 		status int32
 
-		tokenSerializer                               common.TaskTokenSerializer
+		tokenSerializer                               *tasktoken.Serializer
 		config                                        *Config
 		versionChecker                                headers.VersionChecker
 		namespaceHandler                              *namespaceHandler
@@ -181,7 +181,7 @@ func NewWorkflowHandler(
 	handler := &WorkflowHandler{
 		status:          common.DaemonStatusInitialized,
 		config:          config,
-		tokenSerializer: common.NewProtoTaskTokenSerializer(),
+		tokenSerializer: tasktoken.NewSerializer(),
 		versionChecker:  headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
 			logger,
