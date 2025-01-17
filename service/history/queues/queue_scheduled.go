@@ -92,7 +92,7 @@ func NewScheduledQueue(
 				NextPageToken: paginationToken,
 			}
 
-			resp, err := shard.GetExecutionManager().GetHistoryTasks(ctx, request)
+			resp, err := shard.GetHistoryTasks(ctx, request)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -275,7 +275,7 @@ func (p *scheduledQueue) lookAheadTask() {
 		BatchSize:           1,
 		NextPageToken:       nil,
 	}
-	response, err := p.shard.GetExecutionManager().GetHistoryTasks(ctx, request)
+	response, err := p.shard.GetHistoryTasks(ctx, request)
 	if err != nil {
 		p.logger.Error("Failed to load look ahead task", tag.Error(err))
 		if common.IsResourceExhausted(err) {
