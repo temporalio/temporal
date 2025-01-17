@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/namespace/nsattr"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -64,7 +65,7 @@ type (
 		metadataMgr            persistence.MetadataManager
 		clusterMetadata        cluster.Metadata
 		namespaceReplicator    nsreplication.Replicator
-		namespaceAttrValidator *namespace.AttrValidatorImpl
+		namespaceAttrValidator *nsattr.Validator
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
 		timeSource             clock.TimeSource
@@ -102,7 +103,7 @@ func newNamespaceHandler(
 		metadataMgr:            metadataMgr,
 		clusterMetadata:        clusterMetadata,
 		namespaceReplicator:    namespaceReplicator,
-		namespaceAttrValidator: namespace.NewAttrValidator(clusterMetadata),
+		namespaceAttrValidator: nsattr.NewValidator(clusterMetadata),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
 		timeSource:             timeSource,

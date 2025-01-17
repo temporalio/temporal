@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package nsattr
 
 import (
 	"testing"
@@ -41,7 +41,7 @@ type (
 		controller          *gomock.Controller
 		mockClusterMetadata *cluster.MockMetadata
 
-		validator *AttrValidatorImpl
+		validator *Validator
 	}
 )
 
@@ -60,7 +60,7 @@ func (s *attrValidatorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 
-	s.validator = NewAttrValidator(s.mockClusterMetadata)
+	s.validator = NewValidator(s.mockClusterMetadata)
 }
 
 func (s *attrValidatorSuite) TearDownTest() {
