@@ -146,9 +146,9 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 			var k string
 			switch logTag.Key() {
 			case tag.WorkflowIDKey:
-				k = "temporalWorkflowID"
+				k = WorkflowIDKey
 			case tag.WorkflowRunIDKey:
-				k = "temporalRunID"
+				k = WorkflowRunIDKey
 			default:
 				continue
 			}

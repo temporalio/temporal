@@ -85,6 +85,7 @@ func NewTimerQueueFactory(
 				),
 				int64(params.Config.TimerQueueMaxReaderCount()),
 			),
+			Tracer: params.TracerProvider.Tracer("queue.timer"),
 		},
 	}
 }
@@ -176,6 +177,7 @@ func (f *timerQueueFactory) CreateQueue(
 		shardContext.GetClusterMetadata(),
 		logger,
 		metricsHandler,
+		f.Tracer,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,

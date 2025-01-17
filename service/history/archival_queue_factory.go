@@ -116,6 +116,7 @@ func newQueueFactoryBase(params ArchivalQueueFactoryParams) QueueFactoryBase {
 			),
 			int64(params.Config.ArchivalQueueMaxReaderCount()),
 		),
+		Tracer: params.TracerProvider.Tracer("queue.archival"),
 	}
 }
 
@@ -182,6 +183,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 		shard.GetClusterMetadata(),
 		logger,
 		metricsHandler,
+		f.Tracer,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
