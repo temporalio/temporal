@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -55,8 +54,6 @@ import (
 	"go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-var killOnce sync.Once
 
 type (
 	eagerStartDeniedReason metrics.ReasonString
@@ -438,35 +435,6 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		return nil, StartNew, nil
 	}
 
-	killOnce.Do(func() {
-		err = api.GetAndUpdateWorkflowWithNew(
-			ctx,
-			nil,
-			definition.NewWorkflowKey(
-				s.namespace.ID().String(),
-				workflowID,
-				currentWorkflowConditionFailed.RunID,
-			),
-			func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-				mutableState := workflowLease.GetMutableState()
-				return api.UpdateWorkflowTerminate, workflow.TerminateWorkflow(
-					mutableState,
-					"TESTING",
-					nil,
-					"TESTING",
-					false,
-					nil,
-				)
-			},
-			nil,
-			s.shardContext,
-			s.workflowConsistencyChecker,
-		)
-		if err != nil {
-			panic(err)
-		}
-	})
-
 	var workflowLease api.WorkflowLease
 	var mutableStateInfo *mutableStateInfo
 	// Update current execution and create new execution in one transaction.
@@ -529,7 +497,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		resp, err := s.generateResponse(newRunID, mutableStateInfo.workflowTask, events)
 		return resp, StartNew, err
 	case consts.ErrWorkflowCompleted:
-		if s.followReusePolicyAfterConflictPolicyTerminate(s.namespace.ID().String()) {
+		if s.followReusePolicyAfterConflictPolicyTerminate(s.namespace.Name().String()) {
 			// Exit and retry again from the top.
 			// By returning an Unavailable service error, the entire Start request will be retried.
 			return nil, StartErr, serviceerror.NewUnavailable(fmt.Sprintf("Termination failed: %v", err))
