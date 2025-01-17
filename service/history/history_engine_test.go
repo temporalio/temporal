@@ -5312,6 +5312,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(),
 	).Return(nil)
 
 	err = s.historyEngine.ReapplyEvents(

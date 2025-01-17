@@ -31,6 +31,156 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 
+// Data for each worker deployment version + task queue pair.
+// This is stored in each worker deployment version (for each task queue),
+// and synced to task queue user data (for each worker deployment version).
+message WorkerDeploymentTaskQueueData {
+}
+
+// Local state for Worker Deployment Version
+message VersionLocalState {
+    string deployment_name = 1;
+    string version = 2;
+
+    map<string, TaskQueueFamilyData> task_queue_families = 3;
+
+    bool is_current = 4;
+    google.protobuf.Timestamp last_became_current_time = 5;
+
+    google.protobuf.Timestamp create_time = 6;
+
+    bool started_deployment_workflow = 7;
+
+    message TaskQueueFamilyData {
+        // Key: enums.TaskQueueType, Value: TaskQueueData
+        // All fields in TaskQueueData are valid except last_became_current_time, the source of
+        // truth for that is the value at the root of WorkerDeploymentLocalState.
+        map<int32, WorkerDeploymentTaskQueueData> task_queues = 1;
+    }
+}
+
+// used as Worker Deployment Version workflow input:
+message WorkerDeploymentVersionWorkflowArgs {
+    string namespace_name = 1;
+    string namespace_id = 2;
+    VersionLocalState version_state = 3;
+}
+
+// used as Worker Deployment workflow input:
+message WorkerDeploymentWorkflowArgs {
+    string namespace_name = 1;
+    string namespace_id = 2;
+    string deployment_name = 3;
+    WorkerDeploymentLocalState state = 4;
+}
+
+// Local state for Worker Deployment
+message WorkerDeploymentLocalState {
+    string current_version = 1;
+    google.protobuf.Timestamp current_changed_time = 2;
+}
+
+// used as Worker Deployment Version workflow update input:
+message RegisterWorkerInVersionArgs {
+    string task_queue_name = 1;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    google.protobuf.Timestamp first_poller_time = 3;
+    int32 max_task_queues = 4;
+}
+
+// used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
+message SyncVersionStateArgs {
+    SetCurrent set_current = 1;
+
+    message SetCurrent {
+        // If last_became_current_time is present, then set the deployment's
+        // last_became_current_time to it and set is_current true. If it's missing,
+        // set is_current false.
+        google.protobuf.Timestamp last_became_current_time = 1;
+    }
+}
+
+// used as Worker Deployment workflow update response (sent from Worker Deployment workflow):
+message SyncVersionStateResponse {
+    VersionLocalState version_state = 1;
+}
+
+// used as Worker Deployment Version workflow query response:
+message QueryDescribeVersionResponse {
+    VersionLocalState version_state = 1;
+}
+
+// used as Worker Deployment Version workflow memo:
+message VersionWorkflowMemo {
+    string deployment_name = 1;
+    string version = 2;
+    google.protobuf.Timestamp create_time = 3;
+    bool is_current_deployment = 4;
+}
+
+// used as Worker Deployment Version workflow activity input:
+message StartWorkerDeploymentRequest {
+    string deployment_name = 1;
+    string request_id = 2;
+}
+
+// used as Worker Deployment Version workflow activity input:
+message SyncWorkerDeploymentUserDataRequest {
+    string deployment_name = 1;
+    string version = 2;
+    repeated SyncUserData sync = 3;
+
+    message SyncUserData {
+        string name = 1;
+        temporal.api.enums.v1.TaskQueueType type = 2;
+        WorkerDeploymentTaskQueueData data = 3;
+    }
+}
+
+// used as Worker Deployment Version workflow activity output:
+message SyncWorkerDeploymentUserDataResponse {
+    map<string, int64> task_queue_max_versions = 1;
+}
+
+// used as Worker Deployment Version workflow activity input:
+message CheckWorkerDeploymentUserDataPropagationRequest {
+    map<string, int64> task_queue_max_versions = 1;
+}
+
+// used as Worker Deployment workflow update input:
+message SetCurrentVersionArgs {
+    string identity = 1;
+    string version = 2;
+    string request_id = 4;
+}
+
+// used as Worker Deployment update response:
+message SetCurrentVersionResponse {
+}
+
+// used as Worker Deployment activity input:
+message SyncVersionStateActivityArgs {
+    string deployment_name = 1;
+    string version = 2;
+    SyncVersionStateArgs args = 3;
+    string request_id = 4;
+}
+
+// used as Worker Deployment activity result:
+message SyncVersionStateActivityResult {
+    VersionLocalState version_state = 1;
+}
+
+// used as Worker Deployment workflow memo:
+message WorkerDeploymentWorkflowMemo {
+    string deployment_name = 1;
+    string current_version = 2;
+    google.protobuf.Timestamp current_changed_time = 3;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Below this line are the messages for the pre-release Deployment APIs //
+//////////////////////////////////////////////////////////////////////////
 // Data for each deployment+task queue pair. This is stored in each deployment (for each task
 // queue), and synced to task queue user data (for each deployment).
 message TaskQueueData {
@@ -134,6 +284,16 @@ message SyncUserDataRequest {
         temporal.api.enums.v1.TaskQueueType type = 2;
         TaskQueueData data = 3;
     }
+}
+
+// used as deployment workflow activity output:
+message SyncUserDataResponse {
+    map<string, int64> task_queue_max_versions = 1;
+}
+
+// used as deployment workflow activity input:
+message CheckUserDataPropagationRequest {
+    map<string, int64> task_queue_max_versions = 1;
 }
 
 // used as deployment series workflow update input:

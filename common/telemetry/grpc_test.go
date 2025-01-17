@@ -36,7 +36,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace/noop"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/telemetry"
@@ -60,7 +60,7 @@ func Test_ServerStatsHandler(t *testing.T) {
 		})
 		otelStatsHandler.HandleRPC(ctx, &stats.InPayload{
 			Payload: &workflowservice.TerminateWorkflowExecutionRequest{
-				WorkflowExecution: &common.WorkflowExecution{
+				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: "WF-ID",
 					RunId:      "RUN-ID",
 				},

@@ -28,12 +28,12 @@ import (
 	"context"
 	"fmt"
 
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	workflowpb "go.temporal.io/server/api/workflow/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -62,7 +62,7 @@ type (
 			ctx context.Context,
 			sourceClusterName string,
 			workflowKey definition.WorkflowKey,
-			baseExecutionInfo *workflowpb.BaseExecutionInfo,
+			baseExecutionInfo *workflowspb.BaseExecutionInfo,
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			historyEvents [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
@@ -96,7 +96,7 @@ func (h *historyEventsHandlerImpl) HandleHistoryEvents(
 	ctx context.Context,
 	sourceClusterName string,
 	workflowKey definition.WorkflowKey,
-	baseExecutionInfo *workflowpb.BaseExecutionInfo,
+	baseExecutionInfo *workflowspb.BaseExecutionInfo,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	historyEvents [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,
@@ -193,7 +193,7 @@ func (h *historyEventsHandlerImpl) handleLocalGeneratedEvent(
 	}
 	mu, err := engine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 		NamespaceId: workflowKey.NamespaceID,
-		Execution: &common.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
@@ -224,7 +224,7 @@ func (h *historyEventsHandlerImpl) handleLocalGeneratedEvent(
 func (h *historyEventsHandlerImpl) handleRemoteGeneratedHistoryEvents(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
-	baseExecutionInfo *workflowpb.BaseExecutionInfo,
+	baseExecutionInfo *workflowspb.BaseExecutionInfo,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	historyEvents [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,

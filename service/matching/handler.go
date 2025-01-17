@@ -459,6 +459,14 @@ func (h *Handler) ReplicateTaskQueueUserData(
 	return h.engine.ReplicateTaskQueueUserData(ctx, request)
 }
 
+func (h *Handler) CheckTaskQueueUserDataPropagation(
+	ctx context.Context,
+	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,
+) (_ *matchingservice.CheckTaskQueueUserDataPropagationResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.CheckTaskQueueUserDataPropagation(ctx, request)
+}
+
 func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.DispatchNexusTask(ctx, request)

@@ -41,6 +41,7 @@ func handleSuccessfulOperationResult(
 	node *hsm.Node,
 	operation Operation,
 	result *commonpb.Payload,
+	links []*commonpb.Link,
 	completionSource CompletionSource,
 ) (hsm.TransitionOutput, error) {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
@@ -57,6 +58,7 @@ func handleSuccessfulOperationResult(
 				RequestId:        operation.RequestId,
 			},
 		}
+		e.Links = links
 	})
 	return TransitionSucceeded.Apply(operation, EventSucceeded{
 		Time:             event.EventTime.AsTime(),
@@ -75,6 +77,11 @@ func handleUnsuccessfulOperationError(
 	if err != nil {
 		return hsm.TransitionOutput{}, err
 	}
+	failure, err := commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError)
+	if err != nil {
+		return hsm.TransitionOutput{}, err
+	}
+
 	switch opFailedError.State { // nolint:exhaustive
 	case nexus.OperationStateFailed:
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
@@ -82,11 +89,7 @@ func handleUnsuccessfulOperationError(
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 				NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-					Failure: nexusOperationFailure(
-						operation,
-						eventID,
-						commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
-					),
+					Failure:          nexusOperationFailure(operation, eventID, failure),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},
@@ -105,11 +108,7 @@ func handleUnsuccessfulOperationError(
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
 				NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
-					Failure: nexusOperationFailure(
-						operation,
-						eventID,
-						commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
-					),
+					Failure:          nexusOperationFailure(operation, eventID, failure),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},
@@ -205,7 +204,7 @@ func CompletionHandler(
 			if opFailedError != nil {
 				return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceCallback)
 			}
-			return handleSuccessfulOperationResult(node, operation, result, CompletionSourceCallback)
+			return handleSuccessfulOperationResult(node, operation, result, nil, CompletionSourceCallback)
 		})
 		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion.
 		if errors.Is(err, hsm.ErrInvalidTransition) {

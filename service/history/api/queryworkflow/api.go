@@ -216,7 +216,7 @@ func Invoke(
 					},
 				}, nil
 			case enumspb.QUERY_RESULT_TYPE_FAILED:
-				return nil, serviceerror.NewQueryFailed(result.GetErrorMessage())
+				return nil, serviceerror.NewQueryFailedWithFailure(result.GetErrorMessage(), result.GetFailure())
 			default:
 				metrics.QueryRegistryInvalidStateCount.With(scope).Record(1)
 				return nil, consts.ErrQueryEnteredInvalidState

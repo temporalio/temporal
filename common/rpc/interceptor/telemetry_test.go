@@ -32,7 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
-	"go.temporal.io/api/query/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -208,7 +208,7 @@ func TestEmitActionMetric(t *testing.T) {
 			methodName: queryWorkflow,
 			fullName:   api.WorkflowServicePrefix + queryWorkflow,
 			req: &workflowservice.QueryWorkflowRequest{
-				Query: &query.WorkflowQuery{
+				Query: &querypb.WorkflowQuery{
 					QueryType: "some_type",
 				},
 			},
@@ -218,7 +218,7 @@ func TestEmitActionMetric(t *testing.T) {
 			methodName: queryWorkflow,
 			fullName:   api.WorkflowServicePrefix + queryWorkflow,
 			req: &workflowservice.QueryWorkflowRequest{
-				Query: &query.WorkflowQuery{
+				Query: &querypb.WorkflowQuery{
 					QueryType: "__temporal_workflow_metadata",
 				},
 			},

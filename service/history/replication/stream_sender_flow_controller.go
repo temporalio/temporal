@@ -32,8 +32,8 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/server/api/enums/v1"
-	replicationpb "go.temporal.io/server/api/replication/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
@@ -50,18 +50,18 @@ type (
 	}
 	SenderFlowController interface {
 		// Wait will block go routine until the sender is allowed to send a task
-		Wait(priority enums.TaskPriority)
-		RefreshReceiverFlowControlInfo(syncState *replicationpb.SyncReplicationState)
+		Wait(priority enumsspb.TaskPriority)
+		RefreshReceiverFlowControlInfo(syncState *replicationspb.SyncReplicationState)
 	}
 	SenderFlowControllerImpl struct {
-		flowControlStates  map[enums.TaskPriority]*flowControlState
+		flowControlStates  map[enumsspb.TaskPriority]*flowControlState
 		defaultRateLimiter quotas.RateLimiter
 		logger             log.Logger
 	}
 )
 
 func NewSenderFlowController(config *configs.Config, logger log.Logger) *SenderFlowControllerImpl {
-	flowControlStates := make(map[enums.TaskPriority]*flowControlState)
+	flowControlStates := make(map[enumsspb.TaskPriority]*flowControlState)
 	highPriorityState := &flowControlState{
 		resume: true,
 	}
@@ -77,8 +77,8 @@ func NewSenderFlowController(config *configs.Config, logger log.Logger) *SenderF
 	lowPriorityState.rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 {
 		return float64(config.ReplicationStreamSenderLowPriorityQPS())
 	})
-	flowControlStates[enums.TASK_PRIORITY_HIGH] = highPriorityState
-	flowControlStates[enums.TASK_PRIORITY_LOW] = lowPriorityState
+	flowControlStates[enumsspb.TASK_PRIORITY_HIGH] = highPriorityState
+	flowControlStates[enumsspb.TASK_PRIORITY_LOW] = lowPriorityState
 	return &SenderFlowControllerImpl{
 		flowControlStates:  flowControlStates,
 		defaultRateLimiter: quotas.NewRateLimiter(float64(config.ReplicationStreamSenderHighPriorityQPS()), config.ReplicationStreamSenderHighPriorityQPS()),
@@ -86,32 +86,32 @@ func NewSenderFlowController(config *configs.Config, logger log.Logger) *SenderF
 	}
 }
 
-func (s *SenderFlowControllerImpl) RefreshReceiverFlowControlInfo(syncState *replicationpb.SyncReplicationState) {
+func (s *SenderFlowControllerImpl) RefreshReceiverFlowControlInfo(syncState *replicationspb.SyncReplicationState) {
 	if syncState.GetHighPriorityState() != nil {
-		s.setState(s.flowControlStates[enums.TASK_PRIORITY_HIGH], syncState.GetHighPriorityState().GetFlowControlCommand())
+		s.setState(s.flowControlStates[enumsspb.TASK_PRIORITY_HIGH], syncState.GetHighPriorityState().GetFlowControlCommand())
 	}
 	if syncState.GetLowPriorityState() != nil {
-		s.setState(s.flowControlStates[enums.TASK_PRIORITY_LOW], syncState.GetLowPriorityState().GetFlowControlCommand())
+		s.setState(s.flowControlStates[enumsspb.TASK_PRIORITY_LOW], syncState.GetLowPriorityState().GetFlowControlCommand())
 	}
 }
 
-func (s *SenderFlowControllerImpl) setState(state *flowControlState, flowControlCommand enums.ReplicationFlowControlCommand) {
+func (s *SenderFlowControllerImpl) setState(state *flowControlState, flowControlCommand enumsspb.ReplicationFlowControlCommand) {
 	switch flowControlCommand {
-	case enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, enums.REPLICATION_FLOW_CONTROL_COMMAND_UNSPECIFIED:
+	case enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_UNSPECIFIED:
 		state.mu.Lock()
 		defer state.mu.Unlock()
 		state.resume = true
 		if state.waiters > 0 {
 			state.cond.Broadcast()
 		}
-	case enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE:
+	case enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE:
 		state.mu.Lock()
 		defer state.mu.Unlock()
 		state.resume = false
 	}
 }
 
-func (s *SenderFlowControllerImpl) Wait(priority enums.TaskPriority) {
+func (s *SenderFlowControllerImpl) Wait(priority enumsspb.TaskPriority) {
 	state, ok := s.flowControlStates[priority]
 	waitForRateLimiter := func(rateLimiter quotas.RateLimiter) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // to avoid infinite wait

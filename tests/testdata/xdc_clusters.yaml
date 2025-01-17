@@ -1,9 +1,7 @@
 - clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
-  enablearchival: false
   workerconfig:
-    enablearchiver: false
     enablereplicator: true
   clusterno: 0
   historyconfig:
@@ -20,9 +18,7 @@
 - clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
-  enablearchival: false
   workerconfig:
-    enablearchiver: false
     enablereplicator: true
   clusterno: 1
   historyconfig:

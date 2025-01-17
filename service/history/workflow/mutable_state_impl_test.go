@@ -47,12 +47,12 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -338,7 +338,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		tq,
 		"",
 		worker_versioning.StampFromBuildId("b2"),
-		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		false,
 	)
 	s.NoError(err)
@@ -361,7 +361,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		tq,
 		"",
 		worker_versioning.StampFromBuildId("b2"),
-		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b0"},
+		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b0"},
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -403,7 +403,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
 		tq,
 		"",
 		nil,
-		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -1287,12 +1287,12 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	)
 
 	mutableState.executionInfo.LastFirstEventTxnId = txnID
-	mutableState.executionInfo.ParentClock = &clock.VectorClock{
+	mutableState.executionInfo.ParentClock = &clockspb.VectorClock{
 		ShardId: 1,
 		Clock:   1,
 	}
 	mutableState.pendingChildExecutionInfoIDs = map[int64]*persistencespb.ChildExecutionInfo{1: {
-		Clock: &clock.VectorClock{
+		Clock: &clockspb.VectorClock{
 			ShardId: 1,
 			Clock:   1,
 		},
@@ -1676,24 +1676,25 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false)
 	s.NoError(err)
 
-	acceptedUpdateID := s.T().Name() + "-accepted-update-id"
-	acceptedMsgID := s.T().Name() + "-accepted-msg-id"
-	var acptEvents []*historypb.HistoryEvent
-	for i := 0; i < 2; i++ {
-		updateID := fmt.Sprintf("%s-%d", acceptedUpdateID, i)
-		acptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
-			updateID,
-			fmt.Sprintf("%s-%d", acceptedMsgID, i),
-			1,
-			&updatepb.Request{
-				Meta: &updatepb.Meta{UpdateId: updateID},
-			},
-		)
-		s.Require().NoError(err)
-		s.Require().NotNil(acptEvent)
-		acptEvents = append(acptEvents, acptEvent)
-	}
-	s.Require().Len(acptEvents, 2, "expected to create 2 UpdateAccepted events")
+	// 1st accepted update (without acceptedRequest)
+	updateID1 := fmt.Sprintf("%s-1-accepted-update-id", s.T().Name())
+	acptEvent1, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		updateID1,
+		fmt.Sprintf("%s-1-accepted-msg-id", s.T().Name()),
+		1,
+		nil) // no acceptedRequest!
+	s.NoError(err)
+	s.NotNil(acptEvent1)
+
+	// 2nd accepted update (with acceptedRequest)
+	updateID2 := fmt.Sprintf("%s-2-accepted-update-id", s.T().Name())
+	acptEvent2, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		updateID2,
+		fmt.Sprintf("%s-2-accepted-msg-id", s.T().Name()),
+		1,
+		&updatepb.Request{Meta: &updatepb.Meta{UpdateId: updateID2}})
+	s.NoError(err)
+	s.NotNil(acptEvent2)
 
 	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
 		1234,
@@ -1704,34 +1705,35 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 			},
 		},
 	)
-	s.Require().Error(err)
+	s.Error(err)
 
 	completedEvent, err := s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
-		acptEvents[0].EventId,
+		acptEvent1.EventId,
 		&updatepb.Response{
-			Meta: &updatepb.Meta{UpdateId: acptEvents[0].GetWorkflowExecutionUpdateAcceptedEventAttributes().GetProtocolInstanceId()},
+			Meta: &updatepb.Meta{UpdateId: updateID1},
 			Outcome: &updatepb.Outcome{
 				Value: &updatepb.Outcome_Success{Success: testPayloads},
 			},
 		},
 	)
-	s.Require().NoError(err)
-	s.Require().NotNil(completedEvent)
+	s.NoError(err)
+	s.NotNil(completedEvent)
 
-	s.Require().Len(cacheStore, 3, "expected 1 UpdateCompleted event + 2 UpdateAccepted events in cache")
+	s.Len(cacheStore, 3, "expected 1 UpdateCompleted event + 2 UpdateAccepted events in cache")
 
 	numCompleted := 0
 	numAccepted := 0
 	s.mutableState.VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo) {
-		if comp := updInfo.GetCompletion(); comp != nil {
+		s.Contains([]string{updateID1, updateID2}, updID)
+		switch {
+		case updInfo.GetCompletion() != nil:
 			numCompleted++
-		}
-		if updInfo.GetAcceptance() != nil {
+		case updInfo.GetAcceptance() != nil:
 			numAccepted++
 		}
 	})
-	s.Require().Equal(numCompleted, 1, "expected 1 completed")
-	s.Require().Equal(numAccepted, 1, "expected 1 accepted")
+	s.Equal(numCompleted, 1, "expected 1 completed")
+	s.Equal(numAccepted, 1, "expected 1 accepted")
 
 	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
 		namespaceEntry.IsGlobalNamespace(),
@@ -1740,19 +1742,19 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
-	s.Require().NoError(err)
-	s.Require().Len(mutation.ExecutionInfo.UpdateInfos, 2,
+	s.NoError(err)
+	s.Len(mutation.ExecutionInfo.UpdateInfos, 2,
 		"expected 1 completed update + 1 accepted in mutation")
 
 	// this must be done after the transaction is closed
 	// as GetUpdateOutcome relies on event version history which is only updated when closing the transaction
 	outcome, err := s.mutableState.GetUpdateOutcome(ctx, completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetMeta().GetUpdateId())
-	s.Require().NoError(err)
-	s.Require().Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), outcome)
+	s.NoError(err)
+	s.Equal(completedEvent.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), outcome)
 
 	_, err = s.mutableState.GetUpdateOutcome(ctx, "not_an_update_id")
-	s.Require().Error(err)
-	s.Require().IsType((*serviceerror.NotFound)(nil), err)
+	s.Error(err)
+	s.IsType((*serviceerror.NotFound)(nil), err)
 }
 
 func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
@@ -1906,12 +1908,16 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	)
 	s.NoError(err)
 
-	accptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent("random-updateId", "random", 0, &updatepb.Request{})
+	updateID := "random-updateId"
+	accptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		updateID, "random", 0, nil)
 	s.NoError(err)
 	s.NotNil(accptEvent)
 
-	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(accptEvent.EventId, &updatepb.Response{})
+	completedEvent, err := s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		accptEvent.EventId, &updatepb.Response{Meta: &updatepb.Meta{UpdateId: updateID}})
 	s.NoError(err)
+	s.NotNil(completedEvent)
 
 	_, err = s.mutableState.AddWorkflowExecutionSignaled(
 		"signalName",
@@ -2403,6 +2409,24 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			},
 			versionedTransitionUpdated: true,
 		},
+		{
+			name: "CloseTransactionAsSnapshot, from unknown to enable",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				ms.GetExecutionInfo().PreviousTransitionHistory = ms.GetExecutionInfo().TransitionHistory
+				ms.GetExecutionInfo().TransitionHistory = nil
+				completWorkflowTaskFn(ms)
+
+				mutation, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
 		// TODO: add a test for flushing buffered events using last event version.
 	}
 
@@ -2424,8 +2448,13 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				namespaceEntry.FailoverVersion(),
 			).Return(cluster.TestCurrentClusterName).AnyTimes()
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+			var expectedTransitionHistory []*persistencespb.VersionedTransition
+			if s.mutableState.executionInfo.TransitionHistory == nil {
+				expectedTransitionHistory = CopyVersionedTransitions(s.mutableState.executionInfo.PreviousTransitionHistory)
+			} else {
+				expectedTransitionHistory = CopyVersionedTransitions(s.mutableState.executionInfo.TransitionHistory)
+			}
 
-			expectedTransitionHistory := CopyVersionedTransitions(s.mutableState.executionInfo.TransitionHistory)
 			if tc.versionedTransitionUpdated {
 				expectedTransitionHistory = UpdatedTransitionHistory(expectedTransitionHistory, namespaceEntry.FailoverVersion())
 			}
@@ -2638,11 +2667,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 					updateID,
 					"update-message-id",
 					65,
-					&updatepb.Request{
-						Meta: &updatepb.Meta{
-							UpdateId: updateID,
-						},
-					},
+					nil, // this is an optional field
 				)
 				s.NoError(err)
 
@@ -2946,9 +2971,8 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 			s.NotNil(s.mutableState.executionInfo.TransitionHistory)
-
 			execInfo, err := tc.txFunc(s.mutableState)
-
+			s.NotNil(execInfo.PreviousTransitionHistory)
 			s.Nil(execInfo.TransitionHistory)
 			s.Nil(err)
 		})
@@ -3947,7 +3971,7 @@ func (s *mutableStateSuite) verifyChildExecutionInfos(expectedMap, actualMap, or
 		s.Equal(expected.StartedEventId, actual.StartedEventId, "StartedEventId mismatch")
 		s.Equal(expected.StartedWorkflowId, actual.StartedWorkflowId, "StartedWorkflowId mismatch")
 		s.Equal(expected.StartedRunId, actual.StartedRunId, "StartedRunId mismatch")
-		s.NotEqual(expected.CreateRequestId, actual.CreateRequestId, "CreateRequestId mismatch")
+		s.Equal(expected.CreateRequestId, actual.CreateRequestId, "CreateRequestId mismatch")
 		s.Equal(expected.Namespace, actual.Namespace, "Namespace mismatch")
 		s.Equal(expected.WorkflowTypeName, actual.WorkflowTypeName, "WorkflowTypeName mismatch")
 		s.Equal(expected.ParentClosePolicy, actual.ParentClosePolicy, "ParentClosePolicy mismatch")

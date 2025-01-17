@@ -30,11 +30,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/history/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -60,19 +60,19 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	newParentRunID := uuid.NewString()
 	oldParentWFKey := definition.NewWorkflowKey(testNamespaceID.String(), paretntWFID, oldParentRunID)
 	newParentWFKey := definition.NewWorkflowKey(testNamespaceID.String(), paretntWFID, newParentRunID)
-	oldParentExecutionInfo := &persistence.WorkflowExecutionInfo{
+	oldParentExecutionInfo := &persistencespb.WorkflowExecutionInfo{
 		ResetRunId: newParentRunID, // link the old parent to the new parent.
 	}
 
 	// The request will be sent to the old parent.
 	request := &historyservice.RecordChildExecutionCompletedRequest{
 		NamespaceId: testNamespaceID.String(),
-		ParentExecution: &common.WorkflowExecution{
+		ParentExecution: &commonpb.WorkflowExecution{
 			RunId:      oldParentRunID,
 			WorkflowId: paretntWFID,
 		},
-		ChildExecution: &common.WorkflowExecution{WorkflowId: childWFID},
-		CompletionEvent: &history.HistoryEvent{
+		ChildExecution: &commonpb.WorkflowExecution{WorkflowId: childWFID},
+		CompletionEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
@@ -92,7 +92,7 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	newParentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	newParentMutableState.EXPECT().GetNextEventID().Return(int64(10))
 	newParentMutableState.EXPECT().AddChildWorkflowExecutionCompletedEvent(anyArg, anyArg, anyArg).Return(nil, nil)
-	childExecutionInfo := &persistence.ChildExecutionInfo{
+	childExecutionInfo := &persistencespb.ChildExecutionInfo{
 		StartedEventId:    int64(10), // indicate that the started event is already recorded.
 		StartedWorkflowId: childWFID,
 	}
@@ -132,18 +132,18 @@ func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
 	paretntWFID := uuid.NewString()
 	oldParentRunID := uuid.NewString()
 	oldParentWFKey := definition.NewWorkflowKey(testNamespaceID.String(), paretntWFID, oldParentRunID)
-	oldParentExecutionInfo := &persistence.WorkflowExecutionInfo{
+	oldParentExecutionInfo := &persistencespb.WorkflowExecutionInfo{
 		ResetRunId: oldParentRunID, // link to self causing an infinite loop.
 	}
 
 	request := &historyservice.RecordChildExecutionCompletedRequest{
 		NamespaceId: testNamespaceID.String(),
-		ParentExecution: &common.WorkflowExecution{
+		ParentExecution: &commonpb.WorkflowExecution{
 			RunId:      oldParentRunID,
 			WorkflowId: paretntWFID,
 		},
-		ChildExecution: &common.WorkflowExecution{WorkflowId: childWFID},
-		CompletionEvent: &history.HistoryEvent{
+		ChildExecution: &commonpb.WorkflowExecution{WorkflowId: childWFID},
+		CompletionEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}

@@ -31,8 +31,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/api/enums/v1"
-	replicationpb "go.temporal.io/server/api/replication/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
@@ -70,7 +70,7 @@ func (s *senderFlowControllerSuite) TearDownTest() {
 }
 
 func (s *senderFlowControllerSuite) TestWait_HighPriority() {
-	state := s.senderFlowCtrlImpl.flowControlStates[enums.TASK_PRIORITY_HIGH]
+	state := s.senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_HIGH]
 	state.rateLimiter = s.mockRateLimiter
 
 	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(nil)
@@ -80,14 +80,14 @@ func (s *senderFlowControllerSuite) TestWait_HighPriority() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enums.TASK_PRIORITY_HIGH)
+		s.senderFlowCtrlImpl.Wait(enumsspb.TASK_PRIORITY_HIGH)
 	}()
 
 	wg.Wait()
 }
 
 func (s *senderFlowControllerSuite) TestWait_LowPriority() {
-	state := s.senderFlowCtrlImpl.flowControlStates[enums.TASK_PRIORITY_LOW]
+	state := s.senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_LOW]
 	state.rateLimiter = s.mockRateLimiter
 
 	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(nil)
@@ -97,7 +97,7 @@ func (s *senderFlowControllerSuite) TestWait_LowPriority() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enums.TASK_PRIORITY_LOW)
+		s.senderFlowCtrlImpl.Wait(enumsspb.TASK_PRIORITY_LOW)
 	}()
 
 	wg.Wait()
@@ -113,7 +113,7 @@ func (s *senderFlowControllerSuite) TestWait_DefaultPriority() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enums.TASK_PRIORITY_UNSPECIFIED)
+		s.senderFlowCtrlImpl.Wait(enumsspb.TASK_PRIORITY_UNSPECIFIED)
 	}()
 
 	wg.Wait()
@@ -121,23 +121,23 @@ func (s *senderFlowControllerSuite) TestWait_DefaultPriority() {
 
 func (s *senderFlowControllerSuite) TestRefreshReceiverFlowControlInfo() {
 	senderFlowCtrlImpl := NewSenderFlowController(s.config, s.logger)
-	state := &replicationpb.SyncReplicationState{
-		HighPriorityState: &replicationpb.ReplicationState{
-			FlowControlCommand: enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
+	state := &replicationspb.SyncReplicationState{
+		HighPriorityState: &replicationspb.ReplicationState{
+			FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
 		},
-		LowPriorityState: &replicationpb.ReplicationState{
-			FlowControlCommand: enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
+		LowPriorityState: &replicationspb.ReplicationState{
+			FlowControlCommand: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
 		},
 	}
 
 	senderFlowCtrlImpl.RefreshReceiverFlowControlInfo(state)
 
-	s.True(senderFlowCtrlImpl.flowControlStates[enums.TASK_PRIORITY_HIGH].resume)
-	s.False(senderFlowCtrlImpl.flowControlStates[enums.TASK_PRIORITY_LOW].resume)
+	s.True(senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_HIGH].resume)
+	s.False(senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_LOW].resume)
 }
 
 func (s *senderFlowControllerSuite) TestPauseToResume() {
-	state := s.senderFlowCtrlImpl.flowControlStates[enums.TASK_PRIORITY_HIGH]
+	state := s.senderFlowCtrlImpl.flowControlStates[enumsspb.TASK_PRIORITY_HIGH]
 	state.rateLimiter = s.mockRateLimiter
 
 	// Set initial state to paused
@@ -151,7 +151,7 @@ func (s *senderFlowControllerSuite) TestPauseToResume() {
 
 	go func() {
 		defer wg.Done()
-		s.senderFlowCtrlImpl.Wait(enums.TASK_PRIORITY_HIGH)
+		s.senderFlowCtrlImpl.Wait(enumsspb.TASK_PRIORITY_HIGH)
 	}()
 
 	// Ensure the goroutine has time to start and block
@@ -164,7 +164,7 @@ func (s *senderFlowControllerSuite) TestPauseToResume() {
 	s.Equal(1, state.waiters)
 
 	// Transition from paused to resumed
-	s.senderFlowCtrlImpl.setState(state, enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME)
+	s.senderFlowCtrlImpl.setState(state, enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME)
 	wg.Wait()
 
 	s.Equal(0, state.waiters)

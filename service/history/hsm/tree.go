@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -61,6 +62,11 @@ type Key struct {
 	ID string
 }
 
+// String returns a human-readable representation of a Key
+func (k Key) String() string {
+	return fmt.Sprintf("%s:%s", k.Type, k.ID)
+}
+
 // StateMachineDefinition provides type information and a serializer for a state machine.
 type StateMachineDefinition interface {
 	Type() string
@@ -90,20 +96,79 @@ type cachedMachine struct {
 	deleted bool
 }
 
-type OperationLog struct {
-	// All transitions, including regular state changes and deletions
-	TransitionsByPath map[string][]TransitionOutputWithCount
-	// Track topmost deleted paths to filter outputs efficiently
-	DeletedPaths [][]Key
+// formatPath returns a human-readable representation of a path.
+func formatPath(path []Key) string {
+	if len(path) == 0 {
+		return "<root>"
+	}
+	var parts []string
+	for _, key := range path {
+		parts = append(parts, key.String())
+	}
+	return strings.Join(parts, "/")
 }
 
-func (o *OperationLog) IsDeleted(path []Key) bool {
-	for _, deletedPath := range o.DeletedPaths {
-		if isPathPrefix(deletedPath, path) {
-			return true
+// Operation represents a state change in the hierarchical state machine tree.
+// Each operation is associated with a path in the tree and provides information
+// about what occurred at that location.
+type Operation interface {
+	// Path returns the full path to the node where this operation occurred.
+	Path() []Key
+	mustImplementOperation()
+}
+
+// DeleteOperation represents the deletion of a node in the tree.
+type DeleteOperation struct {
+	// path is the full path to the deleted node.
+	path []Key
+}
+
+func (d DeleteOperation) Path() []Key { return d.path }
+
+func (DeleteOperation) mustImplementOperation() {}
+
+// String returns a human-readable representation of a DeleteOperation.
+func (d DeleteOperation) String() string {
+	return fmt.Sprintf("Delete(%s)", formatPath(d.path))
+}
+
+// TransitionOperation represents a state transition that occurred at a specific
+// node in the tree.
+type TransitionOperation struct {
+	// path is the full path to the node where the transition occurred.
+	path []Key
+	// Output contains the transition output and associated metadata.
+	Output TransitionOutputWithCount
+}
+
+func (t TransitionOperation) Path() []Key { return t.path }
+
+func (TransitionOperation) mustImplementOperation() {}
+
+// String returns a human-readable representation of a TransitionOperation.
+func (t TransitionOperation) String() string {
+	return fmt.Sprintf("Transition(%s)[count=%d]", formatPath(t.path), t.Output.TransitionCount)
+}
+
+// OperationLog represents an ordered sequence of operations that have occurred in the tree. Operations are ordered
+// chronologically.
+type OperationLog []Operation
+
+// String returns a human-readable representation of an OperationLog.
+func (ol OperationLog) String() string {
+	var ops []string
+	for _, op := range ol {
+		switch o := op.(type) {
+		case DeleteOperation:
+			ops = append(ops, o.String())
+		case TransitionOperation:
+			ops = append(ops, o.String())
+		default:
+			// Fallback for unknown operation types
+			ops = append(ops, fmt.Sprintf("%T(%v)", op, op.Path()))
 		}
 	}
-	return false
+	return fmt.Sprintf("[%s]", strings.Join(ops, ", "))
 }
 
 // NodeBackend is a concrete implementation to support interacting with the underlying platform.
@@ -141,7 +206,7 @@ type Node struct {
 	persistence *persistencespb.StateMachineNode
 	definition  StateMachineDefinition
 	backend     NodeBackend
-	opLog       *OperationLog
+	opLog       OperationLog
 }
 
 // NewRoot creates a new root [Node].
@@ -178,9 +243,7 @@ func NewRoot(
 			children:   make(map[Key]*Node),
 		},
 		backend: backend,
-		opLog: &OperationLog{
-			TransitionsByPath: make(map[string][]TransitionOutputWithCount),
-		},
+		opLog:   make(OperationLog, 0),
 	}, nil
 }
 
@@ -201,10 +264,6 @@ type TransitionOutputWithCount struct {
 	TransitionOutput
 	TransitionCount int64
 }
-type PathAndOutputs struct {
-	Path    []Key
-	Outputs []TransitionOutputWithCount
-}
 
 func (n *Node) Path() []Key {
 	if n.Parent == nil {
@@ -213,40 +272,24 @@ func (n *Node) Path() []Key {
 	return append(n.Parent.Path(), n.Key)
 }
 
-// Outputs returns all outputs produced by transitions on this tree.
-func (n *Node) Outputs() []PathAndOutputs {
-	root := n.root()
-	currentPath := n.Path()
-
-	if root.opLog.IsDeleted(currentPath) {
-		return nil
+// Outputs returns a compacted operation log from the root state machine. The operation log maintains a sequence of
+// state changes, while compaction ensures operations are properly filtered when portions of the state machine tree are
+// deleted. For details on compaction rules, see OperationLog.compact().
+// This method must be called on the root node only.
+func (n *Node) Outputs() (OperationLog, error) {
+	if n.Parent != nil {
+		return nil, fmt.Errorf("can only be called from root node")
 	}
 
-	var paos []PathAndOutputs
-	pathKey := fmt.Sprint(currentPath)
-	if transitions := root.opLog.TransitionsByPath[pathKey]; len(transitions) > 0 {
-		paos = append(paos, PathAndOutputs{
-			Path:    currentPath,
-			Outputs: transitions,
-		})
-	}
-
-	for _, child := range n.cache.children {
-		paos = append(paos, child.Outputs()...)
-	}
-
-	return paos
+	compacted := n.opLog.compact()
+	return compacted, nil
 }
 
 // ClearTransactionState resets all transition outputs in the tree.
 // This should be called at the end of every transaction where the transitions are performed to avoid emitting duplicate
 // transition outputs.
 func (n *Node) ClearTransactionState() {
-	root := n.root()
-	if root.opLog != nil {
-		root.opLog.DeletedPaths = nil
-		root.opLog.TransitionsByPath = make(map[string][]TransitionOutputWithCount)
-	}
+	n.root().opLog = nil
 
 	n.cache.dirty = false
 	for _, child := range n.cache.children {
@@ -313,6 +356,10 @@ func (n *Node) Child(path []Key) (*Node, error) {
 	return child.Child(rest)
 }
 
+func (n *Node) InvalidateCache() {
+	n.cache.dataLoaded = false
+}
+
 // AddChild adds an immediate child to a node, serializing the given data.
 // Returns [ErrStateMachineAlreadyExists] if a child with the given key already exists, [ErrNotRegistered] if the key's
 // type is not found in the node's state machine registry and serialization errors.
@@ -375,7 +422,8 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 	return node, nil
 }
 
-// DeleteChild deletes an immediate child node and all its descendants from the tree.
+// DeleteChild marks a child node and all its descendants as deleted, removing them from the cache. No transitions will
+// be allowed after deleting a child.
 func (n *Node) DeleteChild(key Key) error {
 	if n.cache.deleted {
 		return fmt.Errorf("%w: cannot delete from deleted node: %v", ErrStateMachineInvalidState, n.Key)
@@ -394,9 +442,10 @@ func (n *Node) DeleteChild(key Key) error {
 		return err
 	}
 
-	// Record deletion
 	root := n.root()
-	root.opLog.DeletedPaths = append(root.opLog.DeletedPaths, child.Path())
+	root.opLog = append(root.opLog, DeleteOperation{
+		path: child.Path(),
+	})
 
 	// Remove from persistence and cache
 	machinesMap := n.persistence.Children[key.Type]
@@ -582,10 +631,12 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	n.cache.dirty = true
 
 	root := n.root()
-	pathKey := fmt.Sprint(n.Path())
-	root.opLog.TransitionsByPath[pathKey] = append(root.opLog.TransitionsByPath[pathKey], TransitionOutputWithCount{
-		TransitionOutput: output,
-		TransitionCount:  n.persistence.TransitionCount,
+	root.opLog = append(root.opLog, TransitionOperation{
+		path: n.Path(),
+		Output: TransitionOutputWithCount{
+			TransitionOutput: output,
+			TransitionCount:  n.persistence.TransitionCount,
+		},
 	})
 
 	return nil
@@ -700,10 +751,100 @@ func (n *Node) root() *Node {
 	return root
 }
 
+// compact filters the operation log based on deletion status. For any operation path:
+// - If any parent in the path is deleted, the operation is excluded
+// - If the target of the operation is deleted, only its DeleteOperation is kept
+// - Otherwise, the operation is included
+func (ol OperationLog) compact() OperationLog {
+	if len(ol) == 0 {
+		return ol
+	}
+
+	root := newOpNode(Key{})
+	for _, op := range ol {
+		node := root.getOrCreateNode(op.Path())
+		if _, ok := op.(DeleteOperation); ok {
+			node.isDeleted = true
+		}
+	}
+
+	return root.collect(ol)
+}
+
+// getOrCreateNode traverses/creates path and returns the final node.
+func (n *opNode) getOrCreateNode(path []Key) *opNode {
+	current := n
+	for _, key := range path {
+		next, exists := current.children[key]
+		if !exists {
+			next = newOpNode(key)
+			current.children[key] = next
+		}
+		current = next
+	}
+	return current
+}
+
 func isPathPrefix(prefix, path []Key) bool {
 	if len(prefix) > len(path) {
 		return false
 	}
 
 	return slices.Equal(prefix, path[:len(prefix)])
+}
+
+// opNode represents a node in the operation tree, tracking deletion status.
+type opNode struct {
+	key       Key
+	children  map[Key]*opNode
+	isDeleted bool
+}
+
+// newOpNode creates a new operation tree node with the given key.
+func newOpNode(key Key) *opNode {
+	return &opNode{
+		key:      key,
+		children: make(map[Key]*opNode),
+	}
+}
+
+// collect returns an ordered subset of the input operation log based on the deletion status tracked in this operation
+// tree. The original chronological order of operations is preserved. The status of each node in the path (not just the
+// operation's target) determines whether the operation is included in the result.
+func (n *opNode) collect(oplog OperationLog) OperationLog {
+	var result OperationLog
+
+	for _, op := range oplog {
+		path := op.Path()
+		current := n
+
+		var isAncestorDeleted bool
+
+		// Traverse the path to the target node, checking deletion status
+		for i, key := range path {
+			child, exists := current.children[key]
+			if !exists {
+				panic("path must exist in tree")
+			}
+
+			if child.isDeleted {
+				isAncestorDeleted = true
+				if i == len(path)-1 {
+					if deleteOp, ok := op.(DeleteOperation); ok {
+						result = append(result, deleteOp)
+					}
+				}
+				break
+			}
+			current = child
+		}
+
+		if isAncestorDeleted {
+			continue
+		}
+
+		result = append(result, op)
+	}
+
+	return result
 }

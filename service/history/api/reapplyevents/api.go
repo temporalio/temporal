@@ -161,6 +161,7 @@ func Invoke(
 					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
 					nil,
+					false, // allowResetWithPendingChildren
 				)
 				switch err.(type) {
 				case *serviceerror.InvalidArgument:

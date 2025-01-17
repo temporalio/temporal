@@ -79,6 +79,7 @@ type (
 			resetReason string,
 			additionalReapplyEvents []*historypb.HistoryEvent,
 			resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+			allowResetWithPendingChildren bool,
 		) error
 	}
 
@@ -133,6 +134,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	allowResetWithPendingChildren bool,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -222,6 +224,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		resetRequestID,
 		resetWorkflowVersion,
 		resetReason,
+		allowResetWithPendingChildren,
 	)
 	if err != nil {
 		return err
@@ -268,6 +271,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetRequestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
+	allowResetWithPendingChildren bool,
 ) (Workflow, error) {
 
 	resetWorkflow, err := r.replayResetWorkflow(
@@ -306,7 +310,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	if len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
+	if !allowResetWithPendingChildren && len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
 		return nil, serviceerror.NewInvalidArgument("WorkflowResetter encountered pending child workflows.")
 	}
 
@@ -894,6 +898,37 @@ func reapplyEvents(
 				return reappliedEvents, err
 			}
 			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+			if isReset || isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionTerminatedEventAttributes()
+			if err := workflow.TerminateWorkflow(
+				mutableState,
+				attr.GetReason(),
+				attr.GetDetails(),
+				attr.GetIdentity(),
+				false,
+				event.Links,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		// Handle all non-init events for the child.
+		case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+			if !isReset {
+				continue
+			}
+			err := reapplyChildEvents(mutableState, event)
+			if err != nil {
+				return nil, err
+			}
 		default:
 			root := mutableState.HSM()
 			def, ok := stateMachineRegistry.EventDefinition(event.GetEventType())
@@ -918,6 +953,105 @@ func reapplyEvents(
 		}
 	}
 	return reappliedEvents, nil
+}
+
+// reapplyChildEvents reapplies all child events except EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED.
+// This function is intended to pick up all the events for a child that was already initialized before the reset point.
+// Re-applying these events is needed to support reconnecting of the child with parent.
+func reapplyChildEvents(mutableState workflow.MutableState, event *historypb.HistoryEvent) error { // nolint:revive
+	switch event.GetEventType() { // nolint:exhaustive
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
+		childEventAttributes := event.GetStartChildWorkflowExecutionFailedEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		attributes := &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
+			WorkflowId:   childEventAttributes.WorkflowId,
+			WorkflowType: childEventAttributes.WorkflowType,
+			Control:      childEventAttributes.Control,
+		}
+		if _, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.Cause, attributes); err != nil {
+			return err
+		}
+
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
+		childEventAttributes := event.GetChildWorkflowExecutionStartedEventAttributes()
+		ci, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		childClock := ci.Clock
+		if _, err := mutableState.AddChildWorkflowExecutionStartedEvent(
+			childEventAttributes.WorkflowExecution,
+			childEventAttributes.WorkflowType,
+			childEventAttributes.GetInitiatedEventId(),
+			childEventAttributes.Header,
+			childClock); err != nil {
+			return err
+		}
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+		childEventAttributes := event.GetChildWorkflowExecutionCompletedEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		attributes := &historypb.WorkflowExecutionCompletedEventAttributes{
+			Result: childEventAttributes.Result,
+		}
+		if _, err := mutableState.AddChildWorkflowExecutionCompletedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, attributes); err != nil {
+			return err
+		}
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+		childEventAttributes := event.GetChildWorkflowExecutionFailedEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		attributes := &historypb.WorkflowExecutionFailedEventAttributes{
+			Failure:    childEventAttributes.Failure,
+			RetryState: childEventAttributes.RetryState,
+		}
+		if _, err := mutableState.AddChildWorkflowExecutionFailedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, attributes); err != nil {
+			return err
+		}
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+		childEventAttributes := event.GetChildWorkflowExecutionCanceledEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		attributes := &historypb.WorkflowExecutionCanceledEventAttributes{
+			Details: childEventAttributes.Details,
+		}
+		if _, err := mutableState.AddChildWorkflowExecutionCanceledEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, attributes); err != nil {
+			return err
+		}
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+		childEventAttributes := event.GetChildWorkflowExecutionTimedOutEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		attributes := &historypb.WorkflowExecutionTimedOutEventAttributes{
+			RetryState: childEventAttributes.RetryState,
+		}
+		if _, err := mutableState.AddChildWorkflowExecutionTimedOutEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, attributes); err != nil {
+			return err
+		}
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+		childEventAttributes := event.GetChildWorkflowExecutionTerminatedEventAttributes()
+		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
+		if !childExists {
+			return nil
+		}
+		if _, err := mutableState.AddChildWorkflowExecutionTerminatedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, nil); err != nil {
+			return err
+		}
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("WorkflowResetter encountered an unexpected child event: [%s]", event.GetEventType().String()))
+	}
+	return nil
 }
 
 func (r *workflowResetterImpl) getPaginationFn(

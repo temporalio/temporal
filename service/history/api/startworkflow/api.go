@@ -27,9 +27,9 @@ package startworkflow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -38,12 +38,14 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -74,13 +76,14 @@ const (
 
 // Starter starts a new workflow execution.
 type Starter struct {
-	shardContext               shard.Context
-	workflowConsistencyChecker api.WorkflowConsistencyChecker
-	tokenSerializer            common.TaskTokenSerializer
-	visibilityManager          manager.VisibilityManager
-	request                    *historyservice.StartWorkflowExecutionRequest
-	namespace                  *namespace.Namespace
-	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
+	shardContext                                  shard.Context
+	workflowConsistencyChecker                    api.WorkflowConsistencyChecker
+	tokenSerializer                               common.TaskTokenSerializer
+	visibilityManager                             manager.VisibilityManager
+	request                                       *historyservice.StartWorkflowExecutionRequest
+	namespace                                     *namespace.Namespace
+	createOrUpdateLeaseFn                         api.CreateOrUpdateLeaseFunc
+	followReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -124,6 +127,7 @@ func NewStarter(
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
+		followReusePolicyAfterConflictPolicyTerminate: shardContext.GetConfig().FollowReusePolicyAfterConflictPolicyTerminate,
 	}, nil
 }
 
@@ -249,7 +253,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // prepareNewWorkflow creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error) {
-	runID := uuid.NewString()
+	runID := primitives.NewUUID().String()
 	mutableState, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
@@ -403,7 +407,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	// Using a new RunID here to simplify locking: MultiOperation, that re-uses the Starter, is creating
 	// a locked workflow context for each new workflow. Using a fresh RunID prevents a deadlock with the
 	// previously created workflow context.
-	newRunID := uuid.NewString()
+	newRunID := primitives.NewUUID().String()
 
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
@@ -493,8 +497,13 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		resp, err := s.generateResponse(newRunID, mutableStateInfo.workflowTask, events)
 		return resp, StartNew, err
 	case consts.ErrWorkflowCompleted:
-		// current workflow already closed
-		// fallthough to the logic for only creating the new workflow below
+		if s.followReusePolicyAfterConflictPolicyTerminate(s.namespace.Name().String()) {
+			// Exit and retry again from the top.
+			// By returning an Unavailable service error, the entire Start request will be retried.
+			// NOTE: This WorkflowIDReusePolicy cannot be RejectDuplicate as the frontend will reject that.
+			return nil, StartErr, serviceerror.NewUnavailable(fmt.Sprintf("Termination failed: %v", err))
+		}
+		// Fallthough to the logic for only creating the new workflow below.
 		return nil, StartNew, nil
 	default:
 		return nil, StartErr, err

@@ -27,7 +27,7 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -229,7 +229,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 		ctx,
 		shardContext,
 		namespace.ID(e.NamespaceID),
-		&common.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: e.WorkflowID,
 			RunId:      runId,
 		},

@@ -109,7 +109,7 @@ func newBacklogManager(
 	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
-	bmg.taskAckManager = newAckManager(bmg)
+	bmg.taskAckManager = newAckManager(bmg.db, logger)
 	bmg.taskGC = newTaskGC(bmg.db, config)
 
 	return bmg
@@ -227,8 +227,6 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 		// We handle this by writing the task back to persistence with a higher taskID.
 		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
 		// again the underlying reason for failing to start will be resolved.
-		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
-		// re-written to persistence frequently.
 		err = executeWithRetry(context.Background(), func(_ context.Context) error {
 			_, err := c.taskWriter.appendTask(task.Data)
 			return err
@@ -237,7 +235,9 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 		if err != nil {
 			// OK, we also failed to write to persistence.
 			// This should only happen in very extreme cases where persistence is completely down.
-			// We still can't lose the old task, so we just unload the entire task queue
+			// We still can't lose the old task, so we just unload the entire task queue.
+			// We haven't advanced the ack level past this task, so when the task queue reloads,
+			// it will see this task again.
 			c.logger.Error("Persistent store operation failure",
 				tag.StoreOperationStopTaskQueue,
 				tag.Error(err),

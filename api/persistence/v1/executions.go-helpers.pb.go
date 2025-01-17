@@ -399,6 +399,80 @@ func (this *OutboundTaskInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type NexusInvocationTaskInfo to the protobuf v3 wire format
+func (val *NexusInvocationTaskInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusInvocationTaskInfo from the protobuf v3 wire format
+func (val *NexusInvocationTaskInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusInvocationTaskInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusInvocationTaskInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusInvocationTaskInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusInvocationTaskInfo
+	switch t := that.(type) {
+	case *NexusInvocationTaskInfo:
+		that1 = t
+	case NexusInvocationTaskInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type NexusCancelationTaskInfo to the protobuf v3 wire format
+func (val *NexusCancelationTaskInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NexusCancelationTaskInfo from the protobuf v3 wire format
+func (val *NexusCancelationTaskInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NexusCancelationTaskInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NexusCancelationTaskInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NexusCancelationTaskInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NexusCancelationTaskInfo
+	switch t := that.(type) {
+	case *NexusCancelationTaskInfo:
+		that1 = t
+	case NexusCancelationTaskInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type ActivityInfo to the protobuf v3 wire format
 func (val *ActivityInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
