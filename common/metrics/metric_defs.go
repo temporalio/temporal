@@ -734,6 +734,10 @@ var (
 		"shardinfo_scheduled_queue_lag",
 		WithDescription("A histogram across history shards for the difference between the earliest scheduled time of pending history tasks and current time."),
 	)
+	ShardInfoQueueHeartbeatDuration = NewTimerDef(
+		"shardinfo_queue_heartbeat_duration",
+		WithDescription("A histogram across history shard for the duration between two queue updateState calls."),
+	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
 	FinalizerItemsCompleted    = NewCounterDef("finalizer_items_completed")
