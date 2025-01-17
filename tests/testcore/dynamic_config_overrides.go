@@ -42,11 +42,11 @@ var (
 	//
 	// NOTE1: settings which are not really dynamic (requires server restart to take effect) can't be overridden on test level,
 	//        i.e., must be overridden globally (1) or per test suite (2).
-	// NOTE2: per test overrides change value for the cluster, therefore, it affects not only specific test, but
-	//        all tests for this suite. Automatic cleanup reverts previous value and tests don't affect each other.
-	//        But it means that tests in the same suite can be run in parallel.This is not a problem because testify
+	// NOTE2: per test overrides change the value for the cluster, therefore, it affects not only a specific test, but
+	//        all tests for that suite. The automatic cleanup reverts to the  previous value and tests don't affect each other.
+	//        But that means tests in the same suite can't be run in parallel. This is not a problem because testify
 	//        doesn't allow parallel execution of tests in the same suite anyway. If one day, it will be allowed,
-	//        unique namespaces with overrides per namespace should be used for tests which require different settings.
+	//        unique namespaces with overrides per namespace should be used for tests that require overrides.
 	dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendRPS.Key():                                         3000,
 		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
