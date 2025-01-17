@@ -500,6 +500,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		if s.followReusePolicyAfterConflictPolicyTerminate(s.namespace.Name().String()) {
 			// Exit and retry again from the top.
 			// By returning an Unavailable service error, the entire Start request will be retried.
+			// NOTE: This WorkflowIDReusePolicy cannot be RejectDuplicate as the frontend will reject that.
 			return nil, StartErr, serviceerror.NewUnavailable(fmt.Sprintf("Termination failed: %v", err))
 		}
 		// Fallthough to the logic for only creating the new workflow below.
