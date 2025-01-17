@@ -5361,6 +5361,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
 				}, nil
 			})
+		s.NoError(err)
 		uwsRes := <-uwsCh
 		s.NoError(uwsRes.err)
 
