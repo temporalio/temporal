@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -406,12 +407,12 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 
 	// figure out which components are enabled at all for this namespace
 	var enabledComponents []workercommon.PerNSWorkerComponent
-	var componentSet string
+	var componentSet strings.Builder
 	for _, cmp := range w.wm.components {
 		options := cmp.DedicatedWorkerOptions(args.ns)
 		if options.Enabled {
 			enabledComponents = append(enabledComponents, cmp)
-			componentSet += fmt.Sprintf("%p,", cmp)
+			fmt.Fprintf(&componentSet, "%p,", cmp)
 		}
 	}
 
@@ -432,10 +433,10 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 		return errNoWorkerNeeded
 	}
 	// ensure this changes if multiplicity changes
-	componentSet += fmt.Sprintf(",%d", workerAllocation.local)
+	fmt.Fprintf(&componentSet, "%d,", workerAllocation.local)
 
 	// get sdk worker options
-	componentSet += fmt.Sprintf(",%+v", w.opts)
+	fmt.Fprintf(&componentSet, "%+v,", w.opts)
 
 	// we do need a worker, but maybe we have one already
 	w.lock.Lock()
@@ -446,7 +447,7 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 		return nil
 	}
 
-	if componentSet == w.componentSet {
+	if componentSet.String() == w.componentSet {
 		// no change in set of components enabled, leave existing running
 		return nil
 	}
@@ -474,7 +475,7 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 
 	w.client = client
 	w.worker = worker
-	w.componentSet = componentSet
+	w.componentSet = componentSet.String()
 	return nil
 }
 
