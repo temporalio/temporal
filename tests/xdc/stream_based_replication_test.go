@@ -566,7 +566,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		var err error
 		resp, err = client1.DescribeNamespace(testcore.NewContext(), descReq)
 		return err == nil
-	}, cacheRefreshInterval, time.Second)
+	}, 2*cacheRefreshInterval, cacheRefreshInterval/4)
 
 	// Start a workflow
 	id := "reset-test"

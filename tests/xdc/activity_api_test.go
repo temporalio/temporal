@@ -99,7 +99,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	ns := s.createGlobalNamespace()
 	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
-		Namespace: ns,
+		Namespace: ns.String(),
 		Logger:    log.NewSdkLogger(s.logger),
 	})
 	s.NoError(err)
@@ -132,7 +132,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 
 	// pause the activity in cluster 1
 	pauseRequest := &workflowservice.PauseActivityByIdRequest{
-		Namespace:  ns,
+		Namespace:  ns.String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 	}
@@ -142,7 +142,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 
 	// reset the activity in cluster 1
 	resetRequest := &workflowservice.ResetActivityByIdRequest{
-		Namespace:  ns,
+		Namespace:  ns.String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 		NoWait:     false,
@@ -153,7 +153,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 
 	// update the activity properties in cluster 1
 	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
-		Namespace:  ns,
+		Namespace:  ns.String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 		ActivityOptions: &activitypb.ActivityOptions{
@@ -181,12 +181,12 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	worker1.Stop()
 
 	// failover to standby cluster
-	s.failover(ns, s.clusterNames[1], int64(2), s.cluster1.FrontendClient())
+	s.failover(ns.String(), s.clusterNames[1], int64(2), s.cluster1.FrontendClient())
 
 	// get standby client
 	standbyClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
-		Namespace: ns,
+		Namespace: ns.String(),
 	})
 	s.NoError(err)
 	s.NotNil(standbyClient)
@@ -212,7 +212,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 
 	// unpause the activity in cluster 2
 	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
-		Namespace:  ns,
+		Namespace:  ns.String(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 		Operation: &workflowservice.UnpauseActivityByIdRequest_Resume{

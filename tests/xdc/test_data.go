@@ -31,10 +31,6 @@ import (
 )
 
 const (
-	numOfRetry        = 100
-	waitTimeInMs      = 400
-	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
-	// TODO (alex): remove 5s buffer. Refresh interval is 1s now.
+	// TODO (alex): remove this file
 	cacheRefreshInterval = testcore.NamespaceCacheRefreshInterval + 5*time.Second
-	testTimeout          = 30 * time.Second
 )

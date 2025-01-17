@@ -54,6 +54,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	namespaceCacheWaitTime      = 2 * testcore.NamespaceCacheRefreshInterval
+	namespaceCacheCheckInterval = testcore.NamespaceCacheRefreshInterval / 2
+	testTimeout                 = 30 * time.Second
+)
+
 type (
 	xdcBaseSuite struct {
 		// TODO (alex): use FunctionalTestSuite
@@ -79,6 +85,7 @@ type (
 	}
 )
 
+// TODO (alex): this should be gone.
 func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplicationConfig {
 	config := make([]*replicationpb.ClusterReplicationConfig, len(s.clusterNames))
 	for i, clusterName := range s.clusterNames {
@@ -222,16 +229,59 @@ func (s *xdcBaseSuite) setupTest() {
 		s.waitForClusterSynced()
 	})
 }
+func (s *xdcBaseSuite) createGlobalNamespace() namespace.Name {
+	return createGlobalNamespace(s.Assertions, s.clusterNames, []*testcore.TestCluster{s.cluster1, s.cluster2})
+}
 
-func (s *xdcBaseSuite) createGlobalNamespace() string {
+// TODO (alex): merge this and above functions when all xdc tests share same base struct
+func createGlobalNamespace(s *require.Assertions, clusterNames []string, clusters []*testcore.TestCluster) namespace.Name {
 	ctx := testcore.NewContext()
-	ns := "test-namespace-" + uuid.NewString()
+	ns := namespace.Name("test-namespace-" + uuid.NewString())
+	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusterNames))
+	for i, clusterName := range clusterNames {
+		replicationConfigs[i] = &replicationpb.ClusterReplicationConfig{
+			ClusterName: clusterName,
+		}
+	}
 
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        ns,
+		Namespace:                        ns.String(),
 		IsGlobalNamespace:                true,
-		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
+		Clusters:                         replicationConfigs,
+		ActiveClusterName:                clusterNames[0],
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
+	}
+	_, err := clusters[0].FrontendClient().RegisterNamespace(ctx, regReq)
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// Wait for namespace record to be replicated and loaded into memory.
+		for _, r := range clusters[1].Host().FrontendNamespaceRegistries() {
+			resp, err := r.GetNamespace(ns)
+			assert.NoError(t, err)
+			if resp != nil {
+				assert.True(t, resp.IsGlobalNamespace())
+			}
+		}
+	}, 15*time.Second, 500*time.Millisecond)
+
+	return ns
+}
+
+func (s *xdcBaseSuite) createLocalNamespace(clusterName string) namespace.Name {
+	ctx := testcore.NewContext()
+	ns := namespace.Name("test-namespace-" + uuid.NewString())
+	replicationConfigs := []*replicationpb.ClusterReplicationConfig{
+		{
+			ClusterName: clusterName,
+		},
+	}
+
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        ns.String(),
+		IsGlobalNamespace:                false,
+		Clusters:                         replicationConfigs,
+		ActiveClusterName:                clusterName,
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
 	_, err := s.cluster1.FrontendClient().RegisterNamespace(ctx, regReq)
@@ -239,11 +289,14 @@ func (s *xdcBaseSuite) createGlobalNamespace() string {
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		// Wait for namespace record to be replicated and loaded into memory.
-		for _, r := range s.cluster2.Host().FrontendNamespaceRegistries() {
-			_, err := r.GetNamespace(namespace.Name(ns))
+		for _, r := range s.cluster1.Host().FrontendNamespaceRegistries() {
+			resp, err := r.GetNamespace(ns)
 			assert.NoError(t, err)
+			if resp != nil {
+				assert.False(t, resp.IsGlobalNamespace())
+			}
 		}
-	}, 15*time.Second, 500*time.Millisecond)
+	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 
 	return ns
 }

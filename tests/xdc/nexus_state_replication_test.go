@@ -49,6 +49,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/testvars"
@@ -169,12 +170,12 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
-		Namespace: ns,
+		Namespace: ns.String(),
 	})
 	s.NoError(err)
 	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
-		Namespace: ns,
+		Namespace: ns.String(),
 	})
 	s.NoError(err)
 
@@ -209,7 +210,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	s.waitOperationRetry(ctx, sdkClient2, run)
 
 	// Now failover, and let cluster2 be the active.
-	s.failover(ns, s.clusterNames[1], 2, s.cluster1.FrontendClient())
+	s.failover(ns.String(), s.clusterNames[1], 2, s.cluster1.FrontendClient())
 
 	s.NoError(sdkClient2.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "dont-care", nil))
 
@@ -248,7 +249,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	s.waitEvent(ctx, sdkClient1, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 
 	// Fail back to cluster1.
-	s.failover(ns, s.clusterNames[0], 11, s.cluster2.FrontendClient())
+	s.failover(ns.String(), s.clusterNames[0], 11, s.cluster2.FrontendClient())
 
 	s.completeNexusOperation(ctx, "result", publicCallbackUrl, callbackToken)
 
@@ -322,12 +323,12 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
-		Namespace: ns,
+		Namespace: ns.String(),
 	})
 	s.NoError(err)
 	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
-		Namespace: ns,
+		Namespace: ns.String(),
 	})
 	s.NoError(err)
 
@@ -436,18 +437,18 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
-		Namespace: ns,
+		Namespace: ns.String(),
 	})
 	s.NoError(err)
 	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
-		Namespace: ns,
+		Namespace: ns.String(),
 	})
 	s.NoError(err)
 
 	tv := testvars.New(s.T())
 	startResp, err := sdkClient1.WorkflowService().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    ns,
+		Namespace:    ns.String(),
 		WorkflowId:   tv.WorkflowID(),
 		WorkflowType: tv.WorkflowType(),
 		TaskQueue:    tv.TaskQueue(),
@@ -477,7 +478,7 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	})
 
 	// Failover to cluster2.
-	s.failover(ns, s.clusterNames[1], 2, s.cluster1.FrontendClient())
+	s.failover(ns.String(), s.clusterNames[1], 2, s.cluster1.FrontendClient())
 
 	// Unblock callback after failover.
 	failCallback.Store(false)
@@ -550,12 +551,12 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
-		Namespace: ns,
+		Namespace: ns.String(),
 	})
 	s.NoError(err)
 	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
-		Namespace: ns,
+		Namespace: ns.String(),
 	})
 	s.NoError(err)
 
@@ -596,7 +597,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 
 	// Poll next WFT which will be scheduled when timer fires
 	secondPollResp, err := s.cluster1.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:  "test",
 	})
@@ -707,9 +708,9 @@ func (s *NexusStateReplicationSuite) waitOperationRetry(
 	}, time.Second*10, time.Millisecond*100)
 }
 
-func (s *NexusStateReplicationSuite) pollWorkflowTask(ctx context.Context, client workflowservice.WorkflowServiceClient, ns string) *workflowservice.PollWorkflowTaskQueueResponse {
+func (s *NexusStateReplicationSuite) pollWorkflowTask(ctx context.Context, client workflowservice.WorkflowServiceClient, ns namespace.Name) *workflowservice.PollWorkflowTaskQueueResponse {
 	pollRes, err := client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "tq",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,

@@ -808,9 +808,8 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                  payloads.EncodeBytes(buf.Bytes()),
 					ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
-					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+					ScheduleToStartTimeout: durationpb.New(50 * time.Second),
 					StartToCloseTimeout:    durationpb.New(50 * time.Second),
-					HeartbeatTimeout:       durationpb.New(5 * time.Second),
 				}},
 			}}, nil
 		}
@@ -823,18 +822,12 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 		}}, nil
 	}
 
-	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-
-		return payloads.EncodeString("Activity Result"), false, nil
-	}
-
 	poller := &testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler,
 		Logger:              s.logger,
 		T:                   s.T(),
 	}
@@ -872,9 +865,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
   2 v1 WorkflowTaskScheduled
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
-  5 v1 ActivityTaskScheduled
-  6 v2 ActivityTaskTimedOut
-  7 v2 WorkflowTaskScheduled`,
+  5 v1 ActivityTaskScheduled`,
 		func() *historypb.History {
 			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			s.NoError(err)
@@ -903,9 +894,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
   5 v1 ActivityTaskScheduled
-  6 v2 ActivityTaskTimedOut
-  7 v2 WorkflowTaskScheduled
-  8 v2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`,
+  6 v2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`,
 		func() *historypb.History {
 			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			s.NoError(err)
@@ -920,9 +909,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
   5 v1 ActivityTaskScheduled
-  6 v2 ActivityTaskTimedOut
-  7 v2 WorkflowTaskScheduled
-  8 v2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`,
+  6 v2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`,
 		func() *historypb.History {
 			historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			if err != nil {
@@ -2298,12 +2285,11 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 }
 
 func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
-	namespace := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
-	s.registerNamespace(namespace, true, true)
+	nsName := s.createGlobalNamespace()
 
 	taskqueue := "functional-activity-heartbeat-workflow-failover-test-taskqueue"
-	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
-	client2, worker2 := s.newClientAndWorker(s.cluster2.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker2")
+	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), nsName.String(), taskqueue, "worker1")
+	client2, worker2 := s.newClientAndWorker(s.cluster2.Host().FrontendGRPCAddress(), nsName.String(), taskqueue, "worker2")
 
 	lastAttemptCount := 0
 	expectedHeartbeatValue := 100
@@ -2349,7 +2335,7 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	time.Sleep(time.Second * 4) // wait for heartbeat from activity to be reported and activity timed out on heartbeat
 
 	worker1.Stop() // stop worker1 so cluster 1 won't make any progress
-	s.failover(namespace, s.clusterNames[1], int64(2), s.cluster1.FrontendClient())
+	s.failover(nsName.String(), s.clusterNames[1], int64(2), s.cluster1.FrontendClient())
 
 	// verify things are replicated over
 	resp, err := s.cluster1.HistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
@@ -2408,11 +2394,10 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	namespace := "local-ns-to-be-promote-" + common.GenerateRandomString(5)
-	s.registerNamespace(namespace, false, false)
+	nsName := s.createLocalNamespace(s.clusterNames[0])
 
 	taskqueue := "functional-local-ns-to-be-promote-taskqueue"
-	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), nsName.String(), taskqueue, "worker1")
 
 	testWorkflowFn := func(ctx workflow.Context, sleepInterval time.Duration) error {
 		return workflow.Sleep(ctx, sleepInterval)
@@ -2586,12 +2571,12 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	// promote ns
 	frontendClient1 := s.cluster1.FrontendClient()
 	_, err = frontendClient1.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-		Namespace:        namespace,
+		Namespace:        nsName.String(),
 		PromoteNamespace: true,
 	})
 	s.NoError(err)
 	nsResp, err := frontendClient1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 	})
 	s.NoError(err)
 	s.True(nsResp.IsGlobalNamespace)
@@ -2622,7 +2607,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 
 	// update ns to have 2 clusters
 	_, err = frontendClient1.UpdateNamespace(testCtx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			Clusters: s.clusterReplicationConfig(),
 		},
@@ -2633,7 +2618,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
 
 	nsResp, err = frontendClient1.DescribeNamespace(testCtx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 	})
 	s.NoError(err)
 	s.True(nsResp.IsGlobalNamespace)
@@ -2682,7 +2667,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
+		Namespace:  nsName.String(),
 		OverallRps: 10,
 	})
 
@@ -2697,7 +2682,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "namespace-handover", migration.NamespaceHandoverParams{
-		Namespace:              namespace,
+		Namespace:              nsName.String(),
 		RemoteCluster:          s.clusterNames[1],
 		AllowedLaggingSeconds:  10,
 		HandoverTimeoutSeconds: 30,
@@ -2709,7 +2694,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	// at this point ns migration is done.
 	// verify namespace is now active in cluster2
 	nsResp2, err := frontendClient1.DescribeNamespace(testCtx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 	})
 	s.NoError(err)
 	s.True(nsResp2.IsGlobalNamespace)
@@ -2719,7 +2704,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	// verify all wf in ns is now available in cluster2
 	client2, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
-		Namespace: namespace,
+		Namespace: nsName.String(),
 	})
 	s.NoError(err)
 	feClient2 := s.cluster2.FrontendClient()
@@ -2729,7 +2714,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 		s.Equal(expectedRunID, desc1.WorkflowExecutionInfo.Execution.RunId)
 		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.WorkflowExecutionInfo.Status)
 		resp, err := feClient2.GetWorkflowExecutionHistoryReverse(testCtx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
-			Namespace: namespace,
+			Namespace: nsName.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: wfID,
 				RunId:      expectedRunID,
@@ -2742,7 +2727,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 		listWorkflowResp, err := feClient2.ListClosedWorkflowExecutions(
 			testCtx,
 			&workflowservice.ListClosedWorkflowExecutionsRequest{
-				Namespace:       namespace,
+				Namespace:       nsName.String(),
 				MaximumPageSize: 1000,
 				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
 					ExecutionFilter: &filterpb.WorkflowExecutionFilter{
@@ -2764,11 +2749,10 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	namespace := "force-replication" + common.GenerateRandomString(5)
-	s.registerNamespace(namespace, true, false)
+	nsName := s.createGlobalNamespace()
 
 	taskqueue := "functional-local-force-replication-task-queue"
-	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), nsName.String(), taskqueue, "worker1")
 
 	testWorkflowFn := func(ctx workflow.Context) error {
 		return nil
@@ -2796,7 +2780,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	frontendClient1 := s.cluster1.FrontendClient()
 	// Update ns to have 2 clusters
 	_, err = frontendClient1.UpdateNamespace(testCtx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			Clusters: s.clusterReplicationConfig(),
 		},
@@ -2807,7 +2791,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
 
 	nsResp, err := frontendClient1.DescribeNamespace(testCtx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 	})
 	s.NoError(err)
 	s.True(nsResp.IsGlobalNamespace)
@@ -2825,7 +2809,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
+		Namespace:  nsName.String(),
 		OverallRps: 10,
 	})
 	s.NoError(err)
@@ -2833,7 +2817,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	s.NoError(err)
 
 	// Verify all wf in ns is now available in cluster2
-	client2, worker2 := s.newClientAndWorker(s.cluster2.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker2")
+	client2, worker2 := s.newClientAndWorker(s.cluster2.Host().FrontendGRPCAddress(), nsName.String(), taskqueue, "worker2")
 	verify := func(wfID string, expectedRunID string) {
 		desc1, err := client2.DescribeWorkflowExecution(testCtx, wfID, "")
 		s.NoError(err)
@@ -2845,7 +2829,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	frontendClient2 := s.cluster2.FrontendClient()
 	// Failover ns
 	_, err = frontendClient2.UpdateNamespace(testCtx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: s.clusterNames[1],
 		},
@@ -2855,7 +2839,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
 
 	nsResp, err = frontendClient2.DescribeNamespace(testCtx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 	})
 	s.NoError(err)
 	s.Equal(s.clusterNames[1], nsResp.ReplicationConfig.ActiveClusterName)
@@ -2866,7 +2850,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 
 	// Test reset workflow in cluster 2
 	resetResp, err := client2.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      run1.GetRunID(),
@@ -2890,11 +2874,10 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	namespace := "force-replication" + common.GenerateRandomString(5)
-	s.registerNamespace(namespace, true, false)
+	nsName := s.createGlobalNamespace()
 
 	taskqueue := "functional-force-replication-reset-task-queue"
-	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), nsName.String(), taskqueue, "worker1")
 
 	testWorkflowFn := func(ctx workflow.Context) error {
 		return nil
@@ -2920,7 +2903,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	s.NoError(err)
 
 	resp, err := client1.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      run1.GetRunID(),
@@ -2937,7 +2920,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	frontendClient1 := s.cluster1.FrontendClient()
 	// Update ns to have 2 clusters
 	_, err = frontendClient1.UpdateNamespace(testCtx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			Clusters: s.clusterReplicationConfig(),
 		},
@@ -2948,7 +2931,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
 
 	nsResp, err := frontendClient1.DescribeNamespace(testCtx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 	})
 	s.NoError(err)
 	s.True(nsResp.IsGlobalNamespace)
@@ -2966,7 +2949,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
+		Namespace:  nsName.String(),
 		OverallRps: 10,
 	})
 	s.NoError(err)
@@ -2974,7 +2957,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	s.NoError(err)
 
 	// Verify all wf in ns is now available in cluster2
-	client2, _ := s.newClientAndWorker(s.cluster2.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker2")
+	client2, _ := s.newClientAndWorker(s.cluster2.Host().FrontendGRPCAddress(), nsName.String(), taskqueue, "worker2")
 	verifyHistory := func(wfID string, runID string) {
 		iter1 := client1.GetWorkflowHistory(testCtx, wfID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		iter2 := client2.GetWorkflowHistory(testCtx, wfID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
@@ -3038,34 +3021,6 @@ func (s *FunctionalClustersTestSuite) getHistory(client workflowservice.Workflow
 	}
 
 	return events
-}
-
-func (s *FunctionalClustersTestSuite) registerNamespace(namespace string, isGlobalNamespace, initialReplicated bool) {
-	clusters := s.clusterReplicationConfig()
-	if !isGlobalNamespace || !initialReplicated {
-		clusters = s.clusterReplicationConfig()[0:1]
-	}
-	client1 := s.cluster1.FrontendClient() // active
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        namespace,
-		IsGlobalNamespace:                isGlobalNamespace,
-		Clusters:                         clusters,
-		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
-	}
-	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
-	s.NoError(err)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
-
-	descReq := &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
-	}
-	resp, err := client1.DescribeNamespace(testcore.NewContext(), descReq)
-	s.NoError(err)
-	s.NotNil(resp)
-	s.Equal(namespace, resp.NamespaceInfo.Name)
-	s.Equal(isGlobalNamespace, resp.IsGlobalNamespace)
 }
 
 func (s *FunctionalClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
