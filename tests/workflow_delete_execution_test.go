@@ -185,8 +185,8 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 				Execution: we,
 			},
 		)
-		var invalidArgumentErr *serviceerror.InvalidArgument
-		s.ErrorAs(err, &invalidArgumentErr)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
 		s.Nil(historyResponse)
 
 		s.Eventually(
@@ -300,8 +300,8 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 				Execution: we,
 			},
 		)
-		var invalidArgumentErr *serviceerror.InvalidArgument
-		s.ErrorAs(err, &invalidArgumentErr)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
 		s.Nil(historyResponse)
 
 		s.Eventually(
@@ -429,8 +429,8 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 				Execution: we,
 			},
 		)
-		var invalidArgumentErr *serviceerror.InvalidArgument
-		s.ErrorAs(err, &invalidArgumentErr)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
 		s.Nil(historyResponse)
 
 		s.Eventually(
