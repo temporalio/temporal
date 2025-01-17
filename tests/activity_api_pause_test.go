@@ -36,7 +36,6 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
@@ -52,14 +51,15 @@ type ActivityApiPauseClientTestSuite struct {
 	activityRetryPolicy *temporal.RetryPolicy
 }
 
-func (s *ActivityApiPauseClientTestSuite) SetupSuite() {
-	s.FunctionalTestSdkSuite.SetupSuite()
-	s.OverrideDynamicConfig(dynamicconfig.ActivityAPIsEnabled, true)
-	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
+func TestActivityApiPauseClientTestSuite(t *testing.T) {
+	s := new(ActivityApiPauseClientTestSuite)
+	suite.Run(t, s)
 }
 
 func (s *ActivityApiPauseClientTestSuite) SetupTest() {
 	s.FunctionalTestSdkSuite.SetupTest()
+
+	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
 
 	s.initialRetryInterval = 1 * time.Second
 	s.scheduleToCloseTimeout = 30 * time.Minute
@@ -69,11 +69,6 @@ func (s *ActivityApiPauseClientTestSuite) SetupTest() {
 		InitialInterval:    s.initialRetryInterval,
 		BackoffCoefficient: 1,
 	}
-}
-
-func TestActivityApiPauseClientTestSuite(t *testing.T) {
-	s := new(ActivityApiPauseClientTestSuite)
-	suite.Run(t, s)
 }
 
 func (s *ActivityApiPauseClientTestSuite) makeWorkflowFunc(activityFunction ActivityFunctions) WorkflowFunction {

@@ -70,6 +70,9 @@ func (s *namespaceTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		// Run tests at full speed.
 		dynamicconfig.DeleteNamespaceDeleteActivityRPS.Key(): 1000000,
+
+		dynamicconfig.TransferProcessorUpdateAckInterval.Key():   1 * time.Second,
+		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(): 1 * time.Second,
 	}
 
 	if testcore.UsingSQLAdvancedVisibility() {
@@ -82,9 +85,9 @@ func (s *namespaceTestSuite) SetupSuite() {
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {
 	// don't fail for this test, we're testing this behavior specifically
-	s.GetTestCluster().OverrideDynamicConfig(s.T(), dynamicconfig.ValidateUTF8FailRPCRequest, false)
-	s.GetTestCluster().OverrideDynamicConfig(s.T(), dynamicconfig.ValidateUTF8FailRPCResponse, false)
-	s.GetTestCluster().OverrideDynamicConfig(s.T(), dynamicconfig.ValidateUTF8FailPersistence, false)
+	s.OverrideDynamicConfig(dynamicconfig.ValidateUTF8FailRPCRequest, false)
+	s.OverrideDynamicConfig(dynamicconfig.ValidateUTF8FailRPCResponse, false)
+	s.OverrideDynamicConfig(dynamicconfig.ValidateUTF8FailPersistence, false)
 
 	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
@@ -184,7 +187,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
 
-	s.GetTestCluster().OverrideDynamicConfig(s.T(), dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour)
+	s.OverrideDynamicConfig(dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour)
 
 	retention := 24 * time.Hour
 	_, err := s.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
@@ -522,7 +525,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Protected() {
 	})
 	s.NoError(err)
 
-	s.GetTestCluster().OverrideDynamicConfig(s.T(), dynamicconfig.ProtectedNamespaces, []string{tv.NamespaceName().String()})
+	s.OverrideDynamicConfig(dynamicconfig.ProtectedNamespaces, []string{tv.NamespaceName().String()})
 
 	delResp, err := s.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: tv.NamespaceName().String(),

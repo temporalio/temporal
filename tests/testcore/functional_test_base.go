@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -207,23 +208,12 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 	s.Require().Empty(s.testClusterConfig.DeprecatedFrontendAddress, "Functional tests against external frontends are not supported")
 	s.Require().Empty(s.testClusterConfig.DeprecatedClusterNo, "ClusterNo should not be present in cluster config files")
 
-	if s.testClusterConfig.DynamicConfigOverrides == nil {
-		s.testClusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]any)
-	}
-
-	// TODO (alex): clusterConfig shouldn't have DC at all.
-	maps.Copy(s.testClusterConfig.DynamicConfigOverrides, map[dynamicconfig.Key]any{
-		dynamicconfig.HistoryScannerEnabled.Key():    false,
-		dynamicconfig.TaskQueueScannerEnabled.Key():  false,
-		dynamicconfig.ExecutionsScannerEnabled.Key(): false,
-		dynamicconfig.BuildIdScavengerEnabled.Key():  false,
-		// Better to read through in tests than add artificial sleeps (which is what we previously had).
-		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
-		dynamicconfig.RetentionTimerJitterDuration.Key():            time.Second,
-		dynamicconfig.EnableEagerWorkflowStart.Key():                true,
-		dynamicconfig.FrontendEnableExecuteMultiOperation.Key():     true,
-	})
+	s.testClusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	maps.Copy(s.testClusterConfig.DynamicConfigOverrides, params.DynamicConfigOverrides)
+	// TODO (alex): is it needed?
+	if s.testClusterConfig.ESConfig != nil {
+		s.testClusterConfig.DynamicConfigOverrides[dynamicconfig.SecondaryVisibilityWritingMode.Key()] = visibility.SecondaryVisibilityWritingModeDual
+	}
 
 	s.testClusterConfig.ServiceFxOptions = params.ServiceOptions
 	s.testClusterConfig.EnableMetricsCapture = true
@@ -259,15 +249,12 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 	s.adminClient = s.testCluster.AdminClient()
 	s.operatorClient = s.testCluster.OperatorClient()
 	s.httpAPIAddress = s.testCluster.Host().FrontendHTTPAddress()
-
 }
 
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
 // call this testcore FunctionalTestBase.SetupTest function to distribute the tests
 // into partitions. Otherwise, the test suite will be executed multiple times
 // in each partition.
-// Furthermore, all test suites in the "tests/" directory that don't inherit
-// from FunctionalTestBase must implement SetupTest that calls checkTestShard.
 func (s *FunctionalTestBase) SetupTest() {
 	s.checkTestShard()
 	s.initAssertions()

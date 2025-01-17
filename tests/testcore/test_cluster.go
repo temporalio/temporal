@@ -103,8 +103,8 @@ type (
 		WorkerConfig           WorkerConfig
 		ESConfig               *esclient.Config
 		MockAdminClient        map[string]adminservice.AdminServiceClient
-		FaultInjection         config.FaultInjection `yaml:"faultInjection"`
-		DynamicConfigOverrides map[dynamicconfig.Key]any
+		FaultInjection         config.FaultInjection     `yaml:"faultInjection"`
+		DynamicConfigOverrides map[dynamicconfig.Key]any `yaml:"-"`
 		GenerateMTLS           bool
 		EnableMetricsCapture   bool
 		// ServiceFxOptions can be populated using WithFxOptionsForService.

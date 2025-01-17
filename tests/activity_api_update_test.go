@@ -40,7 +40,6 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -52,19 +51,14 @@ type ActivityApiUpdateClientTestSuite struct {
 	tv *testvars.TestVars
 }
 
-func (s *ActivityApiUpdateClientTestSuite) SetupSuite() {
-	s.FunctionalTestSdkSuite.SetupSuite()
-	s.OverrideDynamicConfig(dynamicconfig.ActivityAPIsEnabled, true)
-	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
+func TestActivityApiUpdateClientTestSuite(t *testing.T) {
+	s := new(ActivityApiUpdateClientTestSuite)
+	suite.Run(t, s)
 }
 
 func (s *ActivityApiUpdateClientTestSuite) SetupTest() {
 	s.FunctionalTestSdkSuite.SetupTest()
-}
-
-func TestActivityApiUpdateClientTestSuite(t *testing.T) {
-	s := new(ActivityApiUpdateClientTestSuite)
-	suite.Run(t, s)
+	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
 }
 
 type (
