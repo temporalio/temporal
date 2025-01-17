@@ -23,10 +23,6 @@
 package matcher
 
 import (
-	"fmt"
-	"strings"
-
-	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -57,20 +53,11 @@ Different fields can support different operators:
 Returns true if the query matches the mutable state, false otherwise, or error if the query is invalid.
 */
 func MatchMutableState(ms workflow.MutableState, query string) (bool, error) {
-	query, err := prepareQuery(query)
-	if err != nil {
-		return false, err
-	}
-
-	whereCause, err := getWhereCause(query)
-	if err != nil {
-		return false, err
-	}
 	evaluator := newMutableStateMatchEvaluator(ms)
-
-	return evaluator.Evaluate(whereCause)
+	return evaluator.Evaluate(query)
 }
 
+/*
 func getWhereCause(query string) (sqlparser.Expr, error) {
 	stmt, err := sqlparser.Parse(query)
 	if err != nil {
@@ -109,3 +96,4 @@ func prepareQuery(query string) (string, error) {
 
 	return query, nil
 }
+*/
