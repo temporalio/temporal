@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nsdlq
+package nsreplication
 
 import (
 	"context"
@@ -35,7 +35,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.uber.org/mock/gomock"
 )
@@ -47,9 +46,9 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		mockReplicationTaskExecutor *nsreplication.MockTaskExecutor
+		mockReplicationTaskExecutor *MockTaskExecutor
 		mockReplicationQueue        *persistence.MockNamespaceReplicationQueue
-		dlqMessageHandler           *messageHandlerImpl
+		dlqMessageHandler           *dlqMessageHandlerImpl
 	}
 )
 
@@ -70,14 +69,14 @@ func (s *dlqMessageHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	logger := log.NewTestLogger()
-	s.mockReplicationTaskExecutor = nsreplication.NewMockTaskExecutor(s.controller)
+	s.mockReplicationTaskExecutor = NewMockTaskExecutor(s.controller)
 	s.mockReplicationQueue = persistence.NewMockNamespaceReplicationQueue(s.controller)
 
-	s.dlqMessageHandler = NewMessageHandler(
+	s.dlqMessageHandler = NewDLQMessageHandler(
 		s.mockReplicationTaskExecutor,
 		s.mockReplicationQueue,
 		logger,
-	).(*messageHandlerImpl)
+	).(*dlqMessageHandlerImpl)
 }
 
 func (s *dlqMessageHandlerSuite) TearDownTest() {
