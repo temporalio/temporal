@@ -22,9 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination dlq_message_handler_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination dlq_message_handler_mock.go
 
-package namespace
+package nsdlq
 
 import (
 	"context"
@@ -33,31 +33,32 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 )
 
 type (
-	// DLQMessageHandler is the interface handles namespace DLQ messages
-	DLQMessageHandler interface {
+	// MessageHandler is the interface handles namespace DLQ messages
+	MessageHandler interface {
 		Read(ctx context.Context, lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationspb.ReplicationTask, []byte, error)
 		Purge(ctx context.Context, lastMessageID int64) error
 		Merge(ctx context.Context, lastMessageID int64, pageSize int, pageToken []byte) ([]byte, error)
 	}
 
-	dlqMessageHandlerImpl struct {
-		replicationHandler        ReplicationTaskExecutor
+	messageHandlerImpl struct {
+		replicationHandler        nsreplication.TaskExecutor
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		logger                    log.Logger
 	}
 )
 
-// NewDLQMessageHandler returns a DLQTaskHandler instance
-func NewDLQMessageHandler(
-	replicationHandler ReplicationTaskExecutor,
+// NewMessageHandler returns a MessageHandler instance
+func NewMessageHandler(
+	replicationHandler nsreplication.TaskExecutor,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.Logger,
-) DLQMessageHandler {
-	return &dlqMessageHandlerImpl{
+) MessageHandler {
+	return &messageHandlerImpl{
 		replicationHandler:        replicationHandler,
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		logger:                    logger,
@@ -65,7 +66,7 @@ func NewDLQMessageHandler(
 }
 
 // ReadMessages reads namespace replication DLQ messages
-func (d *dlqMessageHandlerImpl) Read(
+func (d *messageHandlerImpl) Read(
 	ctx context.Context,
 	lastMessageID int64,
 	pageSize int,
@@ -87,7 +88,7 @@ func (d *dlqMessageHandlerImpl) Read(
 }
 
 // PurgeMessages purges namespace replication DLQ messages
-func (d *dlqMessageHandlerImpl) Purge(
+func (d *messageHandlerImpl) Purge(
 	ctx context.Context,
 	lastMessageID int64,
 ) error {
@@ -116,7 +117,7 @@ func (d *dlqMessageHandlerImpl) Purge(
 }
 
 // MergeMessages merges namespace replication DLQ messages
-func (d *dlqMessageHandlerImpl) Merge(
+func (d *messageHandlerImpl) Merge(
 	ctx context.Context,
 	lastMessageID int64,
 	pageSize int,

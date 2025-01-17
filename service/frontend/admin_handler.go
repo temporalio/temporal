@@ -70,6 +70,8 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsdlq"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -108,7 +110,7 @@ type (
 		numberOfHistoryShards      int32
 		ESClient                   esclient.Client
 		config                     *Config
-		namespaceDLQHandler        namespace.DLQMessageHandler
+		namespaceDLQHandler        nsdlq.MessageHandler
 		eventSerializer            serialization.Serializer
 		visibilityMgr              manager.VisibilityManager
 		persistenceExecutionName   string
@@ -183,7 +185,7 @@ var (
 func NewAdminHandler(
 	args NewAdminHandlerArgs,
 ) *AdminHandler {
-	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
+	namespaceReplicationTaskExecutor := nsreplication.NewTaskExecutor(
 		args.ClusterMetadata.GetCurrentClusterName(),
 		args.PersistenceMetadataManager,
 		args.Logger,
@@ -208,7 +210,7 @@ func NewAdminHandler(
 		status:                common.DaemonStatusInitialized,
 		numberOfHistoryShards: args.PersistenceConfig.NumHistoryShards,
 		config:                args.Config,
-		namespaceDLQHandler: namespace.NewDLQMessageHandler(
+		namespaceDLQHandler: nsdlq.NewMessageHandler(
 			namespaceReplicationTaskExecutor,
 			args.NamespaceReplicationQueue,
 			args.Logger,

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package nsreplication
 
 import (
 	"context"
@@ -56,25 +56,25 @@ type (
 		) error
 	}
 
-	namespaceReplicatorImpl struct {
+	replicator struct {
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		logger                    log.Logger
 	}
 )
 
-// NewNamespaceReplicator create a new instance of namespace replicator
-func NewNamespaceReplicator(
+// NewReplicator create a new instance of namespace replicator
+func NewReplicator(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.Logger,
 ) Replicator {
-	return &namespaceReplicatorImpl{
+	return &replicator{
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		logger:                    logger,
 	}
 }
 
 // HandleTransmissionTask handle transmission of the namespace replication task
-func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
+func (r *replicator) HandleTransmissionTask(
 	ctx context.Context,
 	namespaceOperation enumsspb.NamespaceOperation,
 	info *persistencespb.NamespaceInfo,
@@ -129,7 +129,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 		},
 	}
 
-	return namespaceReplicator.namespaceReplicationQueue.Publish(
+	return r.namespaceReplicationQueue.Publish(
 		ctx,
 		&replicationspb.ReplicationTask{
 			TaskType:   taskType,

@@ -63,7 +63,6 @@ func (d *AttrValidatorImpl) ValidateNamespaceConfig(config *persistencespb.Names
 func (d *AttrValidatorImpl) ValidateNamespaceReplicationConfigForLocalNamespace(
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) error {
-
 	activeCluster := replicationConfig.ActiveClusterName
 	clusters := replicationConfig.Clusters
 
@@ -90,7 +89,6 @@ func (d *AttrValidatorImpl) ValidateNamespaceReplicationConfigForLocalNamespace(
 func (d *AttrValidatorImpl) ValidateNamespaceReplicationConfigForGlobalNamespace(
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) error {
-
 	activeCluster := replicationConfig.ActiveClusterName
 	clusters := replicationConfig.Clusters
 
@@ -120,7 +118,6 @@ func (d *AttrValidatorImpl) ValidateNamespaceReplicationConfigForGlobalNamespace
 func (d *AttrValidatorImpl) validateClusterName(
 	clusterName string,
 ) error {
-
 	if info, ok := d.clusterMetadata.GetAllClusterInfo()[clusterName]; !ok || !info.Enabled {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid cluster name: %v", clusterName))
 	}

@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -56,7 +57,7 @@ type (
 		logger                  log.Logger
 		lock                    sync.Mutex
 		clientBean              client.Bean
-		replicationTaskExecutor namespace.ReplicationTaskExecutor
+		replicationTaskExecutor nsreplication.TaskExecutor
 		currentCluster          string
 		metricsHandler          metrics.Handler
 	}
@@ -67,7 +68,7 @@ func NewEagerNamespaceRefresher(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	clientBean client.Bean,
-	replicationTaskExecutor namespace.ReplicationTaskExecutor,
+	replicationTaskExecutor nsreplication.TaskExecutor,
 	currentCluster string,
 	metricsHandler metrics.Handler) EagerNamespaceRefresher {
 	return &eagerNamespaceRefresherImpl{
