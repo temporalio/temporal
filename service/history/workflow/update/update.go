@@ -68,6 +68,7 @@ type (
 		request         *anypb.Any // of type *updatepb.Request
 		acceptedEventID int64
 		onComplete      func()
+		checkLimits     func(*updatepb.Request) error
 		instrumentation *instrumentation
 		admittedTime    time.Time
 
@@ -85,6 +86,7 @@ func New(id string, opts ...updateOpt) *Update {
 		id:              id,
 		state:           stateCreated,
 		onComplete:      func() {},
+		checkLimits:     func(request *updatepb.Request) error { return nil },
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewFuture[*failurepb.Failure](),
 		outcome:         future.NewFuture[*updatepb.Outcome](),
@@ -151,6 +153,12 @@ func newCompleted(
 func withCompletionCallback(cb func()) updateOpt {
 	return func(u *Update) {
 		u.onComplete = cb
+	}
+}
+
+func withLimitChecker(cb func(req *updatepb.Request) error) updateOpt {
+	return func(u *Update) {
+		u.checkLimits = cb
 	}
 }
 
@@ -321,6 +329,11 @@ func (u *Update) Admit(
 ) error {
 	if u.state != stateCreated {
 		return nil
+	}
+	if err := u.checkLimits(req); err != nil {
+		// Remove the update from the registry immediately.
+		u.onComplete()
+		return err
 	}
 	if err := validateRequestMsg(u.id, req); err != nil {
 		return err
