@@ -861,7 +861,7 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 	EnableDeployments = NewNamespaceBoolSetting(
 		"system.enableDeployments",
 		false,
-		`EnableDeployments enables deployments (versioning v3) in all services,
+		`EnableDeployments enables deployments (deprecated versioning v3 pre-release) in all services,
 including deployment-related RPCs in the frontend, deployment entity workflows in the worker,
 and deployment interaction in matching and history.`,
 	)

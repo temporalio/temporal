@@ -398,6 +398,7 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 			componentSet += fmt.Sprintf("%p,", cmp)
 		}
 	}
+
 	if len(enabledComponents) == 0 {
 		// no components enabled, we don't need a worker
 		return errNoWorkerNeeded

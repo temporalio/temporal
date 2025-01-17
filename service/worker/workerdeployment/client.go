@@ -688,10 +688,10 @@ func stateToInfo(state *deploymentspb.VersionLocalState) *deploymentpb.WorkerDep
 		return nil
 	}
 
-	taskQueues := make([]*deploymentpb.WorkerDeploymentVersionInfo_WorkerBuildTaskQueueInfo, 0, len(state.TaskQueueFamilies)*2)
+	taskQueues := make([]*deploymentpb.WorkerDeploymentVersionInfo_DeploymentVersionTaskQueueInfo, 0, len(state.TaskQueueFamilies)*2)
 	for taskQueueName, taskQueueFamilyInfo := range state.TaskQueueFamilies {
 		for taskQueueType := range taskQueueFamilyInfo.TaskQueues {
-			element := &deploymentpb.WorkerDeploymentVersionInfo_WorkerBuildTaskQueueInfo{
+			element := &deploymentpb.WorkerDeploymentVersionInfo_DeploymentVersionTaskQueueInfo{
 				Name: taskQueueName,
 				Type: enumspb.TaskQueueType(taskQueueType),
 				// TODO (Shivam): Add fields here as needed.
