@@ -34,6 +34,7 @@ import (
 var (
 	// Functional tests don't use dynamic config files. All settings get their default values
 	// defined in common/dynamicconfig/constants.go.
+	//
 	// There are 4 ways to override a setting:
 	// 1. Globally using this file. Every test suite creates a new test cluster using this overrides.
 	// 2. Per test suite using FunctionalTestBase.SetupSuiteWithCluster() and WithDynamicConfigOverrides() option.
