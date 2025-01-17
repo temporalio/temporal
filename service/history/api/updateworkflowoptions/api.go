@@ -126,12 +126,7 @@ func Invoke(
 func getOptionsFromMutableState(ms workflow.MutableState) *workflowpb.WorkflowExecutionOptions {
 	opts := &workflowpb.WorkflowExecutionOptions{}
 	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
-		if override := versioningInfo.GetVersioningOverride(); override != nil {
-			opts.VersioningOverride = &workflowpb.VersioningOverride{
-				Behavior:   override.Behavior,
-				Deployment: override.Deployment,
-			}
-		}
+		opts.VersioningOverride = proto.Clone(versioningInfo.GetVersioningOverride()).(*workflowpb.VersioningOverride)
 	}
 	return opts
 }

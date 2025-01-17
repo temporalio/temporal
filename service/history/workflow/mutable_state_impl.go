@@ -4409,10 +4409,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
-	override := event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride()
-	if event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetUnsetVersioningOverride() {
+	attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+	override := attributes.GetVersioningOverride()
+	if attributes.GetUnsetVersioningOverride() {
 		override = nil
+	} else if override == nil {
+		return nil
 	}
+
 	previousEffectiveDeployment := ms.GetEffectiveDeployment()
 	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
