@@ -189,34 +189,34 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	data := &deploymentspb.DeploymentVersionTaskQueueData{}
 
 	// sync to user data
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
-	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-		DeploymentName: d.VersionState.DeploymentName,
-		Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-			&deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-				Name: args.TaskQueueName,
-				Type: args.TaskQueueType,
-				Data: d.dataWithTime(data),
-			},
-		},
-	}).Get(ctx, &syncRes)
-	if err != nil {
-		return err
-	}
+	// activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	// var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+	// err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+	// 	DeploymentName: d.VersionState.DeploymentName,
+	// 	Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+	// 		&deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+	// 			Name: args.TaskQueueName,
+	// 			Type: args.TaskQueueType,
+	// 			Data: d.dataWithTime(data),
+	// 		},
+	// 	},
+	// }).Get(ctx, &syncRes)
+	// if err != nil {
+	// 	return err
+	// }
 
-	if len(syncRes.TaskQueueMaxVersions) > 0 {
-		// wait for propagation
-		err = workflow.ExecuteActivity(
-			activityCtx,
-			d.a.CheckWorkerDeploymentUserDataPropagation,
-			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
-			}).Get(ctx, nil)
-		if err != nil {
-			return err
-		}
-	}
+	// if len(syncRes.TaskQueueMaxVersions) > 0 {
+	// 	// wait for propagation
+	// 	err = workflow.ExecuteActivity(
+	// 		activityCtx,
+	// 		d.a.CheckWorkerDeploymentUserDataPropagation,
+	// 		&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+	// 			TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+	// 		}).Get(ctx, nil)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	// if successful, add the task queue to the local state
 	if d.VersionState.TaskQueueFamilies == nil {

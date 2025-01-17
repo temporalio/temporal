@@ -3327,8 +3327,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		return nil, errNamespaceNotSet
 	}
 
-	// TODO (Shivam): do we wanna change the config for public-preview?
-	if !wh.config.EnableDeployments(request.Namespace) {
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
 		return nil, errDeploymentsNotAllowed
 	}
 

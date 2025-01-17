@@ -344,8 +344,16 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	// [cleanup-wv-pre-release]
-	if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
-		return nil, err
+	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
+		if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
+			return nil, err
+		}
+	}
+
+	if c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
+		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, pollMetadata); err != nil {
+			return nil, err
+		}
 	}
 
 	// the desired global rate limit for the task queue comes from the
@@ -622,86 +630,86 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 	return nil
 }
 
-// TODO (Shivam): Implement this.
-// func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
-// 	ctx context.Context,
-// 	namespaceEntry *namespace.Namespace,
-// 	pollMetadata *pollMetadata,
-// ) error {
-// 	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities)
-// 	if workerDeployment == nil {
-// 		return nil
-// 	}
-// 	if !c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
-// 		return errDeploymentsNotAllowed
-// 	}
+// TODO (Shivam): Complete the implementation of this.
+func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	pollMetadata *pollMetadata,
+) error {
+	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities)
+	if workerDeployment == nil {
+		return nil
+	}
+	if !c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
+		return errMissingDeploymentVersion
+	}
 
-// 	// lock so that only one poll does the update and the rest wait for it
-// 	c.deploymentLock.Lock()
-// 	defer c.deploymentLock.Unlock()
+	// lock so that only one poll does the update and the rest wait for it
+	c.deploymentLock.Lock()
+	defer c.deploymentLock.Unlock()
 
-// 	if c.deploymentRegistered {
-// 		// deployment already registered
-// 		return nil
-// 	}
+	if c.deploymentRegistered {
+		// deployment already registered
+		return nil
+	}
 
-// 	if c.deploymentRegisterError != nil {
-// 		// deployment not possible due to registration limits
-// 		return c.deploymentRegisterError
-// 	}
+	if c.deploymentRegisterError != nil {
+		// deployment not possible due to registration limits
+		return c.deploymentRegisterError
+	}
 
-// 	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
-// 	if err != nil {
-// 		return err
-// 	}
+	// userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
+	// if err != nil {
+	// 	return err
+	// }
 
-// 	deploymentVersionData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentVersionData()
-// 	if findDeploymentVersion(deploymentVersionData, workerDeployment.SeriesName, workerDeployment.BuildId) >= 0 {
-// 		// already registered in user data, we can assume the workflow is running.
-// 		// TODO: consider replication scenarios where user data is replicated before
-// 		// the deployment workflow.
-// 		return nil
-// 	}
+	// deploymentVersionData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentVersionData()
+	// if findDeploymentVersion(deploymentVersionData, workerDeployment.SeriesName, workerDeployment.BuildId) >= 0 {
+	// 	// already registered in user data, we can assume the workflow is running.
+	// 	// TODO: consider replication scenarios where user data is replicated before
+	// 	// the deployment workflow.
+	// 	return nil
+	// }
 
-// 	// we need to update the deployment workflow to tell it about this task queue
-// 	// TODO: add some backoff here if we got an error last time
+	// we need to update the deployment workflow to tell it about this task queue
+	// TODO: add some backoff here if we got an error last time
 
-// 	if c.firstPoll.IsZero() {
-// 		c.firstPoll = c.partitionMgr.engine.timeSource.Now()
-// 	}
-// 	err = c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(
-// 		ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), c.firstPoll,
-// 		"matching service", uuid.New())
-// 	if err != nil {
-// 		var errTooMany deployment.ErrMaxTaskQueuesInDeployment
-// 		if errors.As(err, &errTooMany) {
-// 			c.deploymentRegisterError = errTooMany
-// 		}
-// 		return err
-// 	}
+	if c.firstPoll.IsZero() {
+		c.firstPoll = c.partitionMgr.engine.timeSource.Now()
+	}
+	err := c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
+		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), c.firstPoll,
+		"matching service", uuid.New())
+	if err != nil {
+		var errTooMany deployment.ErrMaxTaskQueuesInDeployment
+		if errors.As(err, &errTooMany) {
+			c.deploymentRegisterError = errTooMany
+		}
+		return err
+	}
 
-// 	// the deployment workflow will register itself in this task queue's user data.
-// 	// wait for it to propagate here.
-// 	for {
-// 		userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
-// 		if err != nil {
-// 			return err
-// 		}
-// 		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-// 		if findDeployment(deploymentData, workerDeployment) >= 0 {
-// 			break
-// 		}
-// 		select {
-// 		case <-userDataChanged:
-// 		case <-ctx.Done():
-// 			c.logger.Error("timed out waiting for deployment to appear in user data")
-// 			return ctx.Err()
-// 		}
-// 	}
+	// the deployment workflow will register itself in this task queue's user data.
+	// wait for it to propagate here.
+	// for {
+	// 	userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+	// 	if findDeployment(deploymentData, workerDeployment) >= 0 {
+	// 		break
+	// 	}
+	// 	select {
+	// 	case <-userDataChanged:
+	// 	case <-ctx.Done():
+	// 		c.logger.Error("timed out waiting for deployment to appear in user data")
+	// 		return ctx.Err()
+	// 	}
+	// }
 
-// 	c.deploymentRegistered = true
-// 	return nil
-// }
+	c.deploymentRegistered = true
+	return nil
+}
 
 // newChildContext creates a child context with desired timeout.
 // if tailroom is non-zero, then child context timeout will be

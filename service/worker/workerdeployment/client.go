@@ -197,7 +197,7 @@ func (d *ClientImpl) DescribeVersion(
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
-			return nil, serviceerror.NewNotFound("Deployment not found")
+			return nil, serviceerror.NewNotFound("Deployment Version not found")
 		}
 		return nil, err
 	}

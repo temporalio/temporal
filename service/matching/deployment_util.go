@@ -47,12 +47,3 @@ func findDeployment(deployments *persistencespb.DeploymentData, deployment *depl
 	}
 	return -1
 }
-
-func findDeploymentVersion(deploymentVersionData *persistencespb.DeploymentVersionData, deploymentName string, version string) int {
-	for i, d := range deploymentVersionData.GetDeploymentVersions() {
-		if d.DeploymentName == deploymentName && d.Version == version {
-			return i
-		}
-	}
-	return -1
-}

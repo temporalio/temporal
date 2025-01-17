@@ -49,8 +49,8 @@ func (a *VersionActivities) StartWorkerDeploymentWorkflow(
 	input *deploymentspb.StartWorkerDeploymentRequest,
 ) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("starting deployment workflow", "deploymentName", input.DeploymentName)
-	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	logger.Info("starting worker-deployment workflow", "deploymentName", input.DeploymentName)
+	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
 	return a.deploymentClient.StartWorkerDeployment(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
 }
 
