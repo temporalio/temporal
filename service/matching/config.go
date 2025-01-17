@@ -55,7 +55,7 @@ type (
 		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MatchingDropNonRetryableTasks        dynamicconfig.BoolPropertyFn
 		EnableDeployments                    dynamicconfig.BoolPropertyFnWithNamespaceFilter // [cleanup-wv-pre-release]
-		EnableDeploymentVersions             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableDeploymentVersions             dynamicconfig.BoolPropertyFn
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
 

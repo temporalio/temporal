@@ -186,7 +186,7 @@ type Config struct {
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Enable deployment version RPCs
-	EnableDeploymentVersions dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableDeploymentVersions dynamicconfig.BoolPropertyFn
 
 	// Enable batcher RPCs
 	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter

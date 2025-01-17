@@ -3327,7 +3327,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		return nil, errNamespaceNotSet
 	}
 
-	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+	if !wh.config.EnableDeploymentVersions() {
 		return nil, errDeploymentsNotAllowed
 	}
 

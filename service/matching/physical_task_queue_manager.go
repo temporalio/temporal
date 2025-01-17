@@ -350,7 +350,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 	}
 
-	if c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
+	if c.partitionMgr.engine.config.EnableDeploymentVersions() {
 		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, pollMetadata); err != nil {
 			return nil, err
 		}
@@ -640,7 +640,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	if workerDeployment == nil {
 		return nil
 	}
-	if !c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
+	if !c.partitionMgr.engine.config.EnableDeploymentVersions() {
 		return errMissingDeploymentVersion
 	}
 
