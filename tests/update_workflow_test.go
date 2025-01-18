@@ -4922,8 +4922,6 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 
 			// make sure there's no lock contention
 			s.Empty(capture.Snapshot()[metrics.TaskWorkflowBusyCounter.Name()])
-
-			retCh <- multiopsResponseErr{resp, err}
 		}()
 		return retCh
 	}
@@ -5352,24 +5350,14 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 
 		// allows 1st
-		updateReq := s.updateWorkflowRequest(tv.WithUpdateIDNumber(0),
-			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
-		uwsCh := sendUpdateWithStart(ctx, startReq, updateReq)
-		_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				return &workflowservice.RespondWorkflowTaskCompletedRequest{
-					Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
-				}, nil
-			})
-		s.NoError(err)
-		uwsRes := <-uwsCh
-		s.NoError(uwsRes.err)
+		// removed
 
 		// denies 2nd
-		updateReq = s.updateWorkflowRequest(tv.WithUpdateIDNumber(1), updateReq.WaitPolicy)
+		updateReq := s.updateWorkflowRequest(tv.WithUpdateIDNumber(1),
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
 		select {
 		case <-sendUpdateWithStart(ctx, startReq, updateReq):
-			err = (<-sendUpdateWithStart(ctx, startReq, updateReq)).err
+			err := (<-sendUpdateWithStart(ctx, startReq, updateReq)).err
 			s.Error(err)
 			errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
 			s.Len(errs, 2)

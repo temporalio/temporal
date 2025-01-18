@@ -80,7 +80,8 @@ type (
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
 
-		Logger log.Logger
+		testTimeout *testTimeout
+		Logger      log.Logger
 
 		// Test cluster configuration.
 		testClusterFactory TestClusterFactory
@@ -182,6 +183,7 @@ func (s *FunctionalTestBase) SetupSuite() {
 
 func (s *FunctionalTestBase) TearDownSuite() {
 	s.TearDownCluster()
+	s.testTimeout.cancel()
 }
 
 func (s *FunctionalTestBase) SetupSuiteWithDefaultCluster(options ...TestClusterOption) {
@@ -244,10 +246,22 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 func (s *FunctionalTestBase) SetupTest() {
 	s.checkTestShard()
 	s.initAssertions()
+	if s.testTimeout == nil {
+		// Intializing here instead of in `SetupSuite` as that's overriden by the SDK test suite.
+		s.testTimeout = newTestTimeout(s.T(), perTestTimeout)
+	} else {
+		s.testTimeout.reset(s.T())
+	}
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
 	s.initAssertions()
+	s.testTimeout.reset(s.T()) // each sub tests gets their own timeout
+}
+
+// SetTestTimeout allows extending the default per-test timeout.
+func (s *FunctionalTestBase) SetTestTimeout(d time.Duration) {
+	s.testTimeout.set(d)
 }
 
 func (s *FunctionalTestBase) initAssertions() {
