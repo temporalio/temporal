@@ -185,7 +185,9 @@ func (m *MutableStateMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (b
 			result, err := m.compareStartTimeBetween(fromValue, toValue)
 			return !result, err
 		default:
-			return false, NewMatcherError("%s: range condition operator must be 'between' or 'not between'", invalidExpressionErrMessage)
+			// should never happen
+			return false, NewMatcherError("%s: range condition operator must be 'between' or 'not between'. Got %s",
+				invalidExpressionErrMessage, expr.Operator)
 		}
 
 	default:
