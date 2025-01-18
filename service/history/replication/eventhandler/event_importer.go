@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 const (
@@ -180,7 +180,7 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 
 func invokeImportWorkflowExecutionCall(
 	ctx context.Context,
-	historyEngine shard.Engine,
+	historyEngine historyi.Engine,
 	workflowKey definition.WorkflowKey,
 	historyBatches []*commonpb.DataBlob,
 	versionHistory *historyspb.VersionHistory,

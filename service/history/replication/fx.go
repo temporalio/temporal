@@ -44,6 +44,7 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
@@ -112,7 +113,7 @@ func replicationTaskConverterFactoryProvider(
 	config *configs.Config,
 ) SourceTaskConverterProvider {
 	return func(
-		historyEngine shard.Engine,
+		historyEngine historyi.Engine,
 		shardContext shard.Context,
 		clientClusterName string,
 		serializer serialization.Serializer,
@@ -342,7 +343,7 @@ func resendHandlerProvider(
 		clientBean,
 		serializer,
 		clusterMetadata,
-		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error) {
+		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error) {
 			shardContext, err := shardController.GetShardByNamespaceWorkflow(
 				namespaceId,
 				workflowId,
@@ -367,7 +368,7 @@ func eventImporterProvider(
 ) eventhandler.EventImporter {
 	return eventhandler.NewEventImporter(
 		historyFetcher,
-		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error) {
+		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error) {
 			shardContext, err := shardController.GetShardByNamespaceWorkflow(
 				namespaceId,
 				workflowId,
