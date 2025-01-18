@@ -181,7 +181,7 @@ func (m *MutableStateMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (b
 		switch expr.Operator {
 		case sqlparser.BetweenStr:
 			return m.compareStartTimeBetween(fromValue, toValue)
-		case "not between":
+		case sqlparser.NotBetweenStr:
 			result, err := m.compareStartTimeBetween(fromValue, toValue)
 			return !result, err
 		default:
