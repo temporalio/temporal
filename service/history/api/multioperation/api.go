@@ -61,6 +61,7 @@ type (
 		shardContext       shard.Context
 		namespaceId        namespace.ID
 		consistencyChecker api.WorkflowConsistencyChecker
+		testHooks          testhooks.TestHooks
 
 		updateReq *historyservice.UpdateWorkflowExecutionRequest
 		startReq  *historyservice.StartWorkflowExecutionRequest
@@ -98,6 +99,7 @@ func Invoke(
 		shardContext:       shardContext,
 		namespaceId:        namespace.ID(req.NamespaceId),
 		consistencyChecker: workflowConsistencyChecker,
+		testHooks:          testHooks,
 		updateReq:          updateReq,
 		startReq:           startReq,
 	}
@@ -157,7 +159,7 @@ func (mo *multiOp) Invoke(ctx context.Context) (*historyservice.ExecuteMultiOper
 		return mo.updateWorkflow(ctx, runningWorkflowLease)
 	}
 
-	testhooks.Call(testHooks, testhooks.UpdateWithStartInBetweenLockAndStart)
+	testhooks.Call(mo.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart)
 
 	// Workflow hasn't been started yet ...
 	resp, err := mo.startAndUpdateWorkflow(ctx)

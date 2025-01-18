@@ -5349,7 +5349,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			startReq := startWorkflowReq(tv)
 			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 			updateReq := s.updateWorkflowRequest(tv,
-				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 
 			// simulate a race condition
 			s.InjectHook(testhooks.UpdateWithStartInBetweenLockAndStart, func() {
@@ -5368,7 +5368,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
 				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 					return &workflowservice.RespondWorkflowTaskCompletedRequest{
-						Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
+						Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
 					}, nil
 				})
 			s.NoError(err)
