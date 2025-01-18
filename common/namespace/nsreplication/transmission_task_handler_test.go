@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package nsreplication
 
 import (
 	"context"
@@ -49,7 +49,7 @@ type (
 
 		controller *gomock.Controller
 
-		namespaceReplicator       *namespaceReplicatorImpl
+		namespaceReplicator       *replicator
 		namespaceReplicationQueue *persistence.MockNamespaceReplicationQueue
 	}
 )
@@ -69,10 +69,10 @@ func (s *transmissionTaskSuite) TearDownSuite() {
 func (s *transmissionTaskSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.namespaceReplicationQueue = persistence.NewMockNamespaceReplicationQueue(s.controller)
-	s.namespaceReplicator = NewNamespaceReplicator(
+	s.namespaceReplicator = NewReplicator(
 		s.namespaceReplicationQueue,
 		log.NewTestLogger(),
-	).(*namespaceReplicatorImpl)
+	).(*replicator)
 }
 
 func (s *transmissionTaskSuite) TearDownTest() {

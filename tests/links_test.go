@@ -39,7 +39,7 @@ import (
 )
 
 type LinksSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestLinksTestSuite(t *testing.T) {

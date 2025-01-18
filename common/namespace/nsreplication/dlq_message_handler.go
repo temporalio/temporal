@@ -22,9 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination dlq_message_handler_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination dlq_message_handler_mock.go
 
-package namespace
+package nsreplication
 
 import (
 	"context"
@@ -45,15 +45,15 @@ type (
 	}
 
 	dlqMessageHandlerImpl struct {
-		replicationHandler        ReplicationTaskExecutor
+		replicationHandler        TaskExecutor
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		logger                    log.Logger
 	}
 )
 
-// NewDLQMessageHandler returns a DLQTaskHandler instance
+// NewDLQMessageHandler returns a DLQMessageHandler instance
 func NewDLQMessageHandler(
-	replicationHandler ReplicationTaskExecutor,
+	replicationHandler TaskExecutor,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.Logger,
 ) DLQMessageHandler {
@@ -64,7 +64,7 @@ func NewDLQMessageHandler(
 	}
 }
 
-// ReadMessages reads namespace replication DLQ messages
+// Read reads namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Read(
 	ctx context.Context,
 	lastMessageID int64,
@@ -86,12 +86,11 @@ func (d *dlqMessageHandlerImpl) Read(
 	)
 }
 
-// PurgeMessages purges namespace replication DLQ messages
+// Purge purges namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Purge(
 	ctx context.Context,
 	lastMessageID int64,
 ) error {
-
 	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel(ctx)
 	if err != nil {
 		return err
@@ -115,14 +114,13 @@ func (d *dlqMessageHandlerImpl) Purge(
 	return nil
 }
 
-// MergeMessages merges namespace replication DLQ messages
+// Merge merges namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Merge(
 	ctx context.Context,
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
 ) ([]byte, error) {
-
 	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel(ctx)
 	if err != nil {
 		return nil, err

@@ -1989,12 +1989,17 @@ archivalQueueProcessor`,
 	WorkflowExecutionMaxInFlightUpdates = NewNamespaceIntSetting(
 		"history.maxInFlightUpdates",
 		10,
-		`WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution.`,
+		`WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution. Set to zero to disable limit.`,
+	)
+	WorkflowExecutionMaxInFlightUpdatePayloads = NewNamespaceIntSetting(
+		"history.maxInFlightUpdatePayloads",
+		10*1024*1024,
+		`WorkflowExecutionMaxInFlightUpdatePayloads is the max total payload size (in bytes) of in-flight updates (admitted but not yet completed) for any given workflow execution. Set to zero to disable.`,
 	)
 	WorkflowExecutionMaxTotalUpdates = NewNamespaceIntSetting(
 		"history.maxTotalUpdates",
 		2000,
-		`WorkflowExecutionMaxTotalUpdates is the max number of updates that any given workflow execution can receive.`,
+		`WorkflowExecutionMaxTotalUpdates is the max number of updates that any given workflow execution can receive. Set to zero to disable.`,
 	)
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(
@@ -2077,6 +2082,13 @@ the user has not specified an explicit RetryPolicy`,
 		retrypolicy.DefaultDefaultRetrySettings,
 		`DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
 where the user has set an explicit RetryPolicy, but not specified all the fields`,
+	)
+	FollowReusePolicyAfterConflictPolicyTerminate = NewNamespaceTypedSetting(
+		"history.followReusePolicyAfterConflictPolicyTerminate",
+		true,
+		`Follows WorkflowIdReusePolicy RejectDuplicate and AllowDuplicateFailedOnly after WorkflowIdReusePolicy TerminateExisting was applied.
+If true (the default), RejectDuplicate is disallowed and AllowDuplicateFailedOnly will be honored after TerminateExisting is applied.
+This configuration will be become the default behavior in the next release and removed subsequently.`,
 	)
 	AllowResetWithPendingChildren = NewNamespaceBoolSetting(
 		"history.allowResetWithPendingChildren",

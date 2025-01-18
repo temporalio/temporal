@@ -53,39 +53,54 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/testing/historyrequire"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/environment"
 	"go.uber.org/fx"
 	"gopkg.in/yaml.v3"
 )
 
 type (
-	// FunctionalTestBase is a testcore struct for functional tests
 	FunctionalTestBase struct {
 		suite.Suite
 
-		testClusterFactory     TestClusterFactory
-		testCluster            *TestCluster
-		testClusterConfig      *TestClusterConfig
-		client                 workflowservice.WorkflowServiceClient
-		adminClient            adminservice.AdminServiceClient
-		operatorClient         operatorservice.OperatorServiceClient
-		httpAPIAddress         string
-		Logger                 log.Logger
-		namespace              namespace.Name
-		namespaceID            namespace.ID
-		foreignNamespace       namespace.Name
-		archivalNamespace      namespace.Name
-		archivalNamespaceID    namespace.ID
-		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
+		// `suite.Suite` embeds `*assert.Assertions` which, by default, makes all asserts (like `s.NoError(err)`)
+		// only log the error, continue test execution, and only then fail the test.
+		// This is not desired behavior in most cases. The idiomatic way to change this behavior
+		// is to replace `*assert.Assertions` with `*require.Assertions` by embedding it in every test suite
+		// (or base struct of every test suite).
+		*require.Assertions
+
+		protorequire.ProtoAssertions
+		historyrequire.HistoryRequire
+		updateutils.UpdateUtils
+
+		Logger log.Logger
+
+		// Test cluster configuration.
+		testClusterFactory TestClusterFactory
+		testCluster        *TestCluster
+		testClusterConfig  *TestClusterConfig
+		frontendClient     workflowservice.WorkflowServiceClient
+		adminClient        adminservice.AdminServiceClient
+		operatorClient     operatorservice.OperatorServiceClient
+		httpAPIAddress     string
+		namespace          namespace.Name
+		namespaceID        namespace.ID
+		foreignNamespace   namespace.Name
 	}
-	// TestClusterParams contains the variables which are used to configure test suites via the Option type.
+	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
-		ServiceOptions map[primitives.ServiceName][]fx.Option
+		ServiceOptions         map[primitives.ServiceName][]fx.Option
+		DynamicConfigOverrides map[dynamicconfig.Key]any
+		ArchivalEnabled        bool
 	}
-	Option func(params *TestClusterParams)
+	TestClusterOption func(params *TestClusterParams)
 )
 
 // WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
@@ -99,9 +114,25 @@ type (
 // This is similar to the pattern of plumbing dependencies through the TestClusterConfig, but it's much more convenient,
 // scalable and flexible. The reason we need to do this on a per-service basis is that there are separate fx apps for
 // each one.
-func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) Option {
+func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
+	}
+}
+
+func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestClusterOption {
+	return func(params *TestClusterParams) {
+		if params.DynamicConfigOverrides == nil {
+			params.DynamicConfigOverrides = overrides
+		} else {
+			maps.Copy(params.DynamicConfigOverrides, overrides)
+		}
+	}
+}
+
+func WithArchivalEnabled() TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.ArchivalEnabled = true
 	}
 }
 
@@ -113,11 +144,11 @@ func (s *FunctionalTestBase) GetTestClusterConfig() *TestClusterConfig {
 	return s.testClusterConfig
 }
 
-func (s *FunctionalTestBase) FrontendClient() FrontendClient {
-	return s.client
+func (s *FunctionalTestBase) FrontendClient() workflowservice.WorkflowServiceClient {
+	return s.frontendClient
 }
 
-func (s *FunctionalTestBase) AdminClient() AdminClient {
+func (s *FunctionalTestBase) AdminClient() adminservice.AdminServiceClient {
 	return s.adminClient
 }
 
@@ -137,14 +168,6 @@ func (s *FunctionalTestBase) NamespaceID() namespace.ID {
 	return s.namespaceID
 }
 
-func (s *FunctionalTestBase) ArchivalNamespace() namespace.Name {
-	return s.archivalNamespace
-}
-
-func (s *FunctionalTestBase) ArchivalNamespaceID() namespace.ID {
-	return s.archivalNamespaceID
-}
-
 func (s *FunctionalTestBase) ForeignNamespace() namespace.Name {
 	return s.foreignNamespace
 }
@@ -153,75 +176,91 @@ func (s *FunctionalTestBase) FrontendGRPCAddress() string {
 	return s.GetTestCluster().Host().FrontendGRPCAddress()
 }
 
-func (s *FunctionalTestBase) SetDynamicConfigOverrides(dynamicConfig map[dynamicconfig.Key]interface{}) {
-	s.dynamicConfigOverrides = dynamicConfig
+func (s *FunctionalTestBase) SetupSuite() {
+	s.SetupSuiteWithDefaultCluster()
 }
 
-func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options ...Option) {
+func (s *FunctionalTestBase) TearDownSuite() {
+	s.TearDownCluster()
+}
+
+func (s *FunctionalTestBase) SetupSuiteWithDefaultCluster(options ...TestClusterOption) {
+	// TODO (alex): rename es_cluster.yaml to default_cluster.yaml
+	// TODO (alex): reduce the number of configs or may be get rid of it completely.
+	// TODO (alex): or replace clusterConfigFile param with WithClusterConfigFile option with default value.
+	s.SetupSuiteWithCluster("testdata/es_cluster.yaml", options...)
+}
+func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, options ...TestClusterOption) {
+	params := ApplyTestClusterOptions(options)
+
+	// Logger might be already set by the test suite.
+	if s.Logger == nil {
+		s.Logger = log.NewTestLogger()
+	}
+
+	// Setup test cluster.
+	var err error
+	s.testClusterConfig, err = readTestClusterConfig(clusterConfigFile)
+	s.Require().NoError(err)
+	s.Require().Empty(s.testClusterConfig.DeprecatedFrontendAddress, "Functional tests against external frontends are not supported")
+	s.Require().Empty(s.testClusterConfig.DeprecatedClusterNo, "ClusterNo should not be present in cluster config files")
+
+	s.testClusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]any)
+	maps.Copy(s.testClusterConfig.DynamicConfigOverrides, params.DynamicConfigOverrides)
+	// TODO (alex): is it needed?
+	if s.testClusterConfig.ESConfig != nil {
+		s.testClusterConfig.DynamicConfigOverrides[dynamicconfig.SecondaryVisibilityWritingMode.Key()] = visibility.SecondaryVisibilityWritingModeDual
+	}
+
+	s.testClusterConfig.ServiceFxOptions = params.ServiceOptions
+	s.testClusterConfig.EnableMetricsCapture = true
+	s.testClusterConfig.EnableArchival = params.ArchivalEnabled
+
 	s.testClusterFactory = NewTestClusterFactory()
 
-	params := ApplyTestClusterParams(options)
-
-	s.setupLogger()
-
-	clusterConfig, err := GetTestClusterConfig(defaultClusterConfigFile)
+	s.testCluster, err = s.testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
 	s.Require().NoError(err)
-	s.Empty(clusterConfig.DeprecatedFrontendAddress, "Functional tests against external frontends are not supported")
-	s.Empty(clusterConfig.DeprecatedClusterNo, "ClusterNo should not be present in cluster config files")
 
-	if clusterConfig.DynamicConfigOverrides == nil {
-		clusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
-	}
-	maps.Copy(clusterConfig.DynamicConfigOverrides, map[dynamicconfig.Key]any{
-		dynamicconfig.HistoryScannerEnabled.Key():    false,
-		dynamicconfig.TaskQueueScannerEnabled.Key():  false,
-		dynamicconfig.ExecutionsScannerEnabled.Key(): false,
-		dynamicconfig.BuildIdScavengerEnabled.Key():  false,
-		// Better to read through in tests than add artificial sleeps (which is what we previously had).
-		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
-	})
-	maps.Copy(clusterConfig.DynamicConfigOverrides, s.dynamicConfigOverrides)
-	clusterConfig.ServiceFxOptions = params.ServiceOptions
-	clusterConfig.EnableMetricsCapture = true
-	s.testClusterConfig = clusterConfig
-
-	cluster, err := s.testClusterFactory.NewCluster(s.T(), clusterConfig, s.Logger)
-	s.Require().NoError(err)
-	s.testCluster = cluster
-	s.client = s.testCluster.FrontendClient()
-	s.adminClient = s.testCluster.AdminClient()
-	s.operatorClient = s.testCluster.OperatorClient()
-	s.httpAPIAddress = cluster.Host().FrontendHTTPAddress()
-
+	// Setup test cluster namespaces.
 	s.namespace = namespace.Name(RandomizeStr("namespace"))
-	s.namespaceID, err = s.registerNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.namespaceID, err = s.RegisterNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	s.foreignNamespace = namespace.Name(RandomizeStr("foreign-namespace"))
-	_, err = s.registerNamespace(s.ForeignNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	_, err = s.RegisterNamespace(s.ForeignNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
-	if clusterConfig.EnableArchival {
-		s.archivalNamespace = namespace.Name(RandomizeStr("archival-enabled-namespace"))
-		s.archivalNamespaceID, err = s.registerNamespace(
-			s.ArchivalNamespace(),
-			0, // Archive right away.
-			enumspb.ARCHIVAL_STATE_ENABLED,
-			s.testCluster.archiverBase.historyURI,
-			s.testCluster.archiverBase.visibilityURI,
-		)
-		s.Require().NoError(err)
-	}
+	// Setup test cluster clients.
+	s.frontendClient = s.testCluster.FrontendClient()
+	s.adminClient = s.testCluster.AdminClient()
+	s.operatorClient = s.testCluster.OperatorClient()
+	s.httpAPIAddress = s.testCluster.Host().FrontendHTTPAddress()
 }
 
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
 // call this testcore FunctionalTestBase.SetupTest function to distribute the tests
 // into partitions. Otherwise, the test suite will be executed multiple times
 // in each partition.
-// Furthermore, all test suites in the "tests/" directory that don't inherit
-// from FunctionalTestBase must implement SetupTest that calls checkTestShard.
 func (s *FunctionalTestBase) SetupTest() {
 	s.checkTestShard()
+	s.initAssertions()
+}
+
+func (s *FunctionalTestBase) SetupSubTest() {
+	s.initAssertions()
+}
+
+func (s *FunctionalTestBase) initAssertions() {
+	// `s.Assertions` (as well as other test helpers which depends on `s.T()`) must be initialized on
+	// both test and subtest levels (but not suite level, where `s.T()` is `nil`).
+	//
+	// If these helpers are not reinitialized on subtest level, any failed `assert` in
+	// subtest will fail the entire test (not subtest) immediately without running other subtests.
+
+	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
+	s.UpdateUtils = updateutils.New(s.T())
 }
 
 // checkTestShard supports test sharding based on environment variables.
@@ -253,7 +292,7 @@ func (s *FunctionalTestBase) checkTestShard() {
 	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index+1, total)
 }
 
-func ApplyTestClusterParams(options []Option) TestClusterParams {
+func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
 	params := TestClusterParams{
 		ServiceOptions: make(map[primitives.ServiceName][]fx.Option),
 	}
@@ -263,17 +302,7 @@ func ApplyTestClusterParams(options []Option) TestClusterParams {
 	return params
 }
 
-// setupLogger sets the Logger for the test suite.
-// If the Logger is already set, this method does nothing.
-// If the Logger is not set, this method creates a new log.TestLogger which logs to stdout and stderr.
-func (s *FunctionalTestBase) setupLogger() {
-	if s.Logger == nil {
-		s.Logger = log.NewTestLogger()
-	}
-}
-
-// GetTestClusterConfig return test cluster config
-func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
+func readTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	environment.SetupEnv()
 
 	configLocation := configFile
@@ -293,8 +322,8 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 		return nil, fmt.Errorf("failed to read test cluster config file %s: %w", configLocation, err)
 	}
 	confContent = []byte(os.ExpandEnv(string(confContent)))
-	var options TestClusterConfig
-	if err := yaml.Unmarshal(confContent, &options); err != nil {
+	var clusterConfig TestClusterConfig
+	if err = yaml.Unmarshal(confContent, &clusterConfig); err != nil {
 		return nil, fmt.Errorf("failed to decode test cluster config %s: %w", configLocation, err)
 	}
 
@@ -307,36 +336,29 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 		}
 
 		var fiOptions TestClusterConfig
-		if err := yaml.Unmarshal(fiConfigContent, &fiOptions); err != nil {
+		if err = yaml.Unmarshal(fiConfigContent, &fiOptions); err != nil {
 			return nil, fmt.Errorf("failed to decode test cluster fault injection config %s: %w", TestFlags.FaultInjectionConfigFile, err)
 		}
-		options.FaultInjection = fiOptions.FaultInjection
+		clusterConfig.FaultInjection = fiOptions.FaultInjection
 	}
 
-	return &options, nil
+	return &clusterConfig, nil
 }
 
-func (s *FunctionalTestBase) TearDownSuite() {
-	s.Require().NoError(s.markNamespaceAsDeleted(s.Namespace()))
-	s.Require().NoError(s.markNamespaceAsDeleted(s.ForeignNamespace()))
-	if s.ArchivalNamespace() != namespace.EmptyName {
-		s.Require().NoError(s.markNamespaceAsDeleted(s.ArchivalNamespace()))
-	}
+func (s *FunctionalTestBase) TearDownCluster() {
+	s.Require().NoError(s.MarkNamespaceAsDeleted(s.Namespace()))
+	s.Require().NoError(s.MarkNamespaceAsDeleted(s.ForeignNamespace()))
 
 	if s.testCluster != nil {
-		s.NoError(s.testCluster.TearDownCluster())
-		s.testCluster = nil
+		s.Require().NoError(s.testCluster.TearDownCluster())
 	}
-
-	s.client = nil
-	s.adminClient = nil
 }
 
 // Register namespace using persistence API because:
 //  1. The Retention period is set to 0 for archival tests, and this can't be done through FE,
 //  2. Update search attributes would require an extra API call,
 //  3. One more extra API call would be necessary to get namespace.ID.
-func (s *FunctionalTestBase) registerNamespace(
+func (s *FunctionalTestBase) RegisterNamespace(
 	nsName namespace.Name,
 	retentionDays int32,
 	archivalState enumspb.ArchivalState,
@@ -393,12 +415,12 @@ func (s *FunctionalTestBase) registerNamespace(
 	return nsID, nil
 }
 
-func (s *FunctionalTestBase) markNamespaceAsDeleted(
+func (s *FunctionalTestBase) MarkNamespaceAsDeleted(
 	nsName namespace.Name,
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
-	_, err := s.client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err := s.frontendClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: nsName.String(),
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
 			State: enumspb.NAMESPACE_STATE_DELETED,
@@ -410,7 +432,7 @@ func (s *FunctionalTestBase) markNamespaceAsDeleted(
 
 func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
-		historyResponse, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err := s.frontendClient.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:       namespace,
 			Execution:       execution,
 			MaximumPageSize: 5, // Use small page size to force pagination code path
@@ -419,7 +441,7 @@ func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonp
 
 		events := historyResponse.History.Events
 		for historyResponse.NextPageToken != nil {
-			historyResponse, err = s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			historyResponse, err = s.frontendClient.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace:     namespace,
 				Execution:     execution,
 				NextPageToken: historyResponse.NextPageToken,
@@ -534,4 +556,18 @@ func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{
 	case <-ctx.Done():
 		s.FailNow("context timeout while waiting for channel")
 	}
+}
+
+// TODO (alex): change to nsName namespace.Name
+func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
+	input *commonpb.Payloads, identity string) error {
+	_, err := s.frontendClient.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         nsName,
+		WorkflowExecution: execution,
+		SignalName:        signalName,
+		Input:             input,
+		Identity:          identity,
+	})
+
+	return err
 }

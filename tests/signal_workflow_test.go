@@ -56,7 +56,7 @@ import (
 )
 
 type SignalWorkflowTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestSignalWorkflowTestSuite(t *testing.T) {

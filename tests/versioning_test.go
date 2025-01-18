@@ -54,7 +54,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -63,9 +62,7 @@ import (
 )
 
 type VersioningIntegSuite struct {
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-	// not merely log an error
-	testcore.FunctionalTestBase
+	testcore.FunctionalTestSuite
 	sdkClient sdkclient.Client
 }
 
@@ -126,25 +123,18 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// behaviour related to versioning
 		dynamicconfig.TaskQueueInfoByBuildIdTTL.Key(): 0 * time.Second,
 	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
-
-func (s *VersioningIntegSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *VersioningIntegSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
+	s.FunctionalTestSuite.SetupTest()
 
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sdkClient = sdkClient
+	s.NoError(err)
 }
 
 func (s *VersioningIntegSuite) TearDownTest() {
@@ -3648,7 +3638,7 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 		func() bool {
 			return runs1.Load() >= int32(3)
 		},
-		3500*time.Millisecond,
+		6*time.Second,
 		100*time.Millisecond,
 	)
 

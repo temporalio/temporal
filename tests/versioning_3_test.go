@@ -67,9 +67,7 @@ const (
 )
 
 type Versioning3Suite struct {
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-	// not merely log an error
-	testcore.FunctionalTestBase
+	testcore.FunctionalTestSuite
 }
 
 func TestVersioning3FunctionalSuite(t *testing.T) {
@@ -92,16 +90,7 @@ func (s *Versioning3Suite) SetupSuite() {
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
 	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
-
-func (s *Versioning3Suite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *Versioning3Suite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {

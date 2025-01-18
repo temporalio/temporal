@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -119,7 +120,7 @@ type (
 		esConfig                         *esclient.Config
 		esClient                         esclient.Client
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
-		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
@@ -138,16 +139,8 @@ type (
 
 	// HistoryConfig contains configs for history service
 	HistoryConfig struct {
-		NumHistoryShards           int32
-		NumHistoryHosts            int
-		HistoryCountLimitError     int
-		HistoryCountLimitWarn      int
-		HistorySizeLimitError      int
-		HistorySizeLimitWarn       int
-		BlobSizeLimitError         int
-		BlobSizeLimitWarn          int
-		MutableStateSizeLimitError int
-		MutableStateSizeLimitWarn  int
+		NumHistoryShards int32
+		NumHistoryHosts  int
 	}
 
 	// MatchingConfig is the config for the matching service
@@ -157,7 +150,6 @@ type (
 
 	// WorkerConfig is the config for the worker service
 	WorkerConfig struct {
-		EnableArchiver   bool
 		EnableReplicator bool
 		NumWorkers       int
 		DisableWorker    bool // overrides NumWorkers
@@ -186,7 +178,7 @@ type (
 		ESConfig                         *esclient.Config
 		ESClient                         esclient.Client
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
-		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		NamespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
@@ -201,32 +193,6 @@ type (
 )
 
 const NamespaceCacheRefreshInterval = time.Second
-
-var (
-	// Override values for dynamic configs
-	staticOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendRPS.Key():                                         3000,
-		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
-		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
-		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts.Key():       1,
-		dynamicconfig.SecondaryVisibilityWritingMode.Key():                      visibility.SecondaryVisibilityWritingModeOff,
-		dynamicconfig.WorkflowTaskHeartbeatTimeout.Key():                        5 * time.Second,
-		dynamicconfig.ReplicationTaskFetcherAggregationInterval.Key():           200 * time.Millisecond,
-		dynamicconfig.ReplicationTaskFetcherErrorRetryWait.Key():                50 * time.Millisecond,
-		dynamicconfig.ReplicationTaskProcessorErrorRetryWait.Key():              time.Millisecond,
-		dynamicconfig.ClusterMetadataRefreshInterval.Key():                      100 * time.Millisecond,
-		dynamicconfig.NamespaceCacheRefreshInterval.Key():                       NamespaceCacheRefreshInterval,
-		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Key():             true,
-		dynamicconfig.ValidateUTF8SampleRPCRequest.Key():                        1.0,
-		dynamicconfig.ValidateUTF8SampleRPCResponse.Key():                       1.0,
-		dynamicconfig.ValidateUTF8SamplePersistence.Key():                       1.0,
-		dynamicconfig.ValidateUTF8FailRPCRequest.Key():                          true,
-		dynamicconfig.ValidateUTF8FailRPCResponse.Key():                         true,
-		dynamicconfig.ValidateUTF8FailPersistence.Key():                         true,
-		dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Key():                 true,
-		dynamicconfig.FrontendMaskInternalErrorDetails.Key():                    false,
-	}
-)
 
 // newTemporal returns an instance that hosts full temporal in one process
 func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
@@ -260,13 +226,12 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		hostsByProtocolByService:         params.HostsByProtocolByService,
 	}
 
-	for k, v := range staticOverrides {
+	for k, v := range dynamicConfigOverrides {
 		impl.overrideDynamicConfig(t, k, v)
 	}
 	for k, v := range params.DynamicConfigOverrides {
 		impl.overrideDynamicConfig(t, k, v)
 	}
-	impl.overrideHistoryDynamicConfig(t)
 
 	return impl
 }
@@ -675,40 +640,6 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 			},
 		},
 	}
-}
-
-func (c *TemporalImpl) overrideHistoryDynamicConfig(t *testing.T) {
-	if c.esConfig != nil {
-		c.overrideDynamicConfig(t, dynamicconfig.SecondaryVisibilityWritingMode.Key(), visibility.SecondaryVisibilityWritingModeDual)
-	}
-	if c.historyConfig.HistoryCountLimitWarn != 0 {
-		c.overrideDynamicConfig(t, dynamicconfig.HistoryCountLimitWarn.Key(), c.historyConfig.HistoryCountLimitWarn)
-	}
-	if c.historyConfig.HistoryCountLimitError != 0 {
-		c.overrideDynamicConfig(t, dynamicconfig.HistoryCountLimitError.Key(), c.historyConfig.HistoryCountLimitError)
-	}
-	if c.historyConfig.HistorySizeLimitWarn != 0 {
-		c.overrideDynamicConfig(t, dynamicconfig.HistorySizeLimitWarn.Key(), c.historyConfig.HistorySizeLimitWarn)
-	}
-	if c.historyConfig.HistorySizeLimitError != 0 {
-		c.overrideDynamicConfig(t, dynamicconfig.HistorySizeLimitError.Key(), c.historyConfig.HistorySizeLimitError)
-	}
-	if c.historyConfig.BlobSizeLimitError != 0 {
-		c.overrideDynamicConfig(t, dynamicconfig.BlobSizeLimitError.Key(), c.historyConfig.BlobSizeLimitError)
-	}
-	if c.historyConfig.BlobSizeLimitWarn != 0 {
-		c.overrideDynamicConfig(t, dynamicconfig.BlobSizeLimitWarn.Key(), c.historyConfig.BlobSizeLimitWarn)
-	}
-	if c.historyConfig.MutableStateSizeLimitError != 0 {
-		c.overrideDynamicConfig(t, dynamicconfig.MutableStateSizeLimitError.Key(), c.historyConfig.MutableStateSizeLimitError)
-	}
-	if c.historyConfig.MutableStateSizeLimitWarn != 0 {
-		c.overrideDynamicConfig(t, dynamicconfig.MutableStateSizeLimitWarn.Key(), c.historyConfig.MutableStateSizeLimitWarn)
-	}
-
-	// For DeleteWorkflowExecution tests
-	c.overrideDynamicConfig(t, dynamicconfig.TransferProcessorUpdateAckInterval.Key(), 1*time.Second)
-	c.overrideDynamicConfig(t, dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(), 1*time.Second)
 }
 
 func (c *TemporalImpl) newRPCFactory(

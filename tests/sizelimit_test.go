@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -43,9 +42,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -53,11 +52,7 @@ import (
 )
 
 type SizeLimitFunctionalSuite struct {
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-	// not merely log an error
-	*require.Assertions
-	historyrequire.HistoryRequire
-	testcore.FunctionalTestBase
+	testcore.FunctionalTestSuite
 }
 
 func TestSizeLimitFunctionalSuite(t *testing.T) {
@@ -65,21 +60,18 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 	suite.Run(t, new(SizeLimitFunctionalSuite))
 }
 
-// This cluster use customized threshold for history config
 func (s *SizeLimitFunctionalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/sizelimit_cluster.yaml")
-}
-
-func (s *SizeLimitFunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *SizeLimitFunctionalSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
-	s.HistoryRequire = historyrequire.New(s.T())
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.HistoryCountLimitWarn.Key():      10,
+		dynamicconfig.HistoryCountLimitError.Key():     20,
+		dynamicconfig.HistorySizeLimitWarn.Key():       5000,
+		dynamicconfig.HistorySizeLimitError.Key():      9000,
+		dynamicconfig.BlobSizeLimitWarn.Key():          1,
+		dynamicconfig.BlobSizeLimitError.Key():         1000,
+		dynamicconfig.MutableStateSizeLimitWarn.Key():  200,
+		dynamicconfig.MutableStateSizeLimitError.Key(): 1100,
+	}
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {

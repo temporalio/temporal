@@ -38,14 +38,13 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type ActivityApiResetClientTestSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 	tv                     *testvars.TestVars
 	initialRetryInterval   time.Duration
 	scheduleToCloseTimeout time.Duration
@@ -54,14 +53,15 @@ type ActivityApiResetClientTestSuite struct {
 	activityRetryPolicy *temporal.RetryPolicy
 }
 
-func (s *ActivityApiResetClientTestSuite) SetupSuite() {
-	s.ClientFunctionalSuite.SetupSuite()
-	s.OverrideDynamicConfig(dynamicconfig.ActivityAPIsEnabled, true)
-	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
+func TestActivityApiResetClientTestSuite(t *testing.T) {
+	s := new(ActivityApiResetClientTestSuite)
+	suite.Run(t, s)
 }
 
 func (s *ActivityApiResetClientTestSuite) SetupTest() {
-	s.ClientFunctionalSuite.SetupTest()
+	s.FunctionalTestSdkSuite.SetupTest()
+
+	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
 
 	s.initialRetryInterval = 1 * time.Second
 	s.scheduleToCloseTimeout = 30 * time.Minute
@@ -71,11 +71,6 @@ func (s *ActivityApiResetClientTestSuite) SetupTest() {
 		InitialInterval:    s.initialRetryInterval,
 		BackoffCoefficient: 1,
 	}
-}
-
-func TestActivityApiResetClientTestSuite(t *testing.T) {
-	s := new(ActivityApiResetClientTestSuite)
-	suite.Run(t, s)
 }
 
 func (s *ActivityApiResetClientTestSuite) makeWorkflowFunc(activityFunction ActivityFunctions) WorkflowFunction {

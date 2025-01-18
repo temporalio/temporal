@@ -45,7 +45,7 @@ import (
 )
 
 type EagerWorkflowTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestEagerWorkflowTestSuite(t *testing.T) {

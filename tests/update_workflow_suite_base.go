@@ -39,7 +39,7 @@ import (
 )
 
 type WorkflowUpdateBaseSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 type updateResponseErr struct {

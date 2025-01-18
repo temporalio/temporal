@@ -22,25 +22,54 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package testcore
+package scheduler
 
 import (
-	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 )
 
-// AdminClient is the interface exposed by admin service client
-type AdminClient interface {
-	adminservice.AdminServiceClient
-}
+func TestGenerateRequestID(t *testing.T) {
+	scheduler := Scheduler{
+		SchedulerInternal: &schedulespb.SchedulerInternal{
+			Namespace:     "ns",
+			NamespaceId:   "nsid",
+			ScheduleId:    "mysched",
+			ConflictToken: 10,
+		},
+	}
+	nominalTime := time.Now()
+	actualTime := time.Now()
 
-// FrontendClient is the interface exposed by frontend service client
-type FrontendClient interface {
-	workflowservice.WorkflowServiceClient
-}
+	// No backfill ID given.
+	actual := generateRequestID(
+		scheduler,
+		"",
+		nominalTime,
+		actualTime,
+	)
+	expected := fmt.Sprintf(
+		"sched-auto-nsid-mysched-10-%d-%d",
+		nominalTime.UnixMilli(),
+		actualTime.UnixMilli(),
+	)
+	require.Equal(t, expected, actual)
 
-// HistoryClient is the interface exposed by history service client
-type HistoryClient interface {
-	historyservice.HistoryServiceClient
+	// Backfill ID given.
+	actual = generateRequestID(
+		scheduler,
+		"backfillid",
+		nominalTime,
+		actualTime,
+	)
+	expected = fmt.Sprintf(
+		"sched-backfillid-nsid-mysched-10-%d-%d",
+		nominalTime.UnixMilli(),
+		actualTime.UnixMilli(),
+	)
+	require.Equal(t, expected, actual)
 }

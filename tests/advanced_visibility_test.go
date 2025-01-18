@@ -36,7 +36,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -60,7 +59,6 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
@@ -73,20 +71,15 @@ import (
 const (
 	numOfRetry   = 50
 	waitTimeInMs = 400
+
+	testSearchAttributeKey = "CustomTextField"
+	testSearchAttributeVal = "test value"
 )
 
 type AdvancedVisibilitySuite struct {
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-	// not merely log an error
-	*require.Assertions
-	protorequire.ProtoAssertions
-	historyrequire.HistoryRequire
-	testcore.FunctionalTestBase
-	isElasticsearchEnabled bool
+	testcore.FunctionalTestSuite
 
-	testSearchAttributeKey string
-	testSearchAttributeVal string
-	sdkClient              sdkclient.Client
+	sdkClient sdkclient.Client
 	// client for the system namespace
 	sysSDKClient sdkclient.Client
 }
@@ -109,55 +102,32 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 	}
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-
-	if testcore.UsingSQLAdvancedVisibility() {
-		s.FunctionalTestBase.SetupSuite("testdata/cluster.yaml")
-		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
-		s.isElasticsearchEnabled = false
-	} else {
-		s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
-		s.isElasticsearchEnabled = true
+	if !testcore.UseSQLVisibility() {
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
 		// but returns error if page size on request is greater than defaultPageSize.
 		// Probably can be removed and replaced with assert on items count in response.
 		s.updateMaxResultWindow()
 	}
 
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sdkClient = sdkClient
-	sysSDKClient, err := sdkclient.Dial(sdkclient.Options{
+	s.Require().NoError(err)
+
+	s.sysSDKClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: primitives.SystemLocalNamespace,
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sysSDKClient = sysSDKClient
+	s.Require().NoError(err)
 }
 
 func (s *AdvancedVisibilitySuite) TearDownSuite() {
 	s.sdkClient.Close()
 	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *AdvancedVisibilitySuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
-	s.ProtoAssertions = protorequire.New(s.T())
-	s.HistoryRequire = historyrequire.New(s.T())
-	s.testSearchAttributeKey = "CustomTextField"
-	s.testSearchAttributeVal = "test value"
 }
 
 func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
@@ -166,10 +136,10 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
 	tl := "es-functional-start-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	attrPayload, _ := payload.Encode(s.testSearchAttributeVal)
+	attrPayload, _ := payload.Encode(testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			s.testSearchAttributeKey: attrPayload,
+			testSearchAttributeKey: attrPayload,
 		},
 	}
 	request.SearchAttributes = searchAttr
@@ -203,7 +173,7 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
 	s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
 
 	s.Equal(1, len(openExecution.GetSearchAttributes().GetIndexedFields()))
-	attrPayloadFromResponse, attrExist := openExecution.GetSearchAttributes().GetIndexedFields()[s.testSearchAttributeKey]
+	attrPayloadFromResponse, attrExist := openExecution.GetSearchAttributes().GetIndexedFields()[testSearchAttributeKey]
 	s.True(attrExist)
 	s.Equal(attrPayload.GetData(), attrPayloadFromResponse.GetData())
 	attrType, typeSet := attrPayloadFromResponse.GetMetadata()[searchattribute.MetadataType]
@@ -272,17 +242,17 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	tl := "es-functional-list-workflow-by-search-attr-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
+	attrValBytes, _ := payload.Encode(testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			s.testSearchAttributeKey: attrValBytes,
+			testSearchAttributeKey: attrValBytes,
 		},
 	}
 	request.SearchAttributes = searchAttr
 
 	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
-	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
+	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, testSearchAttributeKey, testSearchAttributeVal)
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 
 	searchAttributes := s.createSearchAttributes()
@@ -679,7 +649,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 }
 
 func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
-	if !s.isElasticsearchEnabled {
+	if testcore.UseSQLVisibility() {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
 
@@ -951,15 +921,15 @@ func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
 	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
-		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
+		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[testSearchAttributeKey]
 		var searchVal string
 		_ = payload.Decode(searchValBytes, &searchVal)
-		s.Equal(s.testSearchAttributeVal, searchVal)
+		s.Equal(testSearchAttributeVal, searchVal)
 	}
 }
 
 func (s *AdvancedVisibilitySuite) TestScanWorkflow() {
-	if !s.isElasticsearchEnabled {
+	if testcore.UseSQLVisibility() {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
 
@@ -991,7 +961,7 @@ func (s *AdvancedVisibilitySuite) TestScanWorkflow() {
 }
 
 func (s *AdvancedVisibilitySuite) TestScanWorkflow_SearchAttribute() {
-	if !s.isElasticsearchEnabled {
+	if testcore.UseSQLVisibility() {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
 
@@ -1000,22 +970,22 @@ func (s *AdvancedVisibilitySuite) TestScanWorkflow_SearchAttribute() {
 	tl := "es-functional-scan-workflow-search-attr-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
+	attrValBytes, _ := payload.Encode(testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			s.testSearchAttributeKey: attrValBytes,
+			testSearchAttributeKey: attrValBytes,
 		},
 	}
 	request.SearchAttributes = searchAttr
 
 	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
-	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
+	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, testSearchAttributeKey, testSearchAttributeVal)
 	s.testHelperForReadOnce(we.GetRunId(), query, true)
 }
 
 func (s *AdvancedVisibilitySuite) TestScanWorkflow_PageToken() {
-	if !s.isElasticsearchEnabled {
+	if testcore.UseSQLVisibility() {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
 
@@ -1050,10 +1020,10 @@ func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
 	tl := "es-functional-count-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	attrValBytes, _ := payload.Encode(s.testSearchAttributeVal)
+	attrValBytes, _ := payload.Encode(testSearchAttributeVal)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			s.testSearchAttributeKey: attrValBytes,
+			testSearchAttributeKey: attrValBytes,
 		},
 	}
 	request.SearchAttributes = searchAttr
@@ -1061,7 +1031,7 @@ func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
 	_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 
-	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
+	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, testSearchAttributeKey, testSearchAttributeVal)
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: s.Namespace().String(),
 		Query:     query,
@@ -1077,7 +1047,7 @@ func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
 	}
 	s.Equal(int64(1), resp.GetCount())
 
-	query = fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, "noMatch")
+	query = fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, testSearchAttributeKey, "noMatch")
 	countRequest.Query = query
 	resp, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 	s.NoError(err)
@@ -1222,10 +1192,10 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		// handle first upsert
 		if commandCount == 0 {
 			commandCount++
-			attrValPayload, _ := payload.Encode(s.testSearchAttributeVal)
+			attrValPayload, _ := payload.Encode(testSearchAttributeVal)
 			upsertSearchAttr := &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					s.testSearchAttributeKey: attrValPayload,
+					testSearchAttributeKey: attrValPayload,
 				},
 			}
 			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = upsertSearchAttr
@@ -1310,11 +1280,11 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 			execution := resp.GetExecutions()[0]
 			retrievedSearchAttr := execution.SearchAttributes
 			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) > 0 {
-				searchValBytes := retrievedSearchAttr.GetIndexedFields()[s.testSearchAttributeKey]
+				searchValBytes := retrievedSearchAttr.GetIndexedFields()[testSearchAttributeKey]
 				var searchVal string
 				err = payload.Decode(searchValBytes, &searchVal)
 				s.NoError(err)
-				s.Equal(s.testSearchAttributeVal, searchVal)
+				s.Equal(testSearchAttributeVal, searchVal)
 				verified = true
 				break
 			}
@@ -1694,7 +1664,7 @@ func (s *AdvancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 			retrievedSearchAttr := execution.SearchAttributes
 			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 5 {
 				fields := retrievedSearchAttr.GetIndexedFields()
-				searchValBytes := fields[s.testSearchAttributeKey]
+				searchValBytes := fields[testSearchAttributeKey]
 				var searchVal string
 				err := payload.Decode(searchValBytes, &searchVal)
 				s.NoError(err)
@@ -1803,7 +1773,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
-	if s.isElasticsearchEnabled {
+	if !testcore.UseSQLVisibility() {
 		s.ErrorContains(err, "BadSearchAttributes: search attribute INVALIDKEY is not defined")
 		s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -2808,7 +2778,7 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
-	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
+	s.Require().FailNowf("", "ES max result window size hasn't reach target size within %v", numOfRetry*waitTimeInMs*time.Millisecond)
 }
 
 func (s *AdvancedVisibilitySuite) addCustomKeywordSearchAttribute(ctx context.Context, attrName string) {

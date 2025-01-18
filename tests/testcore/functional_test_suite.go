@@ -25,12 +25,18 @@
 package testcore
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/taskpoller"
 )
 
-func TestFunctionalSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(FunctionalSuite))
+type (
+	FunctionalTestSuite struct {
+		FunctionalTestBase
+
+		TaskPoller *taskpoller.TaskPoller
+	}
+)
+
+func (s *FunctionalTestSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+	s.TaskPoller = taskpoller.New(s.T(), s.frontendClient, s.Namespace().String())
 }

@@ -35,7 +35,6 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -47,7 +46,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
@@ -72,15 +70,10 @@ const (
 
 type (
 	DeploymentSuite struct {
-		testcore.FunctionalTestBase
-		*require.Assertions
+		testcore.FunctionalTestSuite
 		sdkClient sdkclient.Client
 	}
 )
-
-func (s *DeploymentSuite) setAssertions() {
-	s.Assertions = require.New(s.T())
-}
 
 func TestDeploymentSuite(t *testing.T) {
 	t.Parallel()
@@ -88,7 +81,6 @@ func TestDeploymentSuite(t *testing.T) {
 }
 
 func (s *DeploymentSuite) SetupSuite() {
-	s.setAssertions()
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
@@ -108,25 +100,19 @@ func (s *DeploymentSuite) SetupSuite() {
 		// Reduce the chance of hitting max batch job limit in tests
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): maxConcurrentBatchOps,
 	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
 
-func (s *DeploymentSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *DeploymentSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-	s.setAssertions()
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+	s.FunctionalTestSuite.SetupTest()
+
+	var err error
+	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace().String(),
 	})
-	if err != nil {
-		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
-	}
-	s.sdkClient = sdkClient
+	s.NoError(err)
 }
 
 func (s *DeploymentSuite) TearDownTest() {

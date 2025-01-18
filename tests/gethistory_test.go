@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -48,23 +47,20 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type RawHistorySuite struct {
-	*require.Assertions
-	testcore.FunctionalTestBase
-	historyrequire.HistoryRequire
+	testcore.FunctionalTestSuite
 }
 
 type RawHistoryClientSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 type GetHistoryFunctionalSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestRawHistorySuite(t *testing.T) {
@@ -86,19 +82,7 @@ func (s *RawHistorySuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.SendRawWorkflowHistory.Key(): true,
 	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
-
-func (s *RawHistorySuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *RawHistorySuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	s.Assertions = require.New(s.T())
-	s.HistoryRequire = historyrequire.New(s.T())
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_All() {
@@ -679,9 +663,7 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -756,9 +738,7 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse_MultipleBranches() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")

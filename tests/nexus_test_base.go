@@ -38,7 +38,7 @@ import (
 )
 
 type NexusTestBaseSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func (s *NexusTestBaseSuite) mustToPayload(v any) *commonpb.Payload {

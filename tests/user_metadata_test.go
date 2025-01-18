@@ -38,7 +38,7 @@ import (
 )
 
 type UserMetadataSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestUserMetadataSuite(t *testing.T) {

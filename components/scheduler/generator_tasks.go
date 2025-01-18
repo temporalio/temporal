@@ -22,37 +22,64 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package testcore
+package scheduler
 
 import (
-	"fmt"
-	"strings"
+	"time"
 
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/searchattribute"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/service/history/hsm"
 )
 
 type (
-	SearchAttributeTestMapper struct{}
+	BufferTask struct {
+		deadline time.Time
+	}
+
+	// Fired when the Generator should buffer actions. After buffering, another buffer
+	// task is usually created with a later deadline. The Generator will
+	// alternate between sleeping and buffering without an explicit state
+	// transition.
+	EventBuffer struct {
+		Node *hsm.Node
+
+		Deadline time.Time
+	}
 )
 
-func NewSearchAttributeTestMapper() *SearchAttributeTestMapper {
-	return &SearchAttributeTestMapper{}
+const (
+	TaskTypeBuffer = "scheduler.generator.Buffer"
+)
+
+var (
+	_ hsm.Task = BufferTask{}
+)
+
+func (BufferTask) Type() string {
+	return TaskTypeBuffer
 }
 
-func (t *SearchAttributeTestMapper) GetAlias(fieldName string, namespace string) (string, error) {
-	if _, err := searchattribute.TestNameTypeMap.GetType(fieldName); err == nil {
-		return "AliasFor" + fieldName, nil
-	}
-	return "", serviceerror.NewInvalidArgument(fmt.Sprintf("fieldname '%s' has no search-attribute defined for '%s' namespace", fieldName, namespace))
+func (b BufferTask) Deadline() time.Time {
+	return b.deadline
 }
 
-func (t *SearchAttributeTestMapper) GetFieldName(alias string, namespace string) (string, error) {
-	if strings.HasPrefix(alias, "AliasFor") {
-		fieldName := strings.TrimPrefix(alias, "AliasFor")
-		if _, err := searchattribute.TestNameTypeMap.GetType(fieldName); err == nil {
-			return fieldName, nil
-		}
+func (BufferTask) Destination() string {
+	return ""
+}
+
+func (BufferTask) Validate(_ *persistencespb.StateMachineRef, _ *hsm.Node) error {
+	// Generator only has a single task/state, so no validation is done here.
+	return nil
+}
+
+func (g Generator) tasks() ([]hsm.Task, error) {
+	return []hsm.Task{BufferTask{deadline: g.NextInvocationTime.AsTime()}}, nil
+}
+
+func (g Generator) output() (hsm.TransitionOutput, error) {
+	tasks, err := g.tasks()
+	if err != nil {
+		return hsm.TransitionOutput{}, err
 	}
-	return "", serviceerror.NewInvalidArgument(fmt.Sprintf("search-attribute '%s' not found for '%s' namespace", alias, namespace))
+	return hsm.TransitionOutput{Tasks: tasks}, nil
 }

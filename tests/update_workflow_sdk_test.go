@@ -47,7 +47,7 @@ var (
 )
 
 type UpdateWorkflowSdkSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestUpdateWorkflowSdkSuite(t *testing.T) {

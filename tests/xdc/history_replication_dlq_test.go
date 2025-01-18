@@ -51,7 +51,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/replication"
@@ -115,7 +115,7 @@ type (
 	}
 	testNamespaceReplicationTaskExecutor struct {
 		*namespaceReplicationTaskExecutorParams
-		replicationTaskExecutor namespace.ReplicationTaskExecutor
+		replicationTaskExecutor nsreplication.TaskExecutor
 	}
 	testExecutableTaskConverter struct {
 		*replicationTaskExecutorParams
@@ -210,7 +210,7 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 		),
 		testcore.WithFxOptionsForService(primitives.WorkerService,
 			fx.Decorate(
-				func(executor namespace.ReplicationTaskExecutor) namespace.ReplicationTaskExecutor {
+				func(executor nsreplication.TaskExecutor) nsreplication.TaskExecutor {
 					return &testNamespaceReplicationTaskExecutor{
 						replicationTaskExecutor:                executor,
 						namespaceReplicationTaskExecutorParams: &s.namespaceReplicationTaskExecutors,

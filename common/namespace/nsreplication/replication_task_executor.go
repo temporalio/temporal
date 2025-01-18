@@ -22,9 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replication_task_handler_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replication_task_handler_mock.go
 
-package namespace
+package nsreplication
 
 import (
 	"context"
@@ -66,26 +66,26 @@ var (
 // NOTE: the counterpart of namespace replication transmission logic is in service/frontend package
 
 type (
-	// ReplicationTaskExecutor is the interface for executing namespace replication tasks
-	ReplicationTaskExecutor interface {
+	// TaskExecutor is the interface for executing namespace replication tasks
+	TaskExecutor interface {
 		Execute(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) error
 	}
 
-	namespaceReplicationTaskExecutorImpl struct {
+	taskExecutorImpl struct {
 		currentCluster  string
 		metadataManager persistence.MetadataManager
 		logger          log.Logger
 	}
 )
 
-// NewReplicationTaskExecutor creates a new instance of namespace replicator
-func NewReplicationTaskExecutor(
+// NewTaskExecutor creates a new instance of namespace replicator
+func NewTaskExecutor(
 	currentCluster string,
 	metadataManagerV2 persistence.MetadataManager,
 	logger log.Logger,
-) ReplicationTaskExecutor {
+) TaskExecutor {
 
-	return &namespaceReplicationTaskExecutorImpl{
+	return &taskExecutorImpl{
 		currentCluster:  currentCluster,
 		metadataManager: metadataManagerV2,
 		logger:          logger,
@@ -93,7 +93,7 @@ func NewReplicationTaskExecutor(
 }
 
 // Execute handles receiving of the namespace replication task
-func (h *namespaceReplicationTaskExecutorImpl) Execute(
+func (h *taskExecutorImpl) Execute(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
 ) error {
@@ -123,7 +123,7 @@ func checkClusterIncludedInReplicationConfig(clusterName string, repCfg []*repli
 	return false
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (bool, error) {
+func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (bool, error) {
 	resp, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 		Name: task.Info.GetName(),
 	})
@@ -148,7 +148,7 @@ func (h *namespaceReplicationTaskExecutorImpl) shouldProcessTask(ctx context.Con
 }
 
 // handleNamespaceCreationReplicationTask handles the namespace creation replication task
-func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicationTask(
+func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
 ) error {
@@ -251,7 +251,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 }
 
 // handleNamespaceUpdateReplicationTask handles the namespace update replication task
-func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationTask(
+func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
 ) error {
@@ -318,7 +318,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		request.Namespace.ReplicationConfig.ActiveClusterName = task.ReplicationConfig.GetActiveClusterName()
 		request.Namespace.FailoverVersion = task.GetFailoverVersion()
 		request.Namespace.FailoverNotificationVersion = notificationVersion
-		request.Namespace.ReplicationConfig.FailoverHistory = convertFailoverHistoryToPersistenceProto(task.GetFailoverHistory())
+		request.Namespace.ReplicationConfig.FailoverHistory = ConvertFailoverHistoryToPersistenceProto(task.GetFailoverHistory())
 	}
 
 	if !recordUpdated {
@@ -328,7 +328,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 	return h.metadataManager.UpdateNamespace(ctx, request)
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {
+func (h *taskExecutorImpl) validateNamespaceReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {
 	if task == nil {
 		return ErrEmptyNamespaceReplicationTask
 	}
@@ -356,7 +356,7 @@ func ConvertClusterReplicationConfigFromProto(
 	return output
 }
 
-func convertFailoverHistoryToPersistenceProto(failoverHistory []*replicationpb.FailoverStatus) []*persistencespb.FailoverStatus {
+func ConvertFailoverHistoryToPersistenceProto(failoverHistory []*replicationpb.FailoverStatus) []*persistencespb.FailoverStatus {
 	var res []*persistencespb.FailoverStatus
 	for _, status := range failoverHistory {
 		res = append(res, &persistencespb.FailoverStatus{
@@ -367,7 +367,7 @@ func convertFailoverHistoryToPersistenceProto(failoverHistory []*replicationpb.F
 	return res
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input enumspb.NamespaceState) error {
+func (h *taskExecutorImpl) validateNamespaceStatus(input enumspb.NamespaceState) error {
 	switch input {
 	case enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED:
 		return nil

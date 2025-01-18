@@ -46,7 +46,7 @@ import (
 )
 
 type TransientTaskSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestTransientTaskSuite(t *testing.T) {
