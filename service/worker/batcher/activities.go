@@ -47,6 +47,8 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -222,7 +224,7 @@ func (a *activities) adjustQuery(batchParams BatchParams) string {
 	}
 
 	switch batchParams.BatchType {
-	case BatchTypeTerminate, BatchTypeSignal, BatchTypeCancel, BatchTypeUpdateOptions:
+	case BatchTypeTerminate, BatchTypeSignal, BatchTypeCancel, BatchTypeUpdateOptions, BatchTypeUnpauseActivities:
 		return fmt.Sprintf("(%s) AND (%s)", batchParams.Query, statusRunningQueryFilter)
 	default:
 		return batchParams.Query
@@ -338,6 +340,8 @@ func startTaskProcessor(
 						})
 						return err
 					})
+			case BatchTypeUnpauseActivities:
+				err = status.Errorf(codes.Unimplemented, "BatchTypeUnpauseActivities is not implemented")
 			case BatchTypeUpdateOptions:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
