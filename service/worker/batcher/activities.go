@@ -35,7 +35,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common"
@@ -47,7 +46,8 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"golang.org/x/time/rate"
-	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -340,39 +340,7 @@ func startTaskProcessor(
 						return err
 					})
 			case BatchTypeUnpauseActivities:
-				operations := []*workflowservice.ManageActivityRequest_Operation{
-					{
-						OperationType: &workflowservice.ManageActivityRequest_Operation_Unpause{
-							Unpause: &workflowservice.ManageActivityRequest_UnpauseActivityRequest{
-								Jitter: durationpb.New(batchParams.UnpauseActivitiesParams.Jitter),
-							}}},
-				}
-
-				if batchParams.UnpauseActivitiesParams.KeepAttempts == false {
-					// also reset the activity
-					resetOperation := &workflowservice.ManageActivityRequest_Operation{
-						OperationType: &workflowservice.ManageActivityRequest_Operation_Reset_{
-							Reset_: &workflowservice.ManageActivityRequest_ResetActivityRequest{
-								KeepPaused:     false,
-								ResetHeartbeat: batchParams.UnpauseActivitiesParams.ResetHeartbeat,
-							}}}
-
-					operations = append(operations, resetOperation)
-				}
-
-				err = processTask(ctx, limiter, task,
-					func(workflowID, runID string) error {
-						var err error
-						_, err = frontendClient.ManageActivity(ctx, &workflowservice.ManageActivityRequest{
-							Namespace:    batchParams.Namespace,
-							WorkflowId:   workflowID,
-							RunId:        runID,
-							ActivityType: batchParams.UnpauseActivitiesParams.ActivityType,
-							Operations:   operations,
-						})
-						return err
-					})
-
+				err = status.Errorf(codes.Unimplemented, "BatchTypeUnpauseActivities is not implemented")
 			case BatchTypeUpdateOptions:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
