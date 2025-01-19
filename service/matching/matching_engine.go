@@ -38,6 +38,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -102,6 +103,7 @@ type (
 	pollMetadata struct {
 		ratePerSecond             *float64
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
+		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
 		forwardedFrom             string
 	}
 
@@ -577,6 +579,7 @@ pollLoop:
 		}
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.GetForwardedSource(),
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
@@ -696,7 +699,7 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
 				task.finish(nil, false)
@@ -811,6 +814,7 @@ pollLoop:
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.GetForwardedSource(),
 		}
 		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
@@ -886,7 +890,7 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
 				task.finish(nil, false)
@@ -900,7 +904,7 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 				)
 				task.finish(nil, false)
 			case *serviceerror.ResourceExhausted:
@@ -1947,6 +1951,7 @@ pollLoop:
 		}
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.GetForwardedSource(),
 		}
 		task, _, err := e.pollTask(pollerCtx, partition, pollMetadata)
@@ -2454,7 +2459,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
-		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
+		ScheduledDeployment: worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:    task.event.Data.VersionDirective,
 	}
 
@@ -2479,7 +2484,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		BuildIdRedirectInfo: task.redirectInfo,
 		Stamp:               task.event.Data.GetStamp(),
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
-		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
+		ScheduledDeployment: worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:    task.event.Data.VersionDirective,
 	}
 

@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -271,7 +272,7 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 	s.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, tv.DeploymentTransition())
+			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, tv.DeploymentVersionTransition())
 			return respondEmptyWft(tv, sticky, vbUnpinned), nil
 		})
 
@@ -398,7 +399,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 	s.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, tv.DeploymentTransition())
+			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, tv.DeploymentVersionTransition())
 			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
 		})
 
@@ -455,7 +456,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 	s.pollWftAndHandle(tv1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			s.verifyWorkflowVersioning(tv1, vbUnspecified, nil, nil, tv1.DeploymentTransition())
+			s.verifyWorkflowVersioning(tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
 			return respondWftWithActivities(tv1, tv1, sticky, vbUnpinned, "5"), nil
 		})
 	s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
@@ -476,7 +477,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 	s.pollWftAndHandle(tv2, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentTransition())
+			s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
 			return respondCompleteWorkflow(tv2, vbUnpinned), nil
 		})
 	s.verifyWorkflowVersioning(tv2, vbUnpinned, tv2.Deployment(), nil, nil)
@@ -554,7 +555,7 @@ func (s *Versioning3Suite) TestEagerActivity() {
 	poller, resp := s.pollWftAndHandle(tv, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, tv.DeploymentTransition())
+			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, tv.DeploymentVersionTransition())
 			resp := respondWftWithActivities(tv, tv, true, vbUnpinned, "5")
 			resp.Commands[0].GetScheduleActivityTaskCommandAttributes().RequestEagerExecution = true
 			return resp, nil
@@ -613,7 +614,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	s.pollWftAndHandle(tv1, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			s.verifyWorkflowVersioning(tv1, vbUnspecified, nil, nil, tv1.DeploymentTransition())
+			s.verifyWorkflowVersioning(tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
 			return respondWftWithActivities(tv1, tv1, sticky, vbUnpinned, "5", "6", "7", "8"), nil
 		})
 	s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
@@ -690,7 +691,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	s.pollWftAndHandle(tv2, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentTransition())
+			s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, tv2.DeploymentVersionTransition())
 			close(transitionStarted)
 			s.Logger.Info("Transition wft started")
 			// 8. Complete the transition after act1 completes and act2's first attempt fails.
@@ -743,7 +744,7 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 	s.pollWftAndHandle(tvWf, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			s.verifyWorkflowVersioning(tvWf, vbUnspecified, nil, nil, tvWf.DeploymentTransition())
+			s.verifyWorkflowVersioning(tvWf, vbUnspecified, nil, nil, tvWf.DeploymentVersionTransition())
 			s.Logger.Info("First wf task completed")
 			return respondWftWithActivities(tvWf, tvAct, false, behavior, "5"), nil
 		})
@@ -810,7 +811,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 	behavior enumspb.VersioningBehavior,
 	deployment *deploymentpb.Deployment,
 	override *workflowpb.VersioningOverride,
-	transition *workflowpb.DeploymentTransition,
+	transition *workflowpb.DeploymentVersionTransition,
 ) {
 	dwf, err := s.FrontendClient().DescribeWorkflowExecution(
 		context.Background(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -824,25 +825,26 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 
 	versioningInfo := dwf.WorkflowExecutionInfo.GetVersioningInfo()
 	s.Equal(behavior.String(), versioningInfo.GetBehavior().String())
-	if !deployment.Equal(versioningInfo.GetDeployment()) {
-		s.Fail(fmt.Sprintf("deployment mismatch. expected: {%s}, actual: {%s}",
+	actualDeployment := worker_versioning.DeploymentFromDeploymentVersion(versioningInfo.GetDeploymentVersion())
+	if !deployment.Equal(actualDeployment) {
+		s.Fail(fmt.Sprintf("deployment version mismatch. expected: {%s}, actual: {%s}",
 			deployment,
-			versioningInfo.GetDeployment(),
+			actualDeployment,
 		))
 	}
 
 	s.Equal(override.GetBehavior().String(), versioningInfo.GetVersioningOverride().GetBehavior().String())
-	if actualOverrideDeployment := versioningInfo.GetVersioningOverride().GetDeployment(); !override.GetDeployment().Equal(actualOverrideDeployment) {
-		s.Fail(fmt.Sprintf("deployment override mismatch. expected: {%s}, actual: {%s}",
-			override.GetDeployment(),
+	if actualOverrideDeployment := versioningInfo.GetVersioningOverride().GetPinnedVersion(); !override.GetPinnedVersion().Equal(actualOverrideDeployment) {
+		s.Fail(fmt.Sprintf("pinned override mismatch. expected: {%s}, actual: {%s}",
+			override.GetPinnedVersion(),
 			actualOverrideDeployment,
 		))
 	}
 
-	if !versioningInfo.GetDeploymentTransition().Equal(transition) {
-		s.Fail(fmt.Sprintf("deployment transition mismatch. expected: {%s}, actual: {%s}",
+	if !versioningInfo.GetVersionTransition().Equal(transition) {
+		s.Fail(fmt.Sprintf("version transition mismatch. expected: {%s}, actual: {%s}",
 			transition,
-			versioningInfo.GetDeploymentTransition(),
+			versioningInfo.GetVersionTransition(),
 		))
 	}
 }
@@ -1012,12 +1014,8 @@ func (s *Versioning3Suite) pollWftAndHandle(
 		}
 		resp, err := poller.PollWorkflowTask(
 			&workflowservice.PollWorkflowTaskQueueRequest{
-				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-					BuildId:              tv.BuildID(),
-					DeploymentSeriesName: tv.DeploymentSeries(),
-					UseVersioning:        true,
-				},
-				TaskQueue: tq,
+				DeploymentOptions: tv.WorkerDeploymentOptions(true),
+				TaskQueue:         tq,
 			},
 		).HandleTask(tv, handler)
 		s.NoError(err)
@@ -1048,12 +1046,8 @@ func (s *Versioning3Suite) pollWftAndHandleQueries(
 		}
 		resp, err := poller.PollWorkflowTask(
 			&workflowservice.PollWorkflowTaskQueueRequest{
-				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-					BuildId:              tv.BuildID(),
-					DeploymentSeriesName: tv.DeploymentSeries(),
-					UseVersioning:        true,
-				},
-				TaskQueue: tq,
+				DeploymentOptions: tv.WorkerDeploymentOptions(true),
+				TaskQueue:         tq,
 			},
 		).HandleLegacyQuery(tv, handler)
 		s.NoError(err)
@@ -1083,12 +1077,8 @@ func (s *Versioning3Suite) pollNexusTaskAndHandle(
 		}
 		resp, err := poller.PollNexusTask(
 			&workflowservice.PollNexusTaskQueueRequest{
-				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-					BuildId:              tv.BuildID(),
-					DeploymentSeriesName: tv.DeploymentSeries(),
-					UseVersioning:        true,
-				},
-				TaskQueue: tq,
+				DeploymentOptions: tv.WorkerDeploymentOptions(true),
+				TaskQueue:         tq,
 			},
 		).HandleTask(tv, handler)
 		s.NoError(err)
@@ -1113,11 +1103,7 @@ func (s *Versioning3Suite) pollActivityAndHandle(
 	f := func() {
 		_, err := poller.PollActivityTask(
 			&workflowservice.PollActivityTaskQueueRequest{
-				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-					BuildId:              tv.BuildID(),
-					DeploymentSeriesName: tv.DeploymentSeries(),
-					UseVersioning:        true,
-				},
+				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 			},
 		).HandleTask(tv, handler, taskpoller.WithTimeout(time.Minute))
 		s.NoError(err)
@@ -1141,11 +1127,7 @@ func (s *Versioning3Suite) idlePollWorkflow(
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	_, _ = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
-			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-				BuildId:              tv.BuildID(),
-				DeploymentSeriesName: tv.DeploymentSeries(),
-				UseVersioning:        versioned,
-			},
+			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 		},
 	).HandleTask(
 		tv,
@@ -1166,11 +1148,7 @@ func (s *Versioning3Suite) idlePollActivity(
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	_, _ = poller.PollActivityTask(
 		&workflowservice.PollActivityTaskQueueRequest{
-			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-				BuildId:              tv.BuildID(),
-				DeploymentSeriesName: tv.DeploymentSeries(),
-				UseVersioning:        versioned,
-			},
+			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 		},
 	).HandleTask(
 		tv,
@@ -1194,11 +1172,7 @@ func (s *Versioning3Suite) idlePollNexus(
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 	_, _ = poller.PollNexusTask(
 		&workflowservice.PollNexusTaskQueueRequest{
-			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-				BuildId:              tv.BuildID(),
-				UseVersioning:        versioned,
-				DeploymentSeriesName: tv.DeploymentSeries(),
-			},
+			DeploymentOptions: tv.WorkerDeploymentOptions(versioned),
 		}).HandleTask(
 		tv,
 		func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error) {
@@ -1330,5 +1304,5 @@ func (s *Versioning3Suite) validateBacklogCount(
 }
 
 func makePinnedOverride(d *deploymentpb.Deployment) *workflowpb.VersioningOverride {
-	return &workflowpb.VersioningOverride{Behavior: vbPinned, Deployment: d}
+	return &workflowpb.VersioningOverride{Behavior: vbPinned, PinnedVersion: worker_versioning.DeploymentVersionFromDeployment(d)}
 }

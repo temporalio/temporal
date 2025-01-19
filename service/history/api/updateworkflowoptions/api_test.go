@@ -44,14 +44,14 @@ var (
 	}
 	pinnedOverrideOptionsA = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: &deploymentpb.Deployment{SeriesName: "X", BuildId: "A"},
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "X", Version: "A"},
 		},
 	}
 	pinnedOverrideOptionsB = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: &deploymentpb.Deployment{SeriesName: "X", BuildId: "B"},
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "X", Version: "B"},
 		},
 	}
 )

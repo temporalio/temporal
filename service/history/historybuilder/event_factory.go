@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -170,7 +171,7 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 			WorkerVersion:      workerVersionStamp,
 			SdkMetadata:        sdkMetadata,
 			MeteringMetadata:   meteringMetadata,
-			Deployment:         deployment,
+			DeploymentVersion:  worker_versioning.DeploymentVersionFromDeployment(deployment),
 			VersioningBehavior: behavior,
 		},
 	}
