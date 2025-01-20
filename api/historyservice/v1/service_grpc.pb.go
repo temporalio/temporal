@@ -113,6 +113,7 @@ const (
 	HistoryService_PauseActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/PauseActivity"
 	HistoryService_UnpauseActivity_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseActivity"
 	HistoryService_ResetActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/ResetActivity"
+	HistoryService_ManageActivity_FullMethodName                         = "/temporal.server.api.historyservice.v1.HistoryService/ManageActivity"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -383,6 +384,27 @@ type HistoryServiceClient interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error)
+	// ManageActivity apply reset/pause/unpause/update operations to an activity specified by its ID and/or type.
+	// Either activity id or activity type must be provided.
+	// Supported operations:
+	// 1. Reset operation. Resets the activity to its initial state.
+	// Resetting the activity. This operation will reset the number of attempts.
+	// If activity is paused - activity will be unpaused bt default (see 'keep_paused' flag).
+	// If activity is currently waiting for retry - it will be scheduled immediately.
+	// Flags:
+	// 'reset_heartbeats' indicates that activity should reset heartbeat details.
+	// 'keep_paused'- prevents activity from being unpaused.
+	// 2. Pause operation. Pauses the activity. If activity was already paused it is no-op.
+	// 3. Unpause operation. Unpauses the activity. If activity was not paused this will be a no-op.
+	// If activity was waiting for retry - it will be scheduled immediately.
+	// Unpause operation supports the following flags:
+	// * jitter - if set, the activity will start at a random time within the specified jitter duration.
+	// 4. Update operation - updates the activity options.
+	// for details see UnpauseActivityById.
+	// Returns a `NotFound` error if there is no pending activity with the provided ID or type.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	ManageActivity(ctx context.Context, in *ManageActivityRequest, opts ...grpc.CallOption) (*ManageActivityResponse, error)
 }
 
 type historyServiceClient struct {
@@ -1054,6 +1076,15 @@ func (c *historyServiceClient) ResetActivity(ctx context.Context, in *ResetActiv
 	return out, nil
 }
 
+func (c *historyServiceClient) ManageActivity(ctx context.Context, in *ManageActivityRequest, opts ...grpc.CallOption) (*ManageActivityResponse, error) {
+	out := new(ManageActivityResponse)
+	err := c.cc.Invoke(ctx, HistoryService_ManageActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1322,6 +1353,27 @@ type HistoryServiceServer interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error)
+	// ManageActivity apply reset/pause/unpause/update operations to an activity specified by its ID and/or type.
+	// Either activity id or activity type must be provided.
+	// Supported operations:
+	// 1. Reset operation. Resets the activity to its initial state.
+	// Resetting the activity. This operation will reset the number of attempts.
+	// If activity is paused - activity will be unpaused bt default (see 'keep_paused' flag).
+	// If activity is currently waiting for retry - it will be scheduled immediately.
+	// Flags:
+	// 'reset_heartbeats' indicates that activity should reset heartbeat details.
+	// 'keep_paused'- prevents activity from being unpaused.
+	// 2. Pause operation. Pauses the activity. If activity was already paused it is no-op.
+	// 3. Unpause operation. Unpauses the activity. If activity was not paused this will be a no-op.
+	// If activity was waiting for retry - it will be scheduled immediately.
+	// Unpause operation supports the following flags:
+	// * jitter - if set, the activity will start at a random time within the specified jitter duration.
+	// 4. Update operation - updates the activity options.
+	// for details see UnpauseActivityById.
+	// Returns a `NotFound` error if there is no pending activity with the provided ID or type.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	ManageActivity(context.Context, *ManageActivityRequest) (*ManageActivityResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1541,6 +1593,9 @@ func (UnimplementedHistoryServiceServer) UnpauseActivity(context.Context, *Unpau
 }
 func (UnimplementedHistoryServiceServer) ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
+}
+func (UnimplementedHistoryServiceServer) ManageActivity(context.Context, *ManageActivityRequest) (*ManageActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ManageActivity not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2841,6 +2896,24 @@ func _HistoryService_ResetActivity_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_ManageActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ManageActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).ManageActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_ManageActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).ManageActivity(ctx, req.(*ManageActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3127,6 +3200,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetActivity",
 			Handler:    _HistoryService_ResetActivity_Handler,
+		},
+		{
+			MethodName: "ManageActivity",
+			Handler:    _HistoryService_ManageActivity_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
