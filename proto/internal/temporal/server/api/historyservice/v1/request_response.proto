@@ -1256,3 +1256,16 @@ message UpdateWorkflowExecutionOptionsResponse {
     // Workflow Execution options after update.
     temporal.api.workflow.v1.WorkflowExecutionOptions workflow_execution_options = 1;
 }
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+// (-- api-linter: core::0134::request-resource-required=disabled
+message ManageActivityRequest {
+    option (routing).workflow_id = "manage_request.workflow_id";
+
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.ManageActivityRequest manage_request = 2;
+}
+
+message ManageActivityResponse {
+}

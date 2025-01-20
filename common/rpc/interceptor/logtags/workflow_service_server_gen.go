@@ -109,6 +109,11 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 		return nil
 	case *workflowservice.ListWorkflowExecutionsRequest:
 		return nil
+	case *workflowservice.ManageActivityRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRunId()),
+		}
 	case *workflowservice.PatchScheduleRequest:
 		return nil
 	case *workflowservice.PauseActivityByIdRequest:

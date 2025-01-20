@@ -666,6 +666,26 @@ func (mr *MockHistoryServiceClientMockRecorder) ListTasks(ctx, in any, opts ...a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).ListTasks), varargs...)
 }
 
+// ManageActivity mocks base method.
+func (m *MockHistoryServiceClient) ManageActivity(ctx context.Context, in *historyservice.ManageActivityRequest, opts ...grpc.CallOption) (*historyservice.ManageActivityResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ManageActivity", varargs...)
+	ret0, _ := ret[0].(*historyservice.ManageActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ManageActivity indicates an expected call of ManageActivity.
+func (mr *MockHistoryServiceClientMockRecorder) ManageActivity(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ManageActivity", reflect.TypeOf((*MockHistoryServiceClient)(nil).ManageActivity), varargs...)
+}
+
 // MergeDLQMessages mocks base method.
 func (m *MockHistoryServiceClient) MergeDLQMessages(ctx context.Context, in *historyservice.MergeDLQMessagesRequest, opts ...grpc.CallOption) (*historyservice.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -2094,6 +2114,21 @@ func (m *MockHistoryServiceServer) ListTasks(arg0 context.Context, arg1 *history
 func (mr *MockHistoryServiceServerMockRecorder) ListTasks(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).ListTasks), arg0, arg1)
+}
+
+// ManageActivity mocks base method.
+func (m *MockHistoryServiceServer) ManageActivity(arg0 context.Context, arg1 *historyservice.ManageActivityRequest) (*historyservice.ManageActivityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ManageActivity", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.ManageActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ManageActivity indicates an expected call of ManageActivity.
+func (mr *MockHistoryServiceServerMockRecorder) ManageActivity(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ManageActivity", reflect.TypeOf((*MockHistoryServiceServer)(nil).ManageActivity), arg0, arg1)
 }
 
 // MergeDLQMessages mocks base method.
