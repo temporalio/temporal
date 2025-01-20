@@ -44,7 +44,7 @@ const (
 	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
 
 	// Namespace division
-	WorkerDeploymentNamespaceDivision = "TemporalDeployment" // todo: this is the same as the namespace division for the pre-release deployment APIs
+	WorkerDeploymentVersionNamespaceDivision = "TemporalWorkerDeploymentVersion"
 
 	// Updates
 	RegisterWorkerInDeployment = "register-task-queue-worker" // for Worker Deployment Version wf
@@ -56,7 +56,7 @@ const (
 
 	// Queries
 	QueryDescribeVersion = "describe-version" // for Worker Deployment Version wf
-	QueryCurrentVersion  = "current-version"  // for series wf
+	QueryCurrentVersion  = "current-version"  // for Worker Deployment wf
 
 	// Memos
 	WorkerDeploymentVersionMemoField = "WorkerDeploymentVersionMemo" // for Worker Deployment Version wf
@@ -67,9 +67,9 @@ const (
 	WorkerDeploymentWorkflowIDPrefix             = "temporal-sys-worker-deployment"
 	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
 	WorkerDeploymentVersionWorkflowIDEscape      = "|"
-	WorkerDeploymentVersionWorkflowIDInitialSize = (2 * len(WorkerDeploymentVersionWorkflowIDDelimeter)) + len(WorkerDeploymentVersionWorkflowIDPrefix)
+	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDDelimeter) + len(WorkerDeploymentVersionWorkflowIDPrefix) // todo (Shivam): Do we need 2 * len(WorkerDeploymentVersionWorkflowIDDelimeter)?
 	WorkerDeploymentFieldName                    = "WorkerDeployment"
-	BuildIDFieldName                             = "BuildID"
+	WorkerDeploymentVersionFieldName             = "Version"
 
 	// Application error names for rejected updates
 	errNoChangeType               = "errNoChange"
@@ -82,7 +82,7 @@ var (
 		searchattribute.WorkflowType,
 		WorkerDeploymentVersionWorkflowType,
 		searchattribute.TemporalNamespaceDivision,
-		WorkerDeploymentNamespaceDivision,
+		WorkerDeploymentVersionNamespaceDivision,
 		searchattribute.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
@@ -96,8 +96,8 @@ func ValidateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
 	}
 
-	// Length of each field should be: (MaxIDLengthLimit - prefix and delimeter length) / 2
-	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
+	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length))
+	if len(field) > (maxIDLengthLimit - WorkerDeploymentVersionWorkflowIDInitialSize) {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
 	}
 
@@ -105,7 +105,7 @@ func ValidateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 	return common.ValidateUTF8String(fieldName, field)
 }
 
-// EscapeChar is a helper which escapes the DeploymentWorkflowIDDelimeter character
+// EscapeChar is a helper which escapes the WorkerDeploymentVersionWorkflowIDDelimeter character
 // in the input string
 func escapeChar(s string) string {
 	s = strings.Replace(s, WorkerDeploymentVersionWorkflowIDEscape, WorkerDeploymentVersionWorkflowIDEscape+WorkerDeploymentVersionWorkflowIDEscape, -1)
@@ -123,11 +123,10 @@ func GenerateWorkflowID(WorkerDeploymentName string) string {
 
 // GenerateVersionWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment Version workflows
-func GenerateVersionWorkflowID(seriesName string, buildID string) string {
-	escapedSeriesName := escapeChar(seriesName)
-	escapedBuildId := escapeChar(buildID)
+func GenerateVersionWorkflowID(version string) string {
+	escapedVersion := escapeChar(version)
 
-	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedSeriesName + WorkerDeploymentVersionWorkflowIDDelimeter + escapedBuildId
+	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedVersion
 }
 
 func GenerateVersionWorkflowIDForPatternMatching(seriesName string) string {
