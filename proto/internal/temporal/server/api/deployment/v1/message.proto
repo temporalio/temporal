@@ -79,6 +79,8 @@ message WorkerDeploymentWorkflowArgs {
 message WorkerDeploymentLocalState {
     string current_version = 1;
     google.protobuf.Timestamp current_changed_time = 2;
+    // experimental
+    repeated string versions = 3; 
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -177,6 +179,15 @@ message WorkerDeploymentWorkflowMemo {
     string deployment_name = 1;
     string current_version = 2;
     google.protobuf.Timestamp current_changed_time = 3;
+}
+
+message AddVersionToWorkerDeploymentRequest {
+    string deployment_name = 1;
+    string version = 2;
+    string request_id = 3;
+}
+
+message AddVersionToWorkerDeploymentResponse {
 }
 
 //////////////////////////////////////////////////////////////////////////

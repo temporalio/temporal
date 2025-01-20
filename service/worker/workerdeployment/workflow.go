@@ -85,6 +85,17 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		AddVersionToWorkerDeployment,
+		d.handleAddVersionToWorkerDeployment,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateAddVersionToWorkerDeployment,
+		},
+	); err != nil {
+		return err
+	}
+
 	// Wait until we can continue as new or are cancelled.
 	err = workflow.Await(ctx, func() bool { return workflow.GetInfo(ctx).GetContinueAsNewSuggested() && pendingUpdates == 0 })
 	if err != nil {
@@ -122,6 +133,41 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// do work
 
 	return &deploymentspb.SetCurrentVersionResponse{}, nil
+}
+
+func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) error {
+	if d.State.Versions == nil {
+		return nil
+	}
+
+	for _, v := range d.State.Versions {
+		if v == version {
+			return temporal.NewApplicationError("version already exists", errNoChangeType)
+		}
+	}
+
+	return nil
+}
+
+func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, version string) error {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	// Add version to local state
+	if d.State.Versions == nil {
+		d.State.Versions = make([]string, 0)
+	}
+	d.State.Versions = append(d.State.Versions, version)
+	return nil
 }
 
 func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string, updateMetadata *deploymentpb.UpdateDeploymentMetadata) (*deploymentspb.VersionLocalState, error) {

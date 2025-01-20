@@ -3350,6 +3350,11 @@ func (wh *WorkflowHandler) SetCurrentDeploymentVersion(ctx context.Context, requ
 	return nil, nil
 }
 
+// TODO (Shivam): Implement this
+func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request *workflowservice.DescribeWorkerDeploymentRequest) (_ *workflowservice.DescribeWorkerDeploymentResponse, retError error) {
+	return nil, nil
+}
+
 // Returns the schedule description and current state of an existing schedule.
 func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workflowservice.DescribeScheduleRequest) (_ *workflowservice.DescribeScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)

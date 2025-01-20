@@ -102,6 +102,16 @@ type Client interface {
 		identity string,
 		requestID string,
 	) (*deploymentspb.SyncVersionStateResponse, error)
+
+	// Only used internally by Worker Deployment Version workflow:
+	AddVersionToWorkerDeployment(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName string,
+		version string,
+		identity string,
+		requestID string,
+	) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error)
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
@@ -517,6 +527,58 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		identity,
 		requestID,
 	)
+}
+
+func (d *ClientImpl) AddVersionToWorkerDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName string,
+	version string,
+	identity string,
+	requestID string,
+) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
+	fmt.Printf("Adding version %s to worker-deployment %s\n", version, deploymentName)
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(version)
+	if err != nil {
+		return nil, err
+	}
+
+	updateRequest := &updatepb.Request{
+		Input: &updatepb.Input{Name: AddVersionToWorkerDeployment, Args: updatePayload},
+		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+	}
+
+	workflowID := GenerateWorkflowID(deploymentName)
+
+	outcome, err := d.updateWithStart(
+		ctx,
+		namespaceEntry,
+		WorkerDeploymentVersionWorkflowType,
+		workflowID,
+		nil, // todo: (Shivam) - add memo
+		nil,
+		updateRequest,
+		identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
+		// pretend this is a success
+		return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
+	} else if failure != nil {
+		// TODO: is there an easy way to recover the original type here?
+		return nil, serviceerror.NewInternal(failure.Message)
+	}
+
+	success := outcome.GetSuccess()
+	if success == nil {
+		return nil, serviceerror.NewInternal("outcome missing success and failure")
+	}
+
+	return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
 }
 
 func (d *ClientImpl) updateWithStart(
