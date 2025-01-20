@@ -74,6 +74,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/deployment"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -127,6 +128,7 @@ type (
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
 		deploymentStoreClient         deployment.DeploymentStoreClient
+		workerDeploymentClient        workerdeployment.Client
 		tokenSerializer               common.TaskTokenSerializer
 		historySerializer             serialization.Serializer
 		logger                        log.Logger
@@ -193,7 +195,8 @@ func NewEngine(
 	taskManager persistence.TaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
+	deploymentStoreClient deployment.DeploymentStoreClient, // [wv-cleanup-pre-release]
+	workerDeploymentClient workerdeployment.Client,
 	config *Config,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
@@ -213,6 +216,7 @@ func NewEngine(
 		historyClient:                 historyClient,
 		matchingRawClient:             matchingRawClient,
 		deploymentStoreClient:         deploymentStoreClient,
+		workerDeploymentClient:        workerDeploymentClient,
 		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
 		historySerializer:             serialization.NewSerializer(),
 		logger:                        log.With(logger, tag.ComponentMatchingEngine),

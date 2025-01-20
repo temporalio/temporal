@@ -148,19 +148,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
-	/*
-
-		 	Posting this as a reminder to limit the number of signals coming through since we use CAN:
-
-			Workflows cannot have infinitely-sized history and when the event count grows too large, `ContinueAsNew` can be returned
-			to start a new one atomically. However, in order not to lose any data, signals must be drained and any other futures
-			that need to be reacted to must be completed first. This means there must be a period where there are no signals to
-			drain and no futures to wait on. If signals come in faster than processed or futures wait so long there is no idle
-			period, `ContinueAsNew` will not happen in a timely manner and history will grow.
-
-	*/
-
-	d.logger.Debug("Deployment doing continue-as-new")
+	d.logger.Debug("Version doing continue-as-new")
 	return workflow.NewContinueAsNewError(ctx, VersionWorkflow, d.WorkerDeploymentVersionWorkflowArgs)
 }
 
@@ -198,37 +186,37 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	// initial data
-	data := &deploymentspb.WorkerDeploymentTaskQueueData{}
+	data := &deploymentspb.DeploymentVersionTaskQueueData{}
 
 	// sync to user data
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	var syncRes deploymentspb.SyncWorkerDeploymentUserDataResponse
-	err = workflow.ExecuteActivity(activityCtx, d.a.SyncWorkerDeploymentUserData, &deploymentspb.SyncWorkerDeploymentUserDataRequest{
-		DeploymentName: d.VersionState.DeploymentName,
-		Sync: []*deploymentspb.SyncWorkerDeploymentUserDataRequest_SyncUserData{
-			&deploymentspb.SyncWorkerDeploymentUserDataRequest_SyncUserData{
-				Name: args.TaskQueueName,
-				Type: args.TaskQueueType,
-				Data: d.dataWithTime(data),
-			},
-		},
-	}).Get(ctx, &syncRes)
-	if err != nil {
-		return err
-	}
+	// activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	// var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+	// err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+	// 	DeploymentName: d.VersionState.DeploymentName,
+	// 	Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+	// 		&deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+	// 			Name: args.TaskQueueName,
+	// 			Type: args.TaskQueueType,
+	// 			Data: d.dataWithTime(data),
+	// 		},
+	// 	},
+	// }).Get(ctx, &syncRes)
+	// if err != nil {
+	// 	return err
+	// }
 
-	if len(syncRes.TaskQueueMaxVersions) > 0 {
-		// wait for propagation
-		err = workflow.ExecuteActivity(
-			activityCtx,
-			d.a.CheckWorkerDeploymentUserDataPropagation,
-			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
-			}).Get(ctx, nil)
-		if err != nil {
-			return err
-		}
-	}
+	// if len(syncRes.TaskQueueMaxVersions) > 0 {
+	// 	// wait for propagation
+	// 	err = workflow.ExecuteActivity(
+	// 		activityCtx,
+	// 		d.a.CheckWorkerDeploymentUserDataPropagation,
+	// 		&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+	// 			TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+	// 		}).Get(ctx, nil)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	// if successful, add the task queue to the local state
 	if d.VersionState.TaskQueueFamilies == nil {
@@ -238,7 +226,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{}
 	}
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
-		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.WorkerDeploymentTaskQueueData)
+		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.DeploymentVersionTaskQueueData)
 	}
 	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = data
 
@@ -300,13 +288,13 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		}
 
 		// sync to task queues
-		syncReq := &deploymentspb.SyncWorkerDeploymentUserDataRequest{
+		syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 			DeploymentName: d.VersionState.DeploymentName,
 			Version:        d.VersionState.Version,
 		}
 		for tqName, byType := range d.VersionState.TaskQueueFamilies {
 			for tqType, data := range byType.TaskQueues {
-				syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncWorkerDeploymentUserDataRequest_SyncUserData{
+				syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 					Name: tqName,
 					Type: enumspb.TaskQueueType(tqType),
 					Data: d.dataWithTime(data),
@@ -314,8 +302,8 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			}
 		}
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-		var syncRes deploymentspb.SyncWorkerDeploymentUserDataResponse
-		err = workflow.ExecuteActivity(activityCtx, d.a.SyncWorkerDeploymentUserData, syncReq).Get(ctx, &syncRes)
+		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
 		if err != nil {
 			// TODO: if this fails, should we roll back anything?
 			return nil, err
@@ -334,6 +322,8 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		}
 	}
 
+	// TODO (Shivam) - Move this when UpdateMetadata is implemented.
+
 	// apply changes to metadata
 	// if d.VersionState.Metadata == nil && args.UpdateMetadata != nil {
 	//	d.VersionState.Metadata = make(map[string]*commonpb.Payload)
@@ -350,7 +340,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	}, nil
 }
 
-func (d *VersionWorkflowRunner) dataWithTime(data *deploymentspb.WorkerDeploymentTaskQueueData) *deploymentspb.WorkerDeploymentTaskQueueData {
+func (d *VersionWorkflowRunner) dataWithTime(data *deploymentspb.DeploymentVersionTaskQueueData) *deploymentspb.DeploymentVersionTaskQueueData {
 	data = common.CloneProto(data)
 	return data
 }

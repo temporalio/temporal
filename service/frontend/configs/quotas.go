@@ -111,20 +111,22 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivityById":            2,
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivityById":              2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecutionOptions": 2,
-		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":           2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":           2, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeploymentVersion":    2, // [cleanup-wv-pre-release]
 
 		// P3: Status Querying APIs
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":             3,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility": 3,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":      3,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":       3,
-		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":                 3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":              3,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes":     3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation":        3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeDeployment":            3,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":          3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":               3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility":   3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":        3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":         3,
+		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":                   3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":                3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes":       3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation":          3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeDeployment":              3, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":            3, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
 
 		// P4: Progress APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      4,
