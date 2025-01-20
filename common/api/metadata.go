@@ -145,11 +145,13 @@ var (
 		"UnpauseActivity":                    {Scope: ScopeNamespace, Access: AccessWrite},
 		"ResetActivity":                      {Scope: ScopeNamespace, Access: AccessWrite},
 		"UpdateWorkflowExecutionOptions":     {Scope: ScopeNamespace, Access: AccessWrite},
-		"DescribeDeployment":                 {Scope: ScopeNamespace, Access: AccessReadOnly},
-		"ListDeployments":                    {Scope: ScopeNamespace, Access: AccessReadOnly},
-		"GetDeploymentReachability":          {Scope: ScopeNamespace, Access: AccessReadOnly},
-		"GetCurrentDeployment":               {Scope: ScopeNamespace, Access: AccessReadOnly},
-		"SetCurrentDeployment":               {Scope: ScopeNamespace, Access: AccessWrite},
+		"DescribeDeployment":                 {Scope: ScopeNamespace, Access: AccessReadOnly}, // [cleanup-wv-pre-release]
+		"ListDeployments":                    {Scope: ScopeNamespace, Access: AccessReadOnly}, // [cleanup-wv-pre-release]
+		"GetDeploymentReachability":          {Scope: ScopeNamespace, Access: AccessReadOnly}, // [cleanup-wv-pre-release]
+		"GetCurrentDeployment":               {Scope: ScopeNamespace, Access: AccessReadOnly}, // [cleanup-wv-pre-release]
+		"SetCurrentDeployment":               {Scope: ScopeNamespace, Access: AccessWrite},    // [cleanup-wv-pre-release]
+		"DescribeWorkerDeploymentVersion":    {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"SetCurrentDeploymentVersion":        {Scope: ScopeNamespace, Access: AccessWrite},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},

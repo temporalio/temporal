@@ -65,48 +65,30 @@ type Client interface {
 		requestID string,
 	) error
 
+	// TODO (Shivam) -
+	// Add ListWorkerDeployment + DescribeWorkerDeployment + DeleteWorkerDeployment + DeleteDeploymentVersion
+
 	DescribeVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		seriesName string,
-		buildID string,
-	) (*deploymentpb.DeploymentInfo, error)
-
-	GetCurrentVersion(
-		ctx context.Context,
-		namespaceEntry *namespace.Namespace,
-		seriesName string,
-	) (*deploymentpb.DeploymentInfo, error)
-
-	ListVersions(
-		ctx context.Context,
-		namespaceEntry *namespace.Namespace,
-		seriesName string,
-		pageSize int,
-		nextPageToken []byte,
-	) ([]*deploymentpb.DeploymentListInfo, []byte, error)
-
-	GetVersionReachability(
-		ctx context.Context,
-		namespaceEntry *namespace.Namespace,
-		seriesName string,
-		buildID string,
-	) (*workflowservice.GetDeploymentReachabilityResponse, error)
+		version string,
+	) (*deploymentpb.WorkerDeploymentVersionInfo, error)
 
 	SetCurrentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		deployment *deploymentpb.Deployment,
+		deploymentName string,
+		version string,
 		updateMetadata *deploymentpb.UpdateDeploymentMetadata,
 		identity string,
 		requestID string,
-	) (*deploymentpb.DeploymentInfo, *deploymentpb.DeploymentInfo, error)
+	) (*deploymentpb.WorkerDeploymentVersionInfo, *deploymentpb.WorkerDeploymentVersionInfo, error)
 
 	// Only used internally by Worker Deployment Version workflow:
-	Start(
+	StartWorkerDeployment(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		seriesName string,
+		deploymentName string,
 		identity string,
 		requestID string,
 	) error
@@ -126,7 +108,7 @@ type ErrMaxTaskQueuesInDeployment struct{ error }
 
 type ErrRegister struct{ error }
 
-// ClientImpl implements StoreClient
+// ClientImpl implements Client
 type ClientImpl struct {
 	logger                    log.Logger
 	historyClient             historyservice.HistoryServiceClient
@@ -187,23 +169,18 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 func (d *ClientImpl) DescribeVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	seriesName string,
-	buildID string,
-) (_ *deploymentpb.DeploymentInfo, retErr error) {
+	version string,
+) (_ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("DescribeDeployment", &retErr, seriesName, buildID)()
+	defer d.record("DescribeVersion", &retErr, version)()
 
 	// validating params
-	err := ValidateVersionWfParams(WorkerDeploymentFieldName, seriesName, d.maxIDLengthLimit())
-	if err != nil {
-		return nil, err
-	}
-	err = ValidateVersionWfParams(BuildIDFieldName, buildID, d.maxIDLengthLimit())
+	err := ValidateVersionWfParams(WorkerDeploymentVersionFieldName, version, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	deploymentWorkflowID := GenerateVersionWorkflowID(seriesName, buildID)
+	deploymentWorkflowID := GenerateVersionWorkflowID(version)
 
 	req := &historyservice.QueryWorkflowRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -220,7 +197,7 @@ func (d *ClientImpl) DescribeVersion(
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
-			return nil, serviceerror.NewNotFound("Deployment not found")
+			return nil, serviceerror.NewNotFound("Deployment Version not found")
 		}
 		return nil, err
 	}
@@ -234,56 +211,21 @@ func (d *ClientImpl) DescribeVersion(
 	return stateToInfo(queryResponse.VersionState), nil
 }
 
-// TODO (carly): pass deployment instead of seriesName + buildId in all these APIs -- separate PR
-func (d *ClientImpl) GetVersionReachability(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	seriesName string,
-	buildID string,
-) (_ *workflowservice.GetDeploymentReachabilityResponse, retErr error) {
-	//revive:disable-next-line:defer
-	defer d.record("GetDeploymentReachability", &retErr, seriesName, buildID)()
-
-	deployInfo, err := d.DescribeVersion(ctx, namespaceEntry, seriesName, buildID)
-	if err != nil {
-		return nil, err
-	}
-	reachability, lastUpdateTime, err := getDeploymentReachability(
-		ctx,
-		namespaceEntry.ID().String(),
-		namespaceEntry.Name().String(),
-		seriesName,
-		buildID,
-		deployInfo.GetIsCurrent(),
-		d.reachabilityCache,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.GetDeploymentReachabilityResponse{
-		DeploymentInfo: deployInfo,
-		Reachability:   reachability,
-		LastUpdateTime: timestamppb.New(lastUpdateTime),
-	}, nil
-}
-
 func (d *ClientImpl) GetCurrentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	seriesName string,
-) (_ *deploymentpb.DeploymentInfo, retErr error) {
+	deploymentName string,
+) (_ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("GetCurrentDeployment", &retErr, seriesName)()
+	defer d.record("GetCurrentDeployment", &retErr, deploymentName)()
 
 	// Validating params
-	err := ValidateVersionWfParams(WorkerDeploymentFieldName, seriesName, d.maxIDLengthLimit())
+	err := ValidateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	workflowID := GenerateWorkflowID(seriesName)
+	workflowID := GenerateWorkflowID(deploymentName)
 	resp, err := d.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: namespaceEntry.ID().String(),
 		Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -318,7 +260,7 @@ func (d *ClientImpl) GetCurrentVersion(
 		return nil, nil
 	}
 
-	deploymentInfo, err := d.DescribeVersion(ctx, namespaceEntry, seriesName, memo.CurrentVersion)
+	deploymentInfo, err := d.DescribeVersion(ctx, namespaceEntry, memo.CurrentVersion)
 	if err != nil {
 		return nil, nil
 	}
@@ -326,70 +268,21 @@ func (d *ClientImpl) GetCurrentVersion(
 	return deploymentInfo, nil
 }
 
-func (d *ClientImpl) ListVersions(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	seriesName string,
-	pageSize int,
-	nextPageToken []byte,
-) (_ []*deploymentpb.DeploymentListInfo, _ []byte, retErr error) {
-	//revive:disable-next-line:defer
-	defer d.record("ListDeployments", &retErr, seriesName)()
-
-	query := ""
-	if seriesName != "" {
-		query = BuildQueryWithWorkerDeploymentFilter(seriesName)
-	} else {
-		query = DeploymentVisibilityBaseListQuery
-	}
-
-	if pageSize == 0 {
-		pageSize = d.visibilityMaxPageSize(namespaceEntry.Name().String())
-	}
-
-	persistenceResp, err := d.visibilityManager.ListWorkflowExecutions(
-		ctx,
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   namespaceEntry.ID(),
-			Namespace:     namespaceEntry.Name(),
-			PageSize:      pageSize,
-			NextPageToken: nextPageToken,
-			Query:         query,
-		},
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	deployments := make([]*deploymentpb.DeploymentListInfo, len(persistenceResp.Executions))
-	for i, ex := range persistenceResp.Executions {
-		versionWorkflowMemo := DecodeVersionMemo(ex.GetMemo())
-
-		deploymentListInfo := &deploymentpb.DeploymentListInfo{
-			Deployment: &deploymentpb.Deployment{SeriesName: versionWorkflowMemo.DeploymentName, BuildId: versionWorkflowMemo.Version},
-			CreateTime: versionWorkflowMemo.CreateTime,
-			IsCurrent:  versionWorkflowMemo.IsCurrentDeployment,
-		}
-		deployments[i] = deploymentListInfo
-	}
-
-	return deployments, persistenceResp.NextPageToken, nil
-}
-
 func (d *ClientImpl) SetCurrentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	deployment *deploymentpb.Deployment,
+	deploymentName string,
+	version string,
 	updateMetadata *deploymentpb.UpdateDeploymentMetadata,
 	identity string,
 	requestID string,
-) (_ *deploymentpb.DeploymentInfo, _ *deploymentpb.DeploymentInfo, retErr error) {
+) (_ *deploymentpb.WorkerDeploymentVersionInfo, _ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("SetCurrentDeployment", &retErr, namespaceEntry.Name(), deployment, identity)()
+	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
 		Identity:  identity,
-		Version:   deployment.BuildId,
+		Version:   version,
 		RequestId: requestID,
 	})
 	if err != nil {
@@ -398,7 +291,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
 		namespaceEntry,
-		deployment.SeriesName,
+		deploymentName,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
 			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
@@ -412,7 +305,7 @@ func (d *ClientImpl) SetCurrentVersion(
 
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil, nil, serviceerror.NewAlreadyExist(fmt.Sprintf("Build ID %q is already current for %q",
-			deployment.BuildId, deployment.SeriesName))
+			version, deploymentName))
 	} else if failure != nil {
 		// TODO: is there an easy way to recover the original type here?
 		return nil, nil, serviceerror.NewInternal(failure.Message)
@@ -430,7 +323,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	return stateToInfo(nil), stateToInfo(nil), nil
 }
 
-func (d *ClientImpl) Start(
+func (d *ClientImpl) StartWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
@@ -438,7 +331,7 @@ func (d *ClientImpl) Start(
 	requestID string,
 ) (retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("StartDeploymentSeries", &retErr, namespaceEntry.Name(), deploymentName, identity)()
+	defer d.record("StartWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
 
 	workflowID := GenerateWorkflowID(deploymentName)
 
@@ -487,7 +380,7 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 	requestID string,
 ) (_ *deploymentspb.SyncVersionStateResponse, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("SyncDeploymentWorkflowFromSeries", &retErr, namespaceEntry.Name(), deploymentName, version, args, identity)()
+	defer d.record("SyncVersionWorkflowFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, args, identity)()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
@@ -546,12 +439,12 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	if err != nil {
 		return nil, err
 	}
-	err = ValidateVersionWfParams(BuildIDFieldName, version, d.maxIDLengthLimit())
+	err = ValidateVersionWfParams(WorkerDeploymentVersionFieldName, version, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
 
-	workflowID := GenerateVersionWorkflowID(deploymentName, version)
+	workflowID := GenerateVersionWorkflowID(version)
 
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
@@ -761,7 +654,7 @@ func (d *ClientImpl) buildInitialMemo(deploymentName string) (*commonpb.Memo, er
 
 func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
+	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentVersionNamespaceDivision))
 	return sa
 }
 
@@ -790,22 +683,28 @@ func (d *ClientImpl) record(operation string, retErr *error, args ...any) func()
 }
 
 //nolint:staticcheck
-func stateToInfo(state *deploymentspb.VersionLocalState) *deploymentpb.DeploymentInfo {
+func stateToInfo(state *deploymentspb.VersionLocalState) *deploymentpb.WorkerDeploymentVersionInfo {
 	if state == nil {
 		return nil
 	}
 
-	taskQueues := make([]*deploymentpb.DeploymentInfo_TaskQueueInfo, 0, len(state.TaskQueueFamilies)*2)
+	taskQueues := make([]*deploymentpb.WorkerDeploymentVersionInfo_DeploymentVersionTaskQueueInfo, 0, len(state.TaskQueueFamilies)*2)
 	for taskQueueName, taskQueueFamilyInfo := range state.TaskQueueFamilies {
 		for taskQueueType := range taskQueueFamilyInfo.TaskQueues {
-			element := &deploymentpb.DeploymentInfo_TaskQueueInfo{
+			element := &deploymentpb.WorkerDeploymentVersionInfo_DeploymentVersionTaskQueueInfo{
 				Name: taskQueueName,
 				Type: enumspb.TaskQueueType(taskQueueType),
-				// FirstPollerTime: taskQueueInfo.FirstPollerTime,
+				// TODO (Shivam): Add fields here as needed.
 			}
 			taskQueues = append(taskQueues, element)
 		}
 	}
 
-	return nil
+	// TODO (Shivam): Add metadata and aggregated pollers status
+	return &deploymentpb.WorkerDeploymentVersionInfo{
+		DeploymentName: state.DeploymentName,
+		Version:        state.Version,
+		CreateTime:     state.CreateTime,
+		TaskQueueInfos: taskQueues,
+	}
 }
