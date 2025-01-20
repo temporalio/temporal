@@ -705,6 +705,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) ListWorkflowExecutions(arg0, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkflowExecutions", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ListWorkflowExecutions), varargs...)
 }
 
+// ManageActivity mocks base method.
+func (m *MockWorkflowServiceClient) ManageActivity(arg0 context.Context, arg1 *workflowservice.ManageActivityRequest, arg2 ...grpc.CallOption) (*workflowservice.ManageActivityResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ManageActivity", varargs...)
+	ret0, _ := ret[0].(*workflowservice.ManageActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ManageActivity indicates an expected call of ManageActivity.
+func (mr *MockWorkflowServiceClientMockRecorder) ManageActivity(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ManageActivity", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ManageActivity), varargs...)
+}
+
 // PatchSchedule mocks base method.
 func (m *MockWorkflowServiceClient) PatchSchedule(arg0 context.Context, arg1 *workflowservice.PatchScheduleRequest, arg2 ...grpc.CallOption) (*workflowservice.PatchScheduleResponse, error) {
 	m.ctrl.T.Helper()
