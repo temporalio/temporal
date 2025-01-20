@@ -12,6 +12,7 @@ breaking:
   # Uncomment this to temporarily ignore specific files or directories:
   ignore:
     - temporal/server/api/historyservice/v1/
+    - temporal/server/api/deployment/v1/message.proto
 
 lint:
   use:

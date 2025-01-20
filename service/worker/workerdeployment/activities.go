@@ -40,7 +40,7 @@ type (
 )
 
 func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
-	identity := "deployment series workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
 	res, err := a.deploymentClient.SyncVersionWorkflowFromWorkerDeployment(
 		ctx,
 		a.namespace,
