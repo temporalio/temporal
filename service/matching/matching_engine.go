@@ -76,6 +76,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/deployment"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -128,6 +129,7 @@ type (
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
 		deploymentStoreClient         deployment.DeploymentStoreClient
+		workerDeploymentClient        workerdeployment.Client
 		tokenSerializer               *tasktoken.Serializer
 		historySerializer             serialization.Serializer
 		logger                        log.Logger
@@ -203,7 +205,8 @@ func NewEngine(
 	taskManager persistence.TaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
+	deploymentStoreClient deployment.DeploymentStoreClient, // [wv-cleanup-pre-release]
+	workerDeploymentClient workerdeployment.Client,
 	config *Config,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
@@ -225,6 +228,7 @@ func NewEngine(
 		matchingRawClient:             matchingRawClient,
 		deploymentStoreClient:         deploymentStoreClient,
 		tokenSerializer:               tasktoken.NewSerializer(),
+		workerDeploymentClient:        workerDeploymentClient,
 		historySerializer:             serialization.NewSerializer(),
 		logger:                        log.With(logger, tag.ComponentMatchingEngine),
 		throttledLogger:               log.With(throttledLogger, tag.ComponentMatchingEngine),
@@ -590,7 +594,7 @@ pollLoop:
 			return nil, err
 		}
 		pollMetadata := &pollMetadata{
-			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			workerVersionCapabilities: request.WorkerVersionCapabilities, // [deprecated=true]
 			forwardedFrom:             req.GetForwardedSource(),
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
@@ -827,7 +831,7 @@ pollLoop:
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		pollMetadata := &pollMetadata{
-			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			workerVersionCapabilities: request.WorkerVersionCapabilities, // [deprecated=true]
 			forwardedFrom:             req.GetForwardedSource(),
 		}
 		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
