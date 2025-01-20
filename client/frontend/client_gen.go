@@ -133,6 +133,16 @@ func (c *clientImpl) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkerDeploymentVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeWorkerDeploymentVersion(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkflowExecutionRequest,
@@ -621,6 +631,16 @@ func (c *clientImpl) SetCurrentDeployment(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.SetCurrentDeployment(ctx, request, opts...)
+}
+
+func (c *clientImpl) SetCurrentDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.SetCurrentDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SetCurrentDeploymentVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SetCurrentDeploymentVersion(ctx, request, opts...)
 }
 
 func (c *clientImpl) ShutdownWorker(

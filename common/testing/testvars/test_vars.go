@@ -232,27 +232,48 @@ func (tv *TestVars) RequestID() string {
 	return getOrCreate(tv, "request_id", tv.uuidString, tv.uuidNSetter)
 }
 
+// [cleanup-wv-pre-release]
 func (tv *TestVars) BuildID() string {
 	return getOrCreate(tv, "build_id", tv.uniqueString, tv.stringNSetter)
 }
 
+// [cleanup-wv-pre-release]
 func (tv *TestVars) WithBuildIDNumber(n int) *TestVars {
 	return tv.cloneSetN("build_id", n)
 }
 
+// [cleanup-wv-pre-release]
 func (tv *TestVars) DeploymentSeries() string {
 	return getOrCreate(tv, "deployment_series", tv.uniqueString, tv.stringNSetter)
 }
 
+// [cleanup-wv-pre-release]
 func (tv *TestVars) WithDeploymentSeriesNumber(n int) *TestVars {
 	return tv.cloneSetN("deployment_series", n)
 }
 
+// [cleanup-wv-pre-release]
 func (tv *TestVars) Deployment() *deploymentpb.Deployment {
 	return &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
 		BuildId:    tv.BuildID(),
 	}
+}
+
+func (tv *TestVars) DeploymentVersion() string {
+	return getOrCreate(tv, "version", tv.uniqueString, tv.stringNSetter)
+}
+
+func (tv *TestVars) WithDeploymentVersionNumber(n int) *TestVars {
+	return tv.cloneSetN("version", n)
+}
+
+func (tv *TestVars) DeploymentName() string {
+	return getOrCreate(tv, "deployment_name", tv.uniqueString, tv.stringNSetter)
+}
+
+func (tv *TestVars) WithDeploymentNameNumber(n int) *TestVars {
+	return tv.cloneSetN("deployment_name", n)
 }
 
 func (tv *TestVars) DeploymentTransition() *workflowpb.DeploymentTransition {

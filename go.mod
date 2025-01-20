@@ -7,8 +7,6 @@ retract (
 	v1.26.0 // Published accidentally.
 )
 
-replace go.temporal.io/api => go.temporal.io/api v1.43.2-0.20250116180204-00f5e1d8a293
-
 require (
 	cloud.google.com/go/storage v1.41.0
 	github.com/aws/aws-sdk-go v1.53.15
@@ -21,6 +19,7 @@ require (
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gocql/gocql v1.6.0
 	github.com/golang-jwt/jwt/v4 v4.5.1
+	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
@@ -102,7 +101,6 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
@@ -156,3 +154,5 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
+
+replace go.temporal.io/api => github.com/temporalio/api-go v1.43.2-0.20250117224308-f070b00264f6
