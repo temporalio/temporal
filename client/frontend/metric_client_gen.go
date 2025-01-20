@@ -173,6 +173,20 @@ func (c *metricClient) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DescribeWorkerDeploymentVersionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDescribeWorkerDeploymentVersion")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeWorkerDeploymentVersion(ctx, request, opts...)
+}
+
 func (c *metricClient) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkflowExecutionRequest,
@@ -857,6 +871,20 @@ func (c *metricClient) SetCurrentDeployment(
 	}()
 
 	return c.client.SetCurrentDeployment(ctx, request, opts...)
+}
+
+func (c *metricClient) SetCurrentDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.SetCurrentDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.SetCurrentDeploymentVersionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientSetCurrentDeploymentVersion")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.SetCurrentDeploymentVersion(ctx, request, opts...)
 }
 
 func (c *metricClient) ShutdownWorker(
