@@ -485,6 +485,21 @@ func (c *retryableClient) ListTasks(
 	return resp, err
 }
 
+func (c *retryableClient) ManageActivity(
+	ctx context.Context,
+	request *historyservice.ManageActivityRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ManageActivityResponse, error) {
+	var resp *historyservice.ManageActivityResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ManageActivity(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,

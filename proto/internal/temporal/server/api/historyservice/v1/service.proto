@@ -427,4 +427,27 @@ service HistoryService {
     rpc ResetActivity (ResetActivityRequest) returns (ResetActivityResponse) {
     }
 
+    // ManageActivity apply reset/pause/unpause/update operations to an activity specified by its ID and/or type.
+    // Either activity id or activity type must be provided.
+    // Supported operations:
+    // 1. Reset operation. Resets the activity to its initial state.
+    // Resetting the activity. This operation will reset the number of attempts.
+    // If activity is paused - activity will be unpaused bt default (see 'keep_paused' flag).
+    // If activity is currently waiting for retry - it will be scheduled immediately.
+    // Flags:
+    // 'reset_heartbeats' indicates that activity should reset heartbeat details.
+    // 'keep_paused'- prevents activity from being unpaused.
+    // 2. Pause operation. Pauses the activity. If activity was already paused it is no-op.
+    // 3. Unpause operation. Unpauses the activity. If activity was not paused this will be a no-op.
+    // If activity was waiting for retry - it will be scheduled immediately.
+    // Unpause operation supports the following flags:
+    // * jitter - if set, the activity will start at a random time within the specified jitter duration.
+    // 4. Update operation - updates the activity options.
+    // for details see UnpauseActivityById.
+    // Returns a `NotFound` error if there is no pending activity with the provided ID or type.
+    // (-- api-linter: core::0134::method-signature=disabled
+    // (-- api-linter: core::0134::response-message-name=disabled
+    rpc ManageActivity (ManageActivityRequest) returns (ManageActivityResponse) {
+    }
+
 }

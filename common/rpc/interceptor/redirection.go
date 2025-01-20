@@ -131,6 +131,7 @@ var (
 		"PauseActivityById":              func() any { return &workflowservice.PauseActivityByIdResponse{} },
 		"UnpauseActivityById":            func() any { return &workflowservice.UnpauseActivityByIdResponse{} },
 		"ResetActivityById":              func() any { return &workflowservice.ResetActivityByIdResponse{} },
+		"ManageActivity":                 func() any { return &workflowservice.ManageActivityResponse{} },
 		"UpdateWorkflowExecutionOptions": func() any { return &workflowservice.UpdateWorkflowExecutionOptionsResponse{} },
 
 		"DescribeDeployment":        func() any { return &workflowservice.DescribeDeploymentResponse{} },

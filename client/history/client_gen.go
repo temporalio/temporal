@@ -558,6 +558,26 @@ func (c *clientImpl) ListTasks(
 	return response, nil
 }
 
+func (c *clientImpl) ManageActivity(
+	ctx context.Context,
+	request *historyservice.ManageActivityRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ManageActivityResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetManageRequest().GetWorkflowId())
+	var response *historyservice.ManageActivityResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ManageActivity(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,
