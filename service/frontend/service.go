@@ -186,6 +186,9 @@ type Config struct {
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	// Enable deployment version RPCs
+	EnableDeploymentVersions dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
 	// Enable batcher RPCs
 	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Batch operation dynamic configs
@@ -319,7 +322,9 @@ func NewConfig(
 
 		EnableSchedules: dynamicconfig.FrontendEnableSchedules.Get(dc),
 
-		EnableDeployments: dynamicconfig.EnableDeployments.Get(dc),
+		// [cleanup-wv-pre-release]
+		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
+		EnableDeploymentVersions: dynamicconfig.EnableDeploymentVersions.Get(dc),
 
 		EnableBatcher:                   dynamicconfig.FrontendEnableBatcher.Get(dc),
 		MaxConcurrentBatchOperation:     dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
