@@ -49,15 +49,15 @@ func (a *VersionActivities) StartWorkerDeploymentWorkflow(
 	input *deploymentspb.StartWorkerDeploymentRequest,
 ) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("starting deployment workflow", "deploymentName", input.DeploymentName)
-	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.deploymentClient.Start(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
+	logger.Info("starting worker-deployment workflow", "deploymentName", input.DeploymentName)
+	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	return a.deploymentClient.StartWorkerDeployment(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
 }
 
-func (a *VersionActivities) SyncWorkerDeploymentUserData(
+func (a *VersionActivities) SyncDeploymentVersionUserData(
 	ctx context.Context,
-	input *deploymentspb.SyncWorkerDeploymentUserDataRequest,
-) (*deploymentspb.SyncWorkerDeploymentUserDataResponse, error) {
+	input *deploymentspb.SyncDeploymentVersionUserDataRequest,
+) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 	logger := activity.GetLogger(ctx)
 
 	errs := make(chan error)
@@ -66,14 +66,14 @@ func (a *VersionActivities) SyncWorkerDeploymentUserData(
 	maxVersionByName := make(map[string]int64)
 
 	for _, e := range input.Sync {
-		go func(syncData *deploymentspb.SyncWorkerDeploymentUserDataRequest_SyncUserData) {
-			logger.Info("syncing task queue userdata for deployment", "taskQueue", syncData.Name, "type", syncData.Type)
+		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
+			logger.Info("syncing task queue userdata for deployment version", "taskQueue", syncData.Name, "type", syncData.Type)
 			res, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 				NamespaceId:   a.namespace.ID().String(),
 				TaskQueue:     syncData.Name,
 				TaskQueueType: syncData.Type,
-				// Deployment:    input.Deployment,
-				// Data:          syncData.Data,
+				Deployment:    nil, // TODO (Shivam): Pass nil until matchingservice.SyncDeploymentUserDataRequest gets updated.
+				Data:          nil, // TODO (Shivam): Pass nil until matchingservice.SyncDeploymentUserDataRequest gets updated.
 			})
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
@@ -93,7 +93,7 @@ func (a *VersionActivities) SyncWorkerDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentspb.SyncWorkerDeploymentUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
+	return &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
 }
 
 func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context.Context, input *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
