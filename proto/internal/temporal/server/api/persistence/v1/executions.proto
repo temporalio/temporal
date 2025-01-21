@@ -676,6 +676,7 @@ message NexusOperationInfo {
     // Operation name.
     string operation = 3;
 
+    // reserved due to removal of delete_on_completion
     reserved 4;
 
     // Token for fetching the scheduled event.
