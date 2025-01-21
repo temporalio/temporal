@@ -55,7 +55,9 @@ func TestWorkerDeploymentSuite(t *testing.T) {
 func (s *WorkerDeploymentSuite) SetupSuite() {
 	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 		dynamicconfig.EnableDeploymentVersions.Key():                   true,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true, // [wv-cleanup-pre-release]
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true, // [wv-cleanup-pre-release]
+		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true, // [wv-cleanup-pre-release]
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key():        true,
 
 		// Make sure we don't hit the rate limiter in tests
