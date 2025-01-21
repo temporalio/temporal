@@ -81,6 +81,7 @@ message WorkerDeploymentLocalState {
     google.protobuf.Timestamp current_changed_time = 2;
     // experimental
     repeated string versions = 3; 
+    google.protobuf.Timestamp create_time = 4;
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -114,8 +115,8 @@ message QueryDescribeVersionResponse {
 }
 
 // used as Worker Deployment Version workflow query response:
-message QueryRegisteredVersionsResponse {
-    repeated string versions = 1;
+message QueryDescribeWorkerDeploymentResponse {
+    WorkerDeploymentLocalState state = 1;
 }
 
 // used as Worker Deployment Version workflow memo:

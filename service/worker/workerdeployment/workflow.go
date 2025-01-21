@@ -25,6 +25,8 @@
 package workerdeployment
 
 import (
+	"time"
+
 	"github.com/pborman/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
@@ -33,6 +35,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -62,21 +65,14 @@ func Workflow(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflow
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.State == nil {
 		d.State = &deploymentspb.WorkerDeploymentLocalState{}
+		d.State.CreateTime = timestamppb.New(time.Now())
 	}
 
 	var pendingUpdates int
 
-	err := workflow.SetQueryHandler(ctx, QueryCurrentVersion, func() (string, error) {
-		return d.State.CurrentVersion, nil
-	})
-	if err != nil {
-		d.logger.Info("SetQueryHandler failed for WorkerDeployment workflow with error: " + err.Error())
-		return err
-	}
-
-	err = workflow.SetQueryHandler(ctx, QueryRegisteredVersions, func() (*deploymentspb.QueryRegisteredVersionsResponse, error) {
-		return &deploymentspb.QueryRegisteredVersionsResponse{
-			Versions: d.State.Versions,
+	err := workflow.SetQueryHandler(ctx, QueryDescribeDeployment, func() (*deploymentspb.QueryDescribeWorkerDeploymentResponse, error) {
+		return &deploymentspb.QueryDescribeWorkerDeploymentResponse{
+			State: d.State,
 		}, nil
 	})
 	if err != nil {

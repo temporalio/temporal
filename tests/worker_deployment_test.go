@@ -119,6 +119,8 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment() {
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetCreateTime())
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetCreateTime())
+
+		a.NotNil(resp.GetWorkerDeploymentInfo().GetCreateTime())
 	}, time.Second*10, time.Millisecond*1000)
 }
 

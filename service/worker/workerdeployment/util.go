@@ -57,8 +57,7 @@ const (
 
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
-	QueryCurrentVersion     = "current-version"     // for Worker Deployment wf
-	QueryRegisteredVersions = "registered-versions" // for Worker Deployment wf
+	QueryDescribeDeployment = "describe-deployment" // for Worker Deployment wf
 
 	// Memos
 	WorkerDeploymentVersionMemoField = "WorkerDeploymentVersionMemo" // for Worker Deployment Version wf

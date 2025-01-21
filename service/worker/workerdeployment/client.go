@@ -249,7 +249,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: deploymentWorkflowID,
 			},
-			Query: &querypb.WorkflowQuery{QueryType: QueryRegisteredVersions},
+			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
 		},
 	}
 
@@ -258,15 +258,17 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		return nil, err
 	}
 
-	var queryResponse deploymentspb.QueryRegisteredVersionsResponse
+	var queryResponse deploymentspb.QueryDescribeWorkerDeploymentResponse
 	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
 		return nil, err
 	}
 
+	// TODO (Shivam) - StatetoInfo type thing here as well?
 	var workerDeploymentInfo deploymentpb.WorkerDeploymentInfo
 	workerDeploymentInfo.Name = deploymentName
-	for _, version := range queryResponse.Versions {
+	workerDeploymentInfo.CreateTime = queryResponse.State.CreateTime
+	for _, version := range queryResponse.State.Versions {
 		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, version)
 		if err != nil {
 			return nil, err
@@ -277,7 +279,6 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 			CreateTime: versionInfo.CreateTime,
 		})
 	}
-
 	// TODO (Shivam) - LastEditorIdentity will be the latest client that updated the deployment version. Will be implemented after setCurrentVersion is implemented.
 
 	return &workerDeploymentInfo, nil
