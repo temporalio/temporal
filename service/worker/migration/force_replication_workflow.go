@@ -434,7 +434,6 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 				Executions:       workflowExecutions,
 				RPS:              params.OverallRps / float64(params.ConcurrentActivityCount),
 				GetParentInfoRPS: params.GetParentInfoRPS / float64(params.ConcurrentActivityCount),
-				EnableParentInfo: params.EnableParentInfo,
 			})
 
 		pendingGenerateTasks++

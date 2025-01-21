@@ -33,7 +33,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/testsuite"
@@ -629,19 +628,10 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Success() {
 		RPS:              10,
 		GetParentInfoRPS: 10,
 		Executions:       []*commonpb.WorkflowExecution{execution1, execution2},
-		EnableParentInfo: true,
 	}
 
 	for i := 0; i < len(request.Executions); i++ {
 		we := request.Executions[i]
-		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&historyservice.DescribeWorkflowExecutionRequest{
-			NamespaceId: mockedNamespaceID,
-			Request: &workflowservice.DescribeWorkflowExecutionRequest{
-				Execution: we,
-			},
-		})).Return(&historyservice.DescribeWorkflowExecutionResponse{
-			WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{},
-		}, nil).Times(1)
 		s.mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), protomock.Eq(&historyservice.GenerateLastHistoryReplicationTasksRequest{
 			NamespaceId: mockedNamespaceID,
 			Execution:   we,
@@ -657,84 +647,6 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Success() {
 	s.Equal(lastIdx, lastHeartBeat)
 }
 
-func (s *activitiesSuite) TestGenerateReplicationTasks_WithParentInfo_Success() {
-	env, iceptor := s.initEnv()
-
-	request := generateReplicationTasksRequest{
-		NamespaceID:      mockedNamespaceID,
-		RPS:              10,
-		GetParentInfoRPS: 10,
-		Executions:       []*commonpb.WorkflowExecution{execution1},
-		EnableParentInfo: true,
-	}
-
-	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: mockedNamespaceID,
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Execution: execution1,
-		},
-	})).Return(&historyservice.DescribeWorkflowExecutionResponse{
-		WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{
-			ParentNamespaceId: mockedNamespaceID,
-			ParentExecution: &commonpb.WorkflowExecution{
-				WorkflowId: execution2.GetWorkflowId(),
-				RunId:      execution2.GetRunId(),
-			},
-		},
-	}, nil).Times(1)
-	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: mockedNamespaceID,
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Execution: execution2,
-		},
-	})).Return(&historyservice.DescribeWorkflowExecutionResponse{
-		WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{},
-	}, nil).Times(1)
-	s.mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), protomock.Eq(&historyservice.GenerateLastHistoryReplicationTasksRequest{
-		NamespaceId: mockedNamespaceID,
-		Execution:   execution1,
-	})).Return(&historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
-	s.mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), protomock.Eq(&historyservice.GenerateLastHistoryReplicationTasksRequest{
-		NamespaceId: mockedNamespaceID,
-		Execution:   execution2,
-	})).Return(&historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
-
-	_, err := env.ExecuteActivity(s.a.GenerateReplicationTasks, &request)
-	s.NoError(err)
-
-	s.Greater(len(iceptor.generateReplicationRecordedHeartbeats), 0)
-	lastIdx := len(iceptor.generateReplicationRecordedHeartbeats) - 1
-	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
-	s.Equal(lastIdx, lastHeartBeat)
-}
-
-func (s *activitiesSuite) TestGenerateReplicationTasks_NotFound() {
-	env, iceptor := s.initEnv()
-
-	request := generateReplicationTasksRequest{
-		NamespaceID:      mockedNamespaceID,
-		RPS:              10,
-		GetParentInfoRPS: 10,
-		Executions:       []*commonpb.WorkflowExecution{execution1},
-		EnableParentInfo: true,
-	}
-
-	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: mockedNamespaceID,
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Execution: execution1,
-		},
-	})).Return(nil, serviceerror.NewNotFound("")).Times(1)
-
-	_, err := env.ExecuteActivity(s.a.GenerateReplicationTasks, &request)
-	s.NoError(err)
-
-	s.Greater(len(iceptor.generateReplicationRecordedHeartbeats), 0)
-	lastIdx := len(iceptor.generateReplicationRecordedHeartbeats) - 1
-	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
-	s.Equal(0, lastHeartBeat)
-}
-
 func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	env, iceptor := s.initEnv()
 
@@ -743,34 +655,17 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 		RPS:              10,
 		GetParentInfoRPS: 10,
 		Executions:       []*commonpb.WorkflowExecution{execution1, execution2},
-		EnableParentInfo: true,
 	}
 
 	s.mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), protomock.Eq(&historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: mockedNamespaceID,
 		Execution:   execution1,
 	})).Return(&historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
-	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: mockedNamespaceID,
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Execution: execution1,
-		},
-	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
-		WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{},
-	}, nil).Times(1)
 
 	s.mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), protomock.Eq(&historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: mockedNamespaceID,
 		Execution:   execution2,
 	})).Return(nil, serviceerror.NewInternal("")).Times(1)
-	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: mockedNamespaceID,
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Execution: execution2,
-		},
-	})).Return(&historyservice.DescribeWorkflowExecutionResponse{
-		WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{},
-	}, nil).Times(1)
 
 	_, err := env.ExecuteActivity(s.a.GenerateReplicationTasks, &request)
 	s.Error(err)
@@ -779,46 +674,6 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	lastIdx := len(iceptor.generateReplicationRecordedHeartbeats) - 1
 	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
 	// Only the generation of 1st execution suceeded.
-	s.Equal(0, lastHeartBeat)
-}
-
-func (s *activitiesSuite) TestGenerateReplicationTasks_WithParentInfo_Failed() {
-	env, iceptor := s.initEnv()
-
-	request := generateReplicationTasksRequest{
-		NamespaceID:      mockedNamespaceID,
-		RPS:              10,
-		GetParentInfoRPS: 10,
-		Executions:       []*commonpb.WorkflowExecution{execution1, execution2},
-		EnableParentInfo: true,
-	}
-
-	s.mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), protomock.Eq(&historyservice.GenerateLastHistoryReplicationTasksRequest{
-		NamespaceId: mockedNamespaceID,
-		Execution:   execution1,
-	})).Return(&historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
-	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: mockedNamespaceID,
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Execution: execution1,
-		},
-	})).Return(&historyservice.DescribeWorkflowExecutionResponse{
-		WorkflowExecutionInfo: &workflow.WorkflowExecutionInfo{},
-	}, nil).Times(1)
-	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: mockedNamespaceID,
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Execution: execution2,
-		},
-	})).Return(nil, serviceerror.NewInternal("")).Times(1)
-
-	_, err := env.ExecuteActivity(s.a.GenerateReplicationTasks, &request)
-	s.Error(err)
-
-	s.Greater(len(iceptor.generateReplicationRecordedHeartbeats), 0)
-	lastIdx := len(iceptor.generateReplicationRecordedHeartbeats) - 1
-	lastHeartBeat := iceptor.generateReplicationRecordedHeartbeats[lastIdx]
-	// Only the generation of 1st execution succeeded.
 	s.Equal(0, lastHeartBeat)
 }
 
