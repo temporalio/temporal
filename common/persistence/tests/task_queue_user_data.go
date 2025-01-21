@@ -87,7 +87,7 @@ func (s *TaskQueueUserDataSuite) TestSetInitialAndIncrement() {
 	version := int64(0) // initial version must be 0
 
 	// check that get returns not found
-	res, err := s.taskManager.GetTaskQueueUserData(s.ctx, &p.GetTaskQueueUserDataRequest{
+	_, err := s.taskManager.GetTaskQueueUserData(s.ctx, &p.GetTaskQueueUserDataRequest{
 		NamespaceID: s.namespaceID,
 		TaskQueue:   tq1,
 	})
@@ -107,7 +107,7 @@ func (s *TaskQueueUserDataSuite) TestSetInitialAndIncrement() {
 	version++
 
 	// check that we can get it back
-	res, err = s.taskManager.GetTaskQueueUserData(s.ctx, &p.GetTaskQueueUserDataRequest{
+	res, err := s.taskManager.GetTaskQueueUserData(s.ctx, &p.GetTaskQueueUserDataRequest{
 		NamespaceID: s.namespaceID,
 		TaskQueue:   tq1,
 	})

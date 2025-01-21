@@ -560,19 +560,16 @@ func (d *MatchingTaskStore) UpdateTaskQueueUserData(
 		// Iterate through results to identify first conflicting row.
 		more := true
 		for more {
-			if name, ok := getFromAnyMap[string](previous, "task_queue_name"); ok {
-				if previousVersion, ok := getFromAnyMap[int64](previous, "version"); ok {
-					if update, ok := request.Updates[name]; ok {
-						if update.Version != previousVersion {
-							if update.Conflicting != nil {
-								*update.Conflicting = true
-							}
-							return &p.ConditionFailedError{
-								Msg: fmt.Sprintf("Failed to update task queues: task queue %q version %d != %d",
-									name, update.Version, previousVersion),
-							}
-						}
-					}
+			name, hasName := getFromAnyMap[string](previous, "task_queue_name")
+			previousVersion, hasVer := getFromAnyMap[int64](previous, "version")
+			update, hasUpdate := request.Updates[name]
+			if hasName && hasVer && hasUpdate && update.Version != previousVersion {
+				if update.Conflicting != nil {
+					*update.Conflicting = true
+				}
+				return &p.ConditionFailedError{
+					Msg: fmt.Sprintf("Failed to update task queues: task queue %q version %d != %d",
+						name, update.Version, previousVersion),
 				}
 			}
 			clear(previous)

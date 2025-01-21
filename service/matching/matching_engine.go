@@ -1839,10 +1839,9 @@ func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, reques
 				// This specific update was the conflicting one. Use InvalidArgument so the
 				// caller does not retry.
 				return nil, serviceerror.NewInvalidArgument(persistenceErr.Error())
-			} else {
-				// This update may or may not be conflicting. Use Unavailable to allow retries.
-				return nil, serviceerror.NewUnavailable(persistenceErr.Error())
 			}
+			// This update may or may not be conflicting. Use Unavailable to allow retries.
+			return nil, serviceerror.NewUnavailable(persistenceErr.Error())
 		}
 		// Other errors from persistence get returned as-is.
 		return nil, persistenceErr
