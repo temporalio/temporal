@@ -82,6 +82,7 @@ func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*tas
 				LastAccessTime:            timestamppb.New(lastAccessTime),
 				RatePerSecond:             defaultValue(value.ratePerSecond, defaultTaskDispatchRPS),
 				WorkerVersionCapabilities: value.workerVersionCapabilities,
+				DeploymentOptions:         value.deploymentOptions,
 			})
 		}
 	}
