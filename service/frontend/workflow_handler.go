@@ -152,22 +152,6 @@ type (
 	}
 )
 
-func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(
-	ctx context.Context,
-	request *workflowservice.DescribeWorkerDeploymentVersionRequest,
-) (*workflowservice.DescribeWorkerDeploymentVersionResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (wh *WorkflowHandler) SetCurrentDeploymentVersion(
-	ctx context.Context,
-	request *workflowservice.SetCurrentDeploymentVersionRequest,
-) (*workflowservice.SetCurrentDeploymentVersionResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
 	config *Config,
