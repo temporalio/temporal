@@ -539,7 +539,12 @@ message ActivityInfo {
 
     // The deployment this activity was dispatched to most recently. Present only if the activity
     // was dispatched to a versioned worker.
+    // Deprecated. Replaced by last_deployment_version.
     temporal.api.deployment.v1.Deployment last_started_deployment = 43;
+
+    // The deployment this activity was dispatched to most recently. Present only if the activity
+    // was dispatched to a versioned worker.
+    temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 44;
 }
 
 // timer_map column
