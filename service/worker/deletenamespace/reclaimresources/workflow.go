@@ -93,15 +93,12 @@ var (
 
 func validateParams(params *ReclaimResourcesParams) error {
 	if params.NamespaceID.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace ID is required", "", nil)
+		return errors.NewInvalidArgument("namespace ID is required", nil)
 	}
-
 	if params.Namespace.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace is required", "", nil)
+		return errors.NewInvalidArgument("namespace is required", nil)
 	}
-
 	params.Config.ApplyDefaults()
-
 	return nil
 }
 
@@ -135,11 +132,56 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 
 	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
+	var (
+		namespaceDeleteDelay = params.NamespaceDeleteDelay
+		cancelDeleteDelay    workflow.CancelFunc
+	)
+	err := workflow.SetUpdateHandlerWithOptions(ctx, "update_namespace_delete_delay", func(ctx workflow.Context, newNamespaceDeleteDelayStr string) (string, error) {
+		// This must succeed because Update validator already validated the input.
+		namespaceDeleteDelay, _ = time.ParseDuration(newNamespaceDeleteDelayStr)
+
+		var updateResult string
+		if namespaceDeleteDelay == 0 {
+			logger.Info("Namespace delete delay is removed. Namespace will be deleted immediately after all workflow executions are deleted.")
+			updateResult = "Namespace delete delay is removed."
+		} else {
+			logger.Info("Namespace delete delay is updated.", "new-delete-delay", namespaceDeleteDelay)
+			updateResult = fmt.Sprintf("Namespace delete delay is updated to %s.", namespaceDeleteDelay)
+		}
+
+		if cancelDeleteDelay != nil {
+			cancelDeleteDelay()
+			logger.Info("Existing namespace delete delay timer is cancelled.")
+			updateResult = "Existing namespace delete delay timer is cancelled. " + updateResult
+		}
+		return updateResult, nil
+	}, workflow.UpdateHandlerOptions{
+		Validator: func(_ workflow.Context, newNamespaceDeleteDelayStr string) error {
+			if newNamespaceDeleteDelayStr == "" {
+				return errors.NewInvalidArgument("delay duration is required", nil)
+			}
+			newDuration, err := time.ParseDuration(newNamespaceDeleteDelayStr)
+			if err != nil {
+				return errors.NewInvalidArgument("unable to parse delay duration", err)
+			}
+			if newDuration < 0 {
+				return errors.NewInvalidArgument("delay duration must be positive", nil)
+			}
+			if newDuration > 30*24*time.Hour {
+				return errors.NewInvalidArgument("delay duration must be less than 30 days", nil)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		return result, err
+	}
+
 	var la *LocalActivities
 
 	// Step 0. This workflow is started right after the namespace is marked as DELETED and renamed.
 	// Wait for namespace cache refresh to make sure no new executions are created.
-	err := workflow.Sleep(ctx, namespaceCacheRefreshDelay)
+	err = workflow.Sleep(ctx, namespaceCacheRefreshDelay)
 	if err != nil {
 		return result, err
 	}
@@ -151,16 +193,22 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	}
 
 	// Step 2. Sleep before deleting namespace from a database.
-	err = workflow.Sleep(ctx, params.NamespaceDeleteDelay)
-	if err != nil {
-		return result, fmt.Errorf("%w: %v", errors.ErrUnableToSleep, err)
+	for namespaceDeleteDelay > 0 {
+		var cancelableCtx workflow.Context
+		cancelableCtx, cancelDeleteDelay = workflow.WithCancel(ctx)
+		logger.Info("Delaying namespace delete. Send 'update_namespace_delete_delay' update to change or clear the delay.",
+			"duration", namespaceDeleteDelay.String())
+
+		ndd := namespaceDeleteDelay
+		namespaceDeleteDelay = 0
+		_ = workflow.Sleep(cancelableCtx, ndd)
 	}
 
 	// Step 3. Delete namespace from database.
 	ctx5 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx5, la.DeleteNamespaceActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
 	if err != nil {
-		return result, fmt.Errorf("%w: DeleteNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 
 	result.NamespaceDeleted = true
@@ -185,7 +233,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params Re
 		var isAdvancedVisibility bool
 		err := workflow.ExecuteLocalActivity(ctx1, la.IsAdvancedVisibilityActivity, params.Namespace).Get(ctx, &isAdvancedVisibility)
 		if err != nil {
-			return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+			return result, err
 		}
 	}
 
@@ -193,7 +241,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params Re
 	var executionsCount int64
 	err := workflow.ExecuteLocalActivity(ctx4, la.CountExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsCount)
 	if err != nil {
-		return result, fmt.Errorf("%w: CountExecutionsAdvVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 	if executionsCount == 0 {
 		return result, nil
@@ -204,8 +252,8 @@ func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params Re
 	var der deleteexecutions.DeleteExecutionsResult
 	err = workflow.ExecuteChildWorkflow(ctx2, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
 	if err != nil {
-		logger.Error("Unable to execute child workflow.", tag.Error(err))
-		return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
+		logger.Error("Child workflow error.", tag.Error(err))
+		return result, err
 	}
 	result.DeleteSuccessCount = der.SuccessCount
 	result.DeleteErrorCount = der.ErrorCount
@@ -228,7 +276,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params Re
 				return result, temporal.NewApplicationError(appErr.Message(), appErr.Type(), notDeletedCount)
 			}
 		}
-		return result, fmt.Errorf("%w: EnsureNoExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		return result, err
 	}
 
 	return result, nil

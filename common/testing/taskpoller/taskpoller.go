@@ -28,22 +28,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"testing"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
+	nexuspb "go.temporal.io/api/nexus/v1"
+
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/testing/testvars"
 )
 
 type (
+	Helper interface {
+		Helper()
+	}
 	TaskPoller struct {
-		t         *testing.T
+		t         Helper
 		client    workflowservice.WorkflowServiceClient
 		namespace string
 	}
@@ -54,6 +61,10 @@ type (
 	activityTaskPoller struct {
 		*TaskPoller
 		pollActivityTaskRequest *workflowservice.PollActivityTaskQueueRequest
+	}
+	nexusTaskPoller struct {
+		*TaskPoller
+		pollNexusTaskRequest *workflowservice.PollNexusTaskQueueRequest
 	}
 	options struct {
 		tv      *testvars.TestVars
@@ -86,7 +97,7 @@ var (
 )
 
 func New(
-	t *testing.T,
+	t Helper,
 	client workflowservice.WorkflowServiceClient,
 	namespace string,
 ) *TaskPoller {
@@ -104,11 +115,17 @@ func (p *TaskPoller) PollWorkflowTask(
 	return &workflowTaskPoller{TaskPoller: p, pollWorkflowTaskRequest: req}
 }
 
+func (p *TaskPoller) PollNexusTask(
+	req *workflowservice.PollNexusTaskQueueRequest,
+) *nexusTaskPoller {
+	return &nexusTaskPoller{TaskPoller: p, pollNexusTaskRequest: req}
+}
+
 // PollAndHandleWorkflowTask issues a PollWorkflowTaskQueueRequest to obtain a new workflow task,
-// invokes the handler with the task, and completes/fails the task accordingly.
+// invokes the handler with the task, and completes/fails the task accordingly. Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
-// If no task is available, it returns NoTaskAvailable.
+// If no task is available, it returns `NoWorkflowTaskAvailable`.
 func (p *TaskPoller) PollAndHandleWorkflowTask(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
@@ -120,9 +137,10 @@ func (p *TaskPoller) PollAndHandleWorkflowTask(
 }
 
 // HandleTask invokes the provided handler with the task poll result, and completes/fails the task accordingly.
+// Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
-// If no task is available, it returns NoTaskAvailable.
+// If no task is available, it returns `NoWorkflowTaskAvailable`.
 func (p *workflowTaskPoller) HandleTask(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
@@ -135,7 +153,122 @@ func (p *workflowTaskPoller) HandleTask(
 	return p.pollAndHandleTask(ctx, options, handler)
 }
 
+func (p *nexusTaskPoller) pollTask(
+	ctx context.Context,
+	opts *options,
+) (*workflowservice.PollNexusTaskQueueResponse, error) {
+	p.t.Helper()
+
+	req := common.CloneProto(p.pollNexusTaskRequest)
+	if req.Namespace == "" {
+		req.Namespace = p.namespace
+	}
+	if req.TaskQueue == nil {
+		req.TaskQueue = opts.tv.TaskQueue()
+	}
+	if req.Identity == "" {
+		req.Identity = opts.tv.WorkerIdentity()
+	}
+	resp, err := p.client.PollNexusTaskQueue(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil || resp.TaskToken == nil {
+		return nil, NoWorkflowTaskAvailable
+	}
+
+	return resp, err
+}
+
+func (p *nexusTaskPoller) pollAndHandleTask(
+	ctx context.Context,
+	opts *options,
+	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
+) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	p.t.Helper()
+	task, err := p.pollTask(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to poll nexus task: %w", err)
+	}
+	return p.handleTask(ctx, opts, task, handler)
+}
+func (p *nexusTaskPoller) handleTask(
+	ctx context.Context,
+	opts *options,
+	task *workflowservice.PollNexusTaskQueueResponse,
+	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
+) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	p.t.Helper()
+	reply, err := handler(task)
+	if err != nil {
+		return nil, p.respondNexusTaskFailed(ctx, opts, task.TaskToken)
+	}
+
+	resp, err := p.respondNexusTaskCompleted(ctx, opts, task, reply)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func (p *nexusTaskPoller) respondNexusTaskCompleted(
+	ctx context.Context,
+	opts *options,
+	task *workflowservice.PollNexusTaskQueueResponse,
+	reply *workflowservice.RespondNexusTaskCompletedRequest,
+) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	p.t.Helper()
+	if reply == nil {
+		return nil, errors.New("missing RespondWorkflowTaskCompletedRequest return")
+	}
+	if reply.Namespace == "" {
+		reply.Namespace = p.namespace
+	}
+	if len(reply.TaskToken) == 0 {
+		reply.TaskToken = task.TaskToken
+	}
+	if reply.Identity == "" {
+		reply.Identity = opts.tv.WorkerIdentity()
+	}
+	reply.Response = &nexuspb.Response{}
+
+	return p.client.RespondNexusTaskCompleted(ctx, reply)
+}
+
+func (p *nexusTaskPoller) respondNexusTaskFailed(
+	ctx context.Context,
+	opts *options,
+	taskToken []byte,
+) error {
+	p.t.Helper()
+	_, err := p.client.RespondNexusTaskFailed(
+		ctx,
+		&workflowservice.RespondNexusTaskFailedRequest{
+			Namespace: p.namespace,
+			TaskToken: taskToken,
+			Identity:  opts.tv.WorkerIdentity(),
+			Error: &nexuspb.HandlerError{
+				ErrorType: string(nexus.HandlerErrorTypeInternal),
+			},
+		})
+	return err
+}
+
+func (p *nexusTaskPoller) HandleTask(
+	tv *testvars.TestVars,
+	handler func(task *workflowservice.PollNexusTaskQueueResponse) (*workflowservice.RespondNexusTaskCompletedRequest, error),
+	opts ...optionFunc,
+) (*workflowservice.RespondNexusTaskCompletedResponse, error) {
+	p.t.Helper()
+	options := newOptions(tv, opts)
+	ctx, cancel := newContext(options)
+	defer cancel()
+	return p.pollAndHandleTask(ctx, options, handler)
+}
+
 // HandleWorkflowTask invokes the provided handler with the provided task, and completes/fails the task accordingly.
+// Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
 func (p *TaskPoller) HandleWorkflowTask(
@@ -160,10 +293,10 @@ func (p *TaskPoller) PollActivityTask(
 }
 
 // PollAndHandleActivityTask issues a PollActivityTaskQueueRequest to obtain a new activity task,
-// invokes the handler with the task, and completes/fails the task accordingly.
+// invokes the handler with the task, and completes/fails the task accordingly. Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
-// If no task is available, it returns NoTaskAvailable.
+// If no task is available, it returns `NoActivityTaskAvailable`.
 func (p *TaskPoller) PollAndHandleActivityTask(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
@@ -175,6 +308,7 @@ func (p *TaskPoller) PollAndHandleActivityTask(
 }
 
 // HandleActivityTask invokes the provided handler with the provided task, and completes/fails the task accordingly.
+// Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
 func (p *TaskPoller) HandleActivityTask(
@@ -192,9 +326,10 @@ func (p *TaskPoller) HandleActivityTask(
 }
 
 // HandleTask invokes the provided handler with the task poll result, and completes/fails the task accordingly.
+// Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
-// If no task is available, it returns NoTaskAvailable.
+// If no task is available, it returns `NoActivityTaskAvailable`.
 func (p *activityTaskPoller) HandleTask(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
@@ -239,7 +374,7 @@ func (p *workflowTaskPoller) pollTask(
 	}
 
 	events = history.Events
-	if len(events) == 0 {
+	if len(events) == 0 && req.TaskQueue.GetKind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return nil, errors.New("history events are empty")
 	}
 
@@ -260,6 +395,47 @@ func (p *workflowTaskPoller) pollTask(
 	}
 
 	return resp, err
+}
+
+func (p *workflowTaskPoller) HandleLegacyQuery(
+	tv *testvars.TestVars,
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
+	opts ...optionFunc,
+) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
+	p.t.Helper()
+	options := newOptions(tv, opts)
+	ctx, cancel := newContext(options)
+	defer cancel()
+	return p.pollAndHandleLegacyQuery(ctx, options, handler)
+}
+
+func (p *workflowTaskPoller) pollAndHandleLegacyQuery(
+	ctx context.Context,
+	opts *options,
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
+) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
+	p.t.Helper()
+	task, err := p.pollTask(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to poll workflow task: %w", err)
+	}
+	return p.handleQuery(ctx, task, handler)
+}
+
+func (p *workflowTaskPoller) handleQuery(
+	ctx context.Context,
+	task *workflowservice.PollWorkflowTaskQueueResponse,
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondQueryTaskCompletedRequest, error),
+) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
+	p.t.Helper()
+	// if an error is received here it shall be present in RespondQueryTaskCompletedResponse.ErrorMessage
+	reply, err := handler(task)
+	resp, err := p.respondQueryTaskCompleted(ctx, task, reply, err)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 func (p *workflowTaskPoller) pollAndHandleTask(
@@ -292,6 +468,51 @@ func (p *workflowTaskPoller) handleTask(
 		return nil, err
 	}
 
+	return resp, nil
+}
+
+func (p *workflowTaskPoller) respondQueryTaskCompleted(
+	ctx context.Context,
+	task *workflowservice.PollWorkflowTaskQueueResponse,
+	reply *workflowservice.RespondQueryTaskCompletedRequest,
+	err error,
+) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
+	p.t.Helper()
+	if task == nil {
+		return nil, errors.New("missing PollWorkflowTaskQueueResponse")
+	}
+	if task.Query == nil {
+		return nil, errors.New("missing Legacy Query in PollWorkflowTaskQueueResponse")
+	}
+	if reply == nil {
+		return nil, errors.New("missing RespondQueryTaskCompletedRequest")
+	}
+
+	// setting the fields for RespondQueryTaskCompletedResponse
+	if reply.Namespace == "" {
+		reply.Namespace = p.namespace
+	}
+	if reply.TaskToken == nil {
+		reply.TaskToken = task.TaskToken
+	}
+
+	if err != nil {
+		reply.ErrorMessage = err.Error()
+		reply.Failure = &failurepb.Failure{
+			Message: err.Error(),
+		}
+		reply.CompletedType = enumspb.QUERY_RESULT_TYPE_FAILED
+	} else {
+		reply.CompletedType = enumspb.QUERY_RESULT_TYPE_ANSWERED
+		if reply.QueryResult == nil {
+			reply.QueryResult = payloads.EncodeString("query-result")
+		}
+	}
+
+	resp, err := p.client.RespondQueryTaskCompleted(ctx, reply)
+	if err != nil {
+		return nil, fmt.Errorf("failed to respond with respondQueryTaskCompleted: %w", err)
+	}
 	return resp, nil
 }
 

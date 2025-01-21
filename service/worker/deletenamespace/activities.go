@@ -26,39 +26,61 @@ package deletenamespace
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
 type (
 	localActivities struct {
-		metadataManager persistence.MetadataManager
-		logger          log.Logger
+		metadataManager      persistence.MetadataManager
+		clusterMetadata      cluster.Metadata
+		nexusEndpointManager persistence.NexusEndpointManager
+		logger               log.Logger
+
+		protectedNamespaces                       dynamicconfig.TypedPropertyFn[[]string]
+		allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn
+		nexusEndpointListDefaultPageSize          dynamicconfig.IntPropertyFn
 	}
 
 	getNamespaceInfoResult struct {
-		NamespaceID namespace.ID
-		Namespace   namespace.Name
-		Clusters    []string
+		NamespaceID    namespace.ID
+		Namespace      namespace.Name
+		Clusters       []string
+		ActiveCluster  string
+		CurrentCluster string
 	}
 )
 
 func newLocalActivities(
 	metadataManager persistence.MetadataManager,
+	clusterMetadata cluster.Metadata,
+	nexusEndpointManager persistence.NexusEndpointManager,
 	logger log.Logger,
+	protectedNamespaces dynamicconfig.TypedPropertyFn[[]string],
+	allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn,
+	nexusEndpointListDefaultPageSize dynamicconfig.IntPropertyFn,
 ) *localActivities {
 	return &localActivities{
-		metadataManager: metadataManager,
-		logger:          logger,
+		metadataManager:      metadataManager,
+		clusterMetadata:      clusterMetadata,
+		nexusEndpointManager: nexusEndpointManager,
+		logger:               logger,
+		protectedNamespaces:  protectedNamespaces,
+		allowDeleteNamespaceIfNexusEndpointTarget: allowDeleteNamespaceIfNexusEndpointTarget,
+		nexusEndpointListDefaultPageSize:          nexusEndpointListDefaultPageSize,
 	}
 }
 
@@ -72,18 +94,67 @@ func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID nam
 
 	getNamespaceResponse, err := a.metadataManager.GetNamespace(ctx, getNamespaceRequest)
 	if err != nil {
+		var nsNotFoundErr *serviceerror.NamespaceNotFound
+		if stderrors.As(err, &nsNotFoundErr) {
+			ns := nsName.String()
+			if ns == "" {
+				ns = nsID.String()
+			}
+			return getNamespaceInfoResult{}, errors.NewInvalidArgument(fmt.Sprintf("namespace %s is not found", ns), err)
+		}
 		return getNamespaceInfoResult{}, err
 	}
 
 	if getNamespaceResponse.Namespace == nil || getNamespaceResponse.Namespace.Info == nil || getNamespaceResponse.Namespace.Info.Id == "" {
-		return getNamespaceInfoResult{}, temporal.NewNonRetryableApplicationError("namespace info is corrupted", "", nil)
+		return getNamespaceInfoResult{}, stderrors.New("namespace info is corrupted")
 	}
 
 	return getNamespaceInfoResult{
-		NamespaceID: namespace.ID(getNamespaceResponse.Namespace.Info.Id),
-		Namespace:   namespace.Name(getNamespaceResponse.Namespace.Info.Name),
-		Clusters:    getNamespaceResponse.Namespace.ReplicationConfig.Clusters,
+		NamespaceID:   namespace.ID(getNamespaceResponse.Namespace.Info.Id),
+		Namespace:     namespace.Name(getNamespaceResponse.Namespace.Info.Name),
+		Clusters:      getNamespaceResponse.Namespace.ReplicationConfig.Clusters,
+		ActiveCluster: getNamespaceResponse.Namespace.ReplicationConfig.ActiveClusterName,
+		// CurrentCluster is not technically a "namespace info", but since all cluster data is here,
+		// it is convenient to have the current cluster name here too.
+		CurrentCluster: a.clusterMetadata.GetCurrentClusterName(),
 	}, nil
+}
+
+func (a *localActivities) ValidateProtectedNamespacesActivity(_ context.Context, nsName namespace.Name) error {
+	if slices.Contains(a.protectedNamespaces(), nsName.String()) {
+		return errors.NewFailedPrecondition(fmt.Sprintf("namespace %s is protected from deletion", nsName), nil)
+	}
+	return nil
+}
+
+func (a *localActivities) ValidateNexusEndpointsActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
+	if a.allowDeleteNamespaceIfNexusEndpointTarget() {
+		return nil
+	}
+	// Prevent deletion of a namespace that is targeted by a Nexus endpoint.
+	var nextPageToken []byte
+	for {
+		resp, err := a.nexusEndpointManager.ListNexusEndpoints(ctx, &persistence.ListNexusEndpointsRequest{
+			LastKnownTableVersion: 0,
+			NextPageToken:         nextPageToken,
+			PageSize:              a.nexusEndpointListDefaultPageSize(),
+		})
+		if err != nil {
+			a.logger.Error("Unable to list Nexus endpoints from persistence.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespaceID(nsID.String()), tag.Error(err))
+			return fmt.Errorf("unable to list Nexus endpoints for namespace %s: %w", nsName, err)
+		}
+
+		for _, entry := range resp.Entries {
+			if endpointNsID := entry.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(); endpointNsID == nsID.String() {
+				return errors.NewFailedPrecondition(fmt.Sprintf("cannot delete a namespace that is a target of a Nexus endpoint %s", entry.GetEndpoint().GetSpec().GetName()), nil)
+			}
+		}
+		nextPageToken = resp.NextPageToken
+		if len(nextPageToken) == 0 {
+			break
+		}
+	}
+	return nil
 }
 
 func (a *localActivities) MarkNamespaceDeletedActivity(ctx context.Context, nsName namespace.Name) error {
@@ -149,11 +220,12 @@ func (a *localActivities) GenerateDeletedNamespaceNameActivity(ctx context.Conte
 			return namespace.Name(newName), nil
 		default:
 			logger.Error("Unable to get namespace details.", tag.Error(err))
-			return namespace.EmptyName, err
+			return namespace.EmptyName, fmt.Errorf("unable to get namespace details: %w", err)
 		}
 	}
 	// Should never get here because namespace ID is guaranteed to be unique.
-	panic(fmt.Sprintf("Unable to generate new name for deleted namespace %s. ID %q is not unique.", nsName, nsID))
+	return namespace.EmptyName, fmt.Errorf("unable to generate new name for deleted namespace %s. ID %q is not unique", nsName, nsID)
+
 }
 
 func (a *localActivities) RenameNamespaceActivity(ctx context.Context, previousName namespace.Name, newName namespace.Name) error {

@@ -197,6 +197,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMembershipMonitor(),
 		healthInterceptor,
 		scheduler.NewSpecBuilder(),
+		true,
 	)
 }
 
@@ -641,7 +642,35 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReuse
 
 	s.Nil(resp)
 	s.Equal(err, serviceerror.NewInvalidArgument(
-		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy."))
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy"))
+}
+
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReusePolicy_RejectDuplicate() {
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId:               testWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+	}
+
+	// by default, disallow
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	resp, err := wh.StartWorkflowExecution(context.Background(), req)
+	s.Nil(resp)
+	s.Equal(err, serviceerror.NewInvalidArgument(
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE cannot be used together with WorkflowIdConflictPolicy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING"))
+
+	// allow if explicitly allowed
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.StartWorkflowExecutionResponse{Started: true}, nil)
+
+	config.FollowReusePolicyAfterConflictPolicyTerminate = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh = s.getWorkflowHandler(config)
+	_, err = wh.StartWorkflowExecution(context.Background(), req)
+	s.NoError(err)
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
@@ -828,7 +857,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkf
 
 	s.Nil(resp)
 	s.Equal(err, serviceerror.NewInvalidArgument(
-		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy."))
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy"))
 }
 
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
@@ -2069,8 +2098,7 @@ func (s *WorkflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.SupportsSchedules)
 	s.True(resp.Capabilities.EncodedFailureAttributes)
 	s.True(resp.Capabilities.UpsertMemo)
-	// Nexus is enabled by a dynamic config feature flag which defaults to false.
-	s.False(resp.Capabilities.Nexus)
+	s.True(resp.Capabilities.Nexus)
 }
 
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {

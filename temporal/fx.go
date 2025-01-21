@@ -610,6 +610,7 @@ func ApplyClusterMetadataConfigProvider(
 		customDataStoreFactory,
 		logger,
 		metricsHandler,
+		noop.NewTracerProvider(),
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
@@ -859,6 +860,12 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 	return nil
 }
 
+type SpanExporterInputs struct {
+	fx.In
+	Lifecycyle fx.Lifecycle
+	Config     *config.Config `optional:"true"`
+}
+
 // TraceExportModule holds process-global telemetry fx state defining the set of
 // OTEL trace/span exporters used by tracing instrumentation. The following
 // types can be overriden/augmented with fx.Replace/fx.Decorate:
@@ -873,10 +880,14 @@ var TraceExportModule = fx.Options(
 		)
 	}),
 
-	fx.Provide(func(lc fx.Lifecycle, c *config.Config) ([]otelsdktrace.SpanExporter, error) {
-		exportersByType, err := c.ExporterConfig.SpanExporters()
-		if err != nil {
-			return nil, err
+	fx.Provide(func(inputs SpanExporterInputs) ([]otelsdktrace.SpanExporter, error) {
+		exportersByType := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
+		if inputs.Config != nil {
+			var err error
+			exportersByType, err = inputs.Config.ExporterConfig.SpanExporters()
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		exportersByTypeFromEnv, err := telemetry.SpanExportersFromEnv(os.LookupEnv)
@@ -888,7 +899,7 @@ var TraceExportModule = fx.Options(
 		maps.Copy(exportersByType, exportersByTypeFromEnv)
 
 		exporters := expmaps.Values(exportersByType)
-		lc.Append(fx.Hook{
+		inputs.Lifecycyle.Append(fx.Hook{
 			OnStart: startAll(exporters),
 			OnStop:  shutdownAll(exporters),
 		})
