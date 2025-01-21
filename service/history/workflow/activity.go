@@ -326,11 +326,7 @@ func regenerateActivityRetryTask(
 			scheduleTime = scheduleTime.Add(randomOffset)
 		}
 	}
-	if err := ms.RegenerateActivityRetryTask(activityInfo, scheduleTime); err != nil {
-		return err
-	}
-
-	return nil
+	return ms.RegenerateActivityRetryTask(activityInfo, scheduleTime)
 }
 
 func needRegenerateRetryTask(ai *persistencespb.ActivityInfo, scheduleNewRun bool) bool {
