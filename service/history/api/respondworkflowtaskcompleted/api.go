@@ -74,7 +74,7 @@ type (
 		timeSource                     clock.TimeSource
 		namespaceRegistry              namespace.Registry
 		eventNotifier                  events.Notifier
-		tokenSerializer                common.TaskTokenSerializer
+		tokenSerializer                *tasktoken.Serializer
 		metricsHandler                 metrics.Handler
 		logger                         log.Logger
 		throttledLogger                log.Logger
@@ -88,7 +88,7 @@ type (
 
 func NewWorkflowTaskCompletedHandler(
 	shardContext shard.Context,
-	tokenSerializer common.TaskTokenSerializer,
+	tokenSerializer *tasktoken.Serializer,
 	eventNotifier events.Notifier,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	searchAttributesValidator *searchattribute.Validator,

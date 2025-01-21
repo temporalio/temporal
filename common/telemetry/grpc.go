@@ -31,10 +31,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -103,7 +103,7 @@ func newCustomServerStatsHandler(
 	return &customServerStatsHandler{
 		wrapped: handler,
 		isDebug: DebugMode(),
-		tags:    logtags.NewWorkflowTags(common.NewProtoTaskTokenSerializer(), logger),
+		tags:    logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
 	}
 }
 

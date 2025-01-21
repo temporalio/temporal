@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
@@ -78,7 +77,7 @@ const (
 type Starter struct {
 	shardContext                                  shard.Context
 	workflowConsistencyChecker                    api.WorkflowConsistencyChecker
-	tokenSerializer                               common.TaskTokenSerializer
+	tokenSerializer                               *tasktoken.Serializer
 	visibilityManager                             manager.VisibilityManager
 	request                                       *historyservice.StartWorkflowExecutionRequest
 	namespace                                     *namespace.Namespace
@@ -109,7 +108,7 @@ type mutableStateInfo struct {
 func NewStarter(
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	tokenSerializer common.TaskTokenSerializer,
+	tokenSerializer *tasktoken.Serializer,
 	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
