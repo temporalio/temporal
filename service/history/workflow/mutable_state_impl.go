@@ -5908,7 +5908,7 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 
 	var tombstones []*persistencespb.StateMachineTombstone
 	if ms.stateMachineNode != nil {
-		opLog, err := ms.stateMachineNode.Outputs()
+		opLog, err := ms.stateMachineNode.OpLog()
 		if err != nil {
 			panic(fmt.Sprintf("Failed to get HSM operation log: %v", err))
 		}
