@@ -53,7 +53,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
@@ -258,7 +258,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		indexName string
 		esClient  esclient.Client
 	)
-	if !UsingSQLAdvancedVisibility() && options.ESConfig != nil {
+	if !UseSQLVisibility() && options.ESConfig != nil {
 		// Randomize index name to avoid cross tests interference.
 		for k, v := range options.ESConfig.Indices {
 			options.ESConfig.Indices[k] = fmt.Sprintf("%v-%v", v, uuid.New())
@@ -350,7 +350,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		MatchingConfig:                   options.MatchingConfig,
 		WorkerConfig:                     options.WorkerConfig,
 		MockAdminClient:                  options.MockAdminClient,
-		NamespaceReplicationTaskExecutor: namespace.NewReplicationTaskExecutor(options.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),
+		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(options.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),
 		DynamicConfigOverrides:           options.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 options.ServiceFxOptions,
@@ -543,7 +543,7 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 func (tc *TestCluster) TearDownCluster() error {
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
-	if !UsingSQLAdvancedVisibility() && tc.host.esConfig != nil {
+	if !UseSQLVisibility() && tc.host.esConfig != nil {
 		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
 			errs = multierr.Combine(errs, err)
 		}

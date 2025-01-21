@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package nsmanager
 
 import (
 	"fmt"
@@ -34,23 +34,21 @@ import (
 )
 
 type (
-	// AttrValidatorImpl is namespace attr validator
-	AttrValidatorImpl struct {
+	Validator struct {
 		clusterMetadata cluster.Metadata
 	}
 )
 
-// NewAttrValidator create a new namespace attr validator
-func NewAttrValidator(
+// NewValidator create a new namespace attribute Validator
+func NewValidator(
 	clusterMetadata cluster.Metadata,
-) *AttrValidatorImpl {
-
-	return &AttrValidatorImpl{
+) *Validator {
+	return &Validator{
 		clusterMetadata: clusterMetadata,
 	}
 }
 
-func (d *AttrValidatorImpl) ValidateNamespaceConfig(config *persistencespb.NamespaceConfig) error {
+func (d *Validator) ValidateNamespaceConfig(config *persistencespb.NamespaceConfig) error {
 	if config.HistoryArchivalState == enumspb.ARCHIVAL_STATE_ENABLED && len(config.HistoryArchivalUri) == 0 {
 		return errInvalidArchivalConfig
 	}
@@ -60,10 +58,9 @@ func (d *AttrValidatorImpl) ValidateNamespaceConfig(config *persistencespb.Names
 	return nil
 }
 
-func (d *AttrValidatorImpl) ValidateNamespaceReplicationConfigForLocalNamespace(
+func (d *Validator) ValidateNamespaceReplicationConfigForLocalNamespace(
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) error {
-
 	activeCluster := replicationConfig.ActiveClusterName
 	clusters := replicationConfig.Clusters
 
@@ -87,10 +84,9 @@ func (d *AttrValidatorImpl) ValidateNamespaceReplicationConfigForLocalNamespace(
 	return nil
 }
 
-func (d *AttrValidatorImpl) ValidateNamespaceReplicationConfigForGlobalNamespace(
+func (d *Validator) ValidateNamespaceReplicationConfigForGlobalNamespace(
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 ) error {
-
 	activeCluster := replicationConfig.ActiveClusterName
 	clusters := replicationConfig.Clusters
 
@@ -117,10 +113,9 @@ func (d *AttrValidatorImpl) ValidateNamespaceReplicationConfigForGlobalNamespace
 	return nil
 }
 
-func (d *AttrValidatorImpl) validateClusterName(
+func (d *Validator) validateClusterName(
 	clusterName string,
 ) error {
-
 	if info, ok := d.clusterMetadata.GetAllClusterInfo()[clusterName]; !ok || !info.Enabled {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid cluster name: %v", clusterName))
 	}

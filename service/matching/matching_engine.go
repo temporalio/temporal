@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
@@ -143,6 +144,7 @@ type (
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
+		testHooks                     testhooks.TestHooks
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
 		// RespondQueryTaskCompleted() or through an internal service error causing temporal to be unable to dispatch
@@ -203,6 +205,7 @@ func NewEngine(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
 	nexusEndpointManager persistence.NexusEndpointManager,
+	testHooks testhooks.TestHooks,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -233,6 +236,7 @@ func NewEngine(
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
 		config:                    config,
+		testHooks:                 testHooks,
 		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),

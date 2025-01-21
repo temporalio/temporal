@@ -72,9 +72,8 @@ type (
 )
 
 func TestArchivalSuite(t *testing.T) {
-	// TODO: archival doesn't support parallel yet: t.Parallel()
-	s := new(ArchivalSuite)
-	suite.Run(t, s)
+	t.Parallel() // This suite can work in parallel as long as it is the only one that use testcore.WithArchivalEnabled() option.
+	suite.Run(t, new(ArchivalSuite))
 }
 
 func (s *ArchivalSuite) SetupSuite() {
@@ -82,7 +81,7 @@ func (s *ArchivalSuite) SetupSuite() {
 		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
 	}
 
-	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(
 		testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
 		testcore.WithArchivalEnabled(),
 	)

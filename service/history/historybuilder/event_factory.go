@@ -395,11 +395,13 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 
 func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	versioningOverride *workflowpb.VersioningOverride,
+	unsetVersioningOverride bool,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
 		WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
-			VersioningOverride: versioningOverride,
+			VersioningOverride:      versioningOverride,
+			UnsetVersioningOverride: unsetVersioningOverride,
 		},
 	}
 	event.WorkerMayIgnore = true

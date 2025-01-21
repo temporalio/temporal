@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package nsreplication
 
 import (
 	"context"
@@ -52,7 +52,7 @@ type (
 		controller *gomock.Controller
 
 		mockMetadataMgr     *persistence.MockMetadataManager
-		namespaceReplicator *namespaceReplicationTaskExecutorImpl
+		namespaceReplicator *taskExecutorImpl
 	}
 )
 
@@ -72,11 +72,11 @@ func (s *namespaceReplicationTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockMetadataMgr = persistence.NewMockMetadataManager(s.controller)
 	logger := log.NewTestLogger()
-	s.namespaceReplicator = NewReplicationTaskExecutor(
+	s.namespaceReplicator = NewTaskExecutor(
 		"some random standby cluster name",
 		s.mockMetadataMgr,
 		logger,
-	).(*namespaceReplicationTaskExecutorImpl)
+	).(*taskExecutorImpl)
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TearDownTest() {
@@ -473,7 +473,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: updateTask.ReplicationConfig.ActiveClusterName,
 				Clusters:          []string{updateClusterActive, updateClusterStandby},
-				FailoverHistory:   convertFailoverHistoryToPersistenceProto(failoverHistory),
+				FailoverHistory:   ConvertFailoverHistoryToPersistenceProto(failoverHistory),
 			},
 			ConfigVersion:               updateConfigVersion,
 			FailoverNotificationVersion: updateFailoverVersion,

@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/addtasks"
 	"go.temporal.io/server/service/history/api/deleteworkflow"
@@ -158,6 +159,7 @@ type (
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
 		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		testHooks                  testhooks.TestHooks
 	}
 )
 
@@ -184,6 +186,7 @@ func NewEngineWithShardContext(
 	dlqWriter replication.DLQWriter,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	testHooks testhooks.TestHooks,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -233,6 +236,7 @@ func NewEngineWithShardContext(
 		replicationProgressCache:   replicationProgressCache,
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
+		testHooks:                  testHooks,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -430,6 +434,7 @@ func (e *historyEngineImpl) ExecuteMultiOperation(
 		e.tokenSerializer,
 		e.persistenceVisibilityMgr,
 		e.matchingClient,
+		e.testHooks,
 	)
 }
 

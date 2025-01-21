@@ -22,19 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package xdc
+package nsmanager
 
 import (
-	"time"
-
-	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/api/serviceerror"
 )
 
-const (
-	numOfRetry        = 100
-	waitTimeInMs      = 400
-	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
-	// TODO (alex): remove 5s buffer. Refresh interval is 1s now.
-	cacheRefreshInterval = testcore.NamespaceCacheRefreshInterval + 5*time.Second
-	testTimeout          = 30 * time.Second
+var (
+	errActiveClusterNotInClusters = serviceerror.NewInvalidArgument("Active cluster is not contained in all clusters.")
+	errInvalidArchivalConfig      = serviceerror.NewInvalidArgument("Invalid to enable archival without specifying a uri.")
 )

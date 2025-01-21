@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,19 +20,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package xdc
+//go:build !test_dep
 
-import (
-	"time"
+package testhooks
 
-	"go.temporal.io/server/tests/testcore"
+import "go.uber.org/fx"
+
+var Module = fx.Options(
+	fx.Provide(func() (_ TestHooks) { return }),
 )
 
-const (
-	numOfRetry        = 100
-	waitTimeInMs      = 400
-	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
-	// TODO (alex): remove 5s buffer. Refresh interval is 1s now.
-	cacheRefreshInterval = testcore.NamespaceCacheRefreshInterval + 5*time.Second
-	testTimeout          = 30 * time.Second
+type (
+	// TestHooks (in production mode) is an empty struct just so the build works.
+	// See TestHooks in test_impl.go.
+	//
+	// TestHooks are an inherently unclean way of writing tests. They require mixing test-only
+	// concerns into production code. In general you should prefer other ways of writing tests
+	// wherever possible, and only use TestHooks sparingly, as a last resort.
+	TestHooks struct{}
 )
+
+// Get gets the value of a test hook. In production mode it always returns the zero value and
+// false, which hopefully the compiler will inline and remove the hook as dead code.
+//
+// TestHooks should be used very sparingly, see comment on TestHooks.
+func Get[T any](_ TestHooks, key Key) (T, bool) {
+	var zero T
+	return zero, false
+}
+
+// Call calls a func() hook if present.
+//
+// TestHooks should be used very sparingly, see comment on TestHooks.
+func Call(_ TestHooks, key Key) {
+}

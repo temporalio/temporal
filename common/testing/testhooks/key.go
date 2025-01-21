@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,19 +20,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package xdc
+package testhooks
 
-import (
-	"time"
-
-	"go.temporal.io/server/tests/testcore"
-)
+type Key int
 
 const (
-	numOfRetry        = 100
-	waitTimeInMs      = 400
-	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
-	// TODO (alex): remove 5s buffer. Refresh interval is 1s now.
-	cacheRefreshInterval = testcore.NamespaceCacheRefreshInterval + 5*time.Second
-	testTimeout          = 30 * time.Second
+	MatchingDisableSyncMatch Key = iota
+	MatchingLBForceReadPartition
+	MatchingLBForceWritePartition
+	UpdateWithStartInBetweenLockAndStart
 )

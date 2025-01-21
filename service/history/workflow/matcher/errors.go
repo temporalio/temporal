@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,13 +20,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package matcher
 
 import (
+	"fmt"
+
 	"go.temporal.io/api/serviceerror"
 )
 
 var (
-	errActiveClusterNotInClusters = serviceerror.NewInvalidArgument("Active cluster is not contained in all clusters.")
-	errInvalidArchivalConfig      = serviceerror.NewInvalidArgument("Invalid to enable archival without specifying a uri.")
+	malformedSqlQueryErrMessage = "malformed SQL query"
+	notSupportedErrMessage      = "operation is not supported"
+	invalidExpressionErrMessage = "invalid expression"
 )
+
+func NewMatcherError(format string, a ...any) error {
+	message := fmt.Sprintf(format, a...)
+	return serviceerror.NewInvalidArgument(message)
+}

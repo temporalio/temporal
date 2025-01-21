@@ -98,7 +98,11 @@ func Invoke(
 				}, nil
 			}
 
-			_, err = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride())
+			unsetOverride := false
+			if mergedOpts.GetVersioningOverride() == nil {
+				unsetOverride = true
+			}
+			_, err = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride)
 			if err != nil {
 				return nil, err
 			}
@@ -122,7 +126,11 @@ func Invoke(
 func getOptionsFromMutableState(ms workflow.MutableState) *workflowpb.WorkflowExecutionOptions {
 	opts := &workflowpb.WorkflowExecutionOptions{}
 	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
-		opts.VersioningOverride = versioningInfo.GetVersioningOverride()
+		override, ok := proto.Clone(versioningInfo.GetVersioningOverride()).(*workflowpb.VersioningOverride)
+		if !ok {
+			return nil
+		}
+		opts.VersioningOverride = override
 	}
 	return opts
 }

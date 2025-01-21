@@ -70,6 +70,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -187,7 +188,7 @@ func NewWorkflowHandler(
 			logger,
 			persistenceMetadataManager,
 			clusterMetadata,
-			namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger),
+			nsreplication.NewReplicator(namespaceReplicationQueue, logger),
 			archivalMetadata,
 			archiverProvider,
 			timeSource,

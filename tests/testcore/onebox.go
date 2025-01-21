@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -70,6 +71,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
@@ -99,6 +101,7 @@ type (
 		matchingClient matchingservice.MatchingServiceClient
 
 		dcClient                         *dynamicconfig.MemoryClient
+		testHooks                        testhooks.TestHooks
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
@@ -119,7 +122,7 @@ type (
 		esConfig                         *esclient.Config
 		esClient                         esclient.Client
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
-		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
@@ -177,7 +180,7 @@ type (
 		ESConfig                         *esclient.Config
 		ESClient                         esclient.Client
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
-		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		NamespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
@@ -220,9 +223,11 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
-		serviceFxOptions:                 params.ServiceFxOptions,
-		taskCategoryRegistry:             params.TaskCategoryRegistry,
-		hostsByProtocolByService:         params.HostsByProtocolByService,
+		// If this doesn't build, make sure you're building with tags 'test_dep':
+		testHooks:                testhooks.NewTestHooksImpl(),
+		serviceFxOptions:         params.ServiceFxOptions,
+		taskCategoryRegistry:     params.TaskCategoryRegistry,
+		hostsByProtocolByService: params.HostsByProtocolByService,
 	}
 
 	for k, v := range dynamicConfigOverrides {
@@ -371,6 +376,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -442,6 +448,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -494,6 +501,7 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
@@ -557,6 +565,7 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
@@ -703,6 +712,7 @@ func (p *clientFactoryProvider) NewFactory(
 	monitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	dc *dynamicconfig.Collection,
+	testHooks testhooks.TestHooks,
 	numberOfHistoryShards int32,
 	logger log.Logger,
 	throttledLogger log.Logger,
@@ -712,6 +722,7 @@ func (p *clientFactoryProvider) NewFactory(
 		monitor,
 		metricsHandler,
 		dc,
+		testHooks,
 		numberOfHistoryShards,
 		logger,
 		throttledLogger,
@@ -821,6 +832,12 @@ func sdkClientFactoryProvider(
 
 func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Key, value any) func() {
 	cleanup := c.dcClient.OverrideValue(name, value)
+	t.Cleanup(cleanup)
+	return cleanup
+}
+
+func (c *TemporalImpl) injectHook(t *testing.T, key testhooks.Key, value any) func() {
+	cleanup := testhooks.Set(c.testHooks, key, value)
 	t.Cleanup(cleanup)
 	return cleanup
 }
