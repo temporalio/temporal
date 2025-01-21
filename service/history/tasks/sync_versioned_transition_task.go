@@ -27,7 +27,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 )
@@ -43,9 +43,9 @@ type (
 
 		VersionedTransition    *persistencespb.VersionedTransition
 		FirstEventVersion      int64
-		FirstEventID           int64                       // First event ID of version transition
-		NextEventID            int64                       // Next event ID after version transition
-		LastVersionHistoryItem *history.VersionHistoryItem // Last version history item of version transition when version transition does not have associated events
+		FirstEventID           int64                          // First event ID of version transition
+		NextEventID            int64                          // Next event ID after version transition
+		LastVersionHistoryItem *historyspb.VersionHistoryItem // Last version history item of version transition when version transition does not have associated events
 		NewRunID               string
 
 		TaskEquivalents []Task
