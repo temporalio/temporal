@@ -169,7 +169,7 @@ func Invoke(
 
 			wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 			wfDeployment := mutableState.GetEffectiveDeployment()
-			pollerDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
+			pollerDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions)
 			err = worker_versioning.ValidateTaskVersionDirective(req.GetVersionDirective(), wfBehavior, wfDeployment, req.ScheduledDeployment)
 			if err != nil {
 				return nil, err

@@ -159,12 +159,38 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 }
 
 // DeploymentFromCapabilities returns the deployment if it is using versioning V3, otherwise nil.
-func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities) *deploymentpb.Deployment {
+// It returns the deployment from the `options` if present, otherwise, from `capabilities`,
+func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) *deploymentpb.Deployment {
+	if options.GetWorkflowVersioningMode() != enumspb.WORKFLOW_VERSIONING_MODE_UNVERSIONED &&
+		options.GetName() != "" &&
+		options.GetVersion() != "" {
+		return &deploymentpb.Deployment{
+			SeriesName: options.GetName(),
+			BuildId:    options.GetVersion(),
+		}
+	}
 	if capabilities.GetUseVersioning() && capabilities.GetDeploymentSeriesName() != "" && capabilities.GetBuildId() != "" {
 		return &deploymentpb.Deployment{
 			SeriesName: capabilities.GetDeploymentSeriesName(),
 			BuildId:    capabilities.GetBuildId(),
 		}
+	}
+	return nil
+}
+
+// DeploymentOrVersion Temporary helper function to return a Deployment based on passed Deployment
+// or WorkerDeploymentVersion objects, if `v` is not nil, it'll take precedence.
+func DeploymentOrVersion(d *deploymentpb.Deployment, v *deploymentpb.WorkerDeploymentVersion) *deploymentpb.Deployment {
+	if v != nil {
+		return DeploymentIfValid(DeploymentFromDeploymentVersion(v))
+	}
+	return DeploymentIfValid(d)
+}
+
+// DeploymentIfValid returns the deployment back if is both of its fields have value.
+func DeploymentIfValid(d *deploymentpb.Deployment) *deploymentpb.Deployment {
+	if d.GetSeriesName() != "" && d.GetBuildId() != "" {
+		return d
 	}
 	return nil
 }
@@ -195,7 +221,10 @@ func MakeDirectiveForWorkflowTask(
 	deployment *deploymentpb.Deployment,
 ) *taskqueuespb.TaskVersionDirective {
 	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return &taskqueuespb.TaskVersionDirective{Behavior: behavior, Deployment: deployment}
+		return &taskqueuespb.TaskVersionDirective{
+			Behavior:          behavior,
+			DeploymentVersion: DeploymentVersionFromDeployment(deployment),
+		}
 	}
 	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {
 		// TODO: old versioning only [cleanup-old-wv]
@@ -209,6 +238,30 @@ func MakeDirectiveForWorkflowTask(
 	}
 	// else: unversioned queue
 	return nil
+}
+
+// DeploymentVersionFromDeployment Temporary helper function to convert Deployment to
+// WorkerDeploymentVersion proto until we update code to use the new proto in all places.
+func DeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deploymentpb.WorkerDeploymentVersion {
+	if deployment == nil {
+		return nil
+	}
+	return &deploymentpb.WorkerDeploymentVersion{
+		Version:        deployment.GetBuildId(),
+		DeploymentName: deployment.GetSeriesName(),
+	}
+}
+
+// DeploymentFromDeploymentVersion Temporary helper function to convert WorkerDeploymentVersion to
+// Deployment proto until we update code to use the new proto in all places.
+func DeploymentFromDeploymentVersion(dv *deploymentpb.WorkerDeploymentVersion) *deploymentpb.Deployment {
+	if dv == nil {
+		return nil
+	}
+	return &deploymentpb.Deployment{
+		BuildId:    dv.GetVersion(),
+		SeriesName: dv.GetDeploymentName(),
+	}
 }
 
 func MakeUseAssignmentRulesDirective() *taskqueuespb.TaskVersionDirective {
@@ -252,6 +305,21 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 	return nil
 }
 
+// ValidateDeploymentVersion returns error if the deployment version is nil or it has empty version
+// or deployment name.
+func ValidateDeploymentVersion(version *deploymentpb.WorkerDeploymentVersion) error {
+	if version == nil {
+		return serviceerror.NewInvalidArgument("deployment cannot be nil")
+	}
+	if version.GetDeploymentName() == "" {
+		return serviceerror.NewInvalidArgument("deployment name name cannot be empty")
+	}
+	if version.GetVersion() == "" {
+		return serviceerror.NewInvalidArgument("version cannot be empty")
+	}
+	return nil
+}
+
 func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	if override == nil {
 		return nil
@@ -260,12 +328,17 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	case enumspb.VERSIONING_BEHAVIOR_PINNED:
 		if override.GetDeployment() != nil {
 			return ValidateDeployment(override.GetDeployment())
+		} else if override.GetPinnedVersion() != nil {
+			return ValidateDeploymentVersion(override.GetPinnedVersion())
 		} else {
 			return serviceerror.NewInvalidArgument("must provide deployment if behavior is 'PINNED'")
 		}
 	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
 		if override.GetDeployment() != nil {
 			return serviceerror.NewInvalidArgument("only provide deployment if behavior is 'PINNED'")
+		}
+		if override.GetPinnedVersion() != nil {
+			return serviceerror.NewInvalidArgument("only provide pinned version if behavior is 'PINNED'")
 		}
 	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
 		return serviceerror.NewInvalidArgument("override behavior is required")
@@ -307,7 +380,7 @@ func ValidateTaskVersionDirective(
 			directiveBehavior, wfBehavior))
 	}
 
-	directiveDeployment := directive.GetDeployment()
+	directiveDeployment := DirectiveDeployment(directive)
 	if directiveDeployment == nil {
 		// TODO: remove this once the ScheduledDeployment field is removed from proto
 		directiveDeployment = scheduledDeployment
@@ -320,4 +393,12 @@ func ValidateTaskVersionDirective(
 			directiveDeployment.GetBuildId(), wfDeployment.GetBuildId()))
 	}
 	return nil
+}
+
+// DirectiveDeployment Temporary function until Directive proto is removed.
+func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deploymentpb.Deployment {
+	if dv := directive.GetDeploymentVersion(); dv != nil {
+		return DeploymentFromDeploymentVersion(dv)
+	}
+	return directive.GetDeployment()
 }
