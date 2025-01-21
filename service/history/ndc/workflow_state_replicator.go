@@ -267,7 +267,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			// TODO: Revisit these logic when working on roll out/back plan
 			if snapshot == nil {
 				return serviceerrors.NewSyncState(
-					"failed to apply mutation due to missing mutable state",
+					"failed to apply versioned transition due to missing snapshot",
 					namespaceID.String(),
 					wid,
 					rid,
@@ -350,7 +350,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	}
 	if localMutableState == nil {
 		return serviceerrors.NewSyncState(
-			"failed to apply mutation due to missing mutable state",
+			"failed to apply mutation due to missing local mutable state",
 			namespaceID.String(),
 			workflowID,
 			runID,
@@ -438,7 +438,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 			versionHistories = localMutableState.GetExecutionInfo().VersionHistories
 		}
 		return serviceerrors.NewSyncState(
-			"failed to apply mutation due to missing mutable state",
+			"failed to apply mutation due to missing task snapshot",
 			namespaceID.String(),
 			workflowID,
 			runID,
