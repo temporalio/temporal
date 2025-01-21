@@ -24,9 +24,6 @@
 
 //go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
 
-// Generates fault injection stores.
-//go:generate go run ../../cmd/tools/genfaultinjection -copyright_file ../../LICENSE -out faultinjection
-
 package persistence
 
 import (

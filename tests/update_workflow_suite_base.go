@@ -39,7 +39,7 @@ import (
 )
 
 type WorkflowUpdateBaseSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 type updateResponseErr struct {
@@ -95,7 +95,7 @@ func (s *WorkflowUpdateBaseSuite) updateWorkflowRequest(
 	waitPolicy *updatepb.WaitPolicy,
 ) *workflowservice.UpdateWorkflowExecutionRequest {
 	return &workflowservice.UpdateWorkflowExecutionRequest{
-		Namespace:         s.Namespace(),
+		Namespace:         s.Namespace().String(),
 		WorkflowExecution: tv.WorkflowExecution(),
 		WaitPolicy:        waitPolicy,
 		Request: &updatepb.Request{
@@ -112,7 +112,7 @@ func (s *WorkflowUpdateBaseSuite) waitUpdateAdmitted(tv *testvars.TestVars) {
 	s.T().Helper()
 	s.EventuallyWithTf(func(collect *assert.CollectT) {
 		pollResp, pollErr := s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
-			Namespace:  s.Namespace(),
+			Namespace:  s.Namespace().String(),
 			UpdateRef:  tv.UpdateRef(),
 			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
 		})
@@ -122,18 +122,18 @@ func (s *WorkflowUpdateBaseSuite) waitUpdateAdmitted(tv *testvars.TestVars) {
 	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", tv.UpdateID())
 }
 
-func (s *WorkflowUpdateBaseSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {
+func (s *WorkflowUpdateBaseSuite) startWorkflow(tv *testvars.TestVars) string {
 	s.T().Helper()
 	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), s.startWorkflowRequest(tv))
 	s.NoError(err)
 
-	return tv.WithRunID(startResp.GetRunId())
+	return startResp.GetRunId()
 }
 
 func (s *WorkflowUpdateBaseSuite) startWorkflowRequest(tv *testvars.TestVars) *workflowservice.StartWorkflowExecutionRequest {
 	return &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:    tv.Any().String(),
-		Namespace:    s.Namespace(),
+		Namespace:    s.Namespace().String(),
 		WorkflowId:   tv.WorkflowID(),
 		WorkflowType: tv.WorkflowType(),
 		TaskQueue:    tv.TaskQueue(),

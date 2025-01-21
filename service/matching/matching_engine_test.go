@@ -254,7 +254,7 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 
 func (s *matchingEngineSuite) TestAckManager() {
 	backlogMgr := newBacklogMgr(s.controller, false)
-	m := newAckManager(backlogMgr)
+	m := newAckManager(backlogMgr.db, backlogMgr.logger)
 
 	m.setAckLevel(100)
 	s.EqualValues(100, m.getAckLevel())
@@ -319,7 +319,7 @@ func (s *matchingEngineSuite) TestAckManager() {
 
 func (s *matchingEngineSuite) TestAckManager_Sort() {
 	backlogMgr := newBacklogMgr(s.controller, false)
-	m := newAckManager(backlogMgr)
+	m := newAckManager(backlogMgr.db, backlogMgr.logger)
 
 	const t0 = 100
 	m.setAckLevel(t0)

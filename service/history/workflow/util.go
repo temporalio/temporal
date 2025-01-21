@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm"
 )
 
 func failWorkflowTask(
@@ -235,4 +236,23 @@ func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecution
 		return override.GetBehavior()
 	}
 	return versioningInfo.GetBehavior()
+}
+
+// shouldReapplyEvent returns true if the event should be reapplied to the workflow execution.
+func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
+	switch event.GetEventType() { // nolint:exhaustive
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+		return true
+	}
+
+	// events registered in the hsm framework that are potentially cherry-pickable
+	if _, ok := stateMachineRegistry.EventDefinition(event.GetEventType()); ok {
+		return true
+	}
+
+	return false
 }

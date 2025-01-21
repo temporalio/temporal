@@ -65,6 +65,7 @@ import (
 )
 
 type AdvVisCrossDCTestSuite struct {
+	// TODO (alex): use FunctionalTestSuite
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
@@ -134,17 +135,7 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 		dynamicconfig.EnableTransitionHistory.Key(): s.enableTransitionHistory,
 	}
 
-	var fileName string
-	if testcore.UsingSQLAdvancedVisibility() {
-		// NOTE: can't use xdc_clusters.yaml here because it somehow interferes with the other xDC tests.
-		fileName = "../testdata/xdc_adv_vis_clusters.yaml"
-		s.isElasticsearchEnabled = false
-		s.logger.Info(fmt.Sprintf("Running xDC advanced visibility test with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
-	} else {
-		fileName = "../testdata/xdc_adv_vis_es_clusters.yaml"
-		s.isElasticsearchEnabled = true
-		s.logger.Info("Running xDC advanced visibility test with Elasticsearch persistence")
-	}
+	fileName := "../testdata/xdc_adv_vis_es_clusters.yaml"
 
 	if testcore.TestFlags.TestClusterConfigFile != "" {
 		fileName = testcore.TestFlags.TestClusterConfigFile
@@ -225,7 +216,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
-	if !s.isElasticsearchEnabled {
+	if testcore.UseSQLVisibility() {
 		// When Elasticsearch is enabled, the search attribute aliases are not used.
 		_, err = client1.UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
 			Namespace: ns,

@@ -49,7 +49,6 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
@@ -57,7 +56,7 @@ import (
 )
 
 type QueryWorkflowSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestQueryWorkflowSuite(t *testing.T) {
@@ -92,9 +91,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -144,9 +141,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -257,9 +252,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -289,9 +282,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 
 	queryWorker = worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
 	queryWorker.RegisterWorkflow(workflowFn)
-	if err := queryWorker.Start(); err != nil {
-		s.Logger.Fatal("Error when start worker", tag.Error(err))
-	}
+	err = queryWorker.Start()
+	s.NoError(err)
 
 	// wait query
 	wg.Wait()
@@ -325,9 +317,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -356,9 +346,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
 
@@ -385,7 +373,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	// Query the workflow in the background to have the query delivered with the first workflow task in the Queries map.
 	go func() {
 		_, err := s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowRun.GetID(),
 			},
@@ -401,7 +389,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	util.InterruptibleSleep(ctx, 3*time.Second)
 
 	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
 		Identity:  s.T().Name(),
 	})
@@ -446,7 +434,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	// API.
 	go func() {
 		task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
 			Identity:  s.T().Name(),
 		})
@@ -456,7 +444,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 		}
 
 		_, err = s.FrontendClient().RespondQueryTaskCompleted(ctx, &workflowservice.RespondQueryTaskCompletedRequest{
-			Namespace:     s.Namespace(),
+			Namespace:     s.Namespace().String(),
 			TaskToken:     task.TaskToken,
 			CompletedType: enumspb.QUERY_RESULT_TYPE_FAILED,
 			ErrorMessage:  "my error message",
@@ -469,7 +457,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {
 	}()
 
 	_, err = s.FrontendClient().QueryWorkflow(ctx, &workflowservice.QueryWorkflowRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 		},

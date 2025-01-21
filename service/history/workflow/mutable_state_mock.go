@@ -403,6 +403,18 @@ func (mr *MockMutableStateMockRecorder) AddHistorySize(size any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddHistorySize", reflect.TypeOf((*MockMutableState)(nil).AddHistorySize), size)
 }
 
+// AddReapplyCandidateEvent mocks base method.
+func (m *MockMutableState) AddReapplyCandidateEvent(event *history.HistoryEvent) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddReapplyCandidateEvent", event)
+}
+
+// AddReapplyCandidateEvent indicates an expected call of AddReapplyCandidateEvent.
+func (mr *MockMutableStateMockRecorder) AddReapplyCandidateEvent(event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddReapplyCandidateEvent", reflect.TypeOf((*MockMutableState)(nil).AddReapplyCandidateEvent), event)
+}
+
 // AddRecordMarkerEvent mocks base method.
 func (m *MockMutableState) AddRecordMarkerEvent(arg0 int64, arg1 *command.RecordMarkerCommandAttributes) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -646,18 +658,18 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionCanceledEvent(arg0, 
 }
 
 // AddWorkflowExecutionOptionsUpdatedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflow.VersioningOverride) (*history.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflow.VersioningOverride, unsetVersioningOverride bool) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowExecutionOptionsUpdatedEvent", versioningOverride)
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionOptionsUpdatedEvent", versioningOverride, unsetVersioningOverride)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowExecutionOptionsUpdatedEvent indicates an expected call of AddWorkflowExecutionOptionsUpdatedEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride, unsetVersioningOverride any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionOptionsUpdatedEvent), versioningOverride)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionOptionsUpdatedEvent), versioningOverride, unsetVersioningOverride)
 }
 
 // AddWorkflowExecutionSignaled mocks base method.
@@ -2290,6 +2302,20 @@ func (m *MockMutableState) GetQueryRegistry() QueryRegistry {
 func (mr *MockMutableStateMockRecorder) GetQueryRegistry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueryRegistry", reflect.TypeOf((*MockMutableState)(nil).GetQueryRegistry))
+}
+
+// GetReapplyCandidateEvents mocks base method.
+func (m *MockMutableState) GetReapplyCandidateEvents() []*history.HistoryEvent {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReapplyCandidateEvents")
+	ret0, _ := ret[0].([]*history.HistoryEvent)
+	return ret0
+}
+
+// GetReapplyCandidateEvents indicates an expected call of GetReapplyCandidateEvents.
+func (mr *MockMutableStateMockRecorder) GetReapplyCandidateEvents() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReapplyCandidateEvents", reflect.TypeOf((*MockMutableState)(nil).GetReapplyCandidateEvents))
 }
 
 // GetRequestCancelInfo mocks base method.

@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"testing"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -47,8 +46,11 @@ import (
 )
 
 type (
+	Helper interface {
+		Helper()
+	}
 	TaskPoller struct {
-		t         *testing.T
+		t         Helper
 		client    workflowservice.WorkflowServiceClient
 		namespace string
 	}
@@ -95,7 +97,7 @@ var (
 )
 
 func New(
-	t *testing.T,
+	t Helper,
 	client workflowservice.WorkflowServiceClient,
 	namespace string,
 ) *TaskPoller {
