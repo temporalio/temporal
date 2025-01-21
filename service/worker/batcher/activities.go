@@ -49,6 +49,7 @@ import (
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -342,6 +343,39 @@ func startTaskProcessor(
 					})
 			case BatchTypeUnpauseActivities:
 				err = status.Errorf(codes.Unimplemented, "BatchTypeUnpauseActivities is not implemented")
+				operations := []*workflowservice.ManageActivityRequest_Operation{
+					{
+						OperationType: &workflowservice.ManageActivityRequest_Operation_Unpause{
+							Unpause: &workflowservice.ManageActivityRequest_UnpauseActivityRequest{
+								Jitter: durationpb.New(batchParams.UnpauseActivitiesParams.Jitter),
+							}}},
+				}
+
+				if batchParams.UnpauseActivitiesParams.KeepAttempts == false {
+					// also reset the activity
+					resetOperation := &workflowservice.ManageActivityRequest_Operation{
+						OperationType: &workflowservice.ManageActivityRequest_Operation_Reset_{
+							Reset_: &workflowservice.ManageActivityRequest_ResetActivityRequest{
+								KeepPaused:     false,
+								ResetHeartbeat: batchParams.UnpauseActivitiesParams.ResetHeartbeat,
+							}}}
+
+					operations = append(operations, resetOperation)
+				}
+
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						var err error
+						_, err = frontendClient.ManageActivity(ctx, &workflowservice.ManageActivityRequest{
+							Namespace:    batchParams.Namespace,
+							WorkflowId:   workflowID,
+							RunId:        runID,
+							ActivityType: batchParams.UnpauseActivitiesParams.ActivityType,
+							Operations:   operations,
+						})
+						return err
+					})
+
 			case BatchTypeUpdateOptions:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
