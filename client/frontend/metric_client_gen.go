@@ -173,6 +173,20 @@ func (c *metricClient) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DescribeWorkerDeploymentResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDescribeWorkerDeployment")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeWorkerDeployment(ctx, request, opts...)
+}
+
 func (c *metricClient) DescribeWorkerDeploymentVersion(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkerDeploymentVersionRequest,

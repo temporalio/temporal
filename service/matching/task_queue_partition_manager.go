@@ -472,7 +472,7 @@ func (pm *taskQueuePartitionManagerImpl) HasPollerAfter(buildId string, accessTi
 	return vq.HasPollerAfter(accessTime)
 }
 
-func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) (*matchingservice.DescribeTaskQueueResponse, error) {
 	resp := &matchingservice.DescribeTaskQueueResponse{
 		DescResponse: &workflowservice.DescribeTaskQueueResponse{
 			Pollers: pm.GetAllPollerInfo(),
@@ -481,7 +481,14 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 	if includeTaskQueueStatus {
 		resp.DescResponse.TaskQueueStatus = pm.defaultQueue.LegacyDescribeTaskQueue(true).DescResponse.TaskQueueStatus
 	}
-	return resp
+	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+		perTypeUserData, _, err := pm.getPerTypeUserData()
+		if err != nil {
+			return nil, err
+		}
+		resp.DescResponse.VersioningInfo = worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
+	}
+	return resp, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) Describe(

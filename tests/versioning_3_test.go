@@ -875,6 +875,32 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 	s.verifyWorkflowVersioning(tvWf, behavior, tvWf.Deployment(), nil, nil)
 }
 
+func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
+	tv := testvars.New(s)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	t1 := time.Now()
+
+	s.syncTaskQueueDeploymentData(tv, tqTypeAct, true, 0, false, t1)
+	s.syncTaskQueueDeploymentData(tv, tqTypeWf, false, 20, false, t1)
+
+	actInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     tv.TaskQueue(),
+		TaskQueueType: tqTypeAct,
+	})
+	s.NoError(err)
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersion(), UpdateTime: timestamp.TimePtr(t1)}, actInfo.GetVersioningInfo())
+
+	wfInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     tv.TaskQueue(),
+		TaskQueueType: tqTypeWf,
+	})
+	s.NoError(err)
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{RampingVersion: tv.DeploymentVersion(), RampingVersionPercentage: 20, UpdateTime: timestamp.TimePtr(t1)}, wfInfo.GetVersioningInfo())
+}
+
 func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	tv := testvars.New(s)
 
