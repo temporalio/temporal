@@ -48,7 +48,7 @@ var (
 	noopInstrumentation = instrumentation{
 		log:     log.NewNoopLogger(),
 		metrics: metrics.NoopMetricsHandler,
-		tracer:  trace.NewNoopTracerProvider().Tracer(telemetry.ComponentUpdateRegistry),
+		tracer:  telemetry.NoopTracer,
 	}
 )
 
