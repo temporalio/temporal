@@ -26,7 +26,6 @@ package matching
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -1820,16 +1819,35 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 	namespaceId := namespace.ID(request.NamespaceId)
+	var conflicting bool
 	persistenceErr, ctxErr := e.getUserDataBatcher(namespaceId).Add(ctx, &userDataUpdate{
 		taskQueue: request.GetTaskQueue(),
 		update: persistence.SingleTaskQueueUserDataUpdate{
 			UserData:        request.UserData,
 			BuildIdsAdded:   request.BuildIdsAdded,
 			BuildIdsRemoved: request.BuildIdsRemoved,
+			Conflicting:     &conflicting,
 		},
 	})
-	err := cmp.Or(ctxErr, persistenceErr)
-	return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
+	if ctxErr != nil {
+		// Return context errors as-is.
+		return nil, ctxErr
+	}
+	if persistenceErr != nil {
+		if persistence.IsConflictErr(persistenceErr) {
+			if conflicting {
+				// This specific update was the conflicting one. Use InvalidArgument so the
+				// caller does not retry.
+				return nil, serviceerror.NewInvalidArgument(persistenceErr.Error())
+			} else {
+				// This update may or may not be conflicting. Use Unavailable to allow retries.
+				return nil, serviceerror.NewUnavailable(persistenceErr.Error())
+			}
+		}
+		// Other errors from persistence get returned as-is.
+		return nil, persistenceErr
+	}
+	return &matchingservice.UpdateTaskQueueUserDataResponse{}, nil
 }
 
 func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
