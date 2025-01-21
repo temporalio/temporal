@@ -138,6 +138,64 @@ func (s *TaskQueueUserDataSuite) TestSetInitialAndIncrement() {
 	s.True(hlc.Equal(d2.Data.Clock, res.UserData.Data.Clock))
 }
 
+func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
+	tq1, tq2, tq3 := "tq1", "tq2", "tq3"
+
+	// set up three task queues
+	data := s.makeData(hlc.Zero(12345), 0)
+	for range 3 {
+		err := s.taskManager.UpdateTaskQueueUserData(s.ctx, &p.UpdateTaskQueueUserDataRequest{
+			NamespaceID: s.namespaceID,
+			Updates: map[string]*p.SingleTaskQueueUserDataUpdate{
+				tq1: &p.SingleTaskQueueUserDataUpdate{UserData: data},
+				tq2: &p.SingleTaskQueueUserDataUpdate{UserData: data},
+				tq3: &p.SingleTaskQueueUserDataUpdate{UserData: data},
+			},
+		})
+		s.NoError(err)
+		data.Version++
+	}
+
+	// get all and verify
+	for _, tq := range []string{tq1, tq2, tq3} {
+		res, err := s.taskManager.GetTaskQueueUserData(s.ctx, &p.GetTaskQueueUserDataRequest{
+			NamespaceID: s.namespaceID,
+			TaskQueue:   tq,
+		})
+		s.NoError(err)
+		s.Equal(int64(3), res.UserData.Version)
+		s.True(hlc.Equal(data.Data.Clock, res.UserData.Data.Clock))
+	}
+
+	// do update where one conflicts
+	d4 := s.makeData(data.Data.Clock, 4)
+	var conflict1, conflict2, conflict3 bool
+	err := s.taskManager.UpdateTaskQueueUserData(s.ctx, &p.UpdateTaskQueueUserDataRequest{
+		NamespaceID: s.namespaceID,
+		Updates: map[string]*p.SingleTaskQueueUserDataUpdate{
+			tq1: &p.SingleTaskQueueUserDataUpdate{UserData: data, Conflicting: &conflict1},
+			tq2: &p.SingleTaskQueueUserDataUpdate{UserData: d4, Conflicting: &conflict2},
+			tq3: &p.SingleTaskQueueUserDataUpdate{UserData: data, Conflicting: &conflict3},
+		},
+	})
+	s.Error(err)
+	s.True(p.IsConflictErr(err))
+	s.False(conflict1)
+	s.True(conflict2)
+	s.False(conflict3)
+
+	// verify that none were updated
+	for _, tq := range []string{tq1, tq2, tq3} {
+		res, err := s.taskManager.GetTaskQueueUserData(s.ctx, &p.GetTaskQueueUserDataRequest{
+			NamespaceID: s.namespaceID,
+			TaskQueue:   tq,
+		})
+		s.NoError(err)
+		s.Equal(int64(3), res.UserData.Version)
+		s.True(hlc.Equal(data.Data.Clock, res.UserData.Data.Clock))
+	}
+}
+
 func (s *TaskQueueUserDataSuite) makeData(prev *hlc.Clock, ver int64) *persistencespb.VersionedTaskQueueUserData {
 	return &persistencespb.VersionedTaskQueueUserData{
 		Data: &persistencespb.TaskQueueUserData{

@@ -270,6 +270,7 @@ func (m *taskManagerImpl) UpdateTaskQueueUserData(ctx context.Context, request *
 			UserData:        userData,
 			BuildIdsAdded:   update.BuildIdsAdded,
 			BuildIdsRemoved: update.BuildIdsRemoved,
+			Conflicting:     update.Conflicting,
 		}
 	}
 	return m.taskStore.UpdateTaskQueueUserData(ctx, internalRequest)

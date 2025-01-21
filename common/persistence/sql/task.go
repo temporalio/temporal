@@ -490,7 +490,10 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 				Version:       update.Version,
 			})
 			if m.Db.IsDupEntryError(err) {
-				return &persistence.ConditionFailedError{Msg: err.Error()}
+				err = &persistence.ConditionFailedError{Msg: err.Error()}
+			}
+			if persistence.IsConflictErr(err) && update.Conflicting != nil {
+				*update.Conflicting = true
 			}
 			if err != nil {
 				return err

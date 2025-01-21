@@ -298,6 +298,7 @@ type (
 		// Used to build an index of build_id to task_queues
 		BuildIdsAdded   []string
 		BuildIdsRemoved []string
+		Conflicting     *bool
 	}
 
 	InternalTaskQueueUserDataEntry struct {

@@ -556,13 +556,29 @@ func (d *MatchingTaskStore) UpdateTaskQueueUserData(
 	defer iter.Close()
 
 	if !applied {
-		var columns []string
-		for k, v := range previous {
-			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
+		// No error, but not applied. That means we had a conflict.
+		// Iterate through results to identify first conflicting row.
+		more := true
+		for more {
+			if name, ok := getFromAnyMap[string](previous, "task_queue_name"); ok {
+				if previousVersion, ok := getFromAnyMap[int64](previous, "version"); ok {
+					if update, ok := request.Updates[name]; ok {
+						if update.Version != previousVersion {
+							if update.Conflicting != nil {
+								*update.Conflicting = true
+							}
+							return &p.ConditionFailedError{
+								Msg: fmt.Sprintf("Failed to update task queues: task queue %q version %d != %d",
+									name, update.Version, previousVersion),
+							}
+						}
+					}
+				}
+			}
+			clear(previous)
+			more = iter.MapScan(previous)
 		}
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update task queues. columns: (%v)", strings.Join(columns, ",")),
-		}
+		return &p.ConditionFailedError{Msg: "Failed to update task queues: unknown conflict"}
 	}
 
 	return nil
@@ -655,4 +671,12 @@ func (d *MatchingTaskStore) Close() {
 	if d.Session != nil {
 		d.Session.Close()
 	}
+}
+
+func getFromAnyMap[T any, K comparable](m map[K]any, key K) (t T, found bool) {
+	var v any
+	if v, found = m[key]; found {
+		t, found = v.(T)
+	}
+	return
 }
