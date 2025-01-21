@@ -70,6 +70,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -119,34 +120,35 @@ type (
 		workflowservice.UnsafeWorkflowServiceServer
 		status int32
 
-		tokenSerializer                 common.TaskTokenSerializer
-		config                          *Config
-		versionChecker                  headers.VersionChecker
-		namespaceHandler                *namespaceHandler
-		getDefaultWorkflowRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
-		visibilityMgr                   manager.VisibilityManager
-		logger                          log.Logger
-		throttledLogger                 log.Logger
-		persistenceExecutionName        string
-		clusterMetadataManager          persistence.ClusterMetadataManager
-		clusterMetadata                 cluster.Metadata
-		historyClient                   historyservice.HistoryServiceClient
-		matchingClient                  matchingservice.MatchingServiceClient
-		deploymentStoreClient           deployment.DeploymentStoreClient
-		archiverProvider                provider.ArchiverProvider
-		payloadSerializer               serialization.Serializer
-		namespaceRegistry               namespace.Registry
-		saMapperProvider                searchattribute.MapperProvider
-		saProvider                      searchattribute.Provider
-		saValidator                     *searchattribute.Validator
-		archivalMetadata                archiver.ArchivalMetadata
-		healthServer                    *health.Server
-		overrides                       *Overrides
-		membershipMonitor               membership.Monitor
-		healthInterceptor               *interceptor.HealthInterceptor
-		scheduleSpecBuilder             *scheduler.SpecBuilder
-		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
-		httpEnabled                     bool
+		tokenSerializer                               *tasktoken.Serializer
+		config                                        *Config
+		versionChecker                                headers.VersionChecker
+		namespaceHandler                              *namespaceHandler
+		getDefaultWorkflowRetrySettings               dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+		followReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
+		visibilityMgr                                 manager.VisibilityManager
+		logger                                        log.Logger
+		throttledLogger                               log.Logger
+		persistenceExecutionName                      string
+		clusterMetadataManager                        persistence.ClusterMetadataManager
+		clusterMetadata                               cluster.Metadata
+		historyClient                                 historyservice.HistoryServiceClient
+		matchingClient                                matchingservice.MatchingServiceClient
+		deploymentStoreClient                         deployment.DeploymentStoreClient
+		archiverProvider                              provider.ArchiverProvider
+		payloadSerializer                             serialization.Serializer
+		namespaceRegistry                             namespace.Registry
+		saMapperProvider                              searchattribute.MapperProvider
+		saProvider                                    searchattribute.Provider
+		saValidator                                   *searchattribute.Validator
+		archivalMetadata                              archiver.ArchivalMetadata
+		healthServer                                  *health.Server
+		overrides                                     *Overrides
+		membershipMonitor                             membership.Monitor
+		healthInterceptor                             *interceptor.HealthInterceptor
+		scheduleSpecBuilder                           *scheduler.SpecBuilder
+		outstandingPollers                            collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
+		httpEnabled                                   bool
 	}
 )
 
@@ -177,37 +179,37 @@ func NewWorkflowHandler(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	httpEnabled bool,
 ) *WorkflowHandler {
-
 	handler := &WorkflowHandler{
 		status:          common.DaemonStatusInitialized,
 		config:          config,
-		tokenSerializer: common.NewProtoTaskTokenSerializer(),
+		tokenSerializer: tasktoken.NewSerializer(),
 		versionChecker:  headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
 			logger,
 			persistenceMetadataManager,
 			clusterMetadata,
-			namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger),
+			nsreplication.NewReplicator(namespaceReplicationQueue, logger),
 			archivalMetadata,
 			archiverProvider,
 			timeSource,
 			config,
 		),
-		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
-		visibilityMgr:                   visibilityMgr,
-		logger:                          logger,
-		throttledLogger:                 throttledLogger,
-		persistenceExecutionName:        persistenceExecutionName,
-		clusterMetadataManager:          clusterMetadataManager,
-		clusterMetadata:                 clusterMetadata,
-		historyClient:                   historyClient,
-		matchingClient:                  matchingClient,
-		deploymentStoreClient:           deploymentStoreClient,
-		archiverProvider:                archiverProvider,
-		payloadSerializer:               payloadSerializer,
-		namespaceRegistry:               namespaceRegistry,
-		saProvider:                      saProvider,
-		saMapperProvider:                saMapperProvider,
+		getDefaultWorkflowRetrySettings:               config.DefaultWorkflowRetryPolicy,
+		followReusePolicyAfterConflictPolicyTerminate: config.FollowReusePolicyAfterConflictPolicyTerminate,
+		visibilityMgr:            visibilityMgr,
+		logger:                   logger,
+		throttledLogger:          throttledLogger,
+		persistenceExecutionName: persistenceExecutionName,
+		clusterMetadataManager:   clusterMetadataManager,
+		clusterMetadata:          clusterMetadata,
+		historyClient:            historyClient,
+		matchingClient:           matchingClient,
+		deploymentStoreClient:    deploymentStoreClient,
+		archiverProvider:         archiverProvider,
+		payloadSerializer:        payloadSerializer,
+		namespaceRegistry:        namespaceRegistry,
+		saProvider:               saProvider,
+		saMapperProvider:         saMapperProvider,
 		saValidator: searchattribute.NewValidator(
 			saProvider,
 			saMapperProvider,
@@ -468,7 +470,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowIdReusePolicy(request.WorkflowIdReusePolicy, request.WorkflowIdConflictPolicy); err != nil {
+	if err := wh.validateWorkflowIdReusePolicy(
+		namespaceName,
+		request.WorkflowIdReusePolicy,
+		request.WorkflowIdConflictPolicy); err != nil {
 		return nil, err
 	}
 
@@ -1198,7 +1203,10 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		return nil, err
 	}
 
-	return &workflowservice.RecordActivityTaskHeartbeatResponse{CancelRequested: resp.GetCancelRequested()}, nil
+	return &workflowservice.RecordActivityTaskHeartbeatResponse{
+		CancelRequested: resp.GetCancelRequested(),
+		ActivityPaused:  resp.GetActivityPaused(),
+	}, nil
 }
 
 // RecordActivityTaskHeartbeatById is called by application worker while it is processing an ActivityTask.  If worker fails
@@ -1293,7 +1301,10 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{CancelRequested: resp.GetCancelRequested()}, nil
+	return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{
+		CancelRequested: resp.GetCancelRequested(),
+		ActivityPaused:  resp.GetActivityPaused(),
+	}, nil
 }
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
@@ -1976,6 +1987,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	if err := wh.validateWorkflowIdReusePolicy(
+		namespaceName,
 		request.WorkflowIdReusePolicy,
 		request.WorkflowIdConflictPolicy,
 	); err != nil {
@@ -4777,12 +4789,18 @@ func (wh *WorkflowHandler) validateVersionRuleBuildId(request *workflowservice.U
 }
 
 func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
+	namespaceName namespace.Name,
 	reusePolicy enumspb.WorkflowIdReusePolicy,
 	conflictPolicy enumspb.WorkflowIdConflictPolicy,
 ) error {
 	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED &&
 		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
-		return errIncompatibleIDReusePolicy
+		return errIncompatibleIDReusePolicyTerminateIfRunning
+	}
+	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING &&
+		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE &&
+		wh.followReusePolicyAfterConflictPolicyTerminate(namespaceName.String()) {
+		return errIncompatibleIDReusePolicyRejectDuplicate
 	}
 	return nil
 }

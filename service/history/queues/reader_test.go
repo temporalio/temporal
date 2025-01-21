@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -88,6 +89,7 @@ func (s *readerSuite) SetupTest() {
 			nil,
 			nil,
 			metrics.NoopMetricsHandler,
+			noop.NewTracerProvider().Tracer(""),
 		)
 	})
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), &MonitorOptions{

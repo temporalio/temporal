@@ -123,7 +123,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// behaviour related to versioning
 		dynamicconfig.TaskQueueInfoByBuildIdTTL.Key(): 0 * time.Second,
 	}
-	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *VersioningIntegSuite) SetupTest() {
@@ -3638,7 +3638,7 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 		func() bool {
 			return runs1.Load() >= int32(3)
 		},
-		3500*time.Millisecond,
+		6*time.Second,
 		100*time.Millisecond,
 	)
 

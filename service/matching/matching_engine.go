@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
@@ -125,7 +126,7 @@ type (
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
 		deploymentStoreClient         deployment.DeploymentStoreClient
-		tokenSerializer               common.TaskTokenSerializer
+		tokenSerializer               *tasktoken.Serializer
 		historySerializer             serialization.Serializer
 		logger                        log.Logger
 		throttledLogger               log.ThrottledLogger
@@ -143,6 +144,7 @@ type (
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
+		testHooks                     testhooks.TestHooks
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
 		// RespondQueryTaskCompleted() or through an internal service error causing temporal to be unable to dispatch
@@ -203,6 +205,7 @@ func NewEngine(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
 	nexusEndpointManager persistence.NexusEndpointManager,
+	testHooks testhooks.TestHooks,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -211,7 +214,7 @@ func NewEngine(
 		historyClient:                 historyClient,
 		matchingRawClient:             matchingRawClient,
 		deploymentStoreClient:         deploymentStoreClient,
-		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:               tasktoken.NewSerializer(),
 		historySerializer:             serialization.NewSerializer(),
 		logger:                        log.With(logger, tag.ComponentMatchingEngine),
 		throttledLogger:               log.With(throttledLogger, tag.ComponentMatchingEngine),
@@ -233,6 +236,7 @@ func NewEngine(
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
 		config:                    config,
+		testHooks:                 testHooks,
 		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
@@ -2229,21 +2233,26 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(
 }
 
 // Responsible for emitting and updating loaded_physical_task_queue_count metric
-func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueueManagerImpl, delta int) {
+func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(
+	ns *namespace.Namespace,
+	partition tqid.Partition,
+	version PhysicalTaskQueueVersion,
+	delta int,
+) {
 	// calculating versioned to be one of: “unversioned” or "buildId” or “versionSet”
 	versioned := "unversioned"
-	if dep := pqm.queue.Version().Deployment(); dep != nil {
+	if dep := version.Deployment(); dep != nil {
 		versioned = "deployment"
-	} else if buildID := pqm.queue.Version().BuildId(); buildID != "" {
+	} else if buildID := version.BuildId(); buildID != "" {
 		versioned = "buildId"
-	} else if versionSet := pqm.queue.Version().VersionSet(); versionSet != "" {
+	} else if versionSet := version.VersionSet(); versionSet != "" {
 		versioned = "versionSet"
 	}
 
 	physicalTaskQueueParameters := taskQueueCounterKey{
-		namespaceID:   pqm.partitionMgr.Partition().NamespaceId(),
-		taskType:      pqm.partitionMgr.Partition().TaskType(),
-		partitionType: pqm.partitionMgr.Partition().Kind(),
+		namespaceID:   partition.NamespaceId(),
+		taskType:      partition.TaskType(),
+		partitionType: partition.Kind(),
 		versioned:     versioned,
 	}
 
@@ -2252,12 +2261,11 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueue
 	loadedPhysicalTaskQueueCounter := e.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters]
 	e.gaugeMetrics.lock.Unlock()
 
-	pm := pqm.partitionMgr
 	metrics.LoadedPhysicalTaskQueueGauge.With(
 		metrics.GetPerTaskQueuePartitionTypeScope(
 			e.metricsHandler,
-			pm.ns.Name().String(),
-			pm.Partition(),
+			ns.Name().String(),
+			partition,
 			// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 			false,
 		)).Record(
@@ -2268,24 +2276,28 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueue
 
 // Responsible for emitting and updating loaded_task_queue_family_count, loaded_task_queue_count and
 // loaded_task_queue_partition_count metrics
-func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartitionManager, delta int) {
+func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(
+	ns *namespace.Namespace,
+	partition tqid.Partition,
+	delta int,
+) {
 	// each metric shall be accessed based on the mentioned parameters
 	taskQueueFamilyParameters := taskQueueCounterKey{
-		namespaceID: pm.Partition().NamespaceId(),
+		namespaceID: partition.NamespaceId(),
 	}
 
 	taskQueueParameters := taskQueueCounterKey{
-		namespaceID: pm.Partition().NamespaceId(),
-		taskType:    pm.Partition().TaskType(),
+		namespaceID: partition.NamespaceId(),
+		taskType:    partition.TaskType(),
 	}
 
 	taskQueuePartitionParameters := taskQueueCounterKey{
-		namespaceID:   pm.Partition().NamespaceId(),
-		taskType:      pm.Partition().TaskType(),
-		partitionType: pm.Partition().Kind(),
+		namespaceID:   partition.NamespaceId(),
+		taskType:      partition.TaskType(),
+		partitionType: partition.Kind(),
 	}
 
-	rootPartition := pm.Partition().IsRoot()
+	rootPartition := partition.IsRoot()
 	e.gaugeMetrics.lock.Lock()
 
 	loadedTaskQueueFamilyCounter, loadedTaskQueueCounter, loadedTaskQueuePartitionCounter :=
@@ -2297,14 +2309,14 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 	if rootPartition {
 		loadedTaskQueueCounter += delta
 		e.gaugeMetrics.loadedTaskQueueCount[taskQueueParameters] = loadedTaskQueueCounter
-		if pm.Partition().TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		if partition.TaskType() == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			loadedTaskQueueFamilyCounter += delta
 			e.gaugeMetrics.loadedTaskQueueFamilyCount[taskQueueFamilyParameters] = loadedTaskQueueFamilyCounter
 		}
 	}
 	e.gaugeMetrics.lock.Unlock()
 
-	nsName := pm.Namespace().Name().String()
+	nsName := ns.Name().String()
 
 	e.metricsHandler.Gauge(metrics.LoadedTaskQueueFamilyGauge.Name()).Record(
 		float64(loadedTaskQueueFamilyCounter),
@@ -2320,7 +2332,7 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 	taggedHandler := metrics.GetPerTaskQueuePartitionTypeScope(
 		e.metricsHandler,
 		nsName,
-		pm.Partition(),
+		partition,
 		// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 		false,
 	)

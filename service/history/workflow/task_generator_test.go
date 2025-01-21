@@ -491,7 +491,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 				ScheduleToCloseTimeout: durationpb.New(time.Hour),
 			},
 		},
-	}, []byte("token"), false)
+	}, []byte("token"))
 	require.NoError(t, err)
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)

@@ -30,21 +30,21 @@ package logtags
 import (
 	"strings"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/tasktoken"
 )
 
 type (
 	WorkflowTags struct {
-		serializer common.TaskTokenSerializer
+		serializer *tasktoken.Serializer
 		logger     log.Logger
 	}
 )
 
 func NewWorkflowTags(
-	serializer common.TaskTokenSerializer,
+	serializer *tasktoken.Serializer,
 	logger log.Logger,
 ) *WorkflowTags {
 	return &WorkflowTags{

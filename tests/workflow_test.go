@@ -128,7 +128,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
-
 	// setting this to 0 to be sure we are terminating old workflow
 	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
@@ -145,6 +144,11 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
 		{
 			"TerminateExisting id workflow conflict policy",
 			enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED,
+			enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+		},
+		{
+			"TerminateExisting with AllowDuplicateFailedOnly",
+			enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 			enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 		},
 	}

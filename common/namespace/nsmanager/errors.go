@@ -22,20 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package nsmanager
 
 import (
-	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/api/serviceerror"
 )
 
-type (
-	// TaskTokenSerializer serializes task tokens
-	TaskTokenSerializer interface {
-		Serialize(token *tokenspb.Task) ([]byte, error)
-		Deserialize(data []byte) (*tokenspb.Task, error)
-		SerializeQueryTaskToken(token *tokenspb.QueryTask) ([]byte, error)
-		DeserializeQueryTaskToken(data []byte) (*tokenspb.QueryTask, error)
-		SerializeNexusTaskToken(token *tokenspb.NexusTask) ([]byte, error)
-		DeserializeNexusTaskToken(data []byte) (*tokenspb.NexusTask, error)
-	}
+var (
+	errActiveClusterNotInClusters = serviceerror.NewInvalidArgument("Active cluster is not contained in all clusters.")
+	errInvalidArchivalConfig      = serviceerror.NewInvalidArgument("Invalid to enable archival without specifying a uri.")
 )

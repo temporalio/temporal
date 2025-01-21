@@ -27,6 +27,7 @@ package startworkflow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -35,8 +36,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
@@ -74,13 +75,14 @@ const (
 
 // Starter starts a new workflow execution.
 type Starter struct {
-	shardContext               shard.Context
-	workflowConsistencyChecker api.WorkflowConsistencyChecker
-	tokenSerializer            common.TaskTokenSerializer
-	visibilityManager          manager.VisibilityManager
-	request                    *historyservice.StartWorkflowExecutionRequest
-	namespace                  *namespace.Namespace
-	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
+	shardContext                                  shard.Context
+	workflowConsistencyChecker                    api.WorkflowConsistencyChecker
+	tokenSerializer                               *tasktoken.Serializer
+	visibilityManager                             manager.VisibilityManager
+	request                                       *historyservice.StartWorkflowExecutionRequest
+	namespace                                     *namespace.Namespace
+	createOrUpdateLeaseFn                         api.CreateOrUpdateLeaseFunc
+	followReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -106,7 +108,7 @@ type mutableStateInfo struct {
 func NewStarter(
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	tokenSerializer common.TaskTokenSerializer,
+	tokenSerializer *tasktoken.Serializer,
 	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
@@ -124,6 +126,7 @@ func NewStarter(
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
+		followReusePolicyAfterConflictPolicyTerminate: shardContext.GetConfig().FollowReusePolicyAfterConflictPolicyTerminate,
 	}, nil
 }
 
@@ -493,8 +496,13 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		resp, err := s.generateResponse(newRunID, mutableStateInfo.workflowTask, events)
 		return resp, StartNew, err
 	case consts.ErrWorkflowCompleted:
-		// current workflow already closed
-		// fallthough to the logic for only creating the new workflow below
+		if s.followReusePolicyAfterConflictPolicyTerminate(s.namespace.Name().String()) {
+			// Exit and retry again from the top.
+			// By returning an Unavailable service error, the entire Start request will be retried.
+			// NOTE: This WorkflowIDReusePolicy cannot be RejectDuplicate as the frontend will reject that.
+			return nil, StartErr, serviceerror.NewUnavailable(fmt.Sprintf("Termination failed: %v", err))
+		}
+		// Fallthough to the logic for only creating the new workflow below.
 		return nil, StartNew, nil
 	default:
 		return nil, StartErr, err

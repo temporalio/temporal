@@ -86,16 +86,6 @@ func TestScheduleFunctionalSuite(t *testing.T) {
 	suite.Run(t, new(ScheduleFunctionalSuite))
 }
 
-func (s *ScheduleFunctionalSuite) SetupSuite() {
-	if testcore.UsingSQLAdvancedVisibility() {
-		s.FunctionalTestSuite.SetupSuiteWithCluster("testdata/cluster.yaml")
-		s.Logger.Info(fmt.Sprintf("Running schedule tests with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
-	} else {
-		s.FunctionalTestSuite.SetupSuiteWithCluster("testdata/es_cluster.yaml")
-		s.Logger.Info("Running schedule tests with Elasticsearch persistence")
-	}
-}
-
 func (s *ScheduleFunctionalSuite) SetupTest() {
 	s.FunctionalTestSuite.SetupTest()
 	s.dataConverter = testcore.NewTestDataConverter()

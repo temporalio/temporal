@@ -86,7 +86,7 @@ func (q *faultyDLQ) DeleteTasks(
 }
 
 func (s *PurgeDLQTasksSuite) SetupSuite() {
-	s.FunctionalTestSuite.SetupSuiteWithDefaultCluster(
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
 				s.dlq = &faultyDLQ{HistoryTaskQueueManager: manager}

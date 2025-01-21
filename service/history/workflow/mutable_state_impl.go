@@ -4396,11 +4396,12 @@ func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.
 
 func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	versioningOverride *workflowpb.VersioningOverride,
+	unsetVersioningOverride bool,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
 	}
-	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride)
+	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride, unsetVersioningOverride)
 	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
 		return nil, err
 	}
@@ -4408,7 +4409,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
-	override := event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride()
+	attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+	override := attributes.GetVersioningOverride()
+	if attributes.GetUnsetVersioningOverride() {
+		override = nil
+	} else if override == nil {
+		return nil
+	}
+
 	previousEffectiveDeployment := ms.GetEffectiveDeployment()
 	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
@@ -5924,6 +5932,39 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 	}
 
 	var tombstones []*persistencespb.StateMachineTombstone
+	if ms.stateMachineNode != nil {
+		opLog, err := ms.stateMachineNode.OpLog()
+		if err != nil {
+			panic(fmt.Sprintf("Failed to get HSM operation log: %v", err))
+		}
+
+		for _, op := range opLog {
+			if deleteOp, ok := op.(hsm.DeleteOperation); ok {
+				path := deleteOp.Path()
+				if len(path) == 0 {
+					continue // Skip root deletion
+				}
+
+				tombstone := &persistencespb.StateMachineTombstone{
+					StateMachineKey: &persistencespb.StateMachineTombstone_StateMachinePath{
+						StateMachinePath: &persistencespb.StateMachinePath{
+							Path: make([]*persistencespb.StateMachineKey, len(path)),
+						},
+					},
+				}
+
+				for i, key := range path {
+					tombstone.GetStateMachinePath().Path[i] = &persistencespb.StateMachineKey{
+						Type: key.Type,
+						Id:   key.ID,
+					}
+				}
+
+				tombstones = append(tombstones, tombstone)
+			}
+		}
+	}
+
 	for scheduledEventID := range ms.deleteActivityInfos {
 		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
 			StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
@@ -5964,9 +6005,11 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 	// This requires tracking the lastUpdateVersionedTransition for each signalRequestedID,
 	// which is not supported by today's DB schema.
 	// TODO: we don't delete updateInfo and StateMachine today. Track them here when we do.
+	transitionHistory := ms.executionInfo.TransitionHistory
+	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
 
 	tombstoneBatch := &persistencespb.StateMachineTombstoneBatch{
-		VersionedTransition:    ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
+		VersionedTransition:    currentVersionedTransition,
 		StateMachineTombstones: tombstones,
 	}
 	// As an optimization, we only track the first empty tombstone batch. So we can know the start point of the tombstone batch

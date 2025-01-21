@@ -344,7 +344,7 @@ func TestFindOrCreate(t *testing.T) {
 
 			// create an in-flight update #1
 			upd1, existed, err := reg.FindOrCreate(context.Background(), tv1.UpdateID())
-			require.NoError(t, err, "creating update #1 should have beeen allowed")
+			require.NoError(t, err, "creating update #1 should have been allowed")
 			require.False(t, existed)
 			require.Equal(t, 1, reg.Len())
 
@@ -406,6 +406,28 @@ func TestFindOrCreate(t *testing.T) {
 			require.False(t, existed)
 			require.Equal(t, 2, reg.Len())
 		})
+	})
+
+	t.Run("check max registry size limit", func(t *testing.T) {
+		var (
+			limit = 1
+			reg   = update.NewRegistry(
+				emptyUpdateStore,
+				update.WithRegistrySizeLimit(
+					func() int { return limit },
+				),
+			)
+			evStore = mockEventStore{Controller: effect.Immediate(context.Background())}
+		)
+
+		t.Run("does not crash", func(t *testing.T) {
+			upd, _, err := reg.FindOrCreate(context.Background(), tv1.UpdateID())
+			require.NoError(t, err)
+			err = admit(t, evStore, upd)
+			require.NoError(t, err)
+		})
+
+		// TODO: once implemented, ensure that update is removed from registry
 	})
 }
 
@@ -776,7 +798,7 @@ func TestTryResurrect(t *testing.T) {
 		reg := update.NewRegistry(
 			emptyUpdateStore,
 			update.WithInFlightLimit(
-				func() int { return 0 },
+				func() int { return 1 },
 			),
 		)
 		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
@@ -788,22 +810,32 @@ func TestTryResurrect(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("enforce total update limit", func(t *testing.T) {
+	t.Run("still enforce total update limit", func(t *testing.T) {
 		reg := update.NewRegistry(
 			emptyUpdateStore,
 			update.WithTotalLimit(
-				func() int { return 0 },
+				func() int { return 1 },
 			),
 		)
-		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
-			AcceptedRequestMessageId:         tv.MessageID(),
-			AcceptedRequestSequencingEventId: testSequencingEventID,
-		})}
 
+		// 1st is allowed
+		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId: "0",
+			AcceptedRequest:          &updatepb.Request{},
+		})}
 		_, err := reg.TryResurrect(context.Background(), msg)
+		require.NoError(t, err)
+		require.Equal(t, 1, reg.Len())
+
+		// 2nd is denied
+		msg = &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId: "1",
+			AcceptedRequest:          &updatepb.Request{},
+		})}
+		_, err = reg.TryResurrect(context.Background(), msg)
 		var failedPrecon *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPrecon)
-		require.Equal(t, 0, reg.Len())
+		require.Equal(t, 1, reg.Len())
 	})
 }
 

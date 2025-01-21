@@ -36,6 +36,8 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
@@ -50,6 +52,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -162,6 +165,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		logger            log.Logger
 		metricsHandler    metrics.Handler
+		tracer            trace.Tracer
 		dlqWriter         *DLQWriter
 
 		readerID                   int64
@@ -201,6 +205,7 @@ func NewExecutable(
 	clusterMetadata cluster.Metadata,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	tracer trace.Tracer,
 	opts ...ExecutableOption,
 ) Executable {
 	params := ExecutableParams{
@@ -241,6 +246,7 @@ func NewExecutable(
 			},
 		),
 		metricsHandler:             metricsHandler,
+		tracer:                     tracer,
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
@@ -276,6 +282,25 @@ func (e *executableImpl) Execute() (retErr error) {
 		callerInfo,
 	)
 	e.Unlock()
+
+	if telemetry.IsEnabled(e.tracer) {
+		var span trace.Span
+		ctx, span = e.tracer.Start(
+			ctx,
+			fmt.Sprintf("queue.Execute/%v", e.GetType().String()),
+			trace.WithSpanKind(trace.SpanKindConsumer),
+			trace.WithAttributes(
+				attribute.Key(telemetry.WorkflowIDKey).String(e.GetWorkflowID()),
+				attribute.Key(telemetry.WorkflowRunIDKey).String(e.GetRunID()),
+				attribute.Key("task-type").String(e.GetType().String()),
+				attribute.Key("task-id").Int64(e.GetTaskID())))
+		defer func() {
+			if retErr != nil {
+				span.RecordError(retErr)
+			}
+			span.End()
+		}()
+	}
 
 	defer func() {
 		if panicObj := recover(); panicObj != nil {

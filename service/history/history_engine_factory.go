@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
@@ -68,6 +69,7 @@ type (
 		ReplicationDLQWriter            replication.DLQWriter
 		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		TestHooks                       testhooks.TestHooks
 	}
 
 	historyEngineFactory struct {
@@ -108,5 +110,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.ReplicationDLQWriter,
 		f.CommandHandlerRegistry,
 		f.OutboundQueueCBPool,
+		f.TestHooks,
 	)
 }

@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
@@ -59,9 +60,18 @@ func TestSizeLimitFunctionalSuite(t *testing.T) {
 	suite.Run(t, new(SizeLimitFunctionalSuite))
 }
 
-// This cluster use customized threshold for history config
 func (s *SizeLimitFunctionalSuite) SetupSuite() {
-	s.FunctionalTestSuite.SetupSuiteWithCluster("testdata/sizelimit_cluster.yaml")
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.HistoryCountLimitWarn.Key():      10,
+		dynamicconfig.HistoryCountLimitError.Key():     20,
+		dynamicconfig.HistorySizeLimitWarn.Key():       5000,
+		dynamicconfig.HistorySizeLimitError.Key():      9000,
+		dynamicconfig.BlobSizeLimitWarn.Key():          1,
+		dynamicconfig.BlobSizeLimitError.Key():         1000,
+		dynamicconfig.MutableStateSizeLimitWarn.Key():  200,
+		dynamicconfig.MutableStateSizeLimitError.Key(): 1100,
+	}
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimit() {

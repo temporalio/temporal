@@ -574,6 +574,18 @@ func (s *ContextImpl) AddSpeculativeWorkflowTaskTimeoutTask(
 	return nil
 }
 
+func (s *ContextImpl) GetHistoryTasks(
+	ctx context.Context,
+	request *persistence.GetHistoryTasksRequest,
+) (*persistence.GetHistoryTasksResponse, error) {
+	if err := s.errorByState(); err != nil {
+		return nil, err
+	}
+
+	resp, err := s.executionManager.GetHistoryTasks(ctx, request)
+	return resp, s.handleReadError(err)
+}
+
 func (s *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
