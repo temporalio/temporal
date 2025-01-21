@@ -3350,7 +3350,6 @@ func (wh *WorkflowHandler) SetCurrentDeploymentVersion(ctx context.Context, requ
 	return nil, nil
 }
 
-// TODO (Shivam): Implement this
 func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request *workflowservice.DescribeWorkerDeploymentRequest) (_ *workflowservice.DescribeWorkerDeploymentResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 

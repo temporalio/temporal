@@ -224,7 +224,7 @@ func (d *ClientImpl) DescribeVersion(
 		return nil, err
 	}
 
-	return stateToInfo(queryResponse.VersionState), nil
+	return VersionStateToVersionInfo(queryResponse.VersionState), nil
 }
 
 func (d *ClientImpl) DescribeWorkerDeployment(
@@ -264,24 +264,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		return nil, err
 	}
 
-	// TODO (Shivam) - StatetoInfo type thing here as well?
-	var workerDeploymentInfo deploymentpb.WorkerDeploymentInfo
-	workerDeploymentInfo.Name = deploymentName
-	workerDeploymentInfo.CreateTime = queryResponse.State.CreateTime
-	for _, version := range queryResponse.State.Versions {
-		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, version)
-		if err != nil {
-			return nil, err
-		}
-		// TODO (Shivam) - Add WorkflowVersioningMode + AcceptsNewExecutions
-		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-			Version:    versionInfo.Version,
-			CreateTime: versionInfo.CreateTime,
-		})
-	}
-	// TODO (Shivam) - LastEditorIdentity will be the latest client that updated the deployment version. Will be implemented after setCurrentVersion is implemented.
-
-	return &workerDeploymentInfo, nil
+	return d.DeploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)
 }
 
 func (d *ClientImpl) GetCurrentVersion(
@@ -393,7 +376,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, nil, err
 	}
-	return stateToInfo(nil), stateToInfo(nil), nil
+	return VersionStateToVersionInfo(nil), VersionStateToVersionInfo(nil), nil
 }
 
 func (d *ClientImpl) StartWorkerDeployment(
@@ -617,7 +600,7 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 		namespaceEntry,
 		WorkerDeploymentVersionWorkflowType,
 		workflowID,
-		nil, // todo: (Shivam) - add memo
+		nil,
 		nil,
 		updateRequest,
 		identity,
@@ -640,7 +623,6 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 		return nil, serviceerror.NewInternal("outcome missing success and failure")
 	}
 
-	// todo (Shivam): Do we really need to return this response?
 	return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
 }
 
@@ -808,7 +790,7 @@ func (d *ClientImpl) record(operation string, retErr *error, args ...any) func()
 }
 
 //nolint:staticcheck
-func stateToInfo(state *deploymentspb.VersionLocalState) *deploymentpb.WorkerDeploymentVersionInfo {
+func VersionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deploymentpb.WorkerDeploymentVersionInfo {
 	if state == nil {
 		return nil
 	}
@@ -832,4 +814,29 @@ func stateToInfo(state *deploymentspb.VersionLocalState) *deploymentpb.WorkerDep
 		CreateTime:     state.CreateTime,
 		TaskQueueInfos: taskQueues,
 	}
+}
+
+func (d *ClientImpl) DeploymentStateToDeploymentInfo(ctx context.Context, namespaceEntry *namespace.Namespace,
+	deploymentName string, state *deploymentspb.WorkerDeploymentLocalState) (*deploymentpb.WorkerDeploymentInfo, error) {
+	if state == nil {
+		return nil, nil
+	}
+
+	var workerDeploymentInfo deploymentpb.WorkerDeploymentInfo
+	workerDeploymentInfo.Name = deploymentName
+	workerDeploymentInfo.CreateTime = state.CreateTime
+
+	for _, version := range state.Versions {
+		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, version)
+		if err != nil {
+			return nil, err
+		}
+		// TODO (Shivam) - Add WorkflowVersioningMode + AcceptsNewExecutions
+		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+			Version:    versionInfo.Version,
+			CreateTime: versionInfo.CreateTime,
+		})
+	}
+
+	return &workerDeploymentInfo, nil
 }
