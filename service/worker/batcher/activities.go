@@ -47,8 +47,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"golang.org/x/time/rate"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -342,7 +340,6 @@ func startTaskProcessor(
 						return err
 					})
 			case BatchTypeUnpauseActivities:
-				err = status.Errorf(codes.Unimplemented, "BatchTypeUnpauseActivities is not implemented")
 				operations := []*workflowservice.ManageActivityRequest_Operation{
 					{
 						OperationType: &workflowservice.ManageActivityRequest_Operation_Unpause{
