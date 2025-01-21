@@ -170,18 +170,11 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithRunningAndNoW
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	activityCompleteCh1 := make(chan struct{})
-	activityCompleteCh2 := make(chan struct{})
-	var activityAboutToReset atomic.Bool
-
+	activityCompleteCh := make(chan struct{})
+	var startedActivityCount atomic.Int32
 	activityFunction := func() (string, error) {
-		if activityAboutToReset.Load() == false {
-			activityErr := errors.New("bad-luck-please-retry")
-			s.WaitForChannel(ctx, activityCompleteCh1)
-			return "", activityErr
-		}
-
-		s.WaitForChannel(ctx, activityCompleteCh2)
+		startedActivityCount.Add(1)
+		s.WaitForChannel(ctx, activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -206,7 +199,6 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithRunningAndNoW
 		assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
 	}, 5*time.Second, 200*time.Millisecond)
 
-	activityAboutToReset.Store(true)
 	resetRequest := &workflowservice.ResetActivityByIdRequest{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
@@ -217,9 +209,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithRunningAndNoW
 	s.NoError(err)
 	s.NotNil(resp)
 
-	// let previous activity complete
-	activityCompleteCh1 <- struct{}{}
-	// wait a bit to make sure previous activity is completed
+	// wait a bit
 	util.InterruptibleSleep(ctx, 1*time.Second)
 
 	// check if workflow and activity are still running
@@ -235,12 +225,15 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithRunningAndNoW
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activity finish
-	activityCompleteCh2 <- struct{}{}
+	activityCompleteCh <- struct{}{}
 
 	// wait for workflow to complete
 	var out string
 	err = workflowRun.Get(ctx, &out)
 	s.NoError(err)
+
+	// make sure that only a single instance of the activity was running
+	s.Equal(int32(1), startedActivityCount.Load())
 }
 
 func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {

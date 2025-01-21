@@ -221,6 +221,7 @@ func ResetActivityById(
 	activityId string,
 	scheduleNewRun bool,
 	resetHeartbeats bool,
+	alsoUnpause bool,
 ) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
@@ -235,20 +236,32 @@ func ResetActivityById(
 		// reset the number of attempts
 		ai.Attempt = 1
 
-		if needRegenerateRetryTask(ai, scheduleNewRun) {
-			// we need to change the Stamp every time if we need to regenerate retry task
-			// * to make sure the stale retry is not processed
-			// * to prevent the current running activity from finishing if scheduleNewRun is provided
-			ai.Stamp++
-			if err := ms.RegenerateActivityRetryTask(ai, shardContext.GetTimeSource().Now()); err != nil {
-				return err
-			}
-		}
-
 		if resetHeartbeats {
 			activityInfo.LastHeartbeatDetails = nil
 			activityInfo.LastHeartbeatUpdateTime = nil
 		}
+
+		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
+		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_STARTED || (ai.Paused && !alsoUnpause) {
+			return nil
+		}
+
+		ai.Stamp++
+		if ai.Paused && alsoUnpause {
+			ai.Paused = false
+		}
+
+		// if activity is scheduled - we need to regenerate the retry task
+		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			scheduleTime := activityInfo.ScheduledTime.AsTime()
+			if scheduleNewRun {
+				scheduleTime = shardContext.GetTimeSource().Now().UTC()
+			}
+			if err := ms.RegenerateActivityRetryTask(ai, scheduleTime); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 }

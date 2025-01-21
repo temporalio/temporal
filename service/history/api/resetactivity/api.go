@@ -54,7 +54,7 @@ func Invoke(
 			activityId := request.GetActivityId()
 
 			if err := workflow.ResetActivityById(
-				shardContext, mutableState, activityId, request.NoWait, request.ResetHeartbeat,
+				shardContext, mutableState, activityId, request.NoWait, request.ResetHeartbeat, false,
 			); err != nil {
 				return nil, err
 			}
