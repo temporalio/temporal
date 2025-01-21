@@ -232,6 +232,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
 ) (_ *deploymentpb.WorkerDeploymentInfo, retErr error) {
+	//revive:disable-next-line:defer
 	defer d.record("DescribeWorkerDeployment", &retErr, deploymentName)()
 
 	// validating params

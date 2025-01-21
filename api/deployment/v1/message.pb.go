@@ -1232,6 +1232,7 @@ func (x *WorkerDeploymentWorkflowMemo) GetCurrentChangedTime() *timestamppb.Time
 	return nil
 }
 
+// Used as Worker Deployment Version workflow activity input:
 type AddVersionToWorkerDeploymentRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1295,6 +1296,7 @@ func (x *AddVersionToWorkerDeploymentRequest) GetRequestId() string {
 	return ""
 }
 
+// Used as Worker Deployment Version workflow activity output:
 type AddVersionToWorkerDeploymentResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
