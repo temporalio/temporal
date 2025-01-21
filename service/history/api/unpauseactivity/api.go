@@ -25,6 +25,7 @@ package unpauseactivity
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -99,12 +100,13 @@ func processUnpauseActivityRequest(
 		return &historyservice.UnpauseActivityResponse{}, nil
 	}
 
+	var jitter time.Duration
 	switch op := request.GetFrontendRequest().Operation.(type) {
 	case *workflowservice.UnpauseActivityByIdRequest_Resume:
-		return workflow.UnpauseActivityWithResume(shardContext, mutableState, ai, op.Resume.NoWait)
+		return workflow.UnpauseActivityWithResume(shardContext, mutableState, ai, op.Resume.NoWait, jitter)
 
 	case *workflowservice.UnpauseActivityByIdRequest_Reset_:
-		return workflow.UnpauseActivityWithReset(shardContext, mutableState, ai, op.Reset_.NoWait, op.Reset_.ResetHeartbeat)
+		return workflow.UnpauseActivityWithReset(shardContext, mutableState, ai, op.Reset_.NoWait, op.Reset_.ResetHeartbeat, jitter)
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
