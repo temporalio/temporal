@@ -111,6 +111,10 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment() {
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries())
 		a.Equal(2, len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()))
+
+		if len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()) < 2 {
+			return
+		}
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion())
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetVersion())
 
