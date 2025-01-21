@@ -108,7 +108,11 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment() {
 		a.NoError(err)
 		a.NotNil(resp.GetWorkerDeploymentInfo())
 		a.Equal(tv.DeploymentName(), resp.GetWorkerDeploymentInfo().GetName())
+
+		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries())
 		a.Equal(2, len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()))
+		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion())
+		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetVersion())
 
 		versions := []string{
 			resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion(),
