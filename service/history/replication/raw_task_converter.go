@@ -730,8 +730,8 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 	if err != nil {
 		return nil, err
 	}
-	var nextEventId int64
-	if taskInfo.NextEventID == common.EmptyEventID {
+	var nextEventId = taskInfo.NextEventID
+	if nextEventId == common.EmptyEventID {
 		nextEventId = taskInfo.LastVersionHistoryItem.GetEventId() + 1
 	}
 	lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, nextEventId-1)
