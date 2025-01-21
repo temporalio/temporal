@@ -116,7 +116,7 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	require.True(t, generator.NextInvocationTime.AsTime().After(newHighWatermark))
 
 	// We should have enqueued an Execute task, and another Buffer task.
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 	require.Equal(t, 2, len(opLog))
 

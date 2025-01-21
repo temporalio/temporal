@@ -296,7 +296,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	stateMachineRegistry *hsm.Registry,
 ) error {
 	tree := r.mutableState.HSM()
-	opLog, err := tree.Outputs()
+	opLog, err := tree.OpLog()
 	if err != nil {
 		return err
 	}
