@@ -240,7 +240,6 @@ func ResetActivityById(
 			activityInfo.LastHeartbeatDetails = nil
 			activityInfo.LastHeartbeatUpdateTime = nil
 		}
-
 		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
 		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_STARTED || (ai.Paused && !alsoUnpause) {
 			return nil
