@@ -100,7 +100,7 @@ func NewResult(
 
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	return &workercommon.PerNSDedicatedWorkerOptions{
-		Enabled: s.enabledForNs(ns.Name().String()),
+		Enabled: true,
 	}
 }
 

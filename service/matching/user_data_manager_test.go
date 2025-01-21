@@ -316,7 +316,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).MaxTimes(maxFastUserDataFetches)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // only one fetch
@@ -453,7 +453,7 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).MaxTimes(maxFastUserDataFetches)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -537,7 +537,7 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).MaxTimes(maxFastUserDataFetches)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -606,7 +606,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).MaxTimes(maxFastUserDataFetches)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -657,7 +657,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).MaxTimes(maxFastUserDataFetches)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -712,7 +712,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).MaxTimes(maxFastUserDataFetches)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
