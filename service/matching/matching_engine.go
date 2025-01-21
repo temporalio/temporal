@@ -190,8 +190,8 @@ var (
 	// Options for batching user data updates.
 	userDataBatcherOptions = stream_batcher.BatcherOptions{
 		MaxItems: 100,
-		MinDelay: 200 * time.Millisecond,
-		MaxDelay: 1000 * time.Millisecond,
+		MinDelay: 100 * time.Millisecond,
+		MaxDelay: 500 * time.Millisecond,
 		IdleTime: time.Minute,
 	}
 )
