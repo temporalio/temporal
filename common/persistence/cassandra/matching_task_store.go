@@ -558,12 +558,11 @@ func (d *MatchingTaskStore) UpdateTaskQueueUserData(
 	if !applied {
 		// No error, but not applied. That means we had a conflict.
 		// Iterate through results to identify first conflicting row.
-		more := true
-		for more {
-			name, hasName := getFromAnyMap[string](previous, "task_queue_name")
-			previousVersion, hasVer := getFromAnyMap[int64](previous, "version")
+		for {
+			name, nameErr := getTypedFieldFromRow[string]("task_queue_name", previous)
+			previousVersion, verErr := getTypedFieldFromRow[int64]("version", previous)
 			update, hasUpdate := request.Updates[name]
-			if hasName && hasVer && hasUpdate && update.Version != previousVersion {
+			if nameErr == nil && verErr == nil && hasUpdate && update.Version != previousVersion {
 				if update.Conflicting != nil {
 					*update.Conflicting = true
 				}
@@ -573,7 +572,9 @@ func (d *MatchingTaskStore) UpdateTaskQueueUserData(
 				}
 			}
 			clear(previous)
-			more = iter.MapScan(previous)
+			if !iter.MapScan(previous) {
+				break
+			}
 		}
 		return &p.ConditionFailedError{Msg: "Failed to update task queues: unknown conflict"}
 	}
@@ -668,12 +669,4 @@ func (d *MatchingTaskStore) Close() {
 	if d.Session != nil {
 		d.Session.Close()
 	}
-}
-
-func getFromAnyMap[T any, K comparable](m map[K]any, key K) (t T, found bool) {
-	var v any
-	if v, found = m[key]; found {
-		t, found = v.(T)
-	}
-	return
 }
