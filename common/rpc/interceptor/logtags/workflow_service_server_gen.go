@@ -198,7 +198,9 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 		return nil
 	case *workflowservice.SetCurrentDeploymentRequest:
 		return nil
-	case *workflowservice.SetCurrentDeploymentVersionRequest:
+	case *workflowservice.SetWorkerDeploymentCurrentVersionRequest:
+		return nil
+	case *workflowservice.SetWorkerDeploymentRampingVersionRequest:
 		return nil
 	case *workflowservice.ShutdownWorkerRequest:
 		return nil

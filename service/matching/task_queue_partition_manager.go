@@ -159,7 +159,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
 	directive := params.taskInfo.GetVersionDirective()
 	// spoolQueue will be nil iff task is forwarded.
-	spoolQueue, syncMatchQueue, _, err = pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId())
+	spoolQueue, syncMatchQueue, _, err = pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId(), params.taskInfo.GetWorkflowId())
 	if err != nil {
 		return "", false, err
 	}
@@ -344,12 +344,11 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	}
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
-		newBacklogQueue, syncMatchQueue, userDataChanged, err := pm.getPhysicalQueuesForAdd(
-			ctx,
+		newBacklogQueue, syncMatchQueue, userDataChanged, err := pm.getPhysicalQueuesForAdd(ctx,
 			directive,
 			nil,
 			taskInfo.GetRunId(),
-		)
+			taskInfo.GetWorkflowId())
 		if err != nil {
 			return err
 		}
@@ -390,17 +389,11 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
-		ctx,
+	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		request.VersionDirective,
-		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
-		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
-		// that only try up to 200ms sync-match. Therefore, to prevent blocking the request on the wrong build ID, its
-		// more important to allow the parent partition to make a fresh versioning decision in case the child partition
-		// did not have up-to-date User Data when selected a dispatch build ID.
 		nil,
 		request.GetQueryRequest().GetExecution().GetRunId(),
-	)
+		request.GetQueryRequest().GetExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
@@ -418,17 +411,11 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	taskId string,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
-	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
-		ctx,
+	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		worker_versioning.MakeUseAssignmentRulesDirective(),
-		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
-		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
-		// that only try up to 200ms sync-match. Therefore, to prevent blocking the request on the wrong build ID, its
-		// more important to allow the parent partition to make a fresh versioning decision in case the child partition
-		// did not have up-to-date User Data when selected a dispatch build ID.
 		nil,
 		"",
-	)
+		"")
 	if err != nil {
 		return nil, err
 	}
@@ -796,6 +783,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	directive *taskqueuespb.TaskVersionDirective,
 	forwardInfo *taskqueuespb.TaskForwardInfo,
 	runId string,
+	workflowId string,
 ) (spoolQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, err error) {
 	wfBehavior := directive.GetBehavior()
 	deployment := worker_versioning.DirectiveDeployment(directive)
@@ -821,7 +809,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		// not present in the workflow's pinned deployment. Such activities are considered
 		// independent activities and are treated as unpinned, sent to their TQ's current deployment.
 		isIndependentActivity := pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY &&
-			findDeployment(deploymentData, deployment) == -1
+			!hasDeploymentVersion(deploymentData, deployment)
 		if !isIndependentActivity {
 			pinnedQueue, err := pm.getVersionedQueue(ctx, "", "", deployment, true)
 			if err != nil {
@@ -838,7 +826,8 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		}
 	}
 
-	currentDeployment := worker_versioning.FindCurrentDeployment(deploymentData)
+	versioningInfo := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
+	currentDeployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.FindDeploymentVersionForWorkflowID(versioningInfo, workflowId))
 	if currentDeployment != nil &&
 		// Make sure the wf is not v1-2 versioned
 		directive.GetAssignedBuildId() == "" {

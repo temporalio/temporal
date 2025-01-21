@@ -583,7 +583,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 	}
 
 	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-	if findDeployment(deploymentData, workerDeployment) >= 0 {
+	if hasDeploymentVersion(deploymentData, workerDeployment) {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.
@@ -615,7 +615,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 			return err
 		}
 		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-		if findDeployment(deploymentData, workerDeployment) >= 0 {
+		if hasDeploymentVersion(deploymentData, workerDeployment) {
 			break
 		}
 		select {
@@ -636,7 +636,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	namespaceEntry *namespace.Namespace,
 	pollMetadata *pollMetadata,
 ) error {
-	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities)
+	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
 	if workerDeployment == nil {
 		return nil
 	}

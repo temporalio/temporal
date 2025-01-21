@@ -152,18 +152,18 @@ type (
 	}
 )
 
-func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(
+func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(
 	ctx context.Context,
-	request *workflowservice.DescribeWorkerDeploymentVersionRequest,
-) (*workflowservice.DescribeWorkerDeploymentVersionResponse, error) {
+	request *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
+) (*workflowservice.SetWorkerDeploymentCurrentVersionResponse, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (wh *WorkflowHandler) SetCurrentDeploymentVersion(
+func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(
 	ctx context.Context,
-	request *workflowservice.SetCurrentDeploymentVersionRequest,
-) (*workflowservice.SetCurrentDeploymentVersionResponse, error) {
+	request *workflowservice.SetWorkerDeploymentRampingVersionRequest,
+) (*workflowservice.SetWorkerDeploymentRampingVersionResponse, error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -3359,11 +3359,6 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	return &workflowservice.DescribeWorkerDeploymentVersionResponse{
 		WorkerDeploymentVersionInfo: workerDeploymentVersionInfo,
 	}, nil
-}
-
-// TODO (Shivam): Implement this
-func (wh *WorkflowHandler) SetCurrentDeploymentVersion(ctx context.Context, request *workflowservice.SetCurrentDeploymentVersionRequest) (_ *workflowservice.SetCurrentDeploymentVersionResponse, retError error) {
-	return nil, nil
 }
 
 // Returns the schedule description and current state of an existing schedule.

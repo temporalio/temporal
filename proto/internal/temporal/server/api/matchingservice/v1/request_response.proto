@@ -328,9 +328,18 @@ message SyncDeploymentUserDataRequest {
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
 
     // This is the deployment being modified.
-    temporal.api.deployment.v1.Deployment deployment = 4; 
+    // Deprecated.
+    temporal.api.deployment.v1.Deployment deployment = 4;
     // Data for this deployment.
+    // Deprecated.
     temporal.server.api.deployment.v1.TaskQueueData data = 5;
+
+    oneof operation {
+        // The deployment version and its data that is being updated.
+        temporal.server.api.persistence.v1.DeploymentVersionData update_version_data = 6;
+        // Pass to clean up this version's data from the task queue.
+        temporal.api.deployment.v1.WorkerDeploymentVersion forget_version = 7;
+    }
 }
 
 message SyncDeploymentUserDataResponse {
