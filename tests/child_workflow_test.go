@@ -50,7 +50,7 @@ import (
 )
 
 type ChildWorkflowSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestChildWorkflowSuite(t *testing.T) {
@@ -87,7 +87,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
 		WorkflowType:        parentWorkflowType,
 		TaskQueue:           taskQueueParent,
@@ -253,7 +253,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 
 	pollerParent := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueueParent,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandlerParent,
@@ -263,7 +263,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 
 	pollerChild := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueueChild,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandlerChild,
@@ -273,7 +273,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 
 	pollerGrandchild := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueueGrandchild,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandlerGrandchild,
@@ -308,7 +308,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	childStartedEventSearchAttrs := childStartedEventAttrs.GetSearchAttributes()
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
 	// check parent of child workflow is the top-level workflow
-	s.Equal(s.Namespace(), childStartedEventAttrs.GetParentWorkflowNamespace())
+	s.Equal(s.Namespace().String(), childStartedEventAttrs.GetParentWorkflowNamespace())
 	s.Equal(parentID, childStartedEventAttrs.ParentWorkflowExecution.GetWorkflowId())
 	s.Equal(we.GetRunId(), childStartedEventAttrs.ParentWorkflowExecution.GetRunId())
 	s.Equal(
@@ -367,8 +367,8 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	s.NoError(err)
 	s.NotNil(childCompletedEventFromParent)
 	completedAttributes := childCompletedEventFromParent.GetChildWorkflowExecutionCompletedEventAttributes()
-	s.Equal(s.Namespace(), completedAttributes.Namespace)
-	// TODO: change to s.Equal(s.Namespace()ID) once it is available.
+	s.Equal(s.Namespace().String(), completedAttributes.Namespace)
+	s.Equal(s.NamespaceID().String(), completedAttributes.NamespaceId)
 	s.NotEmpty(completedAttributes.NamespaceId)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
@@ -395,7 +395,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
 		WorkflowType:        parentWorkflowType,
 		TaskQueue:           taskQueueParent,
@@ -479,7 +479,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 
 	pollerParent := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueueParent,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandlerParent,
@@ -489,7 +489,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 
 	pollerChild := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueueChild,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandlerChild,
@@ -517,7 +517,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 		s.NotNil(childStartedEvent)
 		childStartedEventAttrs := childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
 		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
-		s.Equal(s.Namespace(), childStartedEventAttrs.GetParentWorkflowNamespace())
+		s.Equal(s.Namespace().String(), childStartedEventAttrs.GetParentWorkflowNamespace())
 		s.Equal(parentID, childStartedEventAttrs.ParentWorkflowExecution.GetWorkflowId())
 		s.Equal(we.GetRunId(), childStartedEventAttrs.ParentWorkflowExecution.GetRunId())
 		s.NotNil(childStartedEventAttrs.GetRootWorkflowExecution())
@@ -529,7 +529,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 
 	// terminate the child workflow
 	_, terminateErr := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: childID,
 		},
@@ -551,7 +551,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
 		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.Namespace(),
+			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 		})
@@ -600,7 +600,7 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
 		WorkflowType:        parentWorkflowType,
 		TaskQueue:           taskQueueParent,
@@ -707,7 +707,7 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 
 	pollerParent := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueueParent,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandlerParent,
@@ -717,7 +717,7 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 
 	pollerChild := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueueChild,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandlerChild,
@@ -745,7 +745,7 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 	s.NotNil(childStartedEvent)
 	childStartedEventAttrs := childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
-	s.Equal(s.Namespace(), childStartedEventAttrs.GetParentWorkflowNamespace())
+	s.Equal(s.Namespace().String(), childStartedEventAttrs.GetParentWorkflowNamespace())
 	s.Equal(parentID, childStartedEventAttrs.ParentWorkflowExecution.GetWorkflowId())
 	s.Equal(we.GetRunId(), childStartedEventAttrs.ParentWorkflowExecution.GetRunId())
 	s.NotNil(childStartedEventAttrs.GetRootWorkflowExecution())
@@ -762,7 +762,7 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 	s.NotNil(childStartedEvent)
 	childStartedEventAttrs = childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
-	s.Equal(s.Namespace(), childStartedEventAttrs.GetParentWorkflowNamespace())
+	s.Equal(s.Namespace().String(), childStartedEventAttrs.GetParentWorkflowNamespace())
 	s.Equal(parentID, childStartedEventAttrs.ParentWorkflowExecution.GetWorkflowId())
 	s.Equal(we.GetRunId(), childStartedEventAttrs.ParentWorkflowExecution.GetRunId())
 	s.NotNil(childStartedEventAttrs.GetRootWorkflowExecution())
@@ -779,7 +779,7 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 	s.NotNil(childStartedEvent)
 	childStartedEventAttrs = childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
-	s.Equal(s.Namespace(), childStartedEventAttrs.GetParentWorkflowNamespace())
+	s.Equal(s.Namespace().String(), childStartedEventAttrs.GetParentWorkflowNamespace())
 	s.Equal(parentID, childStartedEventAttrs.ParentWorkflowExecution.GetWorkflowId())
 	s.Equal(we.GetRunId(), childStartedEventAttrs.ParentWorkflowExecution.GetRunId())
 	s.NotNil(childStartedEventAttrs.GetRootWorkflowExecution())
@@ -815,7 +815,7 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
 		WorkflowType:        parentWorkflowType,
 		TaskQueue:           taskQueueParent,
@@ -911,7 +911,7 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 
 	pollerParent := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueueParent,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandlerParent,
@@ -921,7 +921,7 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 
 	pollerChild := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueueChild,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandlerChild,

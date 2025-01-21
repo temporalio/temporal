@@ -41,6 +41,7 @@ func handleSuccessfulOperationResult(
 	node *hsm.Node,
 	operation Operation,
 	result *commonpb.Payload,
+	links []*commonpb.Link,
 	completionSource CompletionSource,
 ) (hsm.TransitionOutput, error) {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
@@ -57,6 +58,7 @@ func handleSuccessfulOperationResult(
 				RequestId:        operation.RequestId,
 			},
 		}
+		e.Links = links
 	})
 	return TransitionSucceeded.Apply(operation, EventSucceeded{
 		Time:             event.EventTime.AsTime(),
@@ -202,7 +204,7 @@ func CompletionHandler(
 			if opFailedError != nil {
 				return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceCallback)
 			}
-			return handleSuccessfulOperationResult(node, operation, result, CompletionSourceCallback)
+			return handleSuccessfulOperationResult(node, operation, result, nil, CompletionSourceCallback)
 		})
 		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion.
 		if errors.Is(err, hsm.ErrInvalidTransition) {

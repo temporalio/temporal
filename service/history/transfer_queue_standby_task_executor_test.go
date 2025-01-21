@@ -76,6 +76,10 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// TODO: remove all SetCurrentTime usage in this test suite
+// after clusterName & getCurrentTime() method are deprecated
+// from transferQueueStandbyTaskExecutor
+
 type (
 	transferQueueStandbyTaskExecutorSuite struct {
 		suite.Suite

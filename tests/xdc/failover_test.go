@@ -2325,16 +2325,6 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(2, lastAttemptCount)
 }
 
-// Uncomment if you need to debug history.
-// func (s *funcClustersTestSuite) printHistory(frontendClient workflowservice.WorkflowServiceClient, namespace, workflowID, runID string) {
-// 	events := s.getHistory(frontendClient, namespace, &commonpb.WorkflowExecution{
-// 		WorkflowId: workflowID,
-// 		RunId:      runID,
-// 	})
-// 	history := &historypb.History{Events: events}
-// 	common.PrettyPrintHistory(history, s.logger)
-// }
-
 func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -2923,14 +2913,14 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	verifyHistory(workflowID, resp.GetRunId())
 }
 
-func (s *FunctionalClustersTestSuite) TestDeleteNamespace() {
+func (s *FunctionalClustersTestSuite) TestBlockNamespaceDeleteInPassiveCluster() {
 	namespace := "test-namespace-for-fail-over-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.FrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
+		ActiveClusterName:                s.clusterNames[1], // [0] is active, [1] is passive
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
 	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
@@ -2945,8 +2935,8 @@ func (s *FunctionalClustersTestSuite) TestDeleteNamespace() {
 		})
 	s.Error(err)
 	s.Nil(resp)
-	s.Contains(err.Error(), "is replicated in several clusters")
-	s.Contains(err.Error(), "remove all other cluster and retry")
+	s.Contains(err.Error(), "is passive in current cluster")
+	s.Contains(err.Error(), "make namespace active in this cluster and retry")
 }
 
 func (s *FunctionalClustersTestSuite) getHistory(client workflowservice.WorkflowServiceClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {

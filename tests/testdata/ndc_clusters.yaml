@@ -21,9 +21,7 @@
         initialFailoverVersion: 3
         rpcName: "frontend"
         rpcAddress: "nowhere3:7134"
-  enablearchival: false
   workerconfig:
-    enablearchiver: false
     enablereplicator: true
   clusterno: 0
   historyconfig:
@@ -60,9 +58,7 @@
         initialFailoverVersion: 3
         rpcName: "frontend"
         rpcAddress: "nowhere3:7134"
-  enablearchival: false
   workerconfig:
-    enablearchiver: false
     enablereplicator: true
   clusterno: 1
   historyconfig:
@@ -99,9 +95,7 @@
         initialFailoverVersion: 3
         rpcName: "frontend"
         rpcAddress: "nowhere3:7134"
-  enablearchival: false
   workerconfig:
-    enablearchiver: false
     enablereplicator: true
   clusterno: 2
   historyconfig:

@@ -109,8 +109,11 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     nil,
-		metricsHandler:    nil,
-		logger:            nil,
+		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
+			return 100, func() {}
+		},
+		metricsHandler: nil,
+		logger:         nil,
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -162,7 +165,6 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
 		require.Equal(t, namespace.Name("namespace"), params.Namespace)
 		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
-		require.Equal(t, 100, params.RPS)
 		require.Equal(t, 3, params.ListPageSize)
 		if params.NextPageToken == nil {
 			nilTokenOnce.Store(true)
@@ -255,8 +257,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
 	require.True(t, stderrors.As(err, &appErr))
-	require.Contains(t, appErr.Error(), "unable to execute activity: DeleteExecutionsActivity")
-	require.Contains(t, appErr.Error(), "specific_error_from_activity")
+	require.Equal(t, appErr.Error(), "specific_error_from_activity (type: Unavailable, retryable: true)")
 }
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) {
@@ -332,8 +333,11 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
-		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewTestLogger(),
+		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
+			return 100, func() {}
+		},
+		metricsHandler: metrics.NoopMetricsHandler,
+		logger:         log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -428,8 +432,11 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
-		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewTestLogger(),
+		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
+			return 100, func() {}
+		},
+		metricsHandler: metrics.NoopMetricsHandler,
+		logger:         log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,

@@ -25,7 +25,6 @@
 package deleteexecutions
 
 import (
-	"fmt"
 	"time"
 
 	"go.temporal.io/sdk/log"
@@ -81,15 +80,12 @@ var (
 
 func validateParams(params *DeleteExecutionsParams) error {
 	if params.NamespaceID.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace ID is required", "", nil)
+		return errors.NewInvalidArgument("namespace ID is required", nil)
 	}
-
 	if params.Namespace.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace is required", "", nil)
+		return errors.NewInvalidArgument("namespace is required", nil)
 	}
-
 	params.Config.ApplyDefaults()
-
 	return nil
 }
 
@@ -145,7 +141,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 			NextPageToken: nextPageToken,
 		}).Get(ctx, &nextPageToken)
 		if err != nil {
-			return result, fmt.Errorf("%w: GetNextPageTokenActivity: %v", errors.ErrUnableToExecuteActivity, err)
+			return result, err
 		}
 
 		runningDeleteExecutionsActivityCount++
@@ -165,7 +161,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 			// Wait for one of running activities to complete.
 			runningDeleteExecutionsSelector.Select(ctx)
 			if lastDeleteExecutionsActivityErr != nil {
-				return result, fmt.Errorf("%w: DeleteExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, lastDeleteExecutionsActivityErr)
+				return result, lastDeleteExecutionsActivityErr
 			}
 		}
 
@@ -178,7 +174,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	for runningDeleteExecutionsActivityCount > 0 {
 		runningDeleteExecutionsSelector.Select(ctx)
 		if lastDeleteExecutionsActivityErr != nil {
-			return result, fmt.Errorf("%w: DeleteExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, lastDeleteExecutionsActivityErr)
+			return result, lastDeleteExecutionsActivityErr
 		}
 	}
 

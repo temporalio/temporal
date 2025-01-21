@@ -81,6 +81,15 @@ func (i *instrumentation) countRateLimited() {
 	i.oneOf(metrics.WorkflowExecutionUpdateRequestRateLimited.Name())
 }
 
+func (i *instrumentation) countRegistrySizeLimited(updateCount, registrySize, payloadSize int) {
+	i.oneOf(metrics.WorkflowExecutionUpdateRegistrySizeLimited.Name())
+	// TODO: remove log once limit is enforced everywhere
+	i.log.Warn("update registry size limit reached",
+		tag.NewInt("registry-size", registrySize),
+		tag.NewInt("payload-size", payloadSize),
+		tag.NewInt("update-count", updateCount))
+}
+
 func (i *instrumentation) countTooMany() {
 	i.oneOf(metrics.WorkflowExecutionUpdateTooMany.Name())
 }

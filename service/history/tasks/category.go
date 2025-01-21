@@ -25,6 +25,7 @@
 package tasks
 
 import (
+	"fmt"
 	"strconv"
 )
 
@@ -128,6 +129,10 @@ func (c Category) Name() string {
 
 func (c Category) Type() CategoryType {
 	return c.cType
+}
+
+func (c Category) MarshalText() (text []byte, err error) {
+	return []byte(fmt.Sprintf("%s(id:%d, type:%s)", c.name, c.id, c.cType)), nil
 }
 
 func (t CategoryType) String() string {

@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
 
@@ -65,6 +66,7 @@ type (
 			monitor membership.Monitor,
 			metricsHandler metrics.Handler,
 			dc *dynamicconfig.Collection,
+			testHooks testhooks.TestHooks,
 			numberOfHistoryShards int32,
 			logger log.Logger,
 			throttledLogger log.Logger,
@@ -79,6 +81,7 @@ type (
 		monitor               membership.Monitor
 		metricsHandler        metrics.Handler
 		dynConfig             *dynamicconfig.Collection
+		testHooks             testhooks.TestHooks
 		numberOfHistoryShards int32
 		logger                log.Logger
 		throttledLogger       log.Logger
@@ -103,6 +106,7 @@ func (p *factoryProviderImpl) NewFactory(
 	monitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	dc *dynamicconfig.Collection,
+	testHooks testhooks.TestHooks,
 	numberOfHistoryShards int32,
 	logger log.Logger,
 	throttledLogger log.Logger,
@@ -112,6 +116,7 @@ func (p *factoryProviderImpl) NewFactory(
 		monitor:               monitor,
 		metricsHandler:        metricsHandler,
 		dynConfig:             dc,
+		testHooks:             testHooks,
 		numberOfHistoryShards: numberOfHistoryShards,
 		logger:                logger,
 		throttledLogger:       throttledLogger,
@@ -159,7 +164,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		common.NewClientCache(keyResolver, clientProvider),
 		cf.metricsHandler,
 		cf.logger,
-		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig),
+		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig, cf.testHooks),
 	)
 
 	if cf.metricsHandler != nil {

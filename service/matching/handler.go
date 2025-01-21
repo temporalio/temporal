@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/proto"
@@ -88,6 +89,7 @@ func NewHandler(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
 	nexusEndpointManager persistence.NexusEndpointManager,
+	testHooks testhooks.TestHooks,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -110,6 +112,7 @@ func NewHandler(
 			namespaceReplicationQueue,
 			visibilityManager,
 			nexusEndpointManager,
+			testHooks,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}
