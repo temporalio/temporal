@@ -502,12 +502,20 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 
 		for _, we := range executionCandidates {
 			if err := a.generateWorkflowReplicationTask(ctx, rateLimiter, we); err != nil {
-				if isNotFoundServiceError(err) {
-					a.logger.Warn("force-replication ignore replication task due to NotFoundServiceError", tag.WorkflowNamespaceID(we.GetNamespaceID()), tag.WorkflowID(we.GetWorkflowID()), tag.WorkflowRunID(we.GetRunID()), tag.Error(err))
-				} else {
-					a.logger.Error("force-replication failed to generate replication task", tag.WorkflowNamespaceID(we.GetNamespaceID()), tag.WorkflowID(we.GetWorkflowID()), tag.WorkflowRunID(we.GetRunID()), tag.Error(err))
+				if !isNotFoundServiceError(err) {
+					a.logger.Error("force-replication failed to generate replication task",
+						tag.WorkflowNamespaceID(we.GetNamespaceID()),
+						tag.WorkflowID(we.GetWorkflowID()),
+						tag.WorkflowRunID(we.GetRunID()),
+						tag.Error(err))
 					return err
 				}
+
+				a.logger.Warn("force-replication ignore replication task due to NotFoundServiceError",
+					tag.WorkflowNamespaceID(we.GetNamespaceID()),
+					tag.WorkflowID(we.GetWorkflowID()),
+					tag.WorkflowRunID(we.GetRunID()),
+					tag.Error(err))
 			}
 		}
 		activity.RecordHeartbeat(ctx, i)

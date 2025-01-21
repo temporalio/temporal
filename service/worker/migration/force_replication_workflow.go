@@ -81,9 +81,6 @@ type (
 
 		// Carry over the replication status after continue-as-new.
 		TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
-
-		// Feature flags
-		EnableParentInfo bool
 	}
 
 	QPSQueue struct {
