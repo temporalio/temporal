@@ -349,6 +349,8 @@ type Config struct {
 	EnableEagerWorkflowStart      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
 
+	FollowReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
+
 	// ArchivalQueueProcessor settings
 	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
 	ArchivalProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
@@ -363,8 +365,9 @@ type Config struct {
 	ArchivalBackendMaxRPS                               dynamicconfig.FloatPropertyFn
 	ArchivalQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 
-	WorkflowExecutionMaxInFlightUpdates dynamicconfig.IntPropertyFnWithNamespaceFilter
-	WorkflowExecutionMaxTotalUpdates    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxInFlightUpdates        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxInFlightUpdatePayloads dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxTotalUpdates           dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -547,6 +550,8 @@ func NewConfig(
 		ReplicationProgressCacheMaxSize:                     dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
 		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),
 
+		FollowReusePolicyAfterConflictPolicyTerminate: dynamicconfig.FollowReusePolicyAfterConflictPolicyTerminate.Get(dc),
+
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
@@ -674,8 +679,9 @@ func NewConfig(
 		ArchivalQueueMaxReaderCount:                         dynamicconfig.ArchivalQueueMaxReaderCount.Get(dc),
 
 		// workflow update related
-		WorkflowExecutionMaxInFlightUpdates: dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
-		WorkflowExecutionMaxTotalUpdates:    dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
+		WorkflowExecutionMaxInFlightUpdates:        dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
+		WorkflowExecutionMaxInFlightUpdatePayloads: dynamicconfig.WorkflowExecutionMaxInFlightUpdatePayloads.Get(dc),
+		WorkflowExecutionMaxTotalUpdates:           dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
 
 		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),

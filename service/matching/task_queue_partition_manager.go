@@ -118,7 +118,7 @@ func newTaskQueuePartitionManager(
 }
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
-	pm.engine.updateTaskQueuePartitionGauge(pm, 1)
+	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
 	pm.defaultQueue.Start()
 }
@@ -133,7 +133,7 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	}
 	pm.defaultQueue.Stop(unloadCause)
 	pm.userDataManager.Stop()
-	pm.engine.updateTaskQueuePartitionGauge(pm, -1)
+	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, -1)
 }
 
 func (pm *taskQueuePartitionManagerImpl) Namespace() *namespace.Namespace {
@@ -332,18 +332,19 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	ctx context.Context,
 	task *internalTask,
-	assignedBuildId string,
+	backlogQueue *PhysicalTaskQueueKey,
 ) error {
 	taskInfo := task.event.GetData()
 	// This task came from taskReader so task.event is always set here.
 	directive := taskInfo.GetVersionDirective()
+	assignedBuildId := backlogQueue.Version().BuildId()
 	if assignedBuildId != "" {
 		// construct directive based on the build ID of the spool queue
 		directive = worker_versioning.MakeBuildIdDirective(assignedBuildId)
 	}
 	// Redirect and re-resolve if we're blocked in matcher and user data changes.
 	for {
-		_, syncMatchQueue, userDataChanged, err := pm.getPhysicalQueuesForAdd(
+		newBacklogQueue, syncMatchQueue, userDataChanged, err := pm.getPhysicalQueuesForAdd(
 			ctx,
 			directive,
 			nil,
@@ -360,6 +361,22 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 		} else {
 			// make sure to reset redirectInfo in case it was set in a previous loop cycle
 			task.redirectInfo = nil
+		}
+		if !backlogQueue.version.Deployment().Equal(newBacklogQueue.QueueKey().version.Deployment()) {
+			// Backlog queue has changed, spool to the new queue. This should happen rarely: when
+			// activity of pinned workflow was determined independent and sent to the default queue
+			// but now at dispatch time, the determination is different because the activity pollers
+			// on the pinned deployment have reached server.
+			// TODO: before spooling, try to sync-match the task on the new queue
+			err = newBacklogQueue.SpoolTask(taskInfo)
+			if err != nil {
+				// return the error so task_reader retries the outer call
+				return err
+			}
+			// Finish the task because now it is copied to the other backlog. It should be considered
+			// invalid because a poller did not receive the task.
+			task.finish(nil, false)
+			return nil
 		}
 		err = syncMatchQueue.DispatchSpooledTask(ctx, task, userDataChanged)
 		if err != errInterrupted {
@@ -779,9 +796,15 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	directive *taskqueuespb.TaskVersionDirective,
 	forwardInfo *taskqueuespb.TaskForwardInfo,
 	runId string,
-) (pinnedQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, err error) {
+) (spoolQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, err error) {
 	wfBehavior := directive.GetBehavior()
 	deployment := directive.GetDeployment()
+
+	perTypeUserData, userDataChanged, err := pm.getPerTypeUserData()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	deploymentData := perTypeUserData.GetDeploymentData()
 
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -793,26 +816,29 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		pinnedQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if forwardInfo == nil {
-			// Task is not forwarded, so it can be spooled if sync match fails.
-			// Spool queue and sync match queue is the same for pinned workflows.
-			return pinnedQueue, pinnedQueue, nil, nil
-		} else {
-			// Forwarded from child partition - only do sync match.
-			return nil, pinnedQueue, nil, nil
+
+		// We ignore the pinned directive if this is an activity task but the activity task queue is
+		// not present in the workflow's pinned deployment. Such activities are considered
+		// independent activities and are treated as unpinned, sent to their TQ's current deployment.
+		isIndependentActivity := pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY &&
+			findDeployment(deploymentData, deployment) == -1
+		if !isIndependentActivity {
+			pinnedQueue, err := pm.getVersionedQueue(ctx, "", "", deployment, true)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if forwardInfo == nil {
+				// Task is not forwarded, so it can be spooled if sync match fails.
+				// Spool queue and sync match queue is the same for pinned workflows.
+				return pinnedQueue, pinnedQueue, userDataChanged, nil
+			} else {
+				// Forwarded from child partition - only do sync match.
+				return nil, pinnedQueue, userDataChanged, nil
+			}
 		}
 	}
 
-	perTypeUserData, perTypeUserDataChanged, err := pm.getPerTypeUserData()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	currentDeployment := worker_versioning.FindCurrentDeployment(perTypeUserData.GetDeploymentData())
+	currentDeployment := worker_versioning.FindCurrentDeployment(deploymentData)
 	if currentDeployment != nil &&
 		// Make sure the wf is not v1-2 versioned
 		directive.GetAssignedBuildId() == "" {
@@ -824,17 +850,17 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			}
 
 			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
-			return pm.defaultQueue, pm.defaultQueue, perTypeUserDataChanged, nil
+			return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
 		}
 
 		currentDeploymentQueue, err := pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
 		if forwardInfo == nil {
 			// Task is not forwarded, so it can be spooled if sync match fails.
 			// Unpinned tasks are spooled in default queue
-			return pm.defaultQueue, currentDeploymentQueue, perTypeUserDataChanged, err
+			return pm.defaultQueue, currentDeploymentQueue, userDataChanged, err
 		} else {
 			// Forwarded from child partition - only do sync match.
-			return nil, currentDeploymentQueue, perTypeUserDataChanged, err
+			return nil, currentDeploymentQueue, userDataChanged, err
 		}
 	}
 
@@ -855,15 +881,15 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		return nil, syncMatchQueue, nil, err
 	}
 
-	userData, userDataChanged, err := pm.userDataManager.GetUserData()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
 	if directive.GetBuildId() == nil {
 		// The task belongs to an unversioned execution. Keep using unversioned. But also return
 		// userDataChanged so if current deployment is set, the task redirects to that deployment.
 		return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
+	}
+
+	userData, userDataChanged, err := pm.userDataManager.GetUserData()
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	data := userData.GetData().GetVersioningData()
@@ -921,7 +947,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	}
 
 	if versionSet != "" {
-		pinnedQueue = pm.defaultQueue
+		spoolQueue = pm.defaultQueue
 		syncMatchQueue, err = pm.getVersionedQueue(ctx, versionSet, "", nil, true)
 		if err != nil {
 			return nil, nil, nil, err
@@ -932,13 +958,13 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			return nil, nil, nil, err
 		}
 		// redirect rules are not applied when spooling a task. They'll be applied when dispatching the spool task.
-		pinnedQueue, err = pm.getPhysicalQueue(ctx, buildId)
+		spoolQueue, err = pm.getPhysicalQueue(ctx, buildId)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 	}
 
-	return pinnedQueue, syncMatchQueue, userDataChanged, err
+	return spoolQueue, syncMatchQueue, userDataChanged, err
 }
 
 func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueuespb.TaskVersionDirective, data *persistencespb.VersioningData) (string, error) {

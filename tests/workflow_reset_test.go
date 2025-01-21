@@ -45,7 +45,7 @@ import (
 
 // Tests workflow reset feature
 type WorkflowResetSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestWorkflowResetTestSuite(t *testing.T) {
@@ -62,7 +62,7 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentRunning() {
 
 	// Reset the current run (i.e don't give an explicit runID)
 	resp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:                 s.Namespace(),
+		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID},
 		Reason:                    "testing-reset",
 		RequestId:                 uuid.NewString(),
@@ -73,7 +73,7 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentRunning() {
 
 	// Current run is the assumed base run. The new run should be linked to this one.
 	currentMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
 	})
 	s.NoError(err)
@@ -90,7 +90,7 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentClosed() {
 
 	// Reset the current run (i.e don't give an explicit runID)
 	resp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:                 s.Namespace(),
+		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID},
 		Reason:                    "testing-reset",
 		RequestId:                 uuid.NewString(),
@@ -101,7 +101,7 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentClosed() {
 
 	// Current run is the assumed base run. The new run should be linked to this one.
 	currentMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
 	})
 	s.NoError(err)
@@ -209,7 +209,7 @@ func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
 	for i := 0; i < 5; i++ {
 		currentRunID := s.performReset(ctx, workflowID, baseRunID)
 		baseMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
 		})
 		s.NoError(err)
@@ -237,7 +237,7 @@ func (s *WorkflowResetSuite) getFirstWFTaskCompleteEventID(ctx context.Context, 
 func (s *WorkflowResetSuite) performReset(ctx context.Context, workflowID string, runID string) string {
 	// Reset the workflow by providing the explicit runID (base run) to reset.
 	resp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:                 s.Namespace(),
+		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 		Reason:                    "testing-reset",
 		RequestId:                 uuid.NewString(),
@@ -250,7 +250,7 @@ func (s *WorkflowResetSuite) performReset(ctx context.Context, workflowID string
 // assertMutableStateStatus asserts that the mutable state for the given run matches the expected status.
 func (s *WorkflowResetSuite) assertMutableStateStatus(ctx context.Context, workflowID string, runID string, expectedStatus enumspb.WorkflowExecutionStatus) {
 	ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 	})
 	s.NoError(err)
@@ -260,7 +260,7 @@ func (s *WorkflowResetSuite) assertMutableStateStatus(ctx context.Context, workf
 // assertResetWorkflowLink asserts that the reset runID is properly recorded in the given run.
 func (s *WorkflowResetSuite) assertResetWorkflowLink(ctx context.Context, workflowID string, runID string, expectedLinkRunID string) {
 	baseMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 	})
 	s.NoError(err)
@@ -292,7 +292,7 @@ func (s *WorkflowResetSuite) prepareSingleRun(ctx context.Context, workflowID st
 	s.NoError(err)
 
 	pollWTResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  "test",
 	})
@@ -322,7 +322,7 @@ func (s *WorkflowResetSuite) prepareSingleRun(ctx context.Context, workflowID st
 	}
 
 	pollATResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  identity,
 	})
@@ -333,7 +333,7 @@ func (s *WorkflowResetSuite) prepareSingleRun(ctx context.Context, workflowID st
 	s.NoError(err)
 
 	pollWTResp, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  "test",
 	})

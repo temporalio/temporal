@@ -139,6 +139,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	ctx context.Context,
 	timerTask *tasks.UserTimerTask,
 ) error {
+	referenceTime := t.Now()
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 		if !mutableState.IsWorkflowExecutionRunning() {
 			// workflow already finished, no need to process the timer
@@ -157,7 +158,8 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			}
 
 			if queues.IsTimeExpired(
-				timerTask.GetVisibilityTime(),
+				timerTask,
+				referenceTime,
 				timerSequenceID.Timestamp,
 			) {
 				return &struct{}{}, nil
@@ -197,6 +199,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	//
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
+	referenceTime := t.Now()
 	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 		if !mutableState.IsWorkflowExecutionRunning() {
 			// workflow already finished, no need to process the timer
@@ -216,7 +219,8 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			}
 
 			if queues.IsTimeExpired(
-				timerTask.GetVisibilityTime(),
+				timerTask,
+				referenceTime,
 				timerSequenceID.Timestamp,
 			) {
 				return &struct{}{}, nil
@@ -236,7 +240,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// created.
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
-		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask.GetVisibilityTime(), heartbeatTimeoutVis) {
+		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), heartbeatTimeoutVis) {
 			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
 				return nil, err
 			}
@@ -424,7 +428,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowRunTimeoutTask(
 ) error {
 
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-		if !t.isValidWorkflowRunTimeoutTask(mutableState) {
+		if !t.isValidWorkflowRunTimeoutTask(mutableState, timerTask) {
 			return nil, nil
 		}
 
@@ -501,6 +505,7 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 			ctx,
 			wfContext,
 			mutableState,
+			timerTask,
 			func(node *hsm.Node, task hsm.Task) error {
 				// If this line of code is reached, the task's Validate() function returned no error, which indicates
 				// that it is still expected to run. Return ErrTaskRetry to wait the machine to transition on the active
@@ -652,6 +657,9 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	)
 }
 
+// TODO: deprecate this function and always use t.Now()
+// Only test code sets t.clusterName to be non-current cluster name
+// and advance the time by setting calling shardContext.SetCurrentTime.
 func (t *timerQueueStandbyTaskExecutor) getCurrentTime() time.Time {
 	return t.shardContext.GetCurrentTime(t.clusterName)
 }

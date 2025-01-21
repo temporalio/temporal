@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -293,7 +294,7 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 	c.backlogMgr.Start()
 	c.logger.Info("Started physicalTaskQueueManager", tag.LifeCycleStarted, tag.Cause(c.config.loadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
-	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, 1)
+	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, 1)
 }
 
 // Stop does not unload the queue from its partition. It is intended to be called by the partition manager when
@@ -311,7 +312,7 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	c.liveness.Stop()
 	c.logger.Info("Stopped physicalTaskQueueManager", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
-	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, -1)
+	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, -1)
 }
 
 func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -411,7 +412,7 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 		// Don't try to set read level here because it may have been advanced already.
 		return nil
 	}
-	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue.Version().BuildId())
+	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue)
 }
 
 // DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
@@ -529,7 +530,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 		// request sent by history service
 		c.liveness.markAlive()
 		c.tasksAddedInIntervals.incrementTaskCount()
-		if c.config.TestDisableSyncMatch() {
+		if disable, _ := testhooks.Get[bool](c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch); disable {
 			return false, nil
 		}
 	}

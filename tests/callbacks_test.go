@@ -62,7 +62,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexu
 }
 
 type CallbacksSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestCallbacksSuite(t *testing.T) {
@@ -176,7 +176,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 			}
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:           uuid.New(),
-				Namespace:           s.Namespace(),
+				Namespace:           s.Namespace().String(),
 				WorkflowId:          testcore.RandomizeStr(s.T().Name()),
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -246,7 +246,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 			ctx := testcore.NewContext()
 			sdkClient, err := client.Dial(client.Options{
 				HostPort:  s.FrontendGRPCAddress(),
-				Namespace: s.Namespace(),
+				Namespace: s.Namespace().String(),
 			})
 			s.NoError(err)
 
@@ -270,7 +270,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:          uuid.New(),
-				Namespace:          s.Namespace(),
+				Namespace:          s.Namespace().String(),
 				WorkflowId:         testcore.RandomizeStr(s.T().Name()),
 				WorkflowType:       &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -342,7 +342,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	ctx := testcore.NewContext()
 	sdkClient, err := client.Dial(client.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	s.NoError(err)
 
@@ -377,7 +377,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.New(),
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		WorkflowId:         testcore.RandomizeStr(s.T().Name()),
 		WorkflowType:       &commonpb.WorkflowType{Name: "longRunningWorkflow"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -408,12 +408,12 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
   			2 WorkflowTaskScheduled
   			3 WorkflowTaskStarted
   			4 WorkflowTaskCompleted`,
-		s.GetHistoryFunc(s.Namespace(), workflowExecution),
+		s.GetHistoryFunc(s.Namespace().String(), workflowExecution),
 		5*time.Second,
 		10*time.Millisecond)
 
 	resetWfResponse, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 
 		WorkflowExecution:         workflowExecution,
 		Reason:                    "TestNexusResetWorkflowWithCallback",

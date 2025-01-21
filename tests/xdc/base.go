@@ -56,6 +56,7 @@ import (
 
 type (
 	xdcBaseSuite struct {
+		// TODO (alex): use FunctionalTestSuite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
@@ -88,10 +89,10 @@ func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplic
 	return config
 }
 
-func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.Option) {
+func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.TestClusterOption) {
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 
-	params := testcore.ApplyTestClusterParams(opts)
+	params := testcore.ApplyTestClusterOptions(opts)
 
 	s.clusterNames = clusterNames
 	for idx, clusterName := range s.clusterNames {

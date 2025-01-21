@@ -29,7 +29,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -45,8 +44,7 @@ import (
 
 type (
 	DescribeTaskQueueSuite struct {
-		*require.Assertions
-		testcore.FunctionalTestBase
+		testcore.FunctionalTestSuite
 	}
 )
 
@@ -55,24 +53,9 @@ func TestDescribeTaskQueueSuite(t *testing.T) {
 	suite.Run(t, new(DescribeTaskQueueSuite))
 }
 
-func (s *DescribeTaskQueueSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
-
-func (s *DescribeTaskQueueSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *DescribeTaskQueueSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
-}
-
 func (s *DescribeTaskQueueSuite) TestNonRootLegacy() {
 	resp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), &workflowservice.DescribeTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		ApiMode:   enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED,
 	})
@@ -150,7 +133,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:           uuid.New(),
-			Namespace:           s.Namespace(),
+			Namespace:           s.Namespace().String(),
 			WorkflowId:          id,
 			WorkflowType:        workflowType,
 			TaskQueue:           tq,
@@ -174,7 +157,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	// Poll the tasks
 	for i := 0; i < workflows; {
 		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			TaskQueue: tq,
 			Identity:  identity,
 		})
@@ -184,7 +167,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 		}
 		i++
 		_, err := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Identity:  identity,
 			TaskToken: resp1.TaskToken,
 			Commands: []*commandpb.Command{
@@ -221,7 +204,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	for i := 0; i < workflows; {
 		resp1, err1 := s.FrontendClient().PollActivityTaskQueue(
 			testcore.NewContext(), &workflowservice.PollActivityTaskQueueRequest{
-				Namespace: s.Namespace(),
+				Namespace: s.Namespace().String(),
 				TaskQueue: tq,
 				Identity:  identity,
 			},
@@ -259,7 +242,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 	if isEnhancedMode {
 		if isCached {
 			resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-				Namespace:              s.Namespace(),
+				Namespace:              s.Namespace().String(),
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 				Versions:               nil, // default version, in this case unversioned queue
@@ -294,7 +277,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 		} else {
 			s.EventuallyWithT(func(t *assert.CollectT) {
 				resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-					Namespace:              s.Namespace(),
+					Namespace:              s.Namespace().String(),
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 					Versions:               nil, // default version, in this case unversioned queue
@@ -334,7 +317,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 		// Querying the Legacy API
 		s.Eventually(func() bool {
 			resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-				Namespace:              s.Namespace(),
+				Namespace:              s.Namespace().String(),
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED,
 				IncludeTaskQueueStatus: true,
@@ -354,7 +337,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueuePartition(tqName strin
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
 			context.Background(),
 			&matchingservice.DescribeTaskQueuePartitionRequest{
-				NamespaceId: s.GetNamespaceID(s.Namespace()),
+				NamespaceId: s.NamespaceID().String(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     tqName,
 					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // since we have only workflow tasks
@@ -413,7 +396,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:           uuid.New(),
-			Namespace:           s.Namespace(),
+			Namespace:           s.Namespace().String(),
 			WorkflowId:          id,
 			WorkflowType:        workflowType,
 			TaskQueue:           tq,
@@ -442,7 +425,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 	// Poll the tasks
 	for i := 0; i < workflows; {
 		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			TaskQueue: tq,
 			Identity:  identity,
 		})

@@ -41,7 +41,7 @@ VISIBILITY_DB ?= temporal_visibility
 # Always use "protolegacy" tag to allow disabling utf-8 validation on proto messages
 # during proto library transition.
 ALL_BUILD_TAGS := protolegacy,$(BUILD_TAG)
-ALL_TEST_TAGS := $(ALL_BUILD_TAGS),$(TEST_TAG)
+ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
 TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 
@@ -211,6 +211,13 @@ $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 	@touch $@
 $(GOIMPORTS): $(STAMPDIR)/goimports-$(GOIMPORTS_VER)
 
+GOWRAP_VER := v1.4.1
+GOWRAP := $(LOCALBIN)/gowrap
+$(STAMPDIR)/gowrap-$(GOWRAP_VER): | $(STAMPDIR) $(LOCALBIN)
+	$(call go-install-tool,$(GOWRAP),github.com/hexdigest/gowrap/cmd/gowrap,$(GOWRAP_VER))
+	@touch $@
+$(GOWRAP): $(STAMPDIR)/gowrap-$(GOWRAP_VER)
+
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
 MOCKGEN_VER := v0.4.0
 MOCKGEN := $(LOCALBIN)/mockgen
@@ -340,7 +347,7 @@ lint-actions: $(ACTIONLINT)
 
 lint-code: $(GOLANGCI_LINT)
 	@printf $(COLOR) "Linting code..."
-	@$(GOLANGCI_LINT) run --verbose --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.golangci.yml
+	@$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.golangci.yml
 
 fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 	@printf $(COLOR) "Formatting imports..."
@@ -601,9 +608,10 @@ update-dependencies:
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
 
-go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER)
+go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
 	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
+	$(MAKE) copyright
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."

@@ -143,7 +143,7 @@ func (e taskExecutor) executeInvocationTask(
 	defer cancel()
 
 	result := invokable.Invoke(callCtx, ns, e, task)
-	saveErr := e.saveResult(callCtx, env, ref, result)
+	saveErr := e.saveResult(ctx, env, ref, result)
 	return invokable.WrapError(result, saveErr)
 }
 

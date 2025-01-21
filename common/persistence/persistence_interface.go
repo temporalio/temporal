@@ -24,9 +24,6 @@
 
 //go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
 
-// Generates fault injection stores.
-//go:generate go run ../../cmd/tools/genfaultinjection -copyright_file ../../LICENSE -out faultinjection
-
 package persistence
 
 import (
@@ -232,8 +229,8 @@ type (
 	// create the shard with the returned value.
 	InternalGetOrCreateShardRequest struct {
 		ShardID          int32
-		CreateShardInfo  func() (rangeID int64, shardInfo *commonpb.DataBlob, err error)
-		LifecycleContext context.Context // cancelled when shard is unloaded
+		CreateShardInfo  func() (rangeID int64, shardInfo *commonpb.DataBlob, err error) `json:"-"` // cannot be serialized otherwise
+		LifecycleContext context.Context                                                 // cancelled when shard is unloaded
 	}
 
 	// InternalGetOrCreateShardResponse is the response to GetShard

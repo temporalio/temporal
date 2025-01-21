@@ -244,8 +244,10 @@ message RecordWorkflowTaskStartedRequest {
     temporal.server.api.clock.v1.VectorClock clock = 7;
     temporal.server.api.taskqueue.v1.BuildIdRedirectInfo build_id_redirect_info = 8;
     // The deployment passed by History when the task was scheduled.
+    // Deprecated. use `version_directive.deployment`.
     temporal.api.deployment.v1.Deployment scheduled_deployment = 9;
-
+    // Versioning directive that was sent by history when scheduling the task.
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -286,11 +288,11 @@ message RecordActivityTaskStartedRequest {
     // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     int32 stamp = 9;
     // The deployment passed by History when the task was scheduled.
+    // Deprecated. use `version_directive.deployment`.
     temporal.api.deployment.v1.Deployment scheduled_deployment = 10;
-    // Whether the scheduled deployment contains the activity's task queue. Used by History to
-    // determine if the activity redirect should affect the workflow.
-    // Only set if `scheduled_deployment` is set (i.e. the task is redirected).
-    bool scheduled_deployment_contains_task_queue = 11;
+    reserved 11;
+    // Versioning directive that was sent by history when scheduling the task.
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 12;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -352,6 +354,8 @@ message RecordActivityTaskHeartbeatRequest {
 
 message RecordActivityTaskHeartbeatResponse {
     bool cancel_requested = 1;
+
+    bool activity_paused = 2;
 }
 
 message RespondActivityTaskCompletedRequest {
@@ -630,6 +634,12 @@ message SyncActivityRequest {
     int32 stamp = 20;
     // Indicates if the activity is paused.
     bool paused = 21;
+
+    // Retry policy for the activity.
+    google.protobuf.Duration retry_initial_interval = 22;
+    google.protobuf.Duration retry_maximum_interval = 23;
+    int32 retry_maximum_attempts = 24;
+    double retry_backoff_coefficient = 25;
 }
 
 message SyncActivitiesRequest {
@@ -666,6 +676,11 @@ message ActivitySyncInfo {
     int32 stamp = 20;
     // Indicates if the activity is paused.
     bool paused = 21;
+    // Retry policy for the activity. It needs to be replicated now, since the activity properties can be updated.
+    google.protobuf.Duration retry_initial_interval = 22;
+    google.protobuf.Duration retry_maximum_interval = 23;
+    int32 retry_maximum_attempts = 24;
+    double retry_backoff_coefficient = 25;
 
 }
 

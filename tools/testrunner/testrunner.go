@@ -284,6 +284,7 @@ func (r *runner) combineAttempts() junit.Testsuites {
 }
 
 func Main() {
+	log.SetPrefix("[testrunner] ")
 	ctx := context.Background()
 	if len(os.Args) < 2 {
 		log.Fatalf("expected at least 2 arguments")

@@ -150,24 +150,84 @@ func Test_DeleteNamespaceWorkflow_ByNameAndID(t *testing.T) {
 
 func Test_DeleteReplicatedNamespace(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	env := testSuite.NewTestWorkflowEnvironment()
 	var la *localActivities
 
-	env.OnActivity(la.GetNamespaceInfoActivity, mock.Anything, namespace.ID("namespace-id"), namespace.EmptyName).Return(
-		getNamespaceInfoResult{
-			NamespaceID: "namespace-id",
-			Namespace:   "namespace",
-			Clusters:    []string{"active", "passive"},
-		}, nil).Once()
+	t.Run("namespace that active in the current cluster should be deleted", func(t *testing.T) {
+		env := testSuite.NewTestWorkflowEnvironment()
+		env.OnActivity(la.GetNamespaceInfoActivity, mock.Anything, namespace.ID("namespace-id"), namespace.EmptyName).Return(
+			getNamespaceInfoResult{
+				NamespaceID:    "namespace-id",
+				Namespace:      "namespace",
+				Clusters:       []string{"active", "passive"},
+				ActiveCluster:  "active",
+				CurrentCluster: "active",
+			}, nil).Once()
 
-	env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{
-		NamespaceID: "namespace-id",
+		env.OnActivity(la.ValidateProtectedNamespacesActivity, mock.Anything, mock.Anything).Return(nil).Once()
+		env.OnActivity(la.ValidateNexusEndpointsActivity, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		env.OnActivity(la.MarkNamespaceDeletedActivity, mock.Anything, mock.Anything).Return(nil).Once()
+		env.OnActivity(la.GenerateDeletedNamespaceNameActivity, mock.Anything, mock.Anything, mock.Anything).Return(namespace.EmptyName, nil).Once()
+		env.OnActivity(la.RenameNamespaceActivity, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		env.RegisterWorkflow(reclaimresources.ReclaimResourcesWorkflow)
+		env.OnWorkflow(reclaimresources.ReclaimResourcesWorkflow, mock.Anything, mock.Anything).Return(reclaimresources.ReclaimResourcesResult{}, nil).Once()
+
+		env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{
+			NamespaceID: "namespace-id",
+		})
+
+		require.True(t, env.IsWorkflowCompleted())
+		err := env.GetWorkflowError()
+		require.NoError(t, err)
 	})
 
-	require.True(t, env.IsWorkflowCompleted())
-	err := env.GetWorkflowError()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "namespace namespace is replicated in several clusters [active,passive]: remove all other cluster and retry")
+	t.Run("namespace that passive in the current cluster should NOT be deleted", func(t *testing.T) {
+		env := testSuite.NewTestWorkflowEnvironment()
+		env.OnActivity(la.GetNamespaceInfoActivity, mock.Anything, namespace.ID("namespace-id"), namespace.EmptyName).Return(
+			getNamespaceInfoResult{
+				NamespaceID:    "namespace-id",
+				Namespace:      "namespace",
+				Clusters:       []string{"active", "passive"},
+				ActiveCluster:  "active",
+				CurrentCluster: "passive",
+			}, nil).Once()
+
+		env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{
+			NamespaceID: "namespace-id",
+		})
+
+		require.True(t, env.IsWorkflowCompleted())
+		err := env.GetWorkflowError()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "namespace namespace is passive in current cluster passive: remove cluster passive from cluster list or make namespace active in this cluster and retry")
+	})
+
+	t.Run("namespace that doesn't have current cluster in the cluster list should be deleted", func(t *testing.T) {
+		env := testSuite.NewTestWorkflowEnvironment()
+		env.OnActivity(la.GetNamespaceInfoActivity, mock.Anything, namespace.ID("namespace-id"), namespace.EmptyName).Return(
+			getNamespaceInfoResult{
+				NamespaceID:    "namespace-id",
+				Namespace:      "namespace",
+				Clusters:       []string{"active", "passive"},
+				ActiveCluster:  "active",
+				CurrentCluster: "another-cluster",
+			}, nil).Once()
+
+		env.OnActivity(la.ValidateProtectedNamespacesActivity, mock.Anything, mock.Anything).Return(nil).Once()
+		env.OnActivity(la.ValidateNexusEndpointsActivity, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		env.OnActivity(la.MarkNamespaceDeletedActivity, mock.Anything, mock.Anything).Return(nil).Once()
+		env.OnActivity(la.GenerateDeletedNamespaceNameActivity, mock.Anything, mock.Anything, mock.Anything).Return(namespace.EmptyName, nil).Once()
+		env.OnActivity(la.RenameNamespaceActivity, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		env.RegisterWorkflow(reclaimresources.ReclaimResourcesWorkflow)
+		env.OnWorkflow(reclaimresources.ReclaimResourcesWorkflow, mock.Anything, mock.Anything).Return(reclaimresources.ReclaimResourcesResult{}, nil).Once()
+
+		env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{
+			NamespaceID: "namespace-id",
+		})
+
+		require.True(t, env.IsWorkflowCompleted())
+		err := env.GetWorkflowError()
+		require.NoError(t, err)
+	})
 }
 
 func Test_DeleteSystemNamespace(t *testing.T) {
@@ -231,7 +291,7 @@ func Test_DeleteNamespaceUsedByNexus(t *testing.T) {
 		}, nil).Once()
 	env.OnActivity(la.ValidateProtectedNamespacesActivity, mock.Anything, mock.Anything).Return(nil).Once()
 	env.OnActivity(la.ValidateNexusEndpointsActivity, mock.Anything, mock.Anything, mock.Anything).
-		Return(temporal.NewNonRetryableApplicationError("cannot delete a namespace that is a target of a Nexus endpoint", errors.ValidationErrorErrType, nil, nil)).
+		Return(errors.NewFailedPrecondition("cannot delete a namespace that is a target of a Nexus endpoint", nil)).
 		Once()
 
 	env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{

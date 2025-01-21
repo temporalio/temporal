@@ -29,6 +29,7 @@ import (
 
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -49,6 +50,7 @@ type (
 		atWorkerCfg          sdkworker.Options
 		visibilityManager    manager.VisibilityManager
 		metadataManager      persistence.MetadataManager
+		clusterMetadata      cluster.Metadata
 		nexusEndpointManager persistence.NexusEndpointManager
 		historyClient        resource.HistoryClient
 		metricsHandler       metrics.Handler
@@ -57,12 +59,14 @@ type (
 		protectedNamespaces                       dynamicconfig.TypedPropertyFn[[]string]
 		allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn
 		nexusEndpointListDefaultPageSize          dynamicconfig.IntPropertyFn
+		deleteActivityRPS                         dynamicconfig.TypedSubscribable[int]
 	}
 	componentParams struct {
 		fx.In
 		DynamicCollection    *dynamicconfig.Collection
 		VisibilityManager    manager.VisibilityManager
 		MetadataManager      persistence.MetadataManager
+		ClusterMetadata      cluster.Metadata
 		NexusEndpointManager persistence.NexusEndpointManager
 		HistoryClient        resource.HistoryClient
 		MetricsHandler       metrics.Handler
@@ -79,6 +83,7 @@ func newComponent(
 		atWorkerCfg:          dynamicconfig.WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
 		visibilityManager:    params.VisibilityManager,
 		metadataManager:      params.MetadataManager,
+		clusterMetadata:      params.ClusterMetadata,
 		nexusEndpointManager: params.NexusEndpointManager,
 		historyClient:        params.HistoryClient,
 		metricsHandler:       params.MetricsHandler,
@@ -86,6 +91,7 @@ func newComponent(
 		protectedNamespaces:  dynamicconfig.ProtectedNamespaces.Get(params.DynamicCollection),
 		allowDeleteNamespaceIfNexusEndpointTarget: dynamicconfig.AllowDeleteNamespaceIfNexusEndpointTarget.Get(params.DynamicCollection),
 		nexusEndpointListDefaultPageSize:          dynamicconfig.NexusEndpointListDefaultPageSize.Get(params.DynamicCollection),
+		deleteActivityRPS:                         dynamicconfig.DeleteNamespaceDeleteActivityRPS.Subscribe(params.DynamicCollection),
 	}
 }
 
@@ -126,6 +132,7 @@ func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercomm
 func (wc *deleteNamespaceComponent) deleteNamespaceLocalActivities() *localActivities {
 	return newLocalActivities(
 		wc.metadataManager,
+		wc.clusterMetadata,
 		wc.nexusEndpointManager,
 		wc.logger,
 		wc.protectedNamespaces,
@@ -142,7 +149,13 @@ func (wc *deleteNamespaceComponent) reclaimResourcesLocalActivities() *reclaimre
 }
 
 func (wc *deleteNamespaceComponent) deleteExecutionsActivities() *deleteexecutions.Activities {
-	return deleteexecutions.NewActivities(wc.visibilityManager, wc.historyClient, wc.metricsHandler, wc.logger)
+	return deleteexecutions.NewActivities(
+		wc.visibilityManager,
+		wc.historyClient,
+		wc.deleteActivityRPS,
+		wc.metricsHandler,
+		wc.logger,
+	)
 }
 
 func (wc *deleteNamespaceComponent) deleteExecutionsLocalActivities() *deleteexecutions.LocalActivities {

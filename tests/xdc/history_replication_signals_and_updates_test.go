@@ -48,7 +48,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -70,7 +70,7 @@ type (
 	// that push their tasks into test-specific (i.e. workflow-specific) buffers.
 	hrsuTestSuite struct {
 		xdcBaseSuite
-		namespaceTaskExecutor namespace.ReplicationTaskExecutor
+		namespaceTaskExecutor nsreplication.TaskExecutor
 		// The injection is performed once, at the level of the test suite, but we need the modified executors to be
 		// able to route tasks to test-specific (i.e. workflow-specific) buffers. The following two maps serve that
 		// purpose (each test registers itself in these maps as it starts). Workflow ID and namespace name are both
@@ -100,7 +100,7 @@ type (
 	}
 	// Used to inject a modified namespace replication task executor.
 	hrsuTestNamespaceReplicationTaskExecutor struct {
-		replicationTaskExecutor namespace.ReplicationTaskExecutor
+		replicationTaskExecutor nsreplication.TaskExecutor
 		s                       *hrsuTestSuite
 	}
 	// Used to inject a modified history event replication task executor.
@@ -136,7 +136,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 		[]string{"cluster1", "cluster2"},
 		testcore.WithFxOptionsForService(primitives.WorkerService,
 			fx.Decorate(
-				func(executor namespace.ReplicationTaskExecutor) namespace.ReplicationTaskExecutor {
+				func(executor nsreplication.TaskExecutor) nsreplication.TaskExecutor {
 					s.namespaceTaskExecutor = executor
 					return &hrsuTestNamespaceReplicationTaskExecutor{
 						replicationTaskExecutor: executor,
