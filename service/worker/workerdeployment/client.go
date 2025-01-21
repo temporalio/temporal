@@ -74,6 +74,12 @@ type Client interface {
 		version string,
 	) (*deploymentpb.WorkerDeploymentVersionInfo, error)
 
+	DescribeWorkerDeployment(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName string,
+	) (*deploymentpb.WorkerDeploymentInfo, error)
+
 	SetCurrentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -219,6 +225,62 @@ func (d *ClientImpl) DescribeVersion(
 	}
 
 	return stateToInfo(queryResponse.VersionState), nil
+}
+
+func (d *ClientImpl) DescribeWorkerDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName string,
+) (_ *deploymentpb.WorkerDeploymentInfo, retErr error) {
+	defer d.record("DescribeWorkerDeployment", &retErr, deploymentName)()
+
+	// validating params
+	err := ValidateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
+	deploymentWorkflowID := GenerateWorkflowID(deploymentName)
+
+	req := &historyservice.QueryWorkflowRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		Request: &workflowservice.QueryWorkflowRequest{
+			Namespace: namespaceEntry.Name().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: deploymentWorkflowID,
+			},
+			Query: &querypb.WorkflowQuery{QueryType: QueryRegisteredVersions},
+		},
+	}
+
+	res, err := d.historyClient.QueryWorkflow(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	var queryResponse deploymentspb.QueryRegisteredVersionsResponse
+	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	var workerDeploymentInfo deploymentpb.WorkerDeploymentInfo
+	workerDeploymentInfo.Name = deploymentName
+	for _, version := range queryResponse.Versions {
+		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, version)
+		if err != nil {
+			return nil, err
+		}
+		// TODO (Shivam) - Add WorkflowVersioningMode + AcceptsNewExecutions
+		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+			Version:    versionInfo.Version,
+			CreateTime: versionInfo.CreateTime,
+		})
+	}
+
+	// TODO (Shivam) - LastEditorIdentity will be the latest client that updated the deployment version. Will be implemented after setCurrentVersion is implemented.
+
+	return &workerDeploymentInfo, nil
 }
 
 func (d *ClientImpl) GetCurrentVersion(
@@ -537,7 +599,6 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 	identity string,
 	requestID string,
 ) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
-	fmt.Printf("Adding version %s to worker-deployment %s\n", version, deploymentName)
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(version)
 	if err != nil {
 		return nil, err
@@ -565,7 +626,7 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 		return nil, err
 	}
 
-	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyExistsType {
 		// pretend this is a success
 		return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
 	} else if failure != nil {
@@ -578,6 +639,7 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 		return nil, serviceerror.NewInternal("outcome missing success and failure")
 	}
 
+	// todo (Shivam): Do we really need to return this response?
 	return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
 }
 

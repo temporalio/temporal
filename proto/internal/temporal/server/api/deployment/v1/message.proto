@@ -113,6 +113,11 @@ message QueryDescribeVersionResponse {
     VersionLocalState version_state = 1;
 }
 
+// used as Worker Deployment Version workflow query response:
+message QueryRegisteredVersionsResponse {
+    repeated string versions = 1;
+}
+
 // used as Worker Deployment Version workflow memo:
 message VersionWorkflowMemo {
     string deployment_name = 1;

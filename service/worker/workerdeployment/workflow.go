@@ -74,6 +74,16 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	err = workflow.SetQueryHandler(ctx, QueryRegisteredVersions, func() (*deploymentspb.QueryRegisteredVersionsResponse, error) {
+		return &deploymentspb.QueryRegisteredVersionsResponse{
+			Versions: d.State.Versions,
+		}, nil
+	})
+	if err != nil {
+		d.logger.Info("SetQueryHandler failed for WorkerDeployment workflow with error: " + err.Error())
+		return err
+	}
+
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		SetCurrentVersion,
@@ -142,7 +152,7 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) er
 
 	for _, v := range d.State.Versions {
 		if v == version {
-			return temporal.NewApplicationError("version already exists", errNoChangeType)
+			return temporal.NewApplicationError("deplopyment version already registered", errVersionAlreadyExistsType)
 		}
 	}
 

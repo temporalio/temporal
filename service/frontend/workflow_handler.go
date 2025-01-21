@@ -3352,7 +3352,25 @@ func (wh *WorkflowHandler) SetCurrentDeploymentVersion(ctx context.Context, requ
 
 // TODO (Shivam): Implement this
 func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request *workflowservice.DescribeWorkerDeploymentRequest) (_ *workflowservice.DescribeWorkerDeploymentResponse, retError error) {
-	return nil, nil
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	workerDeploymentInfo, err := wh.workerDeploymentClient.DescribeWorkerDeployment(ctx, namespaceEntry, request.DeploymentName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DescribeWorkerDeploymentResponse{
+		WorkerDeploymentInfo: workerDeploymentInfo,
+	}, nil
 }
 
 // Returns the schedule description and current state of an existing schedule.

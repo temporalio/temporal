@@ -56,8 +56,9 @@ const (
 	ForceCANSignalName = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
 
 	// Queries
-	QueryDescribeVersion = "describe-version" // for Worker Deployment Version wf
-	QueryCurrentVersion  = "current-version"  // for Worker Deployment wf
+	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
+	QueryCurrentVersion     = "current-version"     // for Worker Deployment wf
+	QueryRegisteredVersions = "registered-versions" // for Worker Deployment wf
 
 	// Memos
 	WorkerDeploymentVersionMemoField = "WorkerDeploymentVersionMemo" // for Worker Deployment Version wf
@@ -74,6 +75,7 @@ const (
 
 	// Application error names for rejected updates
 	errNoChangeType               = "errNoChange"
+	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 )
 
