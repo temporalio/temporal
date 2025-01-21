@@ -47,7 +47,7 @@ func (d ScheduledEventDefinition) Apply(root *hsm.Node, event *historypb.History
 	if err != nil {
 		return err
 	}
-	_, err = AddChild(root, strconv.FormatInt(event.EventId, 10), event, token, true)
+	_, err = AddChild(root, strconv.FormatInt(event.EventId, 10), event, token)
 	return err
 }
 
