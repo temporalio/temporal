@@ -240,7 +240,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	var err error
 	dbq := pm.defaultQueue
 	versionSetUsed := false
-	deployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities)
+	deployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
 
 	if deployment != nil {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -798,7 +798,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	runId string,
 ) (spoolQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, err error) {
 	wfBehavior := directive.GetBehavior()
-	deployment := directive.GetDeployment()
+	deployment := worker_versioning.DirectiveDeployment(directive)
 
 	perTypeUserData, userDataChanged, err := pm.getPerTypeUserData()
 	if err != nil {
