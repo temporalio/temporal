@@ -34,6 +34,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.opentelemetry.io/otel/trace/noop"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -567,6 +568,7 @@ func (s *queueBaseSuite) newQueueBase(
 		mockShard.GetClusterMetadata(),
 		s.logger,
 		s.metricsHandler,
+		noop.NewTracerProvider().Tracer(""),
 		nil,
 		func() bool {
 			return false

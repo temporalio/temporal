@@ -88,6 +88,7 @@ func NewTransferQueueFactory(
 				),
 				int64(params.Config.TransferQueueMaxReaderCount()),
 			),
+			Tracer: params.TracerProvider.Tracer("queue.transfer"),
 		},
 	}
 }
@@ -170,6 +171,7 @@ func (f *transferQueueFactory) CreateQueue(
 		shardContext.GetClusterMetadata(),
 		logger,
 		metricsHandler,
+		f.Tracer,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
