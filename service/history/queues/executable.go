@@ -283,6 +283,7 @@ func (e *executableImpl) Execute() (retErr error) {
 	)
 	e.Unlock()
 
+	// Wrapped in if block to avoid unnecessary allocations when OTEL is disables.
 	if telemetry.IsEnabled(e.tracer) {
 		var span trace.Span
 		ctx, span = e.tracer.Start(
@@ -292,8 +293,8 @@ func (e *executableImpl) Execute() (retErr error) {
 			trace.WithAttributes(
 				attribute.Key(telemetry.WorkflowIDKey).String(e.GetWorkflowID()),
 				attribute.Key(telemetry.WorkflowRunIDKey).String(e.GetRunID()),
-				attribute.Key("task-type").String(e.GetType().String()),
-				attribute.Key("task-id").Int64(e.GetTaskID())))
+				attribute.Key("task.type").String(e.GetType().String()),
+				attribute.Key("task.id").Int64(e.GetTaskID())))
 		defer func() {
 			if retErr != nil {
 				span.RecordError(retErr)
