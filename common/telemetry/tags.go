@@ -22,20 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package telemetry
 
-import (
-	tokenspb "go.temporal.io/server/api/token/v1"
-)
-
-type (
-	// TaskTokenSerializer serializes task tokens
-	TaskTokenSerializer interface {
-		Serialize(token *tokenspb.Task) ([]byte, error)
-		Deserialize(data []byte) (*tokenspb.Task, error)
-		SerializeQueryTaskToken(token *tokenspb.QueryTask) ([]byte, error)
-		DeserializeQueryTaskToken(data []byte) (*tokenspb.QueryTask, error)
-		SerializeNexusTaskToken(token *tokenspb.NexusTask) ([]byte, error)
-		DeserializeNexusTaskToken(data []byte) (*tokenspb.NexusTask, error)
-	}
+const (
+	WorkflowIDKey    = "temporalWorkflowID"
+	WorkflowRunIDKey = "temporalRunID"
 )

@@ -95,7 +95,7 @@ type (
 		metricsHandler         metrics.Handler
 		config                 *configs.Config
 		shard                  shard.Context
-		tokenSerializer        common.TaskTokenSerializer
+		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 	}
 
@@ -164,7 +164,7 @@ func newWorkflowTaskCompletedHandler(
 		),
 		config:                 config,
 		shard:                  shard,
-		tokenSerializer:        common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
 	}
 }

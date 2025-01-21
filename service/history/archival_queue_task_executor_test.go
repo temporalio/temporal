@@ -32,6 +32,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace/noop"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -535,6 +536,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				mockMetadata,
 				logger,
 				metrics.NoopMetricsHandler,
+				noop.NewTracerProvider().Tracer(""),
 			)
 			err := executable.Execute()
 			if len(p.ExpectedErrorSubstrings) > 0 {

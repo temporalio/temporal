@@ -77,6 +77,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
@@ -229,7 +230,7 @@ func newMatchingEngine(
 		throttledLogger:               log.ThrottledLogger(logger),
 		metricsHandler:                metrics.NoopMetricsHandler,
 		matchingRawClient:             mockMatchingClient,
-		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:               tasktoken.NewSerializer(),
 		config:                        config,
 		namespaceRegistry:             mockNamespaceCache,
 		hostInfoProvider:              mockHostInfoProvider,
@@ -2865,22 +2866,17 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionWor
 	captureHandler, ok := s.matchingEngine.metricsHandler.(*metricstest.CaptureHandler)
 	s.True(ok)
 	capture := captureHandler.StartCapture()
-	prtn := newRootPartition(
-		uuid.New(),
-		"MetricTester",
-		enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
+
+	rootPrtn := newRootPartition(uuid.New(), "MetricTester", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	_, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), rootPrtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	s.TaskQueueMetricValidator(capture, 1, 1, 1, 1, 1, 1)
 
 	// Calling the update gauge function should increase each of the metrics to 2
 	// since we are dealing with a root partition
-	tqmImpl, ok := tqm.(*taskQueuePartitionManagerImpl)
-	s.True(ok)
-	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
+	s.matchingEngine.updateTaskQueuePartitionGauge(s.ns, rootPrtn, 1)
 	s.TaskQueueMetricValidator(capture, 2, 2, 2, 2, 2, 2)
-
 }
 
 func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionActivityType() {
@@ -2890,11 +2886,8 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionAct
 	s.True(ok)
 	capture := captureHandler.StartCapture()
 
-	prtn := newRootPartition(
-		uuid.New(),
-		"MetricTester",
-		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
+	rootPrtn := newRootPartition(uuid.New(), "MetricTester", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	_, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), rootPrtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creation of a new root partition, having an activity task queue, should not have
@@ -2903,9 +2896,7 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionAct
 
 	// Calling the update gauge function should increase each of the metrics to 2
 	// since we are dealing with a root partition
-	tqmImpl, ok := tqm.(*taskQueuePartitionManagerImpl)
-	s.True(ok)
-	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
+	s.matchingEngine.updateTaskQueuePartitionGauge(s.ns, rootPrtn, 1)
 	s.TaskQueueMetricValidator(capture, 2, 0, 2, 2, 2, 2)
 }
 
@@ -2915,11 +2906,8 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_NonRootPartition
 	s.True(ok)
 	capture := captureHandler.StartCapture()
 
-	NonRootPrtn := newTestTaskQueue(
-		uuid.New(),
-		"MetricTester",
-		enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(31)
-	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), NonRootPrtn, true, loadCauseUnspecified)
+	nonRootPrtn := newTestTaskQueue(uuid.New(), "MetricTester", enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(31)
+	_, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), nonRootPrtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creation of a non-root partition should only increase the Queue Partition counter
@@ -2927,9 +2915,7 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_NonRootPartition
 
 	// Calling the update gauge function should increase each of the metrics to 2
 	// since we are dealing with a root partition
-	tqmImpl, ok := tqm.(*taskQueuePartitionManagerImpl)
-	s.True(ok)
-	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
+	s.matchingEngine.updateTaskQueuePartitionGauge(s.ns, nonRootPrtn, 1)
 	s.TaskQueueMetricValidator(capture, 2, 0, 2, 0, 2, 2)
 }
 
@@ -2953,7 +2939,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 	tlmImpl, ok := tqm.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
 
-	s.matchingEngine.updatePhysicalTaskQueueGauge(tlmImpl, 1)
+	s.matchingEngine.updatePhysicalTaskQueueGauge(s.ns, prtn, tlmImpl.queue.version, 1)
 
 	s.PhysicalQueueMetricValidator(capture, 2, 2)
 
@@ -2977,7 +2963,8 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 	namespaceId := uuid.New()
 	versionSet := uuid.New()
 	tl := "MetricTester"
-	dbq := VersionSetQueueKey(newTestTaskQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), versionSet)
+	rootPrtn := newTestTaskQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition()
+	dbq := VersionSetQueueKey(rootPrtn, versionSet)
 	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
@@ -2996,7 +2983,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 	// Creating a VersionedQueue results in increasing the size of the map to 2, due to 2 entries now,
 	// with it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 2, 1)
-	s.matchingEngine.updatePhysicalTaskQueueGauge(vqtpm.(*physicalTaskQueueManagerImpl), 1)
+	s.matchingEngine.updatePhysicalTaskQueueGauge(s.ns, rootPrtn, vqtpm.(*physicalTaskQueueManagerImpl).queue.version, 1)
 	s.PhysicalQueueMetricValidator(capture, 3, 2)
 
 	// Validating if versioned has been set right for the specific parameters
@@ -3007,7 +2994,6 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 		versioned:     "versionSet",
 	}
 	assert.Equal(s.T(), s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters], 2)
-
 }
 
 func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
@@ -3018,8 +3004,8 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 
 	namespaceId := uuid.New()
 	buildID := uuid.New()
-	tl := "MetricTester"
-	dbq := BuildIdQueueKey(newTestTaskQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), buildID)
+	rootPrtn := newTestTaskQueue(namespaceId, "MetricTester", enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition()
+	dbq := BuildIdQueueKey(rootPrtn, buildID)
 	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
@@ -3027,7 +3013,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 	// the size of the map to 1 and it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
-	Vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(
+	vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(
 		"",
 		buildID,
 		nil,
@@ -3038,7 +3024,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 	// Creating a VersionedQueue results in increasing the size of the map to 2, due to 2 entries now,
 	// with it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 2, 1)
-	s.matchingEngine.updatePhysicalTaskQueueGauge(Vqtpm.(*physicalTaskQueueManagerImpl), 1)
+	s.matchingEngine.updatePhysicalTaskQueueGauge(s.ns, rootPrtn, vqtpm.(*physicalTaskQueueManagerImpl).queue.version, 1)
 	s.PhysicalQueueMetricValidator(capture, 3, 2)
 
 	// Validating if versioned has been set right for the specific parameters

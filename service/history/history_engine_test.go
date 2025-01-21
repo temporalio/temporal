@@ -75,6 +75,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
@@ -230,7 +231,7 @@ func (s *engineSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.mockShard.GetLogger(),
 		metricsHandler:     s.mockShard.GetMetricsHandler(),
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:    tasktoken.NewSerializer(),
 		eventNotifier:      eventNotifier,
 		config:             s.config,
 		queueProcessors: map[tasks.Category]queues.Queue{

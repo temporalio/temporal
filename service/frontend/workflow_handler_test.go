@@ -72,6 +72,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
 	e "go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -115,7 +116,7 @@ type (
 		mockHistoryArchiver    *archiver.MockHistoryArchiver
 		mockVisibilityArchiver *archiver.MockVisibilityArchiver
 
-		tokenSerializer common.TaskTokenSerializer
+		tokenSerializer *tasktoken.Serializer
 
 		testNamespace   namespace.Name
 		testNamespaceID namespace.ID
@@ -159,7 +160,7 @@ func (s *WorkflowHandlerSuite) SetupTest() {
 	s.mockHistoryArchiver = archiver.NewMockHistoryArchiver(s.controller)
 	s.mockVisibilityArchiver = archiver.NewMockVisibilityArchiver(s.controller)
 
-	s.tokenSerializer = common.NewProtoTaskTokenSerializer()
+	s.tokenSerializer = tasktoken.NewSerializer()
 
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
 	s.mockExecutionManager.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()

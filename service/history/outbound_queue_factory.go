@@ -265,6 +265,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		shardContext.GetClusterMetadata(),
 		logger,
 		metricsHandler,
+		f.TracerProvider.Tracer("queue.outbound"),
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
