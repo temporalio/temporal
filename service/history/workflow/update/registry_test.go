@@ -210,6 +210,10 @@ func TestFind(t *testing.T) {
 
 func TestFindOrCreate(t *testing.T) {
 	tv := testvars.New(t)
+	tv1 := tv.WithUpdateIDNumber(1)
+	tv2 := tv.WithUpdateIDNumber(2)
+	tv3 := tv.WithUpdateIDNumber(3)
+	tv4 := tv.WithUpdateIDNumber(4)
 
 	t.Run("find stored update", func(t *testing.T) {
 		reg := update.NewRegistry(&mockUpdateStore{
@@ -262,13 +266,13 @@ func TestFindOrCreate(t *testing.T) {
 		)
 
 		// create an in-flight update #1
-		upd1, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("1"))
-		require.NoError(t, err, "creating update #1 should have beeen allowed")
+		upd1, existed, err := reg.FindOrCreate(context.Background(), tv1.UpdateID())
+		require.NoError(t, err, "creating update #1 should have been allowed")
 		require.False(t, existed)
 		require.Equal(t, 1, reg.Len())
 
 		t.Run("deny new update since it is exceeding the limit", func(t *testing.T) {
-			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			_, _, err = reg.FindOrCreate(context.Background(), tv2.UpdateID())
 			var resExh *serviceerror.ResourceExhausted
 			require.ErrorAs(t, err, &resExh, "creating update #2 should be denied")
 			require.Equal(t, 1, reg.Len())
@@ -277,7 +281,7 @@ func TestFindOrCreate(t *testing.T) {
 		t.Run("admitting 1st update still denies new update to be created", func(t *testing.T) {
 			mustAdmit(t, evStore, upd1)
 
-			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			_, _, err = reg.FindOrCreate(context.Background(), tv2.UpdateID())
 			var resExh *serviceerror.ResourceExhausted
 			require.ErrorAs(t, err, &resExh, "creating update #2 should be denied")
 			require.Equal(t, 1, reg.Len())
@@ -286,22 +290,22 @@ func TestFindOrCreate(t *testing.T) {
 		t.Run("sending 1st update still denies new update to be created", func(t *testing.T) {
 			require.NotNil(t, send(t, upd1, includeAlreadySent), "update should be sent")
 
-			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			_, _, err = reg.FindOrCreate(context.Background(), tv2.UpdateID())
 			var resExh *serviceerror.ResourceExhausted
 			require.ErrorAs(t, err, &resExh, "creating update #2 should be denied")
 			require.Equal(t, 1, reg.Len())
 		})
 
 		t.Run("increasing limit allows new updated to be created", func(t *testing.T) {
-			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			_, _, err = reg.FindOrCreate(context.Background(), tv2.UpdateID())
 			var resExh *serviceerror.ResourceExhausted
 			require.ErrorAs(t, err, &resExh)
 			require.Equal(t, 1, reg.Len())
 
 			limit += 1
 
-			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
-			require.NoError(t, err, "creating update #2 should have beeen created after limit increase")
+			_, existed, err = reg.FindOrCreate(context.Background(), tv2.UpdateID())
+			require.NoError(t, err, "update #2 should have beeen created after limit increase")
 			require.False(t, existed)
 			require.Equal(t, 2, reg.Len())
 		})
@@ -309,10 +313,19 @@ func TestFindOrCreate(t *testing.T) {
 		t.Run("rejecting 1st update allows new update to be created", func(t *testing.T) {
 			assertRejectUpdateInRegistry(t, reg, evStore, upd1)
 
-			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("3"))
-			require.NoError(t, err, "update #3 should be created after #1 completed")
+			_, existed, err = reg.FindOrCreate(context.Background(), tv3.UpdateID())
+			require.NoError(t, err, "update #3 should have been created after #1 completed")
 			require.False(t, existed)
 			require.Equal(t, 2, reg.Len())
+		})
+
+		t.Run("disable limit by setting it to zero", func(t *testing.T) {
+			limit = 0
+
+			_, _, err = reg.FindOrCreate(context.Background(), tv4.UpdateID())
+			require.NoError(t, err, "update #4 should have been created")
+			require.False(t, existed)
+			require.Equal(t, 3, reg.Len())
 		})
 	})
 
@@ -330,7 +343,7 @@ func TestFindOrCreate(t *testing.T) {
 			)
 
 			// create an in-flight update #1
-			upd1, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("1"))
+			upd1, existed, err := reg.FindOrCreate(context.Background(), tv1.UpdateID())
 			require.NoError(t, err, "creating update #1 should have beeen allowed")
 			require.False(t, existed)
 			require.Equal(t, 1, reg.Len())
@@ -345,7 +358,7 @@ func TestFindOrCreate(t *testing.T) {
 		t.Run("deny new update since it is exceeding the limit", func(t *testing.T) {
 			reg, _, _ := newRegistryWithSingleInflightUpdate()
 
-			_, _, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			_, _, err := reg.FindOrCreate(context.Background(), tv2.UpdateID())
 			var failedPrecon *serviceerror.FailedPrecondition
 			require.ErrorAs(t, err, &failedPrecon)
 			require.Equal(t, 1, reg.Len())
@@ -356,7 +369,7 @@ func TestFindOrCreate(t *testing.T) {
 			assertRejectUpdateInRegistry(t, reg, evStore, upd1)
 			require.Equal(t, 0, reg.Len())
 
-			_, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			_, existed, err := reg.FindOrCreate(context.Background(), tv2.UpdateID())
 			require.NoError(t, err)
 			require.False(t, existed)
 			require.Equal(t, 1, reg.Len())
@@ -366,7 +379,7 @@ func TestFindOrCreate(t *testing.T) {
 			reg, evStore, upd1 := newRegistryWithSingleInflightUpdate()
 			mustAccept(t, evStore, upd1)
 
-			_, _, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			_, _, err := reg.FindOrCreate(context.Background(), tv2.UpdateID())
 			var failedPrecon *serviceerror.FailedPrecondition
 			require.ErrorAs(t, err, &failedPrecon)
 			require.Equal(t, 1, reg.Len())
@@ -378,7 +391,7 @@ func TestFindOrCreate(t *testing.T) {
 			assertCompleteUpdateInRegistry(t, reg, evStore, upd1)
 			require.Equal(t, 0, reg.Len())
 
-			_, _, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			_, _, err := reg.FindOrCreate(context.Background(), tv2.UpdateID())
 			var failedPrecon *serviceerror.FailedPrecondition
 			require.ErrorAs(t, err, &failedPrecon)
 			require.Equal(t, 0, reg.Len())
@@ -388,7 +401,7 @@ func TestFindOrCreate(t *testing.T) {
 			reg, _, _ := newRegistryWithSingleInflightUpdate()
 			limit = 2
 
-			_, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			_, existed, err := reg.FindOrCreate(context.Background(), tv2.UpdateID())
 			require.NoError(t, err)
 			require.False(t, existed)
 			require.Equal(t, 2, reg.Len())
@@ -458,9 +471,9 @@ func TestSendMessages(t *testing.T) {
 
 	t.Run("registry with 2 created updates has no messages to send", func(t *testing.T) {
 		var err error
-		upd1, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("1"))
+		upd1, _, err = reg.FindOrCreate(context.Background(), tv.WithUpdateIDNumber(1).UpdateID())
 		require.NoError(t, err)
-		upd2, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+		upd2, _, err = reg.FindOrCreate(context.Background(), tv.WithUpdateIDNumber(2).UpdateID())
 		require.NoError(t, err)
 
 		msgs := reg.Send(context.Background(), includeAlreadySent, testSequencingEventID)
@@ -533,9 +546,9 @@ func TestRejectUnprocessed(t *testing.T) {
 
 	t.Run("registry with updates [#1, #2] in stateCreated rejects nothing", func(t *testing.T) {
 		var err error
-		upd1, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("1"))
+		upd1, _, err = reg.FindOrCreate(context.Background(), tv.WithUpdateIDNumber(1).UpdateID())
 		require.NoError(t, err)
-		upd2, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+		upd2, _, err = reg.FindOrCreate(context.Background(), tv.WithUpdateIDNumber(2).UpdateID())
 		require.NoError(t, err)
 
 		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
@@ -589,14 +602,14 @@ func TestAbort(t *testing.T) {
 	reg := update.NewRegistry(&mockUpdateStore{
 		VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
 			visitor(
-				tv.UpdateID("1"),
+				tv.WithUpdateIDNumber(1).UpdateID(),
 				&persistencespb.UpdateInfo{
 					Value: &persistencespb.UpdateInfo_Admission{
 						Admission: &persistencespb.UpdateAdmissionInfo{},
 					},
 				})
 			visitor(
-				tv.UpdateID("2"),
+				tv.WithUpdateIDNumber(2).UpdateID(),
 				&persistencespb.UpdateInfo{
 					Value: &persistencespb.UpdateInfo_Acceptance{
 						Acceptance: &persistencespb.UpdateAcceptanceInfo{},
@@ -608,13 +621,13 @@ func TestAbort(t *testing.T) {
 	// abort both updates
 	reg.Abort(update.AbortReasonWorkflowCompleted)
 
-	upd1 := reg.Find(context.Background(), tv.UpdateID("1"))
+	upd1 := reg.Find(context.Background(), tv.WithUpdateIDNumber(1).UpdateID())
 	require.NotNil(t, upd1)
 	status1, err := upd1.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
 	require.Equal(t, consts.ErrWorkflowCompleted, err)
 	require.Nil(t, status1)
 
-	upd2 := reg.Find(context.Background(), tv.UpdateID("2"))
+	upd2 := reg.Find(context.Background(), tv.WithUpdateIDNumber(2).UpdateID())
 	require.NotNil(t, upd2)
 	status2, err := upd2.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
 	require.NoError(t, err)

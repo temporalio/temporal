@@ -31,7 +31,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -67,7 +66,7 @@ func NewServerStatsHandler(
 	tmp propagation.TextMapPropagator,
 	logger log.Logger,
 ) ServerStatsHandler {
-	if !isEnabled(tp) {
+	if !IsEnabled(tp) {
 		return nil
 	}
 
@@ -87,7 +86,7 @@ func NewClientStatsHandler(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,
 ) ClientStatsHandler {
-	if !isEnabled(tp) {
+	if !IsEnabled(tp) {
 		return nil
 	}
 
@@ -97,18 +96,13 @@ func NewClientStatsHandler(
 	)
 }
 
-func isEnabled(tp trace.TracerProvider) bool {
-	_, isNoop := tp.(noop.TracerProvider)
-	return !isNoop
-}
-
 func newCustomServerStatsHandler(
 	handler stats.Handler,
 	logger log.Logger,
 ) *customServerStatsHandler {
 	return &customServerStatsHandler{
 		wrapped: handler,
-		isDebug: debugMode(),
+		isDebug: DebugMode(),
 		tags:    logtags.NewWorkflowTags(common.NewProtoTaskTokenSerializer(), logger),
 	}
 }

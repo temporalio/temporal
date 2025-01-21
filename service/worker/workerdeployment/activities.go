@@ -1,8 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,25 +22,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package testcore
+package workerdeployment
 
 import (
-	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
+	"context"
+
+	"go.temporal.io/sdk/activity"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/namespace"
 )
 
-// AdminClient is the interface exposed by admin service client
-type AdminClient interface {
-	adminservice.AdminServiceClient
-}
+type (
+	Activities struct {
+		namespace        *namespace.Namespace
+		deploymentClient Client
+	}
+)
 
-// FrontendClient is the interface exposed by frontend service client
-type FrontendClient interface {
-	workflowservice.WorkflowServiceClient
-}
-
-// HistoryClient is the interface exposed by history service client
-type HistoryClient interface {
-	historyservice.HistoryServiceClient
+func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
+	identity := "deployment series workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	res, err := a.deploymentClient.SyncVersionWorkflowFromWorkerDeployment(
+		ctx,
+		a.namespace,
+		args.DeploymentName,
+		args.Version,
+		args.Args,
+		identity,
+		args.RequestId,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &deploymentspb.SyncVersionStateActivityResult{
+		VersionState: res.VersionState,
+	}, nil
 }

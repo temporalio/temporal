@@ -75,7 +75,7 @@ var (
 			WithBackoffCoefficient(1.2).
 			WithMaximumInterval(5 * time.Second).
 			WithMaximumAttempts(80).
-			WithExpirationInterval(5 * time.Minute)
+			WithExpirationInterval(10 * time.Minute)
 	ErrResendAttemptExceeded = serviceerror.NewInternal("resend history attempts exceeded")
 )
 

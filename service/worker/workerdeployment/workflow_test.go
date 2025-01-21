@@ -1,8 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,15 +22,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package testcore
+package workerdeployment
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/sdk/testsuite"
+	"go.uber.org/mock/gomock"
 )
 
-func TestFunctionalSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(FunctionalSuite))
+type WorkerDeploymentSuite struct {
+	suite.Suite
+	testsuite.WorkflowTestSuite
+	controller *gomock.Controller
+	env        *testsuite.TestWorkflowEnvironment
 }
+
+func TestWorkerDeploymentSuite(t *testing.T) {
+	suite.Run(t, new(WorkerDeploymentSuite))
+}
+
+func (s *WorkerDeploymentSuite) SetupTest() {
+	s.controller = gomock.NewController(s.T())
+	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
+	s.env.RegisterWorkflow(Workflow)
+}
+
+func (s *WorkerDeploymentSuite) TearDownTest() {
+	s.controller.Finish()
+	s.env.AssertExpectations(s.T())
+}
+
+/*
+func (d *WorkerDeploymentSuite) TestStartWorkerDeploymentWorkflow() {}
+
+
+
+
+
+*/

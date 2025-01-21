@@ -556,6 +556,9 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	)
 }
 
+// TODO: deprecate this function and always use t.Now()
+// Only test code sets t.clusterName to be non-current cluster name
+// and advance the time by setting calling shardContext.SetCurrentTime.
 func (t *transferQueueStandbyTaskExecutor) getCurrentTime() time.Time {
 	return t.shardContext.GetCurrentTime(t.clusterName)
 }

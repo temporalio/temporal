@@ -25,34 +25,18 @@
 package testcore
 
 import (
-	"fmt"
-	"strings"
-
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/taskpoller"
 )
 
 type (
-	SearchAttributeTestMapper struct{}
+	FunctionalTestSuite struct {
+		FunctionalTestBase
+
+		TaskPoller *taskpoller.TaskPoller
+	}
 )
 
-func NewSearchAttributeTestMapper() *SearchAttributeTestMapper {
-	return &SearchAttributeTestMapper{}
-}
-
-func (t *SearchAttributeTestMapper) GetAlias(fieldName string, namespace string) (string, error) {
-	if _, err := searchattribute.TestNameTypeMap.GetType(fieldName); err == nil {
-		return "AliasFor" + fieldName, nil
-	}
-	return "", serviceerror.NewInvalidArgument(fmt.Sprintf("fieldname '%s' has no search-attribute defined for '%s' namespace", fieldName, namespace))
-}
-
-func (t *SearchAttributeTestMapper) GetFieldName(alias string, namespace string) (string, error) {
-	if strings.HasPrefix(alias, "AliasFor") {
-		fieldName := strings.TrimPrefix(alias, "AliasFor")
-		if _, err := searchattribute.TestNameTypeMap.GetType(fieldName); err == nil {
-			return fieldName, nil
-		}
-	}
-	return "", serviceerror.NewInvalidArgument(fmt.Sprintf("search-attribute '%s' not found for '%s' namespace", alias, namespace))
+func (s *FunctionalTestSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+	s.TaskPoller = taskpoller.New(s.T(), s.frontendClient, s.Namespace().String())
 }

@@ -155,6 +155,10 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 			LastAttemptCompleteTime:    request.LastAttemptCompleteTime,
 			Stamp:                      request.Stamp,
 			Paused:                     request.Paused,
+			RetryInitialInterval:       request.RetryInitialInterval,
+			RetryMaximumInterval:       request.RetryMaximumInterval,
+			RetryMaximumAttempts:       request.RetryMaximumAttempts,
+			RetryBackoffCoefficient:    request.RetryBackoffCoefficient,
 		},
 	)
 	if err != nil {
@@ -354,9 +358,14 @@ func (r *ActivityStateReplicatorImpl) compareActivity(
 		return true
 	}
 
-	if activityInfo.Stamp != stamp {
+	if activityInfo.Stamp < stamp {
 		// stamp changed, should update activity
 		return true
+	}
+
+	if activityInfo.Stamp > stamp {
+		// stamp is older than we have, should not update activity
+		return false
 	}
 
 	// activityInfo.Version == version

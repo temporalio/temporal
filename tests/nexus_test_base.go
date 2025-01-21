@@ -38,7 +38,7 @@ import (
 )
 
 type NexusTestBaseSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func (s *NexusTestBaseSuite) mustToPayload(v any) *commonpb.Payload {
@@ -62,7 +62,7 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQ
 		}
 	}
 	res, err := s.GetTestCluster().FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Identity:  uuid.NewString(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
@@ -84,7 +84,7 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQ
 	response, handlerError := handler(res)
 	if handlerError != nil {
 		_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Identity:  uuid.NewString(),
 			TaskToken: res.TaskToken,
 			Error:     handlerError,
@@ -96,7 +96,7 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQ
 		}
 	} else if response != nil {
 		_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Identity:  uuid.NewString(),
 			TaskToken: res.TaskToken,
 			Response:  response,

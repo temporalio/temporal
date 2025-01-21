@@ -33,6 +33,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -45,6 +46,7 @@ import (
 type (
 	localActivities struct {
 		metadataManager      persistence.MetadataManager
+		clusterMetadata      cluster.Metadata
 		nexusEndpointManager persistence.NexusEndpointManager
 		logger               log.Logger
 
@@ -54,14 +56,17 @@ type (
 	}
 
 	getNamespaceInfoResult struct {
-		NamespaceID namespace.ID
-		Namespace   namespace.Name
-		Clusters    []string
+		NamespaceID    namespace.ID
+		Namespace      namespace.Name
+		Clusters       []string
+		ActiveCluster  string
+		CurrentCluster string
 	}
 )
 
 func newLocalActivities(
 	metadataManager persistence.MetadataManager,
+	clusterMetadata cluster.Metadata,
 	nexusEndpointManager persistence.NexusEndpointManager,
 	logger log.Logger,
 	protectedNamespaces dynamicconfig.TypedPropertyFn[[]string],
@@ -70,6 +75,7 @@ func newLocalActivities(
 ) *localActivities {
 	return &localActivities{
 		metadataManager:      metadataManager,
+		clusterMetadata:      clusterMetadata,
 		nexusEndpointManager: nexusEndpointManager,
 		logger:               logger,
 		protectedNamespaces:  protectedNamespaces,
@@ -104,9 +110,13 @@ func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID nam
 	}
 
 	return getNamespaceInfoResult{
-		NamespaceID: namespace.ID(getNamespaceResponse.Namespace.Info.Id),
-		Namespace:   namespace.Name(getNamespaceResponse.Namespace.Info.Name),
-		Clusters:    getNamespaceResponse.Namespace.ReplicationConfig.Clusters,
+		NamespaceID:   namespace.ID(getNamespaceResponse.Namespace.Info.Id),
+		Namespace:     namespace.Name(getNamespaceResponse.Namespace.Info.Name),
+		Clusters:      getNamespaceResponse.Namespace.ReplicationConfig.Clusters,
+		ActiveCluster: getNamespaceResponse.Namespace.ReplicationConfig.ActiveClusterName,
+		// CurrentCluster is not technically a "namespace info", but since all cluster data is here,
+		// it is convenient to have the current cluster name here too.
+		CurrentCluster: a.clusterMetadata.GetCurrentClusterName(),
 	}, nil
 }
 
