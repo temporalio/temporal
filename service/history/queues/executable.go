@@ -283,21 +283,24 @@ func (e *executableImpl) Execute() (retErr error) {
 	)
 	e.Unlock()
 
-	ctx, span := e.tracer.Start(
-		ctx,
-		fmt.Sprintf("queue.Execute/%v", e.GetType().String()),
-		trace.WithSpanKind(trace.SpanKindConsumer),
-		trace.WithAttributes(
-			attribute.Key(telemetry.WorkflowIDKey).String(e.GetWorkflowID()),
-			attribute.Key(telemetry.WorkflowRunIDKey).String(e.GetRunID()),
-			attribute.Key("task-type").String(e.GetType().String()),
-			attribute.Key("task-id").Int64(e.GetTaskID())))
-	defer func() {
-		if retErr != nil {
-			span.RecordError(retErr)
-		}
-		span.End()
-	}()
+	if telemetry.IsEnabled(e.tracer) {
+		var span trace.Span
+		ctx, span = e.tracer.Start(
+			ctx,
+			fmt.Sprintf("queue.Execute/%v", e.GetType().String()),
+			trace.WithSpanKind(trace.SpanKindConsumer),
+			trace.WithAttributes(
+				attribute.Key(telemetry.WorkflowIDKey).String(e.GetWorkflowID()),
+				attribute.Key(telemetry.WorkflowRunIDKey).String(e.GetRunID()),
+				attribute.Key("task-type").String(e.GetType().String()),
+				attribute.Key("task-id").Int64(e.GetTaskID())))
+		defer func() {
+			if retErr != nil {
+				span.RecordError(retErr)
+			}
+			span.End()
+		}()
+	}
 
 	defer func() {
 		if panicObj := recover(); panicObj != nil {
