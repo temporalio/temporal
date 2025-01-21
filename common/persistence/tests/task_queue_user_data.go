@@ -32,6 +32,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -43,8 +46,7 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		namespaceID   string
-		taskQueueName string
+		namespaceID string
 
 		taskManager p.TaskManager
 		logger      log.Logger
@@ -74,12 +76,73 @@ func (s *TaskQueueUserDataSuite) SetupTest() {
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 
 	s.namespaceID = uuid.New().String()
-	s.taskQueueName = uuid.New().String()
 }
 
 func (s *TaskQueueUserDataSuite) TearDownTest() {
 	s.cancel()
 }
 
-func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
+func (s *TaskQueueUserDataSuite) TestSetInitialAndIncrement() {
+	tq1 := "tq1"
+	version := int64(0) // initial version must be 0
+
+	// check that get returns not found
+	res, err := s.taskManager.GetTaskQueueUserData(s.ctx, &p.GetTaskQueueUserDataRequest{
+		NamespaceID: s.namespaceID,
+		TaskQueue:   tq1,
+	})
+	s.Error(err)
+
+	// set initial user data
+	d1 := s.makeData(hlc.Zero(12345), version)
+	err = s.taskManager.UpdateTaskQueueUserData(s.ctx, &p.UpdateTaskQueueUserDataRequest{
+		NamespaceID: s.namespaceID,
+		Updates: map[string]*p.SingleTaskQueueUserDataUpdate{
+			tq1: &p.SingleTaskQueueUserDataUpdate{
+				UserData: d1,
+			},
+		},
+	})
+	s.NoError(err)
+	version++
+
+	// check that we can get it back
+	res, err = s.taskManager.GetTaskQueueUserData(s.ctx, &p.GetTaskQueueUserDataRequest{
+		NamespaceID: s.namespaceID,
+		TaskQueue:   tq1,
+	})
+	s.NoError(err)
+	s.Equal(version, res.UserData.Version)
+	s.True(hlc.Equal(d1.Data.Clock, res.UserData.Data.Clock))
+
+	// increment it
+	d2 := s.makeData(d1.Data.Clock, version)
+	err = s.taskManager.UpdateTaskQueueUserData(s.ctx, &p.UpdateTaskQueueUserDataRequest{
+		NamespaceID: s.namespaceID,
+		Updates: map[string]*p.SingleTaskQueueUserDataUpdate{
+			tq1: &p.SingleTaskQueueUserDataUpdate{
+				UserData: d2,
+			},
+		},
+	})
+	s.NoError(err)
+	version++
+
+	// check that we can get it back
+	res, err = s.taskManager.GetTaskQueueUserData(s.ctx, &p.GetTaskQueueUserDataRequest{
+		NamespaceID: s.namespaceID,
+		TaskQueue:   tq1,
+	})
+	s.NoError(err)
+	s.Equal(version, res.UserData.Version)
+	s.True(hlc.Equal(d2.Data.Clock, res.UserData.Data.Clock))
+}
+
+func (s *TaskQueueUserDataSuite) makeData(prev *hlc.Clock, ver int64) *persistencespb.VersionedTaskQueueUserData {
+	return &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			Clock: hlc.Next(prev, clock.NewRealTimeSource()),
+		},
+		Version: ver,
+	}
 }
