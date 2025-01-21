@@ -878,8 +878,8 @@ func respondWftWithActivities(
 					// TODO (shahab): tests with forced task forward take multiple seconds. Need to know why?
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
-					StartToCloseTimeout:    durationpb.New(1 * time.Second),
-					HeartbeatTimeout:       durationpb.New(1 * time.Second),
+					StartToCloseTimeout:    durationpb.New(3 * time.Second),
+					HeartbeatTimeout:       durationpb.New(3 * time.Second),
 					RequestEagerExecution:  false,
 				},
 			},
