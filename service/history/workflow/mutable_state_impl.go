@@ -4418,9 +4418,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		ms.GetExecutionInfo().VersioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 			Behavior: override.GetBehavior(),
 			// We read from both old and new fields but write in the new fields only.
+			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 			PinnedVersion: worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentOrVersion(override.GetDeployment(), override.GetPinnedVersion())),
 		}
-	} else {
+	} else if ms.GetExecutionInfo().GetVersioningInfo() != nil {
+		// TODO (shahab): this behavior has changed in main branch. Update it when merging to main.
 		ms.GetExecutionInfo().VersioningInfo.VersioningOverride = nil
 	}
 
@@ -7377,6 +7379,7 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	}
 
 	// Only store transition in VersionTransition but read from both VersionTransition and DeploymentVersionTransition.
+	//nolint:staticcheck // SA1019 deprecated DeploymentTransition will clean up later
 	versioningInfo.DeploymentTransition = nil
 	versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
 		DeploymentVersion: worker_versioning.DeploymentVersionFromDeployment(deployment),

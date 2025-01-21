@@ -41,7 +41,6 @@ import (
 type (
 	workerComponent struct {
 		activityDeps activityDeps
-		enabled      dynamicconfig.BoolPropertyFn
 	}
 
 	activityDeps struct {
@@ -93,14 +92,13 @@ func NewResult(
 	return fxResult{
 		Component: &workerComponent{
 			activityDeps: params,
-			enabled:      dynamicconfig.EnableDeploymentVersions.Get(dc),
 		},
 	}
 }
 
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	return &workercommon.PerNSDedicatedWorkerOptions{
-		Enabled: s.enabled(),
+		Enabled: true,
 	}
 }
 

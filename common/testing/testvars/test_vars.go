@@ -233,6 +233,7 @@ func (tv *TestVars) RequestID() string {
 	return getOrCreate(tv, "request_id", tv.uuidString, tv.uuidNSetter)
 }
 
+// [cleanup-wv-pre-release]
 func (tv *TestVars) BuildID() string {
 	return getOrCreate(tv, "build_id", tv.uniqueString, tv.stringNSetter)
 }

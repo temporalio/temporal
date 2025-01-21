@@ -210,6 +210,8 @@ func (mse MutableStateWithEffects) CanAddEvent() bool {
 //     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
 //
 // Note: Deployment objects are immutable, never change their fields.
+//
+//nolint:revive // cognitive complexity to reduce after old code clean up
 func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) *deploymentpb.Deployment {
 	if versioningInfo == nil {
 		return nil
@@ -224,6 +226,7 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 		}
 		return override.GetDeployment()
 	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		//nolint:revive // nesting will be reduced after old code clean up
 		if v := versioningInfo.GetDeploymentVersion(); v != nil {
 			return worker_versioning.DeploymentFromDeploymentVersion(v)
 		}

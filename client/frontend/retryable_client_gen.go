@@ -935,30 +935,15 @@ func (c *retryableClient) SetCurrentDeployment(
 	return resp, err
 }
 
-func (c *retryableClient) SetWorkerDeploymentCurrentVersion(
+func (c *retryableClient) SetCurrentDeploymentVersion(
 	ctx context.Context,
-	request *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
+	request *workflowservice.SetCurrentDeploymentVersionRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.SetWorkerDeploymentCurrentVersionResponse, error) {
-	var resp *workflowservice.SetWorkerDeploymentCurrentVersionResponse
+) (*workflowservice.SetCurrentDeploymentVersionResponse, error) {
+	var resp *workflowservice.SetCurrentDeploymentVersionResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.SetWorkerDeploymentCurrentVersion(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) SetWorkerDeploymentRampingVersion(
-	ctx context.Context,
-	request *workflowservice.SetWorkerDeploymentRampingVersionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.SetWorkerDeploymentRampingVersionResponse, error) {
-	var resp *workflowservice.SetWorkerDeploymentRampingVersionResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.SetWorkerDeploymentRampingVersion(ctx, request, opts...)
+		resp, err = c.client.SetCurrentDeploymentVersion(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

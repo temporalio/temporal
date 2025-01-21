@@ -737,6 +737,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.WorkerVersionStamp,
 		request.SdkMetadata,
 		request.MeteringMetadata,
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		worker_versioning.DeploymentOrVersion(request.Deployment, request.DeploymentVersion),
 		request.VersioningBehavior,
 	)
@@ -1102,6 +1103,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
 
+	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := worker_versioning.DeploymentOrVersion(attrs.GetDeployment(), attrs.GetDeploymentVersion())
 	wftBehavior := attrs.GetVersioningBehavior()
 	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
@@ -1147,10 +1149,12 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		if versioningInfo != nil {
 			// Deployment Version is not set for unversioned workers.
 			versioningInfo.DeploymentVersion = nil
+			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 			versioningInfo.Deployment = nil
 		}
 	} else {
 		// Only populating the new field.
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
 		versioningInfo.DeploymentVersion = worker_versioning.DeploymentVersionFromDeployment(wftDeployment)
 	}
