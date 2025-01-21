@@ -781,6 +781,9 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 	if err != nil {
 		return nil, err
 	}
+	if len(taskEvents) == 0 {
+		return nil, nil
+	}
 
 	// truncate historyItems to task's last event
 	var taskHistoryItems []*historyspb.VersionHistoryItem
