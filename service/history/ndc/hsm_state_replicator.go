@@ -184,17 +184,39 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 		currentNode, err := currentHSM.Child(incomingNodePath)
 		if err != nil {
 			// The node may not be found if:
-			// 1. The state machine was deleted (e.g. terminal state cleanup)
-			// 2. We're missing events that created this node
+			// State machine was deleted in terminal state.
+			// Both state machine creation and deletion are always associated with an event, so any missing state
+			// machine must have a corresponding event in history.
 			if errors.Is(err, hsm.ErrStateMachineNotFound) {
-				// In terminal state, nodes can be deleted
-				// Ignore the error and continue processing other nodes
-				r.logger.Debug("State machine not found - likely deleted in terminal state",
-					tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
-					tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
-					tag.WorkflowRunID(mutableState.GetExecutionInfo().OriginalExecutionRunId),
+				notFoundErr := err
+				// Get the last items from both version histories
+				currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(
+					mutableState.GetExecutionInfo().GetVersionHistories(),
 				)
-				return nil
+				if err != nil {
+					return err
+				}
+				lastLocalItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+				if err != nil {
+					return err
+				}
+				lastIncomingItem, err := versionhistory.GetLastVersionHistoryItem(request.EventVersionHistory)
+				if err != nil {
+					return err
+				}
+
+				// Only accept "not found" if our version history is ahead
+				if versionhistory.CompareVersionHistoryItem(lastLocalItem, lastIncomingItem) > 0 {
+					r.logger.Debug("State machine not found - likely deleted in terminal state",
+						tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
+						tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
+						tag.WorkflowRunID(mutableState.GetExecutionInfo().OriginalExecutionRunId),
+					)
+					return nil
+				}
+
+				// Otherwise, we might be missing events
+				return notFoundErr
 			}
 			return err
 		}
