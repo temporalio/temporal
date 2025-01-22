@@ -264,11 +264,27 @@ func (s *activitySuite) TestResetPausedActivityAcceptance() {
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 
 	prevStamp = ai.Stamp
-	err = ResetActivityById(s.mockShard, s.mutableState, ai.ActivityId, false, false)
+	err = ResetActivityById(s.mockShard, s.mutableState, ai.ActivityId, false, false, false)
 	s.NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
 	s.Equal(prevStamp, ai.Stamp, "ActivityInfo.Stamp should not change")
 	s.True(ai.Paused, "ActivityInfo.Paused shouldn't change by reset")
+}
+
+func (s *activitySuite) TestResetAndUnPauseActivityAcceptance() {
+	ai := s.AddActivityInfo()
+
+	prevStamp := ai.Stamp
+	err := PauseActivityById(s.mutableState, ai.ActivityId)
+	s.NoError(err)
+	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
+
+	prevStamp = ai.Stamp
+	err = ResetActivityById(s.mockShard, s.mutableState, ai.ActivityId, false, false, true)
+	s.NoError(err)
+	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
+	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
+	s.False(ai.Paused, "ActivityInfo.Paused shouldn't change by reset")
 }
 
 func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
