@@ -312,7 +312,7 @@ func Main() {
 		if len(failures) == 0 {
 			log.Fatalf("tests failed but no failures have been detected, not rerunning tests")
 		}
-		// Don't rerun if there's more than 10 failures in a single suite.
+		// Rerun all tests from previous attempt if there's more than 10 failures in a single suite.
 		if len(failures) > 10 && retry < r.retries {
 			log.Printf(
 				"number of failures exceeds configured threshold (%d/%d) for narrowing down tests to retry, retrying with previous attempt's args",
