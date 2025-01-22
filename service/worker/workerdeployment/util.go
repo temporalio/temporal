@@ -47,16 +47,17 @@ const (
 	WorkerDeploymentVersionNamespaceDivision = "TemporalWorkerDeploymentVersion"
 
 	// Updates
-	RegisterWorkerInDeployment = "register-task-queue-worker" // for Worker Deployment Version wf
-	SyncVersionState           = "sync-version-state"         // for Worker Deployment Version wfs
-	SetCurrentVersion          = "set-current-version"        // for Worker Deployment wfs
+	RegisterWorkerInDeployment   = "register-task-queue-worker"       // for Worker Deployment Version wf
+	SyncVersionState             = "sync-version-state"               // for Worker Deployment Version wfs
+	SetCurrentVersion            = "set-current-version"              // for Worker Deployment wfs
+	AddVersionToWorkerDeployment = "add-version-to-worker-deployment" // for Worker Deployment wfs
 
 	// Signals
 	ForceCANSignalName = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
 
 	// Queries
-	QueryDescribeVersion = "describe-version" // for Worker Deployment Version wf
-	QueryCurrentVersion  = "current-version"  // for Worker Deployment wf
+	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
+	QueryDescribeDeployment = "describe-deployment" // for Worker Deployment wf
 
 	// Memos
 	WorkerDeploymentVersionMemoField = "WorkerDeploymentVersionMemo" // for Worker Deployment Version wf
@@ -73,6 +74,7 @@ const (
 
 	// Application error names for rejected updates
 	errNoChangeType               = "errNoChange"
+	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 )
 
@@ -88,9 +90,9 @@ var (
 	)
 )
 
-// ValidateVersionWfParams is a helper that verifies if the fields used for generating
+// validateVersionWfParams is a helper that verifies if the fields used for generating
 // Worker Deployment Version related workflowID's are valid
-func ValidateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
+func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))

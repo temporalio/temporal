@@ -79,6 +79,14 @@ message WorkerDeploymentWorkflowArgs {
 message WorkerDeploymentLocalState {
     string current_version = 1;
     google.protobuf.Timestamp current_changed_time = 2;
+    // Deployment Versions that are currently tracked in this Deployment. 
+    // A DeploymentVersion will be cleaned up automatically if all the following conditions meet:
+    // - It does not receive new executions (see WorkerDeploymentVersionInfo.accepts_new_executions) 
+    // - It has no active pollers (see WorkerDeploymentVersionInfo.pollers_status) 
+    // - It is drained (see WorkerDeploymentVersionInfo.drainage_status)
+    // TODO (Shivam) - Removal of registered versions based on the above conditions.
+    repeated string versions = 3; 
+    google.protobuf.Timestamp create_time = 4;
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -109,6 +117,11 @@ message SyncVersionStateResponse {
 // used as Worker Deployment Version workflow query response:
 message QueryDescribeVersionResponse {
     VersionLocalState version_state = 1;
+}
+
+// used as Worker Deployment Version workflow query response:
+message QueryDescribeWorkerDeploymentResponse {
+    WorkerDeploymentLocalState state = 1;
 }
 
 // used as Worker Deployment Version workflow memo:
@@ -177,6 +190,17 @@ message WorkerDeploymentWorkflowMemo {
     string deployment_name = 1;
     string current_version = 2;
     google.protobuf.Timestamp current_changed_time = 3;
+}
+
+// Used as Worker Deployment Version workflow activity input:
+message AddVersionToWorkerDeploymentRequest {
+    string deployment_name = 1;
+    string version = 2;
+    string request_id = 3;
+}
+
+// Used as Worker Deployment Version workflow activity output:
+message AddVersionToWorkerDeploymentResponse {
 }
 
 //////////////////////////////////////////////////////////////////////////

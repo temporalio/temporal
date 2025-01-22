@@ -127,6 +127,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeDeployment":              3, // [cleanup-wv-pre-release]
 		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":            3, // [cleanup-wv-pre-release]
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
 
 		// P4: Progress APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      4,

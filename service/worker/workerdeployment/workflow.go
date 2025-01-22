@@ -25,6 +25,8 @@
 package workerdeployment
 
 import (
+	"time"
+
 	"github.com/pborman/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
@@ -33,6 +35,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -62,12 +65,15 @@ func Workflow(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflow
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.State == nil {
 		d.State = &deploymentspb.WorkerDeploymentLocalState{}
+		d.State.CreateTime = timestamppb.New(time.Now())
 	}
 
 	var pendingUpdates int
 
-	err := workflow.SetQueryHandler(ctx, QueryCurrentVersion, func() (string, error) {
-		return d.State.CurrentVersion, nil
+	err := workflow.SetQueryHandler(ctx, QueryDescribeDeployment, func() (*deploymentspb.QueryDescribeWorkerDeploymentResponse, error) {
+		return &deploymentspb.QueryDescribeWorkerDeploymentResponse{
+			State: d.State,
+		}, nil
 	})
 	if err != nil {
 		d.logger.Info("SetQueryHandler failed for WorkerDeployment workflow with error: " + err.Error())
@@ -80,6 +86,17 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.handleSetCurrent,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateSetCurrent,
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		AddVersionToWorkerDeployment,
+		d.handleAddVersionToWorkerDeployment,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateAddVersionToWorkerDeployment,
 		},
 	); err != nil {
 		return err
@@ -122,6 +139,41 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// do work
 
 	return &deploymentspb.SetCurrentVersionResponse{}, nil
+}
+
+func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) error {
+	if d.State.Versions == nil {
+		return nil
+	}
+
+	for _, v := range d.State.Versions {
+		if v == version {
+			return temporal.NewApplicationError("deployment version already registered", errVersionAlreadyExistsType)
+		}
+	}
+
+	return nil
+}
+
+func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, version string) error {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	// Add version to local state
+	if d.State.Versions == nil {
+		d.State.Versions = make([]string, 0)
+	}
+	d.State.Versions = append(d.State.Versions, version)
+	return nil
 }
 
 func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string, updateMetadata *deploymentpb.UpdateDeploymentMetadata) (*deploymentspb.VersionLocalState, error) {
