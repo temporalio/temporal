@@ -258,12 +258,13 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersionStateArgs) error {
 	if set := args.SetCurrent; set != nil {
 		if set.LastBecameCurrentTime == nil {
-			if d.VersionState.IsCurrent {
+			// version will no longer be current
+			if d.VersionState.LastBecameCurrentTime != nil {
 				return nil
 			}
 		} else {
-			if !d.VersionState.IsCurrent ||
-				!d.VersionState.LastBecameCurrentTime.AsTime().Equal(set.LastBecameCurrentTime.AsTime()) {
+			// version will become current
+			if !d.VersionState.LastBecameCurrentTime.AsTime().Equal(set.LastBecameCurrentTime.AsTime()) {
 				return nil
 			}
 		}
@@ -289,21 +290,12 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	// wait until series workflow started
 	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
 	if err != nil {
-		d.logger.Error("Update canceled before series workflow started")
-		return nil, serviceerror.NewDeadlineExceeded("Update canceled before series workflow started")
+		d.logger.Error("Update canceled before worker deployment workflow started")
+		return nil, serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
 	}
 
 	// apply changes to "current"
 	if set := args.SetCurrent; set != nil {
-		if set.LastBecameCurrentTime == nil {
-			d.VersionState.IsCurrent = false
-		} else {
-			d.VersionState.IsCurrent = true
-			d.VersionState.LastBecameCurrentTime = set.LastBecameCurrentTime
-		}
-		if err := d.updateMemo(ctx); err != nil {
-			return nil, err
-		}
 
 		// sync to task queues
 		syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
@@ -323,7 +315,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
 		if err != nil {
-			// TODO: if this fails, should we roll back anything?
+			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 			return nil, err
 		}
 		if len(syncRes.TaskQueueMaxVersions) > 0 {
@@ -335,8 +327,17 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 					TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
 				}).Get(ctx, nil)
 			if err != nil {
+				// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 				return nil, err
 			}
+		}
+
+		// local state
+		if set.LastBecameCurrentTime != nil {
+			d.VersionState.LastBecameCurrentTime = set.LastBecameCurrentTime
+		}
+		if err := d.updateMemo(ctx); err != nil {
+			return nil, err
 		}
 	}
 
@@ -373,10 +374,10 @@ func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescr
 func (d *VersionWorkflowRunner) updateMemo(ctx workflow.Context) error {
 	return workflow.UpsertMemo(ctx, map[string]any{
 		WorkerDeploymentVersionMemoField: &deploymentspb.VersionWorkflowMemo{
-			DeploymentName:      d.VersionState.DeploymentName,
-			Version:             d.VersionState.Version,
-			CreateTime:          d.VersionState.CreateTime,
-			IsCurrentDeployment: d.VersionState.IsCurrent,
+			DeploymentName:        d.VersionState.DeploymentName,
+			Version:               d.VersionState.Version,
+			CreateTime:            d.VersionState.CreateTime,
+			LastBecameCurrentTime: d.VersionState.LastBecameCurrentTime,
 		},
 	})
 }

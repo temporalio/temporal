@@ -670,10 +670,10 @@ func (d *ClientImpl) updateWithStart(
 
 func (d *ClientImpl) buildInitialVersionMemo(deploymentName, version string) (*commonpb.Memo, error) {
 	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.VersionWorkflowMemo{
-		DeploymentName:      deploymentName,
-		Version:             version,
-		CreateTime:          timestamppb.Now(),
-		IsCurrentDeployment: false,
+		DeploymentName:        deploymentName,
+		Version:               version,
+		CreateTime:            timestamppb.Now(),
+		LastBecameCurrentTime: nil,
 	})
 	if err != nil {
 		return nil, err

@@ -46,12 +46,11 @@ message VersionLocalState {
 
     map<string, TaskQueueFamilyData> task_queue_families = 3;
 
-    bool is_current = 4;
-    google.protobuf.Timestamp last_became_current_time = 5;
+    google.protobuf.Timestamp last_became_current_time = 4;
 
-    google.protobuf.Timestamp create_time = 6;
+    google.protobuf.Timestamp create_time = 5;
 
-    bool started_deployment_workflow = 7;
+    bool started_deployment_workflow = 6;
 
     message TaskQueueFamilyData {
         // Key: enums.TaskQueueType, Value: TaskQueueData
@@ -130,7 +129,7 @@ message VersionWorkflowMemo {
     string deployment_name = 1;
     string version = 2;
     google.protobuf.Timestamp create_time = 3;
-    bool is_current_deployment = 4;
+    google.protobuf.Timestamp last_became_current_time = 4;
 }
 
 // used as Worker Deployment Version workflow activity input:
