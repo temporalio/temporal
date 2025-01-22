@@ -230,7 +230,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	// add version to worker-deployment workflow
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx = workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
 		DeploymentName: d.VersionState.DeploymentName,
 		Version:        d.VersionState.Version,
