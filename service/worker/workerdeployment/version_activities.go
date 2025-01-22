@@ -122,3 +122,10 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 	}
 	return err
 }
+
+func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, input *deploymentspb.AddVersionToWorkerDeploymentRequest) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
+	logger := activity.GetLogger(ctx)
+	logger.Info("adding version to worker-deployment", "deploymentName", input.DeploymentName, "version", input.Version)
+	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	return a.deploymentClient.AddVersionToWorkerDeployment(ctx, a.namespace, input.DeploymentName, input.Version, identity, input.RequestId)
+}
