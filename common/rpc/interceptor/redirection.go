@@ -140,6 +140,7 @@ var (
 		"SetCurrentDeployment":            func() any { return &workflowservice.SetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
 		"DescribeWorkerDeploymentVersion": func() any { return &workflowservice.DescribeWorkerDeploymentVersionResponse{} },
 		"SetCurrentDeploymentVersion":     func() any { return &workflowservice.SetCurrentDeploymentVersionResponse{} },
+		"DescribeWorkerDeployment":        func() any { return &workflowservice.DescribeWorkerDeploymentResponse{} },
 	}
 )
 
