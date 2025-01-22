@@ -46,7 +46,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/internal/freeport"
 	"go.temporal.io/server/tests/testcore"
@@ -316,20 +316,23 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				ch.requestCompleteCh <- err
 				s.EventuallyWithT(func(col *assert.CollectT) {
 					description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, "")
-					require.NoError(col, err)
-					require.Equal(col, 1, len(description.Callbacks))
+					assert.NoError(col, err)
+					assert.Equal(col, 1, len(description.Callbacks))
 					callbackInfo := description.Callbacks[0]
-					protorequire.ProtoEqual(col, request.CompletionCallbacks[0], callbackInfo.Callback)
-					protorequire.ProtoEqual(col, &workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{WorkflowClosed: &workflowpb.CallbackInfo_WorkflowClosed{}}}, callbackInfo.Trigger)
-					require.Equal(col, int32(attempt), callbackInfo.Attempt)
+					protoassert.ProtoEqual(col, request.CompletionCallbacks[0], callbackInfo.Callback)
+					protoassert.ProtoEqual(col, &workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{WorkflowClosed: &workflowpb.CallbackInfo_WorkflowClosed{}}}, callbackInfo.Trigger)
+					if !assert.Equal(col, int32(attempt), callbackInfo.Attempt) {
+						// Return early to avoid evaluating further assertions.
+						return
+					}
 					// Loose check to see that this is set.
-					require.Greater(col, callbackInfo.LastAttemptCompleteTime.AsTime(), time.Now().Add(-time.Hour))
+					assert.Greater(col, callbackInfo.LastAttemptCompleteTime.AsTime(), time.Now().Add(-time.Hour))
 					if attempt < numAttempts {
-						require.Equal(col, enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
-						require.Equal(col, "request failed with: 500 Internal Server Error", callbackInfo.LastAttemptFailure.Message)
+						assert.Equal(col, enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
+						assert.Equal(col, "request failed with: 500 Internal Server Error", callbackInfo.LastAttemptFailure.Message)
 					} else {
-						require.Equal(col, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-						require.Nil(col, callbackInfo.LastAttemptFailure)
+						assert.Equal(col, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+						assert.Nil(col, callbackInfo.LastAttemptFailure)
 					}
 				}, 2*time.Second, 100*time.Millisecond)
 			}
