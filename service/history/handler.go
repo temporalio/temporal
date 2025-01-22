@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
@@ -82,11 +83,11 @@ type (
 
 	// Handler - gRPC handler interface for historyservice
 	Handler struct {
-		historyservice.UnsafeHistoryServiceServer
+		historyservice.UnimplementedHistoryServiceServer
 
 		status int32
 
-		tokenSerializer              common.TaskTokenSerializer
+		tokenSerializer              *tasktoken.Serializer
 		startWG                      sync.WaitGroup
 		config                       *configs.Config
 		eventNotifier                events.Notifier
@@ -1205,6 +1206,40 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 	}
 
 	resp, err2 := engine.ResetWorkflowExecution(ctx, request)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return resp, nil
+}
+
+// UpdateWorkflowExecutionOptions updates the options of a workflow execution.
+// Can be used to set and unset versioning behavior override.
+func (h *Handler) UpdateWorkflowExecutionOptions(ctx context.Context, request *historyservice.UpdateWorkflowExecutionOptionsRequest) (_ *historyservice.UpdateWorkflowExecutionOptionsResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowExecution := request.UpdateRequest.WorkflowExecution
+	workflowID := workflowExecution.GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err2 := engine.UpdateWorkflowExecutionOptions(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
@@ -2331,8 +2366,10 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 	var opErr *nexus.UnsuccessfulOperationError
 	if request.State != string(nexus.OperationStateSucceeded) {
 		opErr = &nexus.UnsuccessfulOperationError{
-			State:   nexus.OperationState(request.GetState()),
-			Failure: *commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
+			State: nexus.OperationState(request.GetState()),
+			Cause: &nexus.FailureError{
+				Failure: commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
+			},
 		}
 	}
 	err = nexusoperations.CompletionHandler(
@@ -2340,6 +2377,9 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
 		ref,
 		request.Completion.RequestId,
+		request.OperationId,
+		request.StartTime,
+		request.Links,
 		request.GetSuccess(),
 		opErr,
 	)

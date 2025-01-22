@@ -265,6 +265,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		shardContext.GetClusterMetadata(),
 		logger,
 		metricsHandler,
+		f.TracerProvider.Tracer("queue.outbound"),
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
@@ -308,12 +309,12 @@ func getOutbountQueueProcessorMetricsHandler(handler metrics.Handler) metrics.Ha
 	return handler.WithTags(metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope))
 }
 
-func stateMachineTask(shardContext shard.Context, task tasks.Task) (hsm.Ref, hsm.Task, error) {
+func StateMachineTask(smRegistry *hsm.Registry, task tasks.Task) (hsm.Ref, hsm.Task, error) {
 	cbt, ok := task.(*tasks.StateMachineOutboundTask)
 	if !ok {
 		return hsm.Ref{}, nil, queues.NewUnprocessableTaskError("unknown task type")
 	}
-	def, ok := shardContext.StateMachineRegistry().TaskSerializer(cbt.Info.Type)
+	def, ok := smRegistry.TaskSerializer(cbt.Info.Type)
 	if !ok {
 		return hsm.Ref{},
 			nil,

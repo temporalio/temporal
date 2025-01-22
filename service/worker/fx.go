@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -49,6 +50,7 @@ import (
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace"
+	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -62,6 +64,7 @@ var Module = fx.Options(
 	deletenamespace.Module,
 	scheduler.Module,
 	batcher.Module,
+	deployment.Module,
 	dlq.Module,
 	dynamicconfig.Module,
 	fx.Provide(
@@ -97,8 +100,8 @@ var Module = fx.Options(
 		clusterMetadata cluster.Metadata,
 		metadataManager persistence.MetadataManager,
 		logger log.Logger,
-	) namespace.ReplicationTaskExecutor {
-		return namespace.NewReplicationTaskExecutor(
+	) nsreplication.TaskExecutor {
+		return nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
 			logger,
@@ -176,6 +179,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // worker visibility never write

@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -55,6 +56,7 @@ import (
 
 type (
 	xdcBaseSuite struct {
+		// TODO (alex): use FunctionalTestSuite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
@@ -72,6 +74,8 @@ type (
 
 		startTime          time.Time
 		onceClusterConnect sync.Once
+
+		enableTransitionHistory bool
 	}
 )
 
@@ -85,12 +89,16 @@ func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplic
 	return config
 }
 
-func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.Option) {
+func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.TestClusterOption) {
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 
-	params := testcore.ApplyTestClusterParams(opts)
+	params := testcore.ApplyTestClusterOptions(opts)
 
 	s.clusterNames = clusterNames
+	for idx, clusterName := range s.clusterNames {
+		s.clusterNames[idx] = clusterName + "_" + common.GenerateRandomString(5)
+	}
+
 	if s.logger == nil {
 		s.logger = log.NewTestLogger()
 	}
@@ -98,6 +106,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.Option
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
 	s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
+	s.dynamicConfigOverrides[dynamicconfig.EnableTransitionHistory.Key()] = s.enableTransitionHistory
 
 	fileName := "../testdata/xdc_clusters.yaml"
 	if testcore.TestFlags.TestClusterConfigFile != "" {

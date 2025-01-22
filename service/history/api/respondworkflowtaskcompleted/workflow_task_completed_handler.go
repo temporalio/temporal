@@ -95,7 +95,7 @@ type (
 		metricsHandler         metrics.Handler
 		config                 *configs.Config
 		shard                  shard.Context
-		tokenSerializer        common.TaskTokenSerializer
+		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 	}
 
@@ -164,7 +164,7 @@ func newWorkflowTaskCompletedHandler(
 		),
 		config:                 config,
 		shard:                  shard,
-		tokenSerializer:        common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
 	}
 }
@@ -476,6 +476,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 
 	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
 
+	// TODO: versioning 3 allows eager activity dispatch for both pinned and unpinned workflows, no
+	// special consideration is need. Remove the versioning logic from here. [cleanup-old-wv]
 	oldVersioningUsed := handler.mutableState.GetMostRecentWorkerVersionStamp().GetUseVersioning()
 	newVersioningUsed := handler.mutableState.GetExecutionInfo().GetAssignedBuildId() != ""
 	versioningUsed := oldVersioningUsed || newVersioningUsed
@@ -539,6 +541,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		uuid.New(),
 		handler.identity,
 		stamp,
+		nil,
 		nil,
 	); err != nil {
 		return nil, err

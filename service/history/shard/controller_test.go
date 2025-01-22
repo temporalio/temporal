@@ -38,7 +38,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -961,7 +961,7 @@ func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
 								},
 							},
 							Predicate: &persistencespb.Predicate{
-								PredicateType: enums.PREDICATE_TYPE_UNIVERSAL,
+								PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
 								Attributes: &persistencespb.Predicate_UniversalPredicateAttributes{
 									UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
 								},

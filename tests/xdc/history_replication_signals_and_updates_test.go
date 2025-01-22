@@ -48,7 +48,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -70,7 +70,7 @@ type (
 	// that push their tasks into test-specific (i.e. workflow-specific) buffers.
 	hrsuTestSuite struct {
 		xdcBaseSuite
-		namespaceTaskExecutor namespace.ReplicationTaskExecutor
+		namespaceTaskExecutor nsreplication.TaskExecutor
 		// The injection is performed once, at the level of the test suite, but we need the modified executors to be
 		// able to route tasks to test-specific (i.e. workflow-specific) buffers. The following two maps serve that
 		// purpose (each test registers itself in these maps as it starts). Workflow ID and namespace name are both
@@ -100,7 +100,7 @@ type (
 	}
 	// Used to inject a modified namespace replication task executor.
 	hrsuTestNamespaceReplicationTaskExecutor struct {
-		replicationTaskExecutor namespace.ReplicationTaskExecutor
+		replicationTaskExecutor nsreplication.TaskExecutor
 		s                       *hrsuTestSuite
 	}
 	// Used to inject a modified history event replication task executor.
@@ -136,7 +136,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 		[]string{"cluster1", "cluster2"},
 		testcore.WithFxOptionsForService(primitives.WorkerService,
 			fx.Decorate(
-				func(executor namespace.ReplicationTaskExecutor) namespace.ReplicationTaskExecutor {
+				func(executor nsreplication.TaskExecutor) nsreplication.TaskExecutor {
 					s.namespaceTaskExecutor = executor
 					return &hrsuTestNamespaceReplicationTaskExecutor{
 						replicationTaskExecutor: executor,
@@ -634,9 +634,9 @@ func (t *hrsuTest) enterSplitBrainStateAndCompletedUpdatesInBothClusters(ctx con
 }
 
 func (t *hrsuTest) failover1To2(ctx context.Context) {
-	t.s.Equal([]string{"cluster1", "cluster1"}, t.getActiveClusters(ctx))
-	t.cluster1.setActive(ctx, "cluster2")
-	t.s.Equal([]string{"cluster2", "cluster1"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusterNames[0], t.s.clusterNames[0]}, t.getActiveClusters(ctx))
+	t.cluster1.setActive(ctx, t.s.clusterNames[1])
+	t.s.Equal([]string{t.s.clusterNames[1], t.s.clusterNames[0]}, t.getActiveClusters(ctx))
 
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
@@ -644,13 +644,13 @@ func (t *hrsuTest) failover1To2(ctx context.Context) {
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
-	t.s.Equal([]string{"cluster2", "cluster2"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusterNames[1], t.s.clusterNames[1]}, t.getActiveClusters(ctx))
 }
 
 func (t *hrsuTest) failover2To1(ctx context.Context) {
-	t.s.Equal([]string{"cluster2", "cluster2"}, t.getActiveClusters(ctx))
-	t.cluster1.setActive(ctx, "cluster1")
-	t.s.Equal([]string{"cluster1", "cluster2"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusterNames[1], t.s.clusterNames[1]}, t.getActiveClusters(ctx))
+	t.cluster1.setActive(ctx, t.s.clusterNames[0])
+	t.s.Equal([]string{t.s.clusterNames[0], t.s.clusterNames[1]}, t.getActiveClusters(ctx))
 
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
@@ -658,15 +658,15 @@ func (t *hrsuTest) failover2To1(ctx context.Context) {
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
-	t.s.Equal([]string{"cluster1", "cluster1"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusterNames[0], t.s.clusterNames[0]}, t.getActiveClusters(ctx))
 }
 
 func (t *hrsuTest) enterSplitBrainState(ctx context.Context) {
 	// We now create a "split brain" state by setting cluster2 to active. We do not execute namespace replication tasks
 	// afterward, so cluster1 does not learn of the change.
-	t.s.Equal([]string{"cluster1", "cluster1"}, t.getActiveClusters(ctx))
-	t.cluster2.setActive(ctx, "cluster2")
-	t.s.Equal([]string{"cluster1", "cluster2"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusterNames[0], t.s.clusterNames[0]}, t.getActiveClusters(ctx))
+	t.cluster2.setActive(ctx, t.s.clusterNames[1])
+	t.s.Equal([]string{t.s.clusterNames[0], t.s.clusterNames[1]}, t.getActiveClusters(ctx))
 
 	// TODO (dan) Why do the tests still pass with this? Does this not remove the split-brain?
 	// s.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_UPDATE, 2)
@@ -764,9 +764,9 @@ func (task *hrsuTestExecutableTask) Execute() error {
 		return fmt.Errorf("failed to retrieve test for workflow %s", task.workflowId())
 	}
 	switch task.sourceCluster {
-	case "cluster1":
+	case task.s.clusterNames[0]:
 		test.cluster2.inboundHistoryReplicationTasks <- task
-	case "cluster2":
+	case task.s.clusterNames[1]:
 		test.cluster1.inboundHistoryReplicationTasks <- task
 	default:
 		task.s.FailNow(fmt.Sprintf("invalid cluster name: %s", task.sourceCluster))
@@ -1005,7 +1005,7 @@ func (t *hrsuTest) registerMultiRegionNamespace(ctx context.Context) {
 	// Namespace event replication tasks are being captured; we need to execute the pending ones now to propagate the
 	// new namespace to cluster 2.
 	t.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_CREATE)
-	t.s.Equal([]string{"cluster1", "cluster1"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusterNames[0], t.s.clusterNames[0]}, t.getActiveClusters(ctx))
 }
 
 func (t *hrsuTest) getActiveClusters(ctx context.Context) []string {

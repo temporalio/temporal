@@ -35,7 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
@@ -491,7 +491,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 				ScheduleToCloseTimeout: durationpb.New(time.Hour),
 			},
 		},
-	}, []byte("token"), false)
+	}, []byte("token"))
 	require.NoError(t, err)
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)
@@ -784,12 +784,12 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 			controller := gomock.NewController(t)
 			mockMutableState := NewMockMutableState(controller)
 			executionInfo := &persistencespb.WorkflowExecutionInfo{
-				VersionHistories: &history.VersionHistories{
+				VersionHistories: &historyspb.VersionHistories{
 					CurrentVersionHistoryIndex: 0,
-					Histories: []*history.VersionHistory{
+					Histories: []*historyspb.VersionHistory{
 						{
 							BranchToken: []byte{1},
-							Items: []*history.VersionHistoryItem{
+							Items: []*historyspb.VersionHistoryItem{
 								{
 									EventId: 10,
 									Version: 1,

@@ -29,6 +29,7 @@ import (
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -87,6 +88,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		CompletionCallbacks:             req.CompletionCallbacks,
 		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
 		InheritedBuildId:                request.InheritedBuildId,
+		VersioningOverride:              request.VersioningOverride,
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -144,7 +146,6 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 			BuildIdRedirectCounter: buildIdRedirectCounter,
 		},
 	}
-
 	return event
 }
 
@@ -156,17 +157,21 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
+	deployment *deploymentpb.Deployment,
+	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId: scheduledEventID,
-			StartedEventId:   startedEventID,
-			Identity:         identity,
-			BinaryChecksum:   checksum,
-			WorkerVersion:    workerVersionStamp,
-			SdkMetadata:      sdkMetadata,
-			MeteringMetadata: meteringMetadata,
+			ScheduledEventId:   scheduledEventID,
+			StartedEventId:     startedEventID,
+			Identity:           identity,
+			BinaryChecksum:     checksum,
+			WorkerVersion:      workerVersionStamp,
+			SdkMetadata:        sdkMetadata,
+			MeteringMetadata:   meteringMetadata,
+			Deployment:         deployment,
+			VersioningBehavior: behavior,
 		},
 	}
 
@@ -385,6 +390,21 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 		},
 	}
 	event.Links = links
+	return event
+}
+
+func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
+	versioningOverride *workflowpb.VersioningOverride,
+	unsetVersioningOverride bool,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+		WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			VersioningOverride:      versioningOverride,
+			UnsetVersioningOverride: unsetVersioningOverride,
+		},
+	}
+	event.WorkerMayIgnore = true
 	return event
 }
 

@@ -420,39 +420,38 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOldButReconsider() {
 }
 
 func (t *MatcherTestSuite) TestBacklogAge() {
-	t.T().Skip("flaky test")
 	t.Equal(emptyBacklogAge, t.rootMatcher.getBacklogAge())
-
-	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
 
 	intruptC := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
+	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
 	go t.rootMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
+	time.Sleep(time.Millisecond * 10)                           //nolint:forbidigo
+	t.InDelta(t.rootMatcher.getBacklogAge(), time.Second, float64(100*time.Millisecond))
 
-	time.Sleep(time.Millisecond)
-	t.InDelta(t.rootMatcher.getBacklogAge(), time.Second, float64(10*time.Millisecond))
-
-	// offering the same task twice to make sure of correct counting
-	go t.rootMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
-	time.Sleep(time.Millisecond)
-	t.InDelta(t.rootMatcher.getBacklogAge(), time.Second, float64(10*time.Millisecond))
+	middleBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
+	// offering a task with the exact creation to make sure of correct counting for each creation time
+	middleBacklogTask.event.Data.CreateTime = youngBacklogTask.event.Data.CreateTime
+	go t.rootMatcher.MustOffer(ctx, middleBacklogTask, intruptC) //nolint:errcheck
+	time.Sleep(time.Millisecond * 10)                            //nolint:forbidigo
+	t.InDelta(t.rootMatcher.getBacklogAge(), time.Second, float64(100*time.Millisecond))
 
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	go t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
-	time.Sleep(time.Millisecond)
-	t.InDelta(t.rootMatcher.getBacklogAge(), time.Minute, float64(10*time.Millisecond))
+	time.Sleep(time.Millisecond * 10)                         //nolint:forbidigo
+	t.InDelta(t.rootMatcher.getBacklogAge(), time.Minute, float64(100*time.Millisecond))
 
 	task, _ := t.rootMatcher.Poll(ctx, &pollMetadata{})
-	time.Sleep(time.Millisecond)
+	time.Sleep(time.Millisecond * 10) //nolint:forbidigo
 	t.NotNil(task)
 	t.NotEqual(emptyBacklogAge, t.rootMatcher.getBacklogAge())
 	task, _ = t.rootMatcher.Poll(ctx, &pollMetadata{})
-	time.Sleep(time.Millisecond)
+	time.Sleep(time.Millisecond * 10) //nolint:forbidigo
 	t.NotNil(task)
 	t.NotEqual(emptyBacklogAge, t.rootMatcher.getBacklogAge())
 	task, _ = t.rootMatcher.Poll(ctx, &pollMetadata{})
-	time.Sleep(time.Millisecond)
+	time.Sleep(time.Millisecond * 10) //nolint:forbidigo
 	t.NotNil(task)
 	t.Equal(emptyBacklogAge, t.rootMatcher.getBacklogAge())
 

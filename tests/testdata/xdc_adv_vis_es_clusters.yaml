@@ -10,9 +10,7 @@
         enabled: true
         initialFailoverVersion: 1
         rpcName: "frontend"
-  enablearchival: false
   workerconfig:
-    enablearchiver: false
     enablereplicator: true
   clusterno: 2
   historyconfig:
@@ -38,9 +36,7 @@
         enabled: true
         initialFailoverVersion: 2
         rpcName: "frontend"
-  enablearchival: false
   workerconfig:
-    enablearchiver: false
     enablereplicator: true
   clusterno: 3
   historyconfig:

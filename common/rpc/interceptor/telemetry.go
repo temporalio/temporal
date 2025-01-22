@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -80,10 +81,12 @@ var (
 	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
 	startWorkflowExecution       = "StartWorkflowExecution"
+	executeMultiOperation        = "ExecuteMultiOperation"
 	queryWorkflow                = "QueryWorkflow"
 
 	grpcActions = map[string]struct{}{
 		startWorkflowExecution:             {},
+		executeMultiOperation:              {},
 		respondWorkflowTaskCompleted:       {},
 		pollActivityTaskQueue:              {},
 		queryWorkflow:                      {},
@@ -99,17 +102,17 @@ var (
 	}
 
 	// commandActions is a subset of all the commands that are counted as actions.
-	commandActions = map[enums.CommandType]struct{}{
-		enums.COMMAND_TYPE_RECORD_MARKER:                      {},
-		enums.COMMAND_TYPE_START_TIMER:                        {},
-		enums.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:             {},
-		enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:     {},
-		enums.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION: {},
-		enums.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:  {},
-		enums.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES:         {},
-		enums.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION: {},
-		enums.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION:           {},
-		enums.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION:     {},
+	commandActions = map[enumspb.CommandType]struct{}{
+		enumspb.COMMAND_TYPE_RECORD_MARKER:                      {},
+		enumspb.COMMAND_TYPE_START_TIMER:                        {},
+		enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:             {},
+		enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:     {},
+		enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION: {},
+		enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:  {},
+		enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES:         {},
+		enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION: {},
+		enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION:           {},
+		enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION:     {},
 	}
 )
 
@@ -123,7 +126,7 @@ func NewTelemetryInterceptor(
 		namespaceRegistry: namespaceRegistry,
 		metricsHandler:    metricsHandler,
 		logger:            logger,
-		workflowTags:      logtags.NewWorkflowTags(common.NewProtoTaskTokenSerializer(), logger),
+		workflowTags:      logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
 		logAllReqErrors:   logAllReqErrors,
 	}
 }
@@ -259,6 +262,18 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		if resp.Started {
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
 		}
+	case executeMultiOperation:
+		resp, ok := result.(*workflowservice.ExecuteMultiOperationResponse)
+		if !ok {
+			return
+		}
+		if len(resp.Responses) > 0 {
+			if startResp := resp.GetResponses()[0].GetStartWorkflow(); startResp != nil {
+				if startResp.Started {
+					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+				}
+			}
+		}
 	case respondWorkflowTaskCompleted:
 		// handle commands
 		completedRequest, ok := req.(*workflowservice.RespondWorkflowTaskCompletedRequest)
@@ -273,10 +288,10 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 			}
 
 			switch command.CommandType { // nolint:exhaustive
-			case enums.COMMAND_TYPE_RECORD_MARKER:
+			case enumspb.COMMAND_TYPE_RECORD_MARKER:
 				// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
 				hasMarker = true
-			case enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
+			case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
 				// Each child workflow counts as 2 actions. We use separate tags to track them separately.
 				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
 				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()+"_Extra"))
@@ -391,7 +406,7 @@ func (ti *TelemetryInterceptor) logErrors(
 		return
 	}
 
-	if !logAllErrors && isUserCaused(statusCode) {
+	if !logAllErrors && isRecordingNeeded(statusCode) {
 		return
 	}
 
@@ -408,7 +423,7 @@ func (ti *TelemetryInterceptor) logErrors(
 	ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
 }
 
-func isUserCaused(statusCode codes.Code) bool {
+func isRecordingNeeded(statusCode codes.Code) bool {
 	switch statusCode {
 	case codes.InvalidArgument,
 		codes.AlreadyExists,
@@ -416,13 +431,13 @@ func isUserCaused(statusCode codes.Code) bool {
 		codes.OutOfRange,
 		codes.PermissionDenied,
 		codes.Unauthenticated,
-		codes.NotFound:
+		codes.NotFound,
+		codes.ResourceExhausted:
 		return true
 	case codes.OK,
 		codes.Canceled,
 		codes.Unknown,
 		codes.DeadlineExceeded,
-		codes.ResourceExhausted,
 		codes.Aborted,
 		codes.Unimplemented,
 		codes.Internal,
@@ -465,7 +480,7 @@ func recordMetrics(metricsHandler metrics.Handler, err error, statusCode codes.C
 		return
 	}
 
-	if !isUserCaused(statusCode) {
+	if !isRecordingNeeded(statusCode) {
 		metrics.ServiceFailures.With(metricsHandler).Record(1)
 	}
 }

@@ -1,6 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -28,47 +30,45 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-var UseExperimentalHsmScheduler = dynamicconfig.NewNamespaceBoolSetting(
-	"scheduler.use-experimental-hsm-scheduler",
-	false,
-	"When true, use the experimental scheduler implemented using the HSM framework instead of workflows")
+type (
+	Tweakables struct {
+		DefaultCatchupWindow              time.Duration // Default for catchup window
+		MinCatchupWindow                  time.Duration // Minimum for catchup window
+		MaxBufferSize                     int           // MaxBufferSize limits the number of buffered actions pending execution in total
+		BackfillsPerIteration             int           // How many backfilled actions to buffer per iteration (implies rate limit since min sleep is 1s)
+		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
 
-const (
-	RecentActionCount = 10
+		// TODO - incomplete tweakables list
+	}
+
+	// V2 Scheduler dynamic config, shared among all sub state machines.
+	Config struct {
+		Tweakables       dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
+		ExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	}
 )
 
-type Tweakables struct {
-	DefaultCatchupWindow              time.Duration // Default for catchup window
-	MinCatchupWindow                  time.Duration // Minimum for catchup window
-	MaxBufferSize                     int           // MaxBufferSize limits the number of buffered starts and backfills
-	BackfillsPerIteration             int           // How many backfilled actions to take per iteration (implies rate limit since min sleep is 1s)
-	CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
+var (
+	// TODO - fix namespaces after removal of prototype
+	CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting(
+		"component.scheduler.tweakables",
+		DefaultTweakables,
+		"A set of tweakable parameters for the CHASM Scheduler")
 
-}
+	ExecutionTimeout = dynamicconfig.NewNamespaceDurationSetting(
+		"component.scheduler.executionTimeout",
+		time.Second*10,
+		`ExecutionTimeout is the timeout for executing a single scheduler task.`,
+	)
 
-var DefaultTweakables = Tweakables{
-	DefaultCatchupWindow:              365 * 24 * time.Hour,
-	MinCatchupWindow:                  10 * time.Second,
-	MaxBufferSize:                     1000,
-	BackfillsPerIteration:             10,
-	CanceledTerminatedCountAsFailures: false,
-}
-
-var CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting[Tweakables](
-	"component.scheduler.tweakables",
-	DefaultTweakables,
-	"A set of tweakable parameters for the schedulers")
-
-var ExecutionTimeout = dynamicconfig.NewNamespaceDurationSetting(
-	"component.scheduler.executionTimeout",
-	time.Second*10,
-	`ExecutionTimeout is the timeout for executing a single scheduler task.`,
+	DefaultTweakables = Tweakables{
+		DefaultCatchupWindow:              365 * 24 * time.Hour,
+		MinCatchupWindow:                  10 * time.Second,
+		MaxBufferSize:                     1000,
+		BackfillsPerIteration:             10,
+		CanceledTerminatedCountAsFailures: false,
+	}
 )
-
-type Config struct {
-	Tweakables       dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
-	ExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-}
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{

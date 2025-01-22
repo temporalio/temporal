@@ -29,11 +29,11 @@ package eventhandler
 import (
 	"context"
 
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	common2 "go.temporal.io/server/common"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -95,8 +95,8 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 		namespace.ID(workflowKey.NamespaceID),
 		workflowKey.WorkflowID,
 		workflowKey.RunID,
-		common2.EmptyEventID,
-		common2.EmptyVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
 		endEventId,
 		endEventVersion,
 	)
@@ -105,20 +105,20 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 		return err
 	}
 
-	var blobs []*common.DataBlob
+	var blobs []*commonpb.DataBlob
 	blobSize := 0
 	var token []byte
 	var versionHistory *historyspb.VersionHistory
-	eventsVersion := common2.EmptyVersion
+	eventsVersion := common.EmptyVersion
 	importFn := func() error {
 		res, err := invokeImportWorkflowExecutionCall(ctx, engine, workflowKey, blobs, versionHistory, token, e.logger)
 		if err != nil {
 			return err
 		}
 		token = res.Token
-		blobs = []*common.DataBlob{}
+		blobs = []*commonpb.DataBlob{}
 		blobSize = 0
-		eventsVersion = common2.EmptyVersion
+		eventsVersion = common.EmptyVersion
 		return nil
 	}
 	for historyIterator.HasNext() {
@@ -142,7 +142,7 @@ func (e *eventImporterImpl) ImportHistoryEventsFromBeginning(
 		if len(events) == 0 {
 			return serviceerror.NewInternal("Empty events received when importing")
 		}
-		if eventsVersion != common2.EmptyVersion && eventsVersion != events[0].GetVersion() {
+		if eventsVersion != common.EmptyVersion && eventsVersion != events[0].GetVersion() {
 			if err := importFn(); err != nil {
 				return err
 			}
@@ -182,14 +182,14 @@ func invokeImportWorkflowExecutionCall(
 	ctx context.Context,
 	historyEngine shard.Engine,
 	workflowKey definition.WorkflowKey,
-	historyBatches []*common.DataBlob,
+	historyBatches []*commonpb.DataBlob,
 	versionHistory *historyspb.VersionHistory,
 	token []byte,
 	logger log.Logger,
 ) (*historyservice.ImportWorkflowExecutionResponse, error) {
 	request := &historyservice.ImportWorkflowExecutionRequest{
 		NamespaceId: workflowKey.NamespaceID,
-		Execution: &common.WorkflowExecution{
+		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},

@@ -56,6 +56,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/ForceLoadTaskQueuePartition":            1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueUserData":                1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ReplicateTaskQueueUserData":             1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueUserDataPropagation":      1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/PollNexusTaskQueue":                     1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskCompleted":              1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskFailed":                 1,
@@ -67,6 +68,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerVersioningRules":            1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerVersioningRules":               1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueuePartition":             1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/SyncDeploymentUserData":                 1,
 	}
 
 	APIPrioritiesOrdered = []int{0, 1}

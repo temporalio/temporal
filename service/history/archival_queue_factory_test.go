@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -82,6 +83,7 @@ func TestArchivalQueueFactory(t *testing.T) {
 			TimeSource:        clock.NewEventTimeSource(),
 			MetricsHandler:    metricsHandler,
 			Logger:            log.NewNoopLogger(),
+			TracerProvider:    telemetry.NoopTracerProvider,
 		},
 	})
 	queue := queueFactory.CreateQueue(mockShard, nil)

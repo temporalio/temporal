@@ -342,10 +342,16 @@ func IsServiceHandlerRetryableError(err error) bool {
 		return false
 	}
 
-	switch err.(type) {
+	switch err := err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.Unavailable:
 		return true
+	case *serviceerror.MultiOperationExecution:
+		for _, opErr := range err.OperationErrors() {
+			if opErr != nil && IsServiceHandlerRetryableError(opErr) {
+				return true
+			}
+		}
 	}
 
 	return false
@@ -553,6 +559,7 @@ func CreateHistoryStartWorkflowRequest(
 		ContinuedFailure:         startRequest.ContinuedFailure,
 		LastCompletionResult:     startRequest.LastCompletionResult,
 		RootExecutionInfo:        rootExecutionInfo,
+		VersioningOverride:       startRequest.GetVersioningOverride(),
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil

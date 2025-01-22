@@ -53,7 +53,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -72,6 +72,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
 	e "go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -115,7 +116,7 @@ type (
 		mockHistoryArchiver    *archiver.MockHistoryArchiver
 		mockVisibilityArchiver *archiver.MockVisibilityArchiver
 
-		tokenSerializer common.TaskTokenSerializer
+		tokenSerializer *tasktoken.Serializer
 
 		testNamespace   namespace.Name
 		testNamespaceID namespace.ID
@@ -159,7 +160,7 @@ func (s *WorkflowHandlerSuite) SetupTest() {
 	s.mockHistoryArchiver = archiver.NewMockHistoryArchiver(s.controller)
 	s.mockVisibilityArchiver = archiver.NewMockVisibilityArchiver(s.controller)
 
-	s.tokenSerializer = common.NewProtoTaskTokenSerializer()
+	s.tokenSerializer = tasktoken.NewSerializer()
 
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
 	s.mockExecutionManager.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
@@ -184,6 +185,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMetadataManager(),
 		s.mockResource.GetHistoryClient(),
 		s.mockResource.GetMatchingClient(),
+		nil, // TODO (Shivam): test deploymentStoreClient here if desired
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetPayloadSerializer(),
 		s.mockResource.GetNamespaceRegistry(),
@@ -196,6 +198,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMembershipMonitor(),
 		healthInterceptor,
 		scheduler.NewSpecBuilder(),
+		true,
 	)
 }
 
@@ -640,7 +643,35 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReuse
 
 	s.Nil(resp)
 	s.Equal(err, serviceerror.NewInvalidArgument(
-		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy."))
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy"))
+}
+
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReusePolicy_RejectDuplicate() {
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId:               testWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+	}
+
+	// by default, disallow
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	resp, err := wh.StartWorkflowExecution(context.Background(), req)
+	s.Nil(resp)
+	s.Equal(err, serviceerror.NewInvalidArgument(
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE cannot be used together with WorkflowIdConflictPolicy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING"))
+
+	// allow if explicitly allowed
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.StartWorkflowExecutionResponse{Started: true}, nil)
+
+	config.FollowReusePolicyAfterConflictPolicyTerminate = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh = s.getWorkflowHandler(config)
+	_, err = wh.StartWorkflowExecution(context.Background(), req)
+	s.NoError(err)
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
@@ -827,7 +858,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkf
 
 	s.Nil(resp)
 	s.Equal(err, serviceerror.NewInvalidArgument(
-		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy."))
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy"))
 }
 
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
@@ -2068,8 +2099,7 @@ func (s *WorkflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.SupportsSchedules)
 	s.True(resp.Capabilities.EncodedFailureAttributes)
 	s.True(resp.Capabilities.UpsertMemo)
-	// Nexus is enabled by a dynamic config feature flag which defaults to false.
-	s.False(resp.Capabilities.Nexus)
+	s.True(resp.Capabilities.Nexus)
 }
 
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
@@ -3189,7 +3219,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 
 	expectedMatchingRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
 		NamespaceId: s.testNamespaceID.String(),
-		TaskQueuePartition: &taskqueue.TaskQueuePartition{
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 			TaskQueue:     stickyTaskQueue,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		},

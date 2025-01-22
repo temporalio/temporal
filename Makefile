@@ -41,7 +41,7 @@ VISIBILITY_DB ?= temporal_visibility
 # Always use "protolegacy" tag to allow disabling utf-8 validation on proto messages
 # during proto library transition.
 ALL_BUILD_TAGS := protolegacy,$(BUILD_TAG)
-ALL_TEST_TAGS := $(ALL_BUILD_TAGS),$(TEST_TAG)
+ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
 TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 
@@ -49,13 +49,10 @@ TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 # If you change this, also change .github/workflows/run-tests.yml!
 # The timeout in the GH workflow must be larger than this to avoid GH timing out the action,
 # which causes the a job run to not produce any logs and hurts the debugging experience.
-TEST_TIMEOUT ?= 20m
+TEST_TIMEOUT ?= 25m
 
 # Number of retries for *-coverage targets.
-# NOTE: This is incompatible with TEST_ARGS which specify the `-run` flag due to how gotestsum selects which tests to
-# retry.
-# *WARNING*: This is disabled for now; see https://github.com/gotestyourself/gotestsum/issues/423
-FAILED_TEST_RETRIES ?= 0
+FAILED_TEST_RETRIES ?= 2
 
 # Whether or not to test with the race detector. All of (1 on y yes t true) are true values.
 TEST_RACE_FLAG ?= on
@@ -76,6 +73,14 @@ LOCALBIN := .bin
 STAMPDIR := .stamp
 export PATH := $(ROOT)/$(LOCALBIN):$(PATH)
 GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) go install
+
+OTEL ?= false
+ifeq ($(OTEL),true)
+	export OTEL_BSP_SCHEDULE_DELAY=0
+	export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
+	export OTEL_TRACES_EXPORTER=otlp
+	export TEMPORAL_OTEL_DEBUG=true
+endif
 
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
 COLOR := "\e[1;36m%s\e[0m\n"
@@ -160,13 +165,14 @@ $(LOCALBIN):
 .PHONY: golangci-lint
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_VERSION := v1.60.3
+# TODO: change to release once newer version than 1.62.2 exists: https://github.com/golangci/golangci-lint/releases
+GOLANGCI_LINT_VERSION := dafd65537336fdce063c492a7ab2a68cc89f8d52
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 	
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
-GCI_VERSION := v0.13.4
+GCI_VERSION := v0.13.5
 GCI := $(LOCALBIN)/gci-$(GCI_VERSION)
 $(GCI): $(LOCALBIN)
 	$(call go-install-tool,$(GCI),github.com/daixiang0/gci,$(GCI_VERSION))
@@ -204,6 +210,13 @@ $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
 	@touch $@
 $(GOIMPORTS): $(STAMPDIR)/goimports-$(GOIMPORTS_VER)
+
+GOWRAP_VER := v1.4.1
+GOWRAP := $(LOCALBIN)/gowrap
+$(STAMPDIR)/gowrap-$(GOWRAP_VER): | $(STAMPDIR) $(LOCALBIN)
+	$(call go-install-tool,$(GOWRAP),github.com/hexdigest/gowrap/cmd/gowrap,$(GOWRAP_VER))
+	@touch $@
+$(GOWRAP): $(STAMPDIR)/gowrap-$(GOWRAP_VER)
 
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
 MOCKGEN_VER := v0.4.0
@@ -334,7 +347,7 @@ lint-actions: $(ACTIONLINT)
 
 lint-code: $(GOLANGCI_LINT)
 	@printf $(COLOR) "Linting code..."
-	@$(GOLANGCI_LINT) run --verbose --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.golangci.yml
+	@$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.golangci.yml
 
 fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 	@printf $(COLOR) "Formatting imports..."
@@ -405,13 +418,13 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(UNIT_TEST_DIRS) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(UNIT_TEST_DIRS) -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(INTEGRATION_TEST_DIRS) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(INTEGRATION_TEST_DIRS) -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_COVERPKG)
 
@@ -421,21 +434,21 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_ROOT) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_ROOT) -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_XDC_ROOT) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_XDC_ROOT) -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_NDC_ROOT) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_NDC_ROOT) -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
@@ -595,9 +608,10 @@ update-dependencies:
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
 
-go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER)
+go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
 	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
+	$(MAKE) copyright
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."

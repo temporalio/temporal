@@ -65,7 +65,7 @@ type Operation struct {
 }
 
 // AddChild adds a new operation child machine to the given node and transitions it to the SCHEDULED state.
-func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventToken []byte, deleteOnCompletion bool) (*hsm.Node, error) {
+func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventToken []byte) (*hsm.Node, error) {
 	attrs := event.GetNexusOperationScheduledEventAttributes()
 
 	node, err := node.AddChild(hsm.Key{Type: OperationMachineType, ID: id}, Operation{
@@ -78,9 +78,7 @@ func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventTok
 			ScheduleToCloseTimeout: attrs.ScheduleToCloseTimeout,
 			RequestId:              attrs.RequestId,
 			State:                  enumsspb.NEXUS_OPERATION_STATE_UNSPECIFIED,
-			// TODO(bergundy): actually delete on completion if this is set.
-			DeleteOnCompletion:  deleteOnCompletion,
-			ScheduledEventToken: eventToken,
+			ScheduledEventToken:    eventToken,
 		},
 	})
 
@@ -93,7 +91,7 @@ func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventTok
 		if err != nil {
 			return output, err
 		}
-		creationTasks, err := op.creationTasks(node)
+		creationTasks, err := op.creationTasks()
 		if err != nil {
 			return output, err
 		}
@@ -153,18 +151,14 @@ func (o Operation) transitionTasks() ([]hsm.Task, error) {
 	case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
 		return []hsm.Task{BackoffTask{deadline: o.NextAttemptScheduleTime.AsTime()}}, nil
 	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
-		return []hsm.Task{InvocationTask{EndpointName: o.Endpoint}}, nil
+		return []hsm.Task{InvocationTask{EndpointName: o.Endpoint, Attempt: o.Attempt}}, nil
 	default:
 		return nil, nil
 	}
 }
 
 // creationTasks returns tasks that are emitted when the machine is created.
-func (o Operation) creationTasks(node *hsm.Node) ([]hsm.Task, error) {
-	if canceled, err := o.cancelRequested(node); canceled || err != nil {
-		return nil, err
-	}
-
+func (o Operation) creationTasks() ([]hsm.Task, error) {
 	if o.ScheduleToCloseTimeout.AsDuration() != 0 {
 		return []hsm.Task{TimeoutTask{deadline: o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration())}}, nil
 	}
@@ -176,7 +170,7 @@ func (o Operation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	creationTasks, err := o.creationTasks(node)
+	creationTasks, err := o.creationTasks()
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +280,7 @@ var TransitionRescheduled = hsm.NewTransition(
 // EventAttemptFailed is triggered when an invocation attempt is failed with a retryable error.
 type EventAttemptFailed struct {
 	Time        time.Time
-	Err         error
+	Failure     *failurepb.Failure
 	Node        *hsm.Node
 	RetryPolicy backoff.RetryPolicy
 }
@@ -297,17 +291,11 @@ var TransitionAttemptFailed = hsm.NewTransition(
 	func(op Operation, event EventAttemptFailed) (hsm.TransitionOutput, error) {
 		op.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(op.Attempt), event.Err)
+		// The last argument (error) is ignored.
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(op.Attempt), nil)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		op.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
-		op.LastAttemptFailure = &failurepb.Failure{
-			Message: event.Err.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: false,
-				},
-			},
-		}
+		op.LastAttemptFailure = event.Failure
 		return op.output()
 	},
 )
@@ -460,20 +448,23 @@ var TransitionTimedOut = hsm.NewTransition(
 	},
 )
 
-// Cancel marks the Operation machine as canceled by spawning a child Cancelation machine and transitioning the child to
-// the SCHEDULED state.
+// Cancel marks the Operation machine as canceled by spawning a child Cancelation machine. If the
+// Operation already completed, then the Operation cannot be canceled anymore, and the Cancelation
+// machine will stay in UNSPECIFIED state. If the Operation is in STARTED state, then transition the
+// Cancelation machine to the SCHEDULED state. Otherwise, the Cancelation machine will wait the
+// Operation machine transition to the STARTED state.
 func (o Operation) Cancel(node *hsm.Node, t time.Time) (hsm.TransitionOutput, error) {
 	child, err := node.AddChild(CancelationMachineKey, Cancelation{
 		NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{},
 	})
 	if err != nil {
-		// This function should be called as part of command/event handling and it should not called more than once.
+		// This function should be called as part of command/event handling and it should not be called
+		// more than once.
 		return hsm.TransitionOutput{}, err
 	}
-	// Operation wasn't started yet, we don't know how to cancel it ATM.
-	// TODO(bergundy): Support cancel-before-started.
-	if o.OperationId == "" {
-		// Don't schedule the cancelation yet. We may schedule it again once the operation is started.
+	if o.State() != enumsspb.NEXUS_OPERATION_STATE_STARTED {
+		// Operation hasn't started yet or has already completed. Either way, cannot schedule
+		// cancelation.
 		return hsm.TransitionOutput{}, nil
 	}
 	return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
@@ -582,7 +573,7 @@ func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	}
 	switch c.State() { // nolint:exhaustive
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
-		return []hsm.Task{CancelationTask{EndpointName: op.Endpoint}}, nil
+		return []hsm.Task{CancelationTask{EndpointName: op.Endpoint, Attempt: c.Attempt}}, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
 		return []hsm.Task{CancelationBackoffTask{deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
 	default:
@@ -653,7 +644,7 @@ var TransitionCancelationRescheduled = hsm.NewTransition(
 // EventCancelationAttemptFailed is triggered when a cancelation attempt is failed with a retryable error.
 type EventCancelationAttemptFailed struct {
 	Time        time.Time
-	Err         error
+	Failure     *failurepb.Failure
 	Node        *hsm.Node
 	RetryPolicy backoff.RetryPolicy
 }
@@ -664,26 +655,19 @@ var TransitionCancelationAttemptFailed = hsm.NewTransition(
 	func(c Cancelation, event EventCancelationAttemptFailed) (hsm.TransitionOutput, error) {
 		c.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(c.Attempt), event.Err)
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(c.Attempt), nil)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		c.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
-		c.LastAttemptFailure = &failurepb.Failure{
-			Message: event.Err.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: false,
-				},
-			},
-		}
+		c.LastAttemptFailure = event.Failure
 		return c.output(event.Node)
 	},
 )
 
 // EventCancelationFailed is triggered when a cancelation attempt is failed with a non retryable error.
 type EventCancelationFailed struct {
-	Time time.Time
-	Err  error
-	Node *hsm.Node
+	Time    time.Time
+	Failure *failurepb.Failure
+	Node    *hsm.Node
 }
 
 var TransitionCancelationFailed = hsm.NewTransition(
@@ -696,14 +680,7 @@ var TransitionCancelationFailed = hsm.NewTransition(
 	enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED,
 	func(c Cancelation, event EventCancelationFailed) (hsm.TransitionOutput, error) {
 		c.recordAttempt(event.Time)
-		c.LastAttemptFailure = &failurepb.Failure{
-			Message: event.Err.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: true,
-				},
-			},
-		}
+		c.LastAttemptFailure = event.Failure
 		return c.output(event.Node)
 	},
 )

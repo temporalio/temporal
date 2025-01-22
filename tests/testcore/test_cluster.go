@@ -37,6 +37,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -50,8 +51,9 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
@@ -62,6 +64,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/internal/freeport"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/fx"
@@ -69,11 +72,12 @@ import (
 )
 
 type (
+	transferProtocol string
+
 	// TestCluster is a testcore struct for functional tests
 	TestCluster struct {
 		testBase     *persistencetests.TestBase
 		archiverBase *ArchiverBase
-		clusterNo    int
 		host         *TemporalImpl
 	}
 
@@ -99,8 +103,8 @@ type (
 		WorkerConfig           WorkerConfig
 		ESConfig               *esclient.Config
 		MockAdminClient        map[string]adminservice.AdminServiceClient
-		FaultInjection         config.FaultInjection `yaml:"faultInjection"`
-		DynamicConfigOverrides map[dynamicconfig.Key]interface{}
+		FaultInjection         config.FaultInjection     `yaml:"faultInjection"`
+		DynamicConfigOverrides map[dynamicconfig.Key]any `yaml:"-"`
 		GenerateMTLS           bool
 		EnableMetricsCapture   bool
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
@@ -109,15 +113,20 @@ type (
 		DeprecatedFrontendAddress string `yaml:"frontendAddress"`
 		DeprecatedClusterNo       int    `yaml:"clusterno"`
 	}
+
+	TestClusterFactory interface {
+		NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error)
+	}
+
+	defaultTestClusterFactory struct {
+		tbFactory PersistenceTestBaseFactory
+	}
 )
 
-type TestClusterFactory interface {
-	NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error)
-}
-
-type defaultTestClusterFactory struct {
-	tbFactory PersistenceTestBaseFactory
-}
+const (
+	httpProtocol transferProtocol = "http"
+	grpcProtocol transferProtocol = "grpc"
+)
 
 func (a *ArchiverBase) Metadata() archiver.ArchivalMetadata {
 	return a.metadata
@@ -136,7 +145,7 @@ func (a *ArchiverBase) VisibilityURI() string {
 }
 
 func (f *defaultTestClusterFactory) NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
-	return NewClusterWithPersistenceTestBaseFactory(t, options, logger, f.tbFactory)
+	return newClusterWithPersistenceTestBaseFactory(t, options, logger, f.tbFactory)
 }
 
 func NewTestClusterFactory() TestClusterFactory {
@@ -189,16 +198,35 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 	return persistencetests.NewTestBase(options)
 }
 
-func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
-	clusterNo := GetFreeClusterNumber()
+func newClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
+	// determine number of hosts per service
+	const minNodes = 1
+	options.FrontendConfig.NumFrontendHosts = max(minNodes, options.FrontendConfig.NumFrontendHosts)
+	options.HistoryConfig.NumHistoryHosts = max(minNodes, options.HistoryConfig.NumHistoryHosts)
+	options.MatchingConfig.NumMatchingHosts = max(minNodes, options.MatchingConfig.NumMatchingHosts)
+	options.WorkerConfig.NumWorkers = max(minNodes, options.WorkerConfig.NumWorkers)
+	if options.WorkerConfig.DisableWorker {
+		options.WorkerConfig.NumWorkers = 0
+	}
+
+	// allocate ports
+	hostsByProtocolByService := map[transferProtocol]map[primitives.ServiceName]static.Hosts{
+		grpcProtocol: {
+			primitives.FrontendService: {All: makeAddresses(options.FrontendConfig.NumFrontendHosts)},
+			primitives.MatchingService: {All: makeAddresses(options.MatchingConfig.NumMatchingHosts)},
+			primitives.HistoryService:  {All: makeAddresses(options.HistoryConfig.NumHistoryHosts)},
+			primitives.WorkerService:   {All: makeAddresses(options.WorkerConfig.NumWorkers)},
+		},
+		httpProtocol: {
+			primitives.FrontendService: {All: makeAddresses(options.FrontendConfig.NumFrontendHosts)},
+		},
+	}
 
 	if len(options.ClusterMetadata.ClusterInformation) > 0 {
 		// set self-address for current cluster
-		// TODO: remove duplication between this and makeGRPCAddresses. we don't have a TemporalImpl
-		// yet so we can't just call that.
 		ci := options.ClusterMetadata.ClusterInformation[options.ClusterMetadata.CurrentClusterName]
-		ci.RPCAddress = fmt.Sprintf("127.0.%d.%d:%d", clusterNo, 1, frontendPort)
-		ci.HTTPAddress = fmt.Sprintf("127.0.%d.%d:%d", clusterNo, 1, frontendHTTPPort)
+		ci.RPCAddress = hostsByProtocolByService[grpcProtocol][primitives.FrontendService].All[0]
+		ci.HTTPAddress = hostsByProtocolByService[httpProtocol][primitives.FrontendService].All[0]
 		options.ClusterMetadata.ClusterInformation[options.ClusterMetadata.CurrentClusterName] = ci
 	}
 
@@ -230,7 +258,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		indexName string
 		esClient  esclient.Client
 	)
-	if !UsingSQLAdvancedVisibility() && options.ESConfig != nil {
+	if !UseSQLVisibility() && options.ESConfig != nil {
 		// Randomize index name to avoid cross tests interference.
 		for k, v := range options.ESConfig.Indices {
 			options.ESConfig.Indices[k] = fmt.Sprintf("%v-%v", v, uuid.New())
@@ -313,7 +341,6 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		VisibilityStoreFactory:           testBase.VisibilityStoreFactory,
 		TaskMgr:                          testBase.TaskMgr,
 		Logger:                           logger,
-		ClusterNo:                        clusterNo,
 		ESConfig:                         options.ESConfig,
 		ESClient:                         esClient,
 		ArchiverMetadata:                 archiverBase.metadata,
@@ -323,11 +350,12 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		MatchingConfig:                   options.MatchingConfig,
 		WorkerConfig:                     options.WorkerConfig,
 		MockAdminClient:                  options.MockAdminClient,
-		NamespaceReplicationTaskExecutor: namespace.NewReplicationTaskExecutor(options.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),
+		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(options.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),
 		DynamicConfigOverrides:           options.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 options.ServiceFxOptions,
 		TaskCategoryRegistry:             taskCategoryRegistry,
+		HostsByProtocolByService:         hostsByProtocolByService,
 	}
 
 	if options.EnableMetricsCapture {
@@ -340,11 +368,11 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 	}
 
 	cluster := newTemporal(t, temporalParams)
-	if err := cluster.Start(); err != nil {
+	if err = cluster.Start(); err != nil {
 		return nil, err
 	}
 
-	return &TestCluster{testBase: testBase, archiverBase: archiverBase, clusterNo: clusterNo, host: cluster}, nil
+	return &TestCluster{testBase: testBase, archiverBase: archiverBase, host: cluster}, nil
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
@@ -513,11 +541,9 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() error {
-	defer PutFreeClusterNumber(tc.clusterNo)
-
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
-	if !UsingSQLAdvancedVisibility() && tc.host.esConfig != nil {
+	if !UseSQLVisibility() && tc.host.esConfig != nil {
 		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
 			errs = multierr.Combine(errs, err)
 		}
@@ -535,17 +561,15 @@ func (tc *TestCluster) TestBase() *persistencetests.TestBase {
 	return tc.testBase
 }
 
-func (tc *TestCluster) ArchivalBase() *ArchiverBase {
+func (tc *TestCluster) ArchiverBase() *ArchiverBase {
 	return tc.archiverBase
 }
 
-// FrontendClient returns a frontend client from the test cluster
-func (tc *TestCluster) FrontendClient() FrontendClient {
+func (tc *TestCluster) FrontendClient() workflowservice.WorkflowServiceClient {
 	return tc.host.FrontendClient()
 }
 
-// AdminClient returns an admin client from the test cluster
-func (tc *TestCluster) AdminClient() AdminClient {
+func (tc *TestCluster) AdminClient() adminservice.AdminServiceClient {
 	return tc.host.AdminClient()
 }
 
@@ -623,4 +647,12 @@ func createFixedTLSConfigProvider() (*encryption.FixedTLSConfigProvider, error) 
 		FrontendServerConfig:  serverTLSConfig,
 		FrontendClientConfig:  clientTLSConfig,
 	}, nil
+}
+
+func makeAddresses(count int) []string {
+	hosts := make([]string, count)
+	for i := range hosts {
+		hosts[i] = fmt.Sprintf("127.0.0.1:%d", freeport.MustGetFreePort())
+	}
+	return hosts
 }

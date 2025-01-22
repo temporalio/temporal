@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -46,8 +47,10 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
@@ -62,6 +65,7 @@ import (
 )
 
 type AdvVisCrossDCTestSuite struct {
+	// TODO (alex): use FunctionalTestSuite
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
 	*require.Assertions
@@ -77,6 +81,9 @@ type AdvVisCrossDCTestSuite struct {
 	clusterConfigs         []*testcore.TestClusterConfig
 	isElasticsearchEnabled bool
 
+	dynamicConfigOverrides  map[dynamicconfig.Key]interface{}
+	enableTransitionHistory bool
+
 	testSearchAttributeKey string
 	testSearchAttributeVal string
 
@@ -86,7 +93,26 @@ type AdvVisCrossDCTestSuite struct {
 
 func TestAdvVisCrossDCTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(AdvVisCrossDCTestSuite))
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &AdvVisCrossDCTestSuite{
+				enableTransitionHistory: tc.enableTransitionHistory,
+			}
+			suite.Run(t, s)
+		})
+	}
 }
 
 var (
@@ -105,17 +131,11 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 
-	var fileName string
-	if testcore.UsingSQLAdvancedVisibility() {
-		// NOTE: can't use xdc_clusters.yaml here because it somehow interferes with the other xDC tests.
-		fileName = "../testdata/xdc_adv_vis_clusters.yaml"
-		s.isElasticsearchEnabled = false
-		s.logger.Info(fmt.Sprintf("Running xDC advanced visibility test with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
-	} else {
-		fileName = "../testdata/xdc_adv_vis_es_clusters.yaml"
-		s.isElasticsearchEnabled = true
-		s.logger.Info("Running xDC advanced visibility test with Elasticsearch persistence")
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.EnableTransitionHistory.Key(): s.enableTransitionHistory,
 	}
+
+	fileName := "../testdata/xdc_adv_vis_es_clusters.yaml"
 
 	if testcore.TestFlags.TestClusterConfigFile != "" {
 		fileName = testcore.TestFlags.TestClusterConfigFile
@@ -129,6 +149,10 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	s.clusterConfigs = clusterConfigs
+
+	for _, config := range clusterConfigs {
+		config.DynamicConfigOverrides = s.dynamicConfigOverrides
+	}
 
 	c, err := s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterNameAdvVis[0])))
 	s.Require().NoError(err)
@@ -178,10 +202,10 @@ func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
 }
 
 func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
-	namespace := "test-xdc-search-attr-" + common.GenerateRandomString(5)
+	ns := "test-xdc-search-attr-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.FrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        namespace,
+		Namespace:                        ns,
 		Clusters:                         clusterReplicationConfigAdvVis,
 		ActiveClusterName:                clusterNameAdvVis[0],
 		IsGlobalNamespace:                true,
@@ -192,10 +216,10 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
-	if !s.isElasticsearchEnabled {
+	if testcore.UseSQLVisibility() {
 		// When Elasticsearch is enabled, the search attribute aliases are not used.
 		_, err = client1.UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
-			Namespace: namespace,
+			Namespace: ns,
 			Config: &namespacepb.NamespaceConfig{
 				CustomSearchAttributeAliases: map[string]string{
 					"Bool01":     "CustomBoolField",
@@ -212,8 +236,16 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		time.Sleep(cacheRefreshInterval) // nolint:forbidigo
 	}
 
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		// Wait for namespace record to be replicated and loaded into memory.
+		for _, r := range s.cluster2.Host().FrontendNamespaceRegistries() {
+			_, err := r.GetNamespace(namespace.Name(ns))
+			assert.NoError(t, err)
+		}
+	}, 15*time.Second, 500*time.Millisecond)
+
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
+		Namespace: ns,
 	}
 	resp, err := client1.DescribeNamespace(testcore.NewContext(), descReq)
 	s.NoError(err)
@@ -239,7 +271,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           namespace,
+		Namespace:           ns,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -259,7 +291,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	startFilter := &filterpb.StartTimeFilter{}
 	startFilter.EarliestTime = timestamppb.New(startTime)
 	saListRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: namespace,
+		Namespace: ns,
 		PageSize:  5,
 		Query:     fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal),
 	}
@@ -307,7 +339,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 
 	poller := testcore.TaskPoller{
 		Client:              client1,
-		Namespace:           namespace,
+		Namespace:           ns,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -354,7 +386,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	}
 
 	saListRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: namespace,
+		Namespace: ns,
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowId = "%s" and %s = "another string"`, id, s.testSearchAttributeKey),
 	}
@@ -365,7 +397,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	testListResult(engine2, saListRequest)
 
 	runningListRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: namespace,
+		Namespace: ns,
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
@@ -378,7 +410,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	terminateReason := "force terminate to make sure standby process tasks"
 	terminateDetails := payloads.EncodeString("terminate details")
 	_, err = client1.TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: namespace,
+		Namespace: ns,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -390,7 +422,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 
 	// check terminate done
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: namespace,
+		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -426,7 +458,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		}, waitTimeInMs*numOfRetry*time.Millisecond, waitTimeInMs*time.Millisecond)
 
 	terminatedListRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: namespace,
+		Namespace: ns,
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Terminated'`, wt),
 	}

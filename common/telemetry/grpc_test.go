@@ -35,8 +35,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-	"go.opentelemetry.io/otel/trace/noop"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/telemetry"
@@ -60,7 +59,7 @@ func Test_ServerStatsHandler(t *testing.T) {
 		})
 		otelStatsHandler.HandleRPC(ctx, &stats.InPayload{
 			Payload: &workflowservice.TerminateWorkflowExecutionRequest{
-				WorkflowExecution: &common.WorkflowExecution{
+				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: "WF-ID",
 					RunId:      "RUN-ID",
 				},
@@ -119,7 +118,7 @@ func Test_ServerStatsHandler(t *testing.T) {
 	})
 
 	t.Run("skip if noop trace provider", func(t *testing.T) {
-		tp := noop.NewTracerProvider()
+		tp := telemetry.NoopTracerProvider
 		tmp := propagation.TraceContext{}
 		otelStatsHandler := telemetry.NewServerStatsHandler(tp, tmp, nil)
 		require.Nil(t, otelStatsHandler)
@@ -129,7 +128,7 @@ func Test_ServerStatsHandler(t *testing.T) {
 func Test_ClientStatsHandler(t *testing.T) {
 
 	t.Run("skip if noop trace provider", func(t *testing.T) {
-		tp := noop.NewTracerProvider()
+		tp := telemetry.NoopTracerProvider
 		tmp := propagation.TraceContext{}
 		otelStatsHandler := telemetry.NewClientStatsHandler(tp, tmp)
 		require.Nil(t, otelStatsHandler)

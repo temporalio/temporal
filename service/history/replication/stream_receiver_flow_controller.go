@@ -26,7 +26,7 @@
 package replication
 
 import (
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -38,26 +38,26 @@ type (
 		taskTrackingCount int
 	}
 	ReceiverFlowController interface {
-		GetFlowControlInfo(priority enums.TaskPriority) enums.ReplicationFlowControlCommand
+		GetFlowControlInfo(priority enumsspb.TaskPriority) enumsspb.ReplicationFlowControlCommand
 	}
 	streamReceiverFlowControllerImpl struct {
-		signalsProvider map[enums.TaskPriority]FlowControlSignalProvider
+		signalsProvider map[enumsspb.TaskPriority]FlowControlSignalProvider
 		config          *configs.Config
 	}
 )
 
-func NewReceiverFlowControl(signals map[enums.TaskPriority]FlowControlSignalProvider, config *configs.Config) *streamReceiverFlowControllerImpl {
+func NewReceiverFlowControl(signals map[enumsspb.TaskPriority]FlowControlSignalProvider, config *configs.Config) *streamReceiverFlowControllerImpl {
 	return &streamReceiverFlowControllerImpl{
 		signalsProvider: signals,
 		config:          config,
 	}
 }
 
-func (s *streamReceiverFlowControllerImpl) GetFlowControlInfo(priority enums.TaskPriority) enums.ReplicationFlowControlCommand {
+func (s *streamReceiverFlowControllerImpl) GetFlowControlInfo(priority enumsspb.TaskPriority) enumsspb.ReplicationFlowControlCommand {
 	if signal, ok := s.signalsProvider[priority]; ok {
 		if signal().taskTrackingCount > s.config.ReplicationReceiverMaxOutstandingTaskCount() {
-			return enums.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
+			return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
 		}
 	}
-	return enums.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
+	return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
 }

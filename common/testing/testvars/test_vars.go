@@ -25,16 +25,19 @@
 package testvars
 
 import (
-	"strings"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	querypb "go.temporal.io/api/query/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -46,7 +49,8 @@ type (
 		testName string
 		testHash uint32
 		an       Any
-		kv       sync.Map
+		values   sync.Map
+		numbers  sync.Map
 	}
 	testNamer interface {
 		Name() string
@@ -66,75 +70,125 @@ func newFromName(testName string) *TestVars {
 	}
 }
 
-func (tv *TestVars) key(typ string, key []string) string {
-	if len(key) == 0 {
-		return typ
+func getOrCreate[T any](tv *TestVars, key string, initialValGen func(key string) T, valNSetter func(val T, n int) T) T {
+	v, _ := tv.values.LoadOrStore(key, initialValGen(key))
+
+	n, ok := tv.numbers.Load(key)
+	if !ok {
+		//revive:disable-next-line:unchecked-type-assertion
+		return v.(T)
 	}
-	return typ + "_" + strings.Join(key, "_")
+
+	//revive:disable-next-line:unchecked-type-assertion
+	return valNSetter(v.(T), n.(int))
 }
 
-func (tv *TestVars) getOrCreate(typ string, key []string, initialVal ...any) any {
-	kvKey := tv.key(typ, key)
-	var kvVal any
-	if len(initialVal) == 0 {
-		kvVal = tv.defaultStringVal(kvKey)
-	} else {
-		kvVal = initialVal[0]
-	}
-	v, _ := tv.kv.LoadOrStore(kvKey, kvVal)
-	return v
+func (tv *TestVars) stringNSetter(v string, n int) string {
+	return fmt.Sprintf("%s_%d", v, n)
 }
 
-func (tv *TestVars) defaultStringVal(key string) string {
-	return tv.testName + "_" + key
+// Generate new uuid for every new n.
+func (tv *TestVars) uuidNSetter(_ string, _ int) string {
+	return tv.uuidString("")
 }
 
-func (tv *TestVars) set(typ string, key []string, val any) {
-	kvKey := tv.key(typ, key)
-	tv.kv.Store(kvKey, val)
+func (tv *TestVars) intNSetter(v int, n int) int {
+	return n*1000 + v
+}
+
+// Use this setter for entities that don't support setting n.
+func unsupportedNSetter[T any](v T, _ int) T {
+	panic(fmt.Sprintf("setting n on type %T is not supported", v))
+}
+
+func (tv *TestVars) uniqueString(key string) string {
+	return fmt.Sprintf("%s_%s", tv.testName, key)
+}
+
+func (tv *TestVars) uuidString(_ string) string {
+	return uuid.New()
+}
+
+func (tv *TestVars) emptyString(_ string) string {
+	return ""
 }
 
 func (tv *TestVars) clone() *TestVars {
 	tv2 := newFromName(tv.testName)
-	tv.kv.Range(func(key, value any) bool {
-		tv2.kv.Store(key, value)
+	tv.values.Range(func(key, value any) bool {
+		tv2.values.Store(key, value)
+		return true
+	})
+	tv.numbers.Range(func(key, value any) bool {
+		tv2.numbers.Store(key, value)
 		return true
 	})
 
 	return tv2
 }
-
-func (tv *TestVars) cloneSet(typ string, key []string, val any) *TestVars {
-	newTv := tv.clone()
-	newTv.set(typ, key, val)
-	return newTv
+func (tv *TestVars) cloneSetVal(key string, val any) *TestVars {
+	tv2 := tv.clone()
+	tv2.values.Store(key, val)
+	return tv2
 }
 
-// ----------- Methods for every "type" ------------
-// TODO: add more as you need them.
-
-func (tv *TestVars) NamespaceID(key ...string) namespace.ID {
-	return tv.getOrCreate("namespace_id", key, namespace.ID(uuid.New())).(namespace.ID)
+func (tv *TestVars) cloneSetN(key string, n int) *TestVars {
+	tv2 := tv.clone()
+	tv2.numbers.Store(key, n)
+	return tv2
 }
 
-func (tv *TestVars) WithNamespaceID(namespaceID namespace.ID, key ...string) *TestVars {
-	return tv.cloneSet("namespace_id", key, namespaceID)
+// ----------- Methods for every entity ------------
+// Add more as you need them following the pattern below.
+// Replace "Entity" with the name of the entity, i.e., UpdateID, ActivityType, etc.
+// Add only the necessary methods (in most cases only first getter).
+/*
+func (tv *TestVars) Entity() string {
+	return getOrCreate(tv, "entity", tv.uniqueString, tv.stringNSetter)
+}
+func (tv *TestVars) WithEntity(entity string) *TestVars {
+	return tv.cloneSetVal("entity", entity)
+}
+func (tv *TestVars) WithEntityNumber(n int) *TestVars {
+	return tv.cloneSetN("entity", n)
+}
+*/
+
+func (tv *TestVars) NamespaceID() namespace.ID {
+	return getOrCreate(tv, "namespace_id",
+		func(key string) namespace.ID {
+			return namespace.ID(tv.uuidString(key))
+		},
+		func(val namespace.ID, n int) namespace.ID {
+			return namespace.ID(tv.uuidNSetter(val.String(), n))
+		},
+	)
 }
 
-func (tv *TestVars) NamespaceName(key ...string) namespace.Name {
-	const typ = "namespace_name"
-	return tv.getOrCreate(typ, key, namespace.Name(tv.defaultStringVal(tv.key(typ, key)))).(namespace.Name)
+func (tv *TestVars) WithNamespaceID(namespaceID namespace.ID) *TestVars {
+	return tv.cloneSetVal("namespace_id", namespaceID)
 }
 
-func (tv *TestVars) WithNamespaceName(namespaceName namespace.Name, key ...string) *TestVars {
-	return tv.cloneSet("namespace_name", key, namespaceName)
+func (tv *TestVars) NamespaceName() namespace.Name {
+	return getOrCreate(tv, "namespace_name",
+		func(key string) namespace.Name {
+			return namespace.Name(tv.uniqueString(key))
+		},
+		func(val namespace.Name, n int) namespace.Name {
+			return namespace.Name(tv.stringNSetter(val.String(), n))
+		},
+	)
 }
 
-func (tv *TestVars) Namespace(key ...string) *namespace.Namespace {
+func (tv *TestVars) WithNamespaceName(namespaceName namespace.Name) *TestVars {
+	return tv.cloneSetVal("namespace_name", namespaceName)
+}
+
+func (tv *TestVars) Namespace() *namespace.Namespace {
 	return namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{
-			Id:   tv.NamespaceID(key...).String(),
-			Name: tv.NamespaceName(key...).String(),
+			Id:   tv.NamespaceID().String(),
+			Name: tv.NamespaceName().String(),
 		},
 		&persistencespb.NamespaceConfig{
 			Retention: timestamp.DurationFromDays(int32(tv.Any().Int())),
@@ -148,178 +202,197 @@ func (tv *TestVars) Namespace(key ...string) *namespace.Namespace {
 	)
 }
 
-func (tv *TestVars) WorkflowID(key ...string) string {
-	return tv.getOrCreate("workflow_id", key).(string)
+func (tv *TestVars) WorkflowID() string {
+	return getOrCreate(tv, "workflow_id", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WithWorkflowID(workflowID string, key ...string) *TestVars {
-	return tv.cloneSet("workflow_id", key, workflowID)
+func (tv *TestVars) WithWorkflowIDNumber(n int) *TestVars {
+	return tv.cloneSetN("workflow_id", n)
 }
 
-func (tv *TestVars) RunID(key ...string) string {
-	return tv.getOrCreate("run_id", key, "").(string)
+// RunID is different from other getters. By default, it returns an empty string.
+// This is to simplify the usage of WorkflowExecution() which most of the time
+// doesn't need RunID. Otherwise, RunID can be set explicitly using WithRunID.
+func (tv *TestVars) RunID() string {
+	return getOrCreate(tv, "run_id", tv.emptyString, tv.uuidNSetter)
 }
 
-func (tv *TestVars) WithRunID(runID string, key ...string) *TestVars {
-	return tv.cloneSet("run_id", key, runID)
+func (tv *TestVars) WithRunID(runID string) *TestVars {
+	return tv.cloneSetVal("run_id", runID)
 }
 
-func (tv *TestVars) WorkflowExecution(key ...string) *commonpb.WorkflowExecution {
+func (tv *TestVars) WorkflowExecution() *commonpb.WorkflowExecution {
 	return &commonpb.WorkflowExecution{
-		WorkflowId: tv.WorkflowID(key...),
-		RunId:      tv.RunID(key...),
+		WorkflowId: tv.WorkflowID(),
+		RunId:      tv.RunID(),
 	}
 }
 
-func (tv *TestVars) UpdateRef(key ...string) *updatepb.UpdateRef {
-	return &updatepb.UpdateRef{
-		UpdateId:          tv.UpdateID(key...),
-		WorkflowExecution: tv.WorkflowExecution(),
+func (tv *TestVars) RequestID() string {
+	return getOrCreate(tv, "request_id", tv.uuidString, tv.uuidNSetter)
+}
+
+func (tv *TestVars) BuildID() string {
+	return getOrCreate(tv, "build_id", tv.uniqueString, tv.stringNSetter)
+}
+
+func (tv *TestVars) WithBuildIDNumber(n int) *TestVars {
+	return tv.cloneSetN("build_id", n)
+}
+
+func (tv *TestVars) DeploymentSeries() string {
+	return getOrCreate(tv, "deployment_series", tv.uniqueString, tv.stringNSetter)
+}
+
+func (tv *TestVars) WithDeploymentSeriesNumber(n int) *TestVars {
+	return tv.cloneSetN("deployment_series", n)
+}
+
+func (tv *TestVars) Deployment() *deploymentpb.Deployment {
+	return &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(),
+		BuildId:    tv.BuildID(),
 	}
 }
 
-func (tv *TestVars) TaskQueue(key ...string) *taskqueuepb.TaskQueue {
+func (tv *TestVars) DeploymentTransition() *workflowpb.DeploymentTransition {
+	return &workflowpb.DeploymentTransition{
+		Deployment: tv.Deployment(),
+	}
+}
+
+func (tv *TestVars) VersioningOverridePinned() *workflowpb.VersioningOverride {
+	return &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+		Deployment: tv.Deployment(),
+	}
+}
+
+func (tv *TestVars) TaskQueue() *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{
-		Name: tv.getOrCreate("task_queue", key).(string),
+		Name: getOrCreate(tv, "task_queue", tv.uniqueString, tv.stringNSetter),
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 }
 
-func (tv *TestVars) WithTaskQueue(taskQueue string, key ...string) *TestVars {
-	return tv.cloneSet("task_queue", key, taskQueue)
+func (tv *TestVars) WithTaskQueue(taskQueue string) *TestVars {
+	return tv.cloneSetVal("task_queue", taskQueue)
 }
 
-func (tv *TestVars) StickyTaskQueue(key ...string) *taskqueuepb.TaskQueue {
+func (tv *TestVars) WithTaskQueueNumber(n int) *TestVars {
+	return tv.cloneSetN("task_queue", n)
+}
+
+func (tv *TestVars) StickyTaskQueue() *taskqueuepb.TaskQueue {
 	return &taskqueuepb.TaskQueue{
-		Name:       tv.getOrCreate("sticky_task_queue", key).(string),
+		Name:       getOrCreate(tv, "sticky_task_queue", tv.uniqueString, tv.stringNSetter),
 		Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
-		NormalName: tv.getOrCreate("task_queue", key).(string),
+		NormalName: tv.TaskQueue().Name,
 	}
 }
 
-func (tv *TestVars) StickyExecutionAttributes(timeout time.Duration, key ...string) *taskqueuepb.StickyExecutionAttributes {
+func (tv *TestVars) StickyExecutionAttributes(timeout time.Duration) *taskqueuepb.StickyExecutionAttributes {
 	return &taskqueuepb.StickyExecutionAttributes{
-		WorkerTaskQueue:        tv.StickyTaskQueue(key...),
+		WorkerTaskQueue:        tv.StickyTaskQueue(),
 		ScheduleToStartTimeout: durationpb.New(timeout),
 	}
 }
 
-func (tv *TestVars) WithStickyTaskQueue(stickyTaskQueue string, key ...string) *TestVars {
-	return tv.cloneSet("sticky_task_queue", key, stickyTaskQueue)
-}
-
-func (tv *TestVars) WorkflowType(key ...string) *commonpb.WorkflowType {
+func (tv *TestVars) WorkflowType() *commonpb.WorkflowType {
 	return &commonpb.WorkflowType{
-		Name: tv.getOrCreate("workflow_type", key).(string),
+		Name: getOrCreate(tv, "workflow_type", tv.uniqueString, tv.stringNSetter),
 	}
 }
 
-func (tv *TestVars) WithWorkflowType(workflowType string, key ...string) *TestVars {
-	return tv.cloneSet("workflow_type", key, workflowType)
+func (tv *TestVars) ActivityID() string {
+	return getOrCreate(tv, "activity_id", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) ActivityID(key ...string) string {
-	return tv.getOrCreate("activity_id", key).(string)
+func (tv *TestVars) WithActivityIDNumber(n int) *TestVars {
+	return tv.cloneSetN("activity_id", n)
 }
 
-func (tv *TestVars) WithActivityID(activityID string, key ...string) *TestVars {
-	return tv.cloneSet("activity_id", key, activityID)
-}
-
-func (tv *TestVars) ActivityType(key ...string) *commonpb.ActivityType {
+func (tv *TestVars) ActivityType() *commonpb.ActivityType {
 	return &commonpb.ActivityType{
-		Name: tv.getOrCreate("activity_type", key).(string),
+		Name: getOrCreate(tv, "activity_type", tv.uniqueString, tv.stringNSetter),
 	}
 }
 
-func (tv *TestVars) WithActivityType(workflowType string, key ...string) *TestVars {
-	return tv.cloneSet("activity_type", key, workflowType)
+func (tv *TestVars) MessageID() string {
+	return getOrCreate(tv, "message_id", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) MessageID(key ...string) string {
-	return tv.getOrCreate("message_id", key).(string)
+func (tv *TestVars) WithMessageIDNumber(n int) *TestVars {
+	return tv.cloneSetN("message_id", n)
 }
 
-func (tv *TestVars) WithMessageID(messageID string, key ...string) *TestVars {
-	return tv.cloneSet("message_id", key, messageID)
+func (tv *TestVars) UpdateID() string {
+	return getOrCreate(tv, "update_id", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) UpdateID(key ...string) string {
-	return tv.getOrCreate("update_id", key).(string)
+func (tv *TestVars) WithUpdateIDNumber(n int) *TestVars {
+	return tv.cloneSetN("update_id", n)
 }
 
-func (tv *TestVars) WithUpdateID(updateID string, key ...string) *TestVars {
-	return tv.cloneSet("update_id", key, updateID)
+func (tv *TestVars) UpdateRef() *updatepb.UpdateRef {
+	return &updatepb.UpdateRef{
+		UpdateId:          tv.UpdateID(),
+		WorkflowExecution: tv.WorkflowExecution(),
+	}
 }
 
-func (tv *TestVars) HandlerName(key ...string) string {
-	return tv.getOrCreate("handler_name", key).(string)
+func (tv *TestVars) HandlerName() string {
+	return getOrCreate(tv, "handler_name", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WithHandlerName(handlerName string, key ...string) *TestVars {
-	return tv.cloneSet("handler_name", key, handlerName)
+func (tv *TestVars) ClientIdentity() string {
+	return getOrCreate(tv, "client_identity", tv.uniqueString, tv.stringNSetter)
 }
 
-//revive:disable:unchecked-type-assertion
-func (tv *TestVars) ClientIdentity(key ...string) string {
-	return tv.getOrCreate("client_identity", key).(string)
+func (tv *TestVars) WorkerIdentity() string {
+	return getOrCreate(tv, "worker_identity", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WithClientIdentity(identity string, key ...string) *TestVars {
-	return tv.cloneSet("client_identity", key, identity)
+func (tv *TestVars) TimerID() string {
+	return getOrCreate(tv, "timer_id", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WorkerIdentity(key ...string) string {
-	return tv.getOrCreate("worker_identity", key).(string)
+func (tv *TestVars) WithTimerIDNumber(n int) *TestVars {
+	return tv.cloneSetN("timer_id", n)
 }
 
-func (tv *TestVars) WithWorkerIdentity(identity string, key ...string) *TestVars {
-	return tv.cloneSet("worker_identity", key, identity)
+func (tv *TestVars) QueryType() string {
+	return getOrCreate(tv, "query_type", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) TimerID(key ...string) string {
-	return tv.getOrCreate("timer_id", key).(string)
+func (tv *TestVars) Query() *querypb.WorkflowQuery {
+	return &querypb.WorkflowQuery{
+		QueryType: tv.QueryType(),
+		QueryArgs: tv.Any().Payloads(),
+	}
 }
 
-func (tv *TestVars) WithTimerID(timerID string, key ...string) *TestVars {
-	return tv.cloneSet("timer_id", key, timerID)
+func (tv *TestVars) SignalName() string {
+	return getOrCreate(tv, "signal_name", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) QueryType(key ...string) string {
-	return tv.getOrCreate("query_type", key).(string)
+func (tv *TestVars) IndexName() string {
+	return getOrCreate(tv, "index_name", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) WithQueryType(queryType string, key ...string) *TestVars {
-	return tv.cloneSet("query_type", key, queryType)
+func (tv *TestVars) Service() string {
+	return getOrCreate(tv, "service", tv.uniqueString, tv.stringNSetter)
 }
 
-func (tv *TestVars) IndexName(key ...string) string {
-	return tv.getOrCreate("index_name", key).(string)
-}
-
-func (tv *TestVars) WithIndexName(indexName string, key ...string) *TestVars {
-	return tv.cloneSet("index_name", key, indexName)
+func (tv *TestVars) Operation() string {
+	return getOrCreate(tv, "operation", tv.uniqueString, tv.stringNSetter)
 }
 
 // ----------- Generic methods ------------
-
-func (tv *TestVars) InfiniteTimeout() *durationpb.Duration {
-	t := 10 * time.Hour
-	return durationpb.New(t)
-}
-
 func (tv *TestVars) Any() Any {
 	return tv.an
 }
 
 func (tv *TestVars) Global() Global {
 	return newGlobal()
-}
-
-func (tv *TestVars) String(key ...string) string {
-	return tv.getOrCreate("string", key).(string)
-}
-
-func (tv *TestVars) WithString(str string, key ...string) *TestVars {
-	return tv.cloneSet("string", key, str)
 }

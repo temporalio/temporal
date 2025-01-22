@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/api"
@@ -202,7 +203,7 @@ func (s *engine2Suite) SetupTest() {
 		logger:             s.logger,
 		throttledLogger:    s.logger,
 		metricsHandler:     metrics.NoopMetricsHandler,
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:    tasktoken.NewSerializer(),
 		config:             s.config,
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
@@ -230,16 +231,8 @@ func (s *engine2Suite) SetupTest() {
 
 	s.historyEngine = h
 
-	s.tv = testvars.New(s.T())
-	s.tv = s.tv.
-		WithWorkflowID("WorkflowID").
-		WithRunID(uuid.New()).
-		WithWorkflowType("WorkflowType").
-		WithTaskQueue("TestTaskQueue").
-		WithClientIdentity("ClientIdentity").
-		WithNamespaceID(tests.NamespaceID).
-		WithString(uuid.New(), "PrevRunID")
-
+	s.tv = testvars.New(s.T()).WithNamespaceID(tests.NamespaceID)
+	s.tv = s.tv.WithRunID(s.tv.Any().RunID())
 }
 
 func (s *engine2Suite) SetupSubTest() {
@@ -1261,13 +1254,13 @@ func makeMockStartRequest(
 			Namespace:                tv.NamespaceID().String(),
 			WorkflowId:               tv.WorkflowID(),
 			WorkflowType:             tv.WorkflowType(),
-			TaskQueue:                tv.TaskQueue("dedupTaskQueue"),
+			TaskQueue:                tv.TaskQueue(),
 			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
 			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
 			WorkflowIdReusePolicy:    wfReusePolicy,
 			WorkflowIdConflictPolicy: wfConflictPolicy,
 			Identity:                 tv.WorkerIdentity(),
-			RequestId:                tv.String("RequestID"),
+			RequestId:                tv.Any().String(),
 		},
 	}
 }
@@ -1279,7 +1272,7 @@ func makeCurrentWorkflowConditionFailedError(
 	lastWriteVersion := common.EmptyVersion
 	return &persistence.CurrentWorkflowConditionFailedError{
 		Msg:              "random message",
-		RequestID:        tv.String("PrevRequestID"),
+		RequestID:        tv.RequestID(),
 		RunID:            tv.RunID(),
 		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1352,7 +1345,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameRequestID() 
 	// no error when request ID is the same
 	s.setupStartWorkflowExecutionForRunning()
 	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
-	startRequest.StartRequest.RequestId = s.tv.String("PrevRequestID")
+	startRequest.StartRequest.RequestId = s.tv.RequestID()
 
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 

@@ -81,6 +81,7 @@ func NewVisibilityQueueFactory(
 				),
 				int64(params.Config.VisibilityQueueMaxReaderCount()),
 			),
+			Tracer: params.TracerProvider.Tracer("queue.visibility"),
 		},
 	}
 }
@@ -140,6 +141,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		shard.GetClusterMetadata(),
 		logger,
 		metricsHandler,
+		f.Tracer,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,

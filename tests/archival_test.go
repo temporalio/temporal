@@ -33,12 +33,10 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -48,6 +46,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -58,15 +57,12 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-const (
-	retryLimit       = 40
-	retryBackoffTime = 500 * time.Millisecond
-)
-
 type (
 	ArchivalSuite struct {
-		*require.Assertions
-		testcore.FunctionalTestBase
+		testcore.FunctionalTestSuite
+
+		archivalNamespace   namespace.Name
+		archivalNamespaceID namespace.ID
 	}
 
 	archivalWorkflowInfo struct {
@@ -76,102 +72,103 @@ type (
 )
 
 func TestArchivalSuite(t *testing.T) {
-	// TODO: archival doesn't support parallel yet: t.Parallel()
-	s := new(ArchivalSuite)
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.RetentionTimerJitterDuration.Key():  time.Second,
-		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
-	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	suite.Run(t, s)
+	t.Parallel() // This suite can work in parallel as long as it is the only one that use testcore.WithArchivalEnabled() option.
+	suite.Run(t, new(ArchivalSuite))
 }
 
 func (s *ArchivalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.ArchivalProcessorArchiveDelay.Key(): time.Duration(0),
+	}
+
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(
+		testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
+		testcore.WithArchivalEnabled(),
+	)
+
+	var err error
+	s.archivalNamespace = namespace.Name(testcore.RandomizeStr("archival-enabled-namespace"))
+	s.archivalNamespaceID, err = s.RegisterNamespace(
+		s.archivalNamespace,
+		0, // Archive right away.
+		enumspb.ARCHIVAL_STATE_ENABLED,
+		s.GetTestCluster().ArchiverBase().HistoryURI(),
+		s.GetTestCluster().ArchiverBase().VisibilityURI(),
+	)
+	s.Require().NoError(err)
 }
 
 func (s *ArchivalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *ArchivalSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
+	s.Require().NoError(s.MarkNamespaceAsDeleted(s.archivalNamespace))
+	s.FunctionalTestBase.TearDownCluster()
 }
 
 func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
-	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(s.GetTestCluster().ArchiverBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
-	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-timer-queue-processor-workflow-id"
 	workflowType := "archival-timer-queue-processor-type"
 	taskQueue := "archival-timer-queue-processor-task-queue"
 	numActivities := 1
 	numRuns := 1
-	workflowInfo := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace(), namespaceID, numActivities, numRuns)[0]
+	workflowInfo := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, numActivities, numRuns)[0]
 
-	s.True(s.isArchived(s.ArchivalNamespace(), workflowInfo.execution))
-	s.True(s.isHistoryDeleted(workflowInfo))
-	s.True(s.isMutableStateDeleted(namespaceID, workflowInfo.execution))
+	s.workflowIsArchived(s.archivalNamespaceID, workflowInfo.execution)
+	s.historyIsDeleted(workflowInfo)
+	s.mutableStateIsDeleted(s.archivalNamespaceID, workflowInfo.execution)
 }
 
 func (s *ArchivalSuite) TestArchival_ContinueAsNew() {
-	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(s.GetTestCluster().ArchiverBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
-	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-continueAsNew-workflow-id"
 	workflowType := "archival-continueAsNew-workflow-type"
 	taskQueue := "archival-continueAsNew-task-queue"
 	numActivities := 1
 	numRuns := 5
-	workflowInfos := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace(), namespaceID, numActivities, numRuns)
+	workflowInfos := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, numActivities, numRuns)
 
 	for _, workflowInfo := range workflowInfos {
-		s.True(s.isArchived(s.ArchivalNamespace(), workflowInfo.execution))
-		s.True(s.isHistoryDeleted(workflowInfo))
-		s.True(s.isMutableStateDeleted(namespaceID, workflowInfo.execution))
+		s.workflowIsArchived(s.archivalNamespaceID, workflowInfo.execution)
+		s.historyIsDeleted(workflowInfo)
+		s.mutableStateIsDeleted(s.archivalNamespaceID, workflowInfo.execution)
 	}
 }
 
 func (s *ArchivalSuite) TestArchival_ArchiverWorker() {
-	s.T().SkipNow() // flaky test, skip for now, will reimplement archival feature.
+	// s.T().SkipNow() // flaky test, skip for now, will reimplement archival feature.
 
-	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(s.GetTestCluster().ArchiverBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
-	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-archiver-worker-workflow-id"
 	workflowType := "archival-archiver-worker-workflow-type"
 	taskQueue := "archival-archiver-worker-task-queue"
 	numActivities := 10
-	workflowInfo := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace(), namespaceID, numActivities, 1)[0]
+	workflowInfo := s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, numActivities, 1)[0]
 
-	s.True(s.isArchived(s.ArchivalNamespace(), workflowInfo.execution))
-	s.True(s.isHistoryDeleted(workflowInfo))
-	s.True(s.isMutableStateDeleted(namespaceID, workflowInfo.execution))
+	s.workflowIsArchived(s.archivalNamespaceID, workflowInfo.execution)
+	s.historyIsDeleted(workflowInfo)
+	s.mutableStateIsDeleted(s.archivalNamespaceID, workflowInfo.execution)
 }
 
 func (s *ArchivalSuite) TestVisibilityArchival() {
-	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetVisibilityConfig().ClusterConfiguredForArchival())
+	s.True(s.GetTestCluster().ArchiverBase().Metadata().GetVisibilityConfig().ClusterConfiguredForArchival())
 
-	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-visibility-workflow-id"
 	workflowType := "archival-visibility-workflow-type"
 	taskQueue := "archival-visibility-task-queue"
 	numActivities := 3
 	numRuns := 5
 	startTime := time.Now().UnixNano()
-	s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.ArchivalNamespace(), namespaceID, numActivities, numRuns)
-	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskQueue, s.ArchivalNamespace(), namespaceID, numActivities, numRuns)
+	s.startAndFinishWorkflow(workflowID, workflowType, taskQueue, s.archivalNamespace, numActivities, numRuns)
+	s.startAndFinishWorkflow("some other workflowID", "some other workflow type", taskQueue, s.archivalNamespace, numActivities, numRuns)
 	endTime := time.Now().UnixNano()
 
 	var executions []*workflowpb.WorkflowExecutionInfo
 
-	for i := 0; i != retryLimit; i++ {
-		executions = []*workflowpb.WorkflowExecutionInfo{}
+	s.Eventually(func() bool {
 		request := &workflowservice.ListArchivedWorkflowExecutionsRequest{
-			Namespace: s.ArchivalNamespace(),
+			Namespace: s.archivalNamespace.String(),
 			PageSize:  2,
 			Query:     fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType),
 		}
@@ -183,10 +180,10 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 			request.NextPageToken = response.NextPageToken
 		}
 		if len(executions) == numRuns {
-			break
+			return true
 		}
-		time.Sleep(retryBackoffTime) //nolint:forbidigo
-	}
+		return false
+	}, 20*time.Second, 500*time.Millisecond)
 
 	for _, execution := range executions {
 		s.Equal(workflowID, execution.GetExecution().GetWorkflowId())
@@ -202,50 +199,46 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 	}
 }
 
-// isArchived returns true if both the workflow history and workflow visibility are archived.
-func (s *ArchivalSuite) isArchived(namespace string, execution *commonpb.WorkflowExecution) bool {
+// workflowIsArchived asserts that both the workflow history and workflow visibility are archived.
+func (s *ArchivalSuite) workflowIsArchived(namespaceID namespace.ID, execution *commonpb.WorkflowExecution) {
 	serviceName := string(primitives.HistoryService)
-	historyURI, err := archiver.NewURI(s.GetTestCluster().ArchivalBase().HistoryURI())
+	historyURI, err := archiver.NewURI(s.GetTestCluster().ArchiverBase().HistoryURI())
 	s.NoError(err)
-	historyArchiver, err := s.GetTestCluster().ArchivalBase().Provider().GetHistoryArchiver(
+	historyArchiver, err := s.GetTestCluster().ArchiverBase().Provider().GetHistoryArchiver(
 		historyURI.Scheme(),
 		serviceName,
 	)
 	s.NoError(err)
 
-	visibilityURI, err := archiver.NewURI(s.GetTestCluster().ArchivalBase().VisibilityURI())
+	visibilityURI, err := archiver.NewURI(s.GetTestCluster().ArchiverBase().VisibilityURI())
 	s.NoError(err)
-	visibilityArchiver, err := s.GetTestCluster().ArchivalBase().Provider().GetVisibilityArchiver(
+	visibilityArchiver, err := s.GetTestCluster().ArchiverBase().Provider().GetVisibilityArchiver(
 		visibilityURI.Scheme(),
 		serviceName,
 	)
 	s.NoError(err)
 
-	for i := 0; i < retryLimit; i++ {
+	s.Eventually(func() bool {
 		ctx := testcore.NewContext()
-		if i > 0 {
-			time.Sleep(retryBackoffTime) //nolint:forbidigo
-		}
-		namespaceID := s.GetNamespaceID(namespace)
 		var historyResponse *archiver.GetHistoryResponse
 		historyResponse, err = historyArchiver.Get(ctx, historyURI, &archiver.GetHistoryRequest{
-			NamespaceID: namespaceID,
+			NamespaceID: namespaceID.String(),
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
 			PageSize:    1,
 		})
 		if err != nil {
-			continue
+			return false
 		}
 		if len(historyResponse.HistoryBatches) == 0 {
-			continue
+			return false
 		}
 		var visibilityResponse *archiver.QueryVisibilityResponse
 		visibilityResponse, err = visibilityArchiver.Query(
 			ctx,
 			visibilityURI,
 			&archiver.QueryVisibilityRequest{
-				NamespaceID: namespaceID,
+				NamespaceID: namespaceID.String(),
 				PageSize:    1,
 				Query: fmt.Sprintf(
 					"WorkflowId = '%s' and RunId = '%s'",
@@ -256,29 +249,23 @@ func (s *ArchivalSuite) isArchived(namespace string, execution *commonpb.Workflo
 			searchattribute.NameTypeMap{},
 		)
 		if err != nil {
-			continue
+			return false
 		}
 		if len(visibilityResponse.Executions) > 0 {
 			return true
 		}
-	}
-	if err != nil {
-		fmt.Println("isArchived failed with error: ", err)
-	}
-	return false
+		return false
+	}, 20*time.Second, 500*time.Millisecond)
 }
 
-func (s *ArchivalSuite) isHistoryDeleted(
-	workflowInfo archivalWorkflowInfo,
-) bool {
-	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
+func (s *ArchivalSuite) historyIsDeleted(workflowInfo archivalWorkflowInfo) {
 	shardID := common.WorkflowIDToHistoryShard(
-		namespaceID,
+		s.archivalNamespaceID.String(),
 		workflowInfo.execution.WorkflowId,
 		s.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
 
-	for i := 0; i < retryLimit; i++ {
+	s.Eventually(func() bool {
 		_, err := s.GetTestCluster().TestBase().ExecutionManager.ReadHistoryBranch(
 			testcore.NewContext(),
 			&persistence.ReadHistoryBranchRequest{
@@ -293,35 +280,34 @@ func (s *ArchivalSuite) isHistoryDeleted(
 		if common.IsNotFoundError(err) {
 			return true
 		}
-
 		s.NoError(err)
-		time.Sleep(retryBackoffTime) //nolint:forbidigo
-	}
-	return false
+		return false
+	}, 20*time.Second, 500*time.Millisecond)
 }
 
-func (s *ArchivalSuite) isMutableStateDeleted(namespaceID string, execution *commonpb.WorkflowExecution) bool {
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(),
+func (s *ArchivalSuite) mutableStateIsDeleted(namespaceID namespace.ID, execution *commonpb.WorkflowExecution) {
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(),
 		s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
 	request := &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
-		NamespaceID: namespaceID,
+		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.WorkflowId,
 		RunID:       execution.RunId,
 	}
 
-	for i := 0; i < retryLimit; i++ {
+	s.Eventually(func() bool {
 		_, err := s.GetTestCluster().TestBase().ExecutionManager.GetWorkflowExecution(testcore.NewContext(), request)
-		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+		if common.IsNotFoundError(err) {
 			return true
 		}
-		time.Sleep(retryBackoffTime) //nolint:forbidigo
-	}
-	return false
+		s.NoError(err)
+		return false
+	}, 20*time.Second, 500*time.Millisecond)
 }
 
 func (s *ArchivalSuite) startAndFinishWorkflow(
-	id, wt, tq, namespace, namespaceID string,
+	id, wt, tq string,
+	nsName namespace.Name,
 	numActivities, numRuns int,
 ) []archivalWorkflowInfo {
 	identity := "worker1"
@@ -330,7 +316,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           namespace,
+		Namespace:           nsName.String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -351,7 +337,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 	runCounter := 1
 
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		branchToken, err := s.getBranchToken(namespace, task.WorkflowExecution)
+		branchToken, err := s.getBranchToken(nsName, task.WorkflowExecution)
 		s.NoError(err)
 
 		workflowInfos[runCounter-1] = archivalWorkflowInfo{
@@ -415,7 +401,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           namespace,
+		Namespace:           nsName.String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -450,12 +436,12 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 }
 
 func (s *ArchivalSuite) getBranchToken(
-	namespace string,
+	nsName namespace.Name,
 	execution *commonpb.WorkflowExecution,
 ) ([]byte, error) {
 
 	descResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
-		Namespace: namespace,
+		Namespace: nsName.String(),
 		Execution: execution,
 	})
 	if err != nil {

@@ -81,7 +81,7 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 		}
 	}
 
-	ref, smt, err := stateMachineTask(e.shardContext, task)
+	ref, smt, err := StateMachineTask(e.shardContext.StateMachineRegistry(), task)
 	if err != nil {
 		return respond(err)
 	}

@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -41,7 +42,7 @@ func Invoke(
 	ctx context.Context,
 	req *historyservice.RespondWorkflowTaskFailedRequest,
 	shardContext shard.Context,
-	tokenSerializer common.TaskTokenSerializer,
+	tokenSerializer *tasktoken.Serializer,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (retError error) {
 	_, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))

@@ -75,6 +75,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
@@ -230,7 +231,7 @@ func (s *engineSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.mockShard.GetLogger(),
 		metricsHandler:     s.mockShard.GetMetricsHandler(),
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:    tasktoken.NewSerializer(),
 		eventNotifier:      eventNotifier,
 		config:             s.config,
 		queueProcessors: map[tasks.Category]queues.Queue{
@@ -5312,6 +5313,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(),
 	).Return(nil)
 
 	err = s.historyEngine.ReapplyEvents(
@@ -6407,7 +6409,15 @@ func addActivityTaskScheduledEventWithRetry(
 
 func addActivityTaskStartedEvent(ms workflow.MutableState, scheduledEventID int64, identity string) *historypb.HistoryEvent {
 	ai, _ := ms.GetActivityInfo(scheduledEventID)
-	event, _ := ms.AddActivityTaskStartedEvent(ai, scheduledEventID, tests.RunID, identity, nil, nil)
+	event, _ := ms.AddActivityTaskStartedEvent(
+		ai,
+		scheduledEventID,
+		tests.RunID,
+		identity,
+		nil,
+		nil,
+		nil,
+	)
 	return event
 }
 

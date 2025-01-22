@@ -84,6 +84,11 @@ var (
 		9000,
 		`VisibilityPersistenceMaxWriteQPS is the max QPC system host can query visibility DB for write.`,
 	)
+	VisibilityPersistenceSlowQueryThreshold = NewGlobalDurationSetting(
+		"system.visibilityPersistenceSlowQueryThreshold",
+		time.Second,
+		`VisibilityPersistenceSlowQueryThreshold is the threshold above which a query is considered slow and logged.`,
+	)
 	EnableReadFromSecondaryVisibility = NewNamespaceBoolSetting(
 		"system.enableReadFromSecondaryVisibility",
 		false,
@@ -484,7 +489,9 @@ Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this
 		"matching.wv.ReachabilityBuildIdVisibilityGracePeriod",
 		3*time.Minute,
 		`ReachabilityBuildIdVisibilityGracePeriod is the time period for which deleted versioning rules are still considered active
-to account for the delay in updating the build id field in visibility.`,
+to account for the delay in updating the build id field in visibility. Not yet supported for GetDeploymentReachability. We recommend waiting
+at least 2 minutes between changing the current deployment and calling GetDeployment, so that newly started workflow executions using the
+recently-current deployment can arrive in visibility.`,
 	)
 	ReachabilityTaskQueueScanLimit = NewGlobalIntSetting(
 		"limit.reachabilityTaskQueueScan",
@@ -850,12 +857,26 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
+	EnableDeployments = NewNamespaceBoolSetting(
+		"system.enableDeployments",
+		false,
+		`EnableDeployments enables deployments (versioning v3) in all services,
+including deployment-related RPCs in the frontend, deployment entity workflows in the worker,
+and deployment interaction in matching and history.`,
+	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
-		false,
-		`EnableNexus toggles all Nexus functionality on the server. Note that toggling this requires restarting
-server hosts for it to take effect.`,
+		true,
+		`Toggles all Nexus functionality on the server. Note that toggling this requires restarting server hosts for it
+		to take effect.`,
 	)
+
+	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
+		"frontend.allowDeleteNamespaceIfNexusEndpointTarget",
+		false,
+		`If set to true (default is false), namespaces that are Nexus endpoint targets will be prevented from being deleted.`,
+	)
+
 	RefreshNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"system.refreshNexusEndpointsLongPollTimeout",
 		5*time.Minute,
@@ -877,6 +898,12 @@ used when the first cache layer has a miss. Requires server restart for change t
 		30*time.Second,
 		`The TTL of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
 used when the first cache layer has a miss. Requires server restart for change to be applied.`,
+	)
+	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSetting(
+		"frontend.nexusRequestHeadersBlacklist",
+		[]string(nil),
+		`Nexus request headers to be removed before being sent to a user handler.
+Wildcards (*) are expanded to allow any substring. By default blacklist is empty.`,
 	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
@@ -927,7 +954,7 @@ used when the first cache layer has a miss. Requires server restart for change t
 
 	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
 		"frontend.enableExecuteMultiOperation",
-		false,
+		true,
 		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
 The API is under active development.`,
 	)
@@ -960,26 +987,26 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		100,
 		`DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
-Default value is 100.`,
+Default value is 100. Despite starting with 'frontend.' this setting is used by a worker and can be changed while namespace is deleted.`,
 	)
 	DeleteNamespacePageSize = NewGlobalIntSetting(
 		"frontend.deleteNamespaceDeletePageSize",
 		1000,
 		`DeleteNamespacePageSize is a page size to read executions from visibility for delete executions activity.
-Default value is 1000.`,
+Default value is 1000. Read once before delete of specified namespace is started.`,
 	)
 	DeleteNamespacePagesPerExecution = NewGlobalIntSetting(
 		"frontend.deleteNamespacePagesPerExecution",
 		256,
 		`DeleteNamespacePagesPerExecution is a number of pages before returning ContinueAsNew from delete executions activity.
-Default value is 256.`,
+Default value is 256. Read once before delete of specified namespace is started.`,
 	)
 	DeleteNamespaceConcurrentDeleteExecutionsActivities = NewGlobalIntSetting(
 		"frontend.deleteNamespaceConcurrentDeleteExecutionsActivities",
 		4,
 		`DeleteNamespaceConcurrentDeleteExecutionsActivities is a number of concurrent delete executions activities.
 Must be not greater than 256 and number of worker cores in the cluster.
-Default is 4.`,
+Default is 4. Read once before delete of specified namespace is started.`,
 	)
 	DeleteNamespaceNamespaceDeleteDelay = NewGlobalDurationSetting(
 		"frontend.deleteNamespaceNamespaceDeleteDelay",
@@ -987,6 +1014,11 @@ Default is 4.`,
 		`DeleteNamespaceNamespaceDeleteDelay is a duration for how long namespace stays in database
 after all namespace resources (i.e. workflow executions) are deleted.
 Default is 0, means, namespace will be deleted immediately.`,
+	)
+	ProtectedNamespaces = NewGlobalTypedSetting(
+		"worker.protectedNamespaces",
+		([]string)(nil),
+		`List of namespace names that can't be deleted.`,
 	)
 
 	// keys for matching
@@ -1112,25 +1144,25 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 	MetricsBreakdownByTaskQueue = NewTaskQueueBoolSetting(
 		"metrics.breakdownByTaskQueue",
 		true,
-		`MetricsBreakdownByTaskQueue determines if the 'taskqueue' tag in Matching and History metrics should 
-contain the actual TQ name or a generic __omitted__ value. Disable this option if the cardinality is too high for your 
+		`MetricsBreakdownByTaskQueue determines if the 'taskqueue' tag in Matching and History metrics should
+contain the actual TQ name or a generic __omitted__ value. Disable this option if the cardinality is too high for your
 observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
 	)
 	MetricsBreakdownByPartition = NewTaskQueueBoolSetting(
 		"metrics.breakdownByPartition",
 		true,
-		`MetricsBreakdownByPartition determines if the 'partition' tag in Matching metrics should 
-contain the actual normal partition ID or a generic __normal__ value. Regardless of this config, the tag value for sticky 
-queues will be "__sticky__". Disable this option if the partition cardinality is too high for your 
+		`MetricsBreakdownByPartition determines if the 'partition' tag in Matching metrics should
+contain the actual normal partition ID or a generic __normal__ value. Regardless of this config, the tag value for sticky
+queues will be "__sticky__". Disable this option if the partition cardinality is too high for your
 observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
 	)
 	MetricsBreakdownByBuildID = NewTaskQueueBoolSetting(
 		"metrics.breakdownByBuildID",
 		true,
-		`MetricsBreakdownByBuildID determines if the 'worker-build-id' tag in Matching metrics should 
-contain the actual Build ID or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned 
-queues will be "__unversioned__". Disable this option if the Build ID cardinality is too high for your 
-observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age 
+		`MetricsBreakdownByBuildID determines if the 'worker-build-id' tag in Matching metrics should
+contain the actual Build ID or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned
+queues will be "__unversioned__". Disable this option if the Build ID cardinality is too high for your
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age
 for VERSIONED queues.`,
 	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
@@ -1169,6 +1201,11 @@ This can help reduce effects of task queue movement.`,
 		5*time.Minute-10*time.Second,
 		`MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.`,
 	)
+	MatchingGetUserDataRefresh = NewGlobalDurationSetting(
+		"matching.getUserDataRefresh",
+		5*time.Minute,
+		`MatchingGetUserDataRefresh is how often the user data owner refreshes data from persistence.`,
+	)
 	MatchingBacklogNegligibleAge = NewTaskQueueDurationSetting(
 		"matching.backlogNegligibleAge",
 		5*time.Second,
@@ -1190,6 +1227,11 @@ duration since last poll exceeds this threshold.`,
 		"matching.listNexusEndpointsLongPollTimeout",
 		5*time.Minute-10*time.Second,
 		`MatchingListNexusEndpointsLongPollTimeout is the max length of long polls for ListNexusEndpoints calls.`,
+	)
+	MatchingNexusEndpointsRefreshInterval = NewGlobalDurationSetting(
+		"matching.nexusEndpointsRefreshInterval",
+		10*time.Second,
+		`Time to wait between calls to check that the in-memory view of Nexus endpoints matches the persisted state.`,
 	)
 	MatchingMembershipUnloadDelay = NewGlobalDurationSetting(
 		"matching.membershipUnloadDelay",
@@ -1213,22 +1255,10 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		false,
 		`MatchingDropNonRetryableTasks states if we should drop matching tasks with Internal/Dataloss errors`,
 	)
-	// for matching testing only:
-
-	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(
-		"test.matching.disableSyncMatch",
-		false,
-		`TestMatchingDisableSyncMatch forces tasks to go through the db once`,
-	)
-	TestMatchingLBForceReadPartition = NewGlobalIntSetting(
-		"test.matching.lbForceReadPartition",
-		-1,
-		`TestMatchingLBForceReadPartition forces polls to go to a specific partition`,
-	)
-	TestMatchingLBForceWritePartition = NewGlobalIntSetting(
-		"test.matching.lbForceWritePartition",
-		-1,
-		`TestMatchingLBForceWritePartition forces adds to go to a specific partition`,
+	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
+		"matching.maxTaskQueuesInDeployment",
+		1000,
+		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registed in a single deployment`,
 	)
 
 	// keys for history
@@ -1942,12 +1972,17 @@ archivalQueueProcessor`,
 	WorkflowExecutionMaxInFlightUpdates = NewNamespaceIntSetting(
 		"history.maxInFlightUpdates",
 		10,
-		`WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution.`,
+		`WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution. Set to zero to disable limit.`,
+	)
+	WorkflowExecutionMaxInFlightUpdatePayloads = NewNamespaceIntSetting(
+		"history.maxInFlightUpdatePayloads",
+		10*1024*1024,
+		`WorkflowExecutionMaxInFlightUpdatePayloads is the max total payload size (in bytes) of in-flight updates (admitted but not yet completed) for any given workflow execution. Set to zero to disable.`,
 	)
 	WorkflowExecutionMaxTotalUpdates = NewNamespaceIntSetting(
 		"history.maxTotalUpdates",
 		2000,
-		`WorkflowExecutionMaxTotalUpdates is the max number of updates that any given workflow execution can receive.`,
+		`WorkflowExecutionMaxTotalUpdates is the max number of updates that any given workflow execution can receive. Set to zero to disable.`,
 	)
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(
@@ -2031,6 +2066,18 @@ the user has not specified an explicit RetryPolicy`,
 		`DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
 where the user has set an explicit RetryPolicy, but not specified all the fields`,
 	)
+	FollowReusePolicyAfterConflictPolicyTerminate = NewNamespaceTypedSetting(
+		"history.followReusePolicyAfterConflictPolicyTerminate",
+		true,
+		`Follows WorkflowIdReusePolicy RejectDuplicate and AllowDuplicateFailedOnly after WorkflowIdReusePolicy TerminateExisting was applied.
+If true (the default), RejectDuplicate is disallowed and AllowDuplicateFailedOnly will be honored after TerminateExisting is applied.
+This configuration will be become the default behavior in the next release and removed subsequently.`,
+	)
+	AllowResetWithPendingChildren = NewNamespaceBoolSetting(
+		"history.allowResetWithPendingChildren",
+		false,
+		`Allows resetting of workflows with pending children when set to true`,
+	)
 	HistoryMaxAutoResetPoints = NewNamespaceIntSetting(
 		"history.historyMaxAutoResetPoints",
 		primitives.DefaultHistoryMaxAutoResetPoints,
@@ -2071,6 +2118,11 @@ the number of children greater than or equal to this threshold`,
 		"history.workflowTaskRetryMaxInterval",
 		time.Minute*10,
 		`WorkflowTaskRetryMaxInterval is the maximum interval added to a workflow task's startToClose timeout for slowing down retry`,
+	)
+	DiscardSpeculativeWorkflowTaskMaximumEventsCount = NewGlobalIntSetting(
+		"history.discardSpeculativeWorkflowTaskMaximumEventsCount",
+		10,
+		`If speculative workflow task shipped more than DiscardSpeculativeWorkflowTaskMaximumEventsCount events, it can't be discarded`,
 	)
 	DefaultWorkflowTaskTimeout = NewNamespaceDurationSetting(
 		"history.defaultWorkflowTaskTimeout",
@@ -2245,7 +2297,7 @@ that task will be sent to DLQ.`,
 	)
 	ReplicationLowPriorityTaskParallelism = NewGlobalIntSetting(
 		"history.ReplicationLowPriorityTaskParallelism",
-		4,
+		1,
 		`ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel`,
 	)
 

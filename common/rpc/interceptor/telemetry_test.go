@@ -32,7 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
-	"go.temporal.io/api/query/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -48,7 +48,8 @@ import (
 )
 
 const (
-	startWorkflow = "StartWorkflowExecution"
+	startWorkflow   = "StartWorkflowExecution"
+	executeMultiOps = "ExecuteMultiOperation"
 )
 
 func TestEmitActionMetric(t *testing.T) {
@@ -77,6 +78,70 @@ func TestEmitActionMetric(t *testing.T) {
 			fullName:          api.WorkflowServicePrefix + startWorkflow,
 			resp:              &workflowservice.StartWorkflowExecutionResponse{Started: true},
 			expectEmitMetrics: true,
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
+								Started: false,
+							},
+						},
+					},
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+						},
+					},
+				},
+			},
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+							StartWorkflow: &workflowservice.StartWorkflowExecutionResponse{
+								Started: true,
+							},
+						},
+					},
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+						},
+					},
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					// missing start response
+					{
+						Response: &workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+							UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionResponse{},
+						},
+					},
+				},
+			},
+		},
+		{
+			methodName: executeMultiOps,
+			fullName:   api.WorkflowServicePrefix + executeMultiOps,
+			resp: &workflowservice.ExecuteMultiOperationResponse{
+				Responses: []*workflowservice.ExecuteMultiOperationResponse_Response{
+					// no responses
+				},
+			},
 		},
 		{
 			methodName: queryWorkflow,
@@ -143,7 +208,7 @@ func TestEmitActionMetric(t *testing.T) {
 			methodName: queryWorkflow,
 			fullName:   api.WorkflowServicePrefix + queryWorkflow,
 			req: &workflowservice.QueryWorkflowRequest{
-				Query: &query.WorkflowQuery{
+				Query: &querypb.WorkflowQuery{
 					QueryType: "some_type",
 				},
 			},
@@ -153,7 +218,7 @@ func TestEmitActionMetric(t *testing.T) {
 			methodName: queryWorkflow,
 			fullName:   api.WorkflowServicePrefix + queryWorkflow,
 			req: &workflowservice.QueryWorkflowRequest{
-				Query: &query.WorkflowQuery{
+				Query: &querypb.WorkflowQuery{
 					QueryType: "__temporal_workflow_metadata",
 				},
 			},
@@ -262,7 +327,7 @@ func TestHandleError(t *testing.T) {
 		{
 			name:                      "resource-exhausted",
 			err:                       serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED, "resource exhausted"),
-			expectLogging:             true,
+			expectLogging:             false,
 			ServiceFailuresCount:      0,
 			ResourceExhaustedCount:    1,
 			ServiceErrorWithTypeCount: 1,

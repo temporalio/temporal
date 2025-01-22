@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 )
 
@@ -47,7 +48,7 @@ type (
 	// NamespaceValidatorInterceptor contains NamespaceValidateIntercept and StateValidationIntercept
 	NamespaceValidatorInterceptor struct {
 		namespaceRegistry               namespace.Registry
-		tokenSerializer                 common.TaskTokenSerializer
+		tokenSerializer                 *tasktoken.Serializer
 		enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
 		maxNamespaceLength              dynamicconfig.IntPropertyFn
 	}
@@ -115,7 +116,7 @@ func NewNamespaceValidatorInterceptor(
 ) *NamespaceValidatorInterceptor {
 	return &NamespaceValidatorInterceptor{
 		namespaceRegistry:               namespaceRegistry,
-		tokenSerializer:                 common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:                 tasktoken.NewSerializer(),
 		enableTokenNamespaceEnforcement: enableTokenNamespaceEnforcement,
 		maxNamespaceLength:              maxNamespaceLength,
 	}

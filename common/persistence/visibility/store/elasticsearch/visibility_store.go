@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -295,14 +296,11 @@ func GetDocID(workflowID string, runID string) string {
 	const maxDocIDLength = 512
 	// Generally runID is guid and this should never be the case.
 	if len(runID)+len(delimiter) >= maxDocIDLength {
-		if len(runID) >= maxDocIDLength {
-			return runID[0:maxDocIDLength]
-		}
-		return runID[0 : maxDocIDLength-len(delimiter)]
+		return util.TruncateUTF8(runID, maxDocIDLength)
 	}
 
 	if len(workflowID)+len(runID)+len(delimiter) > maxDocIDLength {
-		workflowID = workflowID[0 : maxDocIDLength-len(runID)-len(delimiter)]
+		workflowID = util.TruncateUTF8(workflowID, maxDocIDLength-len(runID)-len(delimiter))
 	}
 
 	return workflowID + delimiter + runID

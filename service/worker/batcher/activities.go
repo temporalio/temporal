@@ -50,7 +50,8 @@ import (
 )
 
 const (
-	pageSize = 1000
+	pageSize                 = 1000
+	statusRunningQueryFilter = "ExecutionStatus='Running'"
 )
 
 var (
@@ -108,11 +109,13 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		}
 	}
 
+	adjustedQuery := a.adjustQuery(batchParams)
+
 	if startOver {
 		estimateCount := int64(len(batchParams.Executions))
-		if len(batchParams.Query) > 0 {
+		if len(adjustedQuery) > 0 {
 			resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-				Query: batchParams.Query,
+				Query: adjustedQuery,
 			})
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
@@ -136,11 +139,11 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	for {
 		executions := batchParams.Executions
 		pageToken := hbd.PageToken
-		if len(batchParams.Query) > 0 {
+		if len(adjustedQuery) > 0 {
 			resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 				PageSize:      int32(pageSize),
 				NextPageToken: pageToken,
-				Query:         batchParams.Query,
+				Query:         adjustedQuery,
 			})
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
@@ -210,6 +213,20 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 		tag.WorkflowRunID(wfInfo.WorkflowExecution.RunID),
 		tag.WorkflowNamespace(wfInfo.WorkflowNamespace),
 	)
+}
+
+func (a *activities) adjustQuery(batchParams BatchParams) string {
+	if len(batchParams.Query) == 0 {
+		// don't add anything if query is empty
+		return batchParams.Query
+	}
+
+	switch batchParams.BatchType {
+	case BatchTypeTerminate, BatchTypeSignal, BatchTypeCancel, BatchTypeUpdateOptions:
+		return fmt.Sprintf("(%s) AND (%s)", batchParams.Query, statusRunningQueryFilter)
+	default:
+		return batchParams.Query
+	}
 }
 
 func (a *activities) getOperationRPS(requestedRPS float64) float64 {
@@ -321,6 +338,21 @@ func startTaskProcessor(
 						})
 						return err
 					})
+			case BatchTypeUpdateOptions:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						var err error
+						_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+							Namespace: batchParams.Namespace,
+							WorkflowExecution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+							WorkflowExecutionOptions: batchParams.UpdateOptionsParams.WorkflowExecutionOptions,
+							UpdateMask:               batchParams.UpdateOptionsParams.UpdateMask,
+						})
+						return err
+					})
 			}
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
@@ -411,7 +443,7 @@ func getResetEventIDByOptions(
 	case *commonpb.ResetOptions_WorkflowTaskId:
 		return target.WorkflowTaskId, nil
 	case *commonpb.ResetOptions_BuildId:
-		return getResetPoint(ctx, namespaceStr, workflowExecution, frontendClient, logger, target.BuildId, resetOptions.CurrentRunOnly)
+		return getResetPoint(ctx, namespaceStr, workflowExecution, frontendClient, target.BuildId, resetOptions.CurrentRunOnly)
 	default:
 		errorMsg := fmt.Sprintf("provided reset target (%+v) is not supported.", resetOptions.Target)
 		return 0, serviceerror.NewInvalidArgument(errorMsg)
@@ -504,7 +536,6 @@ func getResetPoint(
 	namespaceStr string,
 	execution *commonpb.WorkflowExecution,
 	frontendClient workflowservice.WorkflowServiceClient,
-	logger log.Logger,
 	buildId string,
 	currentRunOnly bool,
 ) (workflowTaskEventID int64, err error) {
