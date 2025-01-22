@@ -32,7 +32,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.opentelemetry.io/otel/trace/noop"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -56,6 +55,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/dummy"
@@ -1968,7 +1968,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		s.mockClusterMetadata,
 		nil,
 		metrics.NoopMetricsHandler,
-		noop.NewTracerProvider().Tracer(""),
+		telemetry.NoopTracer,
 	)
 }
 

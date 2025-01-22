@@ -32,7 +32,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace/noop"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/queues"
@@ -536,7 +536,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				mockMetadata,
 				logger,
 				metrics.NoopMetricsHandler,
-				noop.NewTracerProvider().Tracer(""),
+				telemetry.NoopTracer,
 			)
 			err := executable.Execute()
 			if len(p.ExpectedErrorSubstrings) > 0 {

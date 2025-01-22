@@ -32,11 +32,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 )
@@ -184,7 +184,7 @@ func (s *memoryScheduledQueueSuite) newSpeculativeWorkflowTaskTimeoutTestExecuta
 			nil,
 			nil,
 			nil,
-			noop.NewTracerProvider().Tracer(""),
+			telemetry.NoopTracer,
 		),
 		wttt,
 	)

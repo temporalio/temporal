@@ -35,13 +35,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.opentelemetry.io/otel/trace/noop"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -140,7 +140,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetClusterMetadata(),
 		logger,
 		metrics.NoopMetricsHandler,
-		noop.NewTracerProvider().Tracer(""),
+		telemetry.NoopTracer,
 		nil,
 		func() bool {
 			return false

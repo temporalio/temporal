@@ -39,7 +39,6 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
@@ -610,7 +609,7 @@ func ApplyClusterMetadataConfigProvider(
 		customDataStoreFactory,
 		logger,
 		metricsHandler,
-		noop.NewTracerProvider(),
+		telemetry.NoopTracerProvider,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
@@ -960,7 +959,7 @@ var ServiceTracingModule = fx.Options(
 	),
 	fx.Provide(func(lc fx.Lifecycle, r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) trace.TracerProvider {
 		if len(sps) == 0 {
-			return noop.NewTracerProvider()
+			return telemetry.NoopTracerProvider
 		}
 		opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
 		opts = append(opts, otelsdktrace.WithResource(r))
