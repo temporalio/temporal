@@ -1056,7 +1056,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 				updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), reqMsg.GetBody())
 				return []*protocolpb.Message{
 					{
-						Id:                 tv.Any().String(),
+						Id:                 tv.Any().String(), // does not exist
 						ProtocolInstanceId: updRequest.GetMeta().GetUpdateId(),
 						SequencingId:       nil,
 						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
@@ -1326,16 +1326,21 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			_, err := poller.PollAndProcessWorkflowTask()
 			updateResult := <-updateResultCh
 			if tc.RespondWorkflowTaskError != "" {
-				require.Error(s.T(), err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
-				require.Contains(s.T(), err.Error(), tc.RespondWorkflowTaskError)
+				s.ErrorContainsf(err, tc.RespondWorkflowTaskError,
+					"RespondWorkflowTaskCompleted should return an error containing `%v`", tc.RespondWorkflowTaskError)
 
-				// When worker returns validation error, API caller got timeout error.
-				require.Error(s.T(), updateResult.err)
-				require.True(s.T(), common.IsContextDeadlineExceededErr(updateResult.err), updateResult.err.Error())
-				require.Nil(s.T(), updateResult.response)
+				if updateResult.err != nil {
+					// Usually, the client times out the request before the server can respond.
+					s.Error(updateResult.err)
+					s.True(common.IsContextDeadlineExceededErr(updateResult.err), updateResult.err.Error())
+					s.Nil(updateResult.response)
+				} else {
+					// This happens when the server responds before the client times out the request.
+					s.Nil(updateResult.response.GetStage(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
+				}
 			} else {
-				require.NoError(s.T(), err)
-				require.NoError(s.T(), updateResult.err)
+				s.NoError(err)
+				s.NoError(updateResult.err)
 			}
 		})
 	}
