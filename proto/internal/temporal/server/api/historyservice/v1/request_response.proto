@@ -305,6 +305,7 @@ message RecordActivityTaskStartedResponse {
     string workflow_namespace = 7;
     temporal.server.api.clock.v1.VectorClock clock = 8;
     int64 version = 9;
+    temporal.api.common.v1.Priority priority = 10;
 }
 
 message RespondWorkflowTaskCompletedRequest {

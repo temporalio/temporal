@@ -468,6 +468,7 @@ func (d *DeploymentClientImpl) StartDeploymentSeries(
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		SearchAttributes:         d.buildSearchAttributes(),
 		Memo:                     memo,
+		Priority:                 &commonpb.Priority{},
 	}
 
 	historyStartReq := &historyservice.StartWorkflowExecutionRequest{
@@ -648,6 +649,7 @@ func (d *DeploymentClientImpl) updateWithStart(
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		SearchAttributes:         d.buildSearchAttributes(),
 		Memo:                     memo,
+		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
 
 	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
