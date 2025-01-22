@@ -1896,6 +1896,54 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	s.NoError(err)
 }
 
+func (s *FunctionalClustersTestSuite) getLastEvent(
+	client workflowservice.WorkflowServiceClient,
+	namespace string,
+	execution *commonpb.WorkflowExecution,
+) *historypb.HistoryEvent {
+
+	resp, err := client.GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: namespace,
+		Execution: execution,
+	})
+	s.NoError(err)
+	s.NotNil(resp.History)
+	s.NotEmpty(resp.History.Events)
+
+	return resp.History.Events[len(resp.History.Events)-1]
+}
+
+func (s *FunctionalClustersTestSuite) getNewExecutionRunIdFromLastEvent(
+	client workflowservice.WorkflowServiceClient,
+	namespace string,
+	execution *commonpb.WorkflowExecution,
+) string {
+	lastEvent := s.getLastEvent(client, namespace, execution)
+	s.NotNil(lastEvent)
+
+	if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
+		s.NotNil(attrs)
+		return attrs.GetNewExecutionRunId()
+	}
+	return ""
+}
+
+func (s *FunctionalClustersTestSuite) waitForNewRunToStart(
+	client workflowservice.WorkflowServiceClient,
+	namespace string,
+	execution *commonpb.WorkflowExecution,
+) string {
+	var newRunID string
+	s.Eventually(func() bool {
+		newRunID = s.getNewExecutionRunIdFromLastEvent(client, namespace, execution)
+		return newRunID != ""
+	}, 10*time.Second, 100*time.Millisecond)
+
+	s.NotEmpty(newRunID, "New run should have started")
+	return newRunID
+}
+
 func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	namespace := "test-cron-workflow-complete-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.FrontendClient() // active
@@ -1987,6 +2035,8 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
   5 v1 WorkflowExecutionCompleted`, events)
+
+	_ = s.waitForNewRunToStart(client1, namespace, executions[0])
 
 	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
