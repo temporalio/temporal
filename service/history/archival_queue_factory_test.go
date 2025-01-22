@@ -29,13 +29,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace/noop"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -83,7 +83,7 @@ func TestArchivalQueueFactory(t *testing.T) {
 			TimeSource:        clock.NewEventTimeSource(),
 			MetricsHandler:    metricsHandler,
 			Logger:            log.NewNoopLogger(),
-			TracerProvider:    noop.NewTracerProvider(),
+			TracerProvider:    telemetry.NoopTracerProvider,
 		},
 	})
 	queue := queueFactory.CreateQueue(mockShard, nil)
