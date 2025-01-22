@@ -467,7 +467,6 @@ func (d *ClientImpl) Start(
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		SearchAttributes:         d.buildSearchAttributes(),
 		Memo:                     memo,
-		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
 
 	historyStartReq := &historyservice.StartWorkflowExecutionRequest{
