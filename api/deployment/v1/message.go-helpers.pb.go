@@ -362,6 +362,43 @@ func (this *QueryDescribeVersionResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type QueryDescribeWorkerDeploymentResponse to the protobuf v3 wire format
+func (val *QueryDescribeWorkerDeploymentResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type QueryDescribeWorkerDeploymentResponse from the protobuf v3 wire format
+func (val *QueryDescribeWorkerDeploymentResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *QueryDescribeWorkerDeploymentResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two QueryDescribeWorkerDeploymentResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *QueryDescribeWorkerDeploymentResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *QueryDescribeWorkerDeploymentResponse
+	switch t := that.(type) {
+	case *QueryDescribeWorkerDeploymentResponse:
+		that1 = t
+	case QueryDescribeWorkerDeploymentResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type VersionWorkflowMemo to the protobuf v3 wire format
 func (val *VersionWorkflowMemo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -724,6 +761,80 @@ func (this *WorkerDeploymentWorkflowMemo) Equal(that interface{}) bool {
 	case *WorkerDeploymentWorkflowMemo:
 		that1 = t
 	case WorkerDeploymentWorkflowMemo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AddVersionToWorkerDeploymentRequest to the protobuf v3 wire format
+func (val *AddVersionToWorkerDeploymentRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AddVersionToWorkerDeploymentRequest from the protobuf v3 wire format
+func (val *AddVersionToWorkerDeploymentRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AddVersionToWorkerDeploymentRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AddVersionToWorkerDeploymentRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AddVersionToWorkerDeploymentRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AddVersionToWorkerDeploymentRequest
+	switch t := that.(type) {
+	case *AddVersionToWorkerDeploymentRequest:
+		that1 = t
+	case AddVersionToWorkerDeploymentRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AddVersionToWorkerDeploymentResponse to the protobuf v3 wire format
+func (val *AddVersionToWorkerDeploymentResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AddVersionToWorkerDeploymentResponse from the protobuf v3 wire format
+func (val *AddVersionToWorkerDeploymentResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AddVersionToWorkerDeploymentResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AddVersionToWorkerDeploymentResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AddVersionToWorkerDeploymentResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AddVersionToWorkerDeploymentResponse
+	switch t := that.(type) {
+	case *AddVersionToWorkerDeploymentResponse:
+		that1 = t
+	case AddVersionToWorkerDeploymentResponse:
 		that1 = &t
 	default:
 		return false

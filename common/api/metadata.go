@@ -152,6 +152,7 @@ var (
 		"SetCurrentDeployment":               {Scope: ScopeNamespace, Access: AccessWrite},    // [cleanup-wv-pre-release]
 		"DescribeWorkerDeploymentVersion":    {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"SetCurrentDeploymentVersion":        {Scope: ScopeNamespace, Access: AccessWrite},
+		"DescribeWorkerDeployment":           {Scope: ScopeNamespace, Access: AccessReadOnly},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},

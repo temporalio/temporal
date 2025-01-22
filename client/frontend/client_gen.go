@@ -133,6 +133,16 @@ func (c *clientImpl) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkerDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeWorkerDeployment(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeWorkerDeploymentVersion(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkerDeploymentVersionRequest,
