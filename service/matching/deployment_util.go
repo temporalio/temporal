@@ -47,3 +47,12 @@ func findDeployment(deployments *persistencespb.DeploymentData, deployment *depl
 	}
 	return -1
 }
+
+func findDeploymentVersion(deploymentVersions *persistencespb.DeploymentVersionData, deployment *deploymentpb.Deployment) int {
+	for i, d := range deploymentVersions.GetDeploymentVersions() {
+		if d.DeploymentName == deployment.SeriesName && d.Version == deployment.BuildId {
+			return i
+		}
+	}
+	return -1
+}

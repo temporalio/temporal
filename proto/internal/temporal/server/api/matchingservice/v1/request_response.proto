@@ -327,10 +327,12 @@ message SyncDeploymentUserDataRequest {
     // routing, the user data is owned by the WORKFLOW task queue.
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
 
-    // This is the deployment being modified.
+    // This is the deployment being modified. [deprecated=true]
     temporal.api.deployment.v1.Deployment deployment = 4; 
-    // Data for this deployment.
+    // Data for this deployment. [deprecated=true]
     temporal.server.api.deployment.v1.TaskQueueData data = 5;
+    // Data for this deployment version. version + deployment_name to be added.
+    temporal.server.api.deployment.v1.DeploymentVersionTaskQueueData version_data = 6;
 }
 
 message SyncDeploymentUserDataResponse {

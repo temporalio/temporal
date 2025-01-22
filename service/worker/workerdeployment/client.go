@@ -85,10 +85,9 @@ type Client interface {
 		namespaceEntry *namespace.Namespace,
 		deploymentName string,
 		version string,
-		updateMetadata *deploymentpb.UpdateDeploymentMetadata,
 		identity string,
 		requestID string,
-	) (*deploymentpb.WorkerDeploymentVersionInfo, *deploymentpb.WorkerDeploymentVersionInfo, error)
+	) (*deploymentspb.SetCurrentVersionResponse, error)
 
 	// Only used internally by Worker Deployment Version workflow:
 	StartWorkerDeployment(
@@ -268,72 +267,14 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	return d.DeploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)
 }
 
-func (d *ClientImpl) GetCurrentVersion(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	deploymentName string,
-) (_ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
-	//revive:disable-next-line:defer
-	defer d.record("GetCurrentDeployment", &retErr, deploymentName)()
-
-	// Validating params
-	err := ValidateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
-	if err != nil {
-		return nil, err
-	}
-
-	workflowID := GenerateWorkflowID(deploymentName)
-	resp, err := d.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: namespaceEntry.ID().String(),
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: namespaceEntry.Name().String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-			},
-		},
-	})
-
-	if err != nil {
-		return nil, err
-	}
-	if resp == nil {
-		return nil, err
-	}
-
-	// Decode value from memo
-	val := resp.WorkflowExecutionInfo.GetMemo().GetFields()[WorkerDeploymentMemoField]
-	if val == nil {
-		// memo missing, series has no set current deployment
-		return nil, nil
-	}
-	var memo deploymentspb.WorkerDeploymentWorkflowMemo
-	err = sdk.PreferProtoDataConverter.FromPayload(val, &memo)
-	if err != nil {
-		return nil, err
-	}
-
-	// Series has no set current deployment
-	if memo.CurrentVersion == "" {
-		return nil, nil
-	}
-
-	deploymentInfo, err := d.DescribeVersion(ctx, namespaceEntry, memo.CurrentVersion)
-	if err != nil {
-		return nil, nil
-	}
-
-	return deploymentInfo, nil
-}
-
 func (d *ClientImpl) SetCurrentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
 	version string,
-	updateMetadata *deploymentpb.UpdateDeploymentMetadata,
 	identity string,
 	requestID string,
-) (_ *deploymentpb.WorkerDeploymentVersionInfo, _ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
+) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
 
@@ -343,7 +284,7 @@ func (d *ClientImpl) SetCurrentVersion(
 		RequestId: requestID,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
@@ -357,27 +298,27 @@ func (d *ClientImpl) SetCurrentVersion(
 		requestID,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
-		return nil, nil, serviceerror.NewAlreadyExist(fmt.Sprintf("Build ID %q is already current for %q",
+		return nil, serviceerror.NewAlreadyExist(fmt.Sprintf("Version %q is already current for %q",
 			version, deploymentName))
 	} else if failure != nil {
 		// TODO: is there an easy way to recover the original type here?
-		return nil, nil, serviceerror.NewInternal(failure.Message)
+		return nil, serviceerror.NewInternal(failure.Message)
 	}
 
 	success := outcome.GetSuccess()
 	if success == nil {
-		return nil, nil, serviceerror.NewInternal("outcome missing success and failure")
+		return nil, serviceerror.NewInternal("outcome missing success and failure")
 	}
 
 	var res deploymentspb.SetCurrentVersionResponse
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return VersionStateToVersionInfo(nil), VersionStateToVersionInfo(nil), nil
+	return &res, nil
 }
 
 func (d *ClientImpl) StartWorkerDeployment(
@@ -826,6 +767,11 @@ func (d *ClientImpl) DeploymentStateToDeploymentInfo(ctx context.Context, namesp
 	var workerDeploymentInfo deploymentpb.WorkerDeploymentInfo
 	workerDeploymentInfo.Name = deploymentName
 	workerDeploymentInfo.CreateTime = state.CreateTime
+
+	// RoutingInfo
+	workerDeploymentInfo.RoutingInfo = &deploymentpb.RoutingInfo{
+		CurrentVersion: state.CurrentVersion,
+	}
 
 	for _, version := range state.Versions {
 		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, version)

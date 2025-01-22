@@ -3345,8 +3345,46 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	}, nil
 }
 
+func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentCurrentVersionRequest) (_ *workflowservice.SetWorkerDeploymentCurrentVersionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO (Shivam) : Verify if sending in uuid.New() is correct
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version.Value, request.Identity, uuid.New())
+	if err != nil {
+		switch err.(type) {
+		case *serviceerror.AlreadyExists:
+			return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
+				PreviousVersion: request.Version.Value, // previousVersion is the version which was requested to be set as current
+			}, nil
+		default:
+			return nil, err
+		}
+	}
+
+	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
+		PreviousVersion: resp.PreviousCurrentVersion,
+	}, nil
+}
+
 // TODO (Shivam): Implement this
-func (wh *WorkflowHandler) SetCurrentDeploymentVersion(ctx context.Context, request *workflowservice.SetCurrentDeploymentVersionRequest) (_ *workflowservice.SetCurrentDeploymentVersionResponse, retError error) {
+func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentRampingVersionRequest) (_ *workflowservice.SetWorkerDeploymentRampingVersionResponse, retError error) {
 	return nil, nil
 }
 

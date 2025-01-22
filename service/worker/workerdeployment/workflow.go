@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
@@ -136,9 +135,33 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.lock.Unlock()
 	}()
 
-	// do work
+	prevCurrentVersion := d.State.CurrentVersion
 
-	return &deploymentspb.SetCurrentVersionResponse{}, nil
+	// TODO (Shivam) - what happens if we fail in the activity? We still return that the new current version is set?
+
+	// update local state first
+	d.State.CurrentVersion = args.Version
+	d.State.CurrentChangedTime = timestamppb.New(workflow.Now(ctx))
+
+	if err := d.updateMemo(ctx); err != nil {
+		return nil, err
+	}
+
+	// tell new current that it's now current
+	if _, err = d.syncVersion(ctx, d.State.CurrentVersion); err != nil {
+		return nil, err
+	}
+
+	// tell previous current that it's no longer current
+	if prevCurrentVersion != "" {
+		if _, err = d.syncVersion(ctx, prevCurrentVersion); err != nil {
+			return nil, err
+		}
+	}
+
+	return &deploymentspb.SetCurrentVersionResponse{
+		PreviousCurrentVersion: prevCurrentVersion,
+	}, nil
 }
 
 func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) error {
@@ -176,7 +199,7 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	return nil
 }
 
-func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string, updateMetadata *deploymentpb.UpdateDeploymentMetadata) (*deploymentspb.VersionLocalState, error) {
+func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string) (*deploymentspb.VersionLocalState, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
 	setCur := &deploymentspb.SyncVersionStateArgs_SetCurrent{}

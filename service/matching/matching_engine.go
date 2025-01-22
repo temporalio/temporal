@@ -1651,20 +1651,41 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		if data.PerType[int32(req.TaskQueueType)] == nil {
 			data.PerType[int32(req.TaskQueueType)] = &persistencespb.TaskQueueTypeUserData{}
 		}
-		if data.PerType[int32(req.TaskQueueType)].DeploymentData == nil {
-			data.PerType[int32(req.TaskQueueType)].DeploymentData = &persistencespb.DeploymentData{}
-		}
 
-		// set/append the new data
-		deploymentData := data.PerType[int32(req.TaskQueueType)].DeploymentData
-		if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
-			deploymentData.Deployments[idx].Data = req.Data
+		// [cleanup-wv-pre-release]
+		if req.Data != nil {
+			if data.PerType[int32(req.TaskQueueType)].DeploymentData == nil {
+				data.PerType[int32(req.TaskQueueType)].DeploymentData = &persistencespb.DeploymentData{}
+			}
+
+			// set/append the new data
+			deploymentData := data.PerType[int32(req.TaskQueueType)].DeploymentData
+			if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
+				deploymentData.Deployments[idx].Data = req.Data
+			} else {
+				deploymentData.Deployments = append(
+					deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
+						Deployment: req.Deployment,
+						Data:       req.Data,
+					})
+			}
 		} else {
-			deploymentData.Deployments = append(
-				deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
-					Deployment: req.Deployment,
-					Data:       req.Data,
-				})
+			if data.PerType[int32(req.TaskQueueType)].DeploymentVersionData == nil {
+				data.PerType[int32(req.TaskQueueType)].DeploymentVersionData = &persistencespb.DeploymentVersionData{}
+			}
+
+			// set/append the new data
+			deploymentVersionData := data.PerType[int32(req.TaskQueueType)].DeploymentVersionData
+			if idx := findDeploymentVersion(deploymentVersionData, req.Deployment); idx >= 0 {
+				deploymentVersionData.DeploymentVersions[idx].Data = req.VersionData
+			} else {
+				deploymentVersionData.DeploymentVersions = append(
+					deploymentVersionData.DeploymentVersions, &persistencespb.DeploymentVersionData_DeploymentVersionDataItem{
+						DeploymentName: req.Deployment.SeriesName,
+						Version:        req.Deployment.BuildId,
+						Data:           req.VersionData,
+					})
+			}
 		}
 
 		data.Clock = now

@@ -36,6 +36,7 @@ import "temporal/api/common/v1/message.proto";
 // and synced to task queue user data (for each worker deployment version).
 message DeploymentVersionTaskQueueData {
     // TODO (Shivam): Add PollerStatus after it gets added in the API repo.
+    google.protobuf.Timestamp last_became_current_time = 1;
 }
 
 // Local state for Worker Deployment Version
@@ -165,6 +166,7 @@ message SetCurrentVersionArgs {
 
 // used as Worker Deployment update response:
 message SetCurrentVersionResponse {
+    string previous_current_version = 1;
 }
 
 // used as Worker Deployment activity input:

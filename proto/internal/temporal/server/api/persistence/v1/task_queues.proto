@@ -114,14 +114,26 @@ message DeploymentData {
     repeated DeploymentDataItem deployments = 1;
 
     message DeploymentDataItem {
-        temporal.api.deployment.v1.Deployment deployment = 1;
-        temporal.server.api.deployment.v1.TaskQueueData data = 2;
+        temporal.api.deployment.v1.Deployment deployment = 1; 
+        temporal.server.api.deployment.v1.TaskQueueData data = 2; 
+    }
+}
+
+message DeploymentVersionData {
+    // Set of deployment versions that this task queue belongs to.
+    repeated DeploymentVersionDataItem deployment_versions = 1;
+
+    message DeploymentVersionDataItem {
+        string deployment_name = 1;
+        string version = 2;
+        temporal.server.api.deployment.v1.DeploymentVersionTaskQueueData data = 3;
     }
 }
 
 // Container for all persistent user data that varies per task queue type within a family.
 message TaskQueueTypeUserData {
     DeploymentData deployment_data = 1;
+    DeploymentVersionData deployment_version_data = 2;
 }
 
 // Container for all persistent user provided data for a task queue family.

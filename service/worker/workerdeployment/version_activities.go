@@ -29,6 +29,7 @@ import (
 	"context"
 	"sync"
 
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/sdk/activity"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -72,8 +73,12 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 				NamespaceId:   a.namespace.ID().String(),
 				TaskQueue:     syncData.Name,
 				TaskQueueType: syncData.Type,
-				Deployment:    nil, // TODO (Shivam): Pass nil until matchingservice.SyncDeploymentUserDataRequest gets updated.
-				Data:          nil, // TODO (Shivam): Pass nil until matchingservice.SyncDeploymentUserDataRequest gets updated.
+				Deployment: &deploymentpb.Deployment{
+					SeriesName: input.DeploymentName,
+					BuildId:    input.Version,
+				},
+				Data:        nil,
+				VersionData: syncData.Data,
 			})
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
