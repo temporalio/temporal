@@ -6096,6 +6096,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					ms.executionState.RunId,
 				)
 				var firstEventID, firstEventVersion, nextEventID int64
+				var lastVersionHistoryItem *historyspb.VersionHistoryItem
 				if len(eventBatches) > 0 {
 					firstEventID = eventBatches[0][0].EventId
 					firstEventVersion = eventBatches[0][0].Version
@@ -6110,9 +6111,10 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					if err != nil {
 						return err
 					}
-					firstEventID = item.EventId
-					firstEventVersion = item.Version
-					nextEventID = item.EventId + 1
+					firstEventID = common.EmptyEventID
+					firstEventVersion = common.EmptyVersion
+					nextEventID = common.EmptyEventID
+					lastVersionHistoryItem = versionhistory.CopyVersionHistoryItem(item)
 				}
 				transitionHistory := ms.executionInfo.TransitionHistory
 				if len(transitionHistory) > 0 && CompareVersionedTransition(
@@ -6120,14 +6122,15 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
 				) != 0 {
 					syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
-						WorkflowKey:         workflowKey,
-						VisibilityTimestamp: now,
-						Priority:            enumsspb.TASK_PRIORITY_HIGH,
-						VersionedTransition: transitionHistory[len(transitionHistory)-1],
-						FirstEventID:        firstEventID,
-						FirstEventVersion:   firstEventVersion,
-						NextEventID:         nextEventID,
-						TaskEquivalents:     replicationTasks,
+						WorkflowKey:            workflowKey,
+						VisibilityTimestamp:    now,
+						Priority:               enumsspb.TASK_PRIORITY_HIGH,
+						VersionedTransition:    transitionHistory[len(transitionHistory)-1],
+						FirstEventID:           firstEventID,
+						FirstEventVersion:      firstEventVersion,
+						NextEventID:            nextEventID,
+						TaskEquivalents:        replicationTasks,
+						LastVersionHistoryItem: lastVersionHistoryItem,
 					}
 
 					// versioned transition updated in the transaction

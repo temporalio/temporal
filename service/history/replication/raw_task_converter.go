@@ -730,12 +730,16 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 	if err != nil {
 		return nil, err
 	}
-	lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, taskInfo.NextEventID-1)
+	var nextEventId = taskInfo.NextEventID
+	if nextEventId == common.EmptyEventID {
+		nextEventId = taskInfo.LastVersionHistoryItem.GetEventId() + 1
+	}
+	lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, nextEventId-1)
 	if err != nil {
 		return nil, err
 	}
 	capItems, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(currentHistory, &historyspb.VersionHistoryItem{
-		EventId: taskInfo.NextEventID - 1,
+		EventId: nextEventId - 1,
 		Version: lastEventVersion,
 	})
 	if err != nil {
@@ -751,7 +755,7 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 				RunId:               taskInfo.RunID,
 				NewRunId:            taskInfo.NewRunID,
 				EventVersionHistory: capItems.Items,
-				NextEventId:         taskInfo.NextEventID,
+				NextEventId:         nextEventId,
 			},
 		},
 		VersionedTransition: taskInfo.VersionedTransition,
