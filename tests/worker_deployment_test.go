@@ -224,8 +224,8 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion_I
 	s.Equal(firstVersion.DeploymentVersion(), resp.PreviousVersion)
 }
 
-// Name is used by testvars. We use a shorten test name in variables so that physical task queue IDs
-// do not grow larger that DB column limit (currently as low as 272 chars).
+// Name is used by testvars. We use a shortened test name in variables so that physical task queue IDs
+// do not grow larger than DB column limit (currently as low as 272 chars).
 func (s *WorkerDeploymentSuite) Name() string {
 	fullName := s.T().Name()
 	if len(fullName) <= 30 {

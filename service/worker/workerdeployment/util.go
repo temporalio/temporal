@@ -90,9 +90,9 @@ var (
 	)
 )
 
-// ValidateVersionWfParams is a helper that verifies if the fields used for generating
+// validateVersionWfParams is a helper that verifies if the fields used for generating
 // Worker Deployment Version related workflowID's are valid
-func ValidateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
+func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
