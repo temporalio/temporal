@@ -138,6 +138,7 @@ var (
 		"GetDeploymentReachability":         func() any { return &workflowservice.GetDeploymentReachabilityResponse{} }, // [cleanup-wv-pre-release]
 		"GetCurrentDeployment":              func() any { return &workflowservice.GetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
 		"SetCurrentDeployment":              func() any { return &workflowservice.SetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
+		"DescribeWorkerDeployment":        func() any { return &workflowservice.DescribeWorkerDeploymentResponse{} },
 		"DescribeWorkerDeploymentVersion":   func() any { return &workflowservice.DescribeWorkerDeploymentVersionResponse{} },
 		"SetWorkerDeploymentCurrentVersion": func() any { return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{} },
 		"SetWorkerDeploymentRampingVersion": func() any { return &workflowservice.SetWorkerDeploymentRampingVersionResponse{} },

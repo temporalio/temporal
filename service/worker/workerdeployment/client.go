@@ -74,6 +74,12 @@ type Client interface {
 		version string,
 	) (*deploymentpb.WorkerDeploymentVersionInfo, error)
 
+	DescribeWorkerDeployment(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName string,
+	) (*deploymentpb.WorkerDeploymentInfo, error)
+
 	SetCurrentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -84,7 +90,7 @@ type Client interface {
 		requestID string,
 	) (*deploymentpb.WorkerDeploymentVersionInfo, *deploymentpb.WorkerDeploymentVersionInfo, error)
 
-	// Only used internally by Worker Deployment Version workflow:
+	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
 	StartWorkerDeployment(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -93,7 +99,7 @@ type Client interface {
 		requestID string,
 	) error
 
-	// Only used internally by WorkerDeployment workflow:
+	// Used internally by the Worker Deployment workflow in its SyncWorkerDeploymentVersion Activity
 	SyncVersionWorkflowFromWorkerDeployment(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -102,6 +108,16 @@ type Client interface {
 		identity string,
 		requestID string,
 	) (*deploymentspb.SyncVersionStateResponse, error)
+
+	// Used internally by the Worker Deployment Version workflow in its AddVersionToWorkerDeployment Activity
+	AddVersionToWorkerDeployment(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName string,
+		version string,
+		identity string,
+		requestID string,
+	) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error)
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
@@ -175,7 +191,7 @@ func (d *ClientImpl) DescribeVersion(
 	defer d.record("DescribeVersion", &retErr, version)()
 
 	// validating params
-	err := ValidateVersionWfParams(WorkerDeploymentVersionFieldName, version, d.maxIDLengthLimit())
+	err := validateVersionWfParams(WorkerDeploymentVersionFieldName, version, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +224,48 @@ func (d *ClientImpl) DescribeVersion(
 		return nil, err
 	}
 
-	return stateToInfo(queryResponse.VersionState), nil
+	return versionStateToVersionInfo(queryResponse.VersionState), nil
+}
+
+func (d *ClientImpl) DescribeWorkerDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName string,
+) (_ *deploymentpb.WorkerDeploymentInfo, retErr error) {
+	//revive:disable-next-line:defer
+	defer d.record("DescribeWorkerDeployment", &retErr, deploymentName)()
+
+	// validating params
+	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
+	deploymentWorkflowID := GenerateWorkflowID(deploymentName)
+
+	req := &historyservice.QueryWorkflowRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		Request: &workflowservice.QueryWorkflowRequest{
+			Namespace: namespaceEntry.Name().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: deploymentWorkflowID,
+			},
+			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
+		},
+	}
+
+	res, err := d.historyClient.QueryWorkflow(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	var queryResponse deploymentspb.QueryDescribeWorkerDeploymentResponse
+	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	return d.deploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)
 }
 
 func (d *ClientImpl) GetCurrentVersion(
@@ -220,7 +277,7 @@ func (d *ClientImpl) GetCurrentVersion(
 	defer d.record("GetCurrentDeployment", &retErr, deploymentName)()
 
 	// Validating params
-	err := ValidateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +377,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, nil, err
 	}
-	return stateToInfo(nil), stateToInfo(nil), nil
+	return versionStateToVersionInfo(nil), versionStateToVersionInfo(nil), nil
 }
 
 func (d *ClientImpl) StartWorkerDeployment(
@@ -435,11 +492,11 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	requestID string,
 ) (*updatepb.Outcome, error) {
 	// validate params which are used for building workflowIDs
-	err := ValidateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
-	err = ValidateVersionWfParams(WorkerDeploymentVersionFieldName, version, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentVersionFieldName, version, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -486,7 +543,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 	requestID string,
 ) (*updatepb.Outcome, error) {
 	// validate params which are used for building workflowIDs
-	err := ValidateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -517,6 +574,57 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		identity,
 		requestID,
 	)
+}
+
+func (d *ClientImpl) AddVersionToWorkerDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName string,
+	version string,
+	identity string,
+	requestID string,
+) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(version)
+	if err != nil {
+		return nil, err
+	}
+
+	updateRequest := &updatepb.Request{
+		Input: &updatepb.Input{Name: AddVersionToWorkerDeployment, Args: updatePayload},
+		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+	}
+
+	workflowID := GenerateWorkflowID(deploymentName)
+
+	outcome, err := d.updateWithStart(
+		ctx,
+		namespaceEntry,
+		WorkerDeploymentVersionWorkflowType,
+		workflowID,
+		nil,
+		nil,
+		updateRequest,
+		identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyExistsType {
+		// pretend this is a success
+		return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
+	} else if failure != nil {
+		// TODO: is there an easy way to recover the original type here?
+		return nil, serviceerror.NewInternal(fmt.Sprintf("failed to add version %v to worker deployment %v with error %v", version, deploymentName, failure.Message))
+	}
+
+	success := outcome.GetSuccess()
+	if success == nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("outcome missing success and failure while adding version %v to worker deployment %v", version, deploymentName))
+	}
+
+	return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
 }
 
 func (d *ClientImpl) updateWithStart(
@@ -683,7 +791,7 @@ func (d *ClientImpl) record(operation string, retErr *error, args ...any) func()
 }
 
 //nolint:staticcheck
-func stateToInfo(state *deploymentspb.VersionLocalState) *deploymentpb.WorkerDeploymentVersionInfo {
+func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deploymentpb.WorkerDeploymentVersionInfo {
 	if state == nil {
 		return nil
 	}
@@ -707,4 +815,29 @@ func stateToInfo(state *deploymentspb.VersionLocalState) *deploymentpb.WorkerDep
 		CreateTime:     state.CreateTime,
 		TaskQueueInfos: taskQueues,
 	}
+}
+
+func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namespaceEntry *namespace.Namespace,
+	deploymentName string, state *deploymentspb.WorkerDeploymentLocalState) (*deploymentpb.WorkerDeploymentInfo, error) {
+	if state == nil {
+		return nil, nil
+	}
+
+	var workerDeploymentInfo deploymentpb.WorkerDeploymentInfo
+	workerDeploymentInfo.Name = deploymentName
+	workerDeploymentInfo.CreateTime = state.CreateTime
+
+	for _, version := range state.Versions {
+		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, version)
+		if err != nil {
+			return nil, err
+		}
+		// TODO (Shivam) - Add WorkflowVersioningMode + AcceptsNewExecutions
+		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
+			Version:    versionInfo.Version,
+			CreateTime: versionInfo.CreateTime,
+		})
+	}
+
+	return &workerDeploymentInfo, nil
 }
