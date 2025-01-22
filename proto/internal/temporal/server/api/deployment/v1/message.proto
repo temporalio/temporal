@@ -79,7 +79,7 @@ message WorkerDeploymentWorkflowArgs {
 message WorkerDeploymentLocalState {
     string current_version = 1;
     google.protobuf.Timestamp current_changed_time = 2;
-    // experimental
+    // Versions that have been registered in this deployment.
     repeated string versions = 3; 
     google.protobuf.Timestamp create_time = 4;
 }

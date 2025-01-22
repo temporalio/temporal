@@ -134,7 +134,7 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 	for _, test := range testCases {
 		fieldName := test.FieldName
 		field := test.Input
-		err := ValidateVersionWfParams(fieldName, field, testMaxIDLengthLimit)
+		err := validateVersionWfParams(fieldName, field, testMaxIDLengthLimit)
 
 		if test.ExpectedError == nil {
 			d.NoError(err)

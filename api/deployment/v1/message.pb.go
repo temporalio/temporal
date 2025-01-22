@@ -328,7 +328,7 @@ type WorkerDeploymentLocalState struct {
 
 	CurrentVersion     string                 `protobuf:"bytes,1,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"`
 	CurrentChangedTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=current_changed_time,json=currentChangedTime,proto3" json:"current_changed_time,omitempty"`
-	// experimental
+	// Versions that have been registered in this deployment.
 	Versions   []string               `protobuf:"bytes,3,rep,name=versions,proto3" json:"versions,omitempty"`
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 }

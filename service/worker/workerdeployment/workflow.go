@@ -148,7 +148,7 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) er
 
 	for _, v := range d.State.Versions {
 		if v == version {
-			return temporal.NewApplicationError("deplopyment version already registered", errVersionAlreadyExistsType)
+			return temporal.NewApplicationError("deployment version already registered", errVersionAlreadyExistsType)
 		}
 	}
 
