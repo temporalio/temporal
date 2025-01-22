@@ -132,7 +132,7 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 	numberOfDeployments := 1
 
 	// Starting a deployment workflow
-	go s.pollFromDeployment(ctx, tv.TaskQueue(), tv.DeploymentSeries(), tv.DeploymentVersion())
+	go s.pollFromDeployment(ctx, tv.TaskQueue(), tv.DeploymentName(), tv.DeploymentVersion())
 
 	// Querying the Deployment
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -144,7 +144,7 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 		})
 		a.NoError(err)
 
-		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
+		a.Equal(tv.DeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
 		a.Equal(tv.DeploymentVersion(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 
 		a.Equal(numberOfDeployments, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
@@ -166,8 +166,8 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 	for p := 0; p < 4; p++ {
 		tq := &taskqueuepb.TaskQueue{Name: root.TaskQueue().NormalPartition(p).RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 		for i := 0; i < 3; i++ {
-			go s.pollFromDeployment(ctx, tq, tv.DeploymentSeries(), tv.DeploymentVersion())
-			go s.pollActivityFromDeployment(ctx, tq, tv.DeploymentSeries(), tv.DeploymentVersion())
+			go s.pollFromDeployment(ctx, tq, tv.DeploymentName(), tv.DeploymentVersion())
+			go s.pollActivityFromDeployment(ctx, tq, tv.DeploymentName(), tv.DeploymentVersion())
 		}
 	}
 
@@ -182,7 +182,7 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 		if !a.NoError(err) {
 			return
 		}
-		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
+		a.Equal(tv.DeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
 		a.Equal(tv.DeploymentVersion(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 
 		if !a.Equal(2, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos())) {
