@@ -79,7 +79,12 @@ message WorkerDeploymentWorkflowArgs {
 message WorkerDeploymentLocalState {
     string current_version = 1;
     google.protobuf.Timestamp current_changed_time = 2;
-    // Versions that have been registered in this deployment.
+    // Deployment Versions that are currently tracked in this Deployment. 
+    // A DeploymentVersion will be cleaned up automatically if all the following conditions meet:
+    // - It does not receive new executions (see WorkerDeploymentVersionInfo.accepts_new_executions) 
+    // - It has no active pollers (see WorkerDeploymentVersionInfo.pollers_status) 
+    // - It is drained (see WorkerDeploymentVersionInfo.drainage_status)
+    // TODO (Shivam) - Removal of registered versions based on the above conditions.
     repeated string versions = 3; 
     google.protobuf.Timestamp create_time = 4;
 }

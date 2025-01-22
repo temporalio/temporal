@@ -328,7 +328,12 @@ type WorkerDeploymentLocalState struct {
 
 	CurrentVersion     string                 `protobuf:"bytes,1,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"`
 	CurrentChangedTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=current_changed_time,json=currentChangedTime,proto3" json:"current_changed_time,omitempty"`
-	// Versions that have been registered in this deployment.
+	// Deployment Versions that are currently tracked in this Deployment.
+	// A DeploymentVersion will be cleaned up automatically if all the following conditions meet:
+	// - It does not receive new executions (see WorkerDeploymentVersionInfo.accepts_new_executions)
+	// - It has no active pollers (see WorkerDeploymentVersionInfo.pollers_status)
+	// - It is drained (see WorkerDeploymentVersionInfo.drainage_status)
+	// TODO (Shivam) - Removal of registered versions based on the above conditions.
 	Versions   []string               `protobuf:"bytes,3,rep,name=versions,proto3" json:"versions,omitempty"`
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 }
