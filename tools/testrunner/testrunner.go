@@ -314,8 +314,10 @@ func Main() {
 		}
 		// Don't rerun if there's more than 10 failures in a single suite.
 		if len(failures) > 10 && retry < r.retries {
-			log.Printf("will not rerun tests, number of failures exceeds configured threshold (%d/%d)", len(failures), 10)
-			break
+			log.Printf(
+				"number of failures exceeds configured threshold (%d/%d) for narrowing down tests to retry, retrying with previous attempt's args",
+				len(failures), 10)
+			continue
 		}
 		args = stripRunFromArgs(args)
 		for i, failure := range failures {
