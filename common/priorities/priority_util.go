@@ -38,36 +38,11 @@ func Merge(
 		return cmp.Or(base, override)
 	}
 
-	priorityKey := base.PriorityKey
-	if override.PriorityKey != 0 {
-		priorityKey = override.PriorityKey
-	}
-
-	fairnessKey := base.FairnessKey
-	if override.FairnessKey != "" {
-		fairnessKey = override.FairnessKey
-	}
-
-	fairnessWeight := base.FairnessWeight
-	if override.FairnessWeight != 0 {
-		fairnessWeight = override.FairnessWeight
-	}
-
-	fairnessRateLimit := base.FairnessRateLimit
-	if override.FairnessRateLimit != 0 {
-		fairnessRateLimit = override.FairnessRateLimit
-	}
-
-	orderingKey := base.OrderingKey
-	if override.OrderingKey != 0 {
-		orderingKey = override.OrderingKey
-	}
-
 	return &commonpb.Priority{
-		PriorityKey:       priorityKey,
-		FairnessKey:       fairnessKey,
-		FairnessWeight:    fairnessWeight,
-		FairnessRateLimit: fairnessRateLimit,
-		OrderingKey:       orderingKey,
+		PriorityKey:       cmp.Or(override.PriorityKey, base.PriorityKey),
+		FairnessKey:       cmp.Or(override.FairnessKey, base.FairnessKey),
+		FairnessWeight:    cmp.Or(override.FairnessWeight, base.FairnessWeight),
+		FairnessRateLimit: cmp.Or(override.FairnessRateLimit, base.FairnessRateLimit),
+		OrderingKey:       cmp.Or(override.OrderingKey, base.OrderingKey),
 	}
 }
