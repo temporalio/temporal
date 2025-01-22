@@ -83,7 +83,7 @@ type (
 
 	// Handler - gRPC handler interface for historyservice
 	Handler struct {
-		historyservice.UnsafeHistoryServiceServer
+		historyservice.UnimplementedHistoryServiceServer
 
 		status int32
 
