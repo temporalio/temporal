@@ -1701,7 +1701,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 	case contextStateAcquired:
 		switch request := request.(type) {
 		case contextRequestAcquire:
-			return nil // nothing to to do, already acquired
+			return nil // nothing to do, already acquired
 		case contextRequestLost:
 			setStateAcquiring()
 			return nil
