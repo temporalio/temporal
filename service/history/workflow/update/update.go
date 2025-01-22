@@ -179,6 +179,7 @@ func (u *Update) WaitLifecycleStage(
 	waitStage enumspb.UpdateWorkflowExecutionLifecycleStage,
 	softTimeout time.Duration,
 ) (*Status, error) {
+	u.instrumentation.countWaitStage(waitStage)
 
 	stCtx, stCancel := context.WithTimeout(ctx, softTimeout)
 	defer stCancel()

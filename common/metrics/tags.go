@@ -260,6 +260,10 @@ func TaskTypeTag(value string) Tag {
 	return &tagImpl{key: TaskTypeTagName, value: value}
 }
 
+func UpdateWaitStageTag(waitStage enumspb.UpdateWorkflowExecutionLifecycleStage) Tag {
+	return &tagImpl{key: UpdateWaitStageName, value: waitStage.String()}
+}
+
 func PartitionTag(partition string) Tag {
 	return &tagImpl{key: PartitionTagName, value: partition}
 }

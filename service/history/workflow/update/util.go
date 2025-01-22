@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/trace"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -98,6 +99,10 @@ func (i *instrumentation) countAborted() {
 	i.oneOf(metrics.WorkflowExecutionUpdateAborted.Name())
 }
 
+func (i *instrumentation) countWaitStage(stage enumspb.UpdateWorkflowExecutionLifecycleStage) {
+	i.oneOf(metrics.WorkflowExecutionWaitStage.Name(), metrics.UpdateWaitStageTag(stage))
+}
+
 func (i *instrumentation) countSent() {
 	i.oneOf(metrics.WorkflowExecutionUpdateSentToWorker.Name())
 }
@@ -118,8 +123,8 @@ func (i *instrumentation) updateRegistrySize(size int) {
 	i.metrics.Histogram(metrics.WorkflowExecutionUpdateRegistrySize.Name(), metrics.Bytes).Record(int64(size))
 }
 
-func (i *instrumentation) oneOf(counterName string) {
-	i.metrics.Counter(counterName).Record(1)
+func (i *instrumentation) oneOf(counterName string, tags ...metrics.Tag) {
+	i.metrics.Counter(counterName).Record(1, tags...)
 }
 
 func (i *instrumentation) stateChange(updateID string, from, to state) {
