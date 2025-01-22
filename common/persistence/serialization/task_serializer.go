@@ -1265,18 +1265,19 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
 	}
 
 	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:         syncVersionedTransitionTask.WorkflowKey.NamespaceID,
-		WorkflowId:          syncVersionedTransitionTask.WorkflowKey.WorkflowID,
-		RunId:               syncVersionedTransitionTask.WorkflowKey.RunID,
-		TaskType:            enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION,
-		TaskId:              syncVersionedTransitionTask.TaskID,
-		VisibilityTime:      timestamppb.New(syncVersionedTransitionTask.VisibilityTimestamp),
-		VersionedTransition: syncVersionedTransitionTask.VersionedTransition,
-		FirstEventId:        syncVersionedTransitionTask.FirstEventID,
-		Version:             syncVersionedTransitionTask.FirstEventVersion,
-		NextEventId:         syncVersionedTransitionTask.NextEventID,
-		NewRunId:            syncVersionedTransitionTask.NewRunID,
-		TaskEquivalents:     taskInfoEquivalents,
+		NamespaceId:            syncVersionedTransitionTask.WorkflowKey.NamespaceID,
+		WorkflowId:             syncVersionedTransitionTask.WorkflowKey.WorkflowID,
+		RunId:                  syncVersionedTransitionTask.WorkflowKey.RunID,
+		TaskType:               enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION,
+		TaskId:                 syncVersionedTransitionTask.TaskID,
+		VisibilityTime:         timestamppb.New(syncVersionedTransitionTask.VisibilityTimestamp),
+		VersionedTransition:    syncVersionedTransitionTask.VersionedTransition,
+		FirstEventId:           syncVersionedTransitionTask.FirstEventID,
+		Version:                syncVersionedTransitionTask.FirstEventVersion,
+		NextEventId:            syncVersionedTransitionTask.NextEventID,
+		NewRunId:               syncVersionedTransitionTask.NewRunID,
+		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
+		TaskEquivalents:        taskInfoEquivalents,
 	}, nil
 }
 
@@ -1303,14 +1304,15 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 			syncVersionedTransitionTask.WorkflowId,
 			syncVersionedTransitionTask.RunId,
 		),
-		VisibilityTimestamp: visibilityTimestamp,
-		TaskID:              syncVersionedTransitionTask.TaskId,
-		FirstEventID:        syncVersionedTransitionTask.FirstEventId,
-		FirstEventVersion:   syncVersionedTransitionTask.Version,
-		NextEventID:         syncVersionedTransitionTask.NextEventId,
-		NewRunID:            syncVersionedTransitionTask.NewRunId,
-		VersionedTransition: syncVersionedTransitionTask.VersionedTransition,
-		TaskEquivalents:     taskEquivalents,
+		VisibilityTimestamp:    visibilityTimestamp,
+		TaskID:                 syncVersionedTransitionTask.TaskId,
+		FirstEventID:           syncVersionedTransitionTask.FirstEventId,
+		FirstEventVersion:      syncVersionedTransitionTask.Version,
+		NextEventID:            syncVersionedTransitionTask.NextEventId,
+		NewRunID:               syncVersionedTransitionTask.NewRunId,
+		VersionedTransition:    syncVersionedTransitionTask.VersionedTransition,
+		LastVersionHistoryItem: syncVersionedTransitionTask.LastVersionHistoryItem,
+		TaskEquivalents:        taskEquivalents,
 	}, nil
 }
 

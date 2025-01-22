@@ -355,6 +355,7 @@ message ReplicationTaskInfo {
     // TODO: Remove this field when state-based replication is stable and
     // doesn't need to be disabled.
     repeated ReplicationTaskInfo task_equivalents = 20;
+    history.v1.VersionHistoryItem last_version_history_item = 21;
 }
 
 // visibility_task_data column
