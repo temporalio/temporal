@@ -31,10 +31,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"go.temporal.io/server/common"
+	otelnoop "go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -66,7 +67,7 @@ func NewServerStatsHandler(
 	tmp propagation.TextMapPropagator,
 	logger log.Logger,
 ) ServerStatsHandler {
-	if !IsEnabled(tp) {
+	if !isEnabled(tp) {
 		return nil
 	}
 
@@ -86,7 +87,7 @@ func NewClientStatsHandler(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,
 ) ClientStatsHandler {
-	if !IsEnabled(tp) {
+	if !isEnabled(tp) {
 		return nil
 	}
 
@@ -103,7 +104,7 @@ func newCustomServerStatsHandler(
 	return &customServerStatsHandler{
 		wrapped: handler,
 		isDebug: DebugMode(),
-		tags:    logtags.NewWorkflowTags(common.NewProtoTaskTokenSerializer(), logger),
+		tags:    logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
 	}
 }
 
@@ -146,9 +147,9 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 			var k string
 			switch logTag.Key() {
 			case tag.WorkflowIDKey:
-				k = "temporalWorkflowID"
+				k = WorkflowIDKey
 			case tag.WorkflowRunIDKey:
-				k = "temporalRunID"
+				k = WorkflowRunIDKey
 			default:
 				continue
 			}
@@ -185,4 +186,9 @@ func (c *customServerStatsHandler) TagConn(ctx context.Context, info *stats.Conn
 
 func (c *customServerStatsHandler) HandleConn(ctx context.Context, stat stats.ConnStats) {
 	c.wrapped.HandleConn(ctx, stat)
+}
+
+func isEnabled(tp trace.TracerProvider) bool {
+	_, isNoop := tp.(otelnoop.TracerProvider)
+	return !isNoop
 }

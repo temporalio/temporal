@@ -74,7 +74,7 @@ var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
 type (
 	// OperatorHandlerImpl - gRPC handler interface for operator service
 	OperatorHandlerImpl struct {
-		operatorservice.UnsafeOperatorServiceServer
+		operatorservice.UnimplementedOperatorServiceServer
 
 		status int32
 

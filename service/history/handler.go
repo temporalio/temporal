@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
@@ -82,11 +83,11 @@ type (
 
 	// Handler - gRPC handler interface for historyservice
 	Handler struct {
-		historyservice.UnsafeHistoryServiceServer
+		historyservice.UnimplementedHistoryServiceServer
 
 		status int32
 
-		tokenSerializer              common.TaskTokenSerializer
+		tokenSerializer              *tasktoken.Serializer
 		startWG                      sync.WaitGroup
 		config                       *configs.Config
 		eventNotifier                events.Notifier

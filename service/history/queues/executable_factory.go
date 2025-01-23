@@ -25,6 +25,7 @@
 package queues
 
 import (
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -52,6 +53,7 @@ type (
 		clusterMetadata            cluster.Metadata
 		logger                     log.Logger
 		metricsHandler             metrics.Handler
+		tracer                     trace.Tracer
 		dlqWriter                  *DLQWriter
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn
@@ -74,6 +76,7 @@ func NewExecutableFactory(
 	clusterMetadata cluster.Metadata,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	tracer trace.Tracer,
 	dlqWriter *DLQWriter,
 	dlqEnabled dynamicconfig.BoolPropertyFn,
 	attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn,
@@ -90,6 +93,7 @@ func NewExecutableFactory(
 		clusterMetadata:            clusterMetadata,
 		logger:                     logger,
 		metricsHandler:             metricsHandler.WithTags(defaultExecutableMetricsTags...),
+		tracer:                     tracer,
 		dlqWriter:                  dlqWriter,
 		dlqEnabled:                 dlqEnabled,
 		attemptsBeforeSendingToDlq: attemptsBeforeSendingToDlq,
@@ -111,6 +115,7 @@ func (f *executableFactoryImpl) NewExecutable(task tasks.Task, readerID int64) E
 		f.clusterMetadata,
 		f.logger,
 		f.metricsHandler,
+		f.tracer,
 		func(params *ExecutableParams) {
 			params.DLQEnabled = f.dlqEnabled
 			params.DLQWriter = f.dlqWriter

@@ -101,7 +101,7 @@ const (
 type (
 	// AdminHandler - gRPC handler interface for adminservice
 	AdminHandler struct {
-		adminservice.UnsafeAdminServiceServer
+		adminservice.UnimplementedAdminServiceServer
 
 		status int32
 

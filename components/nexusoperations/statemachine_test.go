@@ -83,9 +83,9 @@ func TestAddChild(t *testing.T) {
 					},
 				},
 			}
-			child, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"), false)
+			child, err := nexusoperations.AddChild(root, "test-id", event, []byte("token"))
 			require.NoError(t, err)
-			opLog, err := root.Outputs()
+			opLog, err := root.OpLog()
 			require.NoError(t, err)
 			require.Equal(t, 1, len(opLog))
 			transitionOp, ok := opLog[0].(hsm.TransitionOperation)
@@ -192,7 +192,7 @@ func TestRetry(t *testing.T) {
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	}))
-	opLog, err := node.Parent.Outputs()
+	opLog, err := node.Parent.OpLog()
 	require.NoError(t, err)
 	require.Equal(t, 1, len(opLog))
 	transitionOp, ok := opLog[0].(hsm.TransitionOperation)
@@ -212,7 +212,7 @@ func TestRetry(t *testing.T) {
 			Node: node,
 		})
 	}))
-	opLog, err = node.Parent.Outputs()
+	opLog, err = node.Parent.OpLog()
 	require.NoError(t, err)
 	require.Equal(t, 1, len(opLog))
 	transitionOp, ok = opLog[0].(hsm.TransitionOperation)
@@ -321,7 +321,7 @@ func TestCompleteFromAttempt(t *testing.T) {
 			require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 				return tc.transition(node, op)
 			}))
-			opLog, err := node.Parent.Outputs()
+			opLog, err := node.Parent.OpLog()
 			require.NoError(t, err)
 			require.Equal(t, 1, len(opLog))
 			transitionOp, ok := opLog[0].(hsm.TransitionOperation)
@@ -439,7 +439,7 @@ func TestCompleteExternally(t *testing.T) {
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return tc.transition(node, op)
 				}))
-				opLog, err := node.Parent.Outputs()
+				opLog, err := node.Parent.OpLog()
 				require.NoError(t, err)
 				require.Equal(t, 1, len(opLog))
 				transitionOp, ok := opLog[0].(hsm.TransitionOperation)
@@ -592,7 +592,7 @@ func TestCancelationBeforeStarted(t *testing.T) {
 	require.NoError(t, hsm.MachineTransition(root, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return op.Cancel(root, time.Now())
 	}))
-	opLog, err := root.Parent.Outputs()
+	opLog, err := root.Parent.OpLog()
 	require.NoError(t, err)
 	require.Len(t, opLog, 2)
 	transitionOp, ok := opLog[0].(hsm.TransitionOperation)
@@ -617,7 +617,7 @@ func TestCancelationBeforeStarted(t *testing.T) {
 			},
 		})
 	}))
-	opLog, err = root.Parent.Outputs()
+	opLog, err = root.Parent.OpLog()
 	require.NoError(t, err)
 	require.Len(t, opLog, 2)
 

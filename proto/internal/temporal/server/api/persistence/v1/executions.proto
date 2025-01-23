@@ -355,6 +355,7 @@ message ReplicationTaskInfo {
     // TODO: Remove this field when state-based replication is stable and
     // doesn't need to be disabled.
     repeated ReplicationTaskInfo task_equivalents = 20;
+    history.v1.VersionHistoryItem last_version_history_item = 21;
 }
 
 // visibility_task_data column
@@ -676,8 +677,8 @@ message NexusOperationInfo {
     // Operation name.
     string operation = 3;
 
-    // If set the state machine will remove itself from the HSM tree on completion.
-    bool delete_on_completion = 4;
+    // reserved due to removal of delete_on_completion
+    reserved 4;
 
     // Token for fetching the scheduled event.
     bytes scheduled_event_token = 5;

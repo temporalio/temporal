@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -139,6 +140,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetClusterMetadata(),
 		logger,
 		metrics.NoopMetricsHandler,
+		telemetry.NoopTracer,
 		nil,
 		func() bool {
 			return false
