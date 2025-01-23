@@ -248,6 +248,13 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 }
 
 func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
+	e.Logger.Error("VerifyVersionedTransition replication task encountered error",
+		tag.WorkflowNamespaceID(e.NamespaceID),
+		tag.WorkflowID(e.WorkflowID),
+		tag.WorkflowRunID(e.RunID),
+		tag.TaskID(e.ExecutableTask.TaskID()),
+		tag.Error(err),
+	)
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
@@ -279,13 +286,6 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 		}
 		return e.Execute()
 	default:
-		e.Logger.Error("VerifyVersionedTransition replication task encountered error",
-			tag.WorkflowNamespaceID(e.NamespaceID),
-			tag.WorkflowID(e.WorkflowID),
-			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
-			tag.Error(err),
-		)
 		return err
 	}
 }
