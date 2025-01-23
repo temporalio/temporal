@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -5857,7 +5858,9 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 		ms.executionInfo.PreviousTransitionHistory = ms.executionInfo.TransitionHistory
 		ms.executionInfo.LastTransitionHistoryBreakPoint = CopyVersionedTransition(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1])
 	}
-	ms.logInfo(fmt.Sprintf("clearing the versioned transition history. Mutable state: %v", ms))
+	buf := make([]byte, 10240) // Pre-allocate a buffer
+	n := runtime.Stack(buf, false)
+	ms.logInfo(fmt.Sprintf("clearing the versioned transition history. Stack trace:\\n%s", buf[:n]))
 
 	ms.executionInfo.TransitionHistory = nil
 
