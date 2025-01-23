@@ -2549,6 +2549,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		HeartbeatDetails:            historyResponse.HeartbeatDetails,
 		WorkflowType:                historyResponse.WorkflowType,
 		WorkflowNamespace:           historyResponse.WorkflowNamespace,
+		Priority:                    historyResponse.Priority,
 	}
 }
 
