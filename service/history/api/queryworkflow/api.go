@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
@@ -181,6 +182,7 @@ func Invoke(
 				rawMatchingClient,
 				matchingClient,
 				scope,
+				mutableState.GetExecutionInfo().Priority,
 			)
 		}
 	}
@@ -237,6 +239,7 @@ func Invoke(
 				rawMatchingClient,
 				matchingClient,
 				scope,
+				mutableState.GetExecutionInfo().Priority,
 			)
 		case workflow.QueryCompletionTypeFailed:
 			return nil, completionState.Err
@@ -284,6 +287,7 @@ func queryDirectlyThroughMatching(
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
+	priority *commonpb.Priority,
 ) (*historyservice.QueryWorkflowResponse, error) {
 
 	startTime := time.Now().UTC()
@@ -309,6 +313,7 @@ func queryDirectlyThroughMatching(
 			QueryRequest:     queryRequest,
 			TaskQueue:        msResp.GetStickyTaskQueue(),
 			VersionDirective: directive,
+			Priority:         priority,
 		}
 
 		// using a clean new context in case customer provide a context which has
@@ -355,6 +360,7 @@ func queryDirectlyThroughMatching(
 		QueryRequest:     queryRequest,
 		TaskQueue:        msResp.TaskQueue,
 		VersionDirective: directive,
+		Priority:         priority,
 	}
 
 	nonStickyStartTime := time.Now().UTC()
