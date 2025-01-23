@@ -599,14 +599,12 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 			},
 		}, nil).Times(1)
 
-		ns := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-			Namespace: &persistencespb.NamespaceDetail{
-				Info: &persistencespb.NamespaceInfo{},
-				Config: &persistencespb.NamespaceConfig{
-					Retention: durationpb.New(retention),
-				},
-				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		ns := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{},
+			Config: &persistencespb.NamespaceConfig{
+				Retention: durationpb.New(retention),
 			},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 		})
 
 		details := replicationTasksHeartbeatDetails{}

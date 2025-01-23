@@ -6469,7 +6469,7 @@ func (ms *MutableStateImpl) startTransactionHandleNamespaceMigration(
 
 	// local namespace -> global namespace && with started workflow task
 	if lastWriteVersion == common.EmptyVersion && namespaceEntry.FailoverVersion() > common.EmptyVersion && ms.HasStartedWorkflowTask() {
-		localNamespaceMutation := namespace.NewPretendAsLocalNamespace(
+		localNamespaceMutation := namespace.WithPretendLocalNamespace(
 			ms.clusterMetadata.GetCurrentClusterName(),
 		)
 		return namespaceEntry.Clone(localNamespaceMutation), nil
