@@ -34,7 +34,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/trace/noop"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/environment"
 )
 
@@ -194,7 +194,7 @@ func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger
 	return &TestBase{
 		DefaultTestCluster: testCluster,
 		Logger:             logger,
-		TracerProvider:     noop.NewTracerProvider(),
+		TracerProvider:     telemetry.NoopTracerProvider,
 	}
 }
 

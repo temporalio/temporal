@@ -778,10 +778,11 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		if diff > defaultNoProgressNotRetryableTimeout {
 			// Potentially encountered a missing execution, return non-retryable error
 			return response, temporal.NewNonRetryableApplicationError(
-				fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (not retryable). Not found WorkflowExecution: %v, Checkpoint: %v",
+				fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (not retryable): could not find WorkflowExecution: '%v' in TargetCluster: '%s': Checkpoint: '%v', ",
 					diff.Minutes(),
-					details.LastNotVerifiedWorkflowExecution, details.CheckPoint),
-				"", nil)
+					details.LastNotVerifiedWorkflowExecution, request.TargetClusterName, details.CheckPoint),
+				"",
+				nil)
 		}
 	}
 }

@@ -39,7 +39,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/trace/noop"
+	otelnoop "go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
@@ -63,6 +63,11 @@ const (
 	retryDefaultInitialInterval = 5 * time.Second
 	retryDefaultMaxInterval     = 30 * time.Second
 	retryDefaultMaxElapsedTime  = 1 * time.Minute
+)
+
+var (
+	NoopTracerProvider = otelnoop.NewTracerProvider()
+	NoopTracer         = NoopTracerProvider.Tracer("")
 )
 
 type (
@@ -433,7 +438,7 @@ func DebugMode() bool {
 	return isDebug
 }
 
-func IsEnabled(tp trace.Tracer) bool {
-	_, isNoop := tp.(noop.Tracer)
+func IsEnabled(t trace.Tracer) bool {
+	_, isNoop := t.(otelnoop.Tracer)
 	return !isNoop
 }
