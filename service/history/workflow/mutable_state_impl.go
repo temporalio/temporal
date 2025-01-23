@@ -5857,6 +5857,7 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 		ms.executionInfo.PreviousTransitionHistory = ms.executionInfo.TransitionHistory
 		ms.executionInfo.LastTransitionHistoryBreakPoint = CopyVersionedTransition(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1])
 	}
+	ms.logInfo(fmt.Sprintf("clearing the versioned transition history. Mutable state: %v", ms))
 
 	ms.executionInfo.TransitionHistory = nil
 
