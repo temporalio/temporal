@@ -26,7 +26,6 @@ package interceptor
 
 import (
 	"context"
-	"go.temporal.io/server/common/metrics"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
 )
@@ -256,7 +256,7 @@ func (ni *NamespaceValidatorInterceptor) handleRequestWithHandoverRetry(
 
 	var response interface{}
 	var retryCount int
-	var retryLatency time.Duration
+	retryLatency := time.Duration(0)
 	op := func(ctx context.Context) error {
 		err := ni.checkReplicationState(nsEntry, info.FullMethod)
 		if err != nil {
