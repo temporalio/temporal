@@ -24,6 +24,7 @@ package ndc
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/pborman/uuid"
@@ -703,9 +704,14 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowClosed(
 }
 
 func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
+	const (
+		deletedMachineID = "child1"
+		initialCount     = 50
+	)
+
 	persistedState := s.buildWorkflowMutableState()
-	// Remove the child1 state machine so it doesn't exist
-	delete(persistedState.ExecutionInfo.SubStateMachinesByType[s.stateMachineDef.Type()].MachinesById, "child1")
+	// Remove the state machine to simulate deletion
+	delete(persistedState.ExecutionInfo.SubStateMachinesByType[s.stateMachineDef.Type()].MachinesById, deletedMachineID)
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
@@ -715,32 +721,83 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 	}).Return(&persistence.GetWorkflowExecutionResponse{
 		State:           persistedState,
 		DBRecordVersion: 777,
-	}, nil).Times(1)
+	}, nil).AnyTimes()
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
-		WorkflowKey:         s.workflowKey,
-		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
-		StateMachineNode: &persistencespb.StateMachineNode{
-			Children: map[string]*persistencespb.StateMachineMap{
-				s.stateMachineDef.Type(): {
-					MachinesById: map[string]*persistencespb.StateMachineNode{
-						"child1": {
-							Data: []byte(hsmtest.State3),
-							InitialVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+	baseVersionHistory := persistedState.ExecutionInfo.VersionHistories.Histories[persistedState.ExecutionInfo.VersionHistories.CurrentVersionHistoryIndex]
+
+	testCases := []struct {
+		name           string
+		versionHistory *historyspb.VersionHistory
+		expectError    bool
+	}{
+		{
+			name: "older incoming version - ignore missing state machine since local version is newer",
+			versionHistory: &historyspb.VersionHistory{
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 50, Version: s.namespaceEntry.FailoverVersion() - 100},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "newer incoming version - return original notFoundErr since local version is behind",
+			versionHistory: func() *historyspb.VersionHistory {
+				// Start by copying ALL items from base history
+				vh := &historyspb.VersionHistory{
+					Items: make([]*historyspb.VersionHistoryItem, len(baseVersionHistory.Items)),
+				}
+				// Copy all but last item exactly to establish joint point
+				for i := 0; i < len(baseVersionHistory.Items)-1; i++ {
+					vh.Items[i] = &historyspb.VersionHistoryItem{
+						EventId: baseVersionHistory.Items[i].EventId,
+						Version: baseVersionHistory.Items[i].Version,
+					}
+				}
+				// Add final item with higher version but next event ID
+				vh.Items[len(vh.Items)-1] = &historyspb.VersionHistoryItem{
+					EventId: baseVersionHistory.Items[len(baseVersionHistory.Items)-1].EventId + 1,
+					Version: s.namespaceEntry.FailoverVersion() + 100,
+				}
+				return vh
+			}(),
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		s.Run(tc.name, func() {
+			err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+				WorkflowKey:         s.workflowKey,
+				EventVersionHistory: tc.versionHistory,
+				StateMachineNode: &persistencespb.StateMachineNode{
+					Children: map[string]*persistencespb.StateMachineMap{
+						s.stateMachineDef.Type(): {
+							MachinesById: map[string]*persistencespb.StateMachineNode{
+								deletedMachineID: {
+									Data: []byte(hsmtest.State3),
+									InitialVersionedTransition: &persistencespb.VersionedTransition{
+										NamespaceFailoverVersion: tc.versionHistory.GetItems()[len(tc.versionHistory.GetItems())-1].GetVersion(),
+									},
+									LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+										NamespaceFailoverVersion: tc.versionHistory.GetItems()[len(tc.versionHistory.GetItems())-1].GetVersion(),
+									},
+									TransitionCount: initialCount,
+								},
 							},
-							LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-								NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
-							},
-							TransitionCount: 50,
 						},
 					},
 				},
-			},
-		},
-	})
+			})
 
-	s.NoError(err) // Expect no error as we should gracefully handle missing state machines
+			if tc.expectError {
+				s.Error(err)
+				s.True(errors.Is(err, hsm.ErrStateMachineNotFound), "expected ErrStateMachineNotFound error")
+			} else {
+				s.NoError(err)
+			}
+		})
+	}
 }
 
 func (s *hsmStateReplicatorSuite) buildWorkflowMutableState() *persistencespb.WorkflowMutableState {
