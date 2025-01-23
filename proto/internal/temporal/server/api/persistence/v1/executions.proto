@@ -280,6 +280,9 @@ message WorkflowExecutionInfo {
     repeated VersionedTransition previous_transition_history = 100;
     VersionedTransition last_transition_history_break_point = 101;
 
+    // Priority contains metadata that controls relative ordering of task processing
+    // when tasks are backed up in a queue.
+    temporal.api.common.v1.Priority priority = 102;
 }
 
 message ExecutionStats {
@@ -531,6 +534,10 @@ message ActivityInfo {
     // The deployment this activity was dispatched to most recently. Present only if the activity
     // was dispatched to a versioned worker.
     temporal.api.deployment.v1.Deployment last_started_deployment = 43;
+
+    // Priority metadata. If this message is not present, or any fields are not
+    // present, they inherit the values from the workflow.
+    temporal.api.common.v1.Priority priority = 44;
 }
 
 // timer_map column
@@ -561,6 +568,7 @@ message ChildExecutionInfo {
     temporal.server.api.clock.v1.VectorClock clock = 13;
     string namespace_id = 14;
     VersionedTransition last_update_versioned_transition = 15;
+    temporal.api.common.v1.Priority priority = 16;
 }
 
 // request_cancel_map column

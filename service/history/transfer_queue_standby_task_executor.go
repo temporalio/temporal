@@ -525,12 +525,12 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 	}
 
 	pushActivityInfo := postActionInfo.(*activityTaskPostActionInfo)
-	timeout := pushActivityInfo.activityTaskScheduleToStartTimeout
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		ctx,
 		task.(*tasks.ActivityTask),
-		timeout,
+		pushActivityInfo.activityTaskScheduleToStartTimeout,
 		pushActivityInfo.versionDirective,
+		pushActivityInfo.priority,
 		workflow.TransactionPolicyPassive,
 	)
 }
@@ -552,6 +552,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 		pushwtInfo.taskqueue,
 		pushwtInfo.workflowTaskScheduleToStartTimeout,
 		pushwtInfo.versionDirective,
+		pushwtInfo.priority,
 		workflow.TransactionPolicyPassive,
 	)
 }

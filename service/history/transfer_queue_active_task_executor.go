@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/sdk"
@@ -222,7 +223,8 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	return t.pushActivity(ctx, task, timeout, directive, workflow.TransactionPolicyActive)
+	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, ai.Priority)
+	return t.pushActivity(ctx, task, timeout, directive, priority, workflow.TransactionPolicyActive)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -264,6 +266,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	normalTaskQueueName := mutableState.GetExecutionInfo().TaskQueue
 
 	directive := MakeDirectiveForWorkflowTask(mutableState)
+	priority := mutableState.GetExecutionInfo().Priority
 
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
@@ -276,6 +279,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		taskQueue,
 		scheduleToStartTimeout.AsDuration(),
 		directive,
+		priority,
 		workflow.TransactionPolicyActive,
 	)
 
@@ -298,6 +302,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 			taskQueue,
 			scheduleToStartTimeout.AsDuration(),
 			directive,
+			priority,
 			workflow.TransactionPolicyActive,
 		)
 	}
@@ -896,6 +901,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedBuildId,
 		initiatedEvent.GetUserMetadata(),
 		mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(),
+		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -1456,6 +1462,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedBuildId string,
 	userMetadata *sdkpb.UserMetadata,
 	inheritedOverride *workflowpb.VersioningOverride,
+	priority *commonpb.Priority,
 ) (string, *clockspb.VectorClock, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
@@ -1469,7 +1476,6 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			WorkflowExecutionTimeout: attributes.WorkflowExecutionTimeout,
 			WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
 			WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
-
 			// Use the same request ID to dedupe StartWorkflowExecution calls
 			RequestId:             childRequestID,
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
@@ -1479,6 +1485,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			SearchAttributes:      attributes.SearchAttributes,
 			UserMetadata:          userMetadata,
 			VersioningOverride:    inheritedOverride,
+			Priority:              priority,
 		},
 		&workflowspb.ParentExecutionInfo{
 			NamespaceId: task.NamespaceID,

@@ -649,6 +649,7 @@ func (d *ClientImpl) updateWithStart(
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		SearchAttributes:         d.buildSearchAttributes(),
 		Memo:                     memo,
+		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
 
 	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{

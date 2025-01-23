@@ -1139,6 +1139,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		WorkflowType:                matchingResponse.WorkflowType,
 		WorkflowNamespace:           matchingResponse.WorkflowNamespace,
 		Header:                      matchingResponse.Header,
+		Priority:                    matchingResponse.Priority,
 	}, nil
 }
 
@@ -3066,6 +3067,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		Memo:                     request.Memo,
 		SearchAttributes:         sa,
+		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
 	_, err = wh.historyClient.StartWorkflowExecution(
 		ctx,
@@ -4349,6 +4351,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		Memo:                     memo,
 		SearchAttributes:         searchAttributes,
+		Priority:                 &commonpb.Priority{}, // ie default priority
 	}
 
 	_, err = wh.historyClient.StartWorkflowExecution(
