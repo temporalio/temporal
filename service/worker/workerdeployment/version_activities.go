@@ -29,7 +29,6 @@ import (
 	"context"
 	"sync"
 
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/sdk/activity"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -69,17 +68,19 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 	for _, e := range input.Sync {
 		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
 			logger.Info("syncing task queue userdata for deployment version", "taskQueue", syncData.Name, "type", syncData.Type)
-			res, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+
+			var res *matchingservice.SyncDeploymentUserDataResponse
+			var err error
+
+			res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 				NamespaceId:   a.namespace.ID().String(),
 				TaskQueue:     syncData.Name,
 				TaskQueueType: syncData.Type,
-				Deployment: &deploymentpb.Deployment{
-					SeriesName: input.DeploymentName,
-					BuildId:    input.Version,
+				Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+					UpdateVersionData: syncData.Data,
 				},
-				Data:        nil,
-				VersionData: syncData.Data,
 			})
+
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
 			} else {

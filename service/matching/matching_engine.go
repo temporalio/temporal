@@ -1655,6 +1655,9 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		if data.PerType[int32(req.TaskQueueType)] == nil {
 			data.PerType[int32(req.TaskQueueType)] = &persistencespb.TaskQueueTypeUserData{}
 		}
+		if data.PerType[int32(req.TaskQueueType)].DeploymentData == nil {
+			data.PerType[int32(req.TaskQueueType)].DeploymentData = &persistencespb.DeploymentData{}
+		}
 
 		// set/append the new data
 		deploymentData := data.PerType[int32(req.TaskQueueType)].DeploymentData

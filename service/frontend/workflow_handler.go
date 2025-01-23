@@ -3379,7 +3379,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	}
 
 	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
-		PreviousVersion: resp.PreviousCurrentVersion,
+		PreviousVersion: resp.PreviousVersion,
 	}, nil
 }
 

@@ -668,12 +668,12 @@ func (d *ClientImpl) updateWithStart(
 	return outcome, err
 }
 
+// TODO (Shivam): Verify if memo needs changes.
 func (d *ClientImpl) buildInitialVersionMemo(deploymentName, version string) (*commonpb.Memo, error) {
 	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.VersionWorkflowMemo{
-		DeploymentName:        deploymentName,
-		Version:               version,
-		CreateTime:            timestamppb.Now(),
-		LastBecameCurrentTime: nil,
+		DeploymentName: deploymentName,
+		Version:        version,
+		CreateTime:     timestamppb.Now(),
 	})
 	if err != nil {
 		return nil, err

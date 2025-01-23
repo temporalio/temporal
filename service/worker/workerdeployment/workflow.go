@@ -136,29 +136,32 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	}()
 
 	prevCurrentVersion := d.State.CurrentVersion
+	versionUpdateTime := timestamppb.New(workflow.Now(ctx))
+
+	// tell new current that it's current
+	if _, err := d.syncVersion(ctx, args.Version, versionUpdateTime); err != nil {
+		return nil, err
+	}
+
+	if prevCurrentVersion != "" {
+		// tell previous current that it's no longer current
+		if _, err := d.syncVersion(ctx, prevCurrentVersion, versionUpdateTime); err != nil {
+			return nil, err
+		}
+	}
 
 	// update local state
 	d.State.CurrentVersion = args.Version
-	d.State.CurrentChangedTime = timestamppb.New(workflow.Now(ctx))
+	d.State.CurrentChangedTime = versionUpdateTime
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
 		return nil, err
 	}
 
-	// tell new current that it's current
-	if _, err := d.syncVersion(ctx, d.State.CurrentVersion); err != nil {
-		return nil, err
-	}
-
-	if prevCurrentVersion != "" {
-		// tell previous current that it's no longer current
-		if _, err := d.syncVersion(ctx, prevCurrentVersion); err != nil {
-			return nil, err
-		}
-	}
-
-	return &deploymentspb.SetCurrentVersionResponse{}, nil
+	return &deploymentspb.SetCurrentVersionResponse{
+		PreviousVersion: prevCurrentVersion,
+	}, nil
 
 }
 
@@ -197,12 +200,12 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	return nil
 }
 
-func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string) (*deploymentspb.VersionLocalState, error) {
+func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string, versionUpdateTime *timestamppb.Timestamp) (*deploymentspb.VersionLocalState, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
 	setCur := &deploymentspb.SyncVersionStateArgs_SetCurrent{}
-	if d.State.CurrentVersion == version {
-		setCur.LastBecameCurrentTime = d.State.CurrentChangedTime
+	if d.State.CurrentVersion != version {
+		setCur.LastBecameCurrentTime = versionUpdateTime
 	}
 
 	var res deploymentspb.SyncVersionStateActivityResult

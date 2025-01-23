@@ -31,12 +31,24 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 
-// Data for each worker deployment version + task queue pair.
-// This is stored in each worker deployment version (for each task queue),
-// and synced to task queue user data (for each worker deployment version).
-message DeploymentVersionTaskQueueData {
-    // TODO (Shivam): Add PollerStatus after it gets added in the API repo.
-    google.protobuf.Timestamp last_became_current_time = 1;
+
+// The source of truth for this data is in the WorkerDeployment entity workflows, which is
+// synced to all TQs whenever the source changes.
+message DeploymentVersionData {
+    // Special case: `version.version` may be empty (but not `version.deployment_name`). That is
+    // only valid when `ramp_percentage` is non-zero, representing ramping to unversioned in a
+    // particular worker deployment.
+    temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
+    // Last time `is_current` or `ramp_percentage` of this version changed.
+    google.protobuf.Timestamp routing_update_time = 2;
+    // If this version is the current version of its deployment.
+    bool is_current = 3;
+    // Range: [0, 100]. Must be zero if is_current is true. Must be non-zero if `version.version`
+    // is empty.
+    float ramp_percentage = 4;
+
+    // Experimental
+    google.protobuf.Timestamp first_poller_time = 5;
 }
 
 // Local state for Worker Deployment Version
@@ -46,17 +58,18 @@ message VersionLocalState {
 
     map<string, TaskQueueFamilyData> task_queue_families = 3;
 
-    google.protobuf.Timestamp last_became_current_time = 4;
+    bool is_current = 4;
+    google.protobuf.Timestamp last_became_current_time = 5;
 
-    google.protobuf.Timestamp create_time = 5;
+    google.protobuf.Timestamp create_time = 6;
 
-    bool started_deployment_workflow = 6;
+    bool started_deployment_workflow = 7;
 
     message TaskQueueFamilyData {
         // Key: enums.TaskQueueType, Value: TaskQueueData
         // All fields in TaskQueueData are valid except last_became_current_time, the source of
         // truth for that is the value at the root of WorkerDeploymentLocalState.
-        map<int32, DeploymentVersionTaskQueueData> task_queues = 1;
+        map<int32, DeploymentVersionData> task_queues = 1;
     }
 }
 
@@ -129,7 +142,7 @@ message VersionWorkflowMemo {
     string deployment_name = 1;
     string version = 2;
     google.protobuf.Timestamp create_time = 3;
-    google.protobuf.Timestamp last_became_current_time = 4;
+    bool is_current_deployment = 4;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -140,14 +153,13 @@ message StartWorkerDeploymentRequest {
 
 // used as Worker Deployment Version workflow activity input:
 message SyncDeploymentVersionUserDataRequest {
-    string deployment_name = 1;
-    string version = 2;
-    repeated SyncUserData sync = 3;
+    temporal.api.deployment.v1.WorkerDeploymentVersion worker_deployment_version = 1;
+    repeated SyncUserData sync = 2;
 
     message SyncUserData {
         string name = 1;
         temporal.api.enums.v1.TaskQueueType type = 2;
-        DeploymentVersionTaskQueueData data = 3;
+        DeploymentVersionData data = 3;
     }
 }
 
@@ -170,7 +182,7 @@ message SetCurrentVersionArgs {
 
 // used as Worker Deployment update response:
 message SetCurrentVersionResponse {
-    string previous_current_version = 1;
+    string previous_version = 1;
 }
 
 // used as Worker Deployment activity input:

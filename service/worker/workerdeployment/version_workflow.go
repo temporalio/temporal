@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
@@ -37,6 +38,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -186,18 +188,25 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	// initial data
-	data := &deploymentspb.DeploymentVersionTaskQueueData{}
+	workerDeploymentVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: d.VersionState.DeploymentName,
+		Version:        d.VersionState.Version,
+	}
+	data := &deploymentspb.DeploymentVersionData{
+		Version:         workerDeploymentVersion,
+		FirstPollerTime: args.FirstPollerTime,
+	}
 
 	// sync to user data
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-		DeploymentName: d.VersionState.DeploymentName,
+		WorkerDeploymentVersion: workerDeploymentVersion,
 		Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 			&deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 				Name: args.TaskQueueName,
 				Type: args.TaskQueueType,
-				Data: d.dataWithTime(data),
+				Data: d.dataWithTime(data, nil),
 			},
 		},
 	}).Get(ctx, &syncRes)
@@ -248,7 +257,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{}
 	}
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
-		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.DeploymentVersionTaskQueueData)
+		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.DeploymentVersionData)
 	}
 	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = data
 
@@ -299,15 +308,17 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 		// sync to task queues
 		syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
-			DeploymentName: d.VersionState.DeploymentName,
-			Version:        d.VersionState.Version,
+			WorkerDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: d.VersionState.DeploymentName,
+				Version:        d.VersionState.Version,
+			},
 		}
 		for tqName, byType := range d.VersionState.TaskQueueFamilies {
 			for tqType, data := range byType.TaskQueues {
 				syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 					Name: tqName,
 					Type: enumspb.TaskQueueType(tqType),
-					Data: d.dataWithTime(data),
+					Data: d.dataWithTime(data, set.LastBecameCurrentTime),
 				})
 			}
 		}
@@ -359,8 +370,10 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	}, nil
 }
 
-func (d *VersionWorkflowRunner) dataWithTime(data *deploymentspb.DeploymentVersionTaskQueueData) *deploymentspb.DeploymentVersionTaskQueueData {
+func (d *VersionWorkflowRunner) dataWithTime(data *deploymentspb.DeploymentVersionData, routingUpdateTime *timestamppb.Timestamp) *deploymentspb.DeploymentVersionData {
 	data = common.CloneProto(data)
+	data.RoutingUpdateTime = routingUpdateTime
+
 	return data
 }
 
@@ -372,12 +385,12 @@ func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescr
 
 // updateMemo should be called whenever the workflow updates its local state
 func (d *VersionWorkflowRunner) updateMemo(ctx workflow.Context) error {
+	// TODO (Shivam): add an extra field for memo?
 	return workflow.UpsertMemo(ctx, map[string]any{
 		WorkerDeploymentVersionMemoField: &deploymentspb.VersionWorkflowMemo{
-			DeploymentName:        d.VersionState.DeploymentName,
-			Version:               d.VersionState.Version,
-			CreateTime:            d.VersionState.CreateTime,
-			LastBecameCurrentTime: d.VersionState.LastBecameCurrentTime,
+			DeploymentName: d.VersionState.DeploymentName,
+			Version:        d.VersionState.Version,
+			CreateTime:     d.VersionState.CreateTime,
 		},
 	})
 }
