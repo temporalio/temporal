@@ -28,6 +28,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -80,6 +81,9 @@ type (
 		// based on forwardInfo.
 		redirectInfo *taskqueuespb.BuildIdRedirectInfo
 		recycleToken func()
+		// pollerScalingDecision is assigned when the queue has advice to give to the poller about whether
+		// it should adjust its poller count
+		pollerScalingDecision *taskqueuepb.PollerScalingDecision
 	}
 )
 
