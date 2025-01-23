@@ -27,14 +27,17 @@ package worker_versioning
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
 	"strings"
-	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -348,17 +351,92 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	return nil
 }
 
-func FindCurrentDeployment(deployments *persistencespb.DeploymentData) *deploymentpb.Deployment {
-	var currentDeployment *deploymentpb.Deployment
-	var maxCurrentTime time.Time
+// FindDeploymentVersionForWorkflowID returns the deployment version that should be used for a
+// particular workflow ID based on the versioning info of the task queue. Nil means unversioned.
+func FindDeploymentVersionForWorkflowID(versioningInfo *taskqueuepb.TaskQueueVersioningInfo, workflowId string) *deploymentpb.WorkerDeploymentVersion {
+	if versioningInfo == nil {
+		return nil // unversioned
+	}
+	ramp := versioningInfo.GetRampingVersionPercentage()
+	if ramp <= 0 {
+		// No ramp
+		return versioningInfo.GetCurrentVersion()
+	} else if ramp == 100 {
+		return versioningInfo.GetRampingVersion()
+	}
+	// Partial ramp. Decide based on workflow ID
+	wfRampThreshold := calcRampThreshold(workflowId)
+	if wfRampThreshold <= float64(ramp) {
+		return versioningInfo.GetRampingVersion()
+	}
+	return versioningInfo.GetCurrentVersion()
+}
+
+// calcRampThreshold returns a number in [0, 100) that is deterministically calculated based on the
+// passed id. If id is empty, a random threshold is returned.
+func calcRampThreshold(id string) float64 {
+	if id == "" {
+		return rand.Float64()
+	}
+	h := farm.Fingerprint32([]byte(id))
+	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))
+}
+
+func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData) *taskqueuepb.TaskQueueVersioningInfo {
+	if deployments == nil {
+		return nil
+	}
+
+	var current *persistencespb.DeploymentVersionData
+	var ramping *persistencespb.DeploymentVersionData
+
+	// Find old current
 	for _, d := range deployments.GetDeployments() {
+		// [cleanup-old-wv]
 		if d.Data.LastBecameCurrentTime != nil {
-			if t := d.Data.LastBecameCurrentTime.AsTime(); t.After(maxCurrentTime) {
-				currentDeployment, maxCurrentTime = d.GetDeployment(), t
+			if t := d.Data.LastBecameCurrentTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
+				current = &persistencespb.DeploymentVersionData{
+					Version:           DeploymentVersionFromDeployment(d.Deployment),
+					RoutingUpdateTime: d.Data.LastBecameCurrentTime,
+				}
 			}
 		}
 	}
-	return currentDeployment
+
+	// Find new current and ramping
+	for _, v := range deployments.GetVersions() {
+		if v.RoutingUpdateTime != nil && v.GetIsCurrent() {
+			if t := v.RoutingUpdateTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
+				current = v
+			}
+		}
+		if v.RoutingUpdateTime != nil && v.GetRampPercentage() > 0 {
+			if t := v.RoutingUpdateTime.AsTime(); t.After(ramping.GetRoutingUpdateTime().AsTime()) {
+				ramping = v
+			}
+		}
+	}
+
+	if current == nil && ramping == nil {
+		return nil
+	}
+
+	info := &taskqueuepb.TaskQueueVersioningInfo{
+		CurrentVersion: current.GetVersion(),
+		UpdateTime:     current.GetRoutingUpdateTime(),
+	}
+	if ramping.GetRampPercentage() > 0 {
+		info.RampingVersionPercentage = ramping.GetRampPercentage()
+		if ramping.GetVersion().GetVersion() != "" {
+			// If version is "" it means it's ramping to unversioned, so we do not set RampingVersion.
+			info.RampingVersion = ramping.GetVersion()
+		}
+		if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
+			info.UpdateTime = ramping.GetRoutingUpdateTime()
+		}
+	}
+
+	return info
 }
 
 func ValidateTaskVersionDirective(

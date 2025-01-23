@@ -1189,7 +1189,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus()), nil
+	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
 }
 
 func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {
@@ -1635,8 +1635,8 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	if req.Deployment == nil {
-		return nil, errMissingDeployment
+	if req.Deployment == nil && req.GetOperation() == nil {
+		return nil, errMissingDeploymentVersion
 	}
 
 	tqMgr, _, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherWrite)
@@ -1671,14 +1671,37 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 		// set/append the new data
 		deploymentData := data.PerType[int32(req.TaskQueueType)].DeploymentData
-		if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
-			deploymentData.Deployments[idx].Data = req.Data
+		if d := req.Deployment; d != nil {
+			// [cleanup-old-wv]
+			if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
+				deploymentData.Deployments[idx].Data = req.Data
+			} else {
+				deploymentData.Deployments = append(
+					deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
+						Deployment: req.Deployment,
+						Data:       req.Data,
+					})
+			}
+		} else if vd := req.GetUpdateVersionData(); vd != nil {
+			if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
+				old := deploymentData.Versions[idx]
+				if old.GetRoutingUpdateTime().AsTime().Before(vd.GetRoutingUpdateTime().AsTime()) {
+					// only update if the timestamp is more recent
+					deploymentData.Versions[idx] = vd
+				} else {
+					// No-op
+					return nil, false, errUserDataUnmodified
+				}
+			} else {
+				deploymentData.Versions = append(deploymentData.Versions, vd)
+			}
+		} else if v := req.GetForgetVersion(); v != nil {
+			if idx := findDeploymentVersion(deploymentData, v); idx >= 0 {
+				deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
+			}
 		} else {
-			deploymentData.Deployments = append(
-				deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
-					Deployment: req.Deployment,
-					Data:       req.Data,
-				})
+			// No-op
+			return nil, false, errUserDataUnmodified
 		}
 
 		data.Clock = now
