@@ -31,7 +31,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -51,6 +53,7 @@ const (
 type (
 	fakeEnv struct {
 		node *hsm.Node
+		now  time.Time
 	}
 
 	root struct{}
@@ -64,16 +67,22 @@ func (root) IsWorkflowExecutionRunning() bool {
 	return true
 }
 
-func (s fakeEnv) Access(
+func newFakeEnv() *fakeEnv {
+	return &fakeEnv{
+		now: time.Now(),
+	}
+}
+
+func (e fakeEnv) Access(
 	ctx context.Context,
 	ref hsm.Ref,
 	accessType hsm.AccessType,
 	accessor func(*hsm.Node) error) error {
-	return accessor(s.node)
+	return accessor(e.node)
 }
 
-func (fakeEnv) Now() time.Time {
-	return time.Now()
+func (e fakeEnv) Now() time.Time {
+	return e.now
 }
 
 func newRegistry(t *testing.T) *hsm.Registry {
@@ -140,7 +149,13 @@ func defaultSchedule() *schedulepb.Schedule {
 				},
 			},
 		},
-		Action: &schedulepb.ScheduleAction{},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId: "scheduled-wf",
+				},
+			},
+		},
 		Policies: &schedulepb.SchedulePolicies{
 			CatchupWindow: durationpb.New(defaultCatchupWindow),
 		},
@@ -150,4 +165,34 @@ func defaultSchedule() *schedulepb.Schedule {
 			RemainingActions: 0,
 		},
 	}
+}
+
+func defaultConfig() *scheduler.Config {
+	return &scheduler.Config{
+		Tweakables: func(_ string) scheduler.Tweakables {
+			return scheduler.DefaultTweakables
+		},
+		ServiceCallTimeout: func() time.Duration {
+			return 5 * time.Second
+		},
+		RetryPolicy: func() backoff.RetryPolicy {
+			return backoff.NewExponentialRetryPolicy(1 * time.Second)
+		},
+	}
+}
+
+func opLogTasks(node *hsm.Node) (tasks []hsm.Task, err error) {
+	opLog, err := node.OpLog()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, op := range opLog {
+		output, ok := op.(hsm.TransitionOperation)
+		if ok {
+			tasks = append(tasks, output.Output.Tasks...)
+		}
+	}
+
+	return tasks, nil
 }
