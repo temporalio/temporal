@@ -643,14 +643,24 @@ func (c *clientImpl) SetCurrentDeployment(
 	return c.client.SetCurrentDeployment(ctx, request, opts...)
 }
 
-func (c *clientImpl) SetCurrentDeploymentVersion(
+func (c *clientImpl) SetWorkerDeploymentCurrentVersion(
 	ctx context.Context,
-	request *workflowservice.SetCurrentDeploymentVersionRequest,
+	request *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.SetCurrentDeploymentVersionResponse, error) {
+) (*workflowservice.SetWorkerDeploymentCurrentVersionResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.SetCurrentDeploymentVersion(ctx, request, opts...)
+	return c.client.SetWorkerDeploymentCurrentVersion(ctx, request, opts...)
+}
+
+func (c *clientImpl) SetWorkerDeploymentRampingVersion(
+	ctx context.Context,
+	request *workflowservice.SetWorkerDeploymentRampingVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SetWorkerDeploymentRampingVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SetWorkerDeploymentRampingVersion(ctx, request, opts...)
 }
 
 func (c *clientImpl) ShutdownWorker(

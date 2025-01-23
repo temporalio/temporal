@@ -28,6 +28,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 var (
@@ -46,4 +47,29 @@ func findDeployment(deployments *persistencespb.DeploymentData, deployment *depl
 		}
 	}
 	return -1
+}
+
+func findDeploymentVersion(deployments *persistencespb.DeploymentData, dv *deploymentpb.WorkerDeploymentVersion) int {
+	for i, v := range deployments.GetVersions() {
+		if v.Version.Equal(dv) {
+			return i
+		}
+	}
+	return -1
+}
+
+func hasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentpb.WorkerDeploymentVersion) bool {
+	for _, d := range deployments.GetDeployments() {
+		if d.Deployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(v)) {
+			return true
+		}
+	}
+
+	for _, vd := range deployments.GetVersions() {
+		if v.Equal(vd.GetVersion()) {
+			return true
+		}
+	}
+
+	return false
 }
