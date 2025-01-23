@@ -84,7 +84,7 @@ func (j *junitReport) write() {
 	log.Printf("wrote junit report to %s", j.path)
 }
 
-func (j *junitReport) testCases() map[string]struct{} {
+func (j *junitReport) collectTestCases() map[string]struct{} {
 	cases := make(map[string]struct{})
 	for _, suite := range j.Testsuites.Suites {
 		for _, tc := range suite.Testcases {
@@ -94,7 +94,7 @@ func (j *junitReport) testCases() map[string]struct{} {
 	return cases
 }
 
-func (j *junitReport) collectFailures() []string {
+func (j *junitReport) collectTestCaseFailures() []string {
 	root := node{children: make(map[string]node)}
 
 	for _, suite := range j.Testsuites.Suites {
@@ -133,11 +133,17 @@ func (j *junitReport) collectFailures() []string {
 }
 
 func mergeReports(reports []*junitReport) *junitReport {
+	if len(reports) == 0 {
+		log.Fatal("no reports to merge")
+	}
 	if len(reports) == 1 {
 		return reports[0]
 	}
 
 	var combined junit.Testsuites
+	combined.XMLName = reports[0].Testsuites.XMLName
+	combined.Name = reports[0].Testsuites.Name
+	combined.Suites = reports[0].Testsuites.Suites
 
 	for i, report := range reports {
 		combined.Tests += report.Testsuites.Tests
@@ -147,36 +153,33 @@ func mergeReports(reports []*junitReport) *junitReport {
 		combined.Disabled += report.Testsuites.Disabled
 		combined.Time += report.Testsuites.Time
 
-		if i == 0 {
-			combined.XMLName = report.Testsuites.XMLName
-			combined.Name = report.Testsuites.Name
-			combined.Suites = report.Testsuites.Suites
-			continue
-		}
-
-		// Just a sanity check for this tool since it's new and we want to make sure we actually rerun what we
-		// expect.
-		casesTested := report.testCases()
-		casesMissing := make([]string, 0)
-		for _, f := range report.collectFailures() {
-			if _, ok := casesTested[f]; !ok {
-				casesMissing = append(casesMissing, f)
+		// If the report is for a retry ...
+		if i > 0 {
+			// Run sanity check to make sure we rerun what we expect.
+			casesTested := report.collectTestCases()
+			casesMissing := make([]string, 0)
+			previousReport := reports[i-1]
+			for _, f := range previousReport.collectTestCaseFailures() {
+				if _, ok := casesTested[f]; !ok {
+					casesMissing = append(casesMissing, f)
+				}
 			}
-		}
-		if len(casesMissing) > 0 {
-			log.Fatalf("expected a rerun of all failures from the previous attempt, missing: %v", casesMissing)
-		}
-
-		for _, suite := range report.Testsuites.Suites {
-			cpy := suite
-			cpy.Name += fmt.Sprintf(" (retry %d)", i)
-			cpy.Testcases = make([]junit.Testcase, 0, len(suite.Testcases))
-			for _, test := range suite.Testcases {
-				tcpy := test
-				tcpy.Name += fmt.Sprintf(" (retry %d)", i)
-				cpy.Testcases = append(cpy.Testcases, tcpy)
+			if len(casesMissing) > 0 {
+				log.Fatalf("expected a rerun of all failures from the previous attempt, missing: %v", casesMissing)
 			}
-			combined.Suites = append(combined.Suites, cpy)
+
+			// Append the test cases from the retry.
+			for _, suite := range report.Testsuites.Suites {
+				cpy := suite
+				cpy.Name += fmt.Sprintf(" (retry %d)", i)
+				cpy.Testcases = make([]junit.Testcase, 0, len(suite.Testcases))
+				for _, test := range suite.Testcases {
+					tcpy := test
+					tcpy.Name += fmt.Sprintf(" (retry %d)", i)
+					cpy.Testcases = append(cpy.Testcases, tcpy)
+				}
+				combined.Suites = append(combined.Suites, cpy)
+			}
 		}
 	}
 
