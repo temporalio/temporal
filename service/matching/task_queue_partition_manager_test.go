@@ -455,20 +455,23 @@ func (s *PartitionManagerTestSuite) TestHasPollerAfter_Versioned() {
 func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	// not testing TaskQueueStatus, as it is invalid right now and will be changed with the new LegacyDescribeTaskQueue API
 	// no pollers
-	pollers := s.partitionMgr.LegacyDescribeTaskQueue(false).DescResponse.GetPollers()
-	s.Assert().True(len(pollers) == 0)
+	resp, err := s.partitionMgr.LegacyDescribeTaskQueue(false)
+	s.NoError(err)
+	s.Assert().Equal(0, len(resp.DescResponse.GetPollers()))
 
 	// one unversioned poller
 	s.pollWithIdentity("uv", "", false, false)
-	pollers = s.partitionMgr.LegacyDescribeTaskQueue(false).DescResponse.GetPollers()
-	s.Assert().True(len(pollers) == 1)
+	resp, err = s.partitionMgr.LegacyDescribeTaskQueue(false)
+	s.NoError(err)
+	s.Assert().Equal(1, len(resp.DescResponse.GetPollers()))
 
 	// one versioned poller
 	s.pollWithIdentity("v", "bid", true, false)
-	pollers = s.partitionMgr.LegacyDescribeTaskQueue(false).DescResponse.GetPollers()
-	s.Assert().True(len(pollers) == 2)
+	resp, err = s.partitionMgr.LegacyDescribeTaskQueue(false)
+	s.NoError(err)
+	s.Assert().Equal(2, len(resp.DescResponse.GetPollers()))
 
-	for _, p := range pollers {
+	for _, p := range resp.DescResponse.GetPollers() {
 		switch p.GetIdentity() {
 		case "uv":
 			s.Assert().False(p.GetWorkerVersionCapabilities().GetUseVersioning())
