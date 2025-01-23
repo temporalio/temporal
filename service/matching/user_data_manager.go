@@ -64,7 +64,7 @@ type (
 		Start()
 		Stop()
 		WaitUntilInitialized(ctx context.Context) error
-		// GetUserData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
+		// GetUserData returns the user data for this task queue. Do not mutate the returned pointer, as doing so
 		// will cause cache inconsistency.
 		GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
@@ -172,7 +172,7 @@ func (m *userDataManagerImpl) Stop() {
 	m.setUserDataState(userDataClosed, nil)
 }
 
-// GetUserData returns the versioning data for this task queue and a channel that signals when the data has been updated.
+// GetUserData returns the user data for this task queue and a channel that signals when the data has been updated.
 // Do not mutate the returned pointer, as doing so will cause cache inconsistency.
 // If there is no user data, this can return a nil value with no error.
 func (m *userDataManagerImpl) GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
