@@ -65,25 +65,27 @@ func testOnlyStacktrace(stacktrace string) string {
 	var res string
 	snap, _, err := stack.ScanSnapshot(strings.NewReader(stacktrace), io.Discard, stack.DefaultOpts())
 	if err != nil && err != io.EOF {
-		res = fmt.Sprintf("failed to parse stacktrace: %v", err)
-	} else if snap != nil {
-		res = "abridged stacktrace:\n"
-		for _, goroutine := range snap.Goroutines {
-			var shouldPrint bool
-			for _, line := range goroutine.Stack.Calls {
-				if strings.HasSuffix(line.RemoteSrcPath, "_test.go") {
-					shouldPrint = true
-					break
-				}
+		return fmt.Sprintf("failed to parse stacktrace: %v", err)
+	}
+	if snap == nil {
+		return "failed to find a stacktrace"
+	}
+	res = "abridged stacktrace:\n"
+	for _, goroutine := range snap.Goroutines {
+		var shouldPrint bool
+		for _, line := range goroutine.Stack.Calls {
+			if strings.HasSuffix(line.RemoteSrcPath, "_test.go") {
+				shouldPrint = true
+				break
 			}
-			if shouldPrint {
-				res += fmt.Sprintf("\tgoroutine %d [%v]:\n", goroutine.ID, goroutine.State)
-				for _, call := range goroutine.Stack.Calls {
-					file := call.RemoteSrcPath
-					res += fmt.Sprintf("\t\t%s:%d\n", file, call.Line)
-				}
-				res += "\n"
+		}
+		if shouldPrint {
+			res += fmt.Sprintf("\tgoroutine %d [%v]:\n", goroutine.ID, goroutine.State)
+			for _, call := range goroutine.Stack.Calls {
+				file := call.RemoteSrcPath
+				res += fmt.Sprintf("\t\t%s:%d\n", file, call.Line)
 			}
+			res += "\n"
 		}
 	}
 	return res
