@@ -43,9 +43,14 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -130,9 +135,9 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 			tvOldDeployment := tv.WithBuildIDNumber(1)
 			tvNewDeployment := tv.WithBuildIDNumber(2)
 			// previous current deployment
-			s.updateTaskQueueDeploymentData(tvOldDeployment, time.Minute, tqTypeWf)
+			s.updateTaskQueueDeploymentData(tvOldDeployment, true, 0, false, time.Minute, tqTypeWf)
 			// current deployment
-			s.updateTaskQueueDeploymentData(tvNewDeployment, 0, tqTypeWf)
+			s.updateTaskQueueDeploymentData(tvNewDeployment, true, 0, false, 0, tqTypeWf)
 
 			s.startWorkflow(tv, nil)
 
@@ -277,7 +282,7 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 		})
 
 	s.setCurrentDeployment(tv.Deployment())
-	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
+	s.waitForDeploymentDataPropagation(tv, false, tqTypeWf)
 
 	runID := s.startWorkflow(tv, nil)
 
@@ -296,7 +301,7 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 	<-pollerDone // wait for the idle poller to complete to not interfere with the next poller
 
 	// redirect query to new deployment
-	s.updateTaskQueueDeploymentData(tv2, 0, tqTypeWf, tqTypeAct)
+	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
 
 	go s.idlePollWorkflow(tv, true, ver3MinPollTime, "old deployment should not receive query")
 	// Since the current deployment has changed, task will move to the normal queue (thus, sticky=false)
@@ -344,7 +349,7 @@ func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller() {
 			s.NotNil(task)
 			return respondWftWithActivities(tv, tv, false, vbUnpinned, "5"), nil
 		})
-	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
+	s.waitForDeploymentDataPropagation(tv, false, tqTypeWf)
 
 	override := makePinnedOverride(tv.Deployment())
 	s.startWorkflow(tv, override)
@@ -411,7 +416,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 		})
 
 	s.setCurrentDeployment(tv.Deployment())
-	s.waitForDeploymentDataPropagation(tv, tqTypeWf, tqTypeAct)
+	s.waitForDeploymentDataPropagation(tv, false, tqTypeWf, tqTypeAct)
 
 	runID := s.startWorkflow(tv, nil)
 
@@ -432,6 +437,112 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
 }
 
+func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToVersioned() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testUnpinnedWorkflowWithRamp(false)
+		},
+	)
+}
+
+func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToUnversioned() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testUnpinnedWorkflowWithRamp(true)
+		},
+	)
+}
+
+func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
+	// This test sets a 50% ramp and runs 50 wfs and ensures both versions got some wf and
+	// activity tasks.
+
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+	s.warmUpSticky(tv1)
+
+	// v1 is current and v2 is ramping at 50%
+	s.updateTaskQueueDeploymentData(tv1, true, 0, false, 0, tqTypeWf, tqTypeAct)
+	s.updateTaskQueueDeploymentData(tv2, false, 50, toUnversioned, 0, tqTypeWf, tqTypeAct)
+
+	wf := func(ctx workflow.Context, version string) (string, error) {
+		var ret string
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 1 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    1 * time.Second,
+				BackoffCoefficient: 1,
+			},
+		}), "act").Get(ctx, &ret)
+		s.NoError(err)
+		s.Equal(version, ret)
+		return version, nil
+	}
+
+	wf1 := func(ctx workflow.Context) (string, error) {
+		return wf(ctx, "v1")
+	}
+	wf2 := func(ctx workflow.Context) (string, error) {
+		return wf(ctx, "v2")
+	}
+	act1 := func() (string, error) {
+		return "v1", nil
+	}
+	act2 := func() (string, error) {
+		return "v2", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.FrontendGRPCAddress(),
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+
+	w1 := worker.New(sdkClient, tv1.TaskQueue().GetName(), worker.Options{
+		BuildID:                 tv1.BuildID(),
+		UseBuildIDForVersioning: true,
+		DeploymentOptions: worker.DeploymentOptions{
+			DeploymentSeriesName:      tv1.DeploymentSeries(),
+			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+		},
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
+	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+	w2 := worker.New(sdkClient, tv2.TaskQueue().GetName(), worker.Options{
+		BuildID:                 tv2.BuildID(),
+		UseBuildIDForVersioning: !toUnversioned,
+		DeploymentOptions: worker.DeploymentOptions{
+			DeploymentSeriesName:      tv2.DeploymentSeries(),
+			DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+		},
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
+	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	counter := make(map[string]int)
+	for i := 0; i < 50; i++ {
+		run, err := sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv1.TaskQueue().GetName()}, "wf")
+		s.NoError(err)
+		var out string
+		s.NoError(run.Get(ctx, &out))
+		counter[out]++
+	}
+
+	// both versions should've got executions
+	s.Greater(counter["v1"], 0)
+	s.Greater(counter["v2"], 0)
+	s.Equal(50, counter["v1"]+counter["v2"])
+}
+
 func (s *Versioning3Suite) TestTransitionFromWft_Sticky() {
 	s.testTransitionFromWft(true)
 }
@@ -450,7 +561,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 		s.warmUpSticky(tv1)
 	}
 
-	s.updateTaskQueueDeploymentData(tv1, 0, tqTypeWf, tqTypeAct)
+	s.updateTaskQueueDeploymentData(tv1, true, 0, false, 0, tqTypeWf, tqTypeAct)
 	runID := s.startWorkflow(tv1, nil)
 
 	s.pollWftAndHandle(tv1, false, nil,
@@ -472,7 +583,7 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 	s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
 	// Set B as the current deployment
-	s.updateTaskQueueDeploymentData(tv2, 0, tqTypeWf, tqTypeAct)
+	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
 
 	s.pollWftAndHandle(tv2, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -508,15 +619,13 @@ func (s *Versioning3Suite) nexusTaskStaysOnCurrentDeployment() {
 	}
 
 	// current deployment is -> A
-	s.updateTaskQueueDeploymentData(tv1, 0, tqTypeNexus)
-	s.waitForDeploymentDataPropagation(tv1, tqTypeNexus)
+	s.updateTaskQueueDeploymentData(tv1, true, 0, false, 0, tqTypeNexus)
 
 	// local poller with deployment A receives task
 	s.pollAndDispatchNexusTask(tv1, nexusRequest)
 
 	// current deployment is now -> B
-	s.updateTaskQueueDeploymentData(tv2, 0, tqTypeNexus)
-	s.waitForDeploymentDataPropagation(tv2, tqTypeNexus)
+	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeNexus)
 
 	// Pollers of A are there but should not get any task
 	go s.idlePollNexus(tv1, true, ver3MinPollTime, "nexus task should not go to the old deployment")
@@ -549,7 +658,7 @@ func (s *Versioning3Suite) TestEagerActivity() {
 	s.OverrideDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true)
 	tv := testvars.New(s)
 
-	s.updateTaskQueueDeploymentData(tv, 0, tqTypeWf, tqTypeAct)
+	s.updateTaskQueueDeploymentData(tv, true, 0, false, 0, tqTypeWf, tqTypeAct)
 	s.startWorkflow(tv, nil)
 
 	poller, resp := s.pollWftAndHandle(tv, false, nil,
@@ -608,7 +717,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 		s.warmUpSticky(tv1)
 	}
 
-	s.updateTaskQueueDeploymentData(tv1, 0, tqTypeWf, tqTypeAct)
+	s.updateTaskQueueDeploymentData(tv1, true, 0, false, 0, tqTypeWf, tqTypeAct)
 	runID := s.startWorkflow(tv1, nil)
 
 	s.pollWftAndHandle(tv1, false, nil,
@@ -660,7 +769,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
 	// 2. Set d2 as the current deployment
-	s.updateTaskQueueDeploymentData(tv2, 0, tqTypeWf, tqTypeAct)
+	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
 	// Although updateTaskQueueDeploymentData waits for deployment data to reach the TQs, backlogged
 	// tasks might still be waiting behind the old deployment's poll channel. Partition manage should
 	// immediately react to the deployment data changes, but there still is a race possible and the
@@ -736,8 +845,8 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 	tvAct := testvars.New(s).WithDeploymentSeriesNumber(2).WithTaskQueueNumber(2)
 
 	// Set current deployment for each TQ
-	s.updateTaskQueueDeploymentData(tvWf, 0, tqTypeWf)
-	s.updateTaskQueueDeploymentData(tvAct, 0, tqTypeAct)
+	s.updateTaskQueueDeploymentData(tvWf, true, 0, false, 0, tqTypeWf)
+	s.updateTaskQueueDeploymentData(tvAct, true, 0, false, 0, tqTypeAct)
 
 	s.startWorkflow(tvWf, nil)
 
@@ -766,6 +875,121 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 	s.verifyWorkflowVersioning(tvWf, behavior, tvWf.Deployment(), nil, nil)
 }
 
+func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
+	tv := testvars.New(s)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	t1 := time.Now()
+
+	s.syncTaskQueueDeploymentData(tv, tqTypeAct, true, 0, false, t1)
+	s.syncTaskQueueDeploymentData(tv, tqTypeWf, false, 20, false, t1)
+
+	actInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     tv.TaskQueue(),
+		TaskQueueType: tqTypeAct,
+	})
+	s.NoError(err)
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersion(), UpdateTime: timestamp.TimePtr(t1)}, actInfo.GetVersioningInfo())
+
+	wfInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     tv.TaskQueue(),
+		TaskQueueType: tqTypeWf,
+	})
+	s.NoError(err)
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{RampingVersion: tv.DeploymentVersion(), RampingVersionPercentage: 20, UpdateTime: timestamp.TimePtr(t1)}, wfInfo.GetVersioningInfo())
+}
+
+func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
+	tv := testvars.New(s)
+
+	data := s.getTaskQueueDeploymentData(tv, tqTypeAct)
+	s.Nil(data)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeWf)
+	s.Nil(data)
+
+	t1 := time.Now()
+	tv1 := tv.WithBuildIDNumber(1)
+
+	s.syncTaskQueueDeploymentData(tv1, tqTypeAct, true, 0, false, t1)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
+	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+		{Version: tv1.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t1)},
+	}}, data)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeWf)
+	s.Nil(data)
+
+	// Changing things with an older timestamp should not have effect.
+	t0 := t1.Add(-time.Second)
+	s.syncTaskQueueDeploymentData(tv1, tqTypeAct, false, 0, false, t0)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
+	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+		{Version: tv1.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t1)},
+	}}, data)
+
+	// Changing things with a newer timestamp should apply
+	t2 := t1.Add(time.Second)
+	s.syncTaskQueueDeploymentData(tv1, tqTypeAct, false, 20, false, t2)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
+	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+		{Version: tv1.DeploymentVersion(), IsCurrent: false, RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
+	}}, data)
+
+	// Add another version
+	tv2 := tv.WithBuildIDNumber(2)
+	s.syncTaskQueueDeploymentData(tv2, tqTypeAct, false, 10, false, t1)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
+	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+		{Version: tv1.DeploymentVersion(), IsCurrent: false, RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
+		{Version: tv2.DeploymentVersion(), IsCurrent: false, RampPercentage: 10, RoutingUpdateTime: timestamp.TimePtr(t1)},
+	}}, data)
+
+	// Make v2 current
+	s.syncTaskQueueDeploymentData(tv2, tqTypeAct, true, 0, false, t2)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
+	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+		{Version: tv1.DeploymentVersion(), IsCurrent: false, RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
+		{Version: tv2.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t2)},
+	}}, data)
+
+	// Forget v1
+	s.forgetTaskQueueDeploymentVersion(tv1, tqTypeAct, false)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
+	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+		{Version: tv2.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t2)},
+	}}, data)
+
+	// Forget v1 again should be a noop
+	s.forgetTaskQueueDeploymentVersion(tv1, tqTypeAct, false)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
+	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+		{Version: tv2.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t2)},
+	}}, data)
+
+	// Ramp unversioned
+	uv := tv2.DeploymentVersion()
+	uv.Version = ""
+	s.syncTaskQueueDeploymentData(tv2, tqTypeAct, false, 90, true, t2)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
+	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+		{Version: tv2.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t2)},
+		{Version: uv, IsCurrent: false, RampPercentage: 90, RoutingUpdateTime: timestamp.TimePtr(t2)},
+	}}, data)
+
+	// Forget v2
+	s.forgetTaskQueueDeploymentVersion(tv2, tqTypeAct, false)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
+	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+		{Version: uv, IsCurrent: false, RampPercentage: 90, RoutingUpdateTime: timestamp.TimePtr(t2)},
+	}}, data)
+
+	// Forget unversioned ramp
+	s.forgetTaskQueueDeploymentVersion(tv2, tqTypeAct, true)
+	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
+	s.ProtoEqual(&persistencepb.DeploymentData{}, data)
+}
+
 func (s *Versioning3Suite) setCurrentDeployment(
 	deployment *deploymentpb.Deployment,
 ) {
@@ -781,29 +1005,92 @@ func (s *Versioning3Suite) setCurrentDeployment(
 
 func (s *Versioning3Suite) updateTaskQueueDeploymentData(
 	tv *testvars.TestVars,
-	timeSinceCurrent time.Duration,
+	isCurrent bool,
+	ramp float32,
+	rampUnversioned bool,
+	timeSinceUpdate time.Duration,
 	tqTypes ...enumspb.TaskQueueType,
+) {
+	for _, t := range tqTypes {
+		s.syncTaskQueueDeploymentData(tv, t, isCurrent, ramp, rampUnversioned, time.Now().Add(-timeSinceUpdate))
+	}
+	s.waitForDeploymentDataPropagation(tv, rampUnversioned, tqTypes...)
+}
+
+// getTaskQueueDeploymentData gets the deployment data for a given TQ type. The data is always
+// returned from the WF type root partition, so no need to wait for propagation before calling this
+// function.
+func (s *Versioning3Suite) getTaskQueueDeploymentData(
+	tv *testvars.TestVars,
+	tqType enumspb.TaskQueueType,
+) *persistencepb.DeploymentData {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	resp, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(
+		ctx,
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv.TaskQueue().GetName(),
+			TaskQueueType: tqTypeWf,
+		})
+	s.NoError(err)
+	return resp.GetUserData().GetData().GetPerType()[int32(tqType)].GetDeploymentData()
+}
+
+func (s *Versioning3Suite) syncTaskQueueDeploymentData(
+	tv *testvars.TestVars,
+	t enumspb.TaskQueueType,
+	isCurrent bool,
+	ramp float32,
+	rampUnversioned bool,
+	updateTime time.Time,
 ) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
-
-	lastBecameCurrent := time.Now().Add(-timeSinceCurrent)
-	for _, t := range tqTypes {
-		_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
-			ctx, &matchingservice.SyncDeploymentUserDataRequest{
-				NamespaceId:   s.NamespaceID().String(),
-				TaskQueue:     tv.TaskQueue().GetName(),
-				TaskQueueType: t,
-				Deployment:    tv.Deployment(),
-				Data: &deploymentspb.TaskQueueData{
-					FirstPollerTime:       timestamp.TimePtr(lastBecameCurrent),
-					LastBecameCurrentTime: timestamp.TimePtr(lastBecameCurrent),
+	v := tv.DeploymentVersion()
+	if rampUnversioned {
+		v.Version = ""
+	}
+	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
+		ctx, &matchingservice.SyncDeploymentUserDataRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv.TaskQueue().GetName(),
+			TaskQueueType: t,
+			Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+				UpdateVersionData: &persistencepb.DeploymentVersionData{
+					Version:           v,
+					RoutingUpdateTime: timestamp.TimePtr(updateTime),
+					IsCurrent:         isCurrent,
+					RampPercentage:    ramp,
 				},
 			},
-		)
-		s.NoError(err)
+		},
+	)
+	s.NoError(err)
+}
+
+func (s *Versioning3Suite) forgetTaskQueueDeploymentVersion(
+	tv *testvars.TestVars,
+	t enumspb.TaskQueueType,
+	forgetUnversionedRamp bool,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	v := tv.DeploymentVersion()
+	if forgetUnversionedRamp {
+		v.Version = ""
 	}
-	s.waitForDeploymentDataPropagation(tv, tqTypes...)
+	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
+		ctx, &matchingservice.SyncDeploymentUserDataRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueue:     tv.TaskQueue().GetName(),
+			TaskQueueType: t,
+			Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
+				ForgetVersion: v,
+			},
+		},
+	)
+	s.NoError(err)
 }
 
 func (s *Versioning3Suite) verifyWorkflowVersioning(
@@ -1220,6 +1507,7 @@ func (s *Versioning3Suite) warmUpSticky(
 
 func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 	tv *testvars.TestVars,
+	unversionedRamp bool,
 	tqTypes ...enumspb.TaskQueueType,
 ) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -1261,6 +1549,15 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 				deps := perTypes[int32(pt.tp)].GetDeploymentData().GetDeployments()
 				for _, d := range deps {
 					if d.GetDeployment().Equal(tv.Deployment()) {
+						delete(remaining, pt)
+					}
+				}
+				versions := perTypes[int32(pt.tp)].GetDeploymentData().GetVersions()
+				for _, d := range versions {
+					if d.GetVersion().Equal(tv.DeploymentVersion()) {
+						delete(remaining, pt)
+					}
+					if unversionedRamp && d.GetVersion().GetDeploymentName() == tv.DeploymentSeries() && d.GetVersion().GetVersion() == "" {
 						delete(remaining, pt)
 					}
 				}
