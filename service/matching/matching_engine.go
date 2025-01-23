@@ -2582,6 +2582,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		WorkflowType:                historyResponse.WorkflowType,
 		WorkflowNamespace:           historyResponse.WorkflowNamespace,
 		PollerScalingDecision:       task.pollerScalingDecision,
+		Priority:                    historyResponse.Priority,
 	}
 }
 

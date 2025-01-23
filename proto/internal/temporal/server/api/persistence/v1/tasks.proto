@@ -27,6 +27,7 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/timestamp.proto";
 
+import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
@@ -49,9 +50,9 @@ message TaskInfo {
     // How this task should be directed. (Missing means the default for
     // TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 8;
-
     // Stamp field allows to differentiate between different instances of the same task
     int32 stamp = 9;
+    temporal.api.common.v1.Priority priority = 10;
 }
 
 // task_queue column

@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -571,6 +572,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 		Stamp:                  task.Stamp,
+		Priority:               priorities.Merge(mutableState.GetExecutionInfo().Priority, activityInfo.Priority),
 	})
 	if err != nil {
 		return err
