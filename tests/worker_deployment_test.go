@@ -88,8 +88,8 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment() {
 	firstVersion := tv.WithBuildIDNumber(1)
 	secondVersion := tv.WithBuildIDNumber(2)
 
-	go s.pollFromDeployment(ctx, tv)
-	go s.pollFromDeployment(ctx, tv)
+	go s.pollFromDeployment(ctx, firstVersion)
+	go s.pollFromDeployment(ctx, secondVersion)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
@@ -115,8 +115,8 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment() {
 			resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion(),
 			resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetVersion(),
 		}
-		a.Contains(versions, firstVersion.DeploymentVersion())
-		a.Contains(versions, secondVersion.DeploymentVersion())
+		a.Contains(versions, firstVersion.DeploymentVersion().GetVersion())
+		a.Contains(versions, secondVersion.DeploymentVersion().GetVersion())
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetCreateTime())
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetCreateTime())
