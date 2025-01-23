@@ -2215,6 +2215,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		// No need to request eager execution here (for now)
 		RequestEagerExecution: false,
 		CompletionCallbacks:   completionCallbacks,
+		Priority:              previousExecutionInfo.Priority,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -2544,6 +2545,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	}
 
 	ms.executionInfo.MostRecentWorkerVersionStamp = event.SourceVersionStamp
+	ms.executionInfo.Priority = event.Priority
 
 	ms.approximateSize += ms.executionInfo.Size()
 	ms.approximateSize += ms.executionState.Size()
@@ -3288,6 +3290,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
 		ActivityType:            attributes.GetActivityType(),
+		Priority:                attributes.Priority,
 	}
 
 	if attributes.UseWorkflowBuildId {
@@ -5056,6 +5059,7 @@ func (ms *MutableStateImpl) ApplyStartChildWorkflowExecutionInitiatedEvent(
 		NamespaceId:           attributes.GetNamespaceId(),
 		WorkflowTypeName:      attributes.GetWorkflowType().GetName(),
 		ParentClosePolicy:     attributes.GetParentClosePolicy(),
+		Priority:              attributes.Priority,
 	}
 
 	ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci

@@ -90,6 +90,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
 		InheritedBuildId:                request.InheritedBuildId,
 		VersioningOverride:              request.VersioningOverride,
+		Priority:                        req.GetPriority(),
 	}
 
 	parentInfo := request.ParentExecutionInfo
@@ -250,6 +251,7 @@ func (b *EventFactory) CreateActivityTaskScheduledEvent(
 			HeartbeatTimeout:             command.HeartbeatTimeout,
 			RetryPolicy:                  command.RetryPolicy,
 			UseWorkflowBuildId:           command.UseWorkflowBuildId,
+			Priority:                     command.Priority,
 		},
 	}
 	return event
@@ -856,6 +858,7 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			SearchAttributes:             command.SearchAttributes,
 			ParentClosePolicy:            command.GetParentClosePolicy(),
 			InheritBuildId:               command.InheritBuildId,
+			Priority:                     command.Priority,
 		},
 	}
 	return event
