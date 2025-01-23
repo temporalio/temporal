@@ -202,11 +202,12 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) HasPollerAfter(buildId, acc
 }
 
 // LegacyDescribeTaskQueue mocks base method.
-func (m *MocktaskQueuePartitionManager) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+func (m *MocktaskQueuePartitionManager) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) (*matchingservice.DescribeTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LegacyDescribeTaskQueue", includeTaskQueueStatus)
 	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueueResponse)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // LegacyDescribeTaskQueue indicates an expected call of LegacyDescribeTaskQueue.

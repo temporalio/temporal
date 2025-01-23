@@ -154,6 +154,22 @@ type (
 	}
 )
 
+func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(
+	ctx context.Context,
+	request *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
+) (*workflowservice.SetWorkerDeploymentCurrentVersionResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(
+	ctx context.Context,
+	request *workflowservice.SetWorkerDeploymentRampingVersionRequest,
+) (*workflowservice.SetWorkerDeploymentRampingVersionResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
 	config *Config,
@@ -3376,11 +3392,6 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	return &workflowservice.DescribeWorkerDeploymentVersionResponse{
 		WorkerDeploymentVersionInfo: workerDeploymentVersionInfo,
 	}, nil
-}
-
-// TODO (Shivam): Implement this
-func (wh *WorkflowHandler) SetCurrentDeploymentVersion(ctx context.Context, request *workflowservice.SetCurrentDeploymentVersionRequest) (_ *workflowservice.SetCurrentDeploymentVersionResponse, retError error) {
-	return nil, nil
 }
 
 func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request *workflowservice.DescribeWorkerDeploymentRequest) (_ *workflowservice.DescribeWorkerDeploymentResponse, retError error) {
