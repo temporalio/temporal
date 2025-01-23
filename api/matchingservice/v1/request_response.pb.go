@@ -2393,7 +2393,7 @@ type SyncDeploymentUserDataRequest_UpdateVersionData struct {
 }
 
 type SyncDeploymentUserDataRequest_ForgetVersion struct {
-	// Pass to clean up this version's data from the task queue.
+	// The version whose data should be cleaned from the task queue.
 	ForgetVersion *v111.WorkerDeploymentVersion `protobuf:"bytes,7,opt,name=forget_version,json=forgetVersion,proto3,oneof"`
 }
 

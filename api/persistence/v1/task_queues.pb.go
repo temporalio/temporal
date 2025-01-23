@@ -559,15 +559,16 @@ type DeploymentVersionData struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Special case: `version.version` may be absent (but not `version.deployment_name`). That is
+	// Special case: `version.version` may be empty (but not `version.deployment_name`). That is
 	// only valid when `ramp_percentage` is non-zero, representing ramping to unversioned in a
-	// particular deployment name.
+	// particular worker deployment.
 	Version *v12.WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	// Last time `is_current` or `ramp_percentage` of this version changed.
 	RoutingUpdateTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=routing_update_time,json=routingUpdateTime,proto3" json:"routing_update_time,omitempty"`
 	// If this version is the current version of its deployment.
 	IsCurrent bool `protobuf:"varint,3,opt,name=is_current,json=isCurrent,proto3" json:"is_current,omitempty"`
-	// Range: [0, 100]. Must be zero if is_current is true. Must be non-zero if version is null.
+	// Range: [0, 100]. Must be zero if is_current is true. Must be non-zero if `version.version`
+	// is empty.
 	RampPercentage float32 `protobuf:"fixed32,4,opt,name=ramp_percentage,json=rampPercentage,proto3" json:"ramp_percentage,omitempty"`
 }
 
