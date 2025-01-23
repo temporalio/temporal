@@ -39,6 +39,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	serverenumspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -46,6 +47,7 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
@@ -482,6 +484,89 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	}
 }
 
+func (s *PartitionManagerTestSuite) TestPollScalingUpOnBacklog() {
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+	}
+	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, &internalTask{}, time.Now())
+	s.Assert().GreaterOrEqual(decision.PollerDelta, int32(1))
+}
+
+func (s *PartitionManagerTestSuite) TestPollScalingNonRootPartition() {
+	// Non-root partitions only get to emit decisions on high backlog
+	f, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
+	s.Assert().NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
+	s.partitionMgr.partition = partition
+	// Also disable rate limit to ensure that's not why nil is returned here
+	s.controller = gomock.NewController(s.T())
+	rl := quotas.NewMockRateLimiter(s.controller)
+	rl.EXPECT().Allow().Return(true).Times(1)
+	s.partitionMgr.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+	}
+	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, &internalTask{}, time.Now())
+	s.Assert().GreaterOrEqual(decision.PollerDelta, int32(1))
+
+	fakeStats.ApproximateBacklogCount = 0
+	decision = s.partitionMgr.makePollerScalingDecision(fakeStats, &internalTask{}, time.Now())
+	s.Assert().Nil(decision)
+}
+
+func (s *PartitionManagerTestSuite) TestPollScalingDownOnLongSyncMatch() {
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+	}
+	fakeInternalTask := &internalTask{
+		source: serverenumspb.TASK_SOURCE_HISTORY,
+	}
+	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, fakeInternalTask, time.Now().Add(-2*time.Second))
+	s.Assert().LessOrEqual(decision.PollerDelta, int32(-1))
+}
+
+func (s *PartitionManagerTestSuite) TestPollScalingUpOnSlowDispatching() {
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+		TasksAddRate:            1000,
+		TasksDispatchRate:       100,
+	}
+	fakeInternalTask := &internalTask{
+		source: serverenumspb.TASK_SOURCE_HISTORY,
+	}
+	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, fakeInternalTask, time.Now())
+	s.Assert().GreaterOrEqual(decision.PollerDelta, int32(1))
+}
+
+func (s *PartitionManagerTestSuite) TestPollScalingDownOnFastDispatching() {
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+		TasksAddRate:            100,
+		TasksDispatchRate:       1000,
+	}
+	fakeInternalTask := &internalTask{
+		source: serverenumspb.TASK_SOURCE_HISTORY,
+	}
+	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, fakeInternalTask, time.Now())
+	s.Assert().LessOrEqual(decision.PollerDelta, int32(-1))
+}
+
+func (s *PartitionManagerTestSuite) TestPollScalingDecisionsAreRateLimited() {
+	s.controller = gomock.NewController(s.T())
+	rl := quotas.NewMockRateLimiter(s.controller)
+	rl.EXPECT().Allow().Return(true).Times(1)
+	rl.EXPECT().Allow().Return(false).Times(1)
+	s.partitionMgr.pollerScalingRateLimiter = rl
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+	}
+	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, &internalTask{}, time.Now())
+	s.Assert().GreaterOrEqual(decision.PollerDelta, int32(1))
+	decision = s.partitionMgr.makePollerScalingDecision(fakeStats, &internalTask{}, time.Now())
+	s.Assert().Nil(decision)
+}
+
 func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistencespb.VersioningData, directive *taskqueuespb.TaskVersionDirective) {
 	timeout := 1000000 * time.Millisecond
 	if expectedSyncMatch {
@@ -528,7 +613,7 @@ func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, us
 }
 
 // Poll task and assert no error and that a non-nil task is returned
-func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioning bool) {
+func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioning bool) *internalTask {
 	ctx, cancel := context.WithTimeout(context.Background(), 1000000*time.Millisecond)
 	defer cancel()
 
@@ -540,6 +625,8 @@ func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioni
 	})
 	s.Assert().NoError(err)
 	s.Assert().NotNil(task)
+
+	return task
 }
 
 // UpdatePollerData is a no-op if the poller context has no identity, so we need a context with identity for any tests that check poller info
