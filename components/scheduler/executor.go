@@ -81,7 +81,7 @@ func (e Executor) SetState(state enumsspb.SchedulerExecutorState) {
 }
 
 func (e Executor) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
-	return nil, nil
+	return e.tasks()
 }
 
 func (executorMachineDefinition) Type() string {
@@ -114,9 +114,7 @@ var TransitionExecute = hsm.NewTransition(
 	},
 	enumsspb.SCHEDULER_EXECUTOR_STATE_EXECUTING,
 	func(e Executor, event EventExecute) (hsm.TransitionOutput, error) {
-		// We want Executor to immediately wake and attempt to buffer when new starts
-		// are added.
-		e.NextInvocationTime = nil
+		e.NextInvocationTime = timestamppb.New(event.Deadline)
 		e.BufferedStarts = append(e.BufferedStarts, event.BufferedStarts...)
 
 		return e.output()
@@ -128,6 +126,7 @@ var TransitionExecute = hsm.NewTransition(
 var TransitionWait = hsm.NewTransition(
 	[]enumsspb.SchedulerExecutorState{
 		enumsspb.SCHEDULER_EXECUTOR_STATE_UNSPECIFIED,
+		enumsspb.SCHEDULER_EXECUTOR_STATE_WAITING,
 		enumsspb.SCHEDULER_EXECUTOR_STATE_EXECUTING,
 	},
 	enumsspb.SCHEDULER_EXECUTOR_STATE_WAITING,
