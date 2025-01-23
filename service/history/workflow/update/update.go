@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -350,9 +349,6 @@ func (u *Update) Admit(
 	u.instrumentation.countRequestMsg()
 
 	// Marshal Update request here to return InvalidArgument to the API caller if it can't be marshaled.
-	if err := utf8validator.Validate(req, utf8validator.SourceRPCRequest); err != nil {
-		return invalidArgf("unable to validate utf-8 request: %v", err)
-	}
 	reqAny, err := anypb.New(req)
 	if err != nil {
 		return invalidArgf("unable to unmarshal request: %v", err)
@@ -403,10 +399,6 @@ func (u *Update) OnProtocolMessage(
 	body, err := protocolMsg.Body.UnmarshalNew()
 	if err != nil {
 		return invalidArgf("unable to unmarshal request: %v", err)
-	}
-	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
-	if err != nil {
-		return invalidArgf("unable to validate utf-8 request: %v", err)
 	}
 
 	// If no new events can be added to the event store (e.g., workflow is completed),
@@ -524,7 +516,6 @@ func (u *Update) onAcceptanceMsg(
 			return internalErrorf("unable to unmarshal original request: %v", err)
 		}
 	}
-	// utf8validator: we just marshaled u.request ourself earlier, so we don't need to validate it for utf8 strings here
 
 	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(
 		u.id,

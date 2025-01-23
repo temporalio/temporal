@@ -658,10 +658,6 @@ var (
 		"wf_too_many_pending_external_workflow_signals",
 		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending signals to external workflows to be exceeded. See https://t.mp/limits for more information."),
 	)
-	UTF8ValidationErrors = NewCounterDef(
-		"utf8_validation_errors",
-		WithDescription("Number of times the service encountered a proto message with invalid UTF-8 in a string field"),
-	)
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
