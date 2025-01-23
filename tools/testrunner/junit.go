@@ -94,7 +94,7 @@ func (j *junitReport) testCases() map[string]struct{} {
 	return cases
 }
 
-func (j *junitReport) failures() []string {
+func (j *junitReport) collectFailures() []string {
 	root := node{children: make(map[string]node)}
 
 	for _, suite := range j.Testsuites.Suites {
@@ -158,7 +158,7 @@ func mergeReports(reports []*junitReport) *junitReport {
 		// expect.
 		casesTested := report.testCases()
 		casesMissing := make([]string, 0)
-		for _, f := range report.failures() {
+		for _, f := range report.collectFailures() {
 			if _, ok := casesTested[f]; !ok {
 				casesMissing = append(casesMissing, f)
 			}

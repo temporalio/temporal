@@ -197,7 +197,7 @@ func Main() {
 		}
 
 		// Sanity check: make sure failures are reported when the run failed.
-		failures := currentAttempt.junitReport.failures()
+		failures := currentAttempt.junitReport.collectFailures()
 		if len(failures) == 0 {
 			log.Fatalf("tests failed but no failures have been detected, not rerunning tests")
 		}

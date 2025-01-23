@@ -35,7 +35,7 @@ func TestReadJUnitReport(t *testing.T) {
 	j.read()
 	require.Len(t, j.Testsuites.Suites, 1)
 	require.Equal(t, 2, j.Testsuites.Failures)
-	require.Equal(t, []string{"TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument"}, j.failures())
+	require.Equal(t, []string{"TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument"}, j.collectFailures())
 }
 
 func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
