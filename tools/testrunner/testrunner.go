@@ -186,10 +186,10 @@ func Main() {
 
 			// Don't retry.
 			break
-		} else {
-			// All tests were run, parse JUnit XML output.
-			currentAttempt.junitReport.read()
 		}
+
+		// All tests were run, parse JUnit XML output.
+		currentAttempt.junitReport.read()
 
 		// If the run completely successfull, no need to retry.
 		if currentAttempt.exitErr == nil {
