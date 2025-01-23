@@ -33,8 +33,6 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
@@ -73,19 +71,12 @@ func (s *WorkerDeploymentSuite) SetupTest() {
 }
 
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
-func (s *WorkerDeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
-	deploymentName string, version string) {
-	tv := testvars.New(s)
-
+func (s *WorkerDeploymentSuite) pollFromDeployment(ctx context.Context, tv *testvars.TestVars) {
 	_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
-		TaskQueue: taskQueue,
-		Identity:  tv.Any().String(),
-		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-			UseVersioning:        true,
-			BuildId:              version,
-			DeploymentSeriesName: deploymentName,
-		},
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          "random",
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	})
 }
 
@@ -95,22 +86,22 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment() {
 	tv := testvars.New(s)
 
 	// Starting two versions of the deployment
-	firstVersion := tv.WithDeploymentVersionNumber(1)
-	secondVersion := tv.WithDeploymentVersionNumber(2)
+	firstVersion := tv.WithBuildIDNumber(1)
+	secondVersion := tv.WithBuildIDNumber(2)
 
-	go s.pollFromDeployment(ctx, tv.TaskQueue(), tv.DeploymentName(), firstVersion.DeploymentVersion())
-	go s.pollFromDeployment(ctx, tv.TaskQueue(), tv.DeploymentName(), secondVersion.DeploymentVersion())
+	go s.pollFromDeployment(ctx, firstVersion)
+	go s.pollFromDeployment(ctx, secondVersion)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 
 		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      s.Namespace().String(),
-			DeploymentName: tv.DeploymentName(),
+			DeploymentName: tv.DeploymentSeries(),
 		})
 		a.NoError(err)
 		a.NotNil(resp.GetWorkerDeploymentInfo())
-		a.Equal(tv.DeploymentName(), resp.GetWorkerDeploymentInfo().GetName())
+		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentInfo().GetName())
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries())
 		a.Equal(2, len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()))
@@ -125,8 +116,8 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment() {
 			resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion(),
 			resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetVersion(),
 		}
-		a.Contains(versions, firstVersion.DeploymentVersion())
-		a.Contains(versions, secondVersion.DeploymentVersion())
+		a.Contains(versions, firstVersion.DeploymentVersion().GetVersion())
+		a.Contains(versions, secondVersion.DeploymentVersion().GetVersion())
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetCreateTime())
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetCreateTime())

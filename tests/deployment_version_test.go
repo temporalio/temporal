@@ -33,9 +33,7 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -96,31 +94,21 @@ func (s *DeploymentVersionSuite) TearDownTest() {
 }
 
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
-func (s *DeploymentVersionSuite) pollFromDeployment(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
-	deploymentName string, version string) {
+func (s *DeploymentVersionSuite) pollFromDeployment(ctx context.Context, tv *testvars.TestVars) {
 	_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace().String(),
-		TaskQueue: taskQueue,
-		Identity:  "random",
-		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-			UseVersioning:        true,
-			BuildId:              version,
-			DeploymentSeriesName: deploymentName,
-		},
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          "random",
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	})
 }
 
-func (s *DeploymentVersionSuite) pollActivityFromDeployment(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
-	deploymentName string, version string) {
+func (s *DeploymentVersionSuite) pollActivityFromDeployment(ctx context.Context, tv *testvars.TestVars) {
 	_, _ = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: s.Namespace().String(),
-		TaskQueue: taskQueue,
-		Identity:  "random",
-		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-			UseVersioning:        true,
-			BuildId:              version,
-			DeploymentSeriesName: deploymentName,
-		},
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          "random",
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	})
 }
 
@@ -132,7 +120,7 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 	numberOfDeployments := 1
 
 	// Starting a deployment workflow
-	go s.pollFromDeployment(ctx, tv.TaskQueue(), tv.DeploymentName(), tv.DeploymentVersion())
+	go s.pollFromDeployment(ctx, tv)
 
 	// Querying the Deployment
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -140,12 +128,12 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
-			Version:   tv.DeploymentVersion(),
+			Version:   tv.BuildID(),
 		})
 		a.NoError(err)
 
-		a.Equal(tv.DeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
-		a.Equal(tv.DeploymentVersion(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
+		a.Equal(tv.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 
 		a.Equal(numberOfDeployments, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
 		if len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()) < numberOfDeployments {
@@ -164,10 +152,10 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 	s.NoError(err)
 	// Making concurrent polls to 4 partitions, 3 polls to each
 	for p := 0; p < 4; p++ {
-		tq := &taskqueuepb.TaskQueue{Name: root.TaskQueue().NormalPartition(p).RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+		tv2 := tv.WithTaskQueue(root.TaskQueue().NormalPartition(p).RpcName())
 		for i := 0; i < 3; i++ {
-			go s.pollFromDeployment(ctx, tq, tv.DeploymentName(), tv.DeploymentVersion())
-			go s.pollActivityFromDeployment(ctx, tq, tv.DeploymentName(), tv.DeploymentVersion())
+			go s.pollFromDeployment(ctx, tv2)
+			go s.pollActivityFromDeployment(ctx, tv2)
 		}
 	}
 
@@ -177,13 +165,13 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
-			Version:   tv.DeploymentVersion(),
+			Version:   tv.BuildID(),
 		})
 		if !a.NoError(err) {
 			return
 		}
-		a.Equal(tv.DeploymentName(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
-		a.Equal(tv.DeploymentVersion(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
+		a.Equal(tv.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 
 		if !a.Equal(2, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos())) {
 			return

@@ -136,32 +136,30 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	}()
 
 	prevCurrentVersion := d.State.CurrentVersion
-	versionUpdateTime := timestamppb.New(workflow.Now(ctx))
 
-	// tell new current that it's now current
-	if _, err = d.syncVersion(ctx, args.Version, versionUpdateTime); err != nil {
+	// update local state
+	d.State.CurrentVersion = args.Version
+	d.State.CurrentChangedTime = timestamppb.New(workflow.Now(ctx))
+
+	// update memo
+	if err = d.updateMemo(ctx); err != nil {
 		return nil, err
 	}
 
-	// tell previous current that it's no longer current
+	// tell new current that it's current
+	if _, err := d.syncVersion(ctx, d.State.CurrentVersion); err != nil {
+		return nil, err
+	}
+
 	if prevCurrentVersion != "" {
-		if _, err = d.syncVersion(ctx, prevCurrentVersion, nil); err != nil {
-			// TODO (Shivam): Compensation functions required to roll back the changes caused by the earlier activity.
+		// tell previous current that it's no longer current
+		if _, err := d.syncVersion(ctx, prevCurrentVersion); err != nil {
 			return nil, err
 		}
 	}
 
-	// update local state since task-queue sync succeeded
-	d.State.CurrentVersion = args.Version
-	d.State.CurrentChangedTime = versionUpdateTime
+	return &deploymentspb.SetCurrentVersionResponse{}, nil
 
-	if err := d.updateMemo(ctx); err != nil {
-		return nil, err
-	}
-
-	return &deploymentspb.SetCurrentVersionResponse{
-		PreviousCurrentVersion: prevCurrentVersion,
-	}, nil
 }
 
 func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) error {
@@ -199,13 +197,12 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	return nil
 }
 
-func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string, versionUpdatedTime *timestamppb.Timestamp) (*deploymentspb.VersionLocalState, error) {
+func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string) (*deploymentspb.VersionLocalState, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
 	setCur := &deploymentspb.SyncVersionStateArgs_SetCurrent{}
-	if d.State.CurrentVersion != version {
-		// version attempting to become the new "current"
-		setCur.LastBecameCurrentTime = versionUpdatedTime
+	if d.State.CurrentVersion == version {
+		setCur.LastBecameCurrentTime = d.State.CurrentChangedTime
 	}
 
 	var res deploymentspb.SyncVersionStateActivityResult

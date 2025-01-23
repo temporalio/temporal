@@ -3383,8 +3383,9 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	}, nil
 }
 
-// TODO (Shivam): Implement this
 func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentRampingVersionRequest) (_ *workflowservice.SetWorkerDeploymentRampingVersionResponse, retError error) {
+	//TODO implement me
+	panic("implement me")
 	return nil, nil
 }
 
