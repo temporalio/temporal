@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -91,7 +92,7 @@ func NewMemoryScheduledQueueFactory(
 		clusterMetadata:   params.ClusterMetadata,
 		timeSource:        params.TimeSource,
 		metricsHandler:    metricsHandler,
-		tracer:            params.TracerProvider.Tracer("queue.memory"),
+		tracer:            params.TracerProvider.Tracer(telemetry.ComponentQueueMemory),
 		logger:            logger,
 		executorWrapper:   params.ExecutorWrapper,
 	}

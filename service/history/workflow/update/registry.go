@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -163,7 +164,7 @@ func WithMetrics(m metrics.Handler) Option {
 // trace.Tracer) to be used by Registry and its Updates.
 func WithTracerProvider(t trace.TracerProvider) Option {
 	return func(r *registry) {
-		r.instrumentation.tracer = t.Tracer(libraryName)
+		r.instrumentation.tracer = t.Tracer(telemetry.ComponentUpdateRegistry)
 	}
 }
 
