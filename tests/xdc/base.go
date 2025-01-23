@@ -255,7 +255,7 @@ func (s *xdcBaseSuite) failover(
 	client workflowservice.WorkflowServiceClient,
 ) {
 	// wait for replication task propagation
-	time.Sleep(4 * time.Second)
+	s.waitForClusterSynced()
 
 	// update namespace to fail over
 	updateReq := &workflowservice.UpdateNamespaceRequest{

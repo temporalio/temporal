@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -88,7 +89,7 @@ func NewTransferQueueFactory(
 				),
 				int64(params.Config.TransferQueueMaxReaderCount()),
 			),
-			Tracer: params.TracerProvider.Tracer("queue.transfer"),
+			Tracer: params.TracerProvider.Tracer(telemetry.ComponentQueueTransfer),
 		},
 	}
 }
