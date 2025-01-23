@@ -7,6 +7,8 @@ retract (
 	v1.26.0 // Published accidentally.
 )
 
+replace go.temporal.io/api => go.temporal.io/api v1.43.2-0.20250121234928-f4e3b077daa6
+
 require (
 	cloud.google.com/go/storage v1.41.0
 	github.com/aws/aws-sdk-go v1.53.15
@@ -29,9 +31,8 @@ require (
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
 	github.com/lib/pq v1.10.9
-	github.com/maruel/panicparse/v2 v2.4.0
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/nexus-rpc/sdk-go v0.1.1
+	github.com/nexus-rpc/sdk-go v0.1.1-0.20250114202038-3196e4226205
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pborman/uuid v1.2.1
@@ -42,7 +43,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sony/gobreaker v1.0.0
 	github.com/stretchr/testify v1.10.0
-	github.com/temporalio/ringpop-go v0.0.0-20250130211428-b97329e994f7
+	github.com/temporalio/ringpop-go v0.0.0-20241119001152-e505ebd8f887
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
 	github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938
 	github.com/temporalio/tctl-kit v0.0.0-20230328153839-577f95d16fa0
@@ -58,8 +59,8 @@ require (
 	go.opentelemetry.io/otel/sdk v1.31.0
 	go.opentelemetry.io/otel/sdk/metric v1.31.0
 	go.opentelemetry.io/otel/trace v1.31.0
-	go.temporal.io/api v1.43.3-0.20250203200949-1f14206b0af8
-	go.temporal.io/sdk v1.31.0
+	go.temporal.io/api v1.43.2-0.20250114194029-61f369a5f511
+	go.temporal.io/sdk v1.32.1
 	go.temporal.io/version v0.3.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/fx v1.22.0
@@ -155,5 +156,3 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
-
-replace go.temporal.io/api => github.com/temporalio/api-go v1.43.2-0.20250121160331-c633e0f6ca1e
