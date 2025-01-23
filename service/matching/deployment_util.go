@@ -58,15 +58,15 @@ func findDeploymentVersion(deployments *persistencespb.DeploymentData, dv *deplo
 	return -1
 }
 
-func hasDeploymentVersion(deployments *persistencespb.DeploymentData, deployment *deploymentpb.Deployment) bool {
+func hasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentpb.WorkerDeploymentVersion) bool {
 	for _, d := range deployments.GetDeployments() {
-		if d.Deployment.Equal(deployment) {
+		if d.Deployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(v)) {
 			return true
 		}
 	}
 
-	for _, v := range deployments.GetVersions() {
-		if deployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(v.GetVersion())) {
+	for _, vd := range deployments.GetVersions() {
+		if v.Equal(vd.GetVersion()) {
 			return true
 		}
 	}

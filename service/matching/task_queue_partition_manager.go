@@ -391,6 +391,11 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		request.VersionDirective,
+		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
+		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
+		// that only try up to 200ms sync-match. Therefore, to prevent blocking the request on the wrong build ID, its
+		// more important to allow the parent partition to make a fresh versioning decision in case the child partition
+		// did not have up-to-date User Data when selected a dispatch build ID.
 		nil,
 		request.GetQueryRequest().GetExecution().GetRunId(),
 		request.GetQueryRequest().GetExecution().GetWorkflowId())
@@ -413,6 +418,11 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
 	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		worker_versioning.MakeUseAssignmentRulesDirective(),
+		// We do not pass forwardInfo because we want the parent partition to make fresh versioning decision. Note that
+		// forwarded Query/Nexus task requests do not expire rapidly in contrast to forwarded activity/workflow tasks
+		// that only try up to 200ms sync-match. Therefore, to prevent blocking the request on the wrong build ID, its
+		// more important to allow the parent partition to make a fresh versioning decision in case the child partition
+		// did not have up-to-date User Data when selected a dispatch build ID.
 		nil,
 		"",
 		"")
@@ -816,7 +826,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		// not present in the workflow's pinned deployment. Such activities are considered
 		// independent activities and are treated as unpinned, sent to their TQ's current deployment.
 		isIndependentActivity := pm.partition.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY &&
-			!hasDeploymentVersion(deploymentData, deployment)
+			!hasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(deployment))
 		if !isIndependentActivity {
 			pinnedQueue, err := pm.getVersionedQueue(ctx, "", "", deployment, true)
 			if err != nil {

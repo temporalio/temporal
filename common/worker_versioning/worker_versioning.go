@@ -352,7 +352,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 }
 
 // FindDeploymentVersionForWorkflowID returns the deployment version that should be used for a
-// particular workflow ID based on the versioning info of the task queue.
+// particular workflow ID based on the versioning info of the task queue. Nil means unversioned.
 func FindDeploymentVersionForWorkflowID(versioningInfo *taskqueuepb.TaskQueueVersioningInfo, workflowId string) *deploymentpb.WorkerDeploymentVersion {
 	if versioningInfo == nil {
 		return nil // unversioned
@@ -403,19 +403,13 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 		}
 	}
 
-	// Find new current
+	// Find new current and ramping
 	for _, v := range deployments.GetVersions() {
-		// [cleanup-old-wv]
 		if v.RoutingUpdateTime != nil && v.GetIsCurrent() {
 			if t := v.RoutingUpdateTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
 				current = v
 			}
 		}
-	}
-
-	// Find ramping version
-	for _, v := range deployments.GetVersions() {
-		// [cleanup-old-wv]
 		if v.RoutingUpdateTime != nil && v.GetRampPercentage() > 0 {
 			if t := v.RoutingUpdateTime.AsTime(); t.After(ramping.GetRoutingUpdateTime().AsTime()) {
 				ramping = v

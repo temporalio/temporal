@@ -137,15 +137,16 @@ message DeploymentData {
 // The source of truth for this data is in the WorkerDeployment entity workflows, which is
 // synced to all TQs whenever the source changes.
 message DeploymentVersionData {
-    // Special case: `version.version` may be absent (but not `version.deployment_name`). That is
+    // Special case: `version.version` may be empty (but not `version.deployment_name`). That is
     // only valid when `ramp_percentage` is non-zero, representing ramping to unversioned in a
-    // particular deployment name.
+    // particular worker deployment.
     temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
     // Last time `is_current` or `ramp_percentage` of this version changed.
     google.protobuf.Timestamp routing_update_time = 2;
     // If this version is the current version of its deployment.
     bool is_current = 3;
-    // Range: [0, 100]. Must be zero if is_current is true. Must be non-zero if version is null.
+    // Range: [0, 100]. Must be zero if is_current is true. Must be non-zero if `version.version`
+    // is empty.
     float ramp_percentage = 4;
 }
 
