@@ -810,10 +810,12 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 
 	// TODO (Shivam): Add metadata and aggregated pollers status
 	return &deploymentpb.WorkerDeploymentVersionInfo{
-		DeploymentName: state.DeploymentName,
-		Version:        state.Version,
-		CreateTime:     state.CreateTime,
-		TaskQueueInfos: taskQueues,
+		DeploymentName:       state.DeploymentName,
+		Version:              state.Version,
+		CreateTime:           state.CreateTime,
+		TaskQueueInfos:       taskQueues,
+		AcceptsNewExecutions: state.IsCurrent, // TODO (Carly): or if ramping or if unversioned is active
+		DrainageInfo:         state.DrainageInfo,
 	}
 }
 

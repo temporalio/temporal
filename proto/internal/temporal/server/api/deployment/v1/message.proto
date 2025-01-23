@@ -27,6 +27,7 @@ package temporal.server.api.deployment.v1;
 option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/enums/v1/deployment.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
@@ -58,6 +59,10 @@ message VersionLocalState {
         // truth for that is the value at the root of WorkerDeploymentLocalState.
         map<int32, DeploymentVersionTaskQueueData> task_queues = 1;
     }
+
+    temporal.api.enums.v1.VersionRoutingState routing_state = 8;
+
+    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 9;
 }
 
 // used as Worker Deployment Version workflow input:
