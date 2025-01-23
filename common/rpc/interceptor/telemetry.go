@@ -215,10 +215,14 @@ func (ti *TelemetryInterceptor) RecordLatencyMetrics(ctx context.Context, startT
 		userLatencyDuration = time.Duration(val)
 		metrics.ServiceLatencyUserLatency.With(metricsHandler).Record(userLatencyDuration)
 	}
+	handoverRetryLatency := time.Duration(0)
+	if val, ok := metrics.ContextCounterGet(ctx, metrics.NamespaceHandoverRetryLatency.Name()); ok {
+		handoverRetryLatency = time.Duration(val)
+	}
 
 	latency := time.Since(startTime)
 	metrics.ServiceLatency.With(metricsHandler).Record(latency)
-	noUserLatency := max(0, latency-userLatencyDuration)
+	noUserLatency := max(0, latency-userLatencyDuration-handoverRetryLatency)
 	metrics.ServiceLatencyNoUserLatency.With(metricsHandler).Record(noUserLatency)
 }
 

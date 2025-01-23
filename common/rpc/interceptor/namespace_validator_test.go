@@ -26,7 +26,6 @@ package interceptor
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
@@ -210,7 +209,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 		{
 			state:            enumspb.NAMESPACE_STATE_REGISTERED,
 			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
-			expectedErr:      errors.New("error refresh"),
+			expectedErr:      common.ErrNamespaceHandover,
 			method:           api.WorkflowServicePrefix + "StartWorkflowExecution",
 			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
@@ -409,10 +408,6 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 							},
 						},
 					}), nil)
-			}
-			if _, allow := allowedMethodsDuringHandover[api.MethodName(testCase.method)]; !allow &&
-				testCase.replicationState == enumspb.REPLICATION_STATE_HANDOVER {
-				s.mockRegistry.EXPECT().RefreshNamespaceById(namespace.ID("")).Return(nil, errors.New("error refresh"))
 			}
 
 			nvi := NewNamespaceValidatorInterceptor(
@@ -980,15 +975,9 @@ func (s *namespaceValidatorSuite) Test_HandleRequestWithHandoverRetry() {
 		},
 		{
 			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
-			expectedErr:      nil,
+			expectedErr:      common.ErrNamespaceHandover,
 			method:           api.WorkflowServicePrefix + "StartWorkflowExecution",
 			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
-		},
-		{
-			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
-			expectedErr:      errors.New("refresh fail"),
-			method:           api.WorkflowServicePrefix + "StartWorkflowExecution",
-			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace-2"},
 		},
 	}
 
@@ -1005,28 +994,6 @@ func (s *namespaceValidatorSuite) Test_HandleRequestWithHandoverRetry() {
 			s.Fail("invalid test case without namespace")
 		}
 		namespaceName := reqWithNamespace.GetNamespace()
-
-		if testCase.expectedErr != nil {
-			s.mockRegistry.EXPECT().RefreshNamespaceById(namespace.ID(namespaceName)).Return(nil, errors.New("refresh fail"))
-		}
-
-		if _, allow := allowedMethodsDuringHandover[api.MethodName(testCase.method)]; !allow && testCase.replicationState == enumspb.REPLICATION_STATE_HANDOVER && testCase.expectedErr == nil {
-			s.mockRegistry.EXPECT().RefreshNamespaceById(namespace.ID(namespaceName)).Return(namespace.FromPersistentState(
-				&persistence.GetNamespaceResponse{
-					Namespace: &persistencespb.NamespaceDetail{
-						Config: &persistencespb.NamespaceConfig{},
-						ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-							State: enumspb.REPLICATION_STATE_NORMAL,
-						},
-						Info: &persistencespb.NamespaceInfo{
-							Id:    namespaceName,
-							Name:  namespaceName,
-							State: enumspb.NAMESPACE_STATE_REGISTERED,
-						},
-					},
-				},
-			), nil)
-		}
 
 		handlerCalled := false
 		_, err := nvi.handleRequestWithHandoverRetry(context.Background(), testCase.req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {

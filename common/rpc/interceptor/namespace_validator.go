@@ -26,6 +26,7 @@ package interceptor
 
 import (
 	"context"
+	"go.temporal.io/server/common/metrics"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -41,8 +42,8 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Use max handover allow timeout as retry interval
-var handoverRetryPolicy = backoff.NewExponentialRetryPolicy(time.Millisecond * 100).WithExpirationInterval(time.Second * 10)
+// Limit the max attempts to reduce the handover error return to users
+var handoverRetryPolicy = backoff.NewConstantDelayRetryPolicy(time.Millisecond * 100).WithMaximumAttempts(20)
 
 type (
 	TaskTokenGetter interface {
@@ -254,22 +255,28 @@ func (ni *NamespaceValidatorInterceptor) handleRequestWithHandoverRetry(
 ) (interface{}, error) {
 
 	var response interface{}
+	var retryCount int
+	var retryLatency time.Duration
 	op := func(ctx context.Context) error {
 		err := ni.checkReplicationState(nsEntry, info.FullMethod)
 		if err != nil {
-			var nsErr error
-			nsEntry, nsErr = ni.namespaceRegistry.RefreshNamespaceById(nsEntry.ID())
-			if nsErr != nil {
-				return nsErr
-			}
 			return err
 		}
 
 		response, err = handler(ctx, req)
+		if retryCount > 1 {
+			retryLatency = retryLatency + handoverRetryPolicy.ComputeNextDelay(0, retryCount, nil)
+		}
+		retryCount++
 		return err
 	}
 	// Only retry on ErrNamespaceHandover, other errors will be handled by the retry interceptor
 	err := backoff.ThrottleRetryContext(ctx, op, handoverRetryPolicy, common.IsNamespaceHandoverError)
+
+	if retryCount > 1 {
+		// API Latency compensate logic on handover error retry
+		metrics.ContextCounterAdd(ctx, metrics.NamespaceHandoverRetryLatency.Name(), retryLatency.Nanoseconds())
+	}
 	return response, err
 }
 

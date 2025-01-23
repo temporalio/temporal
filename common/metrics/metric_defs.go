@@ -1182,8 +1182,8 @@ var (
 
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")
-	NamespaceReplicationDLQAckLevelGauge  = NewGaugeDef("namespace_dlq_ack_level")
 	NamespaceReplicationDLQMaxLevelGauge  = NewGaugeDef("namespace_dlq_max_level")
+	NamespaceHandoverRetryLatency         = NewTimerDef("namespace_handover_retry_latency")
 
 	// Persistence
 	PersistenceRequests = NewCounterDef(
