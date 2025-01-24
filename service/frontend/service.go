@@ -42,17 +42,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/retrypolicy"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/components/callbacks"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-)
-
-var (
-	matchAny     = regexp.MustCompile(".*")
-	matchNothing = regexp.MustCompile(".^")
 )
 
 // Config represents configuration for frontend service
@@ -210,7 +204,7 @@ type Config struct {
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
 
-	NexusRequestHeadersBlacklist *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	NexusRequestHeadersBlacklist dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -228,7 +222,7 @@ type Config struct {
 
 	ActivityAPIsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HTTPAllowedHosts *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	HTTPAllowedHosts dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 }
 
 // NewConfig returns new service config with default values
@@ -340,16 +334,7 @@ func NewConfig(
 		CallbackHeaderMaxSize:   dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
 		MaxCallbacksPerWorkflow: dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 
-		NexusRequestHeadersBlacklist: dynamicconfig.NewGlobalCachedTypedValue(
-			dc,
-			dynamicconfig.FrontendNexusRequestHeadersBlacklist,
-			func(patterns []string) (*regexp.Regexp, error) {
-				if len(patterns) == 0 {
-					return matchNothing, nil
-				}
-				return util.WildCardStringsToRegexp(patterns)
-			},
-		),
+		NexusRequestHeadersBlacklist: dynamicconfig.FrontendNexusRequestHeadersBlacklist.Get(dc),
 
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
@@ -364,12 +349,7 @@ func NewConfig(
 		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		ActivityAPIsEnabled:        dynamicconfig.ActivityAPIsEnabled.Get(dc),
 
-		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, func(patterns []string) (*regexp.Regexp, error) {
-			if len(patterns) == 0 {
-				return matchAny, nil
-			}
-			return util.WildCardStringsToRegexp(patterns)
-		}),
+		HTTPAllowedHosts: dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 	}
 }
 
