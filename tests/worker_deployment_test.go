@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 type (
@@ -123,6 +124,95 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment() {
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetCreateTime())
 	}, time.Second*10, time.Millisecond*1000)
+}
+
+func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	tv := testvars.New(s)
+
+	firstVersion := tv.WithBuildIDNumber(1)
+	secondVersion := tv.WithBuildIDNumber(2)
+
+	// Start deployment version workflow + worker-deployment workflow. Only one version is stared manually
+	// to prevent erroring out in the successive DescribeWorkerDeployment call.
+	go s.pollFromDeployment(ctx, firstVersion)
+
+	// No current deployment version set.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal("", resp.GetWorkerDeploymentInfo().GetRoutingInfo().GetCurrentVersion())
+	}, time.Second*10, time.Millisecond*1000)
+
+	// Set first version as current version
+	_, _ = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        &wrapperspb.StringValue{Value: firstVersion.DeploymentVersion().GetVersion()},
+	})
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal(firstVersion.DeploymentVersion().GetVersion(), resp.GetWorkerDeploymentInfo().GetRoutingInfo().GetCurrentVersion())
+	}, time.Second*10, time.Millisecond*1000)
+
+	// Set second version as current version
+	_, _ = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        &wrapperspb.StringValue{Value: secondVersion.DeploymentVersion().GetVersion()},
+	})
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal(secondVersion.DeploymentVersion().GetVersion(), resp.GetWorkerDeploymentInfo().GetRoutingInfo().GetCurrentVersion())
+	}, time.Second*10, time.Millisecond*1000)
+}
+
+func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion_Idempotent() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	tv := testvars.New(s)
+
+	firstVersion := tv.WithBuildIDNumber(1)
+
+	// Set first version as current version
+	resp, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        &wrapperspb.StringValue{Value: firstVersion.DeploymentVersion().GetVersion()},
+	})
+	s.NoError(err)
+	s.NotNil(resp.PreviousVersion)
+	s.Equal("", resp.PreviousVersion)
+
+	// Set first version as current version again
+	resp, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        &wrapperspb.StringValue{Value: firstVersion.DeploymentVersion().GetVersion()},
+	})
+	s.NoError(err)
+	s.NotNil(resp.PreviousVersion)
+	s.Equal(firstVersion.DeploymentVersion().GetVersion(), resp.PreviousVersion)
 }
 
 // Name is used by testvars. We use a shortened test name in variables so that physical task queue IDs

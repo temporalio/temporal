@@ -1683,6 +1683,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		deploymentData := data.PerType[int32(req.TaskQueueType)].DeploymentData
 		if d := req.Deployment; d != nil {
 			// [cleanup-old-wv]
+			//nolint:staticcheck
 			if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
 				deploymentData.Deployments[idx].Data = req.Data
 			} else {
@@ -1695,13 +1696,11 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		} else if vd := req.GetUpdateVersionData(); vd != nil {
 			if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 				old := deploymentData.Versions[idx]
-				if old.GetRoutingUpdateTime().AsTime().Before(vd.GetRoutingUpdateTime().AsTime()) {
-					// only update if the timestamp is more recent
-					deploymentData.Versions[idx] = vd
-				} else {
-					// No-op
+				if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 					return nil, false, errUserDataUnmodified
 				}
+				// only update if the timestamp is more recent
+				deploymentData.Versions[idx] = vd
 			} else {
 				deploymentData.Versions = append(deploymentData.Versions, vd)
 			}
