@@ -70,17 +70,11 @@ func ClientProvider(
 	dc *dynamicconfig.Collection,
 ) Client {
 	return &ClientImpl{
-		logger:                logger,
-		historyClient:         historyClient,
-		visibilityManager:     visibilityManager,
-		maxIDLengthLimit:      dynamicconfig.MaxIDLengthLimit.Get(dc),
-		visibilityMaxPageSize: dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
-		reachabilityCache: newReachabilityCache(
-			metrics.NoopMetricsHandler,
-			visibilityManager,
-			dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc)(),
-			dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc)(),
-		),
+		logger:                    logger,
+		historyClient:             historyClient,
+		visibilityManager:         visibilityManager,
+		maxIDLengthLimit:          dynamicconfig.MaxIDLengthLimit.Get(dc),
+		visibilityMaxPageSize:     dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		maxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 	}
 }
@@ -105,6 +99,7 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(VersionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
 	registry.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
+	registry.RegisterWorkflowWithOptions(checkDrainageWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentCheckDrainageWorkflowType})
 
 	versionActivities := &VersionActivities{
 		namespace:        ns,

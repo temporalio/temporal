@@ -27,7 +27,6 @@ package temporal.server.api.deployment.v1;
 option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
-import "temporal/api/enums/v1/deployment.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
@@ -46,8 +45,15 @@ message VersionLocalState {
 
     map<string, TaskQueueFamilyData> task_queue_families = 3;
 
-    bool is_current = 4;
-    google.protobuf.Timestamp last_became_current_time = 5;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+    // Nil if not current.
+    google.protobuf.Timestamp current_since_time = 4;
+
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+    // Nil if not ramping.
+    google.protobuf.Timestamp ramping_since_time = 5;
 
     google.protobuf.Timestamp create_time = 6;
 
@@ -60,9 +66,7 @@ message VersionLocalState {
         map<int32, DeploymentVersionTaskQueueData> task_queues = 1;
     }
 
-    temporal.api.enums.v1.VersionRoutingState routing_state = 8;
-
-    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 9;
+    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 8;
 }
 
 // used as Worker Deployment Version workflow input:
@@ -104,14 +108,15 @@ message RegisterWorkerInVersionArgs {
 
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
 message SyncVersionStateArgs {
-    SetCurrent set_current = 1;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+    // Nil if not current.
+    google.protobuf.Timestamp current_since_time = 4;
 
-    message SetCurrent {
-        // If last_became_current_time is present, then set the deployment's
-        // last_became_current_time to it and set is_current true. If it's missing,
-        // set is_current false.
-        google.protobuf.Timestamp last_became_current_time = 1;
-    }
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+    // Nil if not ramping.
+    google.protobuf.Timestamp ramping_since_time = 5;
 }
 
 // used as Worker Deployment workflow update response (sent from Worker Deployment workflow):
@@ -133,8 +138,16 @@ message QueryDescribeWorkerDeploymentResponse {
 message VersionWorkflowMemo {
     string deployment_name = 1;
     string version = 2;
-    google.protobuf.Timestamp create_time = 3;
-    bool is_current_deployment = 4;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+    // Nil if not current.
+    google.protobuf.Timestamp current_since_time = 3;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+    // Nil if not ramping.
+    google.protobuf.Timestamp ramping_since_time = 4;
+    google.protobuf.Timestamp create_time = 5;
+    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 6;
 }
 
 // used as Worker Deployment Version workflow activity input:

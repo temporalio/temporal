@@ -26,10 +26,12 @@ package workerdeployment
 
 import (
 	"fmt"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
 
 	"github.com/pborman/uuid"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
@@ -78,11 +80,32 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	// Fetch signal channels
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	forceCAN := false
+	drainageStatusSignalChannel := workflow.GetSignalChannel(ctx, SyncDrainageSignalName)
 
 	selector := workflow.NewSelector(ctx)
 	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		// Process Signal
 		forceCAN = true
+	})
+	selector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+		var status enumspb.VersionDrainageStatus
+		c.Receive(ctx, &status)
+		now := timestamppb.Now()
+		info := d.VersionState.DrainageInfo
+		if info == nil {
+			d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
+				Status:          status,
+				LastChangedTime: now,
+				LastCheckedTime: now,
+			}
+		} else {
+			info.LastCheckedTime = now
+			if info.Status != status {
+				info.LastChangedTime = now
+				info.Status = status
+			}
+		}
+		d.updateMemo(ctx)
 	})
 
 	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
@@ -245,25 +268,12 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 }
 
 func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersionStateArgs) error {
-	if set := args.SetCurrent; set != nil {
-		if set.LastBecameCurrentTime == nil {
-			if d.VersionState.IsCurrent {
-				return nil
-			}
-		} else {
-			if !d.VersionState.IsCurrent ||
-				!d.VersionState.LastBecameCurrentTime.AsTime().Equal(set.LastBecameCurrentTime.AsTime()) {
-				return nil
-			}
-		}
+	if args.GetCurrentSinceTime().AsTime().Equal(d.GetVersionState().GetCurrentSinceTime().AsTime()) &&
+		args.GetRampingSinceTime().AsTime().Equal(d.GetVersionState().GetRampingSinceTime().AsTime()) {
+		res := &deploymentspb.SyncVersionStateResponse{VersionState: d.VersionState}
+		return temporal.NewApplicationError("no change", errNoChangeType, res)
 	}
-	// if args.UpdateMetadata != nil {
-	//	// can't compare payloads, just assume it changes something
-	//	return nil
-	// }
-	// return current state along with "no change"
-	res := &deploymentspb.SyncVersionStateResponse{VersionState: d.VersionState}
-	return temporal.NewApplicationError("no change", errNoChangeType, res)
+	return nil
 }
 
 func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *deploymentspb.SyncVersionStateArgs) (*deploymentspb.SyncVersionStateResponse, error) {
@@ -286,68 +296,26 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		return nil, serviceerror.NewDeadlineExceeded("Update canceled before series workflow started")
 	}
 
-	// apply changes to "current"
-	if set := args.SetCurrent; set != nil {
-		if set.LastBecameCurrentTime == nil {
-			d.VersionState.IsCurrent = false
-		} else {
-			d.VersionState.IsCurrent = true
-			d.VersionState.LastBecameCurrentTime = set.LastBecameCurrentTime
-		}
-		if err = d.updateMemo(ctx); err != nil {
-			return nil, err
-		}
+	state := d.GetVersionState()
+	wasAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
+	if args.GetCurrentSinceTime() != nil {
+		state.CurrentSinceTime = args.GetCurrentSinceTime()
+	}
+	if args.GetRampingSinceTime() != nil {
+		state.RampingSinceTime = args.GetRampingSinceTime()
+	}
+	isAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
 
-		// sync to task queues
-		syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
-			DeploymentName: d.VersionState.DeploymentName,
-			Version:        d.VersionState.Version,
-		}
-		for tqName, byType := range d.VersionState.TaskQueueFamilies {
-			for tqType, data := range byType.TaskQueues {
-				syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-					Name: tqName,
-					Type: enumspb.TaskQueueType(tqType),
-					Data: d.dataWithTime(data),
-				})
-			}
-		}
-		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
-		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
-		if err != nil {
-			// TODO: if this fails, should we roll back anything?
-			return nil, err
-		}
-		if len(syncRes.TaskQueueMaxVersions) > 0 {
-			// wait for propagation
-			err = workflow.ExecuteActivity(
-				activityCtx,
-				d.a.CheckWorkerDeploymentUserDataPropagation,
-				&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-					TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
-				}).Get(ctx, nil)
-			if err != nil {
-				return nil, err
-			}
-		}
+	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
+		workflow.ExecuteChildWorkflow(ctx, WorkerDeploymentCheckDrainageWorkflowType)
 	}
 
-	// TODO (Shivam) - Move this when UpdateMetadata is implemented.
-
-	// apply changes to metadata
-	// if d.VersionState.Metadata == nil && args.UpdateMetadata != nil {
-	//	d.VersionState.Metadata = make(map[string]*commonpb.Payload)
-	// }
-	// for key, payload := range args.UpdateMetadata.GetUpsertEntries() {
-	//	d.VersionState.Metadata[key] = payload
-	// }
-	// for _, key := range args.UpdateMetadata.GetRemoveEntries() {
-	//	delete(d.VersionState.Metadata, key)
-	// }
+	if err = d.updateMemo(ctx); err != nil {
+		return nil, err
+	}
 
 	return &deploymentspb.SyncVersionStateResponse{
-		VersionState: d.VersionState,
+		VersionState: state,
 	}, nil
 }
 
@@ -366,10 +334,12 @@ func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescr
 func (d *VersionWorkflowRunner) updateMemo(ctx workflow.Context) error {
 	return workflow.UpsertMemo(ctx, map[string]any{
 		WorkerDeploymentVersionMemoField: &deploymentspb.VersionWorkflowMemo{
-			DeploymentName:      d.VersionState.DeploymentName,
-			Version:             d.VersionState.Version,
-			CreateTime:          d.VersionState.CreateTime,
-			IsCurrentDeployment: d.VersionState.IsCurrent,
+			DeploymentName:   d.VersionState.DeploymentName,
+			Version:          d.VersionState.Version,
+			CurrentSinceTime: d.VersionState.CurrentSinceTime,
+			RampingSinceTime: d.VersionState.RampingSinceTime,
+			CreateTime:       d.VersionState.CreateTime,
+			DrainageInfo:     d.VersionState.DrainageInfo,
 		},
 	})
 }

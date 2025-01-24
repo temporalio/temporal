@@ -139,7 +139,7 @@ var (
 		"GetCurrentDeployment":            func() any { return &workflowservice.GetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
 		"SetCurrentDeployment":            func() any { return &workflowservice.SetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
 		"DescribeWorkerDeploymentVersion": func() any { return &workflowservice.DescribeWorkerDeploymentVersionResponse{} },
-		"SetCurrentDeploymentVersion":     func() any { return &workflowservice.SetCurrentDeploymentVersionResponse{} },
+		"SetCurrentDeploymentVersion":     func() any { return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{} },
 		"DescribeWorkerDeployment":        func() any { return &workflowservice.DescribeWorkerDeploymentResponse{} },
 	}
 )

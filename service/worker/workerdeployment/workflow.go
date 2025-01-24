@@ -179,19 +179,17 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string, updateMetadata *deploymentpb.UpdateDeploymentMetadata) (*deploymentspb.VersionLocalState, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
-	setCur := &deploymentspb.SyncVersionStateArgs_SetCurrent{}
+	args := &deploymentspb.SyncVersionStateArgs{}
 	if d.State.CurrentVersion == version {
-		setCur.LastBecameCurrentTime = d.State.CurrentChangedTime
+		args.CurrentSinceTime = d.State.CurrentChangedTime
 	}
 
 	var res deploymentspb.SyncVersionStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.SyncWorkerDeploymentVersion, &deploymentspb.SyncVersionStateActivityArgs{
 		DeploymentName: d.DeploymentName,
 		Version:        version,
-		Args: &deploymentspb.SyncVersionStateArgs{
-			SetCurrent: setCur,
-		},
-		RequestId: d.newUUID(ctx),
+		Args:           args,
+		RequestId:      d.newUUID(ctx),
 	}).Get(ctx, &res)
 	return res.VersionState, err
 }

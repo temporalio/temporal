@@ -40,8 +40,9 @@ import (
 
 const (
 	// Workflow types
-	WorkerDeploymentVersionWorkflowType = "temporal-sys-worker-deployment-version-workflow"
-	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
+	WorkerDeploymentVersionWorkflowType       = "temporal-sys-worker-deployment-version-workflow"
+	WorkerDeploymentWorkflowType              = "temporal-sys-worker-deployment-workflow"
+	WorkerDeploymentCheckDrainageWorkflowType = "temporal-sys-worker-deployment-check-drainage-workflow"
 
 	// Namespace division
 	WorkerDeploymentVersionNamespaceDivision = "TemporalWorkerDeploymentVersion"
@@ -53,7 +54,8 @@ const (
 	AddVersionToWorkerDeployment = "add-version-to-worker-deployment" // for Worker Deployment wfs
 
 	// Signals
-	ForceCANSignalName = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
+	ForceCANSignalName     = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
+	SyncDrainageSignalName = "sync-drainage-status"
 
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
