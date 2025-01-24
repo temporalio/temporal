@@ -2097,7 +2097,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 		TaskID:              taskID,
 		InitiatedEventID:    childInitEvent.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
-		// AllowChildReconnect: true,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, childInitEvent.GetEventId(), childInitEvent.GetVersion())

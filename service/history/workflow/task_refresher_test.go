@@ -803,7 +803,7 @@ func (s *taskRefresherSuite) TestRefreshChildWorkflowTasks() {
 		branchToken,
 	).Return(initEvent, nil).Times(1)
 
-	s.mockTaskGenerator.EXPECT().GenerateChildWorkflowTasks(initEvent, false).Return(nil).Times(1)
+	s.mockTaskGenerator.EXPECT().GenerateChildWorkflowTasks(initEvent).Return(nil).Times(1)
 
 	err = s.taskRefresher.refreshTasksForChildWorkflow(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
 		TransitionCount:          4,
