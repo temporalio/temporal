@@ -179,8 +179,8 @@ func (u *Update) WaitLifecycleStage(
 	waitStage enumspb.UpdateWorkflowExecutionLifecycleStage,
 	softTimeout time.Duration,
 ) (*Status, error) {
-	softDeadlineExceededErr := errors.New("soft deadline exceeded")
-	stCtx, stCancel := context.WithTimeoutCause(ctx, softTimeout, softDeadlineExceededErr)
+
+	stCtx, stCancel := context.WithTimeout(ctx, softTimeout)
 	defer stCancel()
 
 	if u.outcome.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
@@ -189,21 +189,21 @@ func (u *Update) WaitLifecycleStage(
 			return statusCompleted(outcome), nil
 		}
 
-		// If the user provided context has an error (context.DeadlineExceeded or context.Canceled), then return it to the caller.
-		if ctx.Err() != nil {
+		// If err is coming from the user provided context (context.DeadlineExceeded or context.Canceled), then return it to the caller.
+		if errors.Is(err, ctx.Err()) {
 			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
 			return nil, ctx.Err()
 		}
 
 		// Update uses registryClearedErr when Registry is cleared. This error has special handling here:
 		//   stop waiting for COMPLETED stage and check if Update has reached ACCEPTED stage.
-		// If err is not registryClearedErr and not softDeadlineExceededErr,
+		// If err is not registryClearedErr and is not coming from stCtx,
 		// then it means that the error is coming from the future itself and needs to be returned to the caller.
-		if !errors.Is(err, registryClearedErr) && !errors.Is(context.Cause(stCtx), softDeadlineExceededErr) {
+		if !errors.Is(err, registryClearedErr) && !errors.Is(err, stCtx.Err()) {
 			return nil, err
 		}
 
-		// Only get here if there is an error, and this error is softDeadlineExceededErr or registryClearedErr.
+		// Only get here if there is an error, and this error is coming from stCtx or is registryClearedErr.
 		// In both cases, check if the Update has reached ACCEPTED stage.
 	}
 
@@ -231,8 +231,8 @@ func (u *Update) WaitLifecycleStage(
 			return statusAccepted(), nil
 		}
 
-		// If the user provided context has an error (context.DeadlineExceeded or context.Canceled), then return it to the caller.
-		if ctx.Err() != nil {
+		// If err is coming from the user provided context (context.DeadlineExceeded or context.Canceled), then return it to the caller.
+		if errors.Is(err, ctx.Err()) {
 			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
 			return nil, ctx.Err()
 		}
@@ -245,9 +245,9 @@ func (u *Update) WaitLifecycleStage(
 			return nil, WorkflowUpdateAbortedErr
 		}
 
-		// If err is not softDeadlineExceededErr,
+		// If err is not coming from stCtx,
 		// then it means that the error is coming from the future itself and needs to be returned to the caller.
-		if !errors.Is(context.Cause(stCtx), softDeadlineExceededErr) {
+		if !errors.Is(err, stCtx.Err()) {
 			return nil, err
 		}
 	}
