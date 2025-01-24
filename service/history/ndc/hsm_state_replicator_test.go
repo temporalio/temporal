@@ -709,7 +709,9 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 		initialCount     = 50
 	)
 
+	baseVersion := s.namespaceEntry.FailoverVersion()
 	persistedState := s.buildWorkflowMutableState()
+
 	// Remove the state machine to simulate deletion
 	delete(persistedState.ExecutionInfo.SubStateMachinesByType[s.stateMachineDef.Type()].MachinesById, deletedMachineID)
 
@@ -723,43 +725,29 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 		DBRecordVersion: 777,
 	}, nil).AnyTimes()
 
-	baseVersionHistory := persistedState.ExecutionInfo.VersionHistories.Histories[persistedState.ExecutionInfo.VersionHistories.CurrentVersionHistoryIndex]
-
 	testCases := []struct {
 		name           string
 		versionHistory *historyspb.VersionHistory
 		expectError    bool
 	}{
 		{
-			name: "older incoming version - ignore missing state machine since local version is newer",
+			name: "local version higher - ignore missing state machine",
 			versionHistory: &historyspb.VersionHistory{
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 50, Version: s.namespaceEntry.FailoverVersion() - 100},
+					{EventId: 50, Version: baseVersion - 100},
+					{EventId: 102, Version: baseVersion - 50},
 				},
 			},
 			expectError: false,
 		},
 		{
-			name: "newer incoming version - return original notFoundErr since local version is behind",
-			versionHistory: func() *historyspb.VersionHistory {
-				// Start by copying ALL items from base history
-				vh := &historyspb.VersionHistory{
-					Items: make([]*historyspb.VersionHistoryItem, len(baseVersionHistory.Items)),
-				}
-				// Copy all but last item exactly to establish joint point
-				for i := 0; i < len(baseVersionHistory.Items)-1; i++ {
-					vh.Items[i] = &historyspb.VersionHistoryItem{
-						EventId: baseVersionHistory.Items[i].EventId,
-						Version: baseVersionHistory.Items[i].Version,
-					}
-				}
-				// Add final item with higher version but next event ID
-				vh.Items[len(vh.Items)-1] = &historyspb.VersionHistoryItem{
-					EventId: baseVersionHistory.Items[len(baseVersionHistory.Items)-1].EventId + 1,
-					Version: s.namespaceEntry.FailoverVersion() + 100,
-				}
-				return vh
-			}(),
+			name: "incoming version higher - return notFoundErr",
+			versionHistory: &historyspb.VersionHistory{
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 50, Version: baseVersion - 100},
+					{EventId: 102, Version: baseVersion},
+				},
+			},
 			expectError: true,
 		},
 	}
@@ -767,6 +755,8 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 	for _, tc := range testCases {
 		tc := tc
 		s.Run(tc.name, func() {
+			lastVersion := tc.versionHistory.Items[len(tc.versionHistory.Items)-1].Version
+
 			err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
 				WorkflowKey:         s.workflowKey,
 				EventVersionHistory: tc.versionHistory,
@@ -777,10 +767,10 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 								deletedMachineID: {
 									Data: []byte(hsmtest.State3),
 									InitialVersionedTransition: &persistencespb.VersionedTransition{
-										NamespaceFailoverVersion: tc.versionHistory.GetItems()[len(tc.versionHistory.GetItems())-1].GetVersion(),
+										NamespaceFailoverVersion: lastVersion,
 									},
 									LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-										NamespaceFailoverVersion: tc.versionHistory.GetItems()[len(tc.versionHistory.GetItems())-1].GetVersion(),
+										NamespaceFailoverVersion: lastVersion,
 									},
 									TransitionCount: initialCount,
 								},
