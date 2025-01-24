@@ -127,8 +127,8 @@ message DeploymentData {
 
     // Deprecated.
     message DeploymentDataItem {
-        temporal.api.deployment.v1.Deployment deployment = 1; 
-        temporal.server.api.deployment.v1.TaskQueueData data = 2; 
+        temporal.api.deployment.v1.Deployment deployment = 1;
+        temporal.server.api.deployment.v1.TaskQueueData data = 2;
     }
 }
 

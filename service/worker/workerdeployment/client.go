@@ -301,9 +301,10 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, err
 	}
 
+	var res deploymentspb.SetCurrentVersionResponse
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
-		return nil, serviceerror.NewAlreadyExist(fmt.Sprintf("Version %q is already current for %q",
-			version, deploymentName))
+		res.PreviousVersion = version
+		return &res, nil
 	} else if failure != nil {
 		// TODO: is there an easy way to recover the original type here?
 		return nil, serviceerror.NewInternal(failure.Message)
@@ -314,7 +315,6 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, serviceerror.NewInternal("outcome missing success and failure")
 	}
 
-	var res deploymentspb.SetCurrentVersionResponse
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
@@ -770,7 +770,8 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namesp
 
 	// RoutingInfo
 	workerDeploymentInfo.RoutingInfo = &deploymentpb.RoutingInfo{
-		CurrentVersion: state.CurrentVersion,
+		CurrentVersion:           state.CurrentVersion,
+		CurrentVersionUpdateTime: state.CurrentChangedTime,
 	}
 
 	for _, version := range state.Versions {

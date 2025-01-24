@@ -383,6 +383,7 @@ func calcRampThreshold(id string) float64 {
 	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))
 }
 
+//revive:disable-next-line:cognitive-complexity
 func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData) *taskqueuepb.TaskQueueVersioningInfo {
 	if deployments == nil {
 		return nil

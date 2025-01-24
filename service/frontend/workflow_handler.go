@@ -3368,14 +3368,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	// TODO (Shivam) : Verify if sending in uuid.New() is correct
 	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version.Value, request.Identity, uuid.New())
 	if err != nil {
-		switch err.(type) {
-		case *serviceerror.AlreadyExists:
-			return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
-				PreviousVersion: request.Version.Value, // previousVersion is the version which was requested to be set as current
-			}, nil
-		default:
-			return nil, err
-		}
+		return nil, err
 	}
 
 	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
@@ -3383,10 +3376,9 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	}, nil
 }
 
+// TODO (Shivam): Implement this
 func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentRampingVersionRequest) (_ *workflowservice.SetWorkerDeploymentRampingVersionResponse, retError error) {
-	//TODO implement me
 	panic("implement me")
-	return nil, nil
 }
 
 func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request *workflowservice.DescribeWorkerDeploymentRequest) (_ *workflowservice.DescribeWorkerDeploymentResponse, retError error) {
