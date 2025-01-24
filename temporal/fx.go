@@ -916,7 +916,7 @@ var TraceExportModule = fx.Options(
 //   - *go.opentelemetry.io/otel/sdk/resource.Resource
 //     default: resource.Default() augmented with the supplied serviceName
 //   - go.opentelemetry.io/otel/trace.TracerProvider
-//     default: noop.NewTracerProvider()
+//     default: otelnoop.NewTracerProvider()
 //   - go.opentelemetry.io/otel/ppropagation.TextMapPropagator
 //     default: propagation.TraceContext{}
 //   - telemetry.ServerStatsHandler

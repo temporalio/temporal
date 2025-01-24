@@ -1047,14 +1047,6 @@ See DynamicRateLimitingParams comments for more details.`,
 		primitives.GetHistoryMaxPageSize,
 		`MatchingHistoryMaxPageSize is the maximum page size of history events returned on PollWorkflowTaskQueue requests`,
 	)
-	MatchingLoadUserData = NewTaskQueueBoolSetting(
-		"matching.loadUserData",
-		true,
-		`MatchingLoadUserData can be used to entirely disable loading user data from persistence (and the inter node RPCs
-that propoagate it). When turned off, features that rely on user data (e.g. worker versioning) will essentially
-be disabled. When disabled, matching will drop tasks for versioned workflows and activities to avoid breaking
-versioning semantics. Operator intervention will be required to reschedule the dropped tasks.`,
-	)
 	MatchingUpdateAckInterval = NewTaskQueueDurationSettingWithConstrainedDefault(
 		"matching.updateAckInterval",
 		[]TypedConstrainedValue[time.Duration]{

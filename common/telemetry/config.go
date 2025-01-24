@@ -438,7 +438,7 @@ func DebugMode() bool {
 	return isDebug
 }
 
-func IsEnabled(tp trace.Tracer) bool {
-	_, isNoop := tp.(otelnoop.Tracer)
+func IsEnabled(t trace.Tracer) bool {
+	_, isNoop := t.(otelnoop.Tracer)
 	return !isNoop
 }
