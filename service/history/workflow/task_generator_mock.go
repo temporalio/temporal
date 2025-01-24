@@ -110,17 +110,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateActivityTimerTasks() *gomock.Ca
 }
 
 // GenerateChildWorkflowTasks mocks base method.
-func (m *MockTaskGenerator) GenerateChildWorkflowTasks(event *history.HistoryEvent, allowChildReconnect bool) error {
+func (m *MockTaskGenerator) GenerateChildWorkflowTasks(event *history.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateChildWorkflowTasks", event, allowChildReconnect)
+	ret := m.ctrl.Call(m, "GenerateChildWorkflowTasks", event)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateChildWorkflowTasks indicates an expected call of GenerateChildWorkflowTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateChildWorkflowTasks(event, allowChildReconnect any) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateChildWorkflowTasks(event any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateChildWorkflowTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateChildWorkflowTasks), event, allowChildReconnect)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateChildWorkflowTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateChildWorkflowTasks), event)
 }
 
 // GenerateDelayedWorkflowTasks mocks base method.
