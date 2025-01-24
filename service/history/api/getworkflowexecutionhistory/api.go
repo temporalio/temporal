@@ -31,7 +31,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -55,7 +54,7 @@ func Invoke(
 	eventNotifier events.Notifier,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
 	persistenceVisibilityMgr manager.VisibilityManager,
-) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retError error) {
+) (_ *historyservice.GetWorkflowExecutionHistoryResponseWithRaw, retError error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
@@ -318,9 +317,9 @@ func Invoke(
 		}
 	}
 
-	return &historyservice.GetWorkflowExecutionHistoryResponse{
-		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
-			History:       history,
+	return &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
+		Response: &historyspb.GetWorkflowExecutionHistoryResponse{
+			History:       nil,
 			RawHistory:    historyBlob,
 			NextPageToken: nextToken,
 			Archived:      false,

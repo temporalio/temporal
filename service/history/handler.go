@@ -2139,7 +2139,7 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 func (h *Handler) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
-) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retErr error) {
+) (_ *historyservice.GetWorkflowExecutionHistoryResponseWithRaw, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 	h.startWG.Wait()
 

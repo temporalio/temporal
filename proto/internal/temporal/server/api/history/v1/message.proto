@@ -29,6 +29,7 @@ option go_package = "go.temporal.io/server/api/history/v1;history";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/history/v1/message.proto";
+import "temporal/api/common/v1/message.proto";
 
 message TransientWorkflowTaskInfo {
     reserved 1;
@@ -64,4 +65,20 @@ message TaskKey {
 message TaskRange {
     TaskKey inclusive_min_task_key = 1;
     TaskKey exclusive_max_task_key = 2;
+}
+
+// api-linter: core::0158::response-next-page-token-field=disabled
+// api-linter: core::0158::response-repeated-first-field=disabled
+// api-linter: core::0158::response-plural-first-field=disabled
+// GetWorkflowExecutionHistoryResponse is the response to GetWorkflowExecutionHistory call which returns raw bytes of
+// history events. Frontend service deserialize the response as HistoryEvents as this field is byte compatible with
+// the serialized form of HistoryEvents.
+message GetWorkflowExecutionHistoryResponse {
+    repeated bytes history = 1;
+    // Raw history is an alternate representation of history that may be returned if configured on
+    // the frontend. This is not supported by all SDKs. Either this or `history` will be set.
+    repeated temporal.api.common.v1.DataBlob raw_history = 2;
+    // Will be set if there are more history events than were included in this response
+    bytes next_page_token = 3;
+    bool archived = 4;
 }
