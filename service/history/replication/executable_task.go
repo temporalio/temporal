@@ -619,10 +619,14 @@ func (e *ExecutableTaskImpl) SyncState(
 	ctx context.Context,
 	syncStateErr *serviceerrors.SyncState,
 	remainingAttempt int,
-) (bool, error) {
+) (_ bool, retErr error) {
 
 	// TODO: check & update remainingAttempt
-
+	defer func() {
+		if retErr != nil {
+			e.Logger.Error("error syncing state", tag.Error(retErr))
+		}
+	}()
 	remoteAdminClient, err := e.ClientBean.GetRemoteAdminClient(e.sourceClusterName)
 	if err != nil {
 		return false, err
@@ -683,6 +687,7 @@ func (e *ExecutableTaskImpl) SyncState(
 			ShardId: e.sourceShardKey.ShardID,
 			Tasks:   tasksToAdd,
 		})
+		logger.Info("Added replication task equivalents back to source cluster.", tag.Error(err))
 		return false, err
 	}
 

@@ -128,15 +128,15 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	return engine.ReplicateVersionedTransition(ctx, e.taskAttr.VersionedTransitionArtifact, e.SourceClusterName())
 }
 
-func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
+func (e *ExecutableSyncVersionedTransitionTask) HandleErr(originalErr error) error {
 	e.Logger.Error("Sync Versioned Transition replication task encountered error",
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),
 		tag.WorkflowRunID(e.RunID),
 		tag.TaskID(e.ExecutableTask.TaskID()),
-		tag.Error(err),
+		tag.Error(originalErr),
 	)
-	switch taskErr := err.(type) {
+	switch taskErr := originalErr.(type) {
 	case *serviceerrors.SyncState:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
@@ -162,7 +162,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 					tag.Error(syncStateErr),
 				)
 			}
-			return err
+			return originalErr
 		}
 		return e.Execute()
 	case *serviceerrors.RetryReplication:
@@ -220,6 +220,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		}
 		return e.Execute()
 	default:
-		return err
+		e.Logger.Error("Encountered unknown error", tag.Error(originalErr))
+		return originalErr
 	}
 }
