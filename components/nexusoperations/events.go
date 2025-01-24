@@ -29,6 +29,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -108,7 +109,9 @@ func (d StartedEventDefinition) CherryPick(root *hsm.Node, event *historypb.Hist
 	return d.Apply(root, event)
 }
 
-type CompletedEventDefinition struct{}
+type CompletedEventDefinition struct {
+	enableTransitionHistory dynamicconfig.BoolPropertyFn
+}
 
 func (d CompletedEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
@@ -125,7 +128,10 @@ func (d CompletedEventDefinition) Apply(root *hsm.Node, event *historypb.History
 		return err
 	}
 
-	return root.DeleteChild(node.Key)
+	if d.enableTransitionHistory() {
+		return root.DeleteChild(node.Key)
+	}
+	return nil
 }
 
 func (d CompletedEventDefinition) Type() enumspb.EventType {
@@ -139,7 +145,9 @@ func (d CompletedEventDefinition) CherryPick(root *hsm.Node, event *historypb.Hi
 	return d.Apply(root, event)
 }
 
-type FailedEventDefinition struct{}
+type FailedEventDefinition struct {
+	enableTransitionHistory dynamicconfig.BoolPropertyFn
+}
 
 func (d FailedEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
@@ -161,7 +169,10 @@ func (d FailedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEve
 		return err
 	}
 
-	return root.DeleteChild(node.Key)
+	if d.enableTransitionHistory() {
+		return root.DeleteChild(node.Key)
+	}
+	return nil
 }
 
 func (d FailedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -171,7 +182,9 @@ func (d FailedEventDefinition) CherryPick(root *hsm.Node, event *historypb.Histo
 	return d.Apply(root, event)
 }
 
-type CanceledEventDefinition struct{}
+type CanceledEventDefinition struct {
+	enableTransitionHistory dynamicconfig.BoolPropertyFn
+}
 
 func (d CanceledEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
@@ -192,7 +205,10 @@ func (d CanceledEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryE
 		return err
 	}
 
-	return root.DeleteChild(node.Key)
+	if d.enableTransitionHistory() {
+		return root.DeleteChild(node.Key)
+	}
+	return nil
 }
 
 func (d CanceledEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -202,7 +218,9 @@ func (d CanceledEventDefinition) CherryPick(root *hsm.Node, event *historypb.His
 	return d.Apply(root, event)
 }
 
-type TimedOutEventDefinition struct{}
+type TimedOutEventDefinition struct {
+	enableTransitionHistory dynamicconfig.BoolPropertyFn
+}
 
 func (d TimedOutEventDefinition) IsWorkflowTaskTrigger() bool {
 	return true
@@ -222,7 +240,10 @@ func (d TimedOutEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryE
 		return err
 	}
 
-	return root.DeleteChild(node.Key)
+	if d.enableTransitionHistory() {
+		return root.DeleteChild(node.Key)
+	}
+	return nil
 }
 
 func (d TimedOutEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -232,7 +253,9 @@ func (d TimedOutEventDefinition) CherryPick(root *hsm.Node, event *historypb.His
 	return d.Apply(root, event)
 }
 
-func RegisterEventDefinitions(reg *hsm.Registry) error {
+func RegisterEventDefinitions(reg *hsm.Registry, dc *dynamicconfig.Collection) error {
+	enableTransitionHistory := dynamicconfig.EnableTransitionHistory.Get(dc)
+
 	if err := reg.RegisterEventDefinition(ScheduledEventDefinition{}); err != nil {
 		return err
 	}
@@ -242,16 +265,24 @@ func RegisterEventDefinitions(reg *hsm.Registry) error {
 	if err := reg.RegisterEventDefinition(StartedEventDefinition{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterEventDefinition(CompletedEventDefinition{}); err != nil {
+	if err := reg.RegisterEventDefinition(CompletedEventDefinition{
+		enableTransitionHistory: enableTransitionHistory,
+	}); err != nil {
 		return err
 	}
-	if err := reg.RegisterEventDefinition(FailedEventDefinition{}); err != nil {
+	if err := reg.RegisterEventDefinition(FailedEventDefinition{
+		enableTransitionHistory: enableTransitionHistory,
+	}); err != nil {
 		return err
 	}
-	if err := reg.RegisterEventDefinition(CanceledEventDefinition{}); err != nil {
+	if err := reg.RegisterEventDefinition(CanceledEventDefinition{
+		enableTransitionHistory: enableTransitionHistory,
+	}); err != nil {
 		return err
 	}
-	return reg.RegisterEventDefinition(TimedOutEventDefinition{})
+	return reg.RegisterEventDefinition(TimedOutEventDefinition{
+		enableTransitionHistory: enableTransitionHistory,
+	})
 }
 
 func transitionOperation(
