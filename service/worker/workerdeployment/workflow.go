@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
@@ -136,9 +135,45 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.lock.Unlock()
 	}()
 
-	// do work
+	prevCurrent := d.State.CurrentVersion
+	newCurrent := args.Version
+	versionUpdateTime := timestamppb.New(workflow.Now(ctx))
 
-	return &deploymentspb.SetCurrentVersionResponse{}, nil
+	// tell new current that it's current
+	currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		RoutingUpdateTime: versionUpdateTime,
+		CurrentSinceTime:  versionUpdateTime,
+		RampingSinceTime:  nil, // todo ramp
+	}
+	if _, err := d.syncVersion(ctx, newCurrent, currUpdateArgs); err != nil {
+		return nil, err
+	}
+
+	if prevCurrent != "" {
+		// tell previous current that it's no longer current
+		prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			RoutingUpdateTime: versionUpdateTime,
+			CurrentSinceTime:  nil,
+			RampingSinceTime:  nil, // todo ramp
+		}
+		if _, err := d.syncVersion(ctx, prevCurrent, prevUpdateArgs); err != nil {
+			return nil, err
+		}
+	}
+
+	// update local state
+	d.State.CurrentVersion = args.Version
+	d.State.CurrentChangedTime = versionUpdateTime
+
+	// update memo
+	if err = d.updateMemo(ctx); err != nil {
+		return nil, err
+	}
+
+	return &deploymentspb.SetCurrentVersionResponse{
+		PreviousVersion: prevCurrent,
+	}, nil
+
 }
 
 func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) error {
@@ -176,19 +211,14 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	return nil
 }
 
-func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string, updateMetadata *deploymentpb.UpdateDeploymentMetadata) (*deploymentspb.VersionLocalState, error) {
+func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) (*deploymentspb.VersionLocalState, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-
-	args := &deploymentspb.SyncVersionStateArgs{}
-	if d.State.CurrentVersion == version {
-		args.CurrentSinceTime = d.State.CurrentChangedTime
-	}
 
 	var res deploymentspb.SyncVersionStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.SyncWorkerDeploymentVersion, &deploymentspb.SyncVersionStateActivityArgs{
 		DeploymentName: d.DeploymentName,
-		Version:        version,
-		Args:           args,
+		Version:        targetVersion,
+		UpdateArgs:     versionUpdateArgs,
 		RequestId:      d.newUUID(ctx),
 	}).Get(ctx, &res)
 	return res.VersionState, err

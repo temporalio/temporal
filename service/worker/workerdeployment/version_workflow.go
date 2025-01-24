@@ -26,12 +26,11 @@ package workerdeployment
 
 import (
 	"fmt"
-	deploymentpb "go.temporal.io/api/deployment/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
 
 	"github.com/pborman/uuid"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -209,40 +209,62 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	// initial data
-	data := &deploymentspb.DeploymentVersionTaskQueueData{}
+	workerDeploymentVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: d.VersionState.DeploymentName,
+		Version:        d.VersionState.Version,
+	}
+
+	data := &deploymentspb.DeploymentVersionData{
+		Version:           workerDeploymentVersion,
+		RoutingUpdateTime: timestamppb.Now(),
+		IsCurrent:         false,
+		RampPercentage:    0,
+		FirstPollerTime:   args.FirstPollerTime,
+	}
 
 	// sync to user data
-	// activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	// var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
-	// err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-	// 	DeploymentName: d.VersionState.DeploymentName,
-	// 	Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-	// 		&deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-	// 			Name: args.TaskQueueName,
-	// 			Type: args.TaskQueueType,
-	// 			Data: d.dataWithTime(data),
-	// 		},
-	// 	},
-	// }).Get(ctx, &syncRes)
-	// if err != nil {
-	// 	return err
-	// }
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+		WorkerDeploymentVersion: workerDeploymentVersion,
+		Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+			{
+				Name: args.TaskQueueName,
+				Type: args.TaskQueueType,
+				Data: data,
+			},
+		},
+	}).Get(ctx, &syncRes)
+	if err != nil {
+		return err
+	}
 
-	// if len(syncRes.TaskQueueMaxVersions) > 0 {
-	// 	// wait for propagation
-	// 	err = workflow.ExecuteActivity(
-	// 		activityCtx,
-	// 		d.a.CheckWorkerDeploymentUserDataPropagation,
-	// 		&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-	// 			TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
-	// 		}).Get(ctx, nil)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
+	if len(syncRes.TaskQueueMaxVersions) > 0 {
+		// wait for propagation
+		err = workflow.ExecuteActivity(
+			activityCtx,
+			d.a.CheckWorkerDeploymentUserDataPropagation,
+			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+			}).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
+	}
 
 	// add version to worker-deployment workflow
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx = workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
+		DeploymentName: d.VersionState.DeploymentName,
+		Version:        d.VersionState.Version,
+		RequestId:      d.newUUID(ctx),
+	}).Get(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	// add version to worker-deployment workflow
+	activityCtx = workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
 		DeploymentName: d.VersionState.DeploymentName,
 		Version:        d.VersionState.Version,
@@ -260,14 +282,14 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{}
 	}
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
-		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.DeploymentVersionTaskQueueData)
+		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.DeploymentVersionData)
 	}
 	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = data
 
 	return nil
 }
 
-func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersionStateArgs) error {
+func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersionStateUpdateArgs) error {
 	if args.GetCurrentSinceTime().AsTime().Equal(d.GetVersionState().GetCurrentSinceTime().AsTime()) &&
 		args.GetRampingSinceTime().AsTime().Equal(d.GetVersionState().GetRampingSinceTime().AsTime()) {
 		res := &deploymentspb.SyncVersionStateResponse{VersionState: d.VersionState}
@@ -276,7 +298,7 @@ func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersio
 	return nil
 }
 
-func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *deploymentspb.SyncVersionStateArgs) (*deploymentspb.SyncVersionStateResponse, error) {
+func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *deploymentspb.SyncVersionStateUpdateArgs) (*deploymentspb.SyncVersionStateResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -292,22 +314,85 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	// wait until series workflow started
 	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
 	if err != nil {
-		d.logger.Error("Update canceled before series workflow started")
-		return nil, serviceerror.NewDeadlineExceeded("Update canceled before series workflow started")
+		d.logger.Error("Update canceled before worker deployment workflow started")
+		return nil, serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
 	}
 
 	state := d.GetVersionState()
 	wasAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
+
+	// sync to task queues
+	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
+		WorkerDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: d.VersionState.DeploymentName,
+			Version:        d.VersionState.Version,
+		},
+	}
+	for tqName, byType := range d.VersionState.TaskQueueFamilies {
+		for tqType, oldData := range byType.TaskQueues {
+			newData := &deploymentspb.DeploymentVersionData{
+				Version:           oldData.Version,
+				RoutingUpdateTime: args.RoutingUpdateTime, // todo carly: replace this with just current_since + ramping_since, in future PR since it's more involved
+				IsCurrent:         args.CurrentSinceTime != nil,
+				RampPercentage:    oldData.RampPercentage, // todo ramp
+				FirstPollerTime:   oldData.FirstPollerTime,
+			}
+
+			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+				Name: tqName,
+				Type: enumspb.TaskQueueType(tqType),
+				Data: newData,
+			})
+		}
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
+	if err != nil {
+		// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+		return nil, err
+	}
+	if len(syncRes.TaskQueueMaxVersions) > 0 {
+		// wait for propagation
+		err = workflow.ExecuteActivity(
+			activityCtx,
+			d.a.CheckWorkerDeploymentUserDataPropagation,
+			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+			}).Get(ctx, nil)
+		if err != nil {
+			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+			return nil, err
+		}
+	}
+
+	// apply changes to "current"
 	if args.GetCurrentSinceTime() != nil {
 		state.CurrentSinceTime = args.GetCurrentSinceTime()
 	}
+
+	// apply changes to "ramping"
 	if args.GetRampingSinceTime() != nil {
 		state.RampingSinceTime = args.GetRampingSinceTime()
 	}
+
 	isAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
 
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
 		workflow.ExecuteChildWorkflow(ctx, WorkerDeploymentCheckDrainageWorkflowType)
+		//=======
+		//	// apply changes to "current"
+		//	if set := args.SetCurrent; set != nil {
+		//
+
+		//		// local state
+		//		if set.LastBecameCurrentTime != nil {
+		//			d.VersionState.LastBecameCurrentTime = set.LastBecameCurrentTime
+		//		}
+		//		if err := d.updateMemo(ctx); err != nil {
+		//			return nil, err
+		//		}
+		//>>>>>>> 7ff7876726e34490e9f89040784e75f31fa064ed
 	}
 
 	if err = d.updateMemo(ctx); err != nil {
@@ -319,8 +404,10 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	}, nil
 }
 
-func (d *VersionWorkflowRunner) dataWithTime(data *deploymentspb.DeploymentVersionTaskQueueData) *deploymentspb.DeploymentVersionTaskQueueData {
+func (d *VersionWorkflowRunner) dataWithTime(data *deploymentspb.DeploymentVersionData, routingUpdateTime *timestamppb.Timestamp) *deploymentspb.DeploymentVersionData {
 	data = common.CloneProto(data)
+	data.RoutingUpdateTime = routingUpdateTime
+
 	return data
 }
 
@@ -332,6 +419,7 @@ func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescr
 
 // updateMemo should be called whenever the workflow updates its local state
 func (d *VersionWorkflowRunner) updateMemo(ctx workflow.Context) error {
+	// TODO (Shivam): Update memo to have current_since after proto changes.
 	return workflow.UpsertMemo(ctx, map[string]any{
 		WorkerDeploymentVersionMemoField: &deploymentspb.VersionWorkflowMemo{
 			DeploymentName:   d.VersionState.DeploymentName,

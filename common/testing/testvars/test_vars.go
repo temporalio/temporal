@@ -261,20 +261,11 @@ func (tv *TestVars) Deployment() *deploymentpb.Deployment {
 	}
 }
 
-func (tv *TestVars) DeploymentVersion() string {
-	return getOrCreate(tv, "version", tv.uniqueString, tv.stringNSetter)
-}
-
-func (tv *TestVars) WithDeploymentVersionNumber(n int) *TestVars {
-	return tv.cloneSetN("version", n)
-}
-
-func (tv *TestVars) DeploymentName() string {
-	return getOrCreate(tv, "deployment_name", tv.uniqueString, tv.stringNSetter)
-}
-
-func (tv *TestVars) WithDeploymentNameNumber(n int) *TestVars {
-	return tv.cloneSetN("deployment_name", n)
+func (tv *TestVars) DeploymentVersion() *deploymentpb.WorkerDeploymentVersion {
+	return &deploymentpb.WorkerDeploymentVersion{
+		Version:        tv.BuildID(),
+		DeploymentName: tv.DeploymentSeries(),
+	}
 }
 
 func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionTransition {
