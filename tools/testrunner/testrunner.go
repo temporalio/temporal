@@ -181,7 +181,7 @@ func Main() {
 		if len(timedoutTests) > 0 {
 			// Run timed out and was aborted.
 			// Update JUnit XML output for timed out tests since none will have been generated.
-			currentAttempt.junitReport.generateForTimedoutTests(timedoutTests)
+			currentAttempt.junitReport = generateForTimedoutTests(timedoutTests)
 			log.Print(stacktrace)
 
 			// Don't retry.
@@ -226,7 +226,10 @@ func Main() {
 	}
 
 	// Merge reports from all attempts and write the final JUnit report.
-	mergedReport := mergeReports(r.allReports())
+	mergedReport, err := mergeReports(r.allReports())
+	if err != nil {
+		log.Fatal(err)
+	}
 	mergedReport.path = r.junitOutputPath
 	if err = mergedReport.write(); err != nil {
 		log.Fatal(err)

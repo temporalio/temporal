@@ -53,7 +53,7 @@ func (j *junitReport) read() error {
 	return nil
 }
 
-func (j *junitReport) generateForTimedoutTests(timedoutTests []string) {
+func generateForTimedoutTests(timedoutTests []string) *junitReport {
 	var testcases []junit.Testcase
 	for _, name := range timedoutTests {
 		testcases = append(testcases, junit.Testcase{
@@ -61,11 +61,13 @@ func (j *junitReport) generateForTimedoutTests(timedoutTests []string) {
 			Failure: &junit.Result{Message: "timeout"},
 		})
 	}
-	j.Testsuites = junit.Testsuites{
-		Suites: []junit.Testsuite{
-			{
-				Name:      "suite",
-				Testcases: testcases,
+	return &junitReport{
+		Testsuites: junit.Testsuites{
+			Suites: []junit.Testsuite{
+				{
+					Name:      "suite",
+					Testcases: testcases,
+				},
 			},
 		},
 	}

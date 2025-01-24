@@ -43,11 +43,11 @@ func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
 	require.NoError(t, err)
 	defer os.Remove(out.Name())
 
-	j := &junitReport{path: out.Name()}
-	j.generateForTimedoutTests([]string{
+	j := generateForTimedoutTests([]string{
 		"TestCallbacksSuite/TestWorkflowCallbacks_1",
 		"TestCallbacksSuite/TestWorkflowCallbacks_2",
 	})
+	j.path = out.Name()
 	require.NoError(t, j.write())
 
 	expectedReport, err := os.ReadFile("testdata/junit-timeout-output.xml")
@@ -87,7 +87,8 @@ func TestMergeReports(t *testing.T) {
 	j2 := &junitReport{path: "testdata/junit-attempt-2.xml"}
 	require.NoError(t, j2.read())
 
-	report := mergeReports([]*junitReport{j1, j2})
+	report, err := mergeReports([]*junitReport{j1, j2})
+	require.NoError(t, err)
 
 	suites := report.Testsuites.Suites
 	require.Len(t, suites, 2)
