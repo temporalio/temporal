@@ -88,22 +88,12 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		forceCAN = true
 	})
 	selector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-		var status enumspb.VersionDrainageStatus
-		c.Receive(ctx, &status)
-		now := timestamppb.Now()
-		info := d.VersionState.DrainageInfo
-		if info == nil {
-			d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
-				Status:          status,
-				LastChangedTime: now,
-				LastCheckedTime: now,
-			}
-		} else {
-			info.LastCheckedTime = now
-			if info.Status != status {
-				info.LastChangedTime = now
-				info.Status = status
-			}
+		var newInfo *deploymentpb.VersionDrainageInfo
+		c.Receive(ctx, &newInfo)
+		d.VersionState.DrainageInfo.LastCheckedTime = newInfo.LastCheckedTime
+		if d.VersionState.DrainageInfo.Status != newInfo.Status {
+			d.VersionState.DrainageInfo.Status = newInfo.Status
+			d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
 		}
 		d.updateMemo(ctx)
 	})
@@ -319,16 +309,15 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	}
 
 	state := d.GetVersionState()
-	wasAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
 
 	// sync to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		WorkerDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: d.VersionState.DeploymentName,
-			Version:        d.VersionState.Version,
+			DeploymentName: state.DeploymentName,
+			Version:        state.Version,
 		},
 	}
-	for tqName, byType := range d.VersionState.TaskQueueFamilies {
+	for tqName, byType := range state.TaskQueueFamilies {
 		for tqType, oldData := range byType.TaskQueues {
 			newData := &deploymentspb.DeploymentVersionData{
 				Version:           oldData.Version,
@@ -366,6 +355,8 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		}
 	}
 
+	wasAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
+
 	// apply changes to "current"
 	if args.GetCurrentSinceTime() != nil {
 		state.CurrentSinceTime = args.GetCurrentSinceTime()
@@ -379,20 +370,8 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	isAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
 
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
-		workflow.ExecuteChildWorkflow(ctx, WorkerDeploymentCheckDrainageWorkflowType)
-		//=======
-		//	// apply changes to "current"
-		//	if set := args.SetCurrent; set != nil {
-		//
-
-		//		// local state
-		//		if set.LastBecameCurrentTime != nil {
-		//			d.VersionState.LastBecameCurrentTime = set.LastBecameCurrentTime
-		//		}
-		//		if err := d.updateMemo(ctx); err != nil {
-		//			return nil, err
-		//		}
-		//>>>>>>> 7ff7876726e34490e9f89040784e75f31fa064ed
+		state.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
+		workflow.ExecuteChildWorkflow(ctx, WorkerDeploymentCheckDrainageWorkflowType, d.a.namespace)
 	}
 
 	if err = d.updateMemo(ctx); err != nil {

@@ -25,43 +25,30 @@
 package workerdeployment
 
 import (
+	"context"
 	deploymentpb "go.temporal.io/api/deployment/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/workflow"
-	"time"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const (
-	checkDrainageInterval = 3 * time.Minute
-)
-
-// child workflow
-func checkDrainageWorkflow(ctx workflow.Context, deploymentName, version string) error {
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-
-	for {
-		var info *deploymentpb.VersionDrainageInfo
-		err := workflow.ExecuteActivity(
-			activityCtx,
-			DrainageActivities.GetVersionDrainageStatus,
-			deploymentName,
-			version,
-		).Get(ctx, &info)
-		if err != nil {
-			return err
-		}
-
-		parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
-		err = workflow.SignalExternalWorkflow(ctx, parentWf.ID, parentWf.RunID, SyncDrainageSignalName, info).Get(ctx, nil)
-		if err != nil {
-			return err
-		}
-
-		if info.Status == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
-			return nil
-		}
-
-		workflow.Sleep(ctx, checkDrainageInterval)
+type (
+	DrainageActivities struct {
+		namespace        *namespace.Namespace
+		deploymentClient Client
 	}
-	// todo carly: listen for cancel signal (sent if parent workflow CaNs or if parent workflow becomes current / ramping)
+)
+
+func (a DrainageActivities) GetVersionDrainageStatus(ctx context.Context, deploymentName, version string) (*deploymentpb.VersionDrainageInfo, error) {
+	logger := activity.GetLogger(ctx)
+	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, deploymentName, version)
+	if err != nil {
+		logger.Error("error counting workflows for drainage status", "error", err)
+		return nil, err
+	}
+	return &deploymentpb.VersionDrainageInfo{
+		Status:          response,
+		LastChangedTime: nil, // ignored
+		LastCheckedTime: timestamppb.Now(),
+	}, nil
 }

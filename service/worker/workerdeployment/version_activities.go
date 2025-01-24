@@ -27,7 +27,6 @@ package workerdeployment
 import (
 	"cmp"
 	"context"
-	enumspb "go.temporal.io/api/enums/v1"
 	"sync"
 
 	"go.temporal.io/sdk/activity"
@@ -135,14 +134,4 @@ func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, in
 	logger.Info("adding version to worker-deployment", "deploymentName", input.DeploymentName, "version", input.Version)
 	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
 	return a.deploymentClient.AddVersionToWorkerDeployment(ctx, a.namespace, input.DeploymentName, input.Version, identity, input.RequestId)
-}
-
-func (a *VersionActivities) GetVersionDrainageStatus(ctx context.Context, deploymentName, version string) (enumspb.VersionDrainageStatus, error) {
-	logger := activity.GetLogger(ctx)
-	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, deploymentName, version)
-	if err != nil {
-		logger.Error("error counting workflows for drainage status", "error", err)
-		return enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, err
-	}
-	return response, nil
 }
