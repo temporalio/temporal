@@ -46,7 +46,7 @@ type attempt struct {
 	junitReport *junitReport
 }
 
-func (a *attempt) run(ctx context.Context, args []string) (error, string) {
+func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 	args = append([]string{"--junitfile", a.junitReport.path}, args...)
 	log.Printf("starting test attempt %d with args: %v", a.number, args)
 	cmd := exec.CommandContext(ctx, a.runner.gotestsumExecutable, args...)
@@ -55,9 +55,9 @@ func (a *attempt) run(ctx context.Context, args []string) (error, string) {
 	cmd.Stderr = io.MultiWriter(os.Stderr, &output) // we only need one output
 	cmd.Stdin = os.Stdin
 	if err := cmd.Run(); err != nil {
-		return err, output.String()
+		return output.String(), err
 	}
-	return nil, ""
+	return "", nil
 }
 
 type runner struct {
@@ -172,7 +172,7 @@ func Main() {
 		currentAttempt = r.newAttempt()
 
 		// Run tests.
-		err, stdout := currentAttempt.run(ctx, args)
+		stdout, err := currentAttempt.run(ctx, args)
 		if err != nil && !errors.As(err, &currentAttempt.exitErr) {
 			log.Fatalf("test run failed with an unexpected error: %v", err)
 		}
