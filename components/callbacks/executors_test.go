@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -144,14 +143,12 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
-				namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-					Namespace: &persistencespb.NamespaceDetail{
-						Info: &persistencespb.NamespaceInfo{
-							Id:   "namespace-id",
-							Name: "namespace-name",
-						},
-						Config: &persistencespb.NamespaceConfig{},
+				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{
+						Id:   "namespace-id",
+						Name: "namespace-name",
 					},
+					Config: &persistencespb.NamespaceConfig{},
 				}),
 				nil,
 			)
@@ -276,14 +273,12 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
-				namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-					Namespace: &persistencespb.NamespaceDetail{
-						Info: &persistencespb.NamespaceInfo{
-							Id:   "namespace-id",
-							Name: "namespace-name",
-						},
-						Config: &persistencespb.NamespaceConfig{},
+				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{
+						Id:   "namespace-id",
+						Name: "namespace-name",
 					},
+					Config: &persistencespb.NamespaceConfig{},
 				}),
 				nil,
 			)
