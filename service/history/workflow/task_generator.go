@@ -79,6 +79,7 @@ type (
 		GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error
 		GenerateChildWorkflowTasks(
 			event *historypb.HistoryEvent,
+			allowChildReconnect bool,
 		) error
 		GenerateRequestCancelExternalTasks(
 			event *historypb.HistoryEvent,
@@ -575,6 +576,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 
 func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 	event *historypb.HistoryEvent,
+	allowChildReconnect bool,
 ) error {
 
 	attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
@@ -592,11 +594,12 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 
 	r.mutableState.AddTasks(&tasks.StartChildExecutionTask{
 		// TaskID, VisibilityTimestamp is set by shard
-		WorkflowKey:       r.mutableState.GetWorkflowKey(),
-		TargetNamespaceID: targetNamespaceID.String(),
-		TargetWorkflowID:  childWorkflowInfo.StartedWorkflowId,
-		InitiatedEventID:  childWorkflowInfo.InitiatedEventId,
-		Version:           childWorkflowInfo.Version,
+		WorkflowKey:         r.mutableState.GetWorkflowKey(),
+		TargetNamespaceID:   targetNamespaceID.String(),
+		TargetWorkflowID:    childWorkflowInfo.StartedWorkflowId,
+		InitiatedEventID:    childWorkflowInfo.InitiatedEventId,
+		Version:             childWorkflowInfo.Version,
+		AllowChildReconnect: allowChildReconnect,
 	})
 
 	return nil
