@@ -27,7 +27,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -709,7 +708,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 ) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	time.Sleep(10 * time.Second)
 
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
