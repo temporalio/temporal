@@ -48,9 +48,10 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -914,7 +915,7 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 
 	s.syncTaskQueueDeploymentData(tv1, tqTypeAct, true, 0, false, t1)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
 		{Version: tv1.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t1)},
 	}}, data)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeWf)
@@ -924,7 +925,7 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	t0 := t1.Add(-time.Second)
 	s.syncTaskQueueDeploymentData(tv1, tqTypeAct, false, 0, false, t0)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
 		{Version: tv1.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t1)},
 	}}, data)
 
@@ -932,7 +933,7 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	t2 := t1.Add(time.Second)
 	s.syncTaskQueueDeploymentData(tv1, tqTypeAct, false, 20, false, t2)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
 		{Version: tv1.DeploymentVersion(), IsCurrent: false, RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
 	}}, data)
 
@@ -940,7 +941,7 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	tv2 := tv.WithBuildIDNumber(2)
 	s.syncTaskQueueDeploymentData(tv2, tqTypeAct, false, 10, false, t1)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
 		{Version: tv1.DeploymentVersion(), IsCurrent: false, RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
 		{Version: tv2.DeploymentVersion(), IsCurrent: false, RampPercentage: 10, RoutingUpdateTime: timestamp.TimePtr(t1)},
 	}}, data)
@@ -948,7 +949,7 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	// Make v2 current
 	s.syncTaskQueueDeploymentData(tv2, tqTypeAct, true, 0, false, t2)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
 		{Version: tv1.DeploymentVersion(), IsCurrent: false, RampPercentage: 20, RoutingUpdateTime: timestamp.TimePtr(t2)},
 		{Version: tv2.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t2)},
 	}}, data)
@@ -956,14 +957,14 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	// Forget v1
 	s.forgetTaskQueueDeploymentVersion(tv1, tqTypeAct, false)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
 		{Version: tv2.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t2)},
 	}}, data)
 
 	// Forget v1 again should be a noop
 	s.forgetTaskQueueDeploymentVersion(tv1, tqTypeAct, false)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
 		{Version: tv2.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t2)},
 	}}, data)
 
@@ -972,7 +973,7 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	uv.Version = ""
 	s.syncTaskQueueDeploymentData(tv2, tqTypeAct, false, 90, true, t2)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
 		{Version: tv2.DeploymentVersion(), IsCurrent: true, RoutingUpdateTime: timestamp.TimePtr(t2)},
 		{Version: uv, IsCurrent: false, RampPercentage: 90, RoutingUpdateTime: timestamp.TimePtr(t2)},
 	}}, data)
@@ -980,14 +981,14 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	// Forget v2
 	s.forgetTaskQueueDeploymentVersion(tv2, tqTypeAct, false)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencepb.DeploymentData{Versions: []*persistencepb.DeploymentVersionData{
+	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
 		{Version: uv, IsCurrent: false, RampPercentage: 90, RoutingUpdateTime: timestamp.TimePtr(t2)},
 	}}, data)
 
 	// Forget unversioned ramp
 	s.forgetTaskQueueDeploymentVersion(tv2, tqTypeAct, true)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencepb.DeploymentData{}, data)
+	s.ProtoEqual(&persistencespb.DeploymentData{}, data)
 }
 
 func (s *Versioning3Suite) setCurrentDeployment(
@@ -1023,7 +1024,7 @@ func (s *Versioning3Suite) updateTaskQueueDeploymentData(
 func (s *Versioning3Suite) getTaskQueueDeploymentData(
 	tv *testvars.TestVars,
 	tqType enumspb.TaskQueueType,
-) *persistencepb.DeploymentData {
+) *persistencespb.DeploymentData {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	resp, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(
@@ -1057,7 +1058,7 @@ func (s *Versioning3Suite) syncTaskQueueDeploymentData(
 			TaskQueue:     tv.TaskQueue().GetName(),
 			TaskQueueType: t,
 			Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-				UpdateVersionData: &persistencepb.DeploymentVersionData{
+				UpdateVersionData: &deploymentspb.DeploymentVersionData{
 					Version:           v,
 					RoutingUpdateTime: timestamp.TimePtr(updateTime),
 					IsCurrent:         isCurrent,
