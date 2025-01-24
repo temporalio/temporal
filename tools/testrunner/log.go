@@ -32,7 +32,7 @@ import (
 
 // parseTestTimeouts parses the stdout of a test run and returns the stacktrace and names of tests that timed out.
 func parseTestTimeouts(stdout string) (stacktrace string, timedoutTests []string) {
-	lines := strings.Split(stdout, "\n")
+	lines := strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n")
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		if strings.HasPrefix(line, "FAIL") {
