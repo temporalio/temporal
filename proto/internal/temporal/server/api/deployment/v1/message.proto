@@ -177,7 +177,6 @@ message CheckWorkerDeploymentUserDataPropagationRequest {
 message SetCurrentVersionArgs {
     string identity = 1;
     string version = 2;
-    string request_id = 4;
 }
 
 // used as Worker Deployment update response:

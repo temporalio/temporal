@@ -279,9 +279,8 @@ func (d *ClientImpl) SetCurrentVersion(
 	requestID := uuid.New()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
-		Identity:  identity,
-		Version:   version,
-		RequestId: requestID,
+		Identity: identity,
+		Version:  version,
 	})
 	if err != nil {
 		return nil, err
