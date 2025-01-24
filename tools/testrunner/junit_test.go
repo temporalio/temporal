@@ -32,7 +32,7 @@ import (
 
 func TestReadJUnitReport(t *testing.T) {
 	j := &junitReport{path: "testdata/junit-attempt-1.xml"}
-	j.read()
+	require.NoError(t, j.read())
 	require.Len(t, j.Testsuites.Suites, 1)
 	require.Equal(t, 2, j.Testsuites.Failures)
 	require.Equal(t, []string{"TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument"}, j.collectTestCaseFailures())
@@ -48,7 +48,7 @@ func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
 		"TestCallbacksSuite/TestWorkflowCallbacks_1",
 		"TestCallbacksSuite/TestWorkflowCallbacks_2",
 	})
-	j.write()
+	require.NoError(t, j.write())
 
 	expectedReport, err := os.ReadFile("testdata/junit-timeout-output.xml")
 	require.NoError(t, err)
@@ -83,9 +83,9 @@ func TestNode(t *testing.T) {
 
 func TestMergeReports(t *testing.T) {
 	j1 := &junitReport{path: "testdata/junit-attempt-1.xml"}
-	j1.read()
+	require.NoError(t, j1.read())
 	j2 := &junitReport{path: "testdata/junit-attempt-2.xml"}
-	j2.read()
+	require.NoError(t, j2.read())
 
 	report := mergeReports([]*junitReport{j1, j2})
 

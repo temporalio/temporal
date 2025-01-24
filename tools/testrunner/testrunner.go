@@ -52,7 +52,7 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 	cmd := exec.CommandContext(ctx, a.runner.gotestsumExecutable, args...)
 	var output strings.Builder
 	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &output) // we only need one output
+	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	if err := cmd.Run(); err != nil {
 		return output.String(), err
@@ -189,7 +189,9 @@ func Main() {
 		}
 
 		// All tests were run, parse JUnit XML output.
-		currentAttempt.junitReport.read()
+		if err = currentAttempt.junitReport.read(); err != nil {
+			log.Fatal(err)
+		}
 
 		// If the run completely successfull, no need to retry.
 		if currentAttempt.exitErr == nil {
@@ -226,7 +228,9 @@ func Main() {
 	// Merge reports from all attempts and write the final JUnit report.
 	mergedReport := mergeReports(r.allReports())
 	mergedReport.path = r.junitOutputPath
-	mergedReport.write()
+	if err = mergedReport.write(); err != nil {
+		log.Fatal(err)
+	}
 
 	// Exit with the exit code of the last attempt.
 	if currentAttempt.exitErr != nil {

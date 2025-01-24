@@ -24,6 +24,7 @@ package testrunner
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"iter"
 	"log"
@@ -38,17 +39,18 @@ type junitReport struct {
 	junit.Testsuites
 }
 
-func (j *junitReport) read() {
+func (j *junitReport) read() error {
 	f, err := os.Open(j.path)
 	if err != nil {
-		log.Fatalf("failed to open junit report file: %v", err)
+		return fmt.Errorf("failed to open junit report file: %w", err)
 	}
 	defer f.Close()
 
 	decoder := xml.NewDecoder(f)
 	if err = decoder.Decode(&j.Testsuites); err != nil {
-		log.Fatalf("failed to read junit report file: %v", err)
+		return fmt.Errorf("failed to read junit report file: %w", err)
 	}
+	return nil
 }
 
 func (j *junitReport) generateForTimedoutTests(timedoutTests []string) {
@@ -69,19 +71,20 @@ func (j *junitReport) generateForTimedoutTests(timedoutTests []string) {
 	}
 }
 
-func (j *junitReport) write() {
+func (j *junitReport) write() error {
 	f, err := os.Create(j.path)
 	if err != nil {
-		log.Fatalf("failed to open junit report file: %v", err)
+		return fmt.Errorf("failed to open junit report file: %w", err)
 	}
 	defer f.Close()
 
 	encoder := xml.NewEncoder(f)
 	encoder.Indent("", "    ")
 	if err = encoder.Encode(j.Testsuites); err != nil {
-		log.Fatalf("failed to write junit report file: %v", err)
+		return fmt.Errorf("failed to write junit report file: %w", err)
 	}
 	log.Printf("wrote junit report to %s", j.path)
+	return nil
 }
 
 func (j *junitReport) collectTestCases() map[string]struct{} {
@@ -132,12 +135,12 @@ func (j *junitReport) collectTestCaseFailures() []string {
 	return leafFailures
 }
 
-func mergeReports(reports []*junitReport) *junitReport {
+func mergeReports(reports []*junitReport) (*junitReport, error) {
 	if len(reports) == 0 {
-		log.Fatal("no reports to merge")
+		return nil, errors.New("no reports to merge")
 	}
 	if len(reports) == 1 {
-		return reports[0]
+		return reports[0], nil
 	}
 
 	var combined junit.Testsuites
@@ -165,7 +168,8 @@ func mergeReports(reports []*junitReport) *junitReport {
 				}
 			}
 			if len(casesMissing) > 0 {
-				log.Fatalf("expected a rerun of all failures from the previous attempt, missing: %v", casesMissing)
+				return nil,
+					fmt.Errorf("expected a rerun of all failures from the previous attempt, missing: %v", casesMissing)
 			}
 
 			// Append the test cases from the retry.
@@ -183,7 +187,7 @@ func mergeReports(reports []*junitReport) *junitReport {
 		}
 	}
 
-	return &junitReport{Testsuites: combined}
+	return &junitReport{Testsuites: combined}, nil
 }
 
 type node struct {
