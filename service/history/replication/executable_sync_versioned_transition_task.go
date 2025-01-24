@@ -143,7 +143,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 			headers.SystemPreemptableCallerInfo,
 		), e.NamespaceID)
 		if nsError != nil {
-			return err
+			return nsError
 		}
 		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 		defer cancel()
@@ -171,7 +171,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 			headers.SystemPreemptableCallerInfo,
 		), e.NamespaceID)
 		if nsError != nil {
-			return err
+			return nsError
 		}
 		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 		defer cancel()
@@ -216,7 +216,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 			endEventVersion,
 			"",
 		); resendErr != nil {
-			return err
+			return resendErr
 		}
 		return e.Execute()
 	default:
