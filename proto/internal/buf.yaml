@@ -13,6 +13,7 @@ breaking:
   ignore:
     - temporal/server/api/historyservice/v1/
     - temporal/server/api/deployment/v1/message.proto
+    - temporal/server/api/matchingservice/v1/request_response.proto
 
 lint:
   use:

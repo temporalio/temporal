@@ -3365,8 +3365,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 		return nil, err
 	}
 
-	// TODO (Shivam) : Verify if sending in uuid.New() is correct
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version.Value, request.Identity, uuid.New())
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version.Value, request.Identity)
 	if err != nil {
 		return nil, err
 	}

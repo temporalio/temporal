@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -86,7 +87,6 @@ type Client interface {
 		deploymentName string,
 		version string,
 		identity string,
-		requestID string,
 	) (*deploymentspb.SetCurrentVersionResponse, error)
 
 	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
@@ -273,10 +273,10 @@ func (d *ClientImpl) SetCurrentVersion(
 	deploymentName string,
 	version string,
 	identity string,
-	requestID string,
 ) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
+	requestID := uuid.New()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
 		Identity:  identity,
@@ -591,6 +591,7 @@ func (d *ClientImpl) updateWithStart(
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		SearchAttributes:         d.buildSearchAttributes(),
 		Memo:                     memo,
+		Identity:                 identity,
 	}
 
 	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
