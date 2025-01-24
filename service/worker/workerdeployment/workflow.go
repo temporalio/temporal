@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
@@ -136,9 +135,34 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.lock.Unlock()
 	}()
 
-	// do work
+	prevCurrentVersion := d.State.CurrentVersion
+	versionUpdateTime := timestamppb.New(workflow.Now(ctx))
 
-	return &deploymentspb.SetCurrentVersionResponse{}, nil
+	// tell new current that it's current
+	if _, err := d.syncVersion(ctx, args.Version, versionUpdateTime); err != nil {
+		return nil, err
+	}
+
+	if prevCurrentVersion != "" {
+		// tell previous current that it's no longer current
+		if _, err := d.syncVersion(ctx, prevCurrentVersion, versionUpdateTime); err != nil {
+			return nil, err
+		}
+	}
+
+	// update local state
+	d.State.CurrentVersion = args.Version
+	d.State.CurrentChangedTime = versionUpdateTime
+
+	// update memo
+	if err = d.updateMemo(ctx); err != nil {
+		return nil, err
+	}
+
+	return &deploymentspb.SetCurrentVersionResponse{
+		PreviousVersion: prevCurrentVersion,
+	}, nil
+
 }
 
 func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) error {
@@ -176,12 +200,12 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	return nil
 }
 
-func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string, updateMetadata *deploymentpb.UpdateDeploymentMetadata) (*deploymentspb.VersionLocalState, error) {
+func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string, versionUpdateTime *timestamppb.Timestamp) (*deploymentspb.VersionLocalState, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
 	setCur := &deploymentspb.SyncVersionStateArgs_SetCurrent{}
-	if d.State.CurrentVersion == version {
-		setCur.LastBecameCurrentTime = d.State.CurrentChangedTime
+	if d.State.CurrentVersion != version {
+		setCur.LastBecameCurrentTime = versionUpdateTime
 	}
 
 	var res deploymentspb.SyncVersionStateActivityResult
