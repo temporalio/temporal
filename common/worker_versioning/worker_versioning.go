@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
@@ -382,20 +383,21 @@ func calcRampThreshold(id string) float64 {
 	return 100 * (float64(h) / (float64(math.MaxUint32) + 1))
 }
 
+//revive:disable-next-line:cognitive-complexity
 func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData) *taskqueuepb.TaskQueueVersioningInfo {
 	if deployments == nil {
 		return nil
 	}
 
-	var current *persistencespb.DeploymentVersionData
-	var ramping *persistencespb.DeploymentVersionData
+	var current *deploymentspb.DeploymentVersionData
+	var ramping *deploymentspb.DeploymentVersionData
 
 	// Find old current
 	for _, d := range deployments.GetDeployments() {
 		// [cleanup-old-wv]
 		if d.Data.LastBecameCurrentTime != nil {
 			if t := d.Data.LastBecameCurrentTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
-				current = &persistencespb.DeploymentVersionData{
+				current = &deploymentspb.DeploymentVersionData{
 					Version:           DeploymentVersionFromDeployment(d.Deployment),
 					RoutingUpdateTime: d.Data.LastBecameCurrentTime,
 				}

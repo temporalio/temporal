@@ -68,13 +68,19 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 	for _, e := range input.Sync {
 		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
 			logger.Info("syncing task queue userdata for deployment version", "taskQueue", syncData.Name, "type", syncData.Type)
-			res, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+
+			var res *matchingservice.SyncDeploymentUserDataResponse
+			var err error
+
+			res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 				NamespaceId:   a.namespace.ID().String(),
 				TaskQueue:     syncData.Name,
 				TaskQueueType: syncData.Type,
-				Deployment:    nil, // TODO (Shivam): Pass nil until matchingservice.SyncDeploymentUserDataRequest gets updated.
-				Data:          nil, // TODO (Shivam): Pass nil until matchingservice.SyncDeploymentUserDataRequest gets updated.
+				Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+					UpdateVersionData: syncData.Data,
+				},
 			})
+
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
 			} else {
