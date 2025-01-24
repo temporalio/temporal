@@ -190,45 +190,24 @@ func Invoke(
 	var historyBlob []*commonpb.DataBlob
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
-			if shardContext.GetConfig().SendRawWorkflowHistory(request.Request.GetNamespace()) {
-				historyBlob, _, err = api.GetRawHistory(
-					ctx,
-					shardContext,
-					namespaceID,
-					execution,
-					lastFirstEventID,
-					nextEventID,
-					request.Request.GetMaximumPageSize(),
-					nil,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-				)
-				if err != nil {
-					return nil, err
-				}
-
-				// since getHistory func will not return empty history, so the below is safe
-				historyBlob = historyBlob[len(historyBlob)-1:]
-			} else {
-				history, _, err = api.GetHistory(
-					ctx,
-					shardContext,
-					namespaceID,
-					execution,
-					lastFirstEventID,
-					nextEventID,
-					request.Request.GetMaximumPageSize(),
-					nil,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-					persistenceVisibilityMgr,
-				)
-				if err != nil {
-					return nil, err
-				}
-				// since getHistory func will not return empty history, so the below is safe
-				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
+			historyBlob, _, err = api.GetRawHistory(
+				ctx,
+				shardContext,
+				namespaceID,
+				execution,
+				lastFirstEventID,
+				nextEventID,
+				request.Request.GetMaximumPageSize(),
+				nil,
+				continuationToken.TransientWorkflowTask,
+				continuationToken.BranchToken,
+			)
+			if err != nil {
+				return nil, err
 			}
+
+			// since getHistory func will not return empty history, so the below is safe
+			historyBlob = historyBlob[len(historyBlob)-1:]
 			continuationToken = nil
 		} else if isLongPoll {
 			// set the persistence token to be nil so next time we will query history for updates
@@ -245,35 +224,18 @@ func Invoke(
 				continuationToken = nil
 			}
 		} else {
-			if shardContext.GetConfig().SendRawWorkflowHistory(request.Request.GetNamespace()) {
-				historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
-					ctx,
-					shardContext,
-					namespaceID,
-					execution,
-					continuationToken.FirstEventId,
-					continuationToken.NextEventId,
-					request.Request.GetMaximumPageSize(),
-					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-				)
-			} else {
-				history, continuationToken.PersistenceToken, err = api.GetHistory(
-					ctx,
-					shardContext,
-					namespaceID,
-					execution,
-					continuationToken.FirstEventId,
-					continuationToken.NextEventId,
-					request.Request.GetMaximumPageSize(),
-					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
-					continuationToken.BranchToken,
-					persistenceVisibilityMgr,
-				)
-			}
-
+			historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
+				ctx,
+				shardContext,
+				namespaceID,
+				execution,
+				continuationToken.FirstEventId,
+				continuationToken.NextEventId,
+				request.Request.GetMaximumPageSize(),
+				continuationToken.PersistenceToken,
+				continuationToken.TransientWorkflowTask,
+				continuationToken.BranchToken,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -317,14 +279,24 @@ func Invoke(
 		}
 	}
 
-	return &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
+	resp := &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
 		Response: &historyspb.GetWorkflowExecutionHistoryResponse{
 			History:       nil,
 			RawHistory:    historyBlob,
 			NextPageToken: nextToken,
 			Archived:      false,
 		},
-	}, nil
+	}
+	if shardContext.GetConfig().SendRawWorkflowHistory(request.Request.GetNamespace()) {
+		resp.Response.RawHistory = historyBlob
+	} else {
+		fullHistory := make([][]byte, 0)
+		for _, blob := range historyBlob {
+			fullHistory = append(fullHistory, blob.Data)
+		}
+		resp.Response.History = fullHistory
+	}
+	return resp, nil
 }
 
 func makeFakeContinuedAsNewEvent(
