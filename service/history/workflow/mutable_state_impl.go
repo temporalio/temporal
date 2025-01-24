@@ -4718,7 +4718,6 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	// TODO merge active & passive task generation
 	if err := ms.taskGenerator.GenerateChildWorkflowTasks(
 		event,
-		false, // allowChildReconnect
 	); err != nil {
 		return nil, nil, err
 	}

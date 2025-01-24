@@ -500,7 +500,6 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 
 		if err := taskGenerator.GenerateChildWorkflowTasks(
 			scheduleEvent,
-			false, // allowChildReconnect
 		); err != nil {
 			return err
 		}

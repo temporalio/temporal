@@ -42,7 +42,6 @@ type (
 		TargetWorkflowID    string
 		InitiatedEventID    int64
 		Version             int64
-		AllowChildReconnect bool
 	}
 )
 

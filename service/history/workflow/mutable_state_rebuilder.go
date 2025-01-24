@@ -410,7 +410,6 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 
 			if err := taskGenerator.GenerateChildWorkflowTasks(
 				event,
-				true, // allowChildReconnect
 			); err != nil {
 				return nil, err
 			}
