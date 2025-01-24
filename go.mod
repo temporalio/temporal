@@ -7,7 +7,7 @@ retract (
 	v1.26.0 // Published accidentally.
 )
 
-replace go.temporal.io/api => go.temporal.io/api v1.43.2-0.20250123223624-792f7c873972
+replace go.temporal.io/api => go.temporal.io/api v1.43.2-0.20250124163539-ebe2d0877723
 
 require (
 	cloud.google.com/go/storage v1.41.0
