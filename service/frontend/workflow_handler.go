@@ -117,7 +117,7 @@ var (
 type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
-		workflowservice.UnsafeWorkflowServiceServer
+		workflowservice.UnimplementedWorkflowServiceServer
 		status int32
 
 		tokenSerializer                               *tasktoken.Serializer

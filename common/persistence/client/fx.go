@@ -205,7 +205,7 @@ func DataStoreFactoryProvider(
 		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(defaultStoreCfg.FaultInjection, dataStoreFactory)
 	}
 
-	tracer := tracerProvider.Tracer("persistence")
+	tracer := tracerProvider.Tracer(otel.ComponentPersistence)
 	if otel.IsEnabled(tracer) {
 		dataStoreFactory = telemetry.NewTelemetryDataStoreFactory(dataStoreFactory, logger, tracer)
 	}

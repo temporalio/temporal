@@ -34,7 +34,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.opentelemetry.io/otel/trace/noop"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/clock"
@@ -48,6 +47,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/queues/queuestest"
@@ -1080,7 +1080,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		s.mockClusterMetadata,
 		log.NewTestLogger(),
 		s.metricsHandler,
-		noop.NewTracerProvider().Tracer(""),
+		telemetry.NoopTracer,
 		func(params *queues.ExecutableParams) {
 			params.DLQEnabled = p.dlqEnabled
 			params.DLQWriter = p.dlqWriter

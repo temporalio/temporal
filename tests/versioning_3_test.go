@@ -588,7 +588,7 @@ func (s *Versioning3Suite) TestTransitionFromActivity_NoSticky() {
 }
 
 func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
-	// Wf runs one TWF on d1 and schedules four activities, then:
+	// The workflow runs one WFT on d1 which schedules four activities, then:
 	// 1. The first and second activities starts on d1
 	// 2. Current deployment becomes d2
 	// 3. The third activity is redirected to d2 and starts a transition in the wf, without being
@@ -664,7 +664,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	// tasks might still be waiting behind the old deployment's poll channel. Partition manage should
 	// immediately react to the deployment data changes, but there still is a race possible and the
 	// only way to safeguard against it is to wait a little while before proceeding.
-	time.Sleep(time.Millisecond * 100) //nolint:forbidigo
+	time.Sleep(time.Millisecond * 200) //nolint:forbidigo
 
 	// Pollers of d1 are there, but should not get any task
 	go s.idlePollActivity(tv1, true, ver3MinPollTime, "activities should not go to the old deployment")
@@ -878,8 +878,8 @@ func respondWftWithActivities(
 					// TODO (shahab): tests with forced task forward take multiple seconds. Need to know why?
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
-					StartToCloseTimeout:    durationpb.New(1 * time.Second),
-					HeartbeatTimeout:       durationpb.New(1 * time.Second),
+					StartToCloseTimeout:    durationpb.New(3 * time.Second),
+					HeartbeatTimeout:       durationpb.New(3 * time.Second),
 					RequestEagerExecution:  false,
 				},
 			},

@@ -33,6 +33,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/internal/freeport"
 	"go.temporal.io/server/tests/testcore"
@@ -312,22 +314,27 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 					err = nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional error")
 				}
 				ch.requestCompleteCh <- err
-				description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, "")
-				s.NoError(err)
-				s.Equal(1, len(description.Callbacks))
-				callbackInfo := description.Callbacks[0]
-				s.ProtoEqual(request.CompletionCallbacks[0], callbackInfo.Callback)
-				s.ProtoEqual(&workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{WorkflowClosed: &workflowpb.CallbackInfo_WorkflowClosed{}}}, callbackInfo.Trigger)
-				s.Equal(int32(attempt), callbackInfo.Attempt)
-				// Loose check to see that this is set.
-				s.Greater(callbackInfo.LastAttemptCompleteTime.AsTime(), time.Now().Add(-time.Hour))
-				if attempt < numAttempts {
-					s.Equal(enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
-					s.Equal("request failed with: 500 Internal Server Error", callbackInfo.LastAttemptFailure.Message)
-				} else {
-					s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-					s.Nil(callbackInfo.LastAttemptFailure)
-				}
+				s.EventuallyWithT(func(col *assert.CollectT) {
+					description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, "")
+					assert.NoError(col, err)
+					assert.Equal(col, 1, len(description.Callbacks))
+					callbackInfo := description.Callbacks[0]
+					protoassert.ProtoEqual(col, request.CompletionCallbacks[0], callbackInfo.Callback)
+					protoassert.ProtoEqual(col, &workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{WorkflowClosed: &workflowpb.CallbackInfo_WorkflowClosed{}}}, callbackInfo.Trigger)
+					if !assert.Equal(col, int32(attempt), callbackInfo.Attempt) {
+						// Return early to avoid evaluating further assertions.
+						return
+					}
+					// Loose check to see that this is set.
+					assert.Greater(col, callbackInfo.LastAttemptCompleteTime.AsTime(), time.Now().Add(-time.Hour))
+					if attempt < numAttempts {
+						assert.Equal(col, enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
+						assert.Equal(col, "request failed with: 500 Internal Server Error", callbackInfo.LastAttemptFailure.Message)
+					} else {
+						assert.Equal(col, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+						assert.Nil(col, callbackInfo.LastAttemptFailure)
+					}
+				}, 2*time.Second, 100*time.Millisecond)
 			}
 		})
 	}

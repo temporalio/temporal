@@ -77,32 +77,22 @@ var (
 	// that have `namespace` or `task_token` field in the request object.
 	allowedNamespaceStatesDefault = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 
+	// DO NOT allow workflow data read during namespace handover to prevent read-after-write inconsistency.
 	allowedMethodsDuringHandover = map[string]struct{}{
-		"DescribeNamespace":                  {},
-		"UpdateNamespace":                    {},
-		"GetReplicationMessages":             {},
-		"ReplicateEventsV2":                  {},
-		"GetWorkflowExecutionRawHistory":     {},
-		"GetWorkflowExecutionRawHistoryV2":   {},
-		"GetWorkflowExecutionHistory":        {},
-		"GetWorkflowExecutionHistoryReverse": {},
-		"DescribeWorkflowExecution":          {},
-		"DescribeTaskQueue":                  {},
-		"ListTaskQueuePartitions":            {},
-		"ListOpenWorkflowExecutions":         {},
-		"ListClosedWorkflowExecutions":       {},
-		"ListWorkflowExecutions":             {},
-		"ListArchivedWorkflowExecutions":     {},
-		"ScanWorkflowExecutions":             {},
-		"CountWorkflowExecutions":            {},
-		"DescribeSchedule":                   {},
-		"ListScheduleMatchingTimes":          {},
-		"ListSchedules":                      {},
-		"GetWorkerBuildIdCompatibility":      {},
-		"GetWorkerVersioningRules":           {},
-		"GetWorkerTaskReachability":          {},
-		"DescribeBatchOperation":             {},
-		"ListBatchOperations":                {},
+		"DescribeNamespace":                {},
+		"UpdateNamespace":                  {},
+		"GetReplicationMessages":           {},
+		"ReplicateEventsV2":                {},
+		"GetWorkflowExecutionRawHistory":   {},
+		"GetWorkflowExecutionRawHistoryV2": {}, // This is only internal usage.
+		"ListOpenWorkflowExecutions":       {},
+		"ListClosedWorkflowExecutions":     {},
+		"ListWorkflowExecutions":           {},
+		"ListArchivedWorkflowExecutions":   {},
+		"ScanWorkflowExecutions":           {},
+		"CountWorkflowExecutions":          {},
+		"ListSchedules":                    {},
+		"ListBatchOperations":              {},
 	}
 )
 
