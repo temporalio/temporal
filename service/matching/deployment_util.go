@@ -58,6 +58,7 @@ func findDeploymentVersion(deployments *persistencespb.DeploymentData, dv *deplo
 	return -1
 }
 
+//nolint:staticcheck
 func hasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentpb.WorkerDeploymentVersion) bool {
 	for _, d := range deployments.GetDeployments() {
 		if d.Deployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(v)) {

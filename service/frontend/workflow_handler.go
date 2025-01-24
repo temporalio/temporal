@@ -153,22 +153,6 @@ type (
 	}
 )
 
-func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(
-	ctx context.Context,
-	request *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
-) (*workflowservice.SetWorkerDeploymentCurrentVersionResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(
-	ctx context.Context,
-	request *workflowservice.SetWorkerDeploymentRampingVersionRequest,
-) (*workflowservice.SetWorkerDeploymentRampingVersionResponse, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
 	config *Config,
@@ -3374,6 +3358,41 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	return &workflowservice.DescribeWorkerDeploymentVersionResponse{
 		WorkerDeploymentVersionInfo: workerDeploymentVersionInfo,
 	}, nil
+}
+
+func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentCurrentVersionRequest) (_ *workflowservice.SetWorkerDeploymentCurrentVersionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version.Value, request.Identity)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
+		PreviousVersion: resp.PreviousVersion,
+	}, nil
+}
+
+// TODO (Shivam): Implement this
+func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentRampingVersionRequest) (_ *workflowservice.SetWorkerDeploymentRampingVersionResponse, retError error) {
+	panic("implement me")
 }
 
 func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request *workflowservice.DescribeWorkerDeploymentRequest) (_ *workflowservice.DescribeWorkerDeploymentResponse, retError error) {

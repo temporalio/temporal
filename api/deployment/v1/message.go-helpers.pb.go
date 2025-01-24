@@ -29,35 +29,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type DeploymentVersionTaskQueueData to the protobuf v3 wire format
-func (val *DeploymentVersionTaskQueueData) Marshal() ([]byte, error) {
+// Marshal an object of type DeploymentVersionData to the protobuf v3 wire format
+func (val *DeploymentVersionData) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type DeploymentVersionTaskQueueData from the protobuf v3 wire format
-func (val *DeploymentVersionTaskQueueData) Unmarshal(buf []byte) error {
+// Unmarshal an object of type DeploymentVersionData from the protobuf v3 wire format
+func (val *DeploymentVersionData) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *DeploymentVersionTaskQueueData) Size() int {
+func (val *DeploymentVersionData) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two DeploymentVersionTaskQueueData values are equivalent by recursively
+// Equal returns whether two DeploymentVersionData values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *DeploymentVersionTaskQueueData) Equal(that interface{}) bool {
+func (this *DeploymentVersionData) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *DeploymentVersionTaskQueueData
+	var that1 *DeploymentVersionData
 	switch t := that.(type) {
-	case *DeploymentVersionTaskQueueData:
+	case *DeploymentVersionData:
 		that1 = t
-	case DeploymentVersionTaskQueueData:
+	case DeploymentVersionData:
 		that1 = &t
 	default:
 		return false
