@@ -75,14 +75,14 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				Deployments: []*persistencespb.DeploymentData_DeploymentDataItem{
 					{Deployment: DeploymentFromDeploymentVersion(v1), Data: &deploymentspb.TaskQueueData{LastBecameCurrentTime: t1}},
 				},
-				Versions: []*persistencespb.DeploymentVersionData{
+				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v2, IsCurrent: true, RoutingUpdateTime: t2},
 				},
 			},
 		},
 		{name: "two current + two ramping", want: &taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: v2, UpdateTime: t3, RampingVersion: v3, RampingVersionPercentage: 20},
 			data: &persistencespb.DeploymentData{
-				Versions: []*persistencespb.DeploymentVersionData{
+				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, IsCurrent: true, RoutingUpdateTime: t1},
 					{Version: v2, IsCurrent: true, RoutingUpdateTime: t2},
 					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2},
@@ -92,7 +92,7 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 		},
 		{name: "ramp without current", want: &taskqueuepb.TaskQueueVersioningInfo{UpdateTime: t3, RampingVersion: v3, RampingVersionPercentage: 20},
 			data: &persistencespb.DeploymentData{
-				Versions: []*persistencespb.DeploymentVersionData{
+				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2},
 					{Version: v3, RampPercentage: 20, RoutingUpdateTime: t3},
 				},
@@ -100,7 +100,7 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 		},
 		{name: "ramp to unversioned", want: &taskqueuepb.TaskQueueVersioningInfo{UpdateTime: t2, RampingVersionPercentage: 20},
 			data: &persistencespb.DeploymentData{
-				Versions: []*persistencespb.DeploymentVersionData{
+				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t1},
 					// Passing only deployment name without version
 					{Version: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo"}, RampPercentage: 20, RoutingUpdateTime: t2},
