@@ -288,39 +288,6 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		`How many extra goroutines can be created per root.`,
 	)
 
-	// utf-8 validation
-
-	ValidateUTF8SampleRPCRequest = NewGlobalFloatSetting(
-		"system.validateUTF8.sample.rpcRequest",
-		0.0,
-		`Sample rate of utf-8 string validation for rpc requests`,
-	)
-	ValidateUTF8SampleRPCResponse = NewGlobalFloatSetting(
-		"system.validateUTF8.sample.rpcResponse",
-		0.0,
-		`Sample rate of utf-8 string validation for rpc responses`,
-	)
-	ValidateUTF8SamplePersistence = NewGlobalFloatSetting(
-		"system.validateUTF8.sample.persistence",
-		0.0,
-		`Sample rate of utf-8 string validation for persistence [de]serialization`,
-	)
-	ValidateUTF8FailRPCRequest = NewGlobalBoolSetting(
-		"system.validateUTF8.fail.rpcRequest",
-		false,
-		`Whether to fail rpcs on utf-8 string validation errors`,
-	)
-	ValidateUTF8FailRPCResponse = NewGlobalBoolSetting(
-		"system.validateUTF8.fail.rpcResponse",
-		false,
-		`Whether to fail rpcs on utf-8 string validation errors`,
-	)
-	ValidateUTF8FailPersistence = NewGlobalBoolSetting(
-		"system.validateUTF8.fail.persistence",
-		false,
-		`Whether to fail persistence [de]serialization on utf-8 string validation errors`,
-	)
-
 	// keys for size limit
 
 	BlobSizeLimitError = NewNamespaceIntSetting(

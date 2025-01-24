@@ -64,7 +64,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/common/utf8validator"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -129,9 +128,7 @@ var Module = fx.Options(
 	fx.Provide(health.NewServer),
 	deadlock.Module,
 	config.Module,
-	utf8validator.Module,
 	testhooks.Module,
-	fx.Invoke(func(*utf8validator.Validator) {}), // force this to be constructed even if not referenced elsewhere
 )
 
 var DefaultOptions = fx.Options(

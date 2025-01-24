@@ -86,7 +86,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
-	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/batcher"
@@ -5275,9 +5274,6 @@ func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedule
 	} else if err := listInfo.Unmarshal(listInfoBytes); err != nil {
 		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
 		return nil
-	} else if err := utf8validator.Validate(&listInfo, utf8validator.SourcePersistence); err != nil {
-		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
-		return nil
 	}
 	scheduler.CleanSpec(listInfo.Spec)
 	return &listInfo
@@ -5321,7 +5317,6 @@ func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo
 // This mutates request (but idempotent so safe for retries)
 func (wh *WorkflowHandler) addInitialScheduleMemo(request *workflowservice.CreateScheduleRequest, args *schedulespb.StartScheduleArgs) {
 	info := scheduler.GetListInfoFromStartArgs(args, time.Now().UTC(), wh.scheduleSpecBuilder)
-	// utf8validator: don't bother validating strings in info here because they all came from an rpc request
 	infoBytes, err := info.Marshal()
 	if err != nil {
 		wh.logger.Error("encoding initial schedule memo failed", tag.Error(err))
