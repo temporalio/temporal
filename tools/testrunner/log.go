@@ -25,6 +25,7 @@ package testrunner
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/maruel/panicparse/v2/stack"
@@ -72,13 +73,9 @@ func testOnlyStacktrace(stacktrace string) string {
 	}
 	res = "abridged stacktrace:\n"
 	for _, goroutine := range snap.Goroutines {
-		var shouldPrint bool
-		for _, line := range goroutine.Stack.Calls {
-			if strings.HasSuffix(line.RemoteSrcPath, "_test.go") {
-				shouldPrint = true
-				break
-			}
-		}
+		shouldPrint := slices.ContainsFunc(goroutine.Stack.Calls, func(call stack.Call) bool {
+			return strings.HasSuffix(call.RemoteSrcPath, "_test.go")
+		})
 		if shouldPrint {
 			res += fmt.Sprintf("\tgoroutine %d [%v]:\n", goroutine.ID, goroutine.State)
 			for _, call := range goroutine.Stack.Calls {
