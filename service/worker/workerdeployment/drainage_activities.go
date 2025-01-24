@@ -39,7 +39,7 @@ type (
 	}
 )
 
-func (a DrainageActivities) GetVersionDrainageStatus(ctx context.Context, deploymentName, version string) (*deploymentpb.VersionDrainageInfo, error) {
+func (a *DrainageActivities) GetVersionDrainageStatus(ctx context.Context, deploymentName, version string) (*deploymentpb.VersionDrainageInfo, error) {
 	logger := activity.GetLogger(ctx)
 	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, deploymentName, version)
 	if err != nil {

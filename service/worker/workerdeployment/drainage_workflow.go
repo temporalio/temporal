@@ -38,12 +38,13 @@ const (
 // child workflow
 func checkDrainageWorkflow(ctx workflow.Context, deploymentName, version string) error {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var a *DrainageActivities
 
 	for {
 		var info *deploymentpb.VersionDrainageInfo
 		err := workflow.ExecuteActivity(
 			activityCtx,
-			DrainageActivities.GetVersionDrainageStatus,
+			a.GetVersionDrainageStatus,
 			deploymentName,
 			version,
 		).Get(ctx, &info)
