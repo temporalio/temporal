@@ -2065,7 +2065,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 	s.Nil(err)
 	mutableState.GetExecutionInfo().OriginalExecutionRunId = originalExecutionRunID
 
-	event, _ := addStartChildWorkflowExecutionInitiatedEvent(
+	childInitEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		1111,
 		uuid.New(),
@@ -2080,6 +2080,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 		1*time.Second,
 		enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	)
+	// Set the base workflow for the reset run and simulate a reset point that is after the childInitEvent.EventId
+	mutableState.SetBaseWorkflow("baseRunID", childInitEvent.EventId+1, 123)
 
 	taskID := s.mustGenerateTaskID()
 	transferTask := &tasks.StartChildExecutionTask{
@@ -2092,11 +2094,11 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 		TargetNamespaceID:   tests.ChildNamespaceID.String(),
 		TargetWorkflowID:    childWorkflowID,
 		TaskID:              taskID,
-		InitiatedEventID:    event.GetEventId(),
+		InitiatedEventID:    childInitEvent.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
 	}
 
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, childInitEvent.GetEventId(), childInitEvent.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	// Assert that child workflow describe is called.
 	// The child describe returns a mock parent whose originalExecutionRunID points to the same as the current reset run's originalExecutionRunID
