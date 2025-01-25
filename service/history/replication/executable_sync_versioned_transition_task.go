@@ -161,8 +161,9 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(originalErr error) err
 					tag.TaskID(e.ExecutableTask.TaskID()),
 					tag.Error(syncStateErr),
 				)
+				return originalErr
 			}
-			return originalErr
+			return nil
 		}
 		return e.Execute()
 	case *serviceerrors.RetryReplication:

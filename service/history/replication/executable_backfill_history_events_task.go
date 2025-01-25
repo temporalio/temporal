@@ -185,9 +185,10 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 					tag.TaskID(e.ExecutableTask.TaskID()),
 					tag.Error(syncStateErr),
 				)
+				return err
 			}
 			// return original task processing error
-			return err
+			return nil
 		}
 		return e.Execute()
 	case *serviceerrors.RetryReplication:
