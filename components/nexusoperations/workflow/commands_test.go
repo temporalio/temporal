@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/components/nexusoperations"
@@ -92,7 +93,10 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	smReg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(smReg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(smReg))
-	require.NoError(t, nexusoperations.RegisterEventDefinitions(smReg))
+	ctrl := gomock.NewController(t)
+	mockLogger := log.NewMockLogger(ctrl)
+	dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), mockLogger)
+	require.NoError(t, nexusoperations.RegisterEventDefinitions(smReg, dc))
 	ms := workflow.NewMockMutableState(gomock.NewController(t))
 	node, err := hsm.NewRoot(smReg, workflow.StateMachineType, ms, make(map[string]*persistencespb.StateMachineMap), ms)
 	require.NoError(t, err)
