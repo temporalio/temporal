@@ -183,8 +183,11 @@ func (u *Update) WaitLifecycleStage(
 	stCtx, stCancel := context.WithTimeout(ctx, softTimeout)
 	defer stCancel()
 
+	var err error
+
 	if u.outcome.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-		outcome, err := u.outcome.Get(stCtx)
+		var outcome *updatepb.Outcome
+		outcome, err = u.outcome.Get(stCtx)
 		if err == nil {
 			return statusCompleted(outcome), nil
 		}
@@ -192,14 +195,12 @@ func (u *Update) WaitLifecycleStage(
 		// If err is coming from the user provided context (context.DeadlineExceeded or context.Canceled), then return it to the caller.
 		if errors.Is(err, ctx.Err()) {
 			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
-			return nil, ctx.Err()
+			return nil, err
 		}
 
-		// Update uses registryClearedErr when Registry is cleared. This error has special handling here:
-		//   stop waiting for COMPLETED stage and check if Update has reached ACCEPTED stage.
-		// If err is not registryClearedErr and is not coming from stCtx,
-		// then it means that the error is coming from the future itself and needs to be returned to the caller.
-		if !errors.Is(err, registryClearedErr) && !errors.Is(err, stCtx.Err()) {
+		// If err is not coming from stCtx, then it means that the error is coming from the future itself.
+		// If this err is not registryClearedErr, then it needs to be returned to the caller.
+		if !errors.Is(err, stCtx.Err()) && !errors.Is(err, registryClearedErr) {
 			return nil, err
 		}
 
@@ -211,7 +212,8 @@ func (u *Update) WaitLifecycleStage(
 	if u.accepted.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
 		// Using the same context which might be already expired, but if accepted future is ready,
 		// then it will return immediately without checking context deadline.
-		rejection, err := u.accepted.Get(stCtx)
+		var rejection *failurepb.Failure
+		rejection, err = u.accepted.Get(stCtx)
 		if err == nil {
 			if rejection != nil {
 				return statusRejected(rejection), nil
@@ -237,20 +239,22 @@ func (u *Update) WaitLifecycleStage(
 			return nil, ctx.Err()
 		}
 
-		// Update uses registryClearedErr when Registry is cleared. This error has special handling here:
-		//   stop waiting for ACCEPTED stage and return Unavailable (retryable) error to the caller.
-		// This error will be retried (by history service handler, or history service client in frontend,
-		// or SDK, or user client). This will recreate Update in the Registry.
-		if errors.Is(err, registryClearedErr) {
-			return nil, WorkflowUpdateAbortedErr
-		}
-
-		// If err is not coming from stCtx,
-		// then it means that the error is coming from the future itself and needs to be returned to the caller.
-		if !errors.Is(err, stCtx.Err()) {
+		// If err is not coming from stCtx, then it means that the error is coming from the future itself,
+		// If this err is not registryClearedErr, then it needs to be returned to the caller.
+		if !errors.Is(err, stCtx.Err()) && !errors.Is(err, registryClearedErr) {
 			return nil, err
 		}
 	}
+
+	// Because of the checks above err (if is not nil) can be only registryClearedErr here.
+	// It is converted to Unavailable (retryable) error and returned to the caller.
+	// This error will be retried (by history service handler, or history service client in frontend,
+	// or SDK, or user client). This will recreate Update in the Registry.
+	if errors.Is(err, registryClearedErr) {
+		return nil, WorkflowUpdateAbortedErr
+	}
+
+	// TODO: assert(err == nil)
 
 	// If waitStage=COMPLETED or ACCEPTED and neither has been reached before the softTimeout has expired.
 	if stCtx.Err() != nil {
