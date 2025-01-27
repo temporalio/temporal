@@ -69,7 +69,6 @@ import (
 	"go.temporal.io/server/service/history/api/isactivitytaskvalid"
 	"go.temporal.io/server/service/history/api/isworkflowtaskvalid"
 	"go.temporal.io/server/service/history/api/listtasks"
-	"go.temporal.io/server/service/history/api/manageactivity"
 	"go.temporal.io/server/service/history/api/multioperation"
 	"go.temporal.io/server/service/history/api/pauseactivity"
 	"go.temporal.io/server/service/history/api/pollupdate"
@@ -1102,11 +1101,4 @@ func (e *historyEngineImpl) ResetActivity(
 	request *historyservice.ResetActivityRequest,
 ) (*historyservice.ResetActivityResponse, error) {
 	return resetactivity.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
-}
-
-func (e *historyEngineImpl) ManageActivity(
-	ctx context.Context,
-	request *historyservice.ManageActivityRequest,
-) (*historyservice.ManageActivityResponse, error) {
-	return manageactivity.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
 }

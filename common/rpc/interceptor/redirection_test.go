@@ -194,7 +194,6 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"GetDeploymentReachability":      {},
 		"GetCurrentDeployment":           {},
 		"SetCurrentDeployment":           {},
-		"ManageActivity":                 {},
 	}, apis)
 }
 

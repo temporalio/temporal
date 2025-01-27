@@ -150,7 +150,6 @@ var (
 		"GetDeploymentReachability":          {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"GetCurrentDeployment":               {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"SetCurrentDeployment":               {Scope: ScopeNamespace, Access: AccessWrite},
-		"ManageActivity":                     {Scope: ScopeNamespace, Access: AccessWrite},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},

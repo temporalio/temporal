@@ -421,21 +421,6 @@ func (mr *MockEngineMockRecorder) ListTasks(ctx, request any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTasks", reflect.TypeOf((*MockEngine)(nil).ListTasks), ctx, request)
 }
 
-// ManageActivity mocks base method.
-func (m *MockEngine) ManageActivity(ctx context.Context, request *historyservice.ManageActivityRequest) (*historyservice.ManageActivityResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ManageActivity", ctx, request)
-	ret0, _ := ret[0].(*historyservice.ManageActivityResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ManageActivity indicates an expected call of ManageActivity.
-func (mr *MockEngineMockRecorder) ManageActivity(ctx, request any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ManageActivity", reflect.TypeOf((*MockEngine)(nil).ManageActivity), ctx, request)
-}
-
 // MergeDLQMessages mocks base method.
 func (m *MockEngine) MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()

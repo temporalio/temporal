@@ -146,11 +146,6 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 		return nil
 	case *historyservice.ListTasksRequest:
 		return nil
-	case *historyservice.ManageActivityRequest:
-		return []tag.Tag{
-			tag.WorkflowID(r.GetManageRequest().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetManageRequest().GetRunId()),
-		}
 	case *historyservice.MergeDLQMessagesRequest:
 		return nil
 	case *historyservice.PauseActivityRequest:

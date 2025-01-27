@@ -24,10 +24,7 @@ package unpauseactivity
 
 import (
 	"context"
-	"fmt"
-	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
@@ -87,27 +84,45 @@ func processUnpauseActivityRequest(
 		return nil, consts.ErrWorkflowCompleted
 	}
 	frontendRequest := request.GetFrontendRequest()
-	activityId := frontendRequest.GetActivityId()
+	var activityIDs []string
+	switch a := frontendRequest.GetActivity().(type) {
+	case *workflowservice.UnpauseActivityByIdRequest_Id:
+		activityIDs = append(activityIDs, a.Id)
+	case *workflowservice.UnpauseActivityByIdRequest_Type:
+		activityType := a.Type
+		for _, ai := range mutableState.GetPendingActivityInfos() {
+			if ai.ActivityType.Name == activityType {
+				activityIDs = append(activityIDs, ai.ActivityId)
+			}
+		}
+	}
 
-	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
-
-	if !activityFound {
+	if len(activityIDs) == 0 {
 		return nil, consts.ErrActivityNotFound
 	}
 
-	if !ai.Paused {
-		// do nothing
-		return &historyservice.UnpauseActivityResponse{}, nil
+	for _, activityId := range activityIDs {
+
+		ai, activityFound := mutableState.GetActivityByActivityID(activityId)
+
+		if !activityFound {
+			return nil, consts.ErrActivityNotFound
+		}
+
+		if !ai.Paused {
+			// do nothing
+			continue
+		}
+
+		if err := workflow.UnpauseActivity(
+			shardContext, mutableState, ai,
+			frontendRequest.GetResetAttempts(),
+			frontendRequest.GetResetHeartbeat(),
+			frontendRequest.GetJitter().AsDuration()); err != nil {
+			return nil, err
+		}
+
 	}
 
-	var jitter time.Duration
-	switch op := request.GetFrontendRequest().Operation.(type) {
-	case *workflowservice.UnpauseActivityByIdRequest_Resume:
-		return workflow.UnpauseActivityWithResume(shardContext, mutableState, ai, op.Resume.NoWait, jitter)
-
-	case *workflowservice.UnpauseActivityByIdRequest_Reset_:
-		return workflow.UnpauseActivityWithReset(shardContext, mutableState, ai, op.Reset_.NoWait, op.Reset_.ResetHeartbeat, jitter)
-	default:
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
-	}
+	return &historyservice.UnpauseActivityResponse{}, nil
 }

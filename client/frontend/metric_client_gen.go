@@ -481,20 +481,6 @@ func (c *metricClient) ListWorkflowExecutions(
 	return c.client.ListWorkflowExecutions(ctx, request, opts...)
 }
 
-func (c *metricClient) ManageActivity(
-	ctx context.Context,
-	request *workflowservice.ManageActivityRequest,
-	opts ...grpc.CallOption,
-) (_ *workflowservice.ManageActivityResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientManageActivity")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.ManageActivity(ctx, request, opts...)
-}
-
 func (c *metricClient) PatchSchedule(
 	ctx context.Context,
 	request *workflowservice.PatchScheduleRequest,
