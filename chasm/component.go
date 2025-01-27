@@ -29,9 +29,6 @@ func (UnimplementedComponent) mustEmbedUnimplementedComponent() {}
 type LifecycleState int
 
 const (
-	LifecycleStateUnspecified LifecycleState = 0
-)
-const (
 	LifecycleStateCreated LifecycleState = 1 << iota
 	LifecycleStateRunning
 	// LifecycleStatePaused // <- this can also be a method of the engine: PauseComponent
@@ -39,6 +36,8 @@ const (
 	LifecycleStateFailed
 	// LifecycleStateTerminated
 	// LifecycleStateReset
+
+	LifecycleStateUnspecified = LifecycleState(0)
 )
 
 type OperationIntent int
