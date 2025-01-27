@@ -27,6 +27,7 @@ package scheduler
 import (
 	"time"
 
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
@@ -35,44 +36,66 @@ type (
 		DefaultCatchupWindow              time.Duration // Default for catchup window
 		MinCatchupWindow                  time.Duration // Minimum for catchup window
 		MaxBufferSize                     int           // MaxBufferSize limits the number of buffered actions pending execution in total
-		BackfillsPerIteration             int           // How many backfilled actions to buffer per iteration (implies rate limit since min sleep is 1s)
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
+		RecentActionCount                 int           // How many recent actions are recorded in SchedulerInfo.
 
 		// TODO - incomplete tweakables list
+
 	}
 
-	// V2 Scheduler dynamic config, shared among all sub state machines.
+	// State Machine Scheduler dynamic config, shared among all sub state machines.
 	Config struct {
-		Tweakables       dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
-		ExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		Tweakables         dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
+		ServiceCallTimeout dynamicconfig.DurationPropertyFn
+		RetryPolicy        func() backoff.RetryPolicy
 	}
 )
 
 var (
-	// TODO - fix namespaces after removal of prototype
 	CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting(
 		"component.scheduler.tweakables",
 		DefaultTweakables,
-		"A set of tweakable parameters for the CHASM Scheduler")
+		"A set of tweakable parameters for the state machine scheduler.")
 
-	ExecutionTimeout = dynamicconfig.NewNamespaceDurationSetting(
-		"component.scheduler.executionTimeout",
-		time.Second*10,
-		`ExecutionTimeout is the timeout for executing a single scheduler task.`,
+	RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
+		"component.scheduler.retryPolicy.initialInterval",
+		time.Second,
+		`The initial backoff interval when retrying a failed workflow start.`,
+	)
+
+	RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
+		"component.scheduler.retryPolicy.maxInterval",
+		time.Minute,
+		`The maximum backoff interval when retrying a failed workflow start.`,
+	)
+
+	ServiceCallTimeout = dynamicconfig.NewGlobalDurationSetting(
+		"component.scheduler.serviceCallTimeout",
+		5*time.Second,
+		`The upper bound on how long a service call can take before being timed out.`,
 	)
 
 	DefaultTweakables = Tweakables{
 		DefaultCatchupWindow:              365 * 24 * time.Hour,
 		MinCatchupWindow:                  10 * time.Second,
 		MaxBufferSize:                     1000,
-		BackfillsPerIteration:             10,
 		CanceledTerminatedCountAsFailures: false,
+		RecentActionCount:                 10,
 	}
 )
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Tweakables:       CurrentTweakables.Get(dc),
-		ExecutionTimeout: ExecutionTimeout.Get(dc),
+		Tweakables:         CurrentTweakables.Get(dc),
+		ServiceCallTimeout: ServiceCallTimeout.Get(dc),
+		RetryPolicy: func() backoff.RetryPolicy {
+			return backoff.NewExponentialRetryPolicy(
+				RetryPolicyInitialInterval.Get(dc)(),
+			).WithMaximumInterval(
+				RetryPolicyMaximumInterval.Get(dc)(),
+			).WithExpirationInterval(
+				backoff.NoInterval,
+			)
+		},
 	}
 }
