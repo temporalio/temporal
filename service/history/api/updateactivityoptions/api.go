@@ -31,6 +31,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -67,7 +68,7 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			var err error
-			response, err = updateActivityOptions(validator, mutableState, request)
+			response, err = processActivityOptionsRequest(validator, mutableState, request)
 			if err != nil {
 				return nil, err
 			}
@@ -88,7 +89,7 @@ func Invoke(
 	return response, err
 }
 
-func updateActivityOptions(
+func processActivityOptionsRequest(
 	validator *api.CommandAttrValidator,
 	mutableState workflow.MutableState,
 	request *historyservice.UpdateActivityOptionsRequest,
@@ -101,19 +102,61 @@ func updateActivityOptions(
 	if mergeFrom == nil {
 		return nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
 	}
-	activityId := updateRequest.GetActivityId()
 
-	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
+	var activityIDs []string
+	switch a := updateRequest.GetActivity().(type) {
+	case *workflowservice.UpdateActivityOptionsByIdRequest_Id:
+		activityIDs = append(activityIDs, a.Id)
+	case *workflowservice.UpdateActivityOptionsByIdRequest_Type:
+		activityType := a.Type
+		for _, ai := range mutableState.GetPendingActivityInfos() {
+			if ai.ActivityType.Name == activityType {
+				activityIDs = append(activityIDs, ai.ActivityId)
+			}
+		}
+	}
 
-	if !activityFound {
+	if len(activityIDs) == 0 {
 		return nil, consts.ErrActivityNotFound
 	}
+
 	mask := updateRequest.GetUpdateMask()
 	if mask == nil {
 		return nil, serviceerror.NewInvalidArgument("UpdateMask is not provided")
 	}
 
 	updateFields := util.ParseFieldMask(mask)
+
+	var adjustedOptions *activitypb.ActivityOptions
+	var err error
+	for _, activityId := range activityIDs {
+		ai, activityFound := mutableState.GetActivityByActivityID(activityId)
+
+		if !activityFound {
+			return nil, consts.ErrActivityNotFound
+		}
+
+		if adjustedOptions, err = updateActivityOptions(validator, mutableState, request, ai, mergeFrom, updateFields); err != nil {
+			return nil, err
+		}
+	}
+
+	// fill the response
+	response := &historyservice.UpdateActivityOptionsResponse{
+		ActivityOptions: adjustedOptions,
+	}
+	return response, nil
+}
+
+func updateActivityOptions(
+	validator *api.CommandAttrValidator,
+	mutableState workflow.MutableState,
+	request *historyservice.UpdateActivityOptionsRequest,
+	ai *persistencespb.ActivityInfo,
+	mergeFrom *activitypb.ActivityOptions,
+	updateFields map[string]struct{},
+) (*activitypb.ActivityOptions, error) {
+
 	mergeInto := &activitypb.ActivityOptions{
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: ai.TaskQueue,
@@ -131,8 +174,7 @@ func updateActivityOptions(
 	}
 
 	// update activity options
-	err := applyActivityOptions(mergeInto, mergeFrom, updateFields)
-	if err != nil {
+	if err := applyActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
 		return nil, err
 	}
 
@@ -182,12 +224,7 @@ func updateActivityOptions(
 		}
 	}
 
-	// fill the response
-	response := &historyservice.UpdateActivityOptionsResponse{
-		ActivityOptions: adjustedOptions,
-	}
-	return response, nil
-
+	return adjustedOptions, nil
 }
 
 func applyActivityOptions(

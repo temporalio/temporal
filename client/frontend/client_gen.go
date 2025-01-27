@@ -353,16 +353,6 @@ func (c *clientImpl) ListWorkflowExecutions(
 	return c.client.ListWorkflowExecutions(ctx, request, opts...)
 }
 
-func (c *clientImpl) ManageActivity(
-	ctx context.Context,
-	request *workflowservice.ManageActivityRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.ManageActivityResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.ManageActivity(ctx, request, opts...)
-}
-
 func (c *clientImpl) PatchSchedule(
 	ctx context.Context,
 	request *workflowservice.PatchScheduleRequest,

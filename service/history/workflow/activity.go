@@ -219,9 +219,9 @@ func ResetActivityById(
 	shardContext shard.Context,
 	mutableState MutableState,
 	activityId string,
-	scheduleNewRun bool,
 	resetHeartbeats bool,
-	alsoUnpause bool,
+	keepPaused bool,
+	jitter time.Duration,
 ) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
@@ -242,20 +242,21 @@ func ResetActivityById(
 		}
 
 		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
-		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_STARTED || (ai.Paused && !alsoUnpause) {
+		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_STARTED || (ai.Paused && keepPaused) {
 			return nil
 		}
 
 		ai.Stamp++
-		if ai.Paused && alsoUnpause {
+		if ai.Paused && !keepPaused {
 			ai.Paused = false
 		}
 
-		// if activity is scheduled - we need to regenerate the retry task
+		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
 		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-			scheduleTime := activityInfo.ScheduledTime.AsTime()
-			if scheduleNewRun {
-				scheduleTime = shardContext.GetTimeSource().Now().UTC()
+			scheduleTime := shardContext.GetTimeSource().Now().UTC()
+			if jitter != 0 {
+				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
+				scheduleTime = scheduleTime.Add(randomOffset)
 			}
 			if err := ms.RegenerateActivityRetryTask(ai, scheduleTime); err != nil {
 				return err
@@ -264,6 +265,46 @@ func ResetActivityById(
 
 		return nil
 	})
+}
+
+func UnpauseActivity(
+	shardContext shard.Context,
+	mutableState MutableState,
+	ai *persistencespb.ActivityInfo,
+	resetAttempts bool,
+	resetHeartbeat bool,
+	jitter time.Duration,
+) error {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+		activityInfo.Paused = false
+		activityInfo.Stamp++
+
+		if resetAttempts {
+			activityInfo.Attempt = 1
+		}
+		if resetHeartbeat {
+			activityInfo.LastHeartbeatDetails = nil
+			activityInfo.LastHeartbeatUpdateTime = nil
+		}
+
+		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
+		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			scheduleTime := shardContext.GetTimeSource().Now().UTC()
+			if jitter != 0 {
+				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
+				scheduleTime = scheduleTime.Add(randomOffset)
+			}
+			if err := ms.RegenerateActivityRetryTask(ai, scheduleTime); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func UnpauseActivityWithResume(

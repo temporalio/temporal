@@ -515,21 +515,6 @@ func (c *retryableClient) ListWorkflowExecutions(
 	return resp, err
 }
 
-func (c *retryableClient) ManageActivity(
-	ctx context.Context,
-	request *workflowservice.ManageActivityRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.ManageActivityResponse, error) {
-	var resp *workflowservice.ManageActivityResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.ManageActivity(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) PatchSchedule(
 	ctx context.Context,
 	request *workflowservice.PatchScheduleRequest,

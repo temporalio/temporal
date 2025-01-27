@@ -5428,7 +5428,7 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 	if request.GetWorkflowId() == "" {
 		return nil, errWorkflowIDNotSet
 	}
-	if request.GetActivityId() == "" {
+	if request.GetActivity() == nil {
 		return nil, errActivityIDNotSet
 	}
 
@@ -5467,7 +5467,7 @@ func (wh *WorkflowHandler) PauseActivityById(
 	if request.GetWorkflowId() == "" {
 		return nil, errWorkflowIDNotSet
 	}
-	if request.GetActivityId() == "" {
+	if request.GetActivity() == nil {
 		return nil, errActivityIDNotSet
 	}
 
@@ -5503,7 +5503,7 @@ func (wh *WorkflowHandler) UnpauseActivityById(
 	if request.GetWorkflowId() == "" {
 		return nil, errWorkflowIDNotSet
 	}
-	if request.GetActivityId() == "" {
+	if request.GetActivity() == nil {
 		return nil, errActivityIDNotSet
 	}
 
@@ -5539,7 +5539,7 @@ func (wh *WorkflowHandler) ResetActivityById(
 	if request.GetWorkflowId() == "" {
 		return nil, errWorkflowIDNotSet
 	}
-	if request.GetActivityId() == "" {
+	if request.GetActivity() == nil {
 		return nil, errActivityIDNotSet
 	}
 
@@ -5558,35 +5558,4 @@ func (wh *WorkflowHandler) ResetActivityById(
 	}
 
 	return &workflowservice.ResetActivityByIdResponse{}, nil
-}
-
-func (wh *WorkflowHandler) ManageActivity(ctx context.Context, request *workflowservice.ManageActivityRequest,
-) (*workflowservice.ManageActivityResponse, error) {
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method ManageActivity not implemented")
-	}
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-	if request.GetWorkflowId() == "" {
-		return nil, errWorkflowIDNotSet
-	}
-	if request.GetActivityId() == "" && request.GetActivityType() == "" {
-		return nil, serviceerror.NewInvalidArgument("Either ActivityId or ActivityType should be set on request.")
-	}
-
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err = wh.historyClient.ManageActivity(ctx, &historyservice.ManageActivityRequest{
-		NamespaceId:   namespaceID.String(),
-		ManageRequest: request,
-	}); err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.ManageActivityResponse{}, nil
 }

@@ -136,7 +136,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
+		Activity:   &workflowservice.UpdateActivityOptionsByIdRequest_Id{Id: "activity-id"},
 		ActivityOptions: &activitypb.ActivityOptions{
 			RetryPolicy: &commonpb.RetryPolicy{
 				InitialInterval: durationpb.New(1 * time.Second),
@@ -214,7 +214,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
+		Activity:   &workflowservice.UpdateActivityOptionsByIdRequest_Id{Id: "activity-id"},
 		ActivityOptions: &activitypb.ActivityOptions{
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Second),
 		},
@@ -293,7 +293,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
+		Activity:   &workflowservice.UpdateActivityOptionsByIdRequest_Id{Id: "activity-id"},
 		ActivityOptions: &activitypb.ActivityOptions{
 			ScheduleToCloseTimeout: durationpb.New(newScheduleToCloseTimeout),
 			RetryPolicy: &commonpb.RetryPolicy{
