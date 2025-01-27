@@ -156,7 +156,5 @@ require (
 	modernc.org/token v1.1.0 // indirect
 )
 
-replace (
-  go.temporal.io/api => ../api-go
-  //go.temporal.io/sdk => ../sdk-go
-)
+// sj-poller-scaling-test branch
+replace go.temporal.io/api => go.temporal.io/api v1.43.3-0.20250127235555-1fe5e818b8cd
