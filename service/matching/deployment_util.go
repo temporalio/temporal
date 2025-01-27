@@ -25,6 +25,8 @@
 package matching
 
 import (
+	"fmt"
+
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -65,6 +67,8 @@ func hasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 			return true
 		}
 	}
+
+	fmt.Println("Finding deployment version")
 
 	for _, vd := range deployments.GetVersions() {
 		if v.Equal(vd.GetVersion()) {

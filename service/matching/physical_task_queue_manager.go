@@ -344,11 +344,11 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	// [cleanup-wv-pre-release]
-	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
-		if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
-			return nil, err
-		}
-	}
+	// if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
+	// 	if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
+	// 		return nil, err
+	// 	}
+	// }
 
 	if c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
 		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, pollMetadata); err != nil {
@@ -584,6 +584,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 
 	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
 	if hasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
+		fmt.Println("-----------------------------------")
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.
@@ -658,18 +659,19 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return c.deploymentRegisterError
 	}
 
-	// userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
-	// if err != nil {
-	// 	return err
-	// }
+	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
+	if err != nil {
+		return err
+	}
 
-	// deploymentVersionData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentVersionData()
-	// if findDeploymentVersion(deploymentVersionData, workerDeployment.SeriesName, workerDeployment.BuildId) >= 0 {
-	// 	// already registered in user data, we can assume the workflow is running.
-	// 	// TODO: consider replication scenarios where user data is replicated before
-	// 	// the deployment workflow.
-	// 	return nil
-	// }
+	deploymentVersions := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+	if hasDeploymentVersion(deploymentVersions, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
+		fmt.Println("Already registered in user data")
+		// already registered in user data, we can assume the workflow is running.
+		// TODO: consider replication scenarios where user data is replicated before
+		// the deployment workflow.
+		return nil
+	}
 
 	// we need to update the deployment workflow to tell it about this task queue
 	// TODO: add some backoff here if we got an error last time
@@ -677,7 +679,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	if c.firstPoll.IsZero() {
 		c.firstPoll = c.partitionMgr.engine.timeSource.Now()
 	}
-	err := c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
+	err = c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
 		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), c.firstPoll,
 		"matching service", uuid.New())
 	if err != nil {
@@ -690,22 +692,22 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 
 	// the deployment workflow will register itself in this task queue's user data.
 	// wait for it to propagate here.
-	// for {
-	// 	userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-	// 	if findDeployment(deploymentData, workerDeployment) >= 0 {
-	// 		break
-	// 	}
-	// 	select {
-	// 	case <-userDataChanged:
-	// 	case <-ctx.Done():
-	// 		c.logger.Error("timed out waiting for deployment to appear in user data")
-	// 		return ctx.Err()
-	// 	}
-	// }
+	for {
+		userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
+		if err != nil {
+			return err
+		}
+		deploymentVersions := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+		if findDeploymentVersion(deploymentVersions, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) >= 0 {
+			break
+		}
+		select {
+		case <-userDataChanged:
+		case <-ctx.Done():
+			c.logger.Error("timed out waiting for deployment to appear in user data")
+			return ctx.Err()
+		}
+	}
 
 	c.deploymentRegistered = true
 	return nil

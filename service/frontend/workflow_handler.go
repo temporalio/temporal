@@ -3380,6 +3380,55 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	panic("implement me")
 }
 
+func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *workflowservice.ListWorkerDeploymentsRequest) (_ *workflowservice.ListWorkerDeploymentsResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if wh.config.DisableListVisibilityByFilter(namespaceEntry.Name().String()) {
+		return nil, errListNotAllowed
+	}
+
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
+		request.PageSize = maxPageSize
+	}
+
+	workerDeployments, nextPageToken, err := wh.workerDeploymentClient.ListWorkerDeployments(ctx, namespaceEntry, int(request.PageSize), request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+
+	apiDeployments := make([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, len(workerDeployments))
+	for i, d := range workerDeployments {
+		apiDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
+			Name:        d.Name,
+			CreateTime:  d.CreateTime,
+			RoutingInfo: d.RoutingInfo,
+		}
+	}
+
+	return &workflowservice.ListWorkerDeploymentsResponse{
+		WorkerDeployments: apiDeployments,
+		NextPageToken:     nextPageToken,
+	}, nil
+}
+
 func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request *workflowservice.DescribeWorkerDeploymentRequest) (_ *workflowservice.DescribeWorkerDeploymentResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 

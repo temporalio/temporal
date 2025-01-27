@@ -111,6 +111,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 		return nil
 	case *workflowservice.ListTaskQueuePartitionsRequest:
 		return nil
+	case *workflowservice.ListWorkerDeploymentsRequest:
+		return nil
 	case *workflowservice.ListWorkflowExecutionsRequest:
 		return nil
 	case *workflowservice.PatchScheduleRequest:

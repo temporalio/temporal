@@ -25,9 +25,11 @@
 package workerdeployment
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
@@ -65,6 +67,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.State == nil {
 		d.State = &deploymentspb.WorkerDeploymentLocalState{}
 		d.State.CreateTime = timestamppb.New(time.Now())
+		d.State.RoutingInfo = &deploymentpb.RoutingInfo{}
 	}
 
 	var pendingUpdates int
@@ -115,7 +118,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
-	if d.State.CurrentVersion != args.Version {
+	if d.State.RoutingInfo.CurrentVersion != args.Version {
 		return nil
 	}
 
@@ -131,11 +134,13 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	}
 	d.pendingUpdates++
 	defer func() {
+		fmt.Println("Releasing Lock from setCurrent")
 		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
 
-	prevCurrentVersion := d.State.CurrentVersion
+	fmt.Println("Lock acquired from setCurrent")
+	prevCurrentVersion := d.State.RoutingInfo.CurrentVersion
 	versionUpdateTime := timestamppb.New(workflow.Now(ctx))
 
 	// tell new current that it's current
@@ -151,8 +156,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	}
 
 	// update local state
-	d.State.CurrentVersion = args.Version
-	d.State.CurrentChangedTime = versionUpdateTime
+	d.State.RoutingInfo.CurrentVersion = args.Version
+	d.State.RoutingInfo.CurrentVersionUpdateTime = versionUpdateTime
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
@@ -181,8 +186,10 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) er
 
 func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, version string) error {
 	// use lock to enforce only one update at a time
+	fmt.Println("Trying to acquire lock while adding version")
 	err := d.lock.Lock(ctx)
 	if err != nil {
+		fmt.Println("Could not acquire workflow lock")
 		d.logger.Error("Could not acquire workflow lock")
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
@@ -196,6 +203,7 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	if d.State.Versions == nil {
 		d.State.Versions = make([]string, 0)
 	}
+	d.logger.Info("Adding version to local state", "version", version)
 	d.State.Versions = append(d.State.Versions, version)
 	return nil
 }
@@ -204,7 +212,7 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string, versi
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
 	setCur := &deploymentspb.SyncVersionStateArgs_SetCurrent{}
-	if d.State.CurrentVersion != version {
+	if d.State.RoutingInfo.CurrentVersion != version {
 		setCur.LastBecameCurrentTime = versionUpdateTime
 	}
 
@@ -231,9 +239,9 @@ func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
 func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 	return workflow.UpsertMemo(ctx, map[string]any{
 		WorkerDeploymentMemoField: &deploymentspb.WorkerDeploymentWorkflowMemo{
-			DeploymentName:     d.DeploymentName,
-			CurrentVersion:     d.State.CurrentVersion,
-			CurrentChangedTime: d.State.CurrentChangedTime,
+			DeploymentName: d.DeploymentName,
+			CreateTime:     d.State.CreateTime,
+			RoutingInfo:    d.State.RoutingInfo,
 		},
 	})
 }

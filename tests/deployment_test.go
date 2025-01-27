@@ -192,6 +192,38 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 	}, time.Second*5, time.Millisecond*200)
 }
 
+func (s *DeploymentSuite) TestDescribeDeployment_DoesThisWork() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	// presence of internally used delimiters (:) or escape
+	// characters shouldn't break functionality
+	seriesName := testcore.RandomizeStr("my-series|:|:")
+	buildID := testcore.RandomizeStr("bgt:|")
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: "deployment-test", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	workerDeployment := &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
+	}
+
+	// Starting a deployment workflow
+	go s.pollFromDeployment(ctx, taskQueue, workerDeployment)
+
+	fmt.Println("Setting current deployment")
+	// set to 1
+	res, err := s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
+		Namespace:  s.Namespace().String(),
+		Deployment: workerDeployment,
+		Identity:   "test",
+	})
+	fmt.Println("current deployment is set")
+	s.NoError(err)
+	s.Nil(res.PreviousDeploymentInfo)
+	s.NotNil(res.CurrentDeploymentInfo)
+	s.Equal(workerDeployment.BuildId, res.CurrentDeploymentInfo.Deployment.BuildId)
+}
+
 func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPollers() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
