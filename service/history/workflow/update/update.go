@@ -239,7 +239,7 @@ func (u *Update) WaitLifecycleStage(
 			return nil, ctx.Err()
 		}
 
-		// If err is not coming from stCtx, then it means that the error is coming from the future itself,
+		// If err is not coming from stCtx, then it means that the error is coming from the future itself.
 		// If this err is not registryClearedErr, then it needs to be returned to the caller.
 		if !errors.Is(err, stCtx.Err()) && !errors.Is(err, registryClearedErr) {
 			return nil, err
