@@ -648,6 +648,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	// If workflow is not on any versionedTransition (in an unknown state from state-based replication perspective),
 	// we can't convert this raw task to a replication task, instead we need to rely on its task equivalents.
 	if len(executionInfo.TransitionHistory) == 0 {
+		releaseFunc(nil)
 		return c.convertTaskEquivalents(ctx, taskInfo, targetClusterID)
 	}
 
