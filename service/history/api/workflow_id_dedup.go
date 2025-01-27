@@ -67,42 +67,77 @@ func ResolveDuplicateWorkflowID(
 	switch currentState {
 	// *running* workflow: apply WorkflowIdConflictPolicy
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-		switch wfIDConflictPolicy {
-		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL:
-			msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
-			return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
-		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
-			return nil, ErrUseCurrentExecution
-		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
-			return resolveDuplicateWorkflowStart(shardContext, currentWorkflowStartTime, workflowKey, namespaceEntry, newRunID)
-		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id conflict policy: %v.", wfIDConflictPolicy))
-		}
+		return ResolveWorkflowIDConflictPolicy(
+			shardContext,
+			workflowKey,
+			namespaceEntry,
+			newRunID,
+			currentStartRequestID,
+			wfIDConflictPolicy,
+			currentWorkflowStartTime,
+		)
 
 	// *completed* workflow: apply WorkflowIdReusePolicy
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
-		switch wfIDReusePolicy {
-		case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE:
-			// no action or error
-		case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:
-			if _, ok := consts.FailedWorkflowStatuses[currentStatus]; !ok {
-				msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: allow duplicate workflow Id if last run failed."
-				return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
-			}
-		case enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE:
-			msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
-			return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
-		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow id reuse policy: %v.", wfIDReusePolicy))
-		}
+		// no action for the existing workflow
+		return nil, ResolveWorkflowIDReusePolicy(workflowKey, currentStatus, currentStartRequestID, wfIDReusePolicy)
 
 	default:
 		// persistence.WorkflowStateZombie or unknown type
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process workflow, workflow has invalid state: %v.", currentState))
+		return nil, serviceerror.NewInternal(
+			fmt.Sprintf("Failed to process workflow, workflow has invalid state: %v.", currentState),
+		)
 	}
+}
 
-	// ie "allow"
-	return nil, nil
+func ResolveWorkflowIDConflictPolicy(
+	shardContext shard.Context,
+	workflowKey definition.WorkflowKey,
+	namespaceEntry *namespace.Namespace,
+	newRunID string,
+	currentStartRequestID string,
+	wfIDConflictPolicy enumspb.WorkflowIdConflictPolicy,
+	currentWorkflowStartTime time.Time,
+) (UpdateWorkflowActionFunc, error) {
+	switch wfIDConflictPolicy { //nolint:exhaustive
+	case enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL:
+		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
+		return nil, generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
+	case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
+		return nil, ErrUseCurrentExecution
+	case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
+		return resolveDuplicateWorkflowStart(shardContext, currentWorkflowStartTime, workflowKey, namespaceEntry, newRunID)
+	default:
+		return nil, serviceerror.NewInternal(
+			fmt.Sprintf("Failed to process start workflow id conflict policy: %v.", wfIDConflictPolicy),
+		)
+	}
+}
+
+func ResolveWorkflowIDReusePolicy(
+	workflowKey definition.WorkflowKey,
+	currentStatus enumspb.WorkflowExecutionStatus,
+	currentStartRequestID string,
+	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
+) error {
+	switch wfIDReusePolicy { //nolint:exhaustive
+	case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE:
+		// no error
+	case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:
+		if _, ok := consts.FailedWorkflowStatuses[currentStatus]; !ok {
+			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: allow duplicate workflow Id if last run failed."
+			return generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
+		}
+	case enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE:
+		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
+		return generateWorkflowAlreadyStartedError(msg, currentStartRequestID, workflowKey)
+	default:
+		return serviceerror.NewInternal(
+			fmt.Sprintf("Failed to process start workflow id reuse policy: %v.", wfIDReusePolicy),
+		)
+	}
+	// ie "allow" starting a new workflow
+	return nil
 }
 
 // A minimal interval between workflow starts is used to prevent multiple starts with the same ID too rapidly.
