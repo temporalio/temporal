@@ -27,15 +27,18 @@ package matching
 import (
 	"context"
 	"errors"
+	"go.temporal.io/server/common/quotas"
 	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	serverenumspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -80,6 +83,7 @@ type (
 		cachedPhysicalInfoByBuildId     map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo // non-nil for root-partition
 		cachedPhysicalInfoByBuildIdLock sync.RWMutex                                                             // locks mutation of cachedPhysicalInfoByBuildId
 		lastFanOut                      int64                                                                    // serves as a TTL for cachedPhysicalInfoByBuildId
+		pollerScalingRateLimiter        quotas.RateLimiter
 	}
 )
 
@@ -107,6 +111,8 @@ func newTaskQueuePartitionManager(
 		versionedQueues:             make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
 		userDataManager:             userDataManager,
 		cachedPhysicalInfoByBuildId: nil,
+		// TODO: Configurable
+		pollerScalingRateLimiter: quotas.NewRateLimiter(10, 1),
 	}
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
@@ -326,6 +332,12 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	}
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
+
+	if task != nil {
+		taskQueueInfo := dbq.GetStats()
+		task.pollerScalingDecision = pm.makePollerScalingDecision(taskQueueInfo, task, pollMetadata.localPollStartTime)
+	}
+
 	return task, versionSetUsed, err
 }
 
@@ -1014,4 +1026,48 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 	}
 	perType := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
 	return perType, userDataChanged, nil
+}
+
+// makePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state of the
+// task queue and the task about to be returned. Does not modify inputs.
+func (pm *taskQueuePartitionManagerImpl) makePollerScalingDecision(
+	stats *taskqueuepb.TaskQueueStats, task *internalTask, pollStartTime time.Time,
+) *sdkpb.PollerScalingDecision {
+	pd := &sdkpb.PollerScalingDecision{}
+	decisionMsg := ""
+	if stats.ApproximateBacklogCount > 0 {
+		// Always increase when there is a backlog, even if we're a partition. Also important to increase for sticky
+		// queues.
+		pd.PollerDelta = 1
+		decisionMsg = "Poller up - backlog"
+	} else if !pm.partition.IsRoot() {
+		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
+		pd = nil
+		decisionMsg = "Not root"
+	} else if task.source == serverenumspb.TASK_SOURCE_HISTORY &&
+		pm.engine.timeSource.Since(pollStartTime) > 1*time.Second {
+		// TODO: Configurable period
+		// Decrease if any poll matched after sitting idle for some configured period
+		pd.PollerDelta = -1
+		decisionMsg = "Poller down - sync match"
+	} else if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
+		// TODO: Configurable fraction
+		// Increase if we're adding tasks faster than we're dispatching them
+		pd.PollerDelta = 1
+		decisionMsg = "Poller up - add rate"
+	} else if (stats.TasksAddRate / stats.TasksDispatchRate) < 0.8 {
+		// TODO: Configurable fraction
+		// Decrease if we're dispatching tasks faster than we're adding them
+		pd.PollerDelta = -1
+		decisionMsg = "Poller down - add rate"
+	}
+
+	// Avoid thrashing pollers all over the place by limiting how frequently change decisions are issued.
+	if !(pd != nil && pd.PollerDelta != 0) || !pm.pollerScalingRateLimiter.Allow() {
+		pd = nil
+	} else {
+		pm.logger.Warn(decisionMsg, tag.Value(stats))
+	}
+
+	return pd
 }

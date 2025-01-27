@@ -104,6 +104,8 @@ type (
 		ratePerSecond             *float64
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		forwardedFrom             string
+		// TODO: Should we set this in forwarded polls as well, or is local wait time sufficient?
+		localPollStartTime time.Time
 	}
 
 	namespaceUpdateLocks struct {
@@ -2190,6 +2192,8 @@ func (e *matchingEngineImpl) pollTask(
 		return nil, false, err
 	}
 
+	pollMetadata.localPollStartTime = e.timeSource.Now()
+
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
@@ -2386,6 +2390,9 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	if task.backlogCountHint != nil {
 		response.BacklogCountHint = task.backlogCountHint()
 	}
+	if task.pollerScalingDecision != nil {
+		response.PollerScalingDecision = task.pollerScalingDecision
+	}
 	return response
 }
 
@@ -2446,6 +2453,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		HeartbeatDetails:            historyResponse.HeartbeatDetails,
 		WorkflowType:                historyResponse.WorkflowType,
 		WorkflowNamespace:           historyResponse.WorkflowNamespace,
+		PollerScalingDecision:       task.pollerScalingDecision,
 	}
 }
 

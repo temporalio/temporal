@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"go.temporal.io/api/sdk/v1"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -80,6 +81,9 @@ type (
 		// based on forwardInfo.
 		redirectInfo *taskqueuespb.BuildIdRedirectInfo
 		recycleToken func()
+		// pollerScalingDecision is assigned when the queue has advice to give to the poller about whether
+		// it should adjust its poller count
+		pollerScalingDecision *sdk.PollerScalingDecision
 	}
 )
 

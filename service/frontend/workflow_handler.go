@@ -908,6 +908,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		StartedTime:                matchingResp.StartedTime,
 		Queries:                    matchingResp.Queries,
 		Messages:                   matchingResp.Messages,
+		PollerScalingDecision:      matchingResp.PollerScalingDecision,
 	}, nil
 }
 
