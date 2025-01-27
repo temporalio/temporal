@@ -31,128 +31,212 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (wt *WorkflowTags) extractFromAdminServiceServerRequest(req any) []tag.Tag {
-	switch r := req.(type) {
+func (wt *WorkflowTags) extractFromAdminServiceServerPayload(payload any) []tag.Tag {
+	switch r := payload.(type) {
 	case *adminservice.AddOrUpdateRemoteClusterRequest:
+		return nil
+	case *adminservice.AddOrUpdateRemoteClusterResponse:
 		return nil
 	case *adminservice.AddSearchAttributesRequest:
 		return nil
+	case *adminservice.AddSearchAttributesResponse:
+		return nil
 	case *adminservice.AddTasksRequest:
+		return nil
+	case *adminservice.AddTasksResponse:
 		return nil
 	case *adminservice.CancelDLQJobRequest:
 		return nil
+	case *adminservice.CancelDLQJobResponse:
+		return nil
 	case *adminservice.CloseShardRequest:
 		return nil
+	case *adminservice.CloseShardResponse:
+		return nil
 	case *adminservice.DeepHealthCheckRequest:
+		return nil
+	case *adminservice.DeepHealthCheckResponse:
 		return nil
 	case *adminservice.DeleteWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *adminservice.DeleteWorkflowExecutionResponse:
+		return nil
 	case *adminservice.DescribeClusterRequest:
 		return nil
+	case *adminservice.DescribeClusterResponse:
+		return nil
 	case *adminservice.DescribeDLQJobRequest:
+		return nil
+	case *adminservice.DescribeDLQJobResponse:
 		return nil
 	case *adminservice.DescribeHistoryHostRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
+	case *adminservice.DescribeHistoryHostResponse:
+		return nil
 	case *adminservice.DescribeMutableStateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *adminservice.DescribeMutableStateResponse:
+		return nil
 	case *adminservice.DescribeTaskQueuePartitionRequest:
 		return nil
+	case *adminservice.DescribeTaskQueuePartitionResponse:
+		return nil
 	case *adminservice.ForceUnloadTaskQueuePartitionRequest:
+		return nil
+	case *adminservice.ForceUnloadTaskQueuePartitionResponse:
 		return nil
 	case *adminservice.GenerateLastHistoryReplicationTasksRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *adminservice.GenerateLastHistoryReplicationTasksResponse:
+		return nil
 	case *adminservice.GetDLQMessagesRequest:
+		return nil
+	case *adminservice.GetDLQMessagesResponse:
 		return nil
 	case *adminservice.GetDLQReplicationMessagesRequest:
 		return nil
+	case *adminservice.GetDLQReplicationMessagesResponse:
+		return nil
 	case *adminservice.GetDLQTasksRequest:
+		return nil
+	case *adminservice.GetDLQTasksResponse:
 		return nil
 	case *adminservice.GetNamespaceRequest:
 		return nil
+	case *adminservice.GetNamespaceResponse:
+		return nil
 	case *adminservice.GetNamespaceReplicationMessagesRequest:
+		return nil
+	case *adminservice.GetNamespaceReplicationMessagesResponse:
 		return nil
 	case *adminservice.GetReplicationMessagesRequest:
 		return nil
+	case *adminservice.GetReplicationMessagesResponse:
+		return nil
 	case *adminservice.GetSearchAttributesRequest:
+		return nil
+	case *adminservice.GetSearchAttributesResponse:
 		return nil
 	case *adminservice.GetShardRequest:
 		return nil
+	case *adminservice.GetShardResponse:
+		return nil
 	case *adminservice.GetTaskQueueTasksRequest:
+		return nil
+	case *adminservice.GetTaskQueueTasksResponse:
 		return nil
 	case *adminservice.GetWorkflowExecutionRawHistoryRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *adminservice.GetWorkflowExecutionRawHistoryResponse:
+		return nil
 	case *adminservice.GetWorkflowExecutionRawHistoryV2Request:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *adminservice.GetWorkflowExecutionRawHistoryV2Response:
+		return nil
 	case *adminservice.ImportWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *adminservice.ImportWorkflowExecutionResponse:
+		return nil
 	case *adminservice.ListClusterMembersRequest:
+		return nil
+	case *adminservice.ListClusterMembersResponse:
 		return nil
 	case *adminservice.ListClustersRequest:
 		return nil
+	case *adminservice.ListClustersResponse:
+		return nil
 	case *adminservice.ListHistoryTasksRequest:
+		return nil
+	case *adminservice.ListHistoryTasksResponse:
 		return nil
 	case *adminservice.ListQueuesRequest:
 		return nil
+	case *adminservice.ListQueuesResponse:
+		return nil
 	case *adminservice.MergeDLQMessagesRequest:
+		return nil
+	case *adminservice.MergeDLQMessagesResponse:
 		return nil
 	case *adminservice.MergeDLQTasksRequest:
 		return nil
+	case *adminservice.MergeDLQTasksResponse:
+		return nil
 	case *adminservice.PurgeDLQMessagesRequest:
 		return nil
+	case *adminservice.PurgeDLQMessagesResponse:
+		return nil
 	case *adminservice.PurgeDLQTasksRequest:
+		return nil
+	case *adminservice.PurgeDLQTasksResponse:
 		return nil
 	case *adminservice.ReapplyEventsRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
+	case *adminservice.ReapplyEventsResponse:
+		return nil
 	case *adminservice.RebuildMutableStateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *adminservice.RebuildMutableStateResponse:
+		return nil
 	case *adminservice.RefreshWorkflowTasksRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *adminservice.RefreshWorkflowTasksResponse:
+		return nil
 	case *adminservice.RemoveRemoteClusterRequest:
+		return nil
+	case *adminservice.RemoveRemoteClusterResponse:
 		return nil
 	case *adminservice.RemoveSearchAttributesRequest:
 		return nil
+	case *adminservice.RemoveSearchAttributesResponse:
+		return nil
 	case *adminservice.RemoveTaskRequest:
+		return nil
+	case *adminservice.RemoveTaskResponse:
 		return nil
 	case *adminservice.ResendReplicationTasksRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
 			tag.WorkflowRunID(r.GetRunId()),
 		}
+	case *adminservice.ResendReplicationTasksResponse:
+		return nil
 	case *adminservice.SyncWorkflowStateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *adminservice.SyncWorkflowStateResponse:
+		return nil
 	default:
 		return nil
 	}

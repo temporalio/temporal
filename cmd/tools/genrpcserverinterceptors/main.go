@@ -43,10 +43,10 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 )
 
-const maxRequestDepth = 5
+const maxPayloadDepth = 5
 
 type (
-	requestData struct {
+	payloadData struct {
 		Type string
 
 		WorkflowIdGetter string
@@ -57,7 +57,7 @@ type (
 	grpcServerData struct {
 		Server   string
 		Imports  []string
-		Requests []requestData
+		Payloads []payloadData
 	}
 )
 
@@ -125,9 +125,9 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (wt *WorkflowTags) extractFrom{{.Server}}Request(req any) []tag.Tag {
-	switch r := req.(type) {
-	{{- range .Requests}}
+func (wt *WorkflowTags) extractFrom{{.Server}}Payload(payload any) []tag.Tag {
+	switch r := payload.(type) {
+	{{- range .Payloads}}
 	case {{.Type}}:
 	{{- if or .TaskTokenGetter .WorkflowIdGetter .RunIdGetter}}
 		{{- if .TaskTokenGetter}}
@@ -162,55 +162,60 @@ func writeGrpcServerData(w io.Writer, grpcServerT reflect.Type, tmpl string) {
 		if rpcT.NumIn() < 2 {
 			continue
 		}
-		requestT := rpcT.In(1) // Assume request is always the second parameter.
 
-		rd := workflowTagGetters(requestT, 0)
-		rd.Type = requestT.String()
-		sd.Requests = append(sd.Requests, rd)
+		requestT := rpcT.In(1) // Assume request is always the second parameter.
+		requestPd := workflowTagGetters(requestT, 0)
+		requestPd.Type = requestT.String()
+		sd.Payloads = append(sd.Payloads, requestPd)
+
+		respT := rpcT.Out(0) // Assume response is always the first parameter.
+		responsePd := workflowTagGetters(respT, 0)
+		responsePd.Type = respT.String()
+		sd.Payloads = append(sd.Payloads, responsePd)
 	}
 
 	fatalIfErr(template.Must(template.New("code").Parse(tmpl)).Execute(w, sd))
 }
 
 //nolint:revive // cognitive complexity 37 (> max enabled 25)
-func workflowTagGetters(requestT reflect.Type, depth int) requestData {
-	rd := requestData{}
-	if depth > maxRequestDepth {
-		return rd
+func workflowTagGetters(payloadType reflect.Type, depth int) payloadData {
+	pd := payloadData{}
+	if depth > maxPayloadDepth {
+		return pd
 	}
 
 	switch {
-	case requestT.AssignableTo(executionGetterT):
-		rd.WorkflowIdGetter = "GetExecution().GetWorkflowId()"
-		rd.RunIdGetter = "GetExecution().GetRunId()"
-	case requestT.AssignableTo(workflowExecutionGetterT):
-		rd.WorkflowIdGetter = "GetWorkflowExecution().GetWorkflowId()"
-		rd.RunIdGetter = "GetWorkflowExecution().GetRunId()"
-	case requestT.AssignableTo(taskTokenGetterT):
+	case payloadType.AssignableTo(executionGetterT):
+		pd.WorkflowIdGetter = "GetExecution().GetWorkflowId()"
+		pd.RunIdGetter = "GetExecution().GetRunId()"
+	case payloadType.AssignableTo(workflowExecutionGetterT):
+		pd.WorkflowIdGetter = "GetWorkflowExecution().GetWorkflowId()"
+		pd.RunIdGetter = "GetWorkflowExecution().GetRunId()"
+	case payloadType.AssignableTo(taskTokenGetterT):
 		for _, ert := range excludeTaskTokenTypes {
-			if requestT.AssignableTo(ert) {
-				return rd
+			if payloadType.AssignableTo(ert) {
+				return pd
 			}
 		}
-		rd.TaskTokenGetter = "GetTaskToken()"
+		pd.TaskTokenGetter = "GetTaskToken()"
 	default:
 		// Might be one of these, both, or neither.
-		if requestT.AssignableTo(workflowIdGetterT) {
-			rd.WorkflowIdGetter = "GetWorkflowId()"
+		if payloadType.AssignableTo(workflowIdGetterT) {
+			pd.WorkflowIdGetter = "GetWorkflowId()"
 		}
-		if requestT.AssignableTo(runIdGetterT) {
-			rd.RunIdGetter = "GetRunId()"
+		if payloadType.AssignableTo(runIdGetterT) {
+			pd.RunIdGetter = "GetRunId()"
 		}
 	}
 
 	// Iterates over fields in order they defined in proto file, not proto index.
 	// Order is important because the first match wins.
-	for fieldNum := 0; fieldNum < requestT.Elem().NumField(); fieldNum++ {
-		if (rd.WorkflowIdGetter != "" && rd.RunIdGetter != "") || rd.TaskTokenGetter != "" {
+	for fieldNum := 0; fieldNum < payloadType.Elem().NumField(); fieldNum++ {
+		if (pd.WorkflowIdGetter != "" && pd.RunIdGetter != "") || pd.TaskTokenGetter != "" {
 			break
 		}
 
-		nestedRequest := requestT.Elem().Field(fieldNum)
+		nestedRequest := payloadType.Elem().Field(fieldNum)
 		if nestedRequest.Type.Kind() != reflect.Ptr {
 			continue
 		}
@@ -223,17 +228,17 @@ func workflowTagGetters(requestT reflect.Type, depth int) requestData {
 
 		nestedRd := workflowTagGetters(nestedRequest.Type, depth+1)
 		// First match wins: if getter is already set, it won't be overwritten.
-		if rd.WorkflowIdGetter == "" && nestedRd.WorkflowIdGetter != "" {
-			rd.WorkflowIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.WorkflowIdGetter)
+		if pd.WorkflowIdGetter == "" && nestedRd.WorkflowIdGetter != "" {
+			pd.WorkflowIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.WorkflowIdGetter)
 		}
-		if rd.RunIdGetter == "" && nestedRd.RunIdGetter != "" {
-			rd.RunIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.RunIdGetter)
+		if pd.RunIdGetter == "" && nestedRd.RunIdGetter != "" {
+			pd.RunIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.RunIdGetter)
 		}
-		if rd.TaskTokenGetter == "" && nestedRd.TaskTokenGetter != "" {
-			rd.TaskTokenGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.TaskTokenGetter)
+		if pd.TaskTokenGetter == "" && nestedRd.TaskTokenGetter != "" {
+			pd.TaskTokenGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.TaskTokenGetter)
 		}
 	}
-	return rd
+	return pd
 }
 
 func callWithFile(generator func(io.Writer, reflect.Type), server reflect.Type, outPath string, licenseText string) {

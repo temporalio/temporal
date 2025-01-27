@@ -53,22 +53,22 @@ func NewWorkflowTags(
 	}
 }
 
-func (wt *WorkflowTags) Extract(req any, fullMethod string) []tag.Tag {
-	if req == nil {
+func (wt *WorkflowTags) Extract(payload any, fullMethod string) []tag.Tag {
+	if payload == nil {
 		return nil
 	}
 	switch {
 	case strings.HasPrefix(fullMethod, api.WorkflowServicePrefix):
-		return wt.extractFromWorkflowServiceServerRequest(req)
+		return wt.extractFromWorkflowServiceServerPayload(payload)
 	case strings.HasPrefix(fullMethod, api.OperatorServicePrefix):
 		// OperatorService doesn't have a single API with workflow tags.
 		return nil
 	case strings.HasPrefix(fullMethod, api.AdminServicePrefix):
-		return wt.extractFromAdminServiceServerRequest(req)
+		return wt.extractFromAdminServiceServerPayload(payload)
 	case strings.HasPrefix(fullMethod, api.HistoryServicePrefix):
-		return wt.extractFromHistoryServiceServerRequest(req)
+		return wt.extractFromHistoryServiceServerPayload(payload)
 	case strings.HasPrefix(fullMethod, api.MatchingServicePrefix):
-		return wt.extractFromMatchingServiceServerRequest(req)
+		return wt.extractFromMatchingServiceServerPayload(payload)
 	default:
 		return nil
 	}
