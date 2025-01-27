@@ -150,6 +150,8 @@ func Invoke(
 		return nil, serviceerror.NewWorkflowNotReady("Unable to query workflow due to Workflow Task in failed state.")
 	}
 
+	priority := mutableState.GetExecutionInfo().Priority
+
 	// There are two ways in which queries get dispatched to workflow worker. First, queries can be dispatched on workflow tasks.
 	// These workflow tasks potentially contain new events and queries. The events are treated as coming before the query in time.
 	// The second way in which queries are dispatched to workflow worker is directly through matching; in this approach queries can be
@@ -170,7 +172,7 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
-			workflowLease.GetReleaseFn()(nil)
+			workflowLease.GetReleaseFn()(nil) // release the lock - no access to mutable state beyond this point!
 			req.Execution.RunId = msResp.Execution.RunId
 			return queryDirectlyThroughMatching(
 				ctx,
@@ -182,7 +184,7 @@ func Invoke(
 				rawMatchingClient,
 				matchingClient,
 				scope,
-				mutableState.GetExecutionInfo().Priority,
+				priority,
 			)
 		}
 	}
@@ -199,7 +201,7 @@ func Invoke(
 	}
 	queryID, completionCh := queryReg.BufferQuery(req.GetQuery())
 	defer queryReg.RemoveQuery(queryID)
-	workflowLease.GetReleaseFn()(nil)
+	workflowLease.GetReleaseFn()(nil) // release the lock - no access to mutable state beyond this point!
 	select {
 	case <-completionCh:
 		completionState, err := queryReg.GetCompletionState(queryID)
@@ -239,7 +241,7 @@ func Invoke(
 				rawMatchingClient,
 				matchingClient,
 				scope,
-				mutableState.GetExecutionInfo().Priority,
+				priority,
 			)
 		case workflow.QueryCompletionTypeFailed:
 			return nil, completionState.Err
