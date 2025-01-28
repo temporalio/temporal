@@ -154,6 +154,7 @@ var (
 		"DescribeWorkerDeployment":           {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"SetWorkerDeploymentCurrentVersion":  {Scope: ScopeNamespace, Access: AccessWrite},
 		"SetWorkerDeploymentRampingVersion":  {Scope: ScopeNamespace, Access: AccessWrite},
+		"ListWorkerDeployments":              {Scope: ScopeNamespace, Access: AccessReadOnly},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},

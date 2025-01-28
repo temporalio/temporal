@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
@@ -65,6 +66,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.State == nil {
 		d.State = &deploymentspb.WorkerDeploymentLocalState{}
 		d.State.CreateTime = timestamppb.New(time.Now())
+		d.State.RoutingInfo = &deploymentpb.RoutingInfo{}
 	}
 
 	var pendingUpdates int
@@ -115,11 +117,11 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
-	if d.State.CurrentVersion != args.Version {
-		return nil
+	if d.State.RoutingInfo.CurrentVersion == args.Version {
+		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
 
-	return temporal.NewApplicationError("no change", errNoChangeType)
+	return nil
 }
 
 func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentVersionArgs) (*deploymentspb.SetCurrentVersionResponse, error) {
@@ -135,8 +137,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.lock.Unlock()
 	}()
 
-	prevCurrent := d.State.CurrentVersion
-	newCurrent := args.Version
+	prevCurrentVersion := d.State.RoutingInfo.CurrentVersion
+	newCurrentVersion := args.Version
 	updateTime := timestamppb.New(workflow.Now(ctx))
 
 	// tell new current that it's current
@@ -145,25 +147,25 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		IsCurrent:         true,
 		RampPercentage:    0, // remove ramp if it existed
 	}
-	if _, err := d.syncVersion(ctx, newCurrent, currUpdateArgs); err != nil {
+	if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs); err != nil {
 		return nil, err
 	}
 
-	if prevCurrent != "" {
+	if prevCurrentVersion != "" {
 		// tell previous current that it's no longer current
 		prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 			RoutingUpdateTime: updateTime,
 			IsCurrent:         false,
 			RampPercentage:    0, // no change, the prev current was not ramping
 		}
-		if _, err := d.syncVersion(ctx, prevCurrent, prevUpdateArgs); err != nil {
+		if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs); err != nil {
 			return nil, err
 		}
 	}
 
 	// update local state
-	d.State.CurrentVersion = args.Version
-	d.State.CurrentChangedTime = updateTime
+	d.State.RoutingInfo.CurrentVersion = args.Version
+	d.State.RoutingInfo.CurrentVersionUpdateTime = updateTime
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
@@ -171,7 +173,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	}
 
 	return &deploymentspb.SetCurrentVersionResponse{
-		PreviousVersion: prevCurrent,
+		PreviousVersion: prevCurrentVersion,
 	}, nil
 
 }
@@ -191,17 +193,10 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) er
 }
 
 func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, version string) error {
-	// use lock to enforce only one update at a time
-	//err := d.lock.Lock(ctx)
-	//if err != nil {
-	//	d.logger.Error("Could not acquire workflow lock")
-	//	return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
-	//}
-	//d.pendingUpdates++
-	//defer func() {
-	//	d.pendingUpdates--
-	//	d.lock.Unlock()
-	//}()
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+	}()
 
 	// Add version to local state
 	if d.State.Versions == nil {
@@ -213,7 +208,6 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 
 func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) (*deploymentspb.VersionLocalState, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-
 	var res deploymentspb.SyncVersionStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.SyncWorkerDeploymentVersion, &deploymentspb.SyncVersionStateActivityArgs{
 		DeploymentName: d.DeploymentName,
@@ -235,9 +229,9 @@ func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
 func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 	return workflow.UpsertMemo(ctx, map[string]any{
 		WorkerDeploymentMemoField: &deploymentspb.WorkerDeploymentWorkflowMemo{
-			DeploymentName:     d.DeploymentName,
-			CurrentVersion:     d.State.CurrentVersion,
-			CurrentChangedTime: d.State.CurrentChangedTime,
+			DeploymentName: d.DeploymentName,
+			CreateTime:     d.State.CreateTime,
+			RoutingInfo:    d.State.RoutingInfo,
 		},
 	})
 }
