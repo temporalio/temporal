@@ -25,7 +25,6 @@
 package workerdeployment
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -134,7 +133,6 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	}
 	d.pendingUpdates++
 	defer func() {
-		fmt.Println("Releasing Lock from setCurrent")
 		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
