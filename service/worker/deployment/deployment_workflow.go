@@ -230,6 +230,8 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 		}
 	}
 
+	d.logger.Info("Registering worker in deployment")
+
 	// if successful, add the task queue to the local state
 	if d.State.TaskQueueFamilies == nil {
 		d.State.TaskQueueFamilies = make(map[string]*deploymentspb.DeploymentLocalState_TaskQueueFamilyData)
@@ -289,6 +291,9 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 
 	// apply changes to "current"
 	if set := args.SetCurrent; set != nil {
+
+		d.logger.Info("Syncing from set-current")
+
 		if set.LastBecameCurrentTime == nil {
 			d.State.IsCurrent = false
 		} else {

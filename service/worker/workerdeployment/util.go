@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -44,7 +43,7 @@ const (
 	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
 
 	// Namespace division
-	WorkerDeploymentVersionNamespaceDivision = "TemporalWorkerDeploymentVersion"
+	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
 
 	// Updates
 	RegisterWorkerInDeployment   = "register-task-queue-worker"       // for Worker Deployment Version wf
@@ -79,12 +78,12 @@ const (
 )
 
 var (
-	DeploymentVisibilityBaseListQuery = fmt.Sprintf(
+	WorkerDeploymentVisibilityBaseListQuery = fmt.Sprintf(
 		"%s = '%s' AND %s = '%s' AND %s = '%s'",
 		searchattribute.WorkflowType,
-		WorkerDeploymentVersionWorkflowType,
+		WorkerDeploymentWorkflowType,
 		searchattribute.TemporalNamespaceDivision,
-		WorkerDeploymentVersionNamespaceDivision,
+		WorkerDeploymentNamespaceDivision,
 		searchattribute.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
@@ -137,21 +136,11 @@ func GenerateVersionWorkflowIDForPatternMatching(seriesName string) string {
 	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedSeriesName + WorkerDeploymentVersionWorkflowIDDelimeter
 }
 
-// BuildQueryWithWorkerDeploymentFilter is a helper which builds a query for pattern matching based on the
-// provided workerDeploymentName
-func BuildQueryWithWorkerDeploymentFilter(workerDeploymentName string) string {
-	workflowID := GenerateVersionWorkflowIDForPatternMatching(workerDeploymentName)
-	escapedWorkerDeploymentEntry := sqlparser.String(sqlparser.NewStrVal([]byte(workflowID)))
-
-	query := fmt.Sprintf("%s AND %s STARTS_WITH %s", DeploymentVisibilityBaseListQuery, searchattribute.WorkflowID, escapedWorkerDeploymentEntry)
-	return query
-}
-
-func DecodeVersionMemo(memo *commonpb.Memo) *deploymentspb.VersionWorkflowMemo {
-	var versionWorkflowMemo deploymentspb.VersionWorkflowMemo
-	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[WorkerDeploymentVersionMemoField], &versionWorkflowMemo)
+func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {
+	var workerDeploymentWorkflowMemo deploymentspb.WorkerDeploymentWorkflowMemo
+	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[WorkerDeploymentMemoField], &workerDeploymentWorkflowMemo)
 	if err != nil {
 		return nil
 	}
-	return &versionWorkflowMemo
+	return &workerDeploymentWorkflowMemo
 }

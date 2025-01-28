@@ -89,6 +89,13 @@ type Client interface {
 		identity string,
 	) (*deploymentspb.SetCurrentVersionResponse, error)
 
+	ListWorkerDeployments(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		pageSize int,
+		nextPageToken []byte,
+	) ([]*deploymentspb.WorkerDeploymentSummary, []byte, error)
+
 	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
 	StartWorkerDeployment(
 		ctx context.Context,
@@ -265,6 +272,48 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	}
 
 	return d.deploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)
+}
+
+func (d *ClientImpl) ListWorkerDeployments(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	pageSize int,
+	nextPageToken []byte,
+) (_ []*deploymentspb.WorkerDeploymentSummary, _ []byte, retError error) {
+	//revive:disable-next-line:defer
+	defer d.record("ListWorkerDeployments", &retError)()
+
+	query := WorkerDeploymentVisibilityBaseListQuery
+
+	if pageSize == 0 {
+		pageSize = d.visibilityMaxPageSize(namespaceEntry.Name().String())
+	}
+
+	persistenceResp, err := d.visibilityManager.ListWorkflowExecutions(
+		ctx,
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID:   namespaceEntry.ID(),
+			Namespace:     namespaceEntry.Name(),
+			PageSize:      pageSize,
+			NextPageToken: nextPageToken,
+			Query:         query,
+		},
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, len(persistenceResp.Executions))
+	for i, ex := range persistenceResp.Executions {
+		workerDeploymentInfo := DecodeWorkerDeploymentMemo(ex.GetMemo())
+		workerDeploymentSummaries[i] = &deploymentspb.WorkerDeploymentSummary{
+			Name:        workerDeploymentInfo.DeploymentName,
+			CreateTime:  workerDeploymentInfo.CreateTime,
+			RoutingInfo: workerDeploymentInfo.RoutingInfo,
+		}
+	}
+
+	return workerDeploymentSummaries, persistenceResp.NextPageToken, nil
 }
 
 func (d *ClientImpl) SetCurrentVersion(
@@ -539,7 +588,7 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 	outcome, err := d.updateWithStart(
 		ctx,
 		namespaceEntry,
-		WorkerDeploymentVersionWorkflowType,
+		WorkerDeploymentWorkflowType,
 		workflowID,
 		nil,
 		nil,
@@ -689,6 +738,8 @@ func (d *ClientImpl) buildInitialVersionMemo(deploymentName, version string) (*c
 func (d *ClientImpl) buildInitialMemo(deploymentName string) (*commonpb.Memo, error) {
 	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.WorkerDeploymentWorkflowMemo{
 		DeploymentName: deploymentName,
+		CreateTime:     timestamppb.Now(),
+		RoutingInfo:    &deploymentpb.RoutingInfo{},
 	})
 	if err != nil {
 		return nil, err
@@ -703,7 +754,7 @@ func (d *ClientImpl) buildInitialMemo(deploymentName string) (*commonpb.Memo, er
 
 func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentVersionNamespaceDivision))
+	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
 	return sa
 }
 
@@ -769,10 +820,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namesp
 	workerDeploymentInfo.CreateTime = state.CreateTime
 
 	// RoutingInfo
-	workerDeploymentInfo.RoutingInfo = &deploymentpb.RoutingInfo{
-		CurrentVersion:           state.CurrentVersion,
-		CurrentVersionUpdateTime: state.CurrentChangedTime,
-	}
+	workerDeploymentInfo.RoutingInfo = state.RoutingInfo
 
 	for _, version := range state.Versions {
 		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, version)
