@@ -198,6 +198,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"SetWorkerDeploymentCurrentVersion": {},
 		"SetWorkerDeploymentRampingVersion": {},
 		"DescribeWorkerDeployment":          {},
+		"ListWorkerDeployments":             {},
 	}, apis)
 }
 
