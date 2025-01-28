@@ -678,12 +678,8 @@ func (d *ClientImpl) updateWithStart(
 // TODO (Shivam): Verify if memo needs changes.
 func (d *ClientImpl) buildInitialVersionMemo(deploymentName, version string) (*commonpb.Memo, error) {
 	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.VersionWorkflowMemo{
-		DeploymentName:   deploymentName,
-		Version:          version,
-		CreateTime:       timestamppb.Now(),
-		CurrentSinceTime: nil,
-		RampingSinceTime: nil,
-		DrainageInfo:     nil,
+		DeploymentName: deploymentName,
+		Version:        version,
 	})
 	if err != nil {
 		return nil, err
@@ -761,13 +757,14 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 
 	// TODO (Shivam): Add metadata and aggregated pollers status
 	return &deploymentpb.WorkerDeploymentVersionInfo{
-		DeploymentName:   state.DeploymentName,
-		Version:          state.Version,
-		CreateTime:       state.CreateTime,
-		TaskQueueInfos:   taskQueues,
-		CurrentSinceTime: state.CurrentSinceTime,
-		RampingSinceTime: state.RampingSinceTime,
-		DrainageInfo:     state.DrainageInfo,
+		DeploymentName:    state.DeploymentName,
+		Version:           state.Version,
+		CreateTime:        state.CreateTime,
+		RoutingUpdateTime: state.RoutingUpdateTime,
+		IsCurrent:         state.IsCurrent,
+		RampPercentage:    state.RampPercentage,
+		TaskQueueInfos:    taskQueues,
+		DrainageInfo:      state.DrainageInfo,
 	}
 }
 

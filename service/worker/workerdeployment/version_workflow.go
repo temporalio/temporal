@@ -314,16 +314,12 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	return nil
 }
 
+// If either current status or ramp percentage have changed, we want to let the update through
 func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersionStateUpdateArgs) error {
 	res := &deploymentspb.SyncVersionStateResponse{VersionState: d.VersionState}
-	if args.IsCurrent {
-		if args.GetRoutingUpdateTime().AsTime().Equal(d.GetVersionState().GetCurrentSinceTime().AsTime()) {
-			return temporal.NewApplicationError("no change", errNoChangeType, res)
-		}
-	} else if args.RampPercentage > 0 {
-		if args.GetRoutingUpdateTime().AsTime().Equal(d.GetVersionState().GetRampingSinceTime().AsTime()) {
-			return temporal.NewApplicationError("no change", errNoChangeType, res)
-		}
+	if args.IsCurrent == d.GetVersionState().IsCurrent &&
+		args.RampPercentage == d.GetVersionState().RampPercentage {
+		return temporal.NewApplicationError("no change", errNoChangeType, res)
 	}
 	return nil
 }
@@ -395,24 +391,14 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		}
 	}
 
-	wasAcceptingNewWorkflows := state.CurrentSinceTime != nil || state.RampingSinceTime != nil
+	wasAcceptingNewWorkflows := state.IsCurrent || state.RampPercentage > 0
 
 	// apply changes to current and ramping
-	if args.IsCurrent {
-		state.CurrentSinceTime = args.RoutingUpdateTime
-		state.RampingSinceTime = nil
-		state.RampPercentage = 0
-	} else if args.RampPercentage > 0 {
-		state.CurrentSinceTime = nil
-		state.RampingSinceTime = args.RoutingUpdateTime
-		state.RampPercentage = args.RampPercentage
-	} else {
-		state.CurrentSinceTime = nil
-		state.RampingSinceTime = nil
-		state.RampPercentage = 0
-	}
+	state.RoutingUpdateTime = args.RoutingUpdateTime
+	state.IsCurrent = args.IsCurrent
+	state.RampPercentage = args.RampPercentage
 
-	isAcceptingNewWorkflows := state.CurrentSinceTime != nil || state.RampingSinceTime != nil
+	isAcceptingNewWorkflows := state.IsCurrent || state.RampPercentage > 0
 
 	// stopped accepting new workflows --> start drainage child wf
 	// todo carly: commenting out this if-case and always calling d.startDrainage makes my test work. so there's something wrong here

@@ -388,7 +388,7 @@ func (s *DeploymentVersionSuite) checkVersionIsCurrent(ctx context.Context, tv *
 		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
 		a.Equal(tv.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 
-		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
+		a.True(resp.GetWorkerDeploymentVersionInfo().GetIsCurrent())
 	}, time.Second*10, time.Millisecond*1000)
 }
 
