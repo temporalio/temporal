@@ -130,6 +130,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":          3,
 		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion": 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentRampingVersion": 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":             3,
 
 		// P4: Progress APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      4,

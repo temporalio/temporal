@@ -238,17 +238,6 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		return err
 	}
 
-	// add version to worker-deployment workflow
-	activityCtx = workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
-		DeploymentName: d.VersionState.DeploymentName,
-		Version:        d.VersionState.Version,
-		RequestId:      d.newUUID(ctx),
-	}).Get(ctx, nil)
-	if err != nil {
-		return err
-	}
-
 	// if successful, add the task queue to the local state
 	if d.VersionState.TaskQueueFamilies == nil {
 		d.VersionState.TaskQueueFamilies = make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
@@ -296,7 +285,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		d.lock.Unlock()
 	}()
 
-	// wait until series workflow started
+	// wait until deployment workflow started
 	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
 	if err != nil {
 		d.logger.Error("Update canceled before worker deployment workflow started")
@@ -351,19 +340,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			return nil, err
 		}
 	}
-
-	// TODO (Shivam) - Move this when UpdateMetadata is implemented.
-
-	// apply changes to metadata
-	// if d.VersionState.Metadata == nil && args.UpdateMetadata != nil {
-	//	d.VersionState.Metadata = make(map[string]*commonpb.Payload)
-	// }
-	// for key, payload := range args.UpdateMetadata.GetUpsertEntries() {
-	//	d.VersionState.Metadata[key] = payload
-	// }
-	// for _, key := range args.UpdateMetadata.GetRemoveEntries() {
-	//	delete(d.VersionState.Metadata, key)
-	// }
 
 	return &deploymentspb.SyncVersionStateResponse{
 		VersionState: d.VersionState,
