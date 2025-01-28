@@ -43,7 +43,7 @@ const (
 	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
 
 	// Namespace division
-	WorkerDeploymentVersionNamespaceDivision = "TemporalWorkerDeployment"
+	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
 
 	// Updates
 	RegisterWorkerInDeployment   = "register-task-queue-worker"       // for Worker Deployment Version wf
@@ -83,7 +83,7 @@ var (
 		searchattribute.WorkflowType,
 		WorkerDeploymentWorkflowType,
 		searchattribute.TemporalNamespaceDivision,
-		WorkerDeploymentVersionNamespaceDivision,
+		WorkerDeploymentNamespaceDivision,
 		searchattribute.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)

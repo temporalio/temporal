@@ -663,8 +663,8 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return err
 	}
 
-	deploymentVersions := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-	if hasDeploymentVersion(deploymentVersions, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
+	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+	if hasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.
@@ -695,14 +695,14 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		if err != nil {
 			return err
 		}
-		deploymentVersions := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-		if findDeploymentVersion(deploymentVersions, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) >= 0 {
+		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+		if findDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) >= 0 {
 			break
 		}
 		select {
 		case <-userDataChanged:
 		case <-ctx.Done():
-			c.logger.Error("timed out waiting for deployment to appear in user data")
+			c.logger.Error("timed out waiting for worker deployment version to appear in user data")
 			return ctx.Err()
 		}
 	}

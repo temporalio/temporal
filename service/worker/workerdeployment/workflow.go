@@ -117,11 +117,11 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
-	if d.State.RoutingInfo.CurrentVersion != args.Version {
-		return nil
+	if d.State.RoutingInfo.CurrentVersion == args.Version {
+		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
 
-	return temporal.NewApplicationError("no change", errNoChangeType)
+	return nil
 }
 
 func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentVersionArgs) (*deploymentspb.SetCurrentVersionResponse, error) {

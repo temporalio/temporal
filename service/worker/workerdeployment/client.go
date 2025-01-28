@@ -754,7 +754,7 @@ func (d *ClientImpl) buildInitialMemo(deploymentName string) (*commonpb.Memo, er
 
 func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentVersionNamespaceDivision))
+	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
 	return sa
 }
 
