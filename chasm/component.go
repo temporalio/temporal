@@ -69,6 +69,8 @@ type OperationIntent int
 const (
 	OperationIntentProgress OperationIntent = 1 << iota
 	OperationIntentObserve
+
+	OperationIntentUnspecified = OperationIntent(0)
 )
 
 // The operation intent must come from the context
@@ -90,5 +92,9 @@ func newContextWithOperationIntent(
 func operationIntentFromContext(
 	ctx context.Context,
 ) OperationIntent {
-	return ctx.Value(engineCtxKey).(OperationIntent)
+	intent, ok := ctx.Value(engineCtxKey).(OperationIntent)
+	if !ok {
+		return OperationIntentUnspecified
+	}
+	return intent
 }

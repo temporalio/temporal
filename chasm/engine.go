@@ -269,6 +269,7 @@ func convertComponentRef[R []byte | ComponentRef](
 		return DeserializeComponentRef(refToken)
 	}
 
+	//revive:disable-next-line:unchecked-type-assertion
 	return any(r).(ComponentRef), nil
 }
 
@@ -289,5 +290,9 @@ func newEngineContext(
 func engineFromContext(
 	ctx context.Context,
 ) engine {
-	return ctx.Value(engineCtxKey).(engine)
+	e, ok := ctx.Value(engineCtxKey).(engine)
+	if !ok {
+		return nil
+	}
+	return e
 }
