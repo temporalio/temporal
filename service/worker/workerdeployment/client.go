@@ -119,6 +119,8 @@ type Client interface {
 		requestID string,
 	) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error)
 
+	// Used internally by the Drainage workflow (child of Worker Deployment Version workflow)
+	// in its GetVersionDrainageStatus Activity
 	GetVersionDrainageStatus(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -807,7 +809,7 @@ func (d *ClientImpl) GetVersionDrainageStatus(
 	countRequest := manager.CountWorkflowExecutionsRequest{
 		NamespaceID: namespaceEntry.ID(),
 		Namespace:   namespaceEntry.Name(),
-		Query:       makeDeploymentQuery(deploymentName, version, true),
+		Query:       makeDeploymentQuery(deploymentName, version),
 	}
 	countResponse, err := d.visibilityManager.CountWorkflowExecutions(ctx, &countRequest)
 	if err != nil {
@@ -819,17 +821,12 @@ func (d *ClientImpl) GetVersionDrainageStatus(
 	return enumspb.VERSION_DRAINAGE_STATUS_DRAINING, nil
 }
 
-func makeDeploymentQuery(seriesName, buildID string, open bool) string {
+func makeDeploymentQuery(deploymentName, buildID string) string {
 	var statusFilter string
 	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(&deploymentpb.Deployment{
-		SeriesName: seriesName,
+		SeriesName: deploymentName,
 		BuildId:    buildID,
 	}))
-	if open {
-		statusFilter = "= 'Running'"
-	} else {
-		statusFilter = "!= 'Running'"
-	}
-	// todo (carly) part 2: handle null search attribute / unversioned deployment
+	statusFilter = "= 'Running'"
 	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
 }

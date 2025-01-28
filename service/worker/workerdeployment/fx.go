@@ -99,7 +99,7 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(VersionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
 	registry.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
-	registry.RegisterWorkflowWithOptions(checkDrainageWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentCheckDrainageWorkflowType})
+	registry.RegisterWorkflowWithOptions(checkDrainageWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentDrainageWorkflowType})
 
 	versionActivities := &VersionActivities{
 		namespace:        ns,

@@ -68,18 +68,22 @@ message VersionLocalState {
     // Nil if not ramping.
     google.protobuf.Timestamp ramping_since_time = 5;
 
-    google.protobuf.Timestamp create_time = 6;
+    // Range: [0, 100]. Must be zero if current_since_time is set.
+    // Must be non-zero if ramping_since_time is set.
+    float ramp_percentage = 6;
 
-    bool started_deployment_workflow = 7;
+    google.protobuf.Timestamp create_time = 7;
+
+    bool started_deployment_workflow = 8;
 
     message TaskQueueFamilyData {
         // Key: enums.TaskQueueType, Value: TaskQueueData
         // All fields in TaskQueueData are valid except last_became_current_time, the source of
         // truth for that is the value at the root of WorkerDeploymentLocalState.
-        map<int32, DeploymentVersionData> task_queues = 1;
+        map<int32, DeploymentVersionData> task_queues = 9;
     }
 
-    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 8;
+    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 10;
 }
 
 // used as Worker Deployment Version workflow input:
@@ -121,18 +125,12 @@ message RegisterWorkerInVersionArgs {
 
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
 message SyncVersionStateUpdateArgs {
-    // Time of the change. Equal to 'current_since_time' or 'ramping_since_time' if either is non-nil.
+    // Last time `is_current` or `ramp_percentage` of this version changed.
     google.protobuf.Timestamp routing_update_time = 1;
-
-    // (-- api-linter: core::0140::prepositions=disabled
-    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-    // Nil if not current.
-    google.protobuf.Timestamp current_since_time = 2;
-
-    // (-- api-linter: core::0140::prepositions=disabled
-    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-    // Nil if not ramping.
-    google.protobuf.Timestamp ramping_since_time = 3;
+    // If this version is the current version of its deployment.
+    bool is_current = 2;
+    // Range: [0, 100]. Must be zero if is_current is true. Must be non-zero if version is ramping.
+    float ramp_percentage = 3;
 }
 
 // used as Worker Deployment workflow update response (sent from Worker Deployment workflow):
@@ -154,16 +152,6 @@ message QueryDescribeWorkerDeploymentResponse {
 message VersionWorkflowMemo {
     string deployment_name = 1;
     string version = 2;
-    // (-- api-linter: core::0140::prepositions=disabled
-    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-    // Nil if not current.
-    google.protobuf.Timestamp current_since_time = 3;
-    // (-- api-linter: core::0140::prepositions=disabled
-    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
-    // Nil if not ramping.
-    google.protobuf.Timestamp ramping_since_time = 4;
-    google.protobuf.Timestamp create_time = 5;
-    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 6;
 }
 
 // used as Worker Deployment Version workflow activity input:
