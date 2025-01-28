@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"golang.org/x/time/rate"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -222,7 +223,7 @@ func (a *activities) adjustQuery(batchParams BatchParams) string {
 	}
 
 	switch batchParams.BatchType {
-	case BatchTypeTerminate, BatchTypeSignal, BatchTypeCancel, BatchTypeUpdateOptions:
+	case BatchTypeTerminate, BatchTypeSignal, BatchTypeCancel, BatchTypeUpdateOptions, BatchTypeUnpauseActivities:
 		return fmt.Sprintf("(%s) AND (%s)", batchParams.Query, statusRunningQueryFilter)
 	default:
 		return batchParams.Query
@@ -338,6 +339,26 @@ func startTaskProcessor(
 						})
 						return err
 					})
+			case BatchTypeUnpauseActivities:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						if err != nil {
+							return err
+						}
+						_, err = frontendClient.UnpauseActivityById(ctx, &workflowservice.UnpauseActivityByIdRequest{
+							Namespace:      batchParams.Namespace,
+							WorkflowId:     workflowID,
+							RunId:          runID,
+							Identity:       "batch unpause",
+							Activity:       &workflowservice.UnpauseActivityByIdRequest_Type{Type: batchParams.UnpauseActivitiesParams.ActivityType},
+							ResetAttempts:  !batchParams.UnpauseActivitiesParams.KeepAttempts,
+							ResetHeartbeat: batchParams.UnpauseActivitiesParams.ResetHeartbeat,
+							Jitter:         durationpb.New(batchParams.UnpauseActivitiesParams.Jitter),
+						})
+
+						return err
+					})
+
 			case BatchTypeUpdateOptions:
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {

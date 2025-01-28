@@ -130,7 +130,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	pauseRequest := &workflowservice.PauseActivityByIdRequest{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
+		Activity:   &workflowservice.PauseActivityByIdRequest_Id{Id: "activity-id"},
 	}
 	resp, err := s.FrontendClient().PauseActivityById(ctx, pauseRequest)
 	s.NoError(err)
@@ -158,12 +158,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
-		Operation: &workflowservice.UnpauseActivityByIdRequest_Resume{
-			Resume: &workflowservice.UnpauseActivityByIdRequest_ResumeOperation{
-				NoWait: false,
-			},
-		},
+		Activity:   &workflowservice.UnpauseActivityByIdRequest_Id{Id: "activity-id"},
 	}
 	unpauseResp, err := s.FrontendClient().UnpauseActivityById(ctx, unpauseRequest)
 	s.NoError(err)
@@ -226,7 +221,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	pauseRequest := &workflowservice.PauseActivityByIdRequest{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
+		Activity:   &workflowservice.PauseActivityByIdRequest_Id{Id: "activity-id"},
 	}
 	resp, err := s.FrontendClient().PauseActivityById(ctx, pauseRequest)
 	s.NoError(err)
@@ -246,12 +241,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
-		Operation: &workflowservice.UnpauseActivityByIdRequest_Resume{
-			Resume: &workflowservice.UnpauseActivityByIdRequest_ResumeOperation{
-				NoWait: false,
-			},
-		},
+		Activity:   &workflowservice.UnpauseActivityByIdRequest_Id{Id: "activity-id"},
 	}
 	unpauseResp, err := s.FrontendClient().UnpauseActivityById(ctx, unpauseRequest)
 	s.NoError(err)
@@ -318,7 +308,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 	pauseRequest := &workflowservice.PauseActivityByIdRequest{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
+		Activity:   &workflowservice.PauseActivityByIdRequest_Id{Id: "activity-id"},
 	}
 	resp, err := s.FrontendClient().PauseActivityById(ctx, pauseRequest)
 	s.NoError(err)
@@ -328,12 +318,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
-		Operation: &workflowservice.UnpauseActivityByIdRequest_Resume{
-			Resume: &workflowservice.UnpauseActivityByIdRequest_ResumeOperation{
-				NoWait: true,
-			},
-		},
+		Activity:   &workflowservice.UnpauseActivityByIdRequest_Id{Id: "activity-id"},
 	}
 	unpauseResp, err := s.FrontendClient().UnpauseActivityById(ctx, unpauseRequest)
 	s.NoError(err)
@@ -401,7 +386,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 	pauseRequest := &workflowservice.PauseActivityByIdRequest{
 		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
+		Activity:   &workflowservice.PauseActivityByIdRequest_Id{Id: "activity-id"},
 	}
 	resp, err := s.FrontendClient().PauseActivityById(ctx, pauseRequest)
 	s.NoError(err)
@@ -421,14 +406,10 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 
 	// unpause the activity with reset, and set noWait flag
 	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
-		Namespace:  s.Namespace().String(),
-		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
-		Operation: &workflowservice.UnpauseActivityByIdRequest_Reset_{
-			Reset_: &workflowservice.UnpauseActivityByIdRequest_ResetOperation{
-				NoWait: true,
-			},
-		},
+		Namespace:     s.Namespace().String(),
+		WorkflowId:    workflowRun.GetID(),
+		Activity:      &workflowservice.UnpauseActivityByIdRequest_Id{Id: "activity-id"},
+		ResetAttempts: true,
 	}
 	unpauseResp, err := s.FrontendClient().UnpauseActivityById(ctx, unpauseRequest)
 	s.NoError(err)
