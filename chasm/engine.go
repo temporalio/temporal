@@ -28,8 +28,6 @@ import (
 	"context"
 )
 
-// now that is not exported, a struct is good enough
-// instead of an interface
 type engine interface {
 	newInstance(
 		context.Context,
