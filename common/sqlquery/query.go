@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package util
+package sqlquery
 
 import (
 	"fmt"
@@ -63,8 +63,8 @@ func ExtractStringValue(s string) (string, error) {
 	return "", fmt.Errorf("value %s is not a string value", s)
 }
 
-// ParseSqlValue returns a string, int64 or float64 if the parsing succeeds.
-func ParseSqlValue(sqlValue string) (interface{}, error) {
+// ParseValue returns a string, int64 or float64 if the parsing succeeds.
+func ParseValue(sqlValue string) (interface{}, error) {
 	if sqlValue == "" {
 		return "", nil
 	}

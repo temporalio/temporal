@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/server/common/sqlquery"
 	"go.temporal.io/server/common/util"
 )
 
@@ -75,7 +76,7 @@ func NewQueryParser() QueryParser {
 }
 
 func (p *queryParser) Parse(query string) (*parsedQuery, error) {
-	stmt, err := sqlparser.Parse(fmt.Sprintf(util.QueryTemplate, query))
+	stmt, err := sqlparser.Parse(fmt.Sprintf(sqlquery.QueryTemplate, query))
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +147,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 
 	switch colNameStr {
 	case WorkflowTypeName:
-		val, err := util.ExtractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -158,7 +159,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowTypeName = util.Ptr(val)
 	case WorkflowID:
-		val, err := util.ExtractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -170,7 +171,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowID = util.Ptr(val)
 	case CloseTime:
-		timestamp, err := util.ConvertToTime(valStr)
+		timestamp, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -179,7 +180,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.closeTime = &timestamp
 	case StartTime:
-		timestamp, err := util.ConvertToTime(valStr)
+		timestamp, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -188,7 +189,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.startTime = &timestamp
 	case SearchPrecision:
-		val, err := util.ExtractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}

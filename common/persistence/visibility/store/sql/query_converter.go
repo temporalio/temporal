@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/sqlquery"
 )
 
 type (
@@ -595,7 +595,7 @@ func (c *QueryConverter) parseSQLVal(
 	default:
 		sqlValue = string(expr.Val)
 	}
-	value, err := util.ParseSqlValue(sqlValue)
+	value, err := sqlquery.ParseValue(sqlValue)
 	if err != nil {
 		return nil, err
 	}

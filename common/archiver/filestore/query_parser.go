@@ -35,6 +35,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/sqlquery"
 	"go.temporal.io/server/common/util"
 )
 
@@ -80,7 +81,7 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 	if strings.TrimSpace(query) == "" {
 		return parsedQuery, nil
 	}
-	stmt, err := sqlparser.Parse(fmt.Sprintf(util.QueryTemplate, query))
+	stmt, err := sqlparser.Parse(fmt.Sprintf(sqlquery.QueryTemplate, query))
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +135,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 
 	switch colNameStr {
 	case WorkflowID:
-		val, err := util.ExtractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -147,7 +148,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowID = util.Ptr(val)
 	case RunID:
-		val, err := util.ExtractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -160,7 +161,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.runID = util.Ptr(val)
 	case WorkflowType:
-		val, err := util.ExtractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -173,7 +174,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowTypeName = util.Ptr(val)
 	case ExecutionStatus:
-		val, err := util.ExtractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			// if failed to extract string value, it means user input close status as a number
 			val = valStr
@@ -191,7 +192,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.status = &status
 	case CloseTime:
-		timestamp, err := util.ConvertToTime(valStr)
+		timestamp, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
 			return err
 		}

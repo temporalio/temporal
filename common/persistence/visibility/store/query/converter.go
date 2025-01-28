@@ -36,7 +36,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/sqlquery"
 )
 
 type (
@@ -383,11 +383,11 @@ func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error)
 		return nil, wrapConverterError("unable to convert left part of 'between' expression", err)
 	}
 
-	fromValue, err := util.ParseSqlValue(sqlparser.String(rangeCond.From))
+	fromValue, err := sqlquery.ParseValue(sqlparser.String(rangeCond.From))
 	if err != nil {
 		return nil, err
 	}
-	toValue, err := util.ParseSqlValue(sqlparser.String(rangeCond.To))
+	toValue, err := sqlquery.ParseValue(sqlparser.String(rangeCond.To))
 	if err != nil {
 		return nil, err
 	}
@@ -530,7 +530,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		v, err := util.ParseSqlValue(sqlparser.String(e))
+		v, err := sqlquery.ParseValue(sqlparser.String(e))
 		if err != nil {
 			return nil, err
 		}

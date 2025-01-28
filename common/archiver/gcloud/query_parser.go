@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/server/common/sqlquery"
 	"go.temporal.io/server/common/util"
 )
 
@@ -78,7 +79,7 @@ func NewQueryParser() QueryParser {
 }
 
 func (p *queryParser) Parse(query string) (*parsedQuery, error) {
-	stmt, err := sqlparser.Parse(fmt.Sprintf(util.QueryTemplate, query))
+	stmt, err := sqlparser.Parse(fmt.Sprintf(sqlquery.QueryTemplate, query))
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +143,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 
 	switch colNameStr {
 	case WorkflowID:
-		val, err := util.ExtractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -155,7 +156,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowID = util.Ptr(val)
 	case RunID:
-		val, err := util.ExtractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -168,7 +169,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.runID = util.Ptr(val)
 	case CloseTime:
-		closeTime, err := util.ConvertToTime(valStr)
+		closeTime, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -178,7 +179,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		parsedQuery.closeTime = closeTime
 
 	case StartTime:
-		startTime, err := util.ConvertToTime(valStr)
+		startTime, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -187,7 +188,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.startTime = startTime
 	case WorkflowType:
-		val, err := util.ExtractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -200,7 +201,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowType = util.Ptr(val)
 	case SearchPrecision:
-		val, err := util.ExtractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
