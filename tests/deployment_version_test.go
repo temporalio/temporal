@@ -261,8 +261,8 @@ func (s *DeploymentVersionSuite) TestDrainageStatusNil_OverrideUnversioned() {
 func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrent() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	tv1 := testvars.New(s)
-	tv2 := testvars.New(s)
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := testvars.New(s).WithBuildIDNumber(2)
 
 	// Start deployment workflows 1 and wait for the deployment version to exist
 	go s.pollFromDeployment(ctx, tv1)

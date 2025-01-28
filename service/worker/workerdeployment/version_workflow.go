@@ -401,7 +401,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	isAcceptingNewWorkflows := state.IsCurrent || state.RampPercentage > 0
 
 	// stopped accepting new workflows --> start drainage child wf
-	// todo carly: commenting out this if-case and always calling d.startDrainage makes my test work. so there's something wrong here
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
 		state.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
 		d.startDrainage(ctx)
