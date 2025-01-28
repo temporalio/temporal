@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -216,6 +216,19 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion_I
 	s.NoError(err)
 	s.NotNil(resp.PreviousVersion)
 	s.Equal(firstVersion.DeploymentVersion().GetVersion(), resp.PreviousVersion)
+}
+
+// TestConcurrentSetCurrentVersion_Poll tests that no error is thrown when concurrent operations
+// try to set a current version and poll from the deployment.
+func (s *WorkerDeploymentSuite) TestConcurrentSetCurrentVersion_Poll() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	tv := testvars.New(s)
+
+	go s.pollFromDeployment(ctx, tv)
+
+	// Set current version concurrently
+	s.setCurrentVersion(ctx, tv)
 }
 
 // Testing ListWorkerDeployments

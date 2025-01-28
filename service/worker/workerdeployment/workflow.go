@@ -184,16 +184,9 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) er
 }
 
 func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, version string) error {
-	// use lock to enforce only one update at a time
-	err := d.lock.Lock(ctx)
-	if err != nil {
-		d.logger.Error("Could not acquire workflow lock")
-		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
-	}
 	d.pendingUpdates++
 	defer func() {
 		d.pendingUpdates--
-		d.lock.Unlock()
 	}()
 
 	// Add version to local state
