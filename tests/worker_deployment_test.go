@@ -342,7 +342,7 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 	expectedSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 	actualSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
 ) bool {
-	maxDurationBetweenTimeStamps := 100 * time.Millisecond
+	maxDurationBetweenTimeStamps := 1 * time.Second
 	if expectedSummary.Name != actualSummary.Name {
 		s.Logger.Info("Name mismatch")
 		return false

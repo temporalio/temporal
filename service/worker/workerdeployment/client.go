@@ -280,6 +280,7 @@ func (d *ClientImpl) ListWorkerDeployments(
 	pageSize int,
 	nextPageToken []byte,
 ) (_ []*deploymentspb.WorkerDeploymentSummary, _ []byte, retError error) {
+	//revive:disable-next-line:defer
 	defer d.record("ListWorkerDeployments", &retError)()
 
 	query := WorkerDeploymentVisibilityBaseListQuery

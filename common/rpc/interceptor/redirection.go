@@ -142,6 +142,7 @@ var (
 		"DescribeWorkerDeploymentVersion":   func() any { return &workflowservice.DescribeWorkerDeploymentVersionResponse{} },
 		"SetWorkerDeploymentCurrentVersion": func() any { return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{} },
 		"SetWorkerDeploymentRampingVersion": func() any { return &workflowservice.SetWorkerDeploymentRampingVersionResponse{} },
+		"ListWorkerDeployments":             func() any { return &workflowservice.ListWorkerDeploymentsResponse{} },
 	}
 )
 
