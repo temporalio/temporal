@@ -320,71 +320,71 @@ func (e taskExecutor) loadOperationArgs(
 
 func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexus.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-			operation, err := hsm.MachineData[Operation](node)
-			if err != nil {
-				return err
-			}
-			if callErr != nil {
-				return e.handleStartOperationError(env, node, operation, callErr)
-			}
-			eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
-			if err != nil {
-				return err
-			}
+		operation, err := hsm.MachineData[Operation](node)
+		if err != nil {
+			return err
+		}
+		if callErr != nil {
+			return e.handleStartOperationError(env, node, operation, callErr)
+		}
+		eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+		if err != nil {
+			return err
+		}
 
-			var links []*commonpb.Link
-			if result.Links != nil {
-				for _, nexusLink := range result.Links {
-					switch nexusLink.Type {
-					case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-						link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
-						if err != nil {
-							// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
-							// so ignoring the error for now; we will revisit how to handle these errors later.
-							e.Logger.Error(
-								fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
-								tag.Error(err),
-							)
-							continue
-						}
-						links = append(links, &commonpb.Link{
-							Variant: &commonpb.Link_WorkflowEvent_{
-								WorkflowEvent: link,
-							},
-						})
-					default:
-						// If the link data type is unsupported, just ignore it for now.
-						e.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
+		var links []*commonpb.Link
+		if result.Links != nil {
+			for _, nexusLink := range result.Links {
+				switch nexusLink.Type {
+				case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
+					link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+					if err != nil {
+						// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
+						// so ignoring the error for now; we will revisit how to handle these errors later.
+						e.Logger.Error(
+							fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
+							tag.Error(err),
+						)
+						continue
 					}
+					links = append(links, &commonpb.Link{
+						Variant: &commonpb.Link_WorkflowEvent_{
+							WorkflowEvent: link,
+						},
+					})
+				default:
+					// If the link data type is unsupported, just ignore it for now.
+					e.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
 				}
 			}
+		}
 
-			if result.Pending != nil {
-				// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
-				// to allow it to complete via callback.
-				event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
-					// nolint:revive // We must mutate here even if the linter doesn't like it.
-					e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-						NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-							ScheduledEventId: eventID,
-							OperationId:      result.Pending.ID,
-							RequestId:        operation.RequestId,
-						},
-					}
-					// nolint:revive // We must mutate here even if the linter doesn't like it.
-					e.Links = links
+		if result.Pending != nil {
+			// Handler has indicated that the operation will complete asynchronously. Mark the operation as started
+			// to allow it to complete via callback.
+			event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
+				// nolint:revive // We must mutate here even if the linter doesn't like it.
+				e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+					NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+						ScheduledEventId: eventID,
+						OperationId:      result.Pending.ID,
+						RequestId:        operation.RequestId,
+					},
+				}
+				// nolint:revive // We must mutate here even if the linter doesn't like it.
+				e.Links = links
+			})
+			return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+				return TransitionStarted.Apply(operation, EventStarted{
+					Time:       env.Now(),
+					Node:       node,
+					Attributes: event.GetNexusOperationStartedEventAttributes(),
 				})
-				return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
-					return TransitionStarted.Apply(operation, EventStarted{
-						Time:       env.Now(),
-						Node:       node,
-						Attributes: event.GetNexusOperationStartedEventAttributes(),
-					})
-				})
-			}
-			// Operation completed synchronously. Store the result and update the state machine.
-			return handleSuccessfulOperationResult(node, operation, result.Successful, links)
-		})
+			})
+		}
+		// Operation completed synchronously. Store the result and update the state machine.
+		return handleSuccessfulOperationResult(node, operation, result.Successful, links)
+	})
 }
 
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
