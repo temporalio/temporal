@@ -3409,14 +3409,14 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 		request.PageSize = maxPageSize
 	}
 
-	workerDeployments, nextPageToken, err := wh.workerDeploymentClient.ListWorkerDeployments(ctx, namespaceEntry, int(request.PageSize), request.NextPageToken)
+	resp, nextPageToken, err := wh.workerDeploymentClient.ListWorkerDeployments(ctx, namespaceEntry, int(request.PageSize), request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
-	apiDeployments := make([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, len(workerDeployments))
-	for i, d := range workerDeployments {
-		apiDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
+	workerDeployments := make([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, len(resp))
+	for i, d := range resp {
+		workerDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
 			Name:        d.Name,
 			CreateTime:  d.CreateTime,
 			RoutingInfo: d.RoutingInfo,
@@ -3424,7 +3424,7 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 	}
 
 	return &workflowservice.ListWorkerDeploymentsResponse{
-		WorkerDeployments: apiDeployments,
+		WorkerDeployments: workerDeployments,
 		NextPageToken:     nextPageToken,
 	}, nil
 }

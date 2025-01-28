@@ -139,7 +139,6 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.lock.Unlock()
 	}()
 
-	fmt.Println("Lock acquired from setCurrent")
 	prevCurrentVersion := d.State.RoutingInfo.CurrentVersion
 	versionUpdateTime := timestamppb.New(workflow.Now(ctx))
 
@@ -186,10 +185,8 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) er
 
 func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, version string) error {
 	// use lock to enforce only one update at a time
-	fmt.Println("Trying to acquire lock while adding version")
 	err := d.lock.Lock(ctx)
 	if err != nil {
-		fmt.Println("Could not acquire workflow lock")
 		d.logger.Error("Could not acquire workflow lock")
 		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
@@ -203,7 +200,6 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	if d.State.Versions == nil {
 		d.State.Versions = make([]string, 0)
 	}
-	d.logger.Info("Adding version to local state", "version", version)
 	d.State.Versions = append(d.State.Versions, version)
 	return nil
 }

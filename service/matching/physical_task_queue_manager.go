@@ -344,11 +344,11 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	// [cleanup-wv-pre-release]
-	// if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
-	// 	if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
-	// 		return nil, err
-	// 	}
-	// }
+	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
+		if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
+			return nil, err
+		}
+	}
 
 	if c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
 		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, pollMetadata); err != nil {
@@ -666,7 +666,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 
 	deploymentVersions := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
 	if hasDeploymentVersion(deploymentVersions, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
-		fmt.Println("Already registered in user data")
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.

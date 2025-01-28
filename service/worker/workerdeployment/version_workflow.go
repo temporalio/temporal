@@ -283,10 +283,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	defer func() {
 		d.pendingUpdates--
 		d.lock.Unlock()
-		fmt.Println("Lock released from syncState")
 	}()
-
-	fmt.Println("Lock acquired from syncState")
 
 	// wait until deployment workflow started
 	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
@@ -297,8 +294,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// apply changes to "current"
 	if set := args.SetCurrent; set != nil {
-
-		d.logger.Info("Syncing from set-current")
 
 		// sync to task queues
 		syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{

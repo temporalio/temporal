@@ -27,16 +27,19 @@ package tests
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -215,73 +218,204 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion_I
 	s.Equal(firstVersion.DeploymentVersion().GetVersion(), resp.PreviousVersion)
 }
 
-//   - different deployments, set current version for both + List
-//
-// - Register > 2 worker deployment versions, same deployment:
-//   - pageSize = 2 + List
+// Testing ListWorkerDeployments
 
-// Plan for testing ListWorkerDeployments:
-// - Register one worker version, no current version set + List
-func (s *WorkerDeploymentSuite) TestListWorkerDeployments_OneDeployment() {
+func (s *WorkerDeploymentSuite) TestListWorkerDeployments_OneVersion_OneDeployment() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)
 
-	// Registering one worker deployment
-	go s.pollFromDeployment(ctx, tv)
+	go s.pollFromDeployment(ctx, tv.WithBuildIDNumber(rand.Intn(1000)))
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+	expectedDeploymentSummaries := s.buildWorkerDeploymentSummary(
+		tv.DeploymentSeries(),
+		timestamppb.Now(),
+		&deploymentpb.RoutingInfo{},
+	)
 
-		resp, err := s.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
-			Namespace: s.Namespace().String(),
-		})
-		a.NoError(err)
-		a.Equal(1, len(resp.GetWorkerDeployments()))
-		if len(resp.GetWorkerDeployments()) < 1 {
-			return
-		}
-
-		workerDeployment := resp.GetWorkerDeployments()[0]
-		a.Equal(tv.DeploymentSeries(), workerDeployment.GetName())
-		a.NotNil(workerDeployment.GetCreateTime())
-
-		// RoutingInfo checks
-		routingInfo := workerDeployment.GetRoutingInfo()
-		a.Equal("", routingInfo.GetCurrentVersion()) // no current version set
-		a.Equal("", routingInfo.GetRampingVersion()) // no ramping version set
-		a.Nil(routingInfo.GetCurrentVersionUpdateTime())
-		a.Nil(routingInfo.GetRampingVersionUpdateTime())
-		a.Equal(float32(0), routingInfo.GetRampingVersionPercentage())
-	}, time.Second*10, time.Millisecond*1000)
+	s.startAndValidateWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+		Namespace: s.Namespace().String(),
+	}, []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{expectedDeploymentSummaries})
 }
 
-// - Register two worker versions:
-//   - same deployment, set current version for one + List
 func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeployment() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	tv := testvars.New(s)
 
-	// Same worker deployment
-	firstVersion := tv.WithBuildIDNumber(1)
+	firstVersion := tv.WithBuildIDNumber(rand.Intn(1000))
+	secondVersion := tv.WithBuildIDNumber(rand.Intn(1000))
+	routingInfo := &deploymentpb.RoutingInfo{
+		CurrentVersion:           firstVersion.DeploymentVersion().GetVersion(),
+		CurrentVersionUpdateTime: timestamppb.Now(),
+	}
 
-	go s.pollFromDeployment(ctx, firstVersion)
+	s.setCurrentVersion(ctx, firstVersion)      // starts first version's version workflow
+	go s.pollFromDeployment(ctx, secondVersion) // starts second version's version workflow
 
-	// Set first version as current version; this will also start the worker deployment + version workflow.
+	expectedDeploymentSummary := s.buildWorkerDeploymentSummary(
+		tv.DeploymentSeries(),
+		timestamppb.Now(),
+		routingInfo,
+	)
+
+	s.startAndValidateWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+		Namespace: s.Namespace().String(),
+	}, []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
+		expectedDeploymentSummary,
+	})
+}
+
+func (s *WorkerDeploymentSuite) TestListWorkerDeployments_MultipleVersions_MultipleDeployments_OnePage() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	tv := testvars.New(s)
+
+	expectedDeploymentSummaries := s.createVersionsInDeployments(ctx, tv, 2)
+
+	s.startAndValidateWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+		Namespace: s.Namespace().String(),
+	}, expectedDeploymentSummaries)
+}
+
+func (s *WorkerDeploymentSuite) TestListWorkerDeployments_MultipleVersions_MultipleDeployments_MultiplePages() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	tv := testvars.New(s)
+
+	expectedDeploymentSummaries := s.createVersionsInDeployments(ctx, tv, 5)
+
+	s.startAndValidateWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+		Namespace: s.Namespace().String(),
+		PageSize:  1,
+	}, expectedDeploymentSummaries)
+}
+
+func (s *WorkerDeploymentSuite) setCurrentVersion(ctx context.Context, tv *testvars.TestVars) {
 	resp, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		Version:        &wrapperspb.StringValue{Value: firstVersion.DeploymentVersion().GetVersion()},
+		Version:        &wrapperspb.StringValue{Value: tv.DeploymentVersion().GetVersion()},
 	})
 	s.NoError(err)
 	s.NotNil(resp.PreviousVersion)
 	s.Equal("", resp.PreviousVersion)
-
 }
 
-func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoDeployments_DifferentSeries() {
+func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context, tv *testvars.TestVars, n int) []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary {
+	var expectedDeploymentSummaries []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary
 
+	for i := 0; i < n; i++ {
+		deployment := tv.WithDeploymentSeriesNumber(i)
+		version := deployment.WithBuildIDNumber(i)
+
+		s.setCurrentVersion(ctx, version)
+
+		expectedDeployment := s.buildWorkerDeploymentSummary(
+			deployment.DeploymentSeries(),
+			timestamppb.Now(),
+			&deploymentpb.RoutingInfo{
+				CurrentVersion:           version.DeploymentVersion().GetVersion(),
+				CurrentVersionUpdateTime: timestamppb.Now(),
+			},
+		)
+		expectedDeploymentSummaries = append(expectedDeploymentSummaries, expectedDeployment)
+	}
+
+	return expectedDeploymentSummaries
+}
+
+func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
+	expectedSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
+	actualSummary *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
+) bool {
+	maxDurationBetweenTimeStamps := 100 * time.Millisecond
+	if expectedSummary.Name != actualSummary.Name {
+		s.Logger.Info("Name mismatch")
+		return false
+	}
+	if expectedSummary.CreateTime.AsTime().Sub(actualSummary.CreateTime.AsTime()) > maxDurationBetweenTimeStamps {
+		s.Logger.Info("Create time mismatch")
+		return false
+	}
+
+	// Current version checks
+	if expectedSummary.RoutingInfo.GetCurrentVersion() != actualSummary.RoutingInfo.GetCurrentVersion() {
+		s.Logger.Info("Current version mismatch")
+		return false
+	}
+	if expectedSummary.RoutingInfo.GetCurrentVersionUpdateTime().AsTime().Sub(actualSummary.RoutingInfo.GetCurrentVersionUpdateTime().AsTime()) > maxDurationBetweenTimeStamps {
+		s.Logger.Info("Current version update time mismatch")
+		return false
+	}
+
+	// Ramping version checks
+	if expectedSummary.RoutingInfo.GetRampingVersion() != actualSummary.RoutingInfo.GetRampingVersion() {
+		s.Logger.Info("Ramping version mismatch")
+		return false
+	}
+	if expectedSummary.RoutingInfo.GetRampingVersionPercentage() != actualSummary.RoutingInfo.GetRampingVersionPercentage() {
+		s.Logger.Info("Ramping version percentage mismatch")
+		return false
+	}
+	if expectedSummary.RoutingInfo.GetRampingVersionUpdateTime().AsTime().Sub(actualSummary.RoutingInfo.GetRampingVersionUpdateTime().AsTime()) > maxDurationBetweenTimeStamps {
+		s.Logger.Info("Ramping version update time mismatch")
+		return false
+	}
+
+	return true
+}
+
+func (s *WorkerDeploymentSuite) listWorkerDeployments(ctx context.Context, request *workflowservice.ListWorkerDeploymentsRequest) ([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, error) {
+	var resp *workflowservice.ListWorkerDeploymentsResponse
+	var err error
+	var deploymentSummaries []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary
+	for resp == nil || len(resp.NextPageToken) > 0 {
+		resp, err = s.FrontendClient().ListWorkerDeployments(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		deploymentSummaries = append(deploymentSummaries, resp.GetWorkerDeployments()...)
+		request.NextPageToken = resp.NextPageToken
+	}
+	return deploymentSummaries, nil
+}
+
+func (s *WorkerDeploymentSuite) startAndValidateWorkerDeployments(
+	ctx context.Context,
+	request *workflowservice.ListWorkerDeploymentsRequest,
+	expectedDeploymentSummaries []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary,
+) {
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		actualDeploymentSummaries, err := s.listWorkerDeployments(ctx, request)
+		a.NoError(err)
+		if len(actualDeploymentSummaries) < len(expectedDeploymentSummaries) {
+			return
+		}
+
+		for _, expectedDeploymentSummary := range expectedDeploymentSummaries {
+			deploymentSummaryValidated := false
+			for _, actualDeploymentSummary := range actualDeploymentSummaries {
+				deploymentSummaryValidated = deploymentSummaryValidated ||
+					s.verifyWorkerDeploymentSummary(expectedDeploymentSummary, actualDeploymentSummary)
+			}
+			a.True(deploymentSummaryValidated)
+		}
+	}, time.Second*10, time.Millisecond*1000)
+}
+
+func (s *WorkerDeploymentSuite) buildWorkerDeploymentSummary(
+	deploymentName string, createTime *timestamppb.Timestamp,
+	routingInfo *deploymentpb.RoutingInfo,
+) *workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary {
+	return &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
+		Name:        deploymentName,
+		CreateTime:  createTime,
+		RoutingInfo: routingInfo,
+	}
 }
 
 // Name is used by testvars. We use a shortened test name in variables so that physical task queue IDs
