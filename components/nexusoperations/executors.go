@@ -320,13 +320,16 @@ func (e taskExecutor) loadOperationArgs(
 
 func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexus.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+			operation, err := hsm.MachineData[Operation](node)
+			if err != nil {
+				return err
+			}
 			if callErr != nil {
 				return e.handleStartOperationError(env, node, operation, callErr)
 			}
 			eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 			if err != nil {
-				return hsm.TransitionOutput{}, err
+				return err
 			}
 
 			var links []*commonpb.Link
@@ -371,59 +374,62 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 					// nolint:revive // We must mutate here even if the linter doesn't like it.
 					e.Links = links
 				})
-				return TransitionStarted.Apply(operation, EventStarted{
-					Time:       env.Now(),
-					Node:       node,
-					Attributes: event.GetNexusOperationStartedEventAttributes(),
+				return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+					return TransitionStarted.Apply(operation, EventStarted{
+						Time:       env.Now(),
+						Node:       node,
+						Attributes: event.GetNexusOperationStartedEventAttributes(),
+					})
 				})
 			}
 			// Operation completed synchronously. Store the result and update the state machine.
-			return handleSuccessfulOperationResult(node, operation, result.Successful, links, CompletionSourceResponse)
+			return handleSuccessfulOperationResult(node, operation, result.Successful, links)
 		})
-	})
 }
 
-func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
+func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
 	var handlerErr *nexus.HandlerError
 	var opFailedErr *nexus.UnsuccessfulOperationError
 
 	if errors.As(callErr, &opFailedErr) {
-		return handleUnsuccessfulOperationError(node, operation, opFailedErr, CompletionSourceResponse)
+		return handleUnsuccessfulOperationError(node, operation, opFailedErr)
 	} else if errors.As(callErr, &handlerErr) {
 		if !isRetryableHandlerError(handlerErr.Type) {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 			// Although Failure is nullable, Nexus SDK is expected to always populate this field
-			return handleNonRetryableStartOperationError(env, node, operation, handlerErr)
+			return handleNonRetryableStartOperationError(node, operation, handlerErr)
 		}
 		// Fall through to the AttemptFailed transition.
 	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
-		return handleNonRetryableStartOperationError(env, node, operation, callErr)
+		return handleNonRetryableStartOperationError(node, operation, callErr)
 	} else if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
 		// Operation timeout is not retryable
-		return handleNonRetryableStartOperationError(env, node, operation, callErr)
+		return handleNonRetryableStartOperationError(node, operation, callErr)
 	}
 	failure, err := callErrToFailure(callErr, true)
 	if err != nil {
-		return hsm.TransitionOutput{}, err
+		return err
 	}
-	return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
-		Time:        env.Now(),
-		Failure:     failure,
-		Node:        node,
-		RetryPolicy: e.Config.RetryPolicy(),
+	return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+		return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
+			Time:        env.Now(),
+			Failure:     failure,
+			Node:        node,
+			RetryPolicy: e.Config.RetryPolicy(),
+		})
 	})
 }
 
-func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
+func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, callErr error) error {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
-		return hsm.TransitionOutput{}, err
+		return err
 	}
 	failure, err := callErrToFailure(callErr, true)
 	if err != nil {
-		return hsm.TransitionOutput{}, err
+		return err
 	}
 	attrs := &historypb.NexusOperationFailedEventAttributes{
 		Failure: nexusOperationFailure(
@@ -434,19 +440,14 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 		ScheduledEventId: eventID,
 		RequestId:        operation.RequestId,
 	}
-	node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
+	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
 		// nolint:revive // We must mutate here even if the linter doesn't like it.
 		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 			NexusOperationFailedEventAttributes: attrs,
 		}
 	})
 
-	return TransitionFailed.Apply(operation, EventFailed{
-		Time:             env.Now(),
-		Attributes:       attrs,
-		CompletionSource: CompletionSourceResponse,
-		Node:             node,
-	})
+	return FailedEventDefinition{}.Apply(node.Parent, event)
 }
 
 func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
