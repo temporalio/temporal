@@ -22,23 +22,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
-
 package chasm
 
 import (
-	"context"
-	"time"
+	"reflect"
+)
+
+var (
+	EmptyRegistrableTask = RegistrableTask{}
 )
 
 type (
-	TaskAttributes struct {
-		ScheduledTime time.Time
-		Destination   string
+	RegistrableTask struct {
+		name            string
+		goType          reflect.Type
+		componentGoType reflect.Type // It is not clear how this one is used.
+		handler         any
 	}
 
-	TaskHandler[C any, T any] interface {
-		Validate(Context, C, T) error
-		Execute(context.Context, ComponentRef, T) error
-	}
+	RegistrableTaskOption func(*RegistrableTask)
 )
+
+// NOTE: C is not Component but any.
+func NewRegistrableTask[C any, T any](
+	name string,
+	handler TaskHandler[C, T],
+	opts ...RegistrableTaskOption,
+) RegistrableTask {
+	rt := RegistrableTask{
+		name:            name,
+		goType:          reflect.TypeFor[T](),
+		componentGoType: reflect.TypeFor[C](),
+		handler:         handler,
+	}
+	for _, opt := range opts {
+		opt(&rt)
+	}
+	return rt
+}
+
+func (rt RegistrableTask) Name() string {
+	return rt.name
+}
