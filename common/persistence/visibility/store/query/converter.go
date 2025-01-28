@@ -30,13 +30,13 @@ package query
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/olivere/elastic/v7"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -383,11 +383,11 @@ func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error)
 		return nil, wrapConverterError("unable to convert left part of 'between' expression", err)
 	}
 
-	fromValue, err := ParseSqlValue(sqlparser.String(rangeCond.From))
+	fromValue, err := util.ParseSqlValue(sqlparser.String(rangeCond.From))
 	if err != nil {
 		return nil, err
 	}
-	toValue, err := ParseSqlValue(sqlparser.String(rangeCond.To))
+	toValue, err := util.ParseSqlValue(sqlparser.String(rangeCond.To))
 	if err != nil {
 		return nil, err
 	}
@@ -530,7 +530,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		v, err := ParseSqlValue(sqlparser.String(e))
+		v, err := util.ParseSqlValue(sqlparser.String(e))
 		if err != nil {
 			return nil, err
 		}
@@ -566,30 +566,6 @@ func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 
 func (n *notSupportedExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 	return nil, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, expr)
-}
-
-// ParseSqlValue returns a string, int64 or float64 if the parsing succeeds.
-func ParseSqlValue(sqlValue string) (interface{}, error) {
-	if sqlValue == "" {
-		return "", nil
-	}
-
-	if sqlValue[0] == '\'' && sqlValue[len(sqlValue)-1] == '\'' {
-		strValue := strings.Trim(sqlValue, "'")
-		return strValue, nil
-	}
-
-	// Unquoted value must be a number. Try int64 first.
-	if intValue, err := strconv.ParseInt(sqlValue, 10, 64); err == nil {
-		return intValue, nil
-	}
-
-	// Then float64.
-	if floatValue, err := strconv.ParseFloat(sqlValue, 64); err == nil {
-		return floatValue, nil
-	}
-
-	return nil, NewConverterError("%s: unable to parse %s", InvalidExpressionErrMessage, sqlValue)
 }
 
 func convertColName(fnInterceptor FieldNameInterceptor, colNameExpr sqlparser.Expr, usage FieldNameUsage) (alias string, fieldName string, err error) {

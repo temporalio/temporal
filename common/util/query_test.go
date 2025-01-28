@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matcher
+package util
 
 import (
 	"testing"
@@ -87,7 +87,7 @@ func TestExtractStringValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			val, err := extractStringValue(tt.input)
+			val, err := ExtractStringValue(tt.input)
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Empty(t, val)
@@ -157,7 +157,7 @@ func TestConvertSqlValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			val, err := convertSqlValue(tt.input)
+			val, err := ParseSqlValue(tt.input)
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -172,29 +172,29 @@ func TestConvertToTime(t *testing.T) {
 	t.Run("acceptance", func(t *testing.T) {
 		// RFC3339 format requires a "T" separator and a timezone, e.g. "2025-01-11T13:14:15Z".
 		input := "'2023-10-26T14:30:00Z'"
-		expectedTime, _ := time.Parse(defaultDateTimeFormat, "2023-10-26T14:30:00Z")
-		actualTime, err := convertToTime(input)
+		expectedTime, _ := time.Parse(DefaultDateTimeFormat, "2023-10-26T14:30:00Z")
+		actualTime, err := ConvertToTime(input)
 		assert.NoError(t, err)
 		assert.Equal(t, expectedTime, actualTime)
 	})
 
 	t.Run("NoQuotes", func(t *testing.T) {
 		input := "2025-01-11T13:14:15Z"
-		actualTime, err := convertToTime(input)
+		actualTime, err := ConvertToTime(input)
 		assert.Error(t, err)
 		assert.Zero(t, actualTime)
 	})
 
 	t.Run("invalid time format", func(t *testing.T) {
 		input := "'2025-13-40 14:02:04'"
-		actualTime, err := convertToTime(input)
+		actualTime, err := ConvertToTime(input)
 		assert.Error(t, err)
 		assert.Zero(t, actualTime)
 	})
 
 	t.Run("random string", func(t *testing.T) {
 		input := "'abs'"
-		actualTime, err := convertToTime(input)
+		actualTime, err := ConvertToTime(input)
 		assert.Error(t, err)
 		assert.Zero(t, actualTime)
 	})

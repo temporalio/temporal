@@ -29,14 +29,12 @@ package filestore
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 )
 
@@ -69,12 +67,6 @@ const (
 	ExecutionStatus = "ExecutionStatus"
 )
 
-const (
-	queryTemplate = "select * from dummy where %s"
-
-	defaultDateTimeFormat = time.RFC3339
-)
-
 // NewQueryParser creates a new query parser for filestore
 func NewQueryParser() QueryParser {
 	return &queryParser{}
@@ -88,7 +80,7 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 	if strings.TrimSpace(query) == "" {
 		return parsedQuery, nil
 	}
-	stmt, err := sqlparser.Parse(fmt.Sprintf(queryTemplate, query))
+	stmt, err := sqlparser.Parse(fmt.Sprintf(util.QueryTemplate, query))
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +134,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 
 	switch colNameStr {
 	case WorkflowID:
-		val, err := extractStringValue(valStr)
+		val, err := util.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -155,7 +147,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowID = util.Ptr(val)
 	case RunID:
-		val, err := extractStringValue(valStr)
+		val, err := util.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -168,7 +160,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.runID = util.Ptr(val)
 	case WorkflowType:
-		val, err := extractStringValue(valStr)
+		val, err := util.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -181,7 +173,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowTypeName = util.Ptr(val)
 	case ExecutionStatus:
-		val, err := extractStringValue(valStr)
+		val, err := util.ExtractStringValue(valStr)
 		if err != nil {
 			// if failed to extract string value, it means user input close status as a number
 			val = valStr
@@ -199,7 +191,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.status = &status
 	case CloseTime:
-		timestamp, err := convertToTime(valStr)
+		timestamp, err := util.ConvertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -234,22 +226,6 @@ func (p *queryParser) convertCloseTime(timestamp time.Time, op string, parsedQue
 	return nil
 }
 
-func convertToTime(timeStr string) (time.Time, error) {
-	ts, err := strconv.ParseInt(timeStr, 10, 64)
-	if err == nil {
-		return timestamp.UnixOrZeroTime(ts), nil
-	}
-	timestampStr, err := extractStringValue(timeStr)
-	if err != nil {
-		return time.Time{}, err
-	}
-	parsedTime, err := time.Parse(defaultDateTimeFormat, timestampStr)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return parsedTime, nil
-}
-
 func convertStatusStr(statusStr string) (enumspb.WorkflowExecutionStatus, error) {
 	statusStr = strings.ToLower(strings.TrimSpace(statusStr))
 	switch statusStr {
@@ -268,11 +244,4 @@ func convertStatusStr(statusStr string) (enumspb.WorkflowExecutionStatus, error)
 	default:
 		return 0, fmt.Errorf("unknown workflow close status: %s", statusStr)
 	}
-}
-
-func extractStringValue(s string) (string, error) {
-	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
-		return s[1 : len(s)-1], nil
-	}
-	return "", fmt.Errorf("value %s is not a string value", s)
 }

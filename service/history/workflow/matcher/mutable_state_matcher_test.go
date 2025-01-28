@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -75,7 +76,7 @@ func TestMatchMutableState(t *testing.T) {
 	}
 
 	// we don't need many SQL related tests here, SQL support is covered in other tests
-	startTime, err := convertToTime(fmt.Sprintf("'%s'", startTimeStr))
+	startTime, err := util.ConvertToTime(fmt.Sprintf("'%s'", startTimeStr))
 	assert.NoError(t, err)
 
 	ws := &persistencespb.WorkflowExecutionState{
