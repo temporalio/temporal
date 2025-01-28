@@ -325,6 +325,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
+
+	// Use this test case to verify that the state machine is actually deleted, the workflowservice
+	// DescribeWorkflowExecution API filters out operations in terminal state in case they complete in a server version
+	// without state machine deletion enabled, hence the use of the adminservice API here.
 	desc, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
