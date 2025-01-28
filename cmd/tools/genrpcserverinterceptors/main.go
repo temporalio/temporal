@@ -43,10 +43,10 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 )
 
-const maxPayloadDepth = 5
+const maxMessageDepth = 5
 
 type (
-	payloadData struct {
+	messageData struct {
 		Type string
 
 		WorkflowIdGetter string
@@ -57,7 +57,7 @@ type (
 	grpcServerData struct {
 		Server   string
 		Imports  []string
-		Payloads []payloadData
+		Messages []messageData
 	}
 )
 
@@ -125,9 +125,9 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (wt *WorkflowTags) extractFrom{{.Server}}Payload(payload any) []tag.Tag {
-	switch r := payload.(type) {
-	{{- range .Payloads}}
+func (wt *WorkflowTags) extractFrom{{.Server}}Message(message any) []tag.Tag {
+	switch r := message.(type) {
+	{{- range .Messages}}
 	case {{.Type}}:
 	{{- if or .TaskTokenGetter .WorkflowIdGetter .RunIdGetter}}
 		{{- if .TaskTokenGetter}}
@@ -164,58 +164,58 @@ func writeGrpcServerData(w io.Writer, grpcServerT reflect.Type, tmpl string) {
 		}
 
 		requestT := rpcT.In(1) // Assume request is always the second parameter.
-		requestPd := workflowTagGetters(requestT, 0)
-		requestPd.Type = requestT.String()
-		sd.Payloads = append(sd.Payloads, requestPd)
+		requestMd := workflowTagGetters(requestT, 0)
+		requestMd.Type = requestT.String()
+		sd.Messages = append(sd.Messages, requestMd)
 
 		respT := rpcT.Out(0) // Assume response is always the first parameter.
-		responsePd := workflowTagGetters(respT, 0)
-		responsePd.Type = respT.String()
-		sd.Payloads = append(sd.Payloads, responsePd)
+		responseMd := workflowTagGetters(respT, 0)
+		responseMd.Type = respT.String()
+		sd.Messages = append(sd.Messages, responseMd)
 	}
 
 	fatalIfErr(template.Must(template.New("code").Parse(tmpl)).Execute(w, sd))
 }
 
 //nolint:revive // cognitive complexity 37 (> max enabled 25)
-func workflowTagGetters(payloadType reflect.Type, depth int) payloadData {
-	pd := payloadData{}
-	if depth > maxPayloadDepth {
+func workflowTagGetters(messageType reflect.Type, depth int) messageData {
+	pd := messageData{}
+	if depth > maxMessageDepth {
 		return pd
 	}
 
 	switch {
-	case payloadType.AssignableTo(executionGetterT):
+	case messageType.AssignableTo(executionGetterT):
 		pd.WorkflowIdGetter = "GetExecution().GetWorkflowId()"
 		pd.RunIdGetter = "GetExecution().GetRunId()"
-	case payloadType.AssignableTo(workflowExecutionGetterT):
+	case messageType.AssignableTo(workflowExecutionGetterT):
 		pd.WorkflowIdGetter = "GetWorkflowExecution().GetWorkflowId()"
 		pd.RunIdGetter = "GetWorkflowExecution().GetRunId()"
-	case payloadType.AssignableTo(taskTokenGetterT):
+	case messageType.AssignableTo(taskTokenGetterT):
 		for _, ert := range excludeTaskTokenTypes {
-			if payloadType.AssignableTo(ert) {
+			if messageType.AssignableTo(ert) {
 				return pd
 			}
 		}
 		pd.TaskTokenGetter = "GetTaskToken()"
 	default:
 		// Might be one of these, both, or neither.
-		if payloadType.AssignableTo(workflowIdGetterT) {
+		if messageType.AssignableTo(workflowIdGetterT) {
 			pd.WorkflowIdGetter = "GetWorkflowId()"
 		}
-		if payloadType.AssignableTo(runIdGetterT) {
+		if messageType.AssignableTo(runIdGetterT) {
 			pd.RunIdGetter = "GetRunId()"
 		}
 	}
 
 	// Iterates over fields in order they defined in proto file, not proto index.
 	// Order is important because the first match wins.
-	for fieldNum := 0; fieldNum < payloadType.Elem().NumField(); fieldNum++ {
+	for fieldNum := 0; fieldNum < messageType.Elem().NumField(); fieldNum++ {
 		if (pd.WorkflowIdGetter != "" && pd.RunIdGetter != "") || pd.TaskTokenGetter != "" {
 			break
 		}
 
-		nestedRequest := payloadType.Elem().Field(fieldNum)
+		nestedRequest := messageType.Elem().Field(fieldNum)
 		if nestedRequest.Type.Kind() != reflect.Ptr {
 			continue
 		}

@@ -31,8 +31,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (wt *WorkflowTags) extractFromWorkflowServiceServerPayload(payload any) []tag.Tag {
-	switch r := payload.(type) {
+func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []tag.Tag {
+	switch r := message.(type) {
 	case *workflowservice.CountWorkflowExecutionsRequest:
 		return nil
 	case *workflowservice.CountWorkflowExecutionsResponse:

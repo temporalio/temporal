@@ -31,8 +31,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (wt *WorkflowTags) extractFromHistoryServiceServerPayload(payload any) []tag.Tag {
-	switch r := payload.(type) {
+func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []tag.Tag {
+	switch r := message.(type) {
 	case *historyservice.AddTasksRequest:
 		return nil
 	case *historyservice.AddTasksResponse:

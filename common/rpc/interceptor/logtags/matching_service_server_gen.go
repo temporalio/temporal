@@ -31,8 +31,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (wt *WorkflowTags) extractFromMatchingServiceServerPayload(payload any) []tag.Tag {
-	switch r := payload.(type) {
+func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []tag.Tag {
+	switch r := message.(type) {
 	case *matchingservice.AddActivityTaskRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
