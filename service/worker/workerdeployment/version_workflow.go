@@ -51,7 +51,7 @@ type (
 		lock                   workflow.Mutex
 		pendingUpdates         int
 		signalsCompleted       bool
-		drainageWorkflowFuture workflow.ChildWorkflowFuture
+		drainageWorkflowFuture *workflow.ChildWorkflowFuture
 	}
 )
 
@@ -182,12 +182,17 @@ func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context) {
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	})
-	d.drainageWorkflowFuture = workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, d.a.namespace)
+	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, d.VersionState.DeploymentName, d.VersionState.Version)
+	d.drainageWorkflowFuture = &fut
 }
 
 func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
 	var terminated bool
-	err := d.drainageWorkflowFuture.SignalChildWorkflow(ctx, TerminateDrainageSignal, nil).Get(ctx, &terminated)
+	if d.drainageWorkflowFuture == nil {
+		return nil
+	}
+	fut := *d.drainageWorkflowFuture
+	err := fut.SignalChildWorkflow(ctx, TerminateDrainageSignal, nil).Get(ctx, &terminated)
 	if err != nil {
 		return err
 	}
@@ -390,22 +395,27 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		}
 	}
 
-	wasAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
+	wasAcceptingNewWorkflows := state.CurrentSinceTime != nil || state.RampingSinceTime != nil
 
 	// apply changes to current and ramping
 	if args.IsCurrent {
 		state.CurrentSinceTime = args.RoutingUpdateTime
 		state.RampingSinceTime = nil
 		state.RampPercentage = 0
+	} else if args.RampPercentage > 0 {
+		state.CurrentSinceTime = nil
+		state.RampingSinceTime = args.RoutingUpdateTime
+		state.RampPercentage = args.RampPercentage
 	} else {
 		state.CurrentSinceTime = nil
-		state.RampingSinceTime = args.RoutingUpdateTime // could be nil
-		state.RampPercentage = args.RampPercentage      // could be zero
+		state.RampingSinceTime = nil
+		state.RampPercentage = 0
 	}
 
-	isAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
+	isAcceptingNewWorkflows := state.CurrentSinceTime != nil || state.RampingSinceTime != nil
 
 	// stopped accepting new workflows --> start drainage child wf
+	// todo carly: commenting out this if-case and always calling d.startDrainage makes my test work. so there's something wrong here
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
 		state.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
 		d.startDrainage(ctx)

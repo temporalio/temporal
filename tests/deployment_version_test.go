@@ -27,6 +27,12 @@ package tests
 import (
 	"context"
 	"fmt"
+	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"testing"
 	"time"
 
@@ -191,4 +197,216 @@ func (s *DeploymentVersionSuite) Name() string {
 		fullName[len(fullName)-21:],
 		farm.Fingerprint32([]byte(fullName)),
 	)
+}
+
+func (s *DeploymentVersionSuite) TestDrainageStatusNil_OverrideUnversioned() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// Starting a deployment workflow
+	go s.pollFromDeployment(ctx, tv)
+
+	// Wait for the deployment version to exist
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.BuildID(),
+		})
+		a.NoError(err)
+		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
+		a.Equal(tv.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+	}, time.Second*5, time.Millisecond*200)
+
+	// non-current deployment has never been used and has no drainage info
+	s.checkVersionDrainage(ctx, tv, nil)
+
+	// start an unversioned workflow, set pinned deployment override --> deployment should be reachable
+	unversionedTQ := "unversioned-test-tq"
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	s.NoError(err)
+	unversionedWFExec := &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	}
+
+	// set override on our new unversioned workflow
+	updateOpts := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: &deploymentpb.WorkerDeploymentVersion{
+				Version:        tv.BuildID(),
+				DeploymentName: tv.DeploymentSeries(),
+			},
+		},
+	}
+	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                s.Namespace().String(),
+		WorkflowExecution:        unversionedWFExec,
+		WorkflowExecutionOptions: updateOpts,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	s.NoError(err)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), updateOpts))
+
+	// describe workflow and check that the versioning info has the override
+	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, updateOpts.GetVersioningOverride())
+	// check that the version is still not draining, since an open workflow is using it via override
+	s.checkVersionDrainage(ctx, tv, nil)
+
+	// TODO (carly): test this with SetCurrent one deployment, then SetCurrent another
+}
+
+func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrent() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s)
+	tv2 := testvars.New(s)
+
+	// Start deployment workflows 1 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv1.BuildID(),
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
+		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+	}, time.Second*5, time.Millisecond*200)
+
+	// Start deployment workflows 2 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv2)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv2.BuildID(),
+		})
+		a.NoError(err)
+		a.Equal(tv2.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
+		a.Equal(tv2.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+	}, time.Second*5, time.Millisecond*200)
+
+	// non-current deployment has never been used and has no drainage info
+	s.checkVersionDrainage(ctx, tv1, nil)
+	s.checkVersionDrainage(ctx, tv2, nil)
+
+	// SetCurrent tv1
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv1.DeploymentSeries(),
+		Version:        wrapperspb.String(tv1.BuildID()),
+		Identity:       tv1.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	s.checkVersionIsCurrent(ctx, tv1)
+
+	// both still nil since neither are draining
+	//s.checkVersionDrainage(ctx, tv1, nil)
+	//s.checkVersionDrainage(ctx, tv2, nil)
+
+	// SetCurrent tv2
+	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv2.DeploymentSeries(),
+		Version:        wrapperspb.String(tv2.BuildID()),
+		Identity:       tv2.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	// tv1 should now be "drained", tv2 still nil
+	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+		LastChangedTime: nil, // don't test this now
+		LastCheckedTime: nil, // don't test this now
+	})
+	//s.checkVersionDrainage(ctx, tv1, nil)
+
+}
+
+func (s *DeploymentVersionSuite) checkVersionDrainage(
+	ctx context.Context,
+	tv *testvars.TestVars,
+	expectedDrainageInfo *deploymentpb.VersionDrainageInfo,
+) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.BuildID(),
+		})
+		a.NoError(err)
+
+		dInfo := resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo()
+
+		if expectedDrainageInfo == nil {
+			a.Nil(dInfo)
+			return
+		}
+
+		// todo carly: remove // try seeing if a drainage workflow started at all:
+		//listResp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		//	Namespace:     s.Namespace().String(),
+		//	PageSize:      0,
+		//	NextPageToken: nil,
+		//	Query:         fmt.Sprintf("WorkflowType = 'temporal-sys-worker-deployment-drainage-workflow'"),
+		//})
+		//a.NoError(err)
+		//a.Equal(1, len(listResp.GetExecutions()))
+		//if len(listResp.GetExecutions()) > 0 {
+		//	exec := listResp.GetExecutions()[0]
+		//	fmt.Printf("%+v", exec)
+		//
+		//}
+
+		a.Equal(expectedDrainageInfo.Status, dInfo.GetStatus())
+		if expectedDrainageInfo.LastCheckedTime != nil {
+			a.Equal(expectedDrainageInfo.LastCheckedTime, dInfo.GetLastCheckedTime())
+		}
+		if expectedDrainageInfo.LastChangedTime != nil {
+			a.Equal(expectedDrainageInfo.LastChangedTime, dInfo.GetLastChangedTime())
+		}
+	}, time.Second*10, time.Millisecond*200)
+}
+
+func (s *DeploymentVersionSuite) checkVersionIsCurrent(ctx context.Context, tv *testvars.TestVars) {
+	// Querying the Deployment
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.BuildID(),
+		})
+		if !a.NoError(err) {
+			return
+		}
+		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentName())
+		a.Equal(tv.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+
+		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
+	}, time.Second*10, time.Millisecond*1000)
+}
+
+func (s *DeploymentVersionSuite) checkDescribeWorkflowAfterOverride(
+	ctx context.Context,
+	wf *commonpb.WorkflowExecution,
+	expectedOverride *workflowpb.VersioningOverride,
+) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: wf,
+		})
+		a.NoError(err)
+		a.NotNil(resp)
+		a.NotNil(resp.GetWorkflowExecutionInfo())
+		a.Equal(expectedOverride.GetBehavior(), resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetBehavior())
+		a.True(proto.Equal(expectedOverride.GetPinnedVersion(), resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetPinnedVersion()))
+	}, 5*time.Second, 50*time.Millisecond)
 }

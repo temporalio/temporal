@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	checkDrainageInterval = 3 * time.Minute
+	checkDrainageInterval = 3 * time.Minute // TODO (Carly): should this be a dynamic config?
 )
 
 // child workflow
@@ -41,39 +41,37 @@ func checkDrainageWorkflow(ctx workflow.Context, deploymentName, version string)
 	var a *DrainageActivities
 
 	// listen for done signal sent by parent if started accepting new executions or continued-as-new
-	done := make(chan bool)
+	done := false
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		terminateChan := workflow.GetSignalChannel(ctx, TerminateDrainageSignal)
 		terminateChan.Receive(ctx, nil)
-		done <- true
+		done = true
 	})
 
 	for {
-		select {
-		case <-done:
+		if done {
 			return nil
-		default:
-			var info *deploymentpb.VersionDrainageInfo
-			err := workflow.ExecuteActivity(
-				activityCtx,
-				a.GetVersionDrainageStatus,
-				deploymentName,
-				version,
-			).Get(ctx, &info)
-			if err != nil {
-				return err
-			}
-
-			parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
-			err = workflow.SignalExternalWorkflow(ctx, parentWf.ID, parentWf.RunID, SyncDrainageSignalName, info).Get(ctx, nil)
-			if err != nil {
-				return err
-			}
-
-			if info.Status == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
-				return nil
-			}
-			workflow.Sleep(ctx, checkDrainageInterval)
 		}
+		var info *deploymentpb.VersionDrainageInfo
+		err := workflow.ExecuteActivity(
+			activityCtx,
+			a.GetVersionDrainageStatus,
+			deploymentName,
+			version,
+		).Get(ctx, &info)
+		if err != nil {
+			return err
+		}
+
+		parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
+		err = workflow.SignalExternalWorkflow(ctx, parentWf.ID, parentWf.RunID, SyncDrainageSignalName, info).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
+
+		if info.Status == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+			return nil
+		}
+		workflow.Sleep(ctx, checkDrainageInterval)
 	}
 }
