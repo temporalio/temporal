@@ -90,8 +90,9 @@ message WorkerDeploymentWorkflowArgs {
 
 // Local state for Worker Deployment
 message WorkerDeploymentLocalState {
-    string current_version = 1;
-    google.protobuf.Timestamp current_changed_time = 2;
+    google.protobuf.Timestamp create_time = 1;
+    // Encapsulates task routing information for this deployment.
+    temporal.api.deployment.v1.RoutingInfo routing_info = 2;
     // Deployment Versions that are currently tracked in this Deployment. 
     // A DeploymentVersion will be cleaned up automatically if all the following conditions meet:
     // - It does not receive new executions (see WorkerDeploymentVersionInfo.accepts_new_executions) 
@@ -99,7 +100,6 @@ message WorkerDeploymentLocalState {
     // - It is drained (see WorkerDeploymentVersionInfo.drainage_status)
     // TODO (Shivam) - Removal of registered versions based on the above conditions.
     repeated string versions = 3; 
-    google.protobuf.Timestamp create_time = 4;
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -200,8 +200,15 @@ message SyncVersionStateActivityResult {
 // used as Worker Deployment workflow memo:
 message WorkerDeploymentWorkflowMemo {
     string deployment_name = 1;
-    string current_version = 2;
-    google.protobuf.Timestamp current_changed_time = 3;
+    google.protobuf.Timestamp create_time = 2;
+    temporal.api.deployment.v1.RoutingInfo routing_info = 3;
+}
+
+// Subset of fields of WorkerDeploymentInfo returned in ListWorkerDeploymentsResponse
+message WorkerDeploymentSummary {
+    string name = 1;
+    google.protobuf.Timestamp create_time = 2;
+    temporal.api.deployment.v1.RoutingInfo routing_info = 3;
 }
 
 // Used as Worker Deployment Version workflow activity input:
