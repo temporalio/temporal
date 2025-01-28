@@ -584,7 +584,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 
 	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
 	if hasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
-		fmt.Println("-----------------------------------")
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.
