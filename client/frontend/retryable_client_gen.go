@@ -530,6 +530,21 @@ func (c *retryableClient) ListTaskQueuePartitions(
 	return resp, err
 }
 
+func (c *retryableClient) ListWorkerDeployments(
+	ctx context.Context,
+	request *workflowservice.ListWorkerDeploymentsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListWorkerDeploymentsResponse, error) {
+	var resp *workflowservice.ListWorkerDeploymentsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListWorkerDeployments(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,

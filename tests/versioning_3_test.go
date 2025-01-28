@@ -970,7 +970,7 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 
 	// Ramp unversioned
 	uv := tv2.DeploymentVersion()
-	uv.Version = ""
+	uv.BuildId = ""
 	s.syncTaskQueueDeploymentData(tv2, tqTypeAct, false, 90, true, t2)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
 	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
@@ -1050,7 +1050,7 @@ func (s *Versioning3Suite) syncTaskQueueDeploymentData(
 	defer cancel()
 	v := tv.DeploymentVersion()
 	if rampUnversioned {
-		v.Version = ""
+		v.BuildId = ""
 	}
 	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
 		ctx, &matchingservice.SyncDeploymentUserDataRequest{
@@ -1079,7 +1079,7 @@ func (s *Versioning3Suite) forgetTaskQueueDeploymentVersion(
 	defer cancel()
 	v := tv.DeploymentVersion()
 	if forgetUnversionedRamp {
-		v.Version = ""
+		v.BuildId = ""
 	}
 	_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
 		ctx, &matchingservice.SyncDeploymentUserDataRequest{
@@ -1558,7 +1558,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 					if d.GetVersion().Equal(tv.DeploymentVersion()) {
 						delete(remaining, pt)
 					}
-					if unversionedRamp && d.GetVersion().GetDeploymentName() == tv.DeploymentSeries() && d.GetVersion().GetVersion() == "" {
+					if unversionedRamp && d.GetVersion().GetDeploymentName() == tv.DeploymentSeries() && d.GetVersion().GetBuildId() == "" {
 						delete(remaining, pt)
 					}
 				}

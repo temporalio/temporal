@@ -91,10 +91,10 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	selector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		var newInfo *deploymentpb.VersionDrainageInfo
 		c.Receive(ctx, &newInfo)
-		d.VersionState.DrainageInfo.LastCheckedTime = newInfo.LastCheckedTime
-		if d.VersionState.DrainageInfo.Status != newInfo.Status {
-			d.VersionState.DrainageInfo.Status = newInfo.Status
-			d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
+		d.VersionState.VersionInfo.DrainageInfo.LastCheckedTime = newInfo.LastCheckedTime
+		if d.VersionState.VersionInfo.DrainageInfo.Status != newInfo.Status {
+			d.VersionState.VersionInfo.DrainageInfo.Status = newInfo.Status
+			d.VersionState.VersionInfo.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
 		}
 	})
 
@@ -112,7 +112,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	}
 
 	// if we were draining and just continued-as-new, restart drainage child wf
-	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
+	if d.VersionState.GetVersionInfo().GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 		d.startDrainage(ctx)
 	}
 
@@ -148,7 +148,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	if !d.VersionState.StartedDeploymentWorkflow {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		err := workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentWorkflow, &deploymentspb.StartWorkerDeploymentRequest{
-			DeploymentName: d.VersionState.DeploymentName,
+			DeploymentName: d.VersionState.VersionInfo.Version.DeploymentName,
 			RequestId:      d.newUUID(ctx),
 		}).Get(ctx, nil)
 		if err != nil {
@@ -182,7 +182,7 @@ func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context) {
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	})
-	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, d.VersionState.DeploymentName, d.VersionState.Version)
+	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, d.VersionState.VersionInfo.Version)
 	d.drainageWorkflowFuture = &fut
 }
 
@@ -234,13 +234,8 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	// initial data
-	workerDeploymentVersion := &deploymentpb.WorkerDeploymentVersion{
-		DeploymentName: d.VersionState.DeploymentName,
-		Version:        d.VersionState.Version,
-	}
-
 	data := &deploymentspb.DeploymentVersionData{
-		Version:           workerDeploymentVersion,
+		Version:           d.VersionState.VersionInfo.Version,
 		RoutingUpdateTime: timestamppb.Now(),
 		IsCurrent:         false,
 		RampPercentage:    0,
@@ -251,7 +246,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-		WorkerDeploymentVersion: workerDeploymentVersion,
+		WorkerDeploymentVersion: d.VersionState.VersionInfo.Version,
 		Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 			{
 				Name: args.TaskQueueName,
@@ -280,8 +275,8 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	// add version to worker-deployment workflow
 	activityCtx = workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
-		DeploymentName: d.VersionState.DeploymentName,
-		Version:        d.VersionState.Version,
+		DeploymentName: d.VersionState.VersionInfo.Version.DeploymentName,
+		Version:        d.VersionState.VersionInfo.Version.BuildId,
 		RequestId:      d.newUUID(ctx),
 	}).Get(ctx, nil)
 	if err != nil {
@@ -303,11 +298,10 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	return nil
 }
 
-// If either current status or ramp percentage have changed, we want to let the update through
+// If routing update time has changed then we want to let the update through.
 func (d *VersionWorkflowRunner) validateSyncState(args *deploymentspb.SyncVersionStateUpdateArgs) error {
 	res := &deploymentspb.SyncVersionStateResponse{VersionState: d.VersionState}
-	if args.IsCurrent == d.GetVersionState().IsCurrent &&
-		args.RampPercentage == d.GetVersionState().RampPercentage {
+	if args.GetRoutingUpdateTime().AsTime().Equal(d.GetVersionState().GetVersionInfo().GetRoutingUpdateTime().AsTime()) {
 		return temporal.NewApplicationError("no change", errNoChangeType, res)
 	}
 	return nil
@@ -337,10 +331,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// sync to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
-		WorkerDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: state.DeploymentName,
-			Version:        state.Version,
-		},
+		WorkerDeploymentVersion: state.GetVersionInfo().GetVersion(),
 	}
 	for tqName, byType := range state.TaskQueueFamilies {
 		for tqType, oldData := range byType.TaskQueues {
@@ -380,18 +371,22 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		}
 	}
 
-	wasAcceptingNewWorkflows := state.IsCurrent || state.RampPercentage > 0
+	wasAcceptingNewWorkflows := state.GetVersionInfo().GetCurrentSinceTime() != nil || state.GetVersionInfo().GetRampingSinceTime() != nil
 
 	// apply changes to current and ramping
-	state.RoutingUpdateTime = args.RoutingUpdateTime
-	state.IsCurrent = args.IsCurrent
-	state.RampPercentage = args.RampPercentage
+	state.VersionInfo.RoutingUpdateTime = args.RoutingUpdateTime
+	if args.IsCurrent {
+		state.VersionInfo.CurrentSinceTime = args.RoutingUpdateTime
+	} else {
+		state.VersionInfo.CurrentSinceTime = nil
+	}
+	// todo carly: apply changes to ramping
 
-	isAcceptingNewWorkflows := state.IsCurrent || state.RampPercentage > 0
+	isAcceptingNewWorkflows := state.GetVersionInfo().GetCurrentSinceTime() != nil || state.GetVersionInfo().GetRampingSinceTime() != nil
 
 	// stopped accepting new workflows --> start drainage child wf
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
-		state.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
+		state.VersionInfo.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
 		d.startDrainage(ctx)
 	}
 
@@ -427,8 +422,8 @@ func (d *VersionWorkflowRunner) updateMemo(ctx workflow.Context) error {
 	// TODO (Shivam): Update memo to have current_since after proto changes.
 	return workflow.UpsertMemo(ctx, map[string]any{
 		WorkerDeploymentVersionMemoField: &deploymentspb.VersionWorkflowMemo{
-			DeploymentName: d.VersionState.DeploymentName,
-			Version:        d.VersionState.Version},
+			DeploymentName: d.VersionState.VersionInfo.Version.DeploymentName,
+			Version:        d.VersionState.VersionInfo.Version.BuildId},
 	})
 }
 

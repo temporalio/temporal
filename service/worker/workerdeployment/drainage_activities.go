@@ -39,9 +39,9 @@ type (
 	}
 )
 
-func (a *DrainageActivities) GetVersionDrainageStatus(ctx context.Context, deploymentName, version string) (*deploymentpb.VersionDrainageInfo, error) {
+func (a *DrainageActivities) GetVersionDrainageStatus(ctx context.Context, version *deploymentpb.WorkerDeploymentVersion) (*deploymentpb.VersionDrainageInfo, error) {
 	logger := activity.GetLogger(ctx)
-	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, deploymentName, version)
+	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, version.DeploymentName, version.BuildId)
 	if err != nil {
 		logger.Error("error counting workflows for drainage status", "error", err)
 		return nil, err

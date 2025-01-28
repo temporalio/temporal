@@ -499,13 +499,26 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 
 	workflowID := GenerateVersionWorkflowID(version)
 
+	now := timestamppb.Now()
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
 		VersionState: &deploymentspb.VersionLocalState{
-			DeploymentName: deploymentName,
-			Version:        version,
-			CreateTime:     timestamppb.Now(),
+			VersionInfo: &deploymentpb.WorkerDeploymentVersionInfo{
+				Version: &deploymentpb.WorkerDeploymentVersion{
+					DeploymentName: deploymentName,
+					BuildId:        version,
+				},
+				WorkflowVersioningMode: 0, // todo
+				CreateTime:             now,
+				RoutingUpdateTime:      now,
+				CurrentSinceTime:       nil, // not current
+				RampingSinceTime:       nil, // not ramping
+				RampPercentage:         0,   // not ramping
+				TaskQueueInfos:         nil, // todo
+				DrainageInfo:           nil, // not draining or drained
+				Metadata:               nil, // todo
+			},
 		},
 	})
 	if err != nil {
@@ -794,10 +807,10 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		return nil
 	}
 
-	taskQueues := make([]*deploymentpb.WorkerDeploymentVersionInfo_DeploymentVersionTaskQueueInfo, 0, len(state.TaskQueueFamilies)*2)
+	taskQueues := make([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, 0, len(state.TaskQueueFamilies)*2)
 	for taskQueueName, taskQueueFamilyInfo := range state.TaskQueueFamilies {
 		for taskQueueType := range taskQueueFamilyInfo.TaskQueues {
-			element := &deploymentpb.WorkerDeploymentVersionInfo_DeploymentVersionTaskQueueInfo{
+			element := &deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
 				Name: taskQueueName,
 				Type: enumspb.TaskQueueType(taskQueueType),
 				// TODO (Shivam): Add fields here as needed.
@@ -808,14 +821,16 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 
 	// TODO (Shivam): Add metadata and aggregated pollers status
 	return &deploymentpb.WorkerDeploymentVersionInfo{
-		DeploymentName:    state.DeploymentName,
-		Version:           state.Version,
-		CreateTime:        state.CreateTime,
-		RoutingUpdateTime: state.RoutingUpdateTime,
-		IsCurrent:         state.IsCurrent,
-		RampPercentage:    state.RampPercentage,
-		TaskQueueInfos:    taskQueues,
-		DrainageInfo:      state.DrainageInfo,
+		Version:                state.VersionInfo.Version,
+		WorkflowVersioningMode: state.VersionInfo.WorkflowVersioningMode,
+		CreateTime:             state.VersionInfo.CreateTime,
+		RoutingUpdateTime:      state.VersionInfo.RoutingUpdateTime,
+		CurrentSinceTime:       state.VersionInfo.CurrentSinceTime,
+		RampingSinceTime:       state.VersionInfo.RampingSinceTime,
+		RampPercentage:         state.VersionInfo.RampPercentage,
+		TaskQueueInfos:         taskQueues,
+		DrainageInfo:           state.VersionInfo.DrainageInfo,
+		Metadata:               state.VersionInfo.Metadata,
 	}
 }
 
@@ -839,8 +854,10 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namesp
 		}
 		// TODO (Shivam) - Add WorkflowVersioningMode + AcceptsNewExecutions
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-			Version:    versionInfo.Version,
-			CreateTime: versionInfo.CreateTime,
+			BuildId:                versionInfo.Version.BuildId,
+			WorkflowVersioningMode: versionInfo.WorkflowVersioningMode,
+			CreateTime:             versionInfo.CreateTime,
+			DrainageStatus:         versionInfo.GetDrainageInfo().GetStatus(),
 		})
 	}
 
