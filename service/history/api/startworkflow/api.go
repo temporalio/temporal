@@ -442,11 +442,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		definition.NewWorkflowKey(
-			s.namespace.ID().String(),
-			workflowID,
-			currentWorkflowConditionFailed.RunID,
-		),
+		workflowKey,
 		currentExecutionUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
 			newMutableState, err := api.NewWorkflowWithSignal(

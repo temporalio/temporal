@@ -22,21 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package testcore
+package chasm
 
 import (
-	"go.temporal.io/server/common/testing/taskpoller"
+	"context"
+	"time"
 )
 
-type (
-	FunctionalTestSuite struct {
-		FunctionalTestBase
+type TaskAttributes struct {
+	ScheduledTime time.Time
+	Destination   string
+}
 
-		TaskPoller *taskpoller.TaskPoller
-	}
-)
-
-func (s *FunctionalTestSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-	s.TaskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+type TaskHandler[C any, T any] interface {
+	Validate(Context, C, T) error
+	Execute(context.Context, ComponentRef, T) error
 }

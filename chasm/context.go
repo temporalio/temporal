@@ -22,21 +22,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package testcore
+package chasm
 
 import (
-	"go.temporal.io/server/common/testing/taskpoller"
+	"context"
+	"time"
 )
 
-type (
-	FunctionalTestSuite struct {
-		FunctionalTestBase
+type Context interface {
+	// Context is not bound to any component,
+	// so all methods needs to take in component as a parameter
 
-		TaskPoller *taskpoller.TaskPoller
-	}
-)
+	// NOTE: component created in the current transaction won't have a ref
+	// this is a Ref to the component state at the start of the transition
+	Ref(Component) (ComponentRef, bool)
+	Now(Component) time.Time
 
-func (s *FunctionalTestSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-	s.TaskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+	// Intent() OperationIntent
+	// ComponentOptions(Component) []ComponentOption
+
+	getContext() context.Context
+}
+
+type MutableContext interface {
+	Context
+
+	AddTask(Component, TaskAttributes, any) error
+
+	// Add more methods here for other storage commands/primitives.
+	// e.g. HistoryEvent
+
+	// Get a Ref for the component
+	// This ref to the component state at the end of the transition
+	// Same as Ref(Component) method in Context,
+	// this only works for components that already exists at the start of the transition
+	//
+	// If we provide this method, then the method on the engine doesn't need to
+	// return a Ref
+	// NewRef(Component) (ComponentRef, bool)
 }
