@@ -138,23 +138,36 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	}()
 
 	prevCurrentVersion := d.State.RoutingInfo.CurrentVersion
-	versionUpdateTime := timestamppb.New(workflow.Now(ctx))
+	newCurrentVersion := args.Version
+	updateTime := timestamppb.New(workflow.Now(ctx))
 
 	// tell new current that it's current
-	if _, err := d.syncVersion(ctx, args.Version, versionUpdateTime); err != nil {
+	currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		RoutingUpdateTime: updateTime,
+		CurrentSinceTime:  updateTime,
+		RampingSinceTime:  nil, // remove ramp if it existed
+		RampPercentage:    0,   // remove ramp if it existed
+	}
+	if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs); err != nil {
 		return nil, err
 	}
 
 	if prevCurrentVersion != "" {
 		// tell previous current that it's no longer current
-		if _, err := d.syncVersion(ctx, prevCurrentVersion, versionUpdateTime); err != nil {
+		prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			RoutingUpdateTime: updateTime,
+			CurrentSinceTime:  nil, // remove current
+			RampingSinceTime:  nil, // no change, the prev current was not ramping
+			RampPercentage:    0,   // no change, the prev current was not ramping
+		}
+		if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs); err != nil {
 			return nil, err
 		}
 	}
 
 	// update local state
 	d.State.RoutingInfo.CurrentVersion = args.Version
-	d.State.RoutingInfo.CurrentVersionUpdateTime = versionUpdateTime
+	d.State.RoutingInfo.CurrentVersionUpdateTime = updateTime
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
@@ -195,22 +208,14 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	return nil
 }
 
-func (d *WorkflowRunner) syncVersion(ctx workflow.Context, version string, versionUpdateTime *timestamppb.Timestamp) (*deploymentspb.VersionLocalState, error) {
+func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) (*deploymentspb.VersionLocalState, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-
-	setCur := &deploymentspb.SyncVersionStateArgs_SetCurrent{}
-	if d.State.RoutingInfo.CurrentVersion != version {
-		setCur.LastBecameCurrentTime = versionUpdateTime
-	}
-
 	var res deploymentspb.SyncVersionStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.SyncWorkerDeploymentVersion, &deploymentspb.SyncVersionStateActivityArgs{
 		DeploymentName: d.DeploymentName,
-		Version:        version,
-		Args: &deploymentspb.SyncVersionStateArgs{
-			SetCurrent: setCur,
-		},
-		RequestId: d.newUUID(ctx),
+		Version:        targetVersion,
+		UpdateArgs:     versionUpdateArgs,
+		RequestId:      d.newUUID(ctx),
 	}).Get(ctx, &res)
 	return res.VersionState, err
 }

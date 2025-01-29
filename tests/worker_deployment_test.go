@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 type (
@@ -112,15 +111,15 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment() {
 		if len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()) < 2 {
 			return
 		}
-		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion())
-		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetVersion())
+		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetBuildId())
+		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetBuildId())
 
 		versions := []string{
-			resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion(),
-			resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetVersion(),
+			resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetBuildId(),
+			resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetBuildId(),
 		}
-		a.Contains(versions, firstVersion.DeploymentVersion().GetVersion())
-		a.Contains(versions, secondVersion.DeploymentVersion().GetVersion())
+		a.Contains(versions, firstVersion.DeploymentVersion().GetBuildId())
+		a.Contains(versions, secondVersion.DeploymentVersion().GetBuildId())
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetCreateTime())
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetCreateTime())
@@ -157,7 +156,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	_, _ = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		Version:        &wrapperspb.StringValue{Value: firstVersion.DeploymentVersion().GetVersion()},
+		BuildId:        firstVersion.DeploymentVersion().GetBuildId(),
 	})
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -168,14 +167,14 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 			DeploymentName: tv.DeploymentSeries(),
 		})
 		a.NoError(err)
-		a.Equal(firstVersion.DeploymentVersion().GetVersion(), resp.GetWorkerDeploymentInfo().GetRoutingInfo().GetCurrentVersion())
+		a.Equal(firstVersion.DeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentInfo().GetRoutingInfo().GetCurrentVersion())
 	}, time.Second*10, time.Millisecond*1000)
 
 	// Set second version as current version
 	_, _ = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		Version:        &wrapperspb.StringValue{Value: secondVersion.DeploymentVersion().GetVersion()},
+		BuildId:        secondVersion.DeploymentVersion().GetBuildId(),
 	})
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -186,7 +185,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 			DeploymentName: tv.DeploymentSeries(),
 		})
 		a.NoError(err)
-		a.Equal(secondVersion.DeploymentVersion().GetVersion(), resp.GetWorkerDeploymentInfo().GetRoutingInfo().GetCurrentVersion())
+		a.Equal(secondVersion.DeploymentVersion().GetBuildId(), resp.GetWorkerDeploymentInfo().GetRoutingInfo().GetCurrentVersion())
 	}, time.Second*10, time.Millisecond*1000)
 }
 
@@ -201,21 +200,21 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion_I
 	resp, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		Version:        &wrapperspb.StringValue{Value: firstVersion.DeploymentVersion().GetVersion()},
+		BuildId:        firstVersion.DeploymentVersion().GetBuildId(),
 	})
 	s.NoError(err)
-	s.NotNil(resp.PreviousVersion)
-	s.Equal("", resp.PreviousVersion)
+	s.NotNil(resp.PreviousBuildId)
+	s.Equal("", resp.PreviousBuildId)
 
 	// Set first version as current version again
 	resp, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		Version:        &wrapperspb.StringValue{Value: firstVersion.DeploymentVersion().GetVersion()},
+		BuildId:        firstVersion.DeploymentVersion().GetBuildId(),
 	})
 	s.NoError(err)
-	s.NotNil(resp.PreviousVersion)
-	s.Equal(firstVersion.DeploymentVersion().GetVersion(), resp.PreviousVersion)
+	s.NotNil(resp.PreviousBuildId)
+	s.Equal(firstVersion.DeploymentVersion().GetBuildId(), resp.PreviousBuildId)
 }
 
 // TestConcurrentSetCurrentVersion_Poll tests that no error is thrown when concurrent operations
@@ -259,7 +258,7 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 	firstVersion := tv.WithBuildIDNumber(rand.Intn(1000))
 	secondVersion := tv.WithBuildIDNumber(rand.Intn(1000))
 	routingInfo := &deploymentpb.RoutingInfo{
-		CurrentVersion:           firstVersion.DeploymentVersion().GetVersion(),
+		CurrentVersion:           firstVersion.DeploymentVersion().GetBuildId(),
 		CurrentVersionUpdateTime: timestamppb.Now(),
 	}
 
@@ -308,11 +307,11 @@ func (s *WorkerDeploymentSuite) setCurrentVersion(ctx context.Context, tv *testv
 	resp, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
-		Version:        &wrapperspb.StringValue{Value: tv.DeploymentVersion().GetVersion()},
+		BuildId:        tv.DeploymentVersion().GetBuildId(),
 	})
 	s.NoError(err)
-	s.NotNil(resp.PreviousVersion)
-	s.Equal("", resp.PreviousVersion)
+	s.NotNil(resp.PreviousBuildId)
+	s.Equal("", resp.PreviousBuildId)
 }
 
 func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context, tv *testvars.TestVars, n int) []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary {
@@ -328,7 +327,7 @@ func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context,
 			deployment.DeploymentSeries(),
 			timestamppb.Now(),
 			&deploymentpb.RoutingInfo{
-				CurrentVersion:           version.DeploymentVersion().GetVersion(),
+				CurrentVersion:           version.DeploymentVersion().GetBuildId(),
 				CurrentVersionUpdateTime: timestamppb.Now(),
 			},
 		)
