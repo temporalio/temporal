@@ -236,10 +236,10 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	// initial data
 	data := &deploymentspb.DeploymentVersionData{
 		Version:           d.VersionState.Version,
-		RoutingUpdateTime: timestamppb.Now(),
-		CurrentSinceTime:  nil, // not current
-		RampingSinceTime:  nil, // not ramping
-		RampPercentage:    0,   // not ramping
+		RoutingUpdateTime: d.VersionState.RoutingUpdateTime,
+		CurrentSinceTime:  d.VersionState.CurrentSinceTime,
+		RampingSinceTime:  d.VersionState.RampingSinceTime,
+		RampPercentage:    d.VersionState.RampPercentage,
 		FirstPollerTime:   args.FirstPollerTime,
 	}
 
