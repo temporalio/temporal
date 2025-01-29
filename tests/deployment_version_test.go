@@ -288,6 +288,8 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrent() {
 		LastChangedTime: nil, // don't test this now
 		LastCheckedTime: nil, // don't test this now
 	})
+
+	// todo carly: not really sure how to check lastChangedTime / lastCheckedTime
 }
 
 func (s *DeploymentVersionSuite) checkVersionDrainage(
