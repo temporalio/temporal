@@ -27,6 +27,7 @@ package temporal.server.api.deployment.v1;
 option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/enums/v1/deployment.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
@@ -53,19 +54,54 @@ message DeploymentVersionData {
 
 // Local state for Worker Deployment Version
 message VersionLocalState {
-    // All fields in version_info are valid except version_info.task_queue_infos, which is external facing.
-    // Internally, ignore version_info.task_queue_infos and refer to task_queue_families instead.
-    temporal.api.deployment.v1.WorkerDeploymentVersionInfo version_info = 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
+    temporal.api.enums.v1.WorkflowVersioningMode workflow_versioning_mode = 2;
+    google.protobuf.Timestamp create_time = 3;
 
-    bool started_deployment_workflow = 2;
+    // Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
+    google.protobuf.Timestamp routing_update_time = 4;
 
-    map<string, TaskQueueFamilyData> task_queue_families = 3;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+    // Nil if not current.
+    google.protobuf.Timestamp current_since_time = 5;
+
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
+    // Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
+    google.protobuf.Timestamp ramping_since_time = 6;
+
+    // Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
+    // Can be in the range [0, 100] if the version is ramping.
+    float ramp_percentage = 7;
+
+    // Helps user determine when it is safe to decommission the workers of this
+    // Version. Not present when version is current or ramping.
+    // Current limitations:
+    // - Not supported for Unversioned mode.
+    // - Periodically refreshed, may have delays up to few minutes (consult the
+    //   last_checked_time value).
+    // - Refreshed only when version is not current or ramping AND the status is not
+    //   "drained" yet.
+    // - Once the status is changed to "drained", it is not changed until the Version
+    //   becomes Current or Ramping again, at which time the drainage info is cleared.
+    //   This means if the Version is "drained" but new workflows are sent to it via
+    //   Pinned Versioning Override, the status does not account for those Pinned-override
+    //   executions and remains "drained".
+    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 8;
+
+    // Arbitrary user-provided metadata attached to this version.
+    temporal.api.deployment.v1.VersionMetadata metadata = 9;
+
+    bool started_deployment_workflow = 10;
+
+    map<string, TaskQueueFamilyData> task_queue_families = 11;
 
     message TaskQueueFamilyData {
         // Key: enums.TaskQueueType, Value: TaskQueueData
         // All fields in TaskQueueData are valid except last_became_current_time, the source of
         // truth for that is the value at the root of WorkerDeploymentLocalState.
-        map<int32, DeploymentVersionData> task_queues = 9;
+        map<int32, DeploymentVersionData> task_queues = 1;
     }
 }
 

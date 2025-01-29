@@ -504,21 +504,18 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
 		VersionState: &deploymentspb.VersionLocalState{
-			VersionInfo: &deploymentpb.WorkerDeploymentVersionInfo{
-				Version: &deploymentpb.WorkerDeploymentVersion{
-					DeploymentName: deploymentName,
-					BuildId:        version,
-				},
-				WorkflowVersioningMode: 0, // todo
-				CreateTime:             now,
-				RoutingUpdateTime:      now,
-				CurrentSinceTime:       nil, // not current
-				RampingSinceTime:       nil, // not ramping
-				RampPercentage:         0,   // not ramping
-				TaskQueueInfos:         nil, // todo
-				DrainageInfo:           nil, // not draining or drained
-				Metadata:               nil, // todo
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: deploymentName,
+				BuildId:        version,
 			},
+			WorkflowVersioningMode: 0, // todo
+			CreateTime:             now,
+			RoutingUpdateTime:      now,
+			CurrentSinceTime:       nil, // not current
+			RampingSinceTime:       nil, // not ramping
+			RampPercentage:         0,   // not ramping
+			DrainageInfo:           nil, // not draining or drained
+			Metadata:               nil, // todo
 		},
 	})
 	if err != nil {
@@ -821,16 +818,16 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 
 	// TODO (Shivam): Add metadata and aggregated pollers status
 	return &deploymentpb.WorkerDeploymentVersionInfo{
-		Version:                state.VersionInfo.Version,
-		WorkflowVersioningMode: state.VersionInfo.WorkflowVersioningMode,
-		CreateTime:             state.VersionInfo.CreateTime,
-		RoutingUpdateTime:      state.VersionInfo.RoutingUpdateTime,
-		CurrentSinceTime:       state.VersionInfo.CurrentSinceTime,
-		RampingSinceTime:       state.VersionInfo.RampingSinceTime,
-		RampPercentage:         state.VersionInfo.RampPercentage,
+		Version:                state.Version,
+		WorkflowVersioningMode: state.WorkflowVersioningMode,
+		CreateTime:             state.CreateTime,
+		RoutingUpdateTime:      state.RoutingUpdateTime,
+		CurrentSinceTime:       state.CurrentSinceTime,
+		RampingSinceTime:       state.RampingSinceTime,
+		RampPercentage:         state.RampPercentage,
 		TaskQueueInfos:         taskQueues,
-		DrainageInfo:           state.VersionInfo.DrainageInfo,
-		Metadata:               state.VersionInfo.Metadata,
+		DrainageInfo:           state.DrainageInfo,
+		Metadata:               state.Metadata,
 	}
 }
 
