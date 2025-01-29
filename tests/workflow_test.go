@@ -43,6 +43,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -51,6 +52,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -125,6 +127,199 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 		s.ErrorAs(err, &alreadyStarted)
 		s.Nil(we2)
 	})
+}
+
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
+	s.OverrideDynamicConfig(
+		callbacks.AllowedAddresses,
+		[]any{map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}},
+	)
+	cb := &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url: "https://some-secure-address",
+			},
+		},
+	}
+
+	testCases := []struct {
+		name                     string
+		WorkflowIdConflictPolicy enumspb.WorkflowIdConflictPolicy
+		OnConflictOptions        *workflowpb.OnConflictOptions
+		ErrMessage               string
+		MaxCallbacksPerWorkflow  int
+	}{
+		{
+			name:                     "OnConflictOptions nil",
+			WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions:        nil,
+		},
+		{
+			name:                     "OnConflictOptions attach request id",
+			WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions: &workflowpb.OnConflictOptions{
+				AttachRequestId: true,
+			},
+		},
+		{
+			name:                     "OnConflictOptions attach request id, links, callbacks",
+			WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions: &workflowpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+				AttachLinks:               true,
+			},
+		},
+		{
+			name:                     "OnConflictOptions failed max callbacks per workflow",
+			WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions: &workflowpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+				AttachLinks:               true,
+			},
+			ErrMessage:              "cannot attach more than 1 callbacks to a workflow (1 callbacks already attached)",
+			MaxCallbacksPerWorkflow: 1,
+		},
+	}
+
+	for i, tc := range testCases {
+		s.Run(tc.name, func() {
+			if tc.MaxCallbacksPerWorkflow > 0 {
+				s.OverrideDynamicConfig(
+					dynamicconfig.MaxCallbacksPerWorkflow,
+					tc.MaxCallbacksPerWorkflow,
+				)
+			}
+
+			id := fmt.Sprintf("functional-start-workflow-use-existing-test-%v", i)
+			wt := &commonpb.WorkflowType{Name: "functional-start-workflow-use-existing-test-type"}
+			tq := &taskqueuepb.TaskQueue{
+				Name: "functional-start-workflow-use-existing-test-taskqueue",
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			}
+
+			request := &workflowservice.StartWorkflowExecutionRequest{
+				RequestId:           uuid.New(),
+				Namespace:           s.Namespace().String(),
+				WorkflowId:          id,
+				WorkflowType:        wt,
+				TaskQueue:           tq,
+				Input:               nil,
+				WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+				Identity:            "worker1",
+				CompletionCallbacks: []*commonpb.Callback{cb},
+			}
+
+			we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+			s.NoError(err0)
+			s.True(we0.Started)
+
+			historyEvents := s.GetHistory(
+				s.Namespace().String(),
+				&commonpb.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: we0.RunId},
+			)
+			s.EqualHistoryEvents(
+				`
+  1 WorkflowExecutionStarted {"Attempt":1,"WorkflowTaskTimeout":{"Nanos":0,"Seconds":10}}
+  2 WorkflowTaskScheduled
+				`,
+				historyEvents,
+			)
+
+			request.RequestId = uuid.New()
+			request.Links = []*commonpb.Link{{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{
+						Namespace:  "dont-care",
+						WorkflowId: "whatever",
+						RunId:      uuid.New(),
+					},
+				},
+			}}
+			request.CompletionCallbacks = []*commonpb.Callback{cb}
+			request.WorkflowIdConflictPolicy = tc.WorkflowIdConflictPolicy
+			request.OnConflictOptions = tc.OnConflictOptions
+			we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+			if tc.ErrMessage == "" {
+				s.NoError(err1)
+			} else {
+				s.ErrorContains(err1, tc.ErrMessage)
+				return
+			}
+
+			s.Equal(we0.RunId, we1.RunId)
+			s.False(we1.Started)
+
+			if tc.OnConflictOptions == nil {
+				historyEvents := s.GetHistory(
+					s.Namespace().String(),
+					&commonpb.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: we0.RunId},
+				)
+				s.EqualHistoryEvents(
+					`
+  1 WorkflowExecutionStarted {"Attempt":1,"WorkflowTaskTimeout":{"Nanos":0,"Seconds":10}}
+  2 WorkflowTaskScheduled
+					`,
+					historyEvents,
+				)
+			} else {
+				historyEvents := s.GetHistory(
+					s.Namespace().String(),
+					&commonpb.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: we0.RunId},
+				)
+				s.EqualHistoryEvents(
+					`
+  1 WorkflowExecutionStarted {"Attempt":1,"WorkflowTaskTimeout":{"Nanos":0,"Seconds":10}}
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionOptionsUpdated // event attributes are checked below
+					`,
+					historyEvents,
+				)
+
+				var wfOptionsUpdated *historypb.HistoryEvent
+				for _, e := range historyEvents {
+					if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+						wfOptionsUpdated = e
+						break
+					}
+				}
+				s.NotNil(wfOptionsUpdated)
+
+				attributes := wfOptionsUpdated.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+				s.Nil(attributes.GetVersioningOverride())
+				s.False(attributes.GetUnsetVersioningOverride())
+
+				if tc.OnConflictOptions.AttachRequestId {
+					s.Equal(request.RequestId, attributes.GetAttachedRequestId())
+				} else {
+					s.Empty(attributes.GetAttachedRequestId())
+				}
+
+				if tc.OnConflictOptions.AttachCompletionCallbacks {
+					s.ProtoElementsMatch(request.CompletionCallbacks, attributes.GetAttachedCompletionCallbacks())
+				} else {
+					s.Empty(attributes.GetAttachedCompletionCallbacks())
+				}
+
+				if tc.OnConflictOptions.AttachLinks {
+					s.ProtoElementsMatch(request.Links, wfOptionsUpdated.GetLinks())
+				} else {
+					s.Empty(wfOptionsUpdated.GetLinks())
+				}
+			}
+
+			descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: id,
+					RunId:      we0.RunId,
+				},
+			})
+			s.NoError(err)
+			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
+		})
+	}
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
