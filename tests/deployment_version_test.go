@@ -208,7 +208,7 @@ func (s *DeploymentVersionSuite) Name() string {
 	)
 }
 
-func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrent() {
+func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
@@ -290,6 +290,18 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrent() {
 	})
 
 	// todo carly: not really sure how to check lastChangedTime / lastCheckedTime
+}
+
+func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs() {
+	// todo carly: test with open workflows on the draining version that then complete
+}
+
+func (s *DeploymentVersionSuite) TestDrainageStatus_SetRampingVersion_NoOpenWFs() {
+	// todo carly: test with open workflows on the draining version that then complete
+}
+
+func (s *DeploymentVersionSuite) TestDrainageStatus_SetRampingVersion_YesOpenWFs() {
+	// todo carly: test with open workflows on the draining version that then complete
 }
 
 func (s *DeploymentVersionSuite) checkVersionDrainage(
