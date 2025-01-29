@@ -191,11 +191,20 @@ func RandomExecutionState(
 	status enumspb.WorkflowExecutionStatus,
 ) *persistencespb.WorkflowExecutionState {
 	return &persistencespb.WorkflowExecutionState{
-		CreateRequestId:    uuid.New().String(),
-		RunId:              runID,
-		State:              state,
-		Status:             status,
-		AttachedRequestIds: []string{uuid.NewString()},
+		CreateRequestId: uuid.New().String(),
+		RunId:           runID,
+		State:           state,
+		Status:          status,
+		AttachedRequestIds: &persistencespb.WorkflowExecutionRequestIDs{
+			RequestIds: map[string]*persistencespb.RequestIDInfo{
+				runID: {
+					Action: enumsspb.WORKFLOW_EXECUTION_REQUEST_ID_ACTION_STARTED,
+				},
+				uuid.NewString(): {
+					Action: enumsspb.WORKFLOW_EXECUTION_REQUEST_ID_ACTION_ATTACHED,
+				},
+			},
+		},
 	}
 }
 

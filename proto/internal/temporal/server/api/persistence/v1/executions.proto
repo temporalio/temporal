@@ -297,7 +297,18 @@ message WorkflowExecutionState {
     // Request IDs that are attached to the workflow execution.
     // They can be from StartWorkflowExecution requests with conflict policy USE_EXISTING and
     // conflict options to attached completion callbacks.
-    repeated string attached_request_ids = 7;
+    WorkflowExecutionRequestIDs attached_request_ids = 7;
+}
+
+message WorkflowExecutionRequestIDs {
+    // Request IDs that are attached to the workflow execution.
+    // They can be from StartWorkflowExecution requests with conflict policy USE_EXISTING and
+    // conflict options to attached completion callbacks.
+    map<string, RequestIDInfo> request_ids = 1;
+}
+
+message RequestIDInfo {
+    temporal.server.api.enums.v1.WorkflowExecutionRequestIDAction action = 1;
 }
 
 // transfer column

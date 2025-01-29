@@ -1260,7 +1260,7 @@ func makeMockStartRequest(
 			WorkflowIdReusePolicy:    wfReusePolicy,
 			WorkflowIdConflictPolicy: wfConflictPolicy,
 			Identity:                 tv.WorkerIdentity(),
-			RequestId:                tv.RequestID(),
+			RequestId:                tv.Any().String(),
 		},
 	}
 }
@@ -1273,14 +1273,26 @@ func makeCurrentWorkflowConditionFailedError(
 	tv1 := tv.WithRequestID("AttachedRequestID1")
 	tv2 := tv.WithRequestID("AttachedRequestID2")
 	return &persistence.CurrentWorkflowConditionFailedError{
-		Msg:                "random message",
-		RequestID:          tv.RequestID(),
-		RunID:              tv.RunID(),
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		LastWriteVersion:   lastWriteVersion,
-		StartTime:          timestamp.TimeValuePtr(startTime),
-		AttachedRequestIDs: []string{tv1.RequestID(), tv2.RequestID()},
+		Msg:              "random message",
+		RequestID:        tv.RequestID(),
+		RunID:            tv.RunID(),
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		LastWriteVersion: lastWriteVersion,
+		StartTime:        timestamp.TimeValuePtr(startTime),
+		AttachedRequestIDs: &persistencespb.WorkflowExecutionRequestIDs{
+			RequestIds: map[string]*persistencespb.RequestIDInfo{
+				tv.RequestID(): {
+					Action: enumsspb.WORKFLOW_EXECUTION_REQUEST_ID_ACTION_STARTED,
+				},
+				tv1.RequestID(): {
+					Action: enumsspb.WORKFLOW_EXECUTION_REQUEST_ID_ACTION_ATTACHED,
+				},
+				tv2.RequestID(): {
+					Action: enumsspb.WORKFLOW_EXECUTION_REQUEST_ID_ACTION_ATTACHED,
+				},
+			},
+		},
 	}
 }
 
@@ -1366,16 +1378,18 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameAttachedRequ
 		enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 	)
 
-	startRequest.StartRequest.RequestId = s.tv.String("AttachedRequestID1")
+	tv1 := s.tv.WithRequestID("AttachedRequestID1")
+	startRequest.StartRequest.RequestId = tv1.RequestID()
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 	s.NoError(err)
-	s.True(resp.Started)
+	s.False(resp.Started)
 	s.Equal(s.tv.RunID(), resp.GetRunId())
 
-	startRequest.StartRequest.RequestId = s.tv.String("AttachedRequestID2")
+	tv2 := s.tv.WithRequestID("AttachedRequestID2")
+	startRequest.StartRequest.RequestId = tv2.RequestID()
 	resp, err = s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 	s.NoError(err)
-	s.True(resp.Started)
+	s.False(resp.Started)
 	s.Equal(s.tv.RunID(), resp.GetRunId())
 }
 

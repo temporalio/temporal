@@ -28,6 +28,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -48,6 +49,13 @@ func extractCurrentWorkflowConflictError(
 		}
 	}
 
+	attachedRequestIDs, err := serialization.WorkflowExecutionRequestIDsFromBlob(
+		currentRow.AttachedRequestIDs,
+		currentRow.AttachedRequestIDsEncoding,
+	)
+	if err != nil {
+		return err
+	}
 	return &p.CurrentWorkflowConditionFailedError{
 		Msg:                message,
 		RequestID:          currentRow.CreateRequestID,
@@ -56,6 +64,6 @@ func extractCurrentWorkflowConflictError(
 		Status:             currentRow.Status,
 		LastWriteVersion:   currentRow.LastWriteVersion,
 		StartTime:          currentRow.StartTime,
-		AttachedRequestIDs: currentRow.AttachedRequestIDs,
+		AttachedRequestIDs: attachedRequestIDs,
 	}
 }
