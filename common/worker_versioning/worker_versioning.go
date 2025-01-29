@@ -166,11 +166,11 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 // It returns the deployment from the `options` if present, otherwise, from `capabilities`,
 func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) *deploymentpb.Deployment {
 	if options.GetWorkflowVersioningMode() != enumspb.WORKFLOW_VERSIONING_MODE_UNVERSIONED &&
-		options.GetName() != "" &&
-		options.GetVersion() != "" {
+		options.GetDeploymentName() != "" &&
+		options.GetBuildId() != "" {
 		return &deploymentpb.Deployment{
-			SeriesName: options.GetName(),
-			BuildId:    options.GetVersion(),
+			SeriesName: options.GetDeploymentName(),
+			BuildId:    options.GetBuildId(),
 		}
 	}
 	if capabilities.GetUseVersioning() && capabilities.GetDeploymentSeriesName() != "" && capabilities.GetBuildId() != "" {
@@ -251,7 +251,7 @@ func DeploymentVersionFromDeployment(deployment *deploymentpb.Deployment) *deplo
 		return nil
 	}
 	return &deploymentpb.WorkerDeploymentVersion{
-		Version:        deployment.GetBuildId(),
+		BuildId:        deployment.GetBuildId(),
 		DeploymentName: deployment.GetSeriesName(),
 	}
 }
@@ -263,7 +263,7 @@ func DeploymentFromDeploymentVersion(dv *deploymentpb.WorkerDeploymentVersion) *
 		return nil
 	}
 	return &deploymentpb.Deployment{
-		BuildId:    dv.GetVersion(),
+		BuildId:    dv.GetBuildId(),
 		SeriesName: dv.GetDeploymentName(),
 	}
 }
@@ -318,8 +318,8 @@ func ValidateDeploymentVersion(version *deploymentpb.WorkerDeploymentVersion) er
 	if version.GetDeploymentName() == "" {
 		return serviceerror.NewInvalidArgument("deployment name name cannot be empty")
 	}
-	if version.GetVersion() == "" {
-		return serviceerror.NewInvalidArgument("version cannot be empty")
+	if version.GetBuildId() == "" {
+		return serviceerror.NewInvalidArgument("build id cannot be empty")
 	}
 	return nil
 }
@@ -407,7 +407,7 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 
 	// Find new current and ramping
 	for _, v := range deployments.GetVersions() {
-		if v.RoutingUpdateTime != nil && v.GetIsCurrent() {
+		if v.RoutingUpdateTime != nil && v.GetCurrentSinceTime() != nil {
 			if t := v.RoutingUpdateTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
 				current = v
 			}
@@ -429,8 +429,9 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 	}
 	if ramping.GetRampPercentage() > 0 {
 		info.RampingVersionPercentage = ramping.GetRampPercentage()
-		if ramping.GetVersion().GetVersion() != "" {
+		if ramping.GetVersion().GetBuildId() != "" {
 			// If version is "" it means it's ramping to unversioned, so we do not set RampingVersion.
+			// todo (carly): handle unversioned
 			info.RampingVersion = ramping.GetVersion()
 		}
 		if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
