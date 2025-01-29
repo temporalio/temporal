@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -121,9 +120,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	reg := hsm.NewRegistry()
 	s.NoError(RegisterStateMachine(reg))
 	s.NoError(nexusoperations.RegisterStateMachines(reg))
-	s.logger = s.mockShard.GetLogger()
-	dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), s.logger)
-	s.NoError(nexusoperations.RegisterEventDefinitions(reg, dc))
+	s.NoError(nexusoperations.RegisterEventDefinitions(reg))
 	s.NoError(nexusoperations.RegisterTaskSerializers(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
 	s.stateMachineRegistry = reg
