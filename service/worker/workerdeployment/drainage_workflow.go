@@ -59,7 +59,7 @@ func DrainageWorkflowWithDurations(visibilityGracePeriod, refreshInterval time.D
 			if err != nil {
 				return err
 			}
-			workflow.Sleep(ctx, visibilityGracePeriod)
+			_ = workflow.Sleep(ctx, visibilityGracePeriod)
 		}
 
 		for {
@@ -85,7 +85,7 @@ func DrainageWorkflowWithDurations(visibilityGracePeriod, refreshInterval time.D
 			if info.Status == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
 				return nil
 			}
-			workflow.Sleep(ctx, refreshInterval)
+			_ = workflow.Sleep(ctx, refreshInterval)
 		}
 	}
 }

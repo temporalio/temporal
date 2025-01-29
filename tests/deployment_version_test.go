@@ -208,6 +208,7 @@ func (s *DeploymentVersionSuite) Name() string {
 	)
 }
 
+//nolint:forbidigo
 func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
