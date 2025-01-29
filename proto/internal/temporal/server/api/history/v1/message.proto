@@ -67,6 +67,15 @@ message TaskRange {
     TaskKey exclusive_max_task_key = 2;
 }
 
+message StrippedHistoryEvent {
+    int64 event_id = 1;
+    int64 version = 4;
+}
+
+message StrippedHistoryEvents {
+    repeated StrippedHistoryEvent events = 1;
+}
+
 // api-linter: core::0158::response-next-page-token-field=disabled
 // api-linter: core::0158::response-repeated-first-field=disabled
 // api-linter: core::0158::response-plural-first-field=disabled

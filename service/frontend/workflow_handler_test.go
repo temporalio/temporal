@@ -39,6 +39,7 @@ import (
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -74,6 +75,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
 	e "go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
@@ -2799,6 +2801,76 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	_, err := wh.ListBatchOperations(context.Background(), request)
 	s.ErrorAs(err, &invalidArgumentErr)
+}
+
+func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_FailedConvertedToContinueAsNew() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New().String()}
+	newRunID := uuid.New().String()
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
+
+	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:              tests.Namespace.String(),
+		Execution:              &we,
+		MaximumPageSize:        10,
+		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
+		SkipArchival:           true,
+	}
+	s.mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), &historyservice.GetWorkflowExecutionHistoryRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		Request:     req,
+	}).Return(&historyservice.GetWorkflowExecutionHistoryResponse{
+		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
+			History: &historypb.History{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId:   int64(5),
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+						Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
+							WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
+								Failure:                      &failurepb.Failure{Message: "this workflow failed"},
+								RetryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
+								WorkflowTaskCompletedEventId: 4,
+								NewExecutionRunId:            newRunID,
+							},
+						},
+					},
+				},
+			},
+		},
+	}, nil).Times(2)
+
+	oldGoSDKVersion := "1.9.1"
+	newGoSDKVersion := "1.10.1"
+
+	// new sdk: should see failed event
+	ctx := headers.SetVersionsForTests(context.Background(), newGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
+	resp, err := wh.GetWorkflowExecutionHistory(ctx, req)
+	s.NoError(err)
+	s.False(resp.Archived)
+	event := resp.History.Events[0]
+	s.Equal(int64(5), event.EventId)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.EventType)
+	attrs := event.GetWorkflowExecutionFailedEventAttributes()
+	s.Equal("this workflow failed", attrs.Failure.Message)
+	s.Equal(newRunID, attrs.NewExecutionRunId)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, attrs.RetryState)
+
+	// old sdk: should see continued-as-new event
+	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
+	// See comment in workflowHandler.go:GetWorkflowExecutionHistory
+	ctx = headers.SetVersionsForTests(context.Background(), oldGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, "")
+	resp, err = wh.GetWorkflowExecutionHistory(ctx, req)
+	s.NoError(err)
+	s.False(resp.Archived)
+	event = resp.History.Events[0]
+	s.Equal(int64(5), event.EventId)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, event.EventType)
+	attrs2 := event.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(newRunID, attrs2.NewExecutionRunId)
+	s.Equal("this workflow failed", attrs2.Failure.Message)
 }
 
 func (s *WorkflowHandlerSuite) newConfig() *Config {

@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/codec"
@@ -51,6 +52,7 @@ type (
 
 		SerializeEvent(event *historypb.HistoryEvent, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		DeserializeEvent(data *commonpb.DataBlob) (*historypb.HistoryEvent, error)
+		DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*history.StrippedHistoryEvent, error)
 
 		SerializeClusterMetadata(icm *persistencespb.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		DeserializeClusterMetadata(data *commonpb.DataBlob) (*persistencespb.ClusterMetadata, error)
@@ -168,6 +170,31 @@ func (t *serializerImpl) DeserializeEvents(data *commonpb.DataBlob) ([]*historyp
 	switch data.EncodingType {
 	case enumspb.ENCODING_TYPE_PROTO3:
 		// Client API currently specifies encodingType on requests which span multiple of these objects
+		err = events.Unmarshal(data.Data)
+	default:
+		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
+	}
+	if err == nil {
+		err = utf8validator.Validate(events, utf8validator.SourcePersistence)
+	}
+	if err != nil {
+		return nil, NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+	}
+	return events.Events, nil
+}
+
+func (t *serializerImpl) DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*history.StrippedHistoryEvent, error) {
+	if data == nil {
+		return nil, nil
+	}
+	if len(data.Data) == 0 {
+		return nil, nil
+	}
+
+	events := &history.StrippedHistoryEvents{}
+	var err error
+	switch data.EncodingType {
+	case enumspb.ENCODING_TYPE_PROTO3:
 		err = events.Unmarshal(data.Data)
 	default:
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
