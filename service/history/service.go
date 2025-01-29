@@ -138,7 +138,15 @@ func (s *Service) Stop() {
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
 
 	s.logger.Info("ShutdownHandler: Waiting for drain")
-	time.Sleep(max(s.config.ShutdownDrainDuration(), waitTime))
+	if waitTime > 0 {
+		time.Sleep(
+			waitTime + // wait for membership change
+				s.config.ShardLingerTimeLimit() + // after membership change shards may linger before close
+				s.config.ShardFinalizerTimeout(), // and then take this long to run a finalizer
+		)
+	} else {
+		time.Sleep(s.config.ShutdownDrainDuration())
+	}
 
 	s.logger.Info("ShutdownHandler: Initiating shardController shutdown")
 	s.handler.controller.Stop()
