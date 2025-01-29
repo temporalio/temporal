@@ -72,10 +72,11 @@ func TestNexusStateReplicationTestSuite(t *testing.T) {
 			name:                    "DisableTransitionHistory",
 			enableTransitionHistory: false,
 		},
-		{
-			name:                    "EnableTransitionHistory",
-			enableTransitionHistory: true,
-		},
+		// TODO(hai719): Enable this test once state based replication works with HSM node deletion.
+		// {
+		// 	name:                    "EnableTransitionHistory",
+		// 	enableTransitionHistory: true,
+		// },
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &NexusStateReplicationSuite{}

@@ -356,9 +356,10 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation:      nil, // This should not be called if the operation has timed out.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
-				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Regexp(t, "remaining operation timeout is less than required minimum", op.LastAttemptFailure.Message)
 				require.Equal(t, 1, len(events))
+				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
+				require.NotNil(t, failure.GetApplicationFailureInfo())
+				require.Equal(t, "remaining operation timeout is less than required minimum", failure.Message)
 			},
 		},
 		{
@@ -369,9 +370,10 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation: nil, // This should not be called if the endpoint is not found.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
-				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", op.LastAttemptFailure.Message)
 				require.Equal(t, 1, len(events))
+				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
+				require.NotNil(t, failure.GetApplicationFailureInfo())
+				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.Message)
 			},
 		},
 		{
@@ -382,9 +384,10 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation:     nil, // This should not be called if the endpoint is not found.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
-				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", op.LastAttemptFailure.Message)
 				require.Equal(t, 1, len(events))
+				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
+				require.NotNil(t, failure.GetApplicationFailureInfo())
+				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.Message)
 			},
 		},
 		{
