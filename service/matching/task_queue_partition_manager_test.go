@@ -398,7 +398,7 @@ func (s *PartitionManagerTestSuite) TestGetAllPollerInfo() {
 			s.Assert().Equal("bid", p.GetWorkerVersionCapabilities().GetBuildId())
 		case "uvdo":
 			s.Assert().NotNil(p.GetDeploymentOptions())
-			s.Assert().Equal("bid", p.GetDeploymentOptions().GetVersion())
+			s.Assert().Equal("bid", p.GetDeploymentOptions().GetBuildId())
 		}
 	}
 }
@@ -550,8 +550,8 @@ func (s *PartitionManagerTestSuite) pollWithIdentity(pollerId, buildId string, u
 	pm := &pollMetadata{}
 	if passOptions {
 		pm.deploymentOptions = &deploymentpb.WorkerDeploymentOptions{
-			Name:                   "foo",
-			Version:                buildId,
+			DeploymentName:         "foo",
+			BuildId:                buildId,
 			WorkflowVersioningMode: enumspb.WORKFLOW_VERSIONING_MODE_UNVERSIONED,
 		}
 		if useVersioning {
