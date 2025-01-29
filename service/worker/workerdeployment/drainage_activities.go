@@ -27,33 +27,29 @@ package workerdeployment
 import (
 	"context"
 
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/sdk/activity"
-	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
-	Activities struct {
+	DrainageActivities struct {
 		namespace        *namespace.Namespace
 		deploymentClient Client
 	}
 )
 
-func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
-	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	res, err := a.deploymentClient.SyncVersionWorkflowFromWorkerDeployment(
-		ctx,
-		a.namespace,
-		args.DeploymentName,
-		args.Version,
-		args.UpdateArgs,
-		identity,
-		args.RequestId,
-	)
+func (a *DrainageActivities) GetVersionDrainageStatus(ctx context.Context, version *deploymentpb.WorkerDeploymentVersion) (*deploymentpb.VersionDrainageInfo, error) {
+	logger := activity.GetLogger(ctx)
+	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, version.DeploymentName, version.BuildId)
 	if err != nil {
+		logger.Error("error counting workflows for drainage status", "error", err)
 		return nil, err
 	}
-	return &deploymentspb.SyncVersionStateActivityResult{
-		VersionState: res.VersionState,
+	return &deploymentpb.VersionDrainageInfo{
+		Status:          response,
+		LastChangedTime: nil, // ignored; whether Status changed will be evaluated by the receiver
+		LastCheckedTime: timestamppb.Now(),
 	}, nil
 }

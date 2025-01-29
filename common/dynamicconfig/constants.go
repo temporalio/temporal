@@ -460,6 +460,18 @@ to account for the delay in updating the build id field in visibility. Not yet s
 at least 2 minutes between changing the current deployment and calling GetDeployment, so that newly started workflow executions using the
 recently-current deployment can arrive in visibility.`,
 	)
+	VersionDrainageStatusVisibilityGracePeriod = NewNamespaceDurationSetting(
+		"matching.wv.VersionDrainageStatusVisibilityGracePeriod",
+		3*time.Minute,
+		`VersionDrainageStatusVisibilityGracePeriod is the time period for which non-current / non-ramping worker deployment versions 
+are still considered active to account for the delay in updating the build id field in visibility.`,
+	)
+	VersionDrainageStatusRefreshInterval = NewNamespaceDurationSetting(
+		"matching.wv.VersionDrainageStatusRefreshInterval",
+		3*time.Minute,
+		`VersionDrainageStatusRefreshInterval is the interval at which each draining deployment version refreshes its
+Drainage Status by querying visibility for open pinned workflows using that version.`,
+	)
 	ReachabilityTaskQueueScanLimit = NewGlobalIntSetting(
 		"limit.reachabilityTaskQueueScan",
 		20,
