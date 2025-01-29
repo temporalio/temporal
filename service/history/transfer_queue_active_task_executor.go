@@ -217,13 +217,13 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, ai)
+	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, ai.Priority)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, ai.Priority)
 	return t.pushActivity(ctx, task, timeout, directive, priority, workflow.TransactionPolicyActive)
 }
 
