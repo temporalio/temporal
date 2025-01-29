@@ -35,13 +35,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/converter"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/workflow"
-	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -63,12 +60,9 @@ var _ hsm.Environment = fakeEnv{}
 func newRegistry(t *testing.T) *hsm.Registry {
 	t.Helper()
 	reg := hsm.NewRegistry()
-	ctrl := gomock.NewController(t)
-	mockLogger := log.NewMockLogger(ctrl)
-	dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), mockLogger)
 	require.NoError(t, workflow.RegisterStateMachine(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
-	require.NoError(t, nexusoperations.RegisterEventDefinitions(reg, dc))
+	require.NoError(t, nexusoperations.RegisterEventDefinitions(reg))
 	return reg
 }
 
@@ -94,6 +88,10 @@ type root struct{}
 
 func (root) IsWorkflowExecutionRunning() bool {
 	return true
+}
+
+func (root) IsTransitionHistoryEnabled() bool {
+	return false
 }
 
 func mustNewScheduledEvent(schedTime time.Time, timeout time.Duration) *historypb.HistoryEvent {
