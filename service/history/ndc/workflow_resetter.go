@@ -59,6 +59,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const (
+	maxChildrenInResetMutableState = 1000
+)
+
+var (
+	errWorkflowResetterMaxChildren = serviceerror.NewInternal(fmt.Sprintf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState))
+)
+
 type (
 	workflowResetReapplyEventsFn func(ctx context.Context, resetMutableState workflow.MutableState) error
 
@@ -648,6 +656,11 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		// All subsequent events should be excluded from being re-applied. So, do nothing and return.
 		return lastVisitedRunID, nil
 	}
+
+	// track the child workflow initiated (but not yet completed) events after reset.
+	// This will be saved in the parent workflow (in execution info) and used by the parent later to determine how to handle starting of these child workflows again.
+	childInitEventsAfterReset := make(map[int64]*historypb.HistoryEvent)
+
 	// First, special handling of remaining events for base workflow
 	nextRunID, err := r.reapplyEventsFromBranch(
 		ctx,
@@ -656,6 +669,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		baseNextEventID,
 		baseBranchToken,
 		resetReapplyExcludeTypes,
+		childInitEventsAfterReset,
 	)
 	switch err.(type) {
 	case nil:
@@ -721,6 +735,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			nextWorkflowNextEventID,
 			nextWorkflowBranchToken,
 			resetReapplyExcludeTypes,
+			childInitEventsAfterReset,
 		)
 		switch err.(type) {
 		case nil:
@@ -733,6 +748,16 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			return "", err
 		}
 	}
+	r.logger.Info(fmt.Sprintf("[%d] child workflows initiated after reset :[%+v]", len(childInitEventsAfterReset), childInitEventsAfterReset))
+	childrenStartedAfterReset := make(map[string]bool)
+	for _, event := range childInitEventsAfterReset {
+		attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+		childID := fmt.Sprintf("%s:%s", attr.GetWorkflowId(), attr.GetWorkflowType().Name)
+		childrenStartedAfterReset[childID] = true
+	}
+	if len(childrenStartedAfterReset) > 0 {
+		resetMutableState.SetChildrenInitializedPostResetPoint(childrenStartedAfterReset)
+	}
 	return lastVisitedRunID, nil
 }
 
@@ -743,6 +768,7 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 	nextEventID int64,
 	branchToken []byte,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	childInitEventsAfterReset map[int64]*historypb.HistoryEvent,
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -768,6 +794,13 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 		if _, err := r.reapplyEvents(ctx, mutableState, lastEvents, resetReapplyExcludeTypes); err != nil {
 			return "", err
 		}
+		// track the child workflow initiated (but not yet completed) events after reset
+		for _, event := range lastEvents {
+			r.populateChildInitEventsAfterReset(childInitEventsAfterReset, event)
+			if len(childInitEventsAfterReset) > maxChildrenInResetMutableState {
+				return "", errWorkflowResetterMaxChildren
+			}
+		}
 	}
 
 	if len(lastEvents) > 0 {
@@ -777,6 +810,27 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 		}
 	}
 	return nextRunID, nil
+}
+
+// populateChildInitEventsAfterReset populates the childrenInitializedAfterReset map with the children initiated after reset.
+func (r *workflowResetterImpl) populateChildInitEventsAfterReset(childrenInitializedAfterReset map[int64]*historypb.HistoryEvent, event *historypb.HistoryEvent) {
+	switch event.GetEventType() {
+	// track the child if it has been initiated after reset
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
+		childrenInitializedAfterReset[event.GetEventId()] = event
+
+	// remove the child if it has reached a terminal state
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+		attr := event.GetChildWorkflowExecutionCanceledEventAttributes()
+		delete(childrenInitializedAfterReset, attr.InitiatedEventId)
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+		attr := event.GetChildWorkflowExecutionCompletedEventAttributes()
+		delete(childrenInitializedAfterReset, attr.InitiatedEventId)
+	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
+		attr := event.GetStartChildWorkflowExecutionFailedEventAttributes()
+		delete(childrenInitializedAfterReset, attr.InitiatedEventId)
+		// TODO: Add more cases here.
+	}
 }
 
 func (r *workflowResetterImpl) reapplyEvents(
