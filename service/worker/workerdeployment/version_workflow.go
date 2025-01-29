@@ -113,7 +113,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 
 	// if we were draining and just continued-as-new, restart drainage child wf
 	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
-		d.startDrainage(ctx)
+		d.startDrainage(ctx, false)
 	}
 
 	// Set up Query Handlers here:
@@ -178,11 +178,11 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	return workflow.NewContinueAsNewError(ctx, VersionWorkflow, nextArgs)
 }
 
-func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context) {
+func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, first bool) {
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	})
-	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, d.VersionState.Version)
+	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, d.VersionState.Version, first)
 	d.drainageWorkflowFuture = &fut
 }
 
@@ -386,7 +386,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	// stopped accepting new workflows --> start drainage child wf
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
 		state.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
-		d.startDrainage(ctx)
+		d.startDrainage(ctx, true)
 	}
 
 	// started accepting new workflows --> stop drainage child wf if it exists

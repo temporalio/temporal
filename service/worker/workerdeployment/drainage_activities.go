@@ -48,7 +48,7 @@ func (a *DrainageActivities) GetVersionDrainageStatus(ctx context.Context, versi
 	}
 	return &deploymentpb.VersionDrainageInfo{
 		Status:          response,
-		LastChangedTime: nil, // ignored
+		LastChangedTime: nil, // ignored; whether Status changed will be evaluated by the receiver
 		LastCheckedTime: timestamppb.Now(),
 	}, nil
 }
