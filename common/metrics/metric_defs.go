@@ -1219,4 +1219,10 @@ var (
 	MemoryStackGauge     = NewGaugeDef("memory_stack")
 	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
 	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
+	NumGCGauge           = NewGaugeDef("memory_num_gc_last",
+		WithDescription("Last runtime.MemStats.NumGC"),
+	)
+	GcPauseNsTotal = NewGaugeDef("memory_pause_total_ns_last",
+		WithDescription("Last runtime.MemStats.PauseTotalNs"),
+	)
 )
