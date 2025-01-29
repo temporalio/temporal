@@ -4264,6 +4264,28 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAdmittedEvent(request *upd
 	return event, nil
 }
 
+func (ms *MutableStateImpl) DeleteSubStateMachine(path *persistencespb.StateMachinePath) error {
+	incomingPath := []hsm.Key{}
+	for _, p := range path.Path {
+		incomingPath = append(incomingPath, hsm.Key{Type: p.Type, ID: p.Id})
+	}
+
+	root := ms.HSM()
+	node, err := root.Child(incomingPath)
+	if err != nil {
+		if !errors.Is(err, hsm.ErrStateMachineNotFound) {
+			return err
+		}
+		ms.logError(
+			fmt.Sprintf("unable to find path: %v in subStateMachine", incomingPath),
+			tag.ErrorTypeInvalidMutableStateAction,
+		)
+		// log data inconsistency instead of returning an error
+		ms.logDataInconsistency()
+	}
+	return root.DeleteChild(node.Key)
+}
+
 // ApplyWorkflowExecutionUpdateAdmittedEvent applies a WorkflowExecutionUpdateAdmittedEvent to mutable state.
 func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error {
 	attrs := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
@@ -7265,41 +7287,8 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 }
 
 func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*persistencespb.StateMachineMap) error {
-	currentHSM := ms.HSM()
-
-	// we don't care about the root here which is the entire mutable state
-	incomingHSM, err := hsm.NewRoot(
-		ms.shard.StateMachineRegistry(),
-		StateMachineType,
-		ms,
-		incoming,
-		ms,
-	)
-	if err != nil {
-		return err
-	}
-
-	if err := incomingHSM.Walk(func(incomingNode *hsm.Node) error {
-		if incomingNode.Parent == nil {
-			// skip root which is the entire mutable state
-			return nil
-		}
-
-		incomingNodePath := incomingNode.Path()
-		currentNode, err := currentHSM.Child(incomingNodePath)
-		if err != nil {
-			// 1. Already done history resend if needed before,
-			// and node creation today always associated with an event
-			// 2. Node deletion is not supported right now.
-			// Based on 1 and 2, node should always be found here.
-			return err
-		}
-
-		return currentNode.Sync(incomingNode)
-	}); err != nil {
-		return err
-	}
-
+	ms.executionInfo.SubStateMachinesByType = incoming
+	ms.mustInitHSM()
 	return nil
 }
 
@@ -7331,6 +7320,8 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 				if _, ok := ms.pendingSignalInfoIDs[tombstone.GetSignalExternalInitiatedEventId()]; ok {
 					err = ms.DeletePendingSignal(tombstone.GetSignalExternalInitiatedEventId())
 				}
+			case *persistencespb.StateMachineTombstone_StateMachinePath:
+				err = ms.DeleteSubStateMachine(tombstone.GetStateMachinePath())
 			default:
 				// TODO: updateID and stateMachinePath
 				err = serviceerror.NewInternal("unknown tombstone type")
