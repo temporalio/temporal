@@ -620,7 +620,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 			if err := workflow.TerminateWorkflow(
 				ms,
-				common.FailureReasonTransactionSizeExceedsLimit,
+				common.TerminationReasonTransactionSizeExceedsLimit.String(),
 				payloads.EncodeString(updateErr.Error()),
 				consts.IdentityHistoryService,
 				false,
