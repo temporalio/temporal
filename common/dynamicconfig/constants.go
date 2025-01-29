@@ -2580,4 +2580,9 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`ActivityAPIsEnabled is a "feature enable" flag. `,
 	)
+	WorkflowCacheEnabled = NewGlobalBoolSetting(
+		"history.workflowCacheEnabled",
+		true,
+		``,
+	)
 )
