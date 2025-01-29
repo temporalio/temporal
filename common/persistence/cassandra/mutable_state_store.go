@@ -33,7 +33,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -745,66 +744,34 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			executionState = newWorkflow.ExecutionState
 		}
 		runID := executionState.RunId
-		createRequestID := executionState.CreateRequestId
 		state := executionState.State
-		status := executionState.Status
-		startTime := executionState.StartTime
-		details := executionState.Details
 
-		// TODO: should this just serialize the executionState variable?
-		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(
-			&persistencespb.WorkflowExecutionState{
-				RunId:           runID,
-				CreateRequestId: createRequestID,
-				State:           state,
-				Status:          status,
-				StartTime:       startTime,
-				Details:         details,
-			},
-		)
+		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(executionState)
 		if err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
 		}
 
 		if currentWorkflow != nil {
 			currentRunID = currentWorkflow.ExecutionState.RunId
-
-			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-				runID,
-				executionStateDatablob.Data,
-				executionStateDatablob.EncodingType.String(),
-				lastWriteVersion,
-				state,
-				shardID,
-				rowTypeExecution,
-				namespaceID,
-				workflowID,
-				permanentRunID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				currentRunID,
-			)
-
 		} else {
 			// reset workflow is current
 			currentRunID = resetWorkflow.ExecutionState.RunId
-
-			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-				runID,
-				executionStateDatablob.Data,
-				executionStateDatablob.EncodingType.String(),
-				lastWriteVersion,
-				state,
-				shardID,
-				rowTypeExecution,
-				namespaceID,
-				workflowID,
-				permanentRunID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				currentRunID,
-			)
 		}
+		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+			runID,
+			executionStateDatablob.Data,
+			executionStateDatablob.EncodingType.String(),
+			lastWriteVersion,
+			state,
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			permanentRunID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			currentRunID,
+		)
 
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
