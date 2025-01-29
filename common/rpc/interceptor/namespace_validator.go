@@ -26,6 +26,7 @@ package interceptor
 
 import (
 	"context"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
@@ -34,11 +35,16 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 )
+
+// Limit the max attempts to reduce the handover error return to users
+var handoverRetryPolicy = backoff.NewConstantDelayRetryPolicy(time.Millisecond * 100).WithMaximumAttempts(20)
 
 type (
 	TaskTokenGetter interface {
@@ -218,7 +224,7 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 		return nil, err
 	}
 
-	return handler(ctx, req)
+	return ni.handleRequestWithHandoverRetry(ctx, req, info, handler, namespaceEntry)
 }
 
 // ValidateState validates:
@@ -228,10 +234,41 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 // 4. Namespace from request match namespace from task token, if check is enabled with dynamic config.
 // 5. Namespace is in correct state.
 func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace.Namespace, fullMethod string) error {
-	if err := ni.checkNamespaceState(namespaceEntry, fullMethod); err != nil {
+	return ni.checkNamespaceState(namespaceEntry, fullMethod)
+}
+
+func (ni *NamespaceValidatorInterceptor) handleRequestWithHandoverRetry(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+	nsEntry *namespace.Namespace,
+) (interface{}, error) {
+
+	var response interface{}
+	var retryCount int
+	retryLatency := time.Duration(0)
+	op := func(ctx context.Context) error {
+		err := ni.checkReplicationState(nsEntry, info.FullMethod)
+		if err != nil {
+			return err
+		}
+
+		response, err = handler(ctx, req)
+		if retryCount > 1 {
+			retryLatency = retryLatency + handoverRetryPolicy.ComputeNextDelay(0, retryCount, nil)
+		}
+		retryCount++
 		return err
 	}
-	return ni.checkReplicationState(namespaceEntry, fullMethod)
+	// Only retry on ErrNamespaceHandover, other errors will be handled by the retry interceptor
+	err := backoff.ThrottleRetryContext(ctx, op, handoverRetryPolicy, common.IsNamespaceHandoverError)
+
+	if retryCount > 1 {
+		// API Latency compensate logic on handover error retry
+		metrics.ContextCounterAdd(ctx, metrics.NamespaceHandoverRetryLatency.Name(), retryLatency.Nanoseconds())
+	}
+	return response, err
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespace(req interface{}) (*namespace.Namespace, error) {
