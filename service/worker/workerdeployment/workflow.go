@@ -144,8 +144,9 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// tell new current that it's current
 	currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 		RoutingUpdateTime: updateTime,
-		IsCurrent:         true,
-		RampPercentage:    0, // remove ramp if it existed
+		CurrentSinceTime:  updateTime,
+		RampingSinceTime:  nil, // remove ramp if it existed
+		RampPercentage:    0,   // remove ramp if it existed
 	}
 	if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs); err != nil {
 		return nil, err
@@ -155,8 +156,9 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		// tell previous current that it's no longer current
 		prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 			RoutingUpdateTime: updateTime,
-			IsCurrent:         false,
-			RampPercentage:    0, // no change, the prev current was not ramping
+			CurrentSinceTime:  nil, // remove current
+			RampingSinceTime:  nil, // no change, the prev current was not ramping
+			RampPercentage:    0,   // no change, the prev current was not ramping
 		}
 		if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs); err != nil {
 			return nil, err

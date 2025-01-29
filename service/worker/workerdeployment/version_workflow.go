@@ -237,8 +237,9 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	data := &deploymentspb.DeploymentVersionData{
 		Version:           d.VersionState.Version,
 		RoutingUpdateTime: timestamppb.Now(),
-		IsCurrent:         false,
-		RampPercentage:    0,
+		CurrentSinceTime:  nil, // not current
+		RampingSinceTime:  nil, // not ramping
+		RampPercentage:    0,   // not ramping
 		FirstPollerTime:   args.FirstPollerTime,
 	}
 
@@ -338,7 +339,8 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			newData := &deploymentspb.DeploymentVersionData{
 				Version:           oldData.Version,
 				RoutingUpdateTime: args.RoutingUpdateTime,
-				IsCurrent:         args.IsCurrent,
+				CurrentSinceTime:  args.CurrentSinceTime,
+				RampingSinceTime:  args.RampingSinceTime,
 				RampPercentage:    args.RampPercentage,
 				FirstPollerTime:   oldData.FirstPollerTime,
 			}
@@ -375,12 +377,9 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// apply changes to current and ramping
 	state.RoutingUpdateTime = args.RoutingUpdateTime
-	if args.IsCurrent {
-		state.CurrentSinceTime = args.RoutingUpdateTime
-	} else {
-		state.CurrentSinceTime = nil
-	}
-	// todo carly: apply changes to ramping
+	state.CurrentSinceTime = args.CurrentSinceTime
+	state.RampingSinceTime = args.RampingSinceTime
+	state.RampPercentage = args.RampPercentage
 
 	isAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
 

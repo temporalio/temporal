@@ -407,7 +407,7 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 
 	// Find new current and ramping
 	for _, v := range deployments.GetVersions() {
-		if v.RoutingUpdateTime != nil && v.GetIsCurrent() {
+		if v.RoutingUpdateTime != nil && v.GetCurrentSinceTime() != nil {
 			if t := v.RoutingUpdateTime.AsTime(); t.After(current.GetRoutingUpdateTime().AsTime()) {
 				current = v
 			}
@@ -431,6 +431,7 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 		info.RampingVersionPercentage = ramping.GetRampPercentage()
 		if ramping.GetVersion().GetBuildId() != "" {
 			// If version is "" it means it's ramping to unversioned, so we do not set RampingVersion.
+			// todo (carly): handle unversioned
 			info.RampingVersion = ramping.GetVersion()
 		}
 		if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
