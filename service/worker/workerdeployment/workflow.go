@@ -94,6 +94,17 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
+		SetWorkerDeploymentRampingVersion,
+		d.handleSetWorkerDeploymentRampingVersion,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateSetWorkerDeploymentRampingVersion,
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
 		AddVersionToWorkerDeployment,
 		d.handleAddVersionToWorkerDeployment,
 		workflow.UpdateHandlerOptions{
@@ -114,6 +125,96 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
 	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkerDeploymentWorkflowArgs)
+}
+
+func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) error {
+	if args.Version == d.State.RoutingInfo.RampingVersion && args.Percentage == d.State.RoutingInfo.RampingVersionPercentage {
+		d.logger.Info("version already ramping, no change")
+		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
+	}
+	// todo: this will only work when "__unversioned__" is the default current-version of a deployment.
+	if args.Version == d.State.RoutingInfo.CurrentVersion {
+		d.logger.Info("version already current")
+		return temporal.NewApplicationError("version already current", errVersionAlreadyCurrentType)
+	}
+
+	return nil
+}
+
+func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Context, args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) (*deploymentspb.SetWorkerDeploymentRampingVersionResponse, error) {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	prevRampingVersion := d.State.RoutingInfo.RampingVersion
+	prevRampingVersionPercentage := d.State.RoutingInfo.RampingVersionPercentage
+
+	newRampingVersion := args.Version
+	updateTime := timestamppb.New(workflow.Now(ctx))
+
+	// unset currently set ramping version
+	if newRampingVersion == "" {
+		if prevRampingVersion == "" {
+			// no previously set ramping version
+			return &deploymentspb.SetWorkerDeploymentRampingVersionResponse{}, nil
+		}
+
+		rampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			RoutingUpdateTime: updateTime,
+			RampingSinceTime:  nil, // remove ramp
+			RampPercentage:    0,   // remove ramp
+		}
+
+		if _, err := d.syncVersion(ctx, prevRampingVersion, rampUpdateArgs); err != nil {
+			return nil, err
+		}
+	} else {
+		// tell new ramping version it's ramping
+		rampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			RoutingUpdateTime: updateTime,
+			RampingSinceTime:  updateTime,
+			RampPercentage:    args.Percentage,
+		}
+		if _, err := d.syncVersion(ctx, newRampingVersion, rampUpdateArgs); err != nil {
+			return nil, err
+		}
+
+		// tell previous ramping version, if present, that it's no longer ramping
+		if prevRampingVersion != "" {
+			prevRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+				RoutingUpdateTime: updateTime,
+				RampingSinceTime:  nil, // remove ramp
+				RampPercentage:    0,   // remove ramp
+			}
+			if _, err := d.syncVersion(ctx, prevRampingVersion, prevRampUpdateArgs); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// update local state
+	d.State.RoutingInfo.RampingVersion = newRampingVersion
+	d.State.RoutingInfo.RampingVersionPercentage = args.Percentage
+	d.State.RoutingInfo.RampingVersionUpdateTime = updateTime
+
+	// update memo
+	if err = d.updateMemo(ctx); err != nil {
+		return nil, err
+	}
+
+	return &deploymentspb.SetWorkerDeploymentRampingVersionResponse{
+		PreviousVersion:    prevRampingVersion,
+		PreviousPercentage: prevRampingVersionPercentage,
+	}, nil
+
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {

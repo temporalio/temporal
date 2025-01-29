@@ -27,7 +27,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -189,7 +188,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	}, time.Second*10, time.Millisecond*1000)
 }
 
-func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion_Idempotent() {
+func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Idempotent() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)
@@ -227,7 +226,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentSetCurrentVersion_Poll() {
 	go s.pollFromDeployment(ctx, tv)
 
 	// Set current version concurrently
-	s.setCurrentVersion(ctx, tv)
+	s.setCurrentVersion(ctx, tv, "")
 }
 
 // Testing ListWorkerDeployments
@@ -237,7 +236,7 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_OneVersion_OneDeployme
 	defer cancel()
 	tv := testvars.New(s)
 
-	go s.pollFromDeployment(ctx, tv.WithBuildIDNumber(rand.Intn(1000)))
+	go s.pollFromDeployment(ctx, tv.WithBuildIDNumber(1))
 
 	expectedDeploymentSummaries := s.buildWorkerDeploymentSummary(
 		tv.DeploymentSeries(),
@@ -250,20 +249,53 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_OneVersion_OneDeployme
 	}, []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{expectedDeploymentSummaries})
 }
 
-func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeployment() {
+func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeployment_OneCurrent_NoRamping() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	tv := testvars.New(s)
 
-	firstVersion := tv.WithBuildIDNumber(rand.Intn(1000))
-	secondVersion := tv.WithBuildIDNumber(rand.Intn(1000))
+	firstVersion := tv.WithBuildIDNumber(1)
+	secondVersion := tv.WithBuildIDNumber(2)
+
 	routingInfo := &deploymentpb.RoutingInfo{
 		CurrentVersion:           firstVersion.DeploymentVersion().GetBuildId(),
 		CurrentVersionUpdateTime: timestamppb.Now(),
 	}
 
-	s.setCurrentVersion(ctx, firstVersion)      // starts first version's version workflow
+	s.setCurrentVersion(ctx, firstVersion, "")  // starts first version's version workflow
 	go s.pollFromDeployment(ctx, secondVersion) // starts second version's version workflow
+
+	expectedDeploymentSummary := s.buildWorkerDeploymentSummary(
+		tv.DeploymentSeries(),
+		timestamppb.Now(),
+		routingInfo,
+	)
+
+	s.startAndValidateWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+		Namespace: s.Namespace().String(),
+	}, []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
+		expectedDeploymentSummary,
+	})
+}
+
+func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeployment_OneCurrent_OneRamping() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	tv := testvars.New(s)
+
+	currentVersionVars := tv.WithBuildIDNumber(1)
+	rampingVersionVars := tv.WithBuildIDNumber(2)
+
+	routingInfo := &deploymentpb.RoutingInfo{
+		CurrentVersion:           currentVersionVars.DeploymentVersion().GetBuildId(),
+		CurrentVersionUpdateTime: timestamppb.Now(),
+		RampingVersion:           rampingVersionVars.DeploymentVersion().GetBuildId(),
+		RampingVersionPercentage: 50,
+		RampingVersionUpdateTime: timestamppb.Now(),
+	}
+
+	s.setCurrentVersion(ctx, currentVersionVars, "")               // starts first version's version workflow + set it to current
+	s.setRampingVersion(ctx, rampingVersionVars, 50, "", 0, false) // starts second version's version workflow + set it to ramping
 
 	expectedDeploymentSummary := s.buildWorkerDeploymentSummary(
 		tv.DeploymentSeries(),
@@ -303,15 +335,227 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_MultipleVersions_Multi
 	}, expectedDeploymentSummaries)
 }
 
-func (s *WorkerDeploymentSuite) setCurrentVersion(ctx context.Context, tv *testvars.TestVars) {
-	resp, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+// Testing SetWorkerDeploymentRampingVersion
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_With_Current() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	tv := testvars.New(s)
+
+	rampingVersionVars := tv.WithBuildIDNumber(1)
+	currentVersionVars := tv.WithBuildIDNumber(2)
+
+	// set version as ramping
+	s.setRampingVersion(ctx, rampingVersionVars, 50, "", 0, false)
+	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
+		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+			Name: tv.DeploymentSeries(),
+			RoutingInfo: &deploymentpb.RoutingInfo{
+				RampingVersion:           rampingVersionVars.BuildID(),
+				RampingVersionPercentage: 50,
+				RampingVersionUpdateTime: timestamppb.Now(),
+				CurrentVersion:           "",
+				CurrentVersionUpdateTime: nil,
+			},
+		},
+	})
+
+	// set current version
+	s.setCurrentVersion(ctx, currentVersionVars, "")
+
+	// fresh DescribeWorkerDeployment call
+	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
+		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+			Name: tv.DeploymentSeries(),
+			RoutingInfo: &deploymentpb.RoutingInfo{
+				RampingVersion:           rampingVersionVars.BuildID(),
+				RampingVersionPercentage: 50,
+				RampingVersionUpdateTime: timestamppb.Now(),
+				CurrentVersion:           currentVersionVars.BuildID(),
+				CurrentVersionUpdateTime: timestamppb.Now(),
+			},
+		},
+	})
+}
+
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Duplicate() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	rampingVersionVars := testvars.New(s).WithBuildIDNumber(1)
+
+	// set version as ramping
+	s.setRampingVersion(ctx, rampingVersionVars, 50, "", 0, false)
+	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: rampingVersionVars.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
+		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+			Name: rampingVersionVars.DeploymentSeries(),
+			RoutingInfo: &deploymentpb.RoutingInfo{
+				RampingVersion:           rampingVersionVars.BuildID(),
+				RampingVersionPercentage: 50,
+				RampingVersionUpdateTime: timestamppb.Now(),
+				CurrentVersion:           "",
+				CurrentVersionUpdateTime: nil,
+			},
+		},
+	})
+
+	// set version as ramping again
+	s.setRampingVersion(ctx, rampingVersionVars, 50, rampingVersionVars.BuildID(), 50, false)
+}
+
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_SetCurrent_To_Ramping() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	currentVersionVars := testvars.New(s).WithBuildIDNumber(1)
+
+	s.setCurrentVersion(ctx, currentVersionVars, "")
+	s.setRampingVersion(ctx, currentVersionVars, 50, "", 0, false) // should not set this version to ramping
+
+	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: currentVersionVars.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
+		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+			Name: currentVersionVars.DeploymentSeries(),
+			RoutingInfo: &deploymentpb.RoutingInfo{
+				RampingVersion:           "",  // no ramping info should be set
+				RampingVersionPercentage: 0,   // no ramping info should be set
+				RampingVersionUpdateTime: nil, // no ramping info should be set
+				CurrentVersion:           currentVersionVars.BuildID(),
+				CurrentVersionUpdateTime: timestamppb.Now(),
+			},
+		},
+	})
+}
+
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurrent_Unset_Ramp() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	tv := testvars.New(s)
+
+	rampingVersionVars := tv.WithBuildIDNumber(1)
+	currentVersionVars := tv.WithBuildIDNumber(2)
+
+	// set version as ramping
+	s.setRampingVersion(ctx, rampingVersionVars, 50, "", 0, false)
+	// set current version
+	s.setCurrentVersion(ctx, currentVersionVars, "")
+
+	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
+		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+			Name: tv.DeploymentSeries(),
+			RoutingInfo: &deploymentpb.RoutingInfo{
+				RampingVersion:           rampingVersionVars.BuildID(),
+				RampingVersionPercentage: 50,
+				RampingVersionUpdateTime: timestamppb.Now(),
+				CurrentVersion:           currentVersionVars.BuildID(),
+				CurrentVersionUpdateTime: timestamppb.Now(),
+			},
+		},
+	})
+
+	// unset ramping version
+	s.setRampingVersion(ctx, rampingVersionVars, 0, rampingVersionVars.BuildID(), 50, true)
+
+	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
+		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+			Name: tv.DeploymentSeries(),
+			RoutingInfo: &deploymentpb.RoutingInfo{
+				RampingVersion:           "",
+				RampingVersionPercentage: 0,
+				RampingVersionUpdateTime: nil,
+				CurrentVersion:           currentVersionVars.BuildID(),
+				CurrentVersionUpdateTime: timestamppb.Now(),
+			},
+		},
+	})
+}
+
+// todo: this test won't work right now until we have current version set to "__unversioned__" by default.
+// check validateSetWorkerDeploymentRampingVersion for more details.
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoCurrent_Unset_Ramp() {
+}
+
+// todo: add validations for VersionSummaries
+func (s *WorkerDeploymentSuite) verifyDescribeWorkerDeployment(
+	actualResp *workflowservice.DescribeWorkerDeploymentResponse,
+	expectedResp *workflowservice.DescribeWorkerDeploymentResponse,
+) {
+	maxDurationBetweenTimeStamps := 1 * time.Second
+
+	s.True((actualResp == nil) == (expectedResp == nil))
+	s.True((actualResp.GetWorkerDeploymentInfo() == nil) == (expectedResp.GetWorkerDeploymentInfo() == nil))
+	s.True((actualResp.GetWorkerDeploymentInfo().GetRoutingInfo() == nil) == (expectedResp.GetWorkerDeploymentInfo().GetRoutingInfo() == nil))
+	s.Equal(expectedResp.GetWorkerDeploymentInfo().GetName(), actualResp.GetWorkerDeploymentInfo().GetName())
+
+	s.True(expectedResp.GetWorkerDeploymentInfo().GetCreateTime().AsTime().Sub(actualResp.GetWorkerDeploymentInfo().GetCreateTime().AsTime()) < maxDurationBetweenTimeStamps)
+
+	actualRoutingInfo := actualResp.GetWorkerDeploymentInfo().GetRoutingInfo()
+	expectedRoutingInfo := expectedResp.GetWorkerDeploymentInfo().GetRoutingInfo()
+
+	s.Equal(expectedRoutingInfo.GetRampingVersion(), actualRoutingInfo.GetRampingVersion())
+	s.Equal(expectedRoutingInfo.GetRampingVersionPercentage(), actualRoutingInfo.GetRampingVersionPercentage())
+	s.True(expectedRoutingInfo.GetRampingVersionUpdateTime().AsTime().Sub(actualRoutingInfo.GetRampingVersionUpdateTime().AsTime()) < maxDurationBetweenTimeStamps)
+
+	s.Equal(expectedRoutingInfo.GetCurrentVersion(), actualRoutingInfo.GetCurrentVersion())
+	s.True(expectedRoutingInfo.GetCurrentVersionUpdateTime().AsTime().Sub(actualRoutingInfo.GetCurrentVersionUpdateTime().AsTime()) < maxDurationBetweenTimeStamps)
+
+}
+
+func (s *WorkerDeploymentSuite) setRampingVersion(ctx context.Context, tv *testvars.TestVars, percentage int, previousRamping string, previousPercentage int, unset bool) {
+	buildID := tv.DeploymentVersion().GetBuildId()
+
+	if unset {
+		buildID = ""
+		percentage = 0
+	}
+	resp, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentVersion().GetDeploymentName(),
+		BuildId:        buildID,
+		Percentage:     float32(percentage),
+		Identity:       tv.Any().String(),
+	})
+	s.NoError(err)
+	s.NotNil(resp.PreviousBuildId)
+	s.Equal(previousRamping, resp.PreviousBuildId)
+	s.Equal(float32(previousPercentage), resp.PreviousPercentage)
+}
+
+func (s *WorkerDeploymentSuite) setCurrentVersion(ctx context.Context, tv *testvars.TestVars, previousCurrent string) {
+	resp, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentVersion().GetDeploymentName(),
 		BuildId:        tv.DeploymentVersion().GetBuildId(),
 	})
 	s.NoError(err)
 	s.NotNil(resp.PreviousBuildId)
-	s.Equal("", resp.PreviousBuildId)
+	s.Equal(previousCurrent, resp.PreviousBuildId)
 }
 
 func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context, tv *testvars.TestVars, n int) []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary {
@@ -321,7 +565,7 @@ func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context,
 		deployment := tv.WithDeploymentSeriesNumber(i)
 		version := deployment.WithBuildIDNumber(i)
 
-		s.setCurrentVersion(ctx, version)
+		s.setCurrentVersion(ctx, version, "")
 
 		expectedDeployment := s.buildWorkerDeploymentSummary(
 			deployment.DeploymentSeries(),
