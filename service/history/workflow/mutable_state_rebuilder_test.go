@@ -128,6 +128,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	root, err := hsm.NewRoot(reg, StateMachineType, s.mockMutableState, make(map[string]*persistencespb.StateMachineMap), s.mockMutableState)
 	s.NoError(err)
 	s.mockMutableState.EXPECT().HSM().Return(root).AnyTimes()
+	s.mockMutableState.EXPECT().IsTransitionHistoryEnabled().Return(false).AnyTimes()
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
@@ -137,6 +138,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
+	s.logger = s.mockShard.GetLogger()
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
 		VersionHistories:                 versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		FirstExecutionRunId:              uuid.New(),
