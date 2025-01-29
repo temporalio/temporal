@@ -39,15 +39,15 @@ import (
 
 var (
 	v1 = &deploymentpb.WorkerDeploymentVersion{
-		Version:        "v1",
+		BuildId:        "v1",
 		DeploymentName: "foo",
 	}
 	v2 = &deploymentpb.WorkerDeploymentVersion{
-		Version:        "v2",
+		BuildId:        "v2",
 		DeploymentName: "foo",
 	}
 	v3 = &deploymentpb.WorkerDeploymentVersion{
-		Version:        "v3",
+		BuildId:        "v3",
 		DeploymentName: "foo",
 	}
 )
@@ -76,15 +76,15 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 					{Deployment: DeploymentFromDeploymentVersion(v1), Data: &deploymentspb.TaskQueueData{LastBecameCurrentTime: t1}},
 				},
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v2, IsCurrent: true, RoutingUpdateTime: t2},
+					{Version: v2, CurrentSinceTime: t2, RoutingUpdateTime: t2},
 				},
 			},
 		},
 		{name: "two current + two ramping", want: &taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: v2, UpdateTime: t3, RampingVersion: v3, RampingVersionPercentage: 20},
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v1, IsCurrent: true, RoutingUpdateTime: t1},
-					{Version: v2, IsCurrent: true, RoutingUpdateTime: t2},
+					{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1},
+					{Version: v2, CurrentSinceTime: t2, RoutingUpdateTime: t2},
 					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2},
 					{Version: v3, RampPercentage: 20, RoutingUpdateTime: t3},
 				},
@@ -160,11 +160,11 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 			runs := 1000000
 			for i := 0; i < runs; i++ {
 				v := FindDeploymentVersionForWorkflowID(versioningInfo, "wf-"+strconv.Itoa(i))
-				histogram[v.GetVersion()]++
+				histogram[v.GetBuildId()]++
 			}
 
-			assert.InEpsilon(t, .7*float64(runs), histogram[tt.from.GetVersion()], .02)
-			assert.InEpsilon(t, .3*float64(runs), histogram[tt.to.GetVersion()], .02)
+			assert.InEpsilon(t, .7*float64(runs), histogram[tt.from.GetBuildId()], .02)
+			assert.InEpsilon(t, .3*float64(runs), histogram[tt.to.GetBuildId()], .02)
 		})
 	}
 }
