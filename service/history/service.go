@@ -148,6 +148,8 @@ func (s *Service) Stop() {
 		time.Sleep(s.config.ShutdownDrainDuration())
 	}
 
+	// Stop shard controller. We should have waited long enough for all shards to realize they
+	// lost ownership and close, but if not, this will definitely close them.
 	s.logger.Info("ShutdownHandler: Initiating shardController shutdown")
 	s.handler.controller.Stop()
 
