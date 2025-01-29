@@ -40,12 +40,14 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 type (
 	cassandraErrorsSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 	}
 )
 
@@ -63,6 +65,7 @@ func (s *cassandraErrorsSuite) TearDownSuite() {
 
 func (s *cassandraErrorsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 }
 
 func (s *cassandraErrorsSuite) TearDownTest() {
@@ -231,23 +234,23 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 	runID, _ := uuid.Parse(permanentRunID)
 	currentRunID := uuid.New()
 	startTime := time.Now().UTC()
-	attachedRequestIDs := &persistencespb.WorkflowExecutionRequestIDs{
+	stateDetails := &persistencespb.WorkflowExecutionStateDetails{
 		RequestIds: map[string]*persistencespb.RequestIDInfo{
 			requestID.String(): {
-				Action: enumsspb.WORKFLOW_EXECUTION_REQUEST_ID_ACTION_STARTED,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
 			uuid.NewString(): {
-				Action: enumsspb.WORKFLOW_EXECUTION_REQUEST_ID_ACTION_ATTACHED,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 			},
 		},
 	}
 	workflowState := &persistencespb.WorkflowExecutionState{
-		CreateRequestId:    requestID.String(),
-		RunId:              currentRunID.String(),
-		State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		StartTime:          timestamp.TimePtr(startTime),
-		AttachedRequestIds: attachedRequestIDs,
+		CreateRequestId: requestID.String(),
+		RunId:           currentRunID.String(),
+		State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		StartTime:       timestamp.TimePtr(startTime),
+		Details:         stateDetails,
 	}
 	blob, err := serialization.WorkflowExecutionStateToBlob(workflowState)
 	lastWriteVersion := rand.Int63()
@@ -266,17 +269,16 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 	if err, ok := err.(*p.CurrentWorkflowConditionFailedError); ok {
 		err.Msg = ""
 	}
-	s.Equal(
-		&p.CurrentWorkflowConditionFailedError{
-			Msg:                "",
-			RequestID:          workflowState.CreateRequestId,
-			RunID:              workflowState.RunId,
-			State:              workflowState.State,
-			Status:             workflowState.Status,
-			LastWriteVersion:   lastWriteVersion,
-			StartTime:          &startTime,
-			AttachedRequestIDs: attachedRequestIDs,
-		},
+	s.DeepEqual(
+		p.NewCurrentWorkflowConditionFailedError(
+			"",
+			workflowState.Details.RequestIds,
+			workflowState.RunId,
+			workflowState.State,
+			workflowState.Status,
+			lastWriteVersion,
+			&startTime,
+		),
 		err,
 	)
 }

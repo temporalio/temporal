@@ -28,7 +28,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -37,33 +36,29 @@ func extractCurrentWorkflowConflictError(
 	message string,
 ) error {
 	if currentRow == nil {
-		return &p.CurrentWorkflowConditionFailedError{
-			Msg:                message,
-			RequestID:          "",
-			RunID:              "",
-			State:              enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
-			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
-			LastWriteVersion:   0,
-			StartTime:          nil,
-			AttachedRequestIDs: nil,
-		}
+		return p.NewCurrentWorkflowConditionFailedError(
+			message,
+			nil,
+			"",
+			enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
+			enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
+			0,
+			nil,
+		)
 	}
 
-	attachedRequestIDs, err := serialization.WorkflowExecutionRequestIDsFromBlob(
-		currentRow.AttachedRequestIDs,
-		currentRow.AttachedRequestIDsEncoding,
-	)
+	details, err := deserializeWorkflowExecutionStateDetails(currentRow)
 	if err != nil {
 		return err
 	}
-	return &p.CurrentWorkflowConditionFailedError{
-		Msg:                message,
-		RequestID:          currentRow.CreateRequestID,
-		RunID:              currentRow.RunID.String(),
-		State:              currentRow.State,
-		Status:             currentRow.Status,
-		LastWriteVersion:   currentRow.LastWriteVersion,
-		StartTime:          currentRow.StartTime,
-		AttachedRequestIDs: attachedRequestIDs,
-	}
+
+	return p.NewCurrentWorkflowConditionFailedError(
+		message,
+		details.GetRequestIds(),
+		currentRow.RunID.String(),
+		currentRow.State,
+		currentRow.Status,
+		currentRow.LastWriteVersion,
+		currentRow.StartTime,
+	)
 }

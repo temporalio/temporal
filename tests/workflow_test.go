@@ -241,13 +241,11 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 			request.WorkflowIdConflictPolicy = tc.WorkflowIdConflictPolicy
 			request.OnConflictOptions = tc.OnConflictOptions
 			we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-			if tc.ErrMessage == "" {
-				s.NoError(err1)
-			} else {
+			if tc.ErrMessage != "" {
 				s.ErrorContains(err1, tc.ErrMessage)
 				return
 			}
-
+			s.NoError(err1)
 			s.Equal(we0.RunId, we1.RunId)
 			s.False(we1.Started)
 

@@ -31,6 +31,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
@@ -938,27 +939,24 @@ func assertRunIDAndUpdateCurrentExecution(
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
-			attachedRequestIDs, err := serialization.WorkflowExecutionRequestIDsFromBlob(
-				currentRow.AttachedRequestIDs,
-				currentRow.AttachedRequestIDsEncoding,
-			)
+			details, err := deserializeWorkflowExecutionStateDetails(currentRow)
 			if err != nil {
 				return err
 			}
 
-			return &p.CurrentWorkflowConditionFailedError{
-				Msg: fmt.Sprintf(
+			return p.NewCurrentWorkflowConditionFailedError(
+				fmt.Sprintf(
 					"assertRunIDAndUpdateCurrentExecution failed. current run ID: %v, request run ID: %v",
 					currentRow.RunID,
 					previousRunID,
 				),
-				RequestID:          currentRow.CreateRequestID,
-				RunID:              currentRow.RunID.String(),
-				State:              currentRow.State,
-				Status:             currentRow.Status,
-				LastWriteVersion:   currentRow.LastWriteVersion,
-				AttachedRequestIDs: attachedRequestIDs,
-			}
+				details.GetRequestIds(),
+				currentRow.RunID.String(),
+				currentRow.State,
+				currentRow.Status,
+				currentRow.LastWriteVersion,
+				currentRow.StartTime,
+			)
 		}
 		return nil
 	}
@@ -1161,4 +1159,31 @@ func updateExecution(
 	}
 
 	return nil
+}
+
+func deserializeWorkflowExecutionStateDetails(
+	row *sqlplugin.CurrentExecutionsRow,
+) (*persistencespb.WorkflowExecutionStateDetails, error) {
+	details, err := serialization.WorkflowExecutionStateDetailsFromBlob(row.Details, row.DetailsEncoding)
+	if err != nil {
+		return nil, err
+	}
+
+	// This is for backwards compatibility since WorkflowExecutionStateDetails.RequestIds is a new
+	// fields that replaces the CurrentExecutionsRow.CrequestRequestID.
+	if row.CreateRequestID != "" {
+		if details == nil {
+			details = &persistencespb.WorkflowExecutionStateDetails{}
+		}
+		if details.RequestIds == nil {
+			details.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
+		}
+		if details.RequestIds[row.CreateRequestID] == nil {
+			details.RequestIds[row.CreateRequestID] = &persistencespb.RequestIDInfo{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			}
+		}
+	}
+
+	return details, nil
 }

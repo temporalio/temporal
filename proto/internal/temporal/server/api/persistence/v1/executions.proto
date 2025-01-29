@@ -30,6 +30,7 @@ import "google/protobuf/timestamp.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/common.proto";
+import "temporal/api/enums/v1/event_type.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
@@ -293,22 +294,20 @@ message WorkflowExecutionState {
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
     VersionedTransition last_update_versioned_transition = 5;
     google.protobuf.Timestamp start_time = 6;
-
-    // Request IDs that are attached to the workflow execution.
-    // They can be from StartWorkflowExecution requests with conflict policy USE_EXISTING and
-    // conflict options to attached completion callbacks.
-    WorkflowExecutionRequestIDs attached_request_ids = 7;
+    // New fields added to WorkflowExecutionState should be added to WorkflowExecutionStateDetails
+    // to avoid modifying the SQL table schema.
+    WorkflowExecutionStateDetails details = 7;
 }
 
-message WorkflowExecutionRequestIDs {
-    // Request IDs that are attached to the workflow execution.
-    // They can be from StartWorkflowExecution requests with conflict policy USE_EXISTING and
-    // conflict options to attached completion callbacks.
+message WorkflowExecutionStateDetails {
+    // Request IDs that are attached to the workflow execution. It can the request ID that started
+    // the workflow execution or request IDs that were attached to an existing running workflow
+    // execution via StartWorkflowExecutionRequest.OnConflictOptions.
     map<string, RequestIDInfo> request_ids = 1;
 }
 
 message RequestIDInfo {
-    temporal.server.api.enums.v1.WorkflowExecutionRequestIDAction action = 1;
+    temporal.api.enums.v1.EventType event_type = 1;
 }
 
 // transfer column

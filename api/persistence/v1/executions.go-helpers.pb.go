@@ -177,35 +177,35 @@ func (this *WorkflowExecutionState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type WorkflowExecutionRequestIDs to the protobuf v3 wire format
-func (val *WorkflowExecutionRequestIDs) Marshal() ([]byte, error) {
+// Marshal an object of type WorkflowExecutionStateDetails to the protobuf v3 wire format
+func (val *WorkflowExecutionStateDetails) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type WorkflowExecutionRequestIDs from the protobuf v3 wire format
-func (val *WorkflowExecutionRequestIDs) Unmarshal(buf []byte) error {
+// Unmarshal an object of type WorkflowExecutionStateDetails from the protobuf v3 wire format
+func (val *WorkflowExecutionStateDetails) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *WorkflowExecutionRequestIDs) Size() int {
+func (val *WorkflowExecutionStateDetails) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two WorkflowExecutionRequestIDs values are equivalent by recursively
+// Equal returns whether two WorkflowExecutionStateDetails values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *WorkflowExecutionRequestIDs) Equal(that interface{}) bool {
+func (this *WorkflowExecutionStateDetails) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *WorkflowExecutionRequestIDs
+	var that1 *WorkflowExecutionStateDetails
 	switch t := that.(type) {
-	case *WorkflowExecutionRequestIDs:
+	case *WorkflowExecutionStateDetails:
 		that1 = t
-	case WorkflowExecutionRequestIDs:
+	case WorkflowExecutionStateDetails:
 		that1 = &t
 	default:
 		return false
