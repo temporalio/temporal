@@ -18,7 +18,7 @@ clean: clean-bins clean-test-results
 	rm -rf $(LOCALBIN)
 
 # Recompile proto files.
-proto: lint-protos lint-api protoc proto-codegen fix-grpc
+proto: lint-protos lint-api protoc proto-codegen fix-history-service
 ########################################################################
 
 .PHONY: proto protoc install bins ci-build-misc clean
@@ -297,9 +297,10 @@ update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
 	@go get -u go.temporal.io/api@master
 
-.PHONY: fix-grpc
-fix-grpc:
-	sed -i '' \
+.PHONY: fix-history-service
+fix-history-service:
+	@printf $(COLOR) "Modify history service interface..."
+	@sed -i '' \
     's/GetWorkflowExecutionHistory(context\.Context, \*GetWorkflowExecutionHistoryRequest) (\*GetWorkflowExecutionHistoryResponse, error)/GetWorkflowExecutionHistory(context.Context, *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponseWithRaw, error)/g' \
     api/historyservice/v1/service_grpc.pb.go
 

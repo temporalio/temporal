@@ -5571,7 +5571,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
 	s.NoError(err)
 
-	// new sdk: should see failed event
 	resp, err := engine.GetWorkflowExecutionHistory(context.Background(), req)
 	s.NoError(err)
 	s.False(resp.Response.Archived)

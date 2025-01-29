@@ -195,7 +195,9 @@ func (t *serializerImpl) DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*
 	var err error
 	switch data.EncodingType {
 	case enumspb.ENCODING_TYPE_PROTO3:
-		err = events.Unmarshal(data.Data)
+		err = proto.UnmarshalOptions{
+			DiscardUnknown: true,
+		}.Unmarshal(data.Data, events)
 	default:
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}

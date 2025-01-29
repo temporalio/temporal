@@ -848,7 +848,6 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		len(nextToken.StoreToken) == 0,
 		request.PageSize,
 	); err != nil {
-		//metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 		m.logger.Error("getHistory: incomplete history",
 			tag.WorkflowBranchToken(branchToken),
 			tag.Error(err))
@@ -969,6 +968,8 @@ func (m *executionManagerImpl) readHistoryBranch(
 		} else {
 			historyEvents = append(historyEvents, events...)
 		}
+		lastEvent := events[len(events)-1]
+		token.LastEventID = lastEvent.GetEventId()
 	}
 
 	nextPageToken, err := m.serializeToken(token, false)
