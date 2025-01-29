@@ -5945,7 +5945,9 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 	}
 
 	var tombstones []*persistencespb.StateMachineTombstone
-	if ms.stateMachineNode != nil {
+	// Temporarily disable tracking tombstones for state based replication until we support syncing HSM tombstones.
+	// TODO(bergundy): remove the condition for transitionHistoryEnabled.
+	if ms.stateMachineNode != nil && !ms.transitionHistoryEnabled {
 		opLog, err := ms.stateMachineNode.OpLog()
 		if err != nil {
 			panic(fmt.Sprintf("Failed to get HSM operation log: %v", err))
