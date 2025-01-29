@@ -124,6 +124,18 @@ func QueueStateFromBlob(blob []byte, encoding string) (*persistencespb.QueueStat
 	return result, proto3Decode(blob, encoding, result)
 }
 
+func WorkflowExecutionRequestIDsToBlob(requestIDs *persistencespb.WorkflowExecutionRequestIDs) (*commonpb.DataBlob, error) {
+	return proto3Encode(requestIDs)
+}
+
+func WorkflowExecutionRequestIDsFromBlob(blob []byte, encoding string) (*persistencespb.WorkflowExecutionRequestIDs, error) {
+	if blob == nil {
+		return nil, nil
+	}
+	result := &persistencespb.WorkflowExecutionRequestIDs{}
+	return result, proto3Decode(blob, encoding, result)
+}
+
 func encode(
 	object proto.Message,
 	encoding enumspb.EncodingType,
@@ -173,13 +185,11 @@ func decode(
 }
 
 func proto3Encode(m proto.Message) (*commonpb.DataBlob, error) {
-	blob := commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3}
 	data, err := proto.Marshal(m)
 	if err != nil {
 		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
-	blob.Data = data
-	return &blob, nil
+	return &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}, nil
 }
 
 func proto3Decode(blob []byte, encoding string, result proto.Message) error {

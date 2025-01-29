@@ -122,14 +122,18 @@ type (
 
 	// CurrentWorkflowConditionFailedError represents a failed conditional update for current workflow record
 	CurrentWorkflowConditionFailedError struct {
-		Msg                string
-		RequestID          string
-		RunID              string
-		State              enumsspb.WorkflowExecutionState
-		Status             enumspb.WorkflowExecutionStatus
-		LastWriteVersion   int64
-		StartTime          *time.Time
-		AttachedRequestIDs []string
+		Msg string
+		// RequestID corresponds to the request ID that started the workflow.
+		RequestID        string
+		RunID            string
+		State            enumsspb.WorkflowExecutionState
+		Status           enumspb.WorkflowExecutionStatus
+		LastWriteVersion int64
+		StartTime        *time.Time
+		// AttachedRequestIDs are additional request IDs that attempted to start a new workflow, but
+		// instead, updated the existing running workflow. They are attached when the conflict policy is
+		// WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING and OnConflictOptions is set.
+		AttachedRequestIDs     *persistencespb.WorkflowExecutionRequestIDs
 	}
 
 	// WorkflowConditionFailedError represents a failed conditional update for workflow record

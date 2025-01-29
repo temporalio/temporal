@@ -2092,9 +2092,13 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 
 func (ms *MutableStateImpl) attachRequestID(requestID string) {
 	if ms.executionState.AttachedRequestIds == nil {
-		ms.executionState.AttachedRequestIds = []string{}
+		ms.executionState.AttachedRequestIds = &persistencespb.WorkflowExecutionRequestIDs{
+			RequestIds: make(map[string]*persistencespb.RequestIDInfo),
+		}
 	}
-	ms.executionState.AttachedRequestIds = append(ms.executionState.AttachedRequestIds, requestID)
+	ms.executionState.AttachedRequestIds.RequestIds[requestID] = &persistencespb.RequestIDInfo{
+		Action: enumsspb.WORKFLOW_EXECUTION_REQUEST_ID_ACTION_ATTACHED,
+	}
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
@@ -2466,6 +2470,14 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 	completionCallbaks []*commonpb.Callback,
 ) error {
 	coll := callbacks.MachineCollection(ms.HSM())
+	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	if len(completionCallbaks)+coll.Size() > maxCallbacksPerWorkflow {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
+			maxCallbacksPerWorkflow,
+			coll.Size(),
+		))
+	}
 	for idx, cb := range completionCallbaks {
 		persistenceCB := &persistencespb.Callback{}
 		switch variant := cb.Variant.(type) {

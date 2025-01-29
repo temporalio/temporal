@@ -116,6 +116,9 @@ type (
 
 		NexusEndpointToBlob(endpoint *persistencespb.NexusEndpoint, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error)
+
+		WorkflowExecutionRequestIDsToBlob(requestIDs *persistencespb.WorkflowExecutionRequestIDs, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		WorkflowExecutionRequestIDsFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionRequestIDs, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -547,6 +550,18 @@ func (t *serializerImpl) NexusEndpointFromBlob(data *commonpb.DataBlob) (*persis
 	return result, ProtoDecodeBlob(data, result)
 }
 
+func (t *serializerImpl) WorkflowExecutionRequestIDsToBlob(requestIDs *persistencespb.WorkflowExecutionRequestIDs, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+	return ProtoEncodeBlob(requestIDs, encodingType)
+}
+
+func (t *serializerImpl) WorkflowExecutionRequestIDsFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionRequestIDs, error) {
+	if data.GetData() == nil {
+		return nil, nil
+	}
+	result := &persistencespb.WorkflowExecutionRequestIDs{}
+	return result, ProtoDecodeBlob(data, result)
+}
+
 func ProtoDecodeBlob(data *commonpb.DataBlob, result proto.Message) error {
 	if data == nil {
 		// TODO: should we return nil or error?
@@ -612,10 +627,5 @@ func ProtoEncodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.
 			EncodingType: encoding,
 		}, nil
 	}
-
-	data, err := proto.Marshal(m)
-	if err != nil {
-		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
-	}
-	return &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}, nil
+	return proto3Encode(m)
 }

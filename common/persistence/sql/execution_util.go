@@ -938,6 +938,14 @@ func assertRunIDAndUpdateCurrentExecution(
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
+			attachedRequestIDs, err := serialization.WorkflowExecutionRequestIDsFromBlob(
+				currentRow.AttachedRequestIDs,
+				currentRow.AttachedRequestIDsEncoding,
+			)
+			if err != nil {
+				return err
+			}
+
 			return &p.CurrentWorkflowConditionFailedError{
 				Msg: fmt.Sprintf(
 					"assertRunIDAndUpdateCurrentExecution failed. current run ID: %v, request run ID: %v",
@@ -949,7 +957,7 @@ func assertRunIDAndUpdateCurrentExecution(
 				State:              currentRow.State,
 				Status:             currentRow.Status,
 				LastWriteVersion:   currentRow.LastWriteVersion,
-				AttachedRequestIDs: currentRow.AttachedRequestIDs,
+				AttachedRequestIDs: attachedRequestIDs,
 			}
 		}
 		return nil
@@ -1035,7 +1043,8 @@ func buildExecutionRow(
 	dbRecordVersion int64,
 	shardID int32,
 ) (row *sqlplugin.ExecutionsRow, err error) {
-
+	// TODO: double encoding execution state? executionState could've been passed to the function as
+	// *commonpb.DataBlob like executionInfo
 	stateBlob, err := serialization.WorkflowExecutionStateToBlob(executionState)
 	if err != nil {
 		return nil, err

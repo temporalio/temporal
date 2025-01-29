@@ -622,6 +622,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 		} else {
 			lastWriteVersion := updateWorkflow.LastWriteVersion
 
+			// TODO: double encoding execution state? already in updateWorkflow.ExecutionStateBlob
 			executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(updateWorkflow.ExecutionState)
 			if err != nil {
 				return err
@@ -748,12 +749,21 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 		state := executionState.State
 		status := executionState.Status
 
-		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistencespb.WorkflowExecutionState{
-			RunId:           runID,
-			CreateRequestId: createRequestID,
-			State:           state,
-			Status:          status,
-		})
+		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(
+			&persistencespb.WorkflowExecutionState{
+				RunId:           runID,
+				CreateRequestId: createRequestID,
+				State:           state,
+				Status:          status,
+				AttachedRequestIds: &persistencespb.WorkflowExecutionRequestIDs{
+					RequestIds: map[string]*persistencespb.RequestIDInfo{
+						createRequestID: {
+							Action: enumsspb.WORKFLOW_EXECUTION_REQUEST_ID_ACTION_STARTED,
+						},
+					},
+				},
+			},
+		)
 		if err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
 		}

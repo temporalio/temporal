@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -318,10 +317,20 @@ func (s *Starter) handleConflict(
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	request := s.request.StartRequest
-	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() ||
-		slices.Contains(currentWorkflowConditionFailed.AttachedRequestIDs, request.GetRequestId()) {
+	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() {
 		resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
 		return resp, StartDeduped, err
+	}
+
+	currentWorkflowRequestIDs := currentWorkflowConditionFailed.AttachedRequestIDs.GetRequestIds()
+	if currentWorkflowRequestIDs[request.GetRequestId()] != nil {
+		// If the request was retried and already attached to an existing workflow, then it didn't start
+		// a new workflow.
+		resp := &historyservice.StartWorkflowExecutionResponse{
+			RunId:   currentWorkflowConditionFailed.RunID,
+			Started: false,
+		}
+		return resp, StartDeduped, nil
 	}
 
 	if err := s.verifyNamespaceActive(creationParams, currentWorkflowConditionFailed); err != nil {
@@ -624,6 +633,10 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	var err error
 	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
 	if onConflictOptions != nil {
+		requestID := ""
+		if onConflictOptions.AttachRequestId {
+			requestID = s.request.StartRequest.GetRequestId()
+		}
 		var completionCallbacks []*commonpb.Callback
 		if onConflictOptions.AttachCompletionCallbacks {
 			completionCallbacks = s.request.StartRequest.GetCompletionCallbacks()
@@ -645,7 +658,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 					nil,
 					false,
-					s.request.StartRequest.GetRequestId(),
+					requestID,
 					completionCallbacks,
 					links,
 				)

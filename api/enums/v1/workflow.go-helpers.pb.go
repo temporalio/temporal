@@ -90,3 +90,22 @@ func PausedWorkflowEntityTypeFromString(s string) (PausedWorkflowEntityType, err
 	}
 	return PausedWorkflowEntityType(0), fmt.Errorf("%s is not a valid PausedWorkflowEntityType", s)
 }
+
+var (
+	WorkflowExecutionRequestIDAction_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Started":     1,
+		"Attached":    2,
+	}
+)
+
+// WorkflowExecutionRequestIDActionFromString parses a WorkflowExecutionRequestIDAction value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to WorkflowExecutionRequestIDAction
+func WorkflowExecutionRequestIDActionFromString(s string) (WorkflowExecutionRequestIDAction, error) {
+	if v, ok := WorkflowExecutionRequestIDAction_value[s]; ok {
+		return WorkflowExecutionRequestIDAction(v), nil
+	} else if v, ok := WorkflowExecutionRequestIDAction_shorthandValue[s]; ok {
+		return WorkflowExecutionRequestIDAction(v), nil
+	}
+	return WorkflowExecutionRequestIDAction(0), fmt.Errorf("%s is not a valid WorkflowExecutionRequestIDAction", s)
+}
