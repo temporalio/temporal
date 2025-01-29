@@ -164,6 +164,7 @@ message QueryWorkflowRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 6;
+    temporal.api.common.v1.Priority priority = 7;
 }
 
 message QueryWorkflowResponse {
