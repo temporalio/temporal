@@ -356,6 +356,9 @@ func NewMutableState(
 		State:     enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		StartTime: timestamppb.New(startTime),
+		Details: &persistencespb.WorkflowExecutionStateDetails{
+			RequestIds: make(map[string]*persistencespb.RequestIDInfo),
+		},
 	}
 	s.approximateSize += s.executionState.Size()
 
@@ -2090,15 +2093,18 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 	ms.approximateSize -= len(requestID)
 }
 
-func (ms *MutableStateImpl) attachRequestID(requestID string) {
-	if ms.executionState.AttachedRequestIds == nil {
-		ms.executionState.AttachedRequestIds = &persistencespb.WorkflowExecutionRequestIDs{
-			RequestIds: make(map[string]*persistencespb.RequestIDInfo),
-		}
+func (ms *MutableStateImpl) attachRequestID(requestID string, eventType enumspb.EventType) {
+	ms.approximateSize -= ms.executionState.Size()
+	if ms.executionState.Details == nil {
+		ms.executionState.Details = &persistencespb.WorkflowExecutionStateDetails{}
 	}
-	ms.executionState.AttachedRequestIds.RequestIds[requestID] = &persistencespb.RequestIDInfo{
-		Action: enumsspb.WORKFLOW_EXECUTION_REQUEST_ID_ACTION_ATTACHED,
+	if ms.executionState.Details.RequestIds == nil {
+		ms.executionState.Details.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
 	}
+	ms.executionState.Details.RequestIds[requestID] = &persistencespb.RequestIDInfo{
+		EventType: eventType,
+	}
+	ms.approximateSize += ms.executionState.Size()
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
@@ -2328,8 +2334,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	}
 
 	ms.approximateSize -= ms.executionInfo.Size()
+	ms.approximateSize -= ms.executionState.Size()
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	ms.executionState.CreateRequestId = requestID
+	ms.executionState.Details.RequestIds[requestID] = &persistencespb.RequestIDInfo{
+		EventType: startEvent.EventType,
+	}
+
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	ms.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	ms.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
@@ -2460,6 +2471,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.MostRecentWorkerVersionStamp = event.SourceVersionStamp
 
 	ms.approximateSize += ms.executionInfo.Size()
+	ms.approximateSize += ms.executionState.Size()
 
 	ms.writeEventToCache(startEvent)
 	return nil
@@ -4456,7 +4468,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		return err
 	}
 	if attributes.GetAttachedRequestId() != "" {
-		ms.attachRequestID(attributes.GetAttachedRequestId())
+		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType)
 	}
 	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
 		if err := ms.addCompletionCallbacks(event, attributes.GetAttachedCompletionCallbacks()); err != nil {

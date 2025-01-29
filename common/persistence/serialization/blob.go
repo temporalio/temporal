@@ -52,7 +52,21 @@ func WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState) (
 
 func WorkflowExecutionStateFromBlob(blob []byte, encoding string) (*persistencespb.WorkflowExecutionState, error) {
 	result := &persistencespb.WorkflowExecutionState{}
-	return result, proto3Decode(blob, encoding, result)
+	if err := proto3Decode(blob, encoding, result); err != nil {
+		return nil, err
+	}
+	// Initialize the WorkflowExecutionStateDetails for old records.
+	if result.Details == nil {
+		result.Details = &persistencespb.WorkflowExecutionStateDetails{
+			RequestIds: make(map[string]*persistencespb.RequestIDInfo),
+		}
+	}
+	if result.CreateRequestId != "" && result.Details.RequestIds[result.CreateRequestId] == nil {
+		result.Details.RequestIds[result.CreateRequestId] = &persistencespb.RequestIDInfo{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		}
+	}
+	return result, nil
 }
 
 func TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo) (*commonpb.DataBlob, error) {
@@ -124,16 +138,16 @@ func QueueStateFromBlob(blob []byte, encoding string) (*persistencespb.QueueStat
 	return result, proto3Decode(blob, encoding, result)
 }
 
-func WorkflowExecutionRequestIDsToBlob(requestIDs *persistencespb.WorkflowExecutionRequestIDs) (*commonpb.DataBlob, error) {
-	return proto3Encode(requestIDs)
+func WorkflowExecutionStateDetailsToBlob(details *persistencespb.WorkflowExecutionStateDetails) (*commonpb.DataBlob, error) {
+	return proto3Encode(details)
 }
 
-func WorkflowExecutionRequestIDsFromBlob(blob []byte, encoding string) (*persistencespb.WorkflowExecutionRequestIDs, error) {
-	if blob == nil {
+func WorkflowExecutionStateDetailsFromBlob(blob []byte, encoding string) (*persistencespb.WorkflowExecutionStateDetails, error) {
+	if len(blob) == 0 {
 		return nil, nil
 	}
-	result := &persistencespb.WorkflowExecutionRequestIDs{}
-	return result, proto3Decode(blob, encoding, result)
+	details := &persistencespb.WorkflowExecutionStateDetails{}
+	return details, proto3Decode(blob, encoding, details)
 }
 
 func encode(

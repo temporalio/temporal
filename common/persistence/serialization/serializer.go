@@ -117,8 +117,8 @@ type (
 		NexusEndpointToBlob(endpoint *persistencespb.NexusEndpoint, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error)
 
-		WorkflowExecutionRequestIDsToBlob(requestIDs *persistencespb.WorkflowExecutionRequestIDs, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		WorkflowExecutionRequestIDsFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionRequestIDs, error)
+		WorkflowExecutionStateDetailsToBlob(requestIDs *persistencespb.WorkflowExecutionStateDetails, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		WorkflowExecutionStateDetailsFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionStateDetails, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -430,7 +430,23 @@ func (t *serializerImpl) WorkflowExecutionStateToBlob(info *persistencespb.Workf
 
 func (t *serializerImpl) WorkflowExecutionStateFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionState, error) {
 	result := &persistencespb.WorkflowExecutionState{}
-	return result, ProtoDecodeBlob(data, result)
+	if err := ProtoDecodeBlob(data, result); err != nil {
+		return nil, err
+	}
+	// Initialize the WorkflowExecutionStateDetails for old records.
+	if result.Details == nil {
+		result.Details = &persistencespb.WorkflowExecutionStateDetails{
+			RequestIds: make(map[string]*persistencespb.RequestIDInfo, 1),
+		}
+	} else if result.Details.RequestIds == nil {
+		result.Details.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
+	}
+	if result.CreateRequestId != "" && result.Details.RequestIds[result.CreateRequestId] == nil {
+		result.Details.RequestIds[result.CreateRequestId] = &persistencespb.RequestIDInfo{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		}
+	}
+	return result, nil
 }
 
 func (t *serializerImpl) ActivityInfoToBlob(info *persistencespb.ActivityInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
@@ -550,15 +566,15 @@ func (t *serializerImpl) NexusEndpointFromBlob(data *commonpb.DataBlob) (*persis
 	return result, ProtoDecodeBlob(data, result)
 }
 
-func (t *serializerImpl) WorkflowExecutionRequestIDsToBlob(requestIDs *persistencespb.WorkflowExecutionRequestIDs, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func (t *serializerImpl) WorkflowExecutionStateDetailsToBlob(requestIDs *persistencespb.WorkflowExecutionStateDetails, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return ProtoEncodeBlob(requestIDs, encodingType)
 }
 
-func (t *serializerImpl) WorkflowExecutionRequestIDsFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionRequestIDs, error) {
-	if data.GetData() == nil {
+func (t *serializerImpl) WorkflowExecutionStateDetailsFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionStateDetails, error) {
+	if len(data.GetData()) == 0 {
 		return nil, nil
 	}
-	result := &persistencespb.WorkflowExecutionRequestIDs{}
+	result := &persistencespb.WorkflowExecutionStateDetails{}
 	return result, ProtoDecodeBlob(data, result)
 }
 

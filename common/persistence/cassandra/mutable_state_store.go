@@ -748,20 +748,18 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 		createRequestID := executionState.CreateRequestId
 		state := executionState.State
 		status := executionState.Status
+		startTime := executionState.StartTime
+		details := executionState.Details
 
+		// TODO: should this just serialize the executionState variable?
 		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(
 			&persistencespb.WorkflowExecutionState{
 				RunId:           runID,
 				CreateRequestId: createRequestID,
 				State:           state,
 				Status:          status,
-				AttachedRequestIds: &persistencespb.WorkflowExecutionRequestIDs{
-					RequestIds: map[string]*persistencespb.RequestIDInfo{
-						createRequestID: {
-							Action: enumsspb.WORKFLOW_EXECUTION_REQUEST_ID_ACTION_STARTED,
-						},
-					},
-				},
+				StartTime:       startTime,
+				Details:         details,
 			},
 		)
 		if err != nil {
@@ -898,16 +896,15 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 		}
 		return err
 	} else if resp.RunID == runID {
-		return &p.CurrentWorkflowConditionFailedError{
-			Msg:                fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
-			RequestID:          "",
-			RunID:              "",
-			State:              enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
-			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
-			LastWriteVersion:   0,
-			StartTime:          startTime,
-			AttachedRequestIDs: nil,
-		}
+		return p.NewCurrentWorkflowConditionFailedError(
+			fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
+			nil,
+			"",
+			enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
+			enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
+			0,
+			startTime,
+		)
 	}
 
 	return nil

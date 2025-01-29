@@ -317,15 +317,13 @@ func (s *Starter) handleConflict(
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	request := s.request.StartRequest
-	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() {
-		resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
-		return resp, StartDeduped, err
-	}
+	currentWorkflowRequestIDs := currentWorkflowConditionFailed.RequestIDs
+	if requestIDInfo := currentWorkflowRequestIDs[request.GetRequestId()]; requestIDInfo != nil {
+		if requestIDInfo.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
+			return resp, StartDeduped, err
+		}
 
-	currentWorkflowRequestIDs := currentWorkflowConditionFailed.AttachedRequestIDs.GetRequestIds()
-	if currentWorkflowRequestIDs[request.GetRequestId()] != nil {
-		// If the request was retried and already attached to an existing workflow, then it didn't start
-		// a new workflow.
 		resp := &historyservice.StartWorkflowExecutionResponse{
 			RunId:   currentWorkflowConditionFailed.RunID,
 			Started: false,
@@ -426,7 +424,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		newRunID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
-		currentWorkflowConditionFailed.RequestID,
+		currentWorkflowConditionFailed.CreateRequestID,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
 		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
 		currentWorkflowStartTime,
@@ -684,7 +682,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 		err := api.ResolveWorkflowIDReusePolicy(
 			workflowKey,
 			currentWorkflowConditionFailed.Status,
-			currentWorkflowConditionFailed.RequestID,
+			currentWorkflowConditionFailed.CreateRequestID,
 			s.request.StartRequest.GetWorkflowIdReusePolicy(),
 		)
 		if err != nil {

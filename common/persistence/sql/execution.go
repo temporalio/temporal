@@ -198,25 +198,23 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("CreteWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
-	requestIDsData, err := serialization.WorkflowExecutionRequestIDsToBlob(
-		newWorkflow.ExecutionState.AttachedRequestIds,
-	)
+	detailsData, err := serialization.WorkflowExecutionStateDetailsToBlob(newWorkflow.ExecutionState.Details)
 	if err != nil {
 		return nil, err
 	}
 
 	row := sqlplugin.CurrentExecutionsRow{
-		ShardID:                    shardID,
-		NamespaceID:                namespaceID,
-		WorkflowID:                 workflowID,
-		RunID:                      runID,
-		CreateRequestID:            newWorkflow.ExecutionState.CreateRequestId,
-		State:                      newWorkflow.ExecutionState.State,
-		Status:                     newWorkflow.ExecutionState.Status,
-		LastWriteVersion:           lastWriteVersion,
-		StartTime:                  getStartTimeFromState(newWorkflow.ExecutionState),
-		AttachedRequestIDs:         requestIDsData.Data,
-		AttachedRequestIDsEncoding: requestIDsData.EncodingType.String(),
+		ShardID:          shardID,
+		NamespaceID:      namespaceID,
+		WorkflowID:       workflowID,
+		RunID:            runID,
+		CreateRequestID:  newWorkflow.ExecutionState.CreateRequestId,
+		State:            newWorkflow.ExecutionState.State,
+		Status:           newWorkflow.ExecutionState.Status,
+		LastWriteVersion: lastWriteVersion,
+		StartTime:        getStartTimeFromState(newWorkflow.ExecutionState),
+		Details:          detailsData.Data,
+		DetailsEncoding:  detailsData.EncodingType.String(),
 	}
 
 	if err := createOrUpdateCurrentExecution(ctx, tx, row, request.Mode); err != nil {
@@ -409,8 +407,8 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 		}
 
 		if newWorkflow != nil {
-			requestIDsData, err := serialization.WorkflowExecutionRequestIDsToBlob(
-				newWorkflow.ExecutionState.AttachedRequestIds,
+			detailsData, err := serialization.WorkflowExecutionStateDetailsToBlob(
+				newWorkflow.ExecutionState.Details,
 			)
 			if err != nil {
 				return err
@@ -423,15 +421,15 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			row.NamespaceID = primitives.MustParseUUID(newWorkflow.NamespaceID)
 			row.RunID = primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
 			row.StartTime = getStartTimeFromState(newWorkflow.ExecutionState)
-			row.AttachedRequestIDs = requestIDsData.Data
-			row.AttachedRequestIDsEncoding = requestIDsData.EncodingType.String()
+			row.Details = detailsData.Data
+			row.DetailsEncoding = detailsData.EncodingType.String()
 
 			if !bytes.Equal(namespaceID, row.NamespaceID) {
 				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot continue as new to another namespace")
 			}
 		} else {
-			requestIDsData, err := serialization.WorkflowExecutionRequestIDsToBlob(
-				updateWorkflow.ExecutionState.AttachedRequestIds,
+			detailsData, err := serialization.WorkflowExecutionStateDetailsToBlob(
+				updateWorkflow.ExecutionState.Details,
 			)
 			if err != nil {
 				return err
@@ -443,8 +441,8 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			row.LastWriteVersion = updateWorkflow.LastWriteVersion
 			row.RunID = runID
 			row.StartTime = getStartTimeFromState(updateWorkflow.ExecutionState)
-			row.AttachedRequestIDs = requestIDsData.Data
-			row.AttachedRequestIDsEncoding = requestIDsData.EncodingType.String()
+			row.Details = detailsData.Data
+			row.DetailsEncoding = detailsData.EncodingType.String()
 			// we still call update only to update the current record
 		}
 		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, runID); err != nil {
@@ -535,23 +533,23 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 		createRequestID := executionState.CreateRequestId
 		state := executionState.State
 		status := executionState.Status
-		requestIDsData, err := serialization.WorkflowExecutionRequestIDsToBlob(executionState.AttachedRequestIds)
+		detailsBlob, err := serialization.WorkflowExecutionStateDetailsToBlob(executionState.Details)
 		if err != nil {
 			return err
 		}
 
 		row := sqlplugin.CurrentExecutionsRow{
-			ShardID:                    shardID,
-			NamespaceID:                namespaceID,
-			WorkflowID:                 workflowID,
-			RunID:                      runID,
-			CreateRequestID:            createRequestID,
-			State:                      state,
-			Status:                     status,
-			LastWriteVersion:           lastWriteVersion,
-			StartTime:                  getStartTimeFromState(executionState),
-			AttachedRequestIDs:         requestIDsData.Data,
-			AttachedRequestIDsEncoding: requestIDsData.EncodingType.String(),
+			ShardID:          shardID,
+			NamespaceID:      namespaceID,
+			WorkflowID:       workflowID,
+			RunID:            runID,
+			CreateRequestID:  createRequestID,
+			State:            state,
+			Status:           status,
+			LastWriteVersion: lastWriteVersion,
+			StartTime:        getStartTimeFromState(executionState),
+			Details:          detailsBlob.Data,
+			DetailsEncoding:  detailsBlob.EncodingType.String(),
 		}
 		var prevRunID primitives.UUID
 		if currentWorkflow != nil {

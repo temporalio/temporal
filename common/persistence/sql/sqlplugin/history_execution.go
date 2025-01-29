@@ -61,17 +61,17 @@ type (
 
 	// CurrentExecutionsRow represents a row in current_executions table
 	CurrentExecutionsRow struct {
-		ShardID                    int32
-		NamespaceID                primitives.UUID
-		WorkflowID                 string
-		RunID                      primitives.UUID
-		CreateRequestID            string
-		StartTime                  *time.Time
-		LastWriteVersion           int64
-		State                      enumsspb.WorkflowExecutionState
-		Status                     enumspb.WorkflowExecutionStatus
-		AttachedRequestIDs         []byte `db:"attached_request_ids"`
-		AttachedRequestIDsEncoding string `db:"attached_request_ids_encoding"`
+		ShardID          int32
+		NamespaceID      primitives.UUID
+		WorkflowID       string
+		RunID            primitives.UUID
+		CreateRequestID  string
+		StartTime        *time.Time
+		LastWriteVersion int64
+		State            enumsspb.WorkflowExecutionState
+		Status           enumspb.WorkflowExecutionStatus
+		Details          []byte
+		DetailsEncoding  string
 	}
 
 	// CurrentExecutionsFilter contains the column names within current_executions table that
