@@ -43,8 +43,8 @@ func Invoke(
 	request := req.GetFrontendRequest()
 	workflowKey := definition.NewWorkflowKey(
 		req.NamespaceId,
-		request.GetWorkflowId(),
-		request.GetRunId(),
+		request.GetExecution().GetWorkflowId(),
+		request.GetExecution().GetRunId(),
 	)
 
 	err := api.GetAndUpdateWorkflowWithNew(
@@ -55,9 +55,9 @@ func Invoke(
 			mutableState := workflowLease.GetMutableState()
 			var activityIDs []string
 			switch a := request.GetActivity().(type) {
-			case *workflowservice.ResetActivityByIdRequest_Id:
+			case *workflowservice.ResetActivityRequest_Id:
 				activityIDs = append(activityIDs, a.Id)
-			case *workflowservice.ResetActivityByIdRequest_Type:
+			case *workflowservice.ResetActivityRequest_Type:
 				activityType := a.Type
 				for _, ai := range mutableState.GetPendingActivityInfos() {
 					if ai.ActivityType.Name == activityType {
@@ -71,7 +71,7 @@ func Invoke(
 			}
 
 			for _, activityId := range activityIDs {
-				if err := workflow.ResetActivityById(
+				if err := workflow.ResetActivity(
 					shardContext, mutableState, activityId,
 					request.ResetHeartbeat, request.KeepPaused, request.Jitter.AsDuration(),
 				); err != nil {

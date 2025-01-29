@@ -116,7 +116,8 @@ type (
 
 	UnpauseActivitiesParams struct {
 		ActivityType   string
-		KeepAttempts   bool
+		MatchAll       bool
+		ResetAttempts  bool
 		ResetHeartbeat bool
 		Jitter         time.Duration
 	}

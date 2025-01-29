@@ -377,7 +377,7 @@ service HistoryService {
     rpc UpdateActivityOptions (UpdateActivityOptionsRequest) returns (UpdateActivityOptionsResponse) {
     }
 
-    // PauseActivityById pauses the execution of an activity specified by its ID.
+    // PauseActivity pauses the execution of an activity specified by its ID.
     // Returns a `NotFound` error if there is no pending activity with the provided ID.
     //
     // Pausing an activity means:
@@ -399,7 +399,7 @@ service HistoryService {
     rpc PauseActivity (PauseActivityRequest) returns (PauseActivityResponse) {
     }
 
-    // UnpauseActivityById unpauses the execution of an activity specified by its ID.
+    // UnpauseActivity unpauses the execution of an activity specified by its ID.
     //
     // If activity is not paused, this call will have no effect.
     // If the activity is waiting for retry, it will be scheduled immediately (* see 'jitter' flag).
@@ -416,7 +416,7 @@ service HistoryService {
     rpc UnpauseActivity (UnpauseActivityRequest) returns (UnpauseActivityResponse) {
     }
 
-    // ResetActivityById resets the execution of an activity specified by its ID.
+    // ResetActivity resets the execution of an activity specified by its ID.
     //
     // Resetting an activity means:
     // * number of attempts will be reset to 0.

@@ -328,7 +328,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 
 func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservice.UpdateActivityOptionsByIdRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
 			ActivityOptions: &activitypb.ActivityOptions{
 				TaskQueue: &taskqueuepb.TaskQueue{Name: "task_queue_name"},
 			},
@@ -337,7 +337,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 					"TaskQueue.Name",
 				},
 			},
-			Activity: &workflowservice.UpdateActivityOptionsByIdRequest_Id{Id: "activity_id"},
+			Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
 		},
 	}
 
@@ -399,10 +399,10 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
 
 	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservice.UpdateActivityOptionsByIdRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
 			ActivityOptions: options,
 			UpdateMask:      updateMask,
-			Activity:        &workflowservice.UpdateActivityOptionsByIdRequest_Id{Id: "activity_id"},
+			Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
 		},
 	}
 

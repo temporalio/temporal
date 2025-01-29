@@ -47,8 +47,8 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
-			request.GetFrontendRequest().WorkflowId,
-			request.GetFrontendRequest().RunId,
+			request.GetFrontendRequest().GetExecution().GetWorkflowId(),
+			request.GetFrontendRequest().GetExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
@@ -86,9 +86,9 @@ func processUnpauseActivityRequest(
 	frontendRequest := request.GetFrontendRequest()
 	var activityIDs []string
 	switch a := frontendRequest.GetActivity().(type) {
-	case *workflowservice.UnpauseActivityByIdRequest_Id:
+	case *workflowservice.UnpauseActivityRequest_Id:
 		activityIDs = append(activityIDs, a.Id)
-	case *workflowservice.UnpauseActivityByIdRequest_Type:
+	case *workflowservice.UnpauseActivityRequest_Type:
 		activityType := a.Type
 		for _, ai := range mutableState.GetPendingActivityInfos() {
 			if ai.ActivityType.Name == activityType {

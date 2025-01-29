@@ -336,7 +336,7 @@ type HistoryServiceClient interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	UpdateActivityOptions(ctx context.Context, in *UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityOptionsResponse, error)
-	// PauseActivityById pauses the execution of an activity specified by its ID.
+	// PauseActivity pauses the execution of an activity specified by its ID.
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	//
 	// Pausing an activity means:
@@ -357,7 +357,7 @@ type HistoryServiceClient interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	PauseActivity(ctx context.Context, in *PauseActivityRequest, opts ...grpc.CallOption) (*PauseActivityResponse, error)
-	// UnpauseActivityById unpauses the execution of an activity specified by its ID.
+	// UnpauseActivity unpauses the execution of an activity specified by its ID.
 	//
 	// If activity is not paused, this call will have no effect.
 	// If the activity is waiting for retry, it will be scheduled immediately (* see 'jitter' flag).
@@ -372,7 +372,7 @@ type HistoryServiceClient interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	UnpauseActivity(ctx context.Context, in *UnpauseActivityRequest, opts ...grpc.CallOption) (*UnpauseActivityResponse, error)
-	// ResetActivityById resets the execution of an activity specified by its ID.
+	// ResetActivity resets the execution of an activity specified by its ID.
 	//
 	// Resetting an activity means:
 	//   - number of attempts will be reset to 0.
@@ -1283,7 +1283,7 @@ type HistoryServiceServer interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error)
-	// PauseActivityById pauses the execution of an activity specified by its ID.
+	// PauseActivity pauses the execution of an activity specified by its ID.
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	//
 	// Pausing an activity means:
@@ -1304,7 +1304,7 @@ type HistoryServiceServer interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	PauseActivity(context.Context, *PauseActivityRequest) (*PauseActivityResponse, error)
-	// UnpauseActivityById unpauses the execution of an activity specified by its ID.
+	// UnpauseActivity unpauses the execution of an activity specified by its ID.
 	//
 	// If activity is not paused, this call will have no effect.
 	// If the activity is waiting for retry, it will be scheduled immediately (* see 'jitter' flag).
@@ -1319,7 +1319,7 @@ type HistoryServiceServer interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	UnpauseActivity(context.Context, *UnpauseActivityRequest) (*UnpauseActivityResponse, error)
-	// ResetActivityById resets the execution of an activity specified by its ID.
+	// ResetActivity resets the execution of an activity specified by its ID.
 	//
 	// Resetting an activity means:
 	//   - number of attempts will be reset to 0.

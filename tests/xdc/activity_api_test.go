@@ -131,28 +131,32 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// pause the activity in cluster 1
-	pauseRequest := &workflowservice.PauseActivityByIdRequest{
-		Namespace:  ns,
-		WorkflowId: workflowRun.GetID(),
-		Activity:   &workflowservice.PauseActivityByIdRequest_Id{Id: "activity-id"},
+	pauseRequest := &workflowservice.PauseActivityRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
 	}
-	pauseResp, err := s.cluster1.Host().FrontendClient().PauseActivityById(ctx, pauseRequest)
+	pauseResp, err := s.cluster1.Host().FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(pauseResp)
 
 	// verify activity is paused is cluster 1
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		s.NoError(err)
-		s.Equal(1, len(description.PendingActivities))
-		s.True(description.PendingActivities[0].Paused)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(description.PendingActivities))
+		assert.True(t, description.PendingActivities[0].Paused)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// update the activity properties in cluster 1
-	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
-		Namespace:  ns,
-		WorkflowId: workflowRun.GetID(),
-		Activity:   &workflowservice.UpdateActivityOptionsByIdRequest_Id{Id: "activity-id"},
+	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id"},
 		ActivityOptions: &activitypb.ActivityOptions{
 			RetryPolicy: &commonpb.RetryPolicy{
 				InitialInterval: durationpb.New(2 * time.Second),
@@ -161,43 +165,45 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval", "retry_policy.maximum_attempts"}},
 	}
-	respUpdate, err := s.cluster1.Host().FrontendClient().UpdateActivityOptionsById(ctx, updateRequest)
+	respUpdate, err := s.cluster1.Host().FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(respUpdate)
 
 	// verify activity is updated in cluster 1
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		s.NoError(err)
-		s.NotNil(description)
-		if description != nil {
-			s.Equal(1, len(description.PendingActivities))
-			s.True(description.PendingActivities[0].Paused)
-			s.Equal(int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+		assert.NoError(t, err)
+		assert.NotNil(t, description.GetPendingActivities())
+		if description.GetPendingActivities() != nil {
+			assert.Equal(t, 1, len(description.PendingActivities))
+			assert.True(t, description.PendingActivities[0].Paused)
+			assert.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// reset the activity in cluster 1, while keeping it paused
-	resetRequest := &workflowservice.ResetActivityByIdRequest{
-		Namespace:  ns,
-		WorkflowId: workflowRun.GetID(),
-		Activity:   &workflowservice.ResetActivityByIdRequest_Id{Id: "activity-id"},
+	resetRequest := &workflowservice.ResetActivityRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Activity:   &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
 		KeepPaused: true,
 	}
-	resetResp, err := s.cluster1.Host().FrontendClient().ResetActivityById(ctx, resetRequest)
+	resetResp, err := s.cluster1.Host().FrontendClient().ResetActivity(ctx, resetRequest)
 	s.NoError(err)
 	s.NotNil(resetResp)
 
 	// verify activity is reset, updated and paused in cluster 1
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		s.NoError(err)
-		s.NotNil(description)
-		if description != nil {
-			s.Equal(1, len(description.PendingActivities))
-			s.True(description.PendingActivities[0].Paused)
-			s.Equal(int32(1), description.PendingActivities[0].Attempt)
-			s.Equal(int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+		assert.NoError(t, err)
+		assert.NotNil(t, description.GetPendingActivities())
+		if description.GetPendingActivities() != nil {
+			assert.Equal(t, 1, len(description.PendingActivities))
+			assert.True(t, description.PendingActivities[0].Paused)
+			assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
+			assert.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -218,13 +224,13 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	// verify activity is still paused in cluster 2
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := standbyClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		s.NoError(err)
-		s.NotNil(description)
-		if description != nil {
-			s.Equal(1, len(description.PendingActivities))
-			s.True(description.PendingActivities[0].Paused)
-			s.Equal(int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
-			s.Equal(int32(10), description.PendingActivities[0].MaximumAttempts)
+		assert.NoError(t, err)
+		assert.NotNil(t, description.GetPendingActivities())
+		if description.GetPendingActivities() != nil {
+			assert.Equal(t, 1, len(description.PendingActivities))
+			assert.True(t, description.PendingActivities[0].Paused)
+			assert.Equal(t, int64(2), description.PendingActivities[0].CurrentRetryInterval.GetSeconds())
+			assert.Equal(t, int32(10), description.PendingActivities[0].MaximumAttempts)
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -239,12 +245,14 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	activityWasPaused.Store(true)
 
 	// unpause the activity in cluster 2
-	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
-		Namespace:  ns,
-		WorkflowId: workflowRun.GetID(),
-		Activity:   &workflowservice.UnpauseActivityByIdRequest_Id{Id: "activity-id"},
+	unpauseRequest := &workflowservice.UnpauseActivityRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
 	}
-	unpauseResp, err := s.cluster2.Host().FrontendClient().UnpauseActivityById(ctx, unpauseRequest)
+	unpauseResp, err := s.cluster2.Host().FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
 

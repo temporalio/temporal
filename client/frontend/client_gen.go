@@ -363,14 +363,14 @@ func (c *clientImpl) PatchSchedule(
 	return c.client.PatchSchedule(ctx, request, opts...)
 }
 
-func (c *clientImpl) PauseActivityById(
+func (c *clientImpl) PauseActivity(
 	ctx context.Context,
-	request *workflowservice.PauseActivityByIdRequest,
+	request *workflowservice.PauseActivityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.PauseActivityByIdResponse, error) {
+) (*workflowservice.PauseActivityResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.PauseActivityById(ctx, request, opts...)
+	return c.client.PauseActivity(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollActivityTaskQueue(
@@ -463,14 +463,14 @@ func (c *clientImpl) RequestCancelWorkflowExecution(
 	return c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
 }
 
-func (c *clientImpl) ResetActivityById(
+func (c *clientImpl) ResetActivity(
 	ctx context.Context,
-	request *workflowservice.ResetActivityByIdRequest,
+	request *workflowservice.ResetActivityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ResetActivityByIdResponse, error) {
+) (*workflowservice.ResetActivityResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.ResetActivityById(ctx, request, opts...)
+	return c.client.ResetActivity(ctx, request, opts...)
 }
 
 func (c *clientImpl) ResetStickyTaskQueue(
@@ -693,24 +693,24 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	return c.client.TerminateWorkflowExecution(ctx, request, opts...)
 }
 
-func (c *clientImpl) UnpauseActivityById(
+func (c *clientImpl) UnpauseActivity(
 	ctx context.Context,
-	request *workflowservice.UnpauseActivityByIdRequest,
+	request *workflowservice.UnpauseActivityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UnpauseActivityByIdResponse, error) {
+) (*workflowservice.UnpauseActivityResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.UnpauseActivityById(ctx, request, opts...)
+	return c.client.UnpauseActivity(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateActivityOptionsById(
+func (c *clientImpl) UpdateActivityOptions(
 	ctx context.Context,
-	request *workflowservice.UpdateActivityOptionsByIdRequest,
+	request *workflowservice.UpdateActivityOptionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateActivityOptionsByIdResponse, error) {
+) (*workflowservice.UpdateActivityOptionsResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.UpdateActivityOptionsById(ctx, request, opts...)
+	return c.client.UpdateActivityOptions(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateNamespace(

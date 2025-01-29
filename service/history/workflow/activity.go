@@ -188,7 +188,7 @@ func GetNextScheduledTime(ai *persistencespb.ActivityInfo) time.Time {
 	return nextScheduledTime
 }
 
-func PauseActivityById(mutableState MutableState, activityId string) error {
+func PauseActivity(mutableState MutableState, activityId string) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
 	}
@@ -215,7 +215,7 @@ func PauseActivityById(mutableState MutableState, activityId string) error {
 	})
 }
 
-func ResetActivityById(
+func ResetActivity(
 	shardContext shard.Context,
 	mutableState MutableState,
 	activityId string,

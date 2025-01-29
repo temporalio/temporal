@@ -45,17 +45,17 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
-			request.GetFrontendRequest().GetWorkflowId(),
-			request.GetFrontendRequest().GetRunId(),
+			request.GetFrontendRequest().GetExecution().GetWorkflowId(),
+			request.GetFrontendRequest().GetExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			frontendRequest := request.GetFrontendRequest()
 			var activityIDs []string
 			switch a := frontendRequest.GetActivity().(type) {
-			case *workflowservice.PauseActivityByIdRequest_Id:
+			case *workflowservice.PauseActivityRequest_Id:
 				activityIDs = append(activityIDs, a.Id)
-			case *workflowservice.PauseActivityByIdRequest_Type:
+			case *workflowservice.PauseActivityRequest_Type:
 				activityType := a.Type
 				for _, ai := range mutableState.GetPendingActivityInfos() {
 					if ai.ActivityType.Name == activityType {
@@ -69,7 +69,7 @@ func Invoke(
 			}
 
 			for _, activityId := range activityIDs {
-				err := workflow.PauseActivityById(mutableState, activityId)
+				err := workflow.PauseActivity(mutableState, activityId)
 				if err != nil {
 					return nil, err
 				}

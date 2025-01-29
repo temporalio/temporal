@@ -35,6 +35,7 @@ var (
 	errExecutionNotSet                                    = serviceerror.NewInvalidArgument("Execution is not set on request.")
 	errWorkflowIDNotSet                                   = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
 	errActivityIDNotSet                                   = serviceerror.NewInvalidArgument("ActivityId is not set on request.")
+	errActivityIdOrTypeNotSet                             = serviceerror.NewInvalidArgument("Either activity ID or activity type should be set on request.")
 	errSignalNameNotSet                                   = serviceerror.NewInvalidArgument("SignalName is not set on request.")
 	errInvalidRunID                                       = serviceerror.NewInvalidArgument("Invalid RunId.")
 	errInvalidNextPageToken                               = serviceerror.NewInvalidArgument("Invalid NextPageToken.")                                 // DEPRECATED

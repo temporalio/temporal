@@ -127,16 +127,19 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		if err != nil {
+		assert.NotNil(t, description.GetPendingActivities())
+		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 1)
 			assert.Equal(t, int32(1), startedActivityCount.Load())
 		}
 	}, 10*time.Second, 500*time.Millisecond)
 
-	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
-		Namespace:  s.Namespace().String(),
-		WorkflowId: workflowRun.GetID(),
-		Activity:   &workflowservice.UpdateActivityOptionsByIdRequest_Id{Id: "activity-id"},
+	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id"},
 		ActivityOptions: &activitypb.ActivityOptions{
 			RetryPolicy: &commonpb.RetryPolicy{
 				InitialInterval: durationpb.New(1 * time.Second),
@@ -144,7 +147,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}},
 	}
-	resp, err := s.FrontendClient().UpdateActivityOptionsById(ctx, updateRequest)
+	resp, err := s.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)
 
@@ -157,7 +160,8 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		if err != nil {
+		assert.NotNil(t, description.GetPendingActivities())
+		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 0)
 			assert.Equal(t, int32(2), startedActivityCount.Load())
 		}
@@ -203,7 +207,8 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		if err != nil {
+		assert.NotNil(t, description.GetPendingActivities())
+		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 1)
 			assert.Equal(t, int32(1), startedActivityCount.Load())
 		}
@@ -211,16 +216,18 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// update schedule_to_close_timeout
-	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
-		Namespace:  s.Namespace().String(),
-		WorkflowId: workflowRun.GetID(),
-		Activity:   &workflowservice.UpdateActivityOptionsByIdRequest_Id{Id: "activity-id"},
+	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id"},
 		ActivityOptions: &activitypb.ActivityOptions{
 			ScheduleToCloseTimeout: durationpb.New(1 * time.Second),
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout"}},
 	}
-	resp, err := s.FrontendClient().UpdateActivityOptionsById(ctx, updateRequest)
+	resp, err := s.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)
 
@@ -228,7 +235,8 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		if err != nil {
+		assert.NotNil(t, description.GetPendingActivities())
+		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 0)
 			assert.Equal(t, int32(1), startedActivityCount.Load())
 		}
@@ -290,10 +298,12 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	// update schedule_to_close_timeout, make it longer
 	// also update retry policy interval, make it shorter
 	newScheduleToCloseTimeout := 10 * time.Second
-	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
-		Namespace:  s.Namespace().String(),
-		WorkflowId: workflowRun.GetID(),
-		Activity:   &workflowservice.UpdateActivityOptionsByIdRequest_Id{Id: "activity-id"},
+	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity-id"},
 		ActivityOptions: &activitypb.ActivityOptions{
 			ScheduleToCloseTimeout: durationpb.New(newScheduleToCloseTimeout),
 			RetryPolicy: &commonpb.RetryPolicy{
@@ -303,7 +313,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"schedule_to_close_timeout", "retry_policy.initial_interval"}},
 	}
 
-	resp, err := s.FrontendClient().UpdateActivityOptionsById(ctx, updateRequest)
+	resp, err := s.FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(resp)
 	// check that the update was successful
@@ -315,7 +325,10 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		assert.Len(t, description.GetPendingActivities(), 0)
+		assert.NotNil(t, description.GetPendingActivities())
+		if description.GetPendingActivities() != nil {
+			assert.Len(t, description.GetPendingActivities(), 0)
+		}
 		assert.Equal(t, int32(2), startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 

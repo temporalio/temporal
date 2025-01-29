@@ -62,8 +62,8 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
-			request.GetUpdateRequest().WorkflowId,
-			request.GetUpdateRequest().RunId,
+			request.GetUpdateRequest().GetExecution().GetWorkflowId(),
+			request.GetUpdateRequest().GetExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
@@ -105,9 +105,9 @@ func processActivityOptionsRequest(
 
 	var activityIDs []string
 	switch a := updateRequest.GetActivity().(type) {
-	case *workflowservice.UpdateActivityOptionsByIdRequest_Id:
+	case *workflowservice.UpdateActivityOptionsRequest_Id:
 		activityIDs = append(activityIDs, a.Id)
-	case *workflowservice.UpdateActivityOptionsByIdRequest_Type:
+	case *workflowservice.UpdateActivityOptionsRequest_Type:
 		activityType := a.Type
 		for _, ai := range mutableState.GetPendingActivityInfos() {
 			if ai.ActivityType.Name == activityType {
