@@ -4282,6 +4282,7 @@ func (ms *MutableStateImpl) DeleteSubStateMachine(path *persistencespb.StateMach
 		)
 		// log data inconsistency instead of returning an error
 		ms.logDataInconsistency()
+		return nil
 	}
 	return root.DeleteChild(node.Key)
 }
