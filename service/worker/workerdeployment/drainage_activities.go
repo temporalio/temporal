@@ -26,6 +26,7 @@ package workerdeployment
 
 import (
 	"context"
+
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/server/common/namespace"

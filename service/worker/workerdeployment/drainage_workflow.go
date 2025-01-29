@@ -25,11 +25,12 @@
 package workerdeployment
 
 import (
+	"time"
+
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"time"
 )
 
 func DrainageWorkflowWithDurations(visibilityGracePeriod, refreshInterval time.Duration) func(ctx workflow.Context, version *deploymentpb.WorkerDeploymentVersion, first bool) error {
