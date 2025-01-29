@@ -212,12 +212,13 @@ func newWorkflowTaskPostActionInfo(
 	taskqueue *taskqueuepb.TaskQueue,
 ) (*workflowTaskPostActionInfo, error) {
 	directive := MakeDirectiveForWorkflowTask(mutableState)
+	priority := mutableState.GetExecutionInfo().Priority
 
 	return &workflowTaskPostActionInfo{
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
 		versionDirective:                   directive,
-		priority:                           mutableState.GetExecutionInfo().Priority,
+		priority:                           priority,
 	}, nil
 }
 
