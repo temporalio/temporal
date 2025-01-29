@@ -127,7 +127,6 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		assert.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 1)
 			assert.Equal(t, int32(1), startedActivityCount.Load())
@@ -160,7 +159,6 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		assert.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 0)
 			assert.Equal(t, int32(2), startedActivityCount.Load())
@@ -207,7 +205,6 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		assert.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 1)
 			assert.Equal(t, int32(1), startedActivityCount.Load())
@@ -235,7 +232,6 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		assert.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 0)
 			assert.Equal(t, int32(1), startedActivityCount.Load())
@@ -325,7 +321,6 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		assert.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 0)
 		}

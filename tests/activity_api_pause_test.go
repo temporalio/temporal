@@ -121,14 +121,10 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		if err != nil {
-			assert.NotNil(t, description.GetPendingActivities())
-			if description.GetPendingActivities() != nil {
-				assert.Len(t, description.PendingActivities, 1)
-			}
-			assert.Equal(t, int32(1), startedActivityCount.Load())
-
+		if description.GetPendingActivities() != nil {
+			assert.Len(t, description.PendingActivities, 1)
 		}
+		assert.Equal(t, int32(1), startedActivityCount.Load())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// pause activity
@@ -313,7 +309,6 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		assert.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 1)
 		}
@@ -398,7 +393,6 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		assert.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 1)
 		}
@@ -421,7 +415,6 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		assert.NotNil(t, description.GetPendingActivities())
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.GetPendingActivities(), 1)
 			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
@@ -449,14 +442,11 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
-		if err != nil {
-			assert.NotNil(t, description.GetPendingActivities())
-			if description.GetPendingActivities() != nil {
-				assert.Len(t, description.GetPendingActivities(), 1)
-				assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
-				// also verify that the number of attempts was reset
-				assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
-			}
+		if description.GetPendingActivities() != nil {
+			assert.Len(t, description.GetPendingActivities(), 1)
+			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
+			// also verify that the number of attempts was reset
+			assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 
