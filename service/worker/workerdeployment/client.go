@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -110,7 +111,7 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName, version string,
-		args *deploymentspb.SyncVersionStateArgs,
+		args *deploymentspb.SyncVersionStateUpdateArgs,
 		identity string,
 		requestID string,
 	) (*deploymentspb.SyncVersionStateResponse, error)
@@ -124,6 +125,13 @@ type Client interface {
 		identity string,
 		requestID string,
 	) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error)
+
+	// Used internally by the Drainage workflow (child of Worker Deployment Version workflow)
+	// in its GetVersionDrainageStatus Activity
+	GetVersionDrainageStatus(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName, version string) (enumspb.VersionDrainageStatus, error)
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
@@ -138,7 +146,6 @@ type ClientImpl struct {
 	maxIDLengthLimit          dynamicconfig.IntPropertyFn
 	visibilityMaxPageSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxTaskQueuesInDeployment dynamicconfig.IntPropertyFnWithNamespaceFilter
-	reachabilityCache         reachabilityCache
 }
 
 var _ Client = (*ClientImpl)(nil)
@@ -421,7 +428,7 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName, version string,
-	args *deploymentspb.SyncVersionStateArgs,
+	args *deploymentspb.SyncVersionStateUpdateArgs,
 	identity string,
 	requestID string,
 ) (_ *deploymentspb.SyncVersionStateResponse, retErr error) {
@@ -492,13 +499,23 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 
 	workflowID := GenerateVersionWorkflowID(version)
 
+	now := timestamppb.Now()
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
 		VersionState: &deploymentspb.VersionLocalState{
-			DeploymentName: deploymentName,
-			Version:        version,
-			CreateTime:     timestamppb.Now(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: deploymentName,
+				BuildId:        version,
+			},
+			WorkflowVersioningMode: 0, // todo
+			CreateTime:             now,
+			RoutingUpdateTime:      now,
+			CurrentSinceTime:       nil, // not current
+			RampingSinceTime:       nil, // not ramping
+			RampPercentage:         0,   // not ramping
+			DrainageInfo:           nil, // not draining or drained
+			Metadata:               nil, // todo
 		},
 	})
 	if err != nil {
@@ -722,7 +739,6 @@ func (d *ClientImpl) buildInitialVersionMemo(deploymentName, version string) (*c
 	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.VersionWorkflowMemo{
 		DeploymentName: deploymentName,
 		Version:        version,
-		CreateTime:     timestamppb.Now(),
 	})
 	if err != nil {
 		return nil, err
@@ -788,10 +804,10 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		return nil
 	}
 
-	taskQueues := make([]*deploymentpb.WorkerDeploymentVersionInfo_DeploymentVersionTaskQueueInfo, 0, len(state.TaskQueueFamilies)*2)
+	taskQueues := make([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, 0, len(state.TaskQueueFamilies)*2)
 	for taskQueueName, taskQueueFamilyInfo := range state.TaskQueueFamilies {
 		for taskQueueType := range taskQueueFamilyInfo.TaskQueues {
-			element := &deploymentpb.WorkerDeploymentVersionInfo_DeploymentVersionTaskQueueInfo{
+			element := &deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
 				Name: taskQueueName,
 				Type: enumspb.TaskQueueType(taskQueueType),
 				// TODO (Shivam): Add fields here as needed.
@@ -802,10 +818,16 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 
 	// TODO (Shivam): Add metadata and aggregated pollers status
 	return &deploymentpb.WorkerDeploymentVersionInfo{
-		DeploymentName: state.DeploymentName,
-		Version:        state.Version,
-		CreateTime:     state.CreateTime,
-		TaskQueueInfos: taskQueues,
+		Version:                state.Version,
+		WorkflowVersioningMode: state.WorkflowVersioningMode,
+		CreateTime:             state.CreateTime,
+		RoutingUpdateTime:      state.RoutingUpdateTime,
+		CurrentSinceTime:       state.CurrentSinceTime,
+		RampingSinceTime:       state.RampingSinceTime,
+		RampPercentage:         state.RampPercentage,
+		TaskQueueInfos:         taskQueues,
+		DrainageInfo:           state.DrainageInfo,
+		Metadata:               state.Metadata,
 	}
 }
 
@@ -829,10 +851,41 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namesp
 		}
 		// TODO (Shivam) - Add WorkflowVersioningMode + AcceptsNewExecutions
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-			Version:    versionInfo.Version,
-			CreateTime: versionInfo.CreateTime,
+			BuildId:                versionInfo.Version.BuildId,
+			WorkflowVersioningMode: versionInfo.WorkflowVersioningMode,
+			CreateTime:             versionInfo.CreateTime,
+			DrainageStatus:         versionInfo.GetDrainageInfo().GetStatus(),
 		})
 	}
 
 	return &workerDeploymentInfo, nil
+}
+
+func (d *ClientImpl) GetVersionDrainageStatus(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName, version string) (enumspb.VersionDrainageStatus, error) {
+	countRequest := manager.CountWorkflowExecutionsRequest{
+		NamespaceID: namespaceEntry.ID(),
+		Namespace:   namespaceEntry.Name(),
+		Query:       makeDeploymentQuery(deploymentName, version),
+	}
+	countResponse, err := d.visibilityManager.CountWorkflowExecutions(ctx, &countRequest)
+	if err != nil {
+		return enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, err
+	}
+	if countResponse.Count == 0 {
+		return enumspb.VERSION_DRAINAGE_STATUS_DRAINED, nil
+	}
+	return enumspb.VERSION_DRAINAGE_STATUS_DRAINING, nil
+}
+
+func makeDeploymentQuery(deploymentName, buildID string) string {
+	var statusFilter string
+	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(&deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    buildID,
+	}))
+	statusFilter = "= 'Running'"
+	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
 }

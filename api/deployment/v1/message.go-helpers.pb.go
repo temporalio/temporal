@@ -251,35 +251,35 @@ func (this *RegisterWorkerInVersionArgs) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type SyncVersionStateArgs to the protobuf v3 wire format
-func (val *SyncVersionStateArgs) Marshal() ([]byte, error) {
+// Marshal an object of type SyncVersionStateUpdateArgs to the protobuf v3 wire format
+func (val *SyncVersionStateUpdateArgs) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type SyncVersionStateArgs from the protobuf v3 wire format
-func (val *SyncVersionStateArgs) Unmarshal(buf []byte) error {
+// Unmarshal an object of type SyncVersionStateUpdateArgs from the protobuf v3 wire format
+func (val *SyncVersionStateUpdateArgs) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *SyncVersionStateArgs) Size() int {
+func (val *SyncVersionStateUpdateArgs) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two SyncVersionStateArgs values are equivalent by recursively
+// Equal returns whether two SyncVersionStateUpdateArgs values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *SyncVersionStateArgs) Equal(that interface{}) bool {
+func (this *SyncVersionStateUpdateArgs) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *SyncVersionStateArgs
+	var that1 *SyncVersionStateUpdateArgs
 	switch t := that.(type) {
-	case *SyncVersionStateArgs:
+	case *SyncVersionStateUpdateArgs:
 		that1 = t
-	case SyncVersionStateArgs:
+	case SyncVersionStateUpdateArgs:
 		that1 = &t
 	default:
 		return false
