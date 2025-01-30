@@ -758,20 +758,21 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	}
 
 	isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
-	if !wh.config.SendRawWorkflowHistory(request.Namespace) && isCloseEventOnly {
-		if len(response.Response.History.GetEvents()) > 0 {
-			response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
+
+	if !wh.config.SendRawWorkflowHistory(request.Namespace) {
+		if isCloseEventOnly {
+			if len(response.Response.History.GetEvents()) > 0 {
+				response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
+			}
 		}
-	}
-
-	err = api.ProcessOutgoingSearchAttributes(wh.namespaceRegistry, wh.saProvider, wh.saMapperProvider, response.Response.History.Events, namespaceID, wh.visibilityMgr)
-	if err != nil {
-		return nil, err
-	}
-
-	err = api.FixFollowEvents(ctx, wh.versionChecker, isCloseEventOnly, response.Response.History)
-	if err != nil {
-		return nil, err
+		err = api.ProcessOutgoingSearchAttributes(wh.namespaceRegistry, wh.saProvider, wh.saMapperProvider, response.Response.History.Events, namespaceID, wh.visibilityMgr)
+		if err != nil {
+			return nil, err
+		}
+		err = api.FixFollowEvents(ctx, wh.versionChecker, isCloseEventOnly, response.Response.History)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return response.Response, nil

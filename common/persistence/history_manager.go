@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
@@ -812,7 +813,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	transactionIDs := make([]int64, 0, len(nodes))
 	nodeIDs := make([]int64, 0, len(nodes))
 	dataSize := 0
-	allEvents := make([]StrippedHistoryEvent, 0, request.PageSize)
+	allEvents := make([]*history.StrippedHistoryEvent, 0, request.PageSize)
 	if len(nodes) > 0 {
 		dataBlobs = make([]*commonpb.DataBlob, len(nodes))
 		for index, node := range nodes {
@@ -820,12 +821,8 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 			if err != nil {
 				return nil, nil, nil, nil, 0, err
 			}
-			strippedBatch := make([]StrippedHistoryEvent, 0, len(events))
-			for _, event := range events {
-				strippedBatch = append(strippedBatch, event)
-				allEvents = append(allEvents, event)
-			}
-			err = ValidateBatch(strippedBatch, branchToken, token, m.logger)
+			allEvents = append(allEvents, events...)
+			err = ValidateBatch(events, branchToken, token, m.logger)
 			if err != nil {
 				return nil, nil, nil, nil, 0, err
 			}
