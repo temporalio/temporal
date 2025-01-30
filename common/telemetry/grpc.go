@@ -134,6 +134,13 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 	c.wrapped.HandleRPC(ctx, stat)
 
 	switch s := stat.(type) {
+	case *stats.InHeader:
+		if c.isDebug {
+			span := trace.SpanFromContext(ctx)
+			for key, values := range s.Header {
+				span.SetAttributes(attribute.StringSlice("rpc.request.headers."+key, values))
+			}
+		}
 	case *stats.InPayload:
 		span := trace.SpanFromContext(ctx)
 		c.annotateTags(ctx, span, s.Payload)
@@ -146,6 +153,13 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 			msgType := string(proto.MessageName(reqMsg).Name())
 			span.SetAttributes(attribute.Key("rpc.request.payload").String(string(payload)))
 			span.SetAttributes(attribute.Key("rpc.request.type").String(msgType))
+		}
+	case *stats.OutHeader:
+		if c.isDebug {
+			span := trace.SpanFromContext(ctx)
+			for key, values := range s.Header {
+				span.SetAttributes(attribute.StringSlice("rpc.response.headers."+key, values))
+			}
 		}
 	case *stats.OutPayload:
 		span := trace.SpanFromContext(ctx)
