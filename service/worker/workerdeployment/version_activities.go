@@ -73,7 +73,6 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 			var err error
 
 			if input.ForgetVersion {
-
 				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 					NamespaceId:   a.namespace.ID().String(),
 					TaskQueue:     syncData.Name,

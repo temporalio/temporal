@@ -249,12 +249,10 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		ForgetVersion:           true,
 	}
 	for tqName, byType := range state.TaskQueueFamilies {
-		for tqType, oldData := range byType.TaskQueues {
-
+		for tqType, _ := range byType.TaskQueues {
 			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 				Name: tqName,
 				Type: enumspb.TaskQueueType(tqType),
-				Data: oldData,
 			})
 		}
 	}
