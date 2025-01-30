@@ -563,7 +563,7 @@ type (
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
 		// Serialized TreeInfo
-		TreeInfo *commonpb.DataBlob
+		TreeInfo *ProtoBlob[*persistencespb.HistoryTreeInfo]
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
 		ForkNodeID int64
 		// branchID of the new branch

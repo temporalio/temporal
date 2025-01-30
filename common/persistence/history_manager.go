@@ -129,7 +129,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	req := &InternalForkHistoryBranchRequest{
 		NewBranchToken: newBranchToken,
 		ForkBranchInfo: forkBranch,
-		TreeInfo:       treeInfoBlob,
+		TreeInfo:       NewProtoBlob[*persistencespb.HistoryTreeInfo](treeInfoBlob),
 		ForkNodeID:     request.ForkNodeID,
 		NewBranchID:    newBranchInfo.BranchId,
 		Info:           request.Info,

@@ -25,9 +25,17 @@
 package persistence
 
 import (
+	"encoding/json"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/persistence/serialization"
+	"google.golang.org/protobuf/proto"
 )
+
+type ProtoBlob[T proto.Message] struct {
+	*commonpb.DataBlob
+}
 
 // NewDataBlob returns a new DataBlob
 // TODO: return an UnknowEncodingType error with the actual type string when encodingTypeStr is invalid
@@ -46,4 +54,16 @@ func NewDataBlob(data []byte, encodingTypeStr string) *commonpb.DataBlob {
 		Data:         data,
 		EncodingType: encodingType,
 	}
+}
+
+func NewProtoBlob[T proto.Message](blob *commonpb.DataBlob) *ProtoBlob[T] {
+	return &ProtoBlob[T]{DataBlob: blob}
+}
+
+func (d *ProtoBlob[T]) MarshalJSON() ([]byte, error) {
+	var zero proto.Message
+	if err := serialization.ProtoDecodeBlob(d.DataBlob, zero); err != nil {
+		return nil, err
+	}
+	return json.Marshal(d)
 }
