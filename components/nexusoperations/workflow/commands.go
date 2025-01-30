@@ -225,15 +225,13 @@ func (ch *commandHandler) HandleCancelCommand(
 		} else {
 			return err
 		}
-	} else if node == nil {
-		if !ms.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId)) {
-			return workflow.FailWorkflowTaskError{
-				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
-			}
+	} else if node == nil &&  !ms.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId)) {
+		return workflow.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
 		}
 		// Fallthrough and apply the event, there's special logic that will handle state machine not found below.
-	} else {
+	}
 		// TODO(bergundy): Remove this when operation auto-deletes itself on terminal state.
 		// Operation may already be in a terminal state because it doesn't yet delete itself. We don't want to accept
 		// cancelation in this case.
