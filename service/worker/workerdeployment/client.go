@@ -67,9 +67,6 @@ type Client interface {
 		requestID string,
 	) error
 
-	// TODO (Shivam) -
-	// Add ListWorkerDeployment + DescribeWorkerDeployment + DeleteWorkerDeployment + DeleteDeploymentVersion
-
 	DescribeVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -96,6 +93,21 @@ type Client interface {
 		pageSize int,
 		nextPageToken []byte,
 	) ([]*deploymentspb.WorkerDeploymentSummary, []byte, error)
+
+	DeleteWorkerDeployment(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName string,
+		identity string,
+	) error
+
+	DeleteWorkerDeploymentVersion(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName string,
+		buildId string,
+		identity string,
+	) error
 
 	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
 	StartWorkerDeployment(
