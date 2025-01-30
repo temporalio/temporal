@@ -408,7 +408,7 @@ func (d *ClientImpl) SetWorkerDeploymentRampingVersion(
 		namespaceEntry,
 		version.GetDeploymentName(),
 		&updatepb.Request{
-			Input: &updatepb.Input{Name: SetWorkerDeploymentRampingVersion, Args: updatePayload},
+			Input: &updatepb.Input{Name: SetRampingVersion, Args: updatePayload},
 			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 		},
 		identity,
@@ -424,9 +424,7 @@ func (d *ClientImpl) SetWorkerDeploymentRampingVersion(
 		res.PreviousPercentage = percentage
 		return &res, nil
 	} else if failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyCurrentType {
-		res.PreviousVersion = ""
-		res.PreviousPercentage = 0
-		return &res, nil
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("Ramping version %v is already current", version.GetBuildId()))
 	} else if failure != nil {
 		// TODO: is there an easy way to recover the original type here?
 		return nil, serviceerror.NewInternal(failure.Message)

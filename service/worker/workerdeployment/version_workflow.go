@@ -330,6 +330,8 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	state := d.GetVersionState()
 
+	// TODO (Shivam): __unversioned__
+
 	// only versions with WORKFLOW_VERSIONING_MODE_VERSIONING_BEHAVIORS can be set as current or ramping
 	// if args.RampPercentage > 0 || args.CurrentSinceTime != nil {
 	// 	if state.WorkflowVersioningMode != enumspb.WORKFLOW_VERSIONING_MODE_VERSIONING_BEHAVIORS {

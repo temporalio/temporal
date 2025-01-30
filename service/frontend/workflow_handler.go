@@ -3366,7 +3366,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 		return nil, err
 	}
 
-	// TODO: error out if build_ID is empty
+	// TODO (Shivam): error out if build_ID is empty
 
 	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.BuildId, request.Identity)
 	if err != nil {
@@ -3378,7 +3378,6 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	}, nil
 }
 
-// TODO (Shivam): Implement this
 func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentRampingVersionRequest) (_ *workflowservice.SetWorkerDeploymentRampingVersionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
@@ -3406,7 +3405,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	}
 
 	if request.GetPercentage() < 0 || request.GetPercentage() > 100 {
-		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100")
+		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
 	}
 
 	deploymentVersion := &deploymentpb.WorkerDeploymentVersion{

@@ -94,7 +94,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
-		SetWorkerDeploymentRampingVersion,
+		SetRampingVersion,
 		d.handleSetWorkerDeploymentRampingVersion,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateSetWorkerDeploymentRampingVersion,
@@ -134,8 +134,8 @@ func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploym
 	}
 	// todo: this will only work when "__unversioned__" is the default current-version of a deployment.
 	if args.Version == d.State.RoutingInfo.CurrentVersion {
-		d.logger.Info("version already current")
-		return temporal.NewApplicationError("version already current", errVersionAlreadyCurrentType)
+		d.logger.Info("version can't be set to ramping since it is already current")
+		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
 	}
 
 	return nil
@@ -158,9 +158,11 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 	prevRampingVersionPercentage := d.State.RoutingInfo.RampingVersionPercentage
 
 	newRampingVersion := args.Version
-	updateTime := timestamppb.New(workflow.Now(ctx))
+	routingUpdateTime := timestamppb.New(workflow.Now(ctx))
 
-	// unset currently set ramping version
+	var rampingSinceTime *timestamppb.Timestamp
+
+	// unsetting ramp
 	if newRampingVersion == "" {
 		if prevRampingVersion == "" {
 			// no previously set ramping version
@@ -168,7 +170,7 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 		}
 
 		rampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: updateTime,
+			RoutingUpdateTime: routingUpdateTime,
 			RampingSinceTime:  nil, // remove ramp
 			RampPercentage:    0,   // remove ramp
 		}
@@ -177,10 +179,17 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 			return nil, err
 		}
 	} else {
-		// tell new ramping version it's ramping
+		// setting ramp
+
+		if prevRampingVersion == newRampingVersion { // the version was alread ramping, user changing ramp %
+			rampingSinceTime = d.State.RoutingInfo.RampingVersionUpdateTime
+		} else {
+			rampingSinceTime = timestamppb.New(workflow.Now(ctx)) // version ramping for the first time
+		}
+
 		rampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: updateTime,
-			RampingSinceTime:  updateTime,
+			RoutingUpdateTime: routingUpdateTime,
+			RampingSinceTime:  rampingSinceTime,
 			RampPercentage:    args.Percentage,
 		}
 		if _, err := d.syncVersion(ctx, newRampingVersion, rampUpdateArgs); err != nil {
@@ -188,9 +197,9 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 		}
 
 		// tell previous ramping version, if present, that it's no longer ramping
-		if prevRampingVersion != "" {
+		if prevRampingVersion != "" && prevRampingVersion != newRampingVersion {
 			prevRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-				RoutingUpdateTime: updateTime,
+				RoutingUpdateTime: routingUpdateTime,
 				RampingSinceTime:  nil, // remove ramp
 				RampPercentage:    0,   // remove ramp
 			}
@@ -203,7 +212,7 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 	// update local state
 	d.State.RoutingInfo.RampingVersion = newRampingVersion
 	d.State.RoutingInfo.RampingVersionPercentage = args.Percentage
-	d.State.RoutingInfo.RampingVersionUpdateTime = updateTime
+	d.State.RoutingInfo.RampingVersionUpdateTime = rampingSinceTime
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
@@ -237,6 +246,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
+
+	// TODO (Shivam): if ramping version is being set as current, unset ramping version.
 
 	prevCurrentVersion := d.State.RoutingInfo.CurrentVersion
 	newCurrentVersion := args.Version
