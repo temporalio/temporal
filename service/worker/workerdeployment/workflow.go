@@ -145,15 +145,14 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkerDeploymentWorkflowArgs)
 }
 
-func (d *WorkflowRunner) validateDeleteDeployment(args *deploymentspb.DeleteDeploymentArgs) error {
+func (d *WorkflowRunner) validateDeleteDeployment() error {
 	if len(d.State.Versions) > 0 {
 		return serviceerror.NewFailedPrecondition("deployment can only be deleted when it has no versions")
 	}
 	return nil
 }
 
-func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context, args *deploymentspb.DeleteDeploymentArgs) error {
-	// TODO (Carly): Do we need to do something with args.Identity here to log who deleted this? Or has the Update already logged that
+func (d *WorkflowRunner) handleDeleteDeployment() error {
 	d.done = true
 	return nil
 }
