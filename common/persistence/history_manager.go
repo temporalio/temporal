@@ -781,7 +781,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		return nil, nil, nil, nil, 0, err
 	}
 
-	nodes, nextToken, err := m.readRawHistoryBranch(
+	nodes, token, err := m.readRawHistoryBranch(
 		ctx,
 		branchToken,
 		shardID,
@@ -800,8 +800,8 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	}
 
 	nodes, err = m.filterHistoryNodes(
-		nextToken.LastNodeID,
-		nextToken.LastTransactionID,
+		token.LastNodeID,
+		token.LastTransactionID,
 		nodes,
 	)
 	if err != nil {
@@ -836,23 +836,23 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 			nodeIDs = append(nodeIDs, node.NodeID)
 		}
 		lastNode := nodes[len(nodes)-1]
-		nextToken.LastNodeID = lastNode.NodeID
-		nextToken.LastTransactionID = lastNode.TransactionID
+		token.LastNodeID = lastNode.NodeID
+		token.LastTransactionID = lastNode.TransactionID
 	}
 
 	if err := VerifyHistoryIsComplete(
 		allEvents,
 		minNodeID,
 		maxNodeID-1,
+		len(request.NextPageToken) == 0,
 		len(token.StoreToken) == 0,
-		len(nextToken.StoreToken) == 0,
 		request.PageSize,
 	); err != nil {
 		m.logger.Error("getHistory: incomplete history",
 			tag.WorkflowBranchToken(branchToken),
 			tag.Error(err))
 	}
-	return dataBlobs, transactionIDs, nodeIDs, nextToken, dataSize, nil
+	return dataBlobs, transactionIDs, nodeIDs, token, dataSize, nil
 }
 
 func (m *executionManagerImpl) readRawHistoryBranchReverseAndFilter(

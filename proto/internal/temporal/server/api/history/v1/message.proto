@@ -30,6 +30,7 @@ import "google/protobuf/timestamp.proto";
 
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/event_type.proto";
 
 message TransientWorkflowTaskInfo {
     reserved 1;
@@ -69,6 +70,7 @@ message TaskRange {
 
 message StrippedHistoryEvent {
     int64 event_id = 1;
+    temporal.api.enums.v1.EventType event_type = 3;
     int64 version = 4;
 }
 
