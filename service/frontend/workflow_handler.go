@@ -4309,8 +4309,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			return nil, serviceerror.NewInvalidArgument("unpause activities operation is not set")
 		}
 		if op.UnpauseActivitiesOperation.GetActivity() == nil {
-			return nil, serviceerror.NewInvalidArgument("activity type must be set")
+			return nil, serviceerror.NewInvalidArgument("activity filter must be set")
 		}
+
 		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
 		case *batchpb.BatchOperationUnpauseActivities_Type:
 			if len(a.Type) == 0 {
@@ -5441,7 +5442,7 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 		return nil, errWorkflowIDNotSet
 	}
 	if request.GetActivity() == nil {
-		return nil, errActivityIdOrTypeNotSet
+		return nil, errActivityIDOrTypeNotSet
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -5480,7 +5481,7 @@ func (wh *WorkflowHandler) PauseActivity(
 		return nil, errWorkflowIDNotSet
 	}
 	if request.GetActivity() == nil {
-		return nil, errActivityIdOrTypeNotSet
+		return nil, errActivityIDOrTypeNotSet
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -5516,7 +5517,7 @@ func (wh *WorkflowHandler) UnpauseActivity(
 		return nil, errWorkflowIDNotSet
 	}
 	if request.GetActivity() == nil {
-		return nil, errActivityIdOrTypeNotSet
+		return nil, errActivityIDOrTypeNotSet
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -5552,7 +5553,7 @@ func (wh *WorkflowHandler) ResetActivity(
 		return nil, errWorkflowIDNotSet
 	}
 	if request.GetActivity() == nil {
-		return nil, errActivityIdOrTypeNotSet
+		return nil, errActivityIDOrTypeNotSet
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
