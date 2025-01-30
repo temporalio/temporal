@@ -1054,6 +1054,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowRunTimeout_Pendi
 	// Flush buffered events so real IDs get assigned
 	mutableState.FlushBufferedEvents()
 
+	startTime := mutableState.GetExecutionState().GetStartTime().AsTime()
 	timerTask := &tasks.WorkflowRunTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			s.namespaceID.String(),
@@ -1062,7 +1063,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowRunTimeout_Pendi
 		),
 		Version:             s.version,
 		TaskID:              s.mustGenerateTaskID(),
-		VisibilityTimestamp: s.now.Add(workflowRunTimeout),
+		VisibilityTimestamp: startTime.Add(workflowRunTimeout),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completionEvent.GetEventId(), completionEvent.GetVersion())
