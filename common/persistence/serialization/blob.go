@@ -144,6 +144,7 @@ func WorkflowExecutionStateDetailsToBlob(details *persistencespb.WorkflowExecuti
 
 func WorkflowExecutionStateDetailsFromBlob(blob []byte, encoding string) (*persistencespb.WorkflowExecutionStateDetails, error) {
 	if len(blob) == 0 {
+		// For backwards compatibility, old records have blob and encoding not set.
 		return nil, nil
 	}
 	details := &persistencespb.WorkflowExecutionStateDetails{}

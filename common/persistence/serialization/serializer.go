@@ -429,24 +429,7 @@ func (t *serializerImpl) WorkflowExecutionStateToBlob(info *persistencespb.Workf
 }
 
 func (t *serializerImpl) WorkflowExecutionStateFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionState, error) {
-	result := &persistencespb.WorkflowExecutionState{}
-	if err := ProtoDecodeBlob(data, result); err != nil {
-		return nil, err
-	}
-	// Initialize the WorkflowExecutionStateDetails for old records.
-	if result.Details == nil {
-		result.Details = &persistencespb.WorkflowExecutionStateDetails{
-			RequestIds: make(map[string]*persistencespb.RequestIDInfo, 1),
-		}
-	} else if result.Details.RequestIds == nil {
-		result.Details.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
-	}
-	if result.CreateRequestId != "" && result.Details.RequestIds[result.CreateRequestId] == nil {
-		result.Details.RequestIds[result.CreateRequestId] = &persistencespb.RequestIDInfo{
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		}
-	}
-	return result, nil
+	return WorkflowExecutionStateFromBlob(data.GetData(), data.GetEncodingType().String())
 }
 
 func (t *serializerImpl) ActivityInfoToBlob(info *persistencespb.ActivityInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
@@ -571,11 +554,7 @@ func (t *serializerImpl) WorkflowExecutionStateDetailsToBlob(requestIDs *persist
 }
 
 func (t *serializerImpl) WorkflowExecutionStateDetailsFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionStateDetails, error) {
-	if len(data.GetData()) == 0 {
-		return nil, nil
-	}
-	result := &persistencespb.WorkflowExecutionStateDetails{}
-	return result, ProtoDecodeBlob(data, result)
+	return WorkflowExecutionStateDetailsFromBlob(data.GetData(), data.GetEncodingType().String())
 }
 
 func ProtoDecodeBlob(data *commonpb.DataBlob, result proto.Message) error {

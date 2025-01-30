@@ -738,17 +738,12 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 
 	case p.ConflictResolveWorkflowModeUpdateCurrent:
 		executionState := resetWorkflow.ExecutionState
+		executionStateBlob := resetWorkflow.ExecutionStateBlob
 		lastWriteVersion := resetWorkflow.LastWriteVersion
 		if newWorkflow != nil {
 			lastWriteVersion = newWorkflow.LastWriteVersion
 			executionState = newWorkflow.ExecutionState
-		}
-		runID := executionState.RunId
-		state := executionState.State
-
-		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(executionState)
-		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
+			executionStateBlob = newWorkflow.ExecutionStateBlob
 		}
 
 		if currentWorkflow != nil {
@@ -757,12 +752,13 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			// reset workflow is current
 			currentRunID = resetWorkflow.ExecutionState.RunId
 		}
+
 		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-			runID,
-			executionStateDatablob.Data,
-			executionStateDatablob.EncodingType.String(),
+			executionState.RunId,
+			executionStateBlob.Data,
+			executionStateBlob.EncodingType.String(),
 			lastWriteVersion,
-			state,
+			executionState.State,
 			shardID,
 			rowTypeExecution,
 			namespaceID,
