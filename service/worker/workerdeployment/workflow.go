@@ -94,6 +94,17 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
+		SetRampingVersion,
+		d.handleSetWorkerDeploymentRampingVersion,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateSetWorkerDeploymentRampingVersion,
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
 		AddVersionToWorkerDeployment,
 		d.handleAddVersionToWorkerDeployment,
 		workflow.UpdateHandlerOptions{
@@ -114,6 +125,106 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
 	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkerDeploymentWorkflowArgs)
+}
+
+func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) error {
+	if args.Version == d.State.RoutingInfo.RampingVersion && args.Percentage == d.State.RoutingInfo.RampingVersionPercentage {
+		d.logger.Info("version already ramping, no change")
+		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
+	}
+	// todo: this will only work when "__unversioned__" is the default current-version of a deployment.
+	if args.Version == d.State.RoutingInfo.CurrentVersion {
+		d.logger.Info("version can't be set to ramping since it is already current")
+		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
+	}
+
+	return nil
+}
+
+func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Context, args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) (*deploymentspb.SetWorkerDeploymentRampingVersionResponse, error) {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	prevRampingVersion := d.State.RoutingInfo.RampingVersion
+	prevRampingVersionPercentage := d.State.RoutingInfo.RampingVersionPercentage
+
+	newRampingVersion := args.Version
+	routingUpdateTime := timestamppb.New(workflow.Now(ctx))
+
+	var rampingSinceTime *timestamppb.Timestamp
+	var rampingVersionUpdateTime *timestamppb.Timestamp
+
+	// unsetting ramp
+	if newRampingVersion == "" {
+
+		rampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			RoutingUpdateTime: routingUpdateTime,
+			RampingSinceTime:  nil, // remove ramp
+			RampPercentage:    0,   // remove ramp
+		}
+
+		if _, err := d.syncVersion(ctx, prevRampingVersion, rampUpdateArgs); err != nil {
+			return nil, err
+		}
+
+		rampingVersionUpdateTime = routingUpdateTime // ramp was updated to ""
+	} else {
+		// setting ramp
+
+		if prevRampingVersion == newRampingVersion { // the version was alread ramping, user changing ramp %
+			rampingSinceTime = d.State.RoutingInfo.RampingVersionUpdateTime
+			rampingVersionUpdateTime = d.State.RoutingInfo.RampingVersionUpdateTime
+		} else {
+			rampingSinceTime = routingUpdateTime // version ramping for the first time
+			rampingVersionUpdateTime = routingUpdateTime
+		}
+
+		rampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			RoutingUpdateTime: routingUpdateTime,
+			RampingSinceTime:  rampingSinceTime,
+			RampPercentage:    args.Percentage,
+		}
+		if _, err := d.syncVersion(ctx, newRampingVersion, rampUpdateArgs); err != nil {
+			return nil, err
+		}
+
+		// tell previous ramping version, if present, that it's no longer ramping
+		if prevRampingVersion != "" && prevRampingVersion != newRampingVersion {
+			prevRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+				RoutingUpdateTime: routingUpdateTime,
+				RampingSinceTime:  nil, // remove ramp
+				RampPercentage:    0,   // remove ramp
+			}
+			if _, err := d.syncVersion(ctx, prevRampingVersion, prevRampUpdateArgs); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// update local state
+	d.State.RoutingInfo.RampingVersion = newRampingVersion
+	d.State.RoutingInfo.RampingVersionPercentage = args.Percentage
+	d.State.RoutingInfo.RampingVersionUpdateTime = rampingVersionUpdateTime
+
+	// update memo
+	if err = d.updateMemo(ctx); err != nil {
+		return nil, err
+	}
+
+	return &deploymentspb.SetWorkerDeploymentRampingVersionResponse{
+		PreviousVersion:    prevRampingVersion,
+		PreviousPercentage: prevRampingVersionPercentage,
+	}, nil
+
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
@@ -168,6 +279,13 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// update local state
 	d.State.RoutingInfo.CurrentVersion = args.Version
 	d.State.RoutingInfo.CurrentVersionUpdateTime = updateTime
+
+	// unset ramping version if it was set to current version
+	if d.State.RoutingInfo.CurrentVersion == d.State.RoutingInfo.RampingVersion {
+		d.State.RoutingInfo.RampingVersion = ""
+		d.State.RoutingInfo.RampingVersionPercentage = 0
+		d.State.RoutingInfo.RampingVersionUpdateTime = updateTime // since ramp was removed
+	}
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
