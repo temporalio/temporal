@@ -97,6 +97,14 @@ type Client interface {
 		nextPageToken []byte,
 	) ([]*deploymentspb.WorkerDeploymentSummary, []byte, error)
 
+	SetWorkerDeploymentRampingVersion(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		version *deploymentpb.WorkerDeploymentVersion,
+		percentage float32,
+		identity string,
+	) (*deploymentspb.SetWorkerDeploymentRampingVersionResponse, error)
+
 	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
 	StartWorkerDeployment(
 		ctx context.Context,
@@ -360,6 +368,63 @@ func (d *ClientImpl) SetCurrentVersion(
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		res.PreviousVersion = version
 		return &res, nil
+	} else if failure != nil {
+		// TODO: is there an easy way to recover the original type here?
+		return nil, serviceerror.NewInternal(failure.Message)
+	}
+
+	success := outcome.GetSuccess()
+	if success == nil {
+		return nil, serviceerror.NewInternal("outcome missing success and failure")
+	}
+
+	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (d *ClientImpl) SetWorkerDeploymentRampingVersion(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	version *deploymentpb.WorkerDeploymentVersion,
+	percentage float32,
+	identity string,
+) (_ *deploymentspb.SetWorkerDeploymentRampingVersionResponse, retErr error) {
+	//revive:disable-next-line:defer
+	defer d.record("SetWorkerDeploymentRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
+	requestID := uuid.New()
+
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetWorkerDeploymentRampingVersionArgs{
+		Identity:   identity,
+		Version:    version.GetBuildId(),
+		Percentage: percentage,
+	})
+	if err != nil {
+		return nil, err
+	}
+	outcome, err := d.updateWithStartWorkerDeployment(
+		ctx,
+		namespaceEntry,
+		version.GetDeploymentName(),
+		&updatepb.Request{
+			Input: &updatepb.Input{Name: SetRampingVersion, Args: updatePayload},
+			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+		},
+		identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var res deploymentspb.SetWorkerDeploymentRampingVersionResponse
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
+		res.PreviousVersion = version.GetBuildId()
+		res.PreviousPercentage = percentage
+		return &res, nil
+	} else if failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyCurrentType {
+		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("Ramping version %v is already current", version.GetBuildId()))
 	} else if failure != nil {
 		// TODO: is there an easy way to recover the original type here?
 		return nil, serviceerror.NewInternal(failure.Message)
