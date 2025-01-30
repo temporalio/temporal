@@ -300,9 +300,9 @@ update-go-api:
 .PHONY: fix-history-service
 fix-history-service:
 	@printf $(COLOR) "Modify history service interface..."
-	@sed -i '' \
+	@sed -i.bak -e \
     's/GetWorkflowExecutionHistory(context\.Context, \*GetWorkflowExecutionHistoryRequest) (\*GetWorkflowExecutionHistoryResponse, error)/GetWorkflowExecutionHistory(context.Context, *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponseWithRaw, error)/g' \
-    api/historyservice/v1/service_grpc.pb.go
+    api/historyservice/v1/service_grpc.pb.go && rm api/historyservice/v1/service_grpc.pb.go.bak
 
 
 
