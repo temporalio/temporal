@@ -247,8 +247,6 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.lock.Unlock()
 	}()
 
-	// TODO (Shivam): if ramping version is being set as current, unset ramping version.
-
 	prevCurrentVersion := d.State.RoutingInfo.CurrentVersion
 	newCurrentVersion := args.Version
 	updateTime := timestamppb.New(workflow.Now(ctx))
@@ -280,6 +278,13 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// update local state
 	d.State.RoutingInfo.CurrentVersion = args.Version
 	d.State.RoutingInfo.CurrentVersionUpdateTime = updateTime
+
+	// unset ramping version if it was set to current version
+	if d.State.RoutingInfo.CurrentVersion == d.State.RoutingInfo.RampingVersion {
+		d.State.RoutingInfo.RampingVersion = ""
+		d.State.RoutingInfo.RampingVersionPercentage = 0
+		d.State.RoutingInfo.RampingVersionUpdateTime = nil
+	}
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {

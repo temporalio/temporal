@@ -572,6 +572,36 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 	})
 }
 
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_SetRampingAsCurrent() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	tv := testvars.New(s)
+
+	rampingVersionVars := tv.WithBuildIDNumber(1)
+	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, "", nil)
+
+	// set ramping version as current
+	s.setCurrentVersion(ctx, rampingVersionVars, "")
+
+	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.verifyDescribeWorkerDeployment(resp, &workflowservice.DescribeWorkerDeploymentResponse{
+		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
+			Name: tv.DeploymentSeries(),
+			RoutingInfo: &deploymentpb.RoutingInfo{
+				RampingVersion:           "",  // no ramping info should be set
+				RampingVersionPercentage: 0,   // no ramping info should be set
+				RampingVersionUpdateTime: nil, // no ramping info should be set
+				CurrentVersion:           rampingVersionVars.BuildID(),
+				CurrentVersionUpdateTime: timestamppb.Now(),
+			},
+		},
+	})
+}
+
 // todo: this test won't work right now until we have current version set to "__unversioned__" by default.
 // check validateSetWorkerDeploymentRampingVersion for more details.
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoCurrent_Unset_Ramp() {
