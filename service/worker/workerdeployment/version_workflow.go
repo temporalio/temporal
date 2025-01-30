@@ -173,7 +173,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	workflow.Go(ctx, d.listenToSignals)
 
 	// Wait on any pending signals and updates.
-	err := workflow.Await(ctx, func() bool { return (d.pendingUpdates == 0 && d.signalsCompleted) || d.done })
+	err := workflow.Await(ctx, func() bool { return (d.signalsCompleted || d.done) && d.pendingUpdates == 0 })
 	if err != nil {
 		return err
 	}
@@ -279,7 +279,6 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	}
 
 	d.done = true
-
 	return nil
 }
 
