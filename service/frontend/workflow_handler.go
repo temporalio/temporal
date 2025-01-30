@@ -39,6 +39,7 @@ import (
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -3365,6 +3366,8 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 		return nil, err
 	}
 
+	// TODO (Shivam): error out if build_ID is empty
+
 	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.BuildId, request.Identity)
 	if err != nil {
 		return nil, err
@@ -3375,9 +3378,49 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 	}, nil
 }
 
-// TODO (Shivam): Implement this
 func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context, request *workflowservice.SetWorkerDeploymentRampingVersionRequest) (_ *workflowservice.SetWorkerDeploymentRampingVersionResponse, retError error) {
-	panic("implement me")
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if request.GetBuildId() == "" {
+		if request.GetPercentage() != 0 {
+			return nil, serviceerror.NewInvalidArgument("Empty value for build_id must be paired with percentage=0")
+		}
+	}
+
+	if request.GetPercentage() < 0 || request.GetPercentage() > 100 {
+		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
+	}
+
+	deploymentVersion := &deploymentpb.WorkerDeploymentVersion{
+		BuildId:        request.GetBuildId(),
+		DeploymentName: request.GetDeploymentName(),
+	}
+	resp, err := wh.workerDeploymentClient.SetWorkerDeploymentRampingVersion(ctx, namespaceEntry, deploymentVersion, request.GetPercentage(), request.GetIdentity())
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.SetWorkerDeploymentRampingVersionResponse{
+		PreviousBuildId:    resp.PreviousVersion,
+		PreviousPercentage: resp.PreviousPercentage,
+	}, nil
 }
 
 func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *workflowservice.ListWorkerDeploymentsRequest) (_ *workflowservice.ListWorkerDeploymentsResponse, retError error) {
