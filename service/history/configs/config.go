@@ -63,6 +63,7 @@ type Config struct {
 	EmitShardLagLog            dynamicconfig.BoolPropertyFn
 	ThrottledLogRPS            dynamicconfig.IntPropertyFn
 	EnableStickyQuery          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	AlignMembershipChange      dynamicconfig.DurationPropertyFn
 	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
 	StartupMembershipJoinDelay dynamicconfig.DurationPropertyFn
 
@@ -403,6 +404,7 @@ func NewConfig(
 		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.HistoryPersistencePerShardNamespaceMaxQPS.Get(dc),
 		PersistenceDynamicRateLimitingParams: dynamicconfig.HistoryPersistenceDynamicRateLimitingParams.Get(dc),
 		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
+		AlignMembershipChange:                dynamicconfig.HistoryAlignMembershipChange.Get(dc),
 		ShutdownDrainDuration:                dynamicconfig.HistoryShutdownDrainDuration.Get(dc),
 		StartupMembershipJoinDelay:           dynamicconfig.HistoryStartupMembershipJoinDelay.Get(dc),
 		AllowResetWithPendingChildren:        dynamicconfig.AllowResetWithPendingChildren.Get(dc),
