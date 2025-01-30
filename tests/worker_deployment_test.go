@@ -582,7 +582,8 @@ func (s *WorkerDeploymentSuite) verifyDescribeWorkerDeployment(
 	actualResp *workflowservice.DescribeWorkerDeploymentResponse,
 	expectedResp *workflowservice.DescribeWorkerDeploymentResponse,
 ) {
-	maxDurationBetweenTimeStamps := 1 * time.Second
+	// relaxed timestamp constraint since the tests make sync calls, which could theoretically take seconds.
+	maxDurationBetweenTimeStamps := 2 * time.Second
 
 	s.True((actualResp == nil) == (expectedResp == nil))
 	s.True((actualResp.GetWorkerDeploymentInfo() == nil) == (expectedResp.GetWorkerDeploymentInfo() == nil))
