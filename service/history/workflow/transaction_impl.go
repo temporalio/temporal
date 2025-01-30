@@ -620,6 +620,7 @@ func NotifyNewHistorySnapshotEvent(
 		workflowState,
 		workflowStatus,
 		executionInfo.VersionHistories,
+		executionInfo.TransitionHistory,
 	))
 	return nil
 }
@@ -659,6 +660,7 @@ func NotifyNewHistoryMutationEvent(
 		workflowState,
 		workflowStatus,
 		executionInfo.VersionHistories,
+		executionInfo.TransitionHistory,
 	))
 	return nil
 }

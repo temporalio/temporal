@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -2492,9 +2493,9 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 			var expectedTransitionHistory []*persistencespb.VersionedTransition
 			if s.mutableState.executionInfo.TransitionHistory == nil {
-				expectedTransitionHistory = CopyVersionedTransitions(s.mutableState.executionInfo.PreviousTransitionHistory)
+				expectedTransitionHistory = transitionhistory.CopyVersionedTransitions(s.mutableState.executionInfo.PreviousTransitionHistory)
 			} else {
-				expectedTransitionHistory = CopyVersionedTransitions(s.mutableState.executionInfo.TransitionHistory)
+				expectedTransitionHistory = transitionhistory.CopyVersionedTransitions(s.mutableState.executionInfo.TransitionHistory)
 			}
 
 			if tc.versionedTransitionUpdated {

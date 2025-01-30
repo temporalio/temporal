@@ -41,6 +41,7 @@ message HistoryContinuation {
     bytes branch_token = 8;
     reserved 9;
     temporal.server.api.history.v1.VersionHistoryItem version_history_item = 10;
+    temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 11;
 }
 
 message RawHistoryContinuation{

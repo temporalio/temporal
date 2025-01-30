@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -240,7 +241,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 
 	newRunId := mutableState.GetExecutionInfo().NewExecutionRunId
 	sourceVersionHistories := versionhistory.CopyVersionHistories(mutableState.GetExecutionInfo().VersionHistories)
-	sourceTransitionHistory := workflow.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory)
+	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory)
 	if cacheReleaseFunc != nil {
 		cacheReleaseFunc(nil)
 	}
