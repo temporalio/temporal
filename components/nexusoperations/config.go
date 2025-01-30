@@ -153,6 +153,8 @@ type Config struct {
 	PayloadSizeLimit                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                dynamicconfig.StringPropertyFn
 	EndpointNotFoundAlwaysNonRetryable dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	HTTPTraceMinAttempt                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HTTPTraceMaxAttempt                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RetryPolicy                        func() backoff.RetryPolicy
 }
 
@@ -170,6 +172,8 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
 		EndpointNotFoundAlwaysNonRetryable: EndpointNotFoundAlwaysNonRetryable.Get(dc),
+		HTTPTraceMinAttempt:                dynamicconfig.NexusHTTPTraceMinAttempt.Get(dc),
+		HTTPTraceMaxAttempt:                dynamicconfig.NexusHTTPTraceMaxAttempt.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),

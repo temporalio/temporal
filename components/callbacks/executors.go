@@ -168,6 +168,9 @@ func (e taskExecutor) loadInvocationArgs(
 			nexusInvokable := nexusInvocation{}
 			nexusInvokable.nexus = variant.Nexus
 			nexusInvokable.completion, err = target.GetNexusCompletion(ctx)
+			nexusInvokable.workflowID = ref.WorkflowKey.WorkflowID
+			nexusInvokable.runID = ref.WorkflowKey.RunID
+			nexusInvokable.attempt = callback.Attempt
 			invokable = nexusInvokable
 			if err != nil {
 				return err
