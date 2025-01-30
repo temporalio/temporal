@@ -435,7 +435,8 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			int64(1),
 			enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			ms.GetExecutionInfo().GetVersionHistories()),
+			ms.GetExecutionInfo().GetVersionHistories(),
+			ms.GetExecutionInfo().GetTransitionHistory()),
 		)
 	}
 
