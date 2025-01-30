@@ -200,6 +200,8 @@ message StartWorkerDeploymentRequest {
 message SyncDeploymentVersionUserDataRequest {
     temporal.api.deployment.v1.WorkerDeploymentVersion worker_deployment_version = 1;
     repeated SyncUserData sync = 2;
+    // if true, the version will be forgotten from the task queue user data.
+    bool forget_version = 3; 
 
     message SyncUserData {
         string name = 1;
