@@ -47,11 +47,11 @@ const (
 	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
 
 	// Updates
-	RegisterWorkerInDeployment   = "register-task-queue-worker"            // for Worker Deployment Version wf
-	SyncVersionState             = "sync-version-state"                    // for Worker Deployment Version wfs
-	SetCurrentVersion            = "set-current-version"                   // for Worker Deployment wfs
-	SetRampingVersion            = "set-worker-deployment-ramping-version" // for Worker Deployment wfs
-	AddVersionToWorkerDeployment = "add-version-to-worker-deployment"      // for Worker Deployment wfs
+	RegisterWorkerInDeployment   = "register-task-queue-worker"       // for Worker Deployment Version wf
+	SyncVersionState             = "sync-version-state"               // for Worker Deployment Version wfs
+	SetCurrentVersion            = "set-current-version"              // for Worker Deployment wfs
+	SetRampingVersion            = "set-ramping-version"              // for Worker Deployment wfs
+	AddVersionToWorkerDeployment = "add-version-to-worker-deployment" // for Worker Deployment wfs
 
 	// Signals
 	ForceCANSignalName      = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs

@@ -438,7 +438,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 	})
 }
 
-func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Duplicate() {
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_DuplicateRamp() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	rampingVersionVars := testvars.New(s).WithBuildIDNumber(1)
@@ -592,9 +592,9 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_SetRamping
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name: tv.DeploymentSeries(),
 			RoutingInfo: &deploymentpb.RoutingInfo{
-				RampingVersion:           "",  // no ramping info should be set
-				RampingVersionPercentage: 0,   // no ramping info should be set
-				RampingVersionUpdateTime: nil, // no ramping info should be set
+				RampingVersion:           "",                // no ramping info should be set
+				RampingVersionPercentage: 0,                 // no ramping info should be set
+				RampingVersionUpdateTime: timestamppb.Now(), // ramping version got updated to ""
 				CurrentVersion:           rampingVersionVars.BuildID(),
 				CurrentVersionUpdateTime: timestamppb.Now(),
 			},

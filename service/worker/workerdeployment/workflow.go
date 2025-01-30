@@ -161,13 +161,10 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 	routingUpdateTime := timestamppb.New(workflow.Now(ctx))
 
 	var rampingSinceTime *timestamppb.Timestamp
+	var rampingVersionUpdateTime *timestamppb.Timestamp
 
 	// unsetting ramp
 	if newRampingVersion == "" {
-		if prevRampingVersion == "" {
-			// no previously set ramping version
-			return &deploymentspb.SetWorkerDeploymentRampingVersionResponse{}, nil
-		}
 
 		rampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 			RoutingUpdateTime: routingUpdateTime,
@@ -178,13 +175,17 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 		if _, err := d.syncVersion(ctx, prevRampingVersion, rampUpdateArgs); err != nil {
 			return nil, err
 		}
+
+		rampingVersionUpdateTime = routingUpdateTime // ramp was updated to ""
 	} else {
 		// setting ramp
 
 		if prevRampingVersion == newRampingVersion { // the version was alread ramping, user changing ramp %
 			rampingSinceTime = d.State.RoutingInfo.RampingVersionUpdateTime
+			rampingVersionUpdateTime = d.State.RoutingInfo.RampingVersionUpdateTime
 		} else {
-			rampingSinceTime = timestamppb.New(workflow.Now(ctx)) // version ramping for the first time
+			rampingSinceTime = routingUpdateTime // version ramping for the first time
+			rampingVersionUpdateTime = routingUpdateTime
 		}
 
 		rampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
@@ -212,7 +213,7 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 	// update local state
 	d.State.RoutingInfo.RampingVersion = newRampingVersion
 	d.State.RoutingInfo.RampingVersionPercentage = args.Percentage
-	d.State.RoutingInfo.RampingVersionUpdateTime = rampingSinceTime
+	d.State.RoutingInfo.RampingVersionUpdateTime = rampingVersionUpdateTime
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
@@ -283,7 +284,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	if d.State.RoutingInfo.CurrentVersion == d.State.RoutingInfo.RampingVersion {
 		d.State.RoutingInfo.RampingVersion = ""
 		d.State.RoutingInfo.RampingVersionPercentage = 0
-		d.State.RoutingInfo.RampingVersionUpdateTime = nil
+		d.State.RoutingInfo.RampingVersionUpdateTime = updateTime // since ramp was removed
 	}
 
 	// update memo
