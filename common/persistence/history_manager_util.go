@@ -37,10 +37,6 @@ import (
 )
 
 type (
-	StrippedHistory interface {
-		GetEvents() []StrippedHistoryEvent
-	}
-
 	StrippedHistoryEvent interface {
 		GetEventId() int64
 		GetVersion() int64
