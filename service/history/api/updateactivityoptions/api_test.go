@@ -321,14 +321,14 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
-	_, err := updateActivityOptions(s.validator, s.mockMutableState, request)
+	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request)
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrWorkflowCompleted)
 }
 
 func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservice.UpdateActivityOptionsByIdRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
 			ActivityOptions: &activitypb.ActivityOptions{
 				TaskQueue: &taskqueuepb.TaskQueue{Name: "task_queue_name"},
 			},
@@ -337,12 +337,13 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 					"TaskQueue.Name",
 				},
 			},
+			Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
 		},
 	}
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
-	_, err := updateActivityOptions(s.validator, s.mockMutableState, request)
+	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request)
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrActivityNotFound)
 }
@@ -398,13 +399,14 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
 
 	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservice.UpdateActivityOptionsByIdRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
 			ActivityOptions: options,
 			UpdateMask:      updateMask,
+			Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
 		},
 	}
 
-	response, err := updateActivityOptions(s.validator, s.mockMutableState, request)
+	response, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request)
 
 	s.NoError(err)
 	s.NotNil(response)

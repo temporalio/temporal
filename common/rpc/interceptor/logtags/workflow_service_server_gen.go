@@ -177,12 +177,12 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.PatchScheduleResponse:
 		return nil
-	case *workflowservice.PauseActivityByIdRequest:
+	case *workflowservice.PauseActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
-	case *workflowservice.PauseActivityByIdResponse:
+	case *workflowservice.PauseActivityResponse:
 		return nil
 	case *workflowservice.PollActivityTaskQueueRequest:
 		return nil
@@ -241,12 +241,12 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.RequestCancelWorkflowExecutionResponse:
 		return nil
-	case *workflowservice.ResetActivityByIdRequest:
+	case *workflowservice.ResetActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
-	case *workflowservice.ResetActivityByIdResponse:
+	case *workflowservice.ResetActivityResponse:
 		return nil
 	case *workflowservice.ResetStickyTaskQueueRequest:
 		return []tag.Tag{
@@ -367,19 +367,19 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.TerminateWorkflowExecutionResponse:
 		return nil
-	case *workflowservice.UnpauseActivityByIdRequest:
+	case *workflowservice.UnpauseActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
-	case *workflowservice.UnpauseActivityByIdResponse:
+	case *workflowservice.UnpauseActivityResponse:
 		return nil
-	case *workflowservice.UpdateActivityOptionsByIdRequest:
+	case *workflowservice.UpdateActivityOptionsRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
-	case *workflowservice.UpdateActivityOptionsByIdResponse:
+	case *workflowservice.UpdateActivityOptionsResponse:
 		return nil
 	case *workflowservice.UpdateNamespaceRequest:
 		return nil
