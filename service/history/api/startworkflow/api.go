@@ -318,8 +318,8 @@ func (s *Starter) handleConflict(
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	request := s.request.StartRequest
 	currentWorkflowRequestIDs := currentWorkflowConditionFailed.RequestIDs
-	if requestIDInfo := currentWorkflowRequestIDs[request.GetRequestId()]; requestIDInfo != nil {
-		if requestIDInfo.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+	if requestIDInfo, ok := currentWorkflowRequestIDs[request.GetRequestId()]; ok {
+		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
 			return resp, StartDeduped, err
 		}

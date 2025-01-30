@@ -2105,6 +2105,7 @@ func (ms *MutableStateImpl) attachRequestID(requestID string, eventType enumspb.
 		EventType: eventType,
 	}
 	ms.approximateSize += ms.executionState.Size()
+	ms.executionStateUpdated = true
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
