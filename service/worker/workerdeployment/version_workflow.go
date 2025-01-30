@@ -241,9 +241,45 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		return serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
 	}
 
-	// TODO: Sync deletion to task queues
+	state := d.GetVersionState()
 
-	// tell workflow it should end
+	// sync version removal to task queues
+	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
+		WorkerDeploymentVersion: state.GetVersion(),
+		ForgetVersion:           true,
+	}
+	for tqName, byType := range state.TaskQueueFamilies {
+		for tqType, oldData := range byType.TaskQueues {
+
+			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+				Name: tqName,
+				Type: enumspb.TaskQueueType(tqType),
+				Data: oldData,
+			})
+		}
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
+	if err != nil {
+		// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+		return err
+	}
+
+	// wait for propagation
+	if len(syncRes.TaskQueueMaxVersions) > 0 {
+		err = workflow.ExecuteActivity(
+			activityCtx,
+			d.a.CheckWorkerDeploymentUserDataPropagation,
+			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+			}).Get(ctx, nil)
+		if err != nil {
+			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+			return err
+		}
+	}
+
 	d.done = true
 
 	return nil

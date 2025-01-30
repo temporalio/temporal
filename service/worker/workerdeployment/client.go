@@ -445,7 +445,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
 		Identity: identity,
-		BuildId:  buildId,
+		Version:  buildId,
 	})
 	if err != nil {
 		return err

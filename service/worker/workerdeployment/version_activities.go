@@ -72,14 +72,27 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 			var res *matchingservice.SyncDeploymentUserDataResponse
 			var err error
 
-			res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-				NamespaceId:   a.namespace.ID().String(),
-				TaskQueue:     syncData.Name,
-				TaskQueueType: syncData.Type,
-				Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-					UpdateVersionData: syncData.Data,
-				},
-			})
+			if input.ForgetVersion {
+
+				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+					NamespaceId:   a.namespace.ID().String(),
+					TaskQueue:     syncData.Name,
+					TaskQueueType: syncData.Type,
+					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
+						ForgetVersion: input.WorkerDeploymentVersion,
+					},
+				})
+			} else {
+
+				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+					NamespaceId:   a.namespace.ID().String(),
+					TaskQueue:     syncData.Name,
+					TaskQueueType: syncData.Type,
+					Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+						UpdateVersionData: syncData.Data,
+					},
+				})
+			}
 
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
