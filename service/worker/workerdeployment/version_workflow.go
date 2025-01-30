@@ -52,6 +52,7 @@ type (
 		pendingUpdates         int
 		signalsCompleted       bool
 		drainageWorkflowFuture *workflow.ChildWorkflowFuture
+		done                   bool
 	}
 )
 
@@ -144,6 +145,17 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		DeleteVersion,
+		d.handleDeleteVersion,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateDeleteVersion,
+		},
+	); err != nil {
+		return err
+	}
+
 	// First ensure series workflow is running
 	if !d.VersionState.StartedDeploymentWorkflow {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -161,15 +173,19 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	workflow.Go(ctx, d.listenToSignals)
 
 	// Wait on any pending signals and updates.
-	err := workflow.Await(ctx, func() bool { return d.pendingUpdates == 0 && d.signalsCompleted })
+	err := workflow.Await(ctx, func() bool { return (d.pendingUpdates == 0 && d.signalsCompleted) || d.done })
 	if err != nil {
 		return err
 	}
 
-	// Before continue-as-new, stop drainage wf if it exists.
+	// Before continue-as-new or done, stop drainage wf if it exists.
 	if d.drainageWorkflowFuture != nil {
 		d.logger.Debug("Version terminating drainage workflow before continue-as-new")
 		_ = d.stopDrainage(ctx) // child options say terminate-on-close, so if this fails the wf will terminate instead.
+	}
+
+	if d.done {
+		return nil
 	}
 
 	d.logger.Debug("Version doing continue-as-new")
@@ -197,6 +213,39 @@ func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
 		return err
 	}
 	d.drainageWorkflowFuture = nil
+	return nil
+}
+
+func (d *VersionWorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+	// TODO: fan out to all the task queues in this version and call describe. If any have pollers, return error
+	return nil
+}
+
+func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	// wait until deployment workflow started
+	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
+	if err != nil {
+		d.logger.Error("Update canceled before worker deployment workflow started")
+		return serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
+	}
+
+	// TODO: Sync deletion to task queues
+
+	// tell workflow it should end
+	d.done = true
+
 	return nil
 }
 
