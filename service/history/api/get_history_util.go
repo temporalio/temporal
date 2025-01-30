@@ -100,19 +100,6 @@ func GetRawHistory(
 			rawHistory = append(rawHistory, blob)
 		}
 	}
-
-	// TODO PPV: Move this to frontend?
-	for i, blob := range rawHistory {
-		strippedEvents, err := shard.GetPayloadSerializer().DeserializeStrippedEvents(blob)
-		if err != nil {
-			return nil, nil, err
-		}
-		rawHistory[i], err = ProcessOutgoingSearchAttributesForRawEvents(shard, strippedEvents, blob, namespaceID, persistenceVisibilityMgr)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
 	return rawHistory, resp.NextPageToken, nil
 }
 
@@ -192,7 +179,13 @@ func GetHistory(
 		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
 	}
 
-	if err := ProcessOutgoingSearchAttributes(shard, historyEvents, namespaceID, persistenceVisibilityMgr); err != nil {
+	if err := ProcessOutgoingSearchAttributes(
+		shard.GetNamespaceRegistry(),
+		shard.GetSearchAttributesProvider(),
+		shard.GetSearchAttributesMapperProvider(),
+		historyEvents,
+		namespaceID,
+		persistenceVisibilityMgr); err != nil {
 		return nil, nil, err
 	}
 
@@ -243,7 +236,13 @@ func GetHistoryReverse(
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryReverseScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
-	if err := ProcessOutgoingSearchAttributes(shard, historyEvents, namespaceID, persistenceVisibilityMgr); err != nil {
+	if err := ProcessOutgoingSearchAttributes(
+		shard.GetNamespaceRegistry(),
+		shard.GetSearchAttributesProvider(),
+		shard.GetSearchAttributesMapperProvider(),
+		historyEvents,
+		namespaceID,
+		persistenceVisibilityMgr); err != nil {
 		return nil, nil, 0, err
 	}
 
@@ -262,16 +261,18 @@ func GetHistoryReverse(
 }
 
 func ProcessOutgoingSearchAttributes(
-	shard shard.Context,
+	nsRegistry namespace.Registry,
+	saProvider searchattribute.Provider,
+	saMapperProvider searchattribute.MapperProvider,
 	events []*historypb.HistoryEvent,
 	namespaceId namespace.ID,
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) error {
-	namespace, err := shard.GetNamespaceRegistry().GetNamespaceName(namespaceId)
+	namespace, err := nsRegistry.GetNamespaceName(namespaceId)
 	if err != nil {
 		return err
 	}
-	saTypeMap, err := shard.GetSearchAttributesProvider().GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
+	saTypeMap, err := saProvider.GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(consts.ErrUnableToGetSearchAttributesMessage, err))
 	}
@@ -289,7 +290,7 @@ func ProcessOutgoingSearchAttributes(
 		}
 		if searchAttributes != nil {
 			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-			aliasedSas, err := searchattribute.AliasFields(shard.GetSearchAttributesMapperProvider(), searchAttributes, namespace.String())
+			aliasedSas, err := searchattribute.AliasFields(saMapperProvider, searchAttributes, namespace.String())
 			if err != nil {
 				return err
 			}
@@ -300,83 +301,6 @@ func ProcessOutgoingSearchAttributes(
 	}
 
 	return nil
-}
-
-func ProcessOutgoingSearchAttributesForRawEvents(
-	shard shard.Context,
-	strippedEvents []*historyspb.StrippedHistoryEvent,
-	blob *commonpb.DataBlob,
-	namespaceId namespace.ID,
-	persistenceVisibilityMgr manager.VisibilityManager,
-) (*commonpb.DataBlob, error) {
-	namespace, err := shard.GetNamespaceRegistry().GetNamespaceName(namespaceId)
-	if err != nil {
-		return nil, err
-	}
-	saTypeMap, err := shard.GetSearchAttributesProvider().GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(consts.ErrUnableToGetSearchAttributesMessage, err))
-	}
-	var fullEvents []*historypb.HistoryEvent
-	var event *historypb.HistoryEvent
-	for i, strippedEvent := range strippedEvents {
-		var searchAttributes *commonpb.SearchAttributes
-		switch strippedEvent.EventType {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
-			if len(fullEvents) == 0 {
-				fullEvents, err = shard.GetPayloadSerializer().DeserializeEvents(blob)
-				if err != nil {
-					return nil, err
-				}
-			}
-			event = fullEvents[i]
-			searchAttributes = event.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
-			if len(fullEvents) == 0 {
-				fullEvents, err = shard.GetPayloadSerializer().DeserializeEvents(blob)
-				if err != nil {
-					return nil, err
-				}
-			}
-			event = fullEvents[i]
-			searchAttributes = event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
-			if len(fullEvents) == 0 {
-				fullEvents, err = shard.GetPayloadSerializer().DeserializeEvents(blob)
-				if err != nil {
-					return nil, err
-				}
-			}
-			event = fullEvents[i]
-			searchAttributes = event.GetStartChildWorkflowExecutionInitiatedEventAttributes().GetSearchAttributes()
-		case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-			if len(fullEvents) == 0 {
-				fullEvents, err = shard.GetPayloadSerializer().DeserializeEvents(blob)
-				if err != nil {
-					return nil, err
-				}
-			}
-			event = fullEvents[i]
-			searchAttributes = event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes()
-		}
-		if searchAttributes != nil {
-			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-			aliasedSas, err := searchattribute.AliasFields(shard.GetSearchAttributesMapperProvider(), searchAttributes, namespace.String())
-			if err != nil {
-				return nil, err
-			}
-			if aliasedSas != searchAttributes {
-				searchAttributes.IndexedFields = aliasedSas.IndexedFields
-			}
-			fullEvents[i] = event
-			blob, err = shard.GetPayloadSerializer().SerializeEvents(fullEvents, enumspb.ENCODING_TYPE_PROTO3)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return blob, nil
 }
 
 func validateTransientWorkflowTaskEvents(
