@@ -197,9 +197,6 @@ func (t *serializerImpl) DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*
 	default:
 		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
-	if err == nil {
-		err = utf8validator.Validate(events, utf8validator.SourcePersistence)
-	}
 	if err != nil {
 		return nil, NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
