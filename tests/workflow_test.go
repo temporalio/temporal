@@ -130,6 +130,37 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
+	id := "functional-start-workflow-use-existing-test"
+	wt := &commonpb.WorkflowType{Name: "functional-start-workflow-use-existing-test-type"}
+	tq := &taskqueuepb.TaskQueue{
+		Name: "functional-start-workflow-use-existing-test-taskqueue",
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.New(),
+		Namespace:          s.Namespace().String(),
+		WorkflowId:         id,
+		WorkflowType:       wt,
+		TaskQueue:          tq,
+		Input:              nil,
+		WorkflowRunTimeout: durationpb.New(100 * time.Second),
+		Identity:           "worker1",
+	}
+
+	we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err0)
+	s.True(we0.Started)
+
+	request.RequestId = uuid.New()
+	request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+	we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err1)
+	s.Equal(we0.RunId, we1.RunId)
+	s.False(we1.Started)
+}
+
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions() {
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false}},
@@ -192,10 +223,10 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 				)
 			}
 
-			id := fmt.Sprintf("functional-start-workflow-use-existing-test-%v", i)
-			wt := &commonpb.WorkflowType{Name: "functional-start-workflow-use-existing-test-type"}
+			id := fmt.Sprintf("functional-start-workflow-use-existing-on-conflict-options-test-%v", i)
+			wt := &commonpb.WorkflowType{Name: "functional-start-workflow-use-existing-on-conflict-options-test-type"}
 			tq := &taskqueuepb.TaskQueue{
-				Name: "functional-start-workflow-use-existing-test-taskqueue",
+				Name: "functional-start-workflow-use-existing-on-conflict-options-test-taskqueue",
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			}
 
@@ -307,17 +338,77 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 				}
 			}
 
-			descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: s.Namespace().String(),
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: id,
-					RunId:      we0.RunId,
+			descResp, err := s.FrontendClient().DescribeWorkflowExecution(
+				testcore.NewContext(),
+				&workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: s.Namespace().String(),
+					Execution: &commonpb.WorkflowExecution{
+						WorkflowId: id,
+						RunId:      we0.RunId,
+					},
 				},
-			})
+			)
 			s.NoError(err)
 			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 		})
 	}
+}
+
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_Dedup() {
+	id := "functional-start-workflow-use-existing-on-conflict-options-dedup-test"
+	wt := &commonpb.WorkflowType{
+		Name: "functional-start-workflow-use-existing-on-conflict-options-dedup-test-type",
+	}
+	tq := &taskqueuepb.TaskQueue{
+		Name: "functional-start-workflow-use-existing-on-conflict-options-dedup-test-taskqueue",
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.New(),
+		Namespace:          s.Namespace().String(),
+		WorkflowId:         id,
+		WorkflowType:       wt,
+		TaskQueue:          tq,
+		Input:              nil,
+		WorkflowRunTimeout: durationpb.New(100 * time.Second),
+		Identity:           "worker1",
+	}
+
+	we0, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err0)
+	s.True(we0.Started)
+
+	request.RequestId = uuid.New()
+	request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+	request.OnConflictOptions = &workflowpb.OnConflictOptions{
+		AttachRequestId: true,
+	}
+	we1, err1 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err1)
+	s.Equal(we0.RunId, we1.RunId)
+	s.False(we1.Started)
+
+	we2, err2 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err2)
+	s.Equal(we0.RunId, we2.RunId)
+	s.False(we2.Started)
+
+	historyEvents := s.GetHistory(
+		s.Namespace().String(),
+		&commonpb.WorkflowExecution{WorkflowId: request.WorkflowId, RunId: we0.RunId},
+	)
+	s.EqualHistoryEvents(
+		fmt.Sprintf(
+			`
+  1 WorkflowExecutionStarted {"Attempt":1,"WorkflowTaskTimeout":{"Nanos":0,"Seconds":10}}
+  2 WorkflowTaskScheduled
+  3 WorkflowExecutionOptionsUpdated {"VersioningOverride": null, "UnsetVersioningOverride": false, "AttachedRequestId": "%s", "AttachedCompletionCallbacks": null}
+			`,
+			request.RequestId,
+		),
+		historyEvents,
+	)
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_Terminate() {
