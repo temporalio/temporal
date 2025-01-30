@@ -36,9 +36,10 @@ import (
 func TestHandoverWorkflow(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
+	var a *activities
+
 	namespaceID := uuid.New()
 
-	var a *activities
 	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	env.OnActivity(a.GetMaxReplicationTaskIDs, mock.Anything).Return(

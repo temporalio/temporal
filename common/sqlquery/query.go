@@ -1,6 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,40 +22,49 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matcher
+package sqlquery
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
-	defaultDateTimeFormat = time.RFC3339
+	QueryTemplate = "select * from dummy where %s"
+
+	DefaultDateTimeFormat = time.RFC3339
 )
 
-func extractStringValue(s string) (string, error) {
-	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
-		return s[1 : len(s)-1], nil
+func ConvertToTime(timeStr string) (time.Time, error) {
+	ts, err := strconv.ParseInt(timeStr, 10, 64)
+	if err == nil {
+		return timestamp.UnixOrZeroTime(ts), nil
 	}
-	return "", fmt.Errorf("value %s is not a string value", s)
-}
-
-func convertToTime(timeStr string) (time.Time, error) {
-	timestampStr, err := extractStringValue(timeStr)
+	timestampStr, err := ExtractStringValue(timeStr)
 	if err != nil {
 		return time.Time{}, err
 	}
-	parsedTime, err := time.Parse(defaultDateTimeFormat, timestampStr)
+	parsedTime, err := time.Parse(DefaultDateTimeFormat, timestampStr)
 	if err != nil {
 		return time.Time{}, err
 	}
 	return parsedTime, nil
 }
 
-// convertSqlValue returns a string, int64 or float64 if the parsing succeeds.
-func convertSqlValue(sqlValue string) (interface{}, error) {
+func ExtractStringValue(s string) (string, error) {
+	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
+		return s[1 : len(s)-1], nil
+	}
+	return "", fmt.Errorf("value %s is not a string value", s)
+}
+
+// ParseValue returns a string, int64 or float64 if the parsing succeeds.
+func ParseValue(sqlValue string) (interface{}, error) {
 	if sqlValue == "" {
 		return "", nil
 	}
@@ -73,5 +84,5 @@ func convertSqlValue(sqlValue string) (interface{}, error) {
 		return floatValue, nil
 	}
 
-	return nil, NewMatcherError("%s: unable to parse %s", invalidExpressionErrMessage, sqlValue)
+	return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid expression: unable to parse %s", sqlValue))
 }

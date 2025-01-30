@@ -64,11 +64,6 @@ const (
 )
 
 const (
-	// MaxWorkflowTaskStartToCloseTimeout sets the Max Workflow Task start to close timeout for a Workflow
-	MaxWorkflowTaskStartToCloseTimeout = 120 * time.Second
-)
-
-const (
 	// Limit for schedule notes field
 	ScheduleNotesSizeLimit = 1000
 )

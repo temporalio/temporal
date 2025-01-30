@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -248,11 +247,6 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 	body, err := acptOrRejMsg.Body.UnmarshalNew()
 	if err != nil {
 		return nil, invalidArgf("unable to unmarshal request: %v", err)
-	}
-
-	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
-	if err != nil {
-		return nil, invalidArgf("unable to validate utf-8 request: %v", err)
 	}
 
 	var reqMsg *updatepb.Request

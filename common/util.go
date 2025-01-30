@@ -667,41 +667,6 @@ func GetPayloadsMapSize(data map[string]*commonpb.Payloads) int {
 	return size
 }
 
-// OverrideWorkflowRunTimeout override the run timeout according to execution timeout
-func OverrideWorkflowRunTimeout(
-	workflowRunTimeout time.Duration,
-	workflowExecutionTimeout time.Duration,
-) time.Duration {
-
-	if workflowExecutionTimeout == 0 {
-		return workflowRunTimeout
-	} else if workflowRunTimeout == 0 {
-		return workflowExecutionTimeout
-	}
-	return min(workflowRunTimeout, workflowExecutionTimeout)
-}
-
-// OverrideWorkflowTaskTimeout override the workflow task timeout according to default timeout or max timeout
-func OverrideWorkflowTaskTimeout(
-	namespace string,
-	taskStartToCloseTimeout time.Duration,
-	workflowRunTimeout time.Duration,
-	getDefaultTimeoutFunc func(namespace string) time.Duration,
-) time.Duration {
-
-	if taskStartToCloseTimeout == 0 {
-		taskStartToCloseTimeout = getDefaultTimeoutFunc(namespace)
-	}
-
-	taskStartToCloseTimeout = min(taskStartToCloseTimeout, MaxWorkflowTaskStartToCloseTimeout)
-
-	if workflowRunTimeout == 0 {
-		return taskStartToCloseTimeout
-	}
-
-	return min(taskStartToCloseTimeout, workflowRunTimeout)
-}
-
 // CloneProto is a generic typed version of proto.Clone from proto.
 func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)

@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -1326,16 +1325,16 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			_, err := poller.PollAndProcessWorkflowTask()
 			updateResult := <-updateResultCh
 			if tc.RespondWorkflowTaskError != "" {
-				require.Error(s.T(), err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
-				require.Contains(s.T(), err.Error(), tc.RespondWorkflowTaskError)
+				s.Error(err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
+				s.Contains(err.Error(), tc.RespondWorkflowTaskError)
 
 				// When worker returns validation error, API caller got timeout error.
-				require.Error(s.T(), updateResult.err)
-				require.True(s.T(), common.IsContextDeadlineExceededErr(updateResult.err), updateResult.err.Error())
-				require.Nil(s.T(), updateResult.response)
+				s.Error(updateResult.err)
+				s.True(common.IsContextDeadlineExceededErr(updateResult.err), updateResult.err.Error())
+				s.Nil(updateResult.response)
 			} else {
-				require.NoError(s.T(), err)
-				require.NoError(s.T(), updateResult.err)
+				s.NoError(err)
+				s.NoError(updateResult.err)
 			}
 		})
 	}
@@ -1394,9 +1393,9 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 								Messages: s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
 							}, nil
 						})
-				require.NoError(s.T(), err)
-				require.NotNil(s.T(), res)
-				require.EqualValues(s.T(), 0, res.ResetHistoryEventId)
+				s.NoError(err)
+				s.NotNil(res)
+				s.EqualValues(0, res.ResetHistoryEventId)
 			}()
 
 			// This is to make sure that sticky poller above reached server first.

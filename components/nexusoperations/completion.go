@@ -42,11 +42,10 @@ func handleSuccessfulOperationResult(
 	operation Operation,
 	result *commonpb.Payload,
 	links []*commonpb.Link,
-	completionSource CompletionSource,
-) (hsm.TransitionOutput, error) {
+) error {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
-		return hsm.TransitionOutput{}, err
+		return err
 	}
 	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
 		// We must assign to this property, linter doesn't like this.
@@ -60,26 +59,21 @@ func handleSuccessfulOperationResult(
 		}
 		e.Links = links
 	})
-	return TransitionSucceeded.Apply(operation, EventSucceeded{
-		Time:             event.EventTime.AsTime(),
-		Node:             node,
-		CompletionSource: completionSource,
-	})
+	return CompletedEventDefinition{}.Apply(node.Parent, event)
 }
 
 func handleUnsuccessfulOperationError(
 	node *hsm.Node,
 	operation Operation,
 	opFailedError *nexus.UnsuccessfulOperationError,
-	completionSource CompletionSource,
-) (hsm.TransitionOutput, error) {
+) error {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
-		return hsm.TransitionOutput{}, err
+		return err
 	}
 	failure, err := commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError)
 	if err != nil {
-		return hsm.TransitionOutput{}, err
+		return err
 	}
 
 	switch opFailedError.State { // nolint:exhaustive
@@ -96,12 +90,7 @@ func handleUnsuccessfulOperationError(
 			}
 		})
 
-		return TransitionFailed.Apply(operation, EventFailed{
-			Time:             event.EventTime.AsTime(),
-			Attributes:       event.GetNexusOperationFailedEventAttributes(),
-			Node:             node,
-			CompletionSource: completionSource,
-		})
+		return FailedEventDefinition{}.Apply(node.Parent, event)
 	case nexus.OperationStateCanceled:
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
@@ -115,15 +104,11 @@ func handleUnsuccessfulOperationError(
 			}
 		})
 
-		return TransitionCanceled.Apply(operation, EventCanceled{
-			Time:             event.EventTime.AsTime(),
-			Node:             node,
-			CompletionSource: completionSource,
-		})
+		return CanceledEventDefinition{}.Apply(node.Parent, event)
 	default:
 		// Both the Nexus Client and CompletionHandler reject invalid states, but just in case, we return this as a
 		// transition error.
-		return hsm.TransitionOutput{}, fmt.Errorf("unexpected operation state: %v", opFailedError.State)
+		return fmt.Errorf("unexpected operation state: %v", opFailedError.State)
 	}
 }
 
@@ -196,17 +181,21 @@ func CompletionHandler(
 		if err := fabricateStartedEventIfMissing(node, requestID, operationID, startTime, links); err != nil {
 			return err
 		}
-		err := hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
-			if requestID != "" && operation.RequestId != requestID {
-				isRetryableNotFoundErr = false
-				return hsm.TransitionOutput{}, serviceerror.NewNotFound("operation not found")
-			}
-			if opFailedError != nil {
-				return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceCallback)
-			}
-			return handleSuccessfulOperationResult(node, operation, result, nil, CompletionSourceCallback)
-		})
-		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion.
+		operation, err := hsm.MachineData[Operation](node)
+		if err != nil {
+			return nil
+		}
+		if requestID != "" && operation.RequestId != requestID {
+			isRetryableNotFoundErr = false
+			return serviceerror.NewNotFound("operation not found")
+		}
+		if opFailedError != nil {
+			err = handleUnsuccessfulOperationError(node, operation, opFailedError)
+		} else {
+			err = handleSuccessfulOperationResult(node, operation, result, nil)
+		}
+		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion with state
+		// based replication.
 		if errors.Is(err, hsm.ErrInvalidTransition) {
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
