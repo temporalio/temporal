@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/components/callbacks"
@@ -213,7 +214,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
-			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
+			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns.String(), TaskQueue: tc.taskQueue}))
 			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 			s.NoError(err)
 
@@ -314,7 +315,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
-			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
+			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns.String(), TaskQueue: tc.taskQueue}))
 			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 			s.NoError(err)
 
@@ -390,7 +391,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 
 	activeSDKClient, err := client.Dial(client.Options{
 		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
-		Namespace: ns,
+		Namespace: ns.String(),
 		Logger:    log.NewSdkLogger(s.logger),
 	})
 	s.NoError(err)
@@ -404,7 +405,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	feClient2 := s.cluster2.FrontendClient()
 
 	pollResp, err := feClient1.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -433,7 +434,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 
 	// Poll and verify that the "started" event was recorded.
 	pollResp, err = feClient1.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -455,7 +456,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	// Wait for Nexus operation to be replicated
 	s.Eventually(func() bool {
 		resp, err := feClient2.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: ns,
+			Namespace: ns.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: run.GetID(),
 				RunId:      run.GetRunID(),
@@ -472,7 +473,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), s.cluster2, publicCallbackUrl, completion, callbackToken)
 	s.Equal(http.StatusOK, res.StatusCode)
 	s.Equal(1, len(snap["nexus_completion_requests"]))
-	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns, "outcome": "request_forwarded"})
+	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns.String(), "outcome": "request_forwarded"})
 
 	// Ensure that CompleteOperation request is tracked as part of normal service telemetry metrics
 	s.Condition(func() bool {
@@ -488,11 +489,11 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	res, snap = s.sendNexusCompletionRequest(ctx, s.T(), s.cluster1, publicCallbackUrl, completion, callbackToken)
 	s.Equal(http.StatusNotFound, res.StatusCode)
 	s.Equal(1, len(snap["nexus_completion_requests"]))
-	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns, "outcome": "error_not_found"})
+	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns.String(), "outcome": "error_not_found"})
 
 	// Poll active cluster and verify the completion is recorded and triggers workflow progress.
 	pollResp, err = feClient1.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -529,9 +530,9 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	s.Equal("result", result)
 }
 
-func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, frontendClient workflowservice.WorkflowServiceClient, ns string, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
+func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, frontendClient workflowservice.WorkflowServiceClient, ns namespace.Name, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
 	res, err := frontendClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		Identity:  uuid.NewString(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
@@ -548,14 +549,14 @@ func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, front
 
 	if handlerErr != nil {
 		_, err = frontendClient.RespondNexusTaskFailed(ctx, &workflowservice.RespondNexusTaskFailedRequest{
-			Namespace: ns,
+			Namespace: ns.String(),
 			Identity:  uuid.NewString(),
 			TaskToken: res.TaskToken,
 			Error:     handlerErr,
 		})
 	} else if response != nil {
 		_, err = frontendClient.RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-			Namespace: ns,
+			Namespace: ns.String(),
 			Identity:  uuid.NewString(),
 			TaskToken: res.TaskToken,
 			Response:  response,
@@ -594,13 +595,13 @@ func (s *NexusRequestForwardingSuite) sendNexusCompletionRequest(
 	return res, capture.Snapshot()
 }
 
-func requireExpectedMetricsCaptured(t *testing.T, snap map[string][]*metricstest.CapturedRecording, ns string, method string, expectedOutcome string) {
+func requireExpectedMetricsCaptured(t *testing.T, snap map[string][]*metricstest.CapturedRecording, ns namespace.Name, method string, expectedOutcome string) {
 	require.Equal(t, 1, len(snap["nexus_requests"]))
-	require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": ns, "method": method, "outcome": expectedOutcome})
+	require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": ns.String(), "method": method, "outcome": expectedOutcome})
 	require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 	require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 	require.Equal(t, 1, len(snap["nexus_latency"]))
-	require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": ns, "method": method, "outcome": expectedOutcome})
+	require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": ns.String(), "method": method, "outcome": expectedOutcome})
 }
 
 func (s *NexusRequestForwardingSuite) mustToPayload(v any) *commonpb.Payload {

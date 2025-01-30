@@ -41,16 +41,13 @@ import (
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	replicationpb "go.temporal.io/api/replication/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
@@ -64,6 +61,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// TODO (alex): rename to VisibilityTestSuite (and file too)
 type AdvVisCrossDCTestSuite struct {
 	// TODO (alex): use FunctionalTestSuite
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
@@ -116,15 +114,7 @@ func TestAdvVisCrossDCTestSuite(t *testing.T) {
 }
 
 var (
-	clusterNameAdvVis              = []string{"active-adv-vis", "standby-adv-vis"}
-	clusterReplicationConfigAdvVis = []*replicationpb.ClusterReplicationConfig{
-		{
-			ClusterName: clusterNameAdvVis[0],
-		},
-		{
-			ClusterName: clusterNameAdvVis[1],
-		},
-	}
+	clusterNameAdvVis = []string{"active-adv-vis", "standby-adv-vis"}
 )
 
 func (s *AdvVisCrossDCTestSuite) SetupSuite() {
@@ -202,24 +192,15 @@ func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
 }
 
 func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
-	ns := "test-xdc-search-attr-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.FrontendClient() // active
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        ns,
-		Clusters:                         clusterReplicationConfigAdvVis,
-		ActiveClusterName:                clusterNameAdvVis[0],
-		IsGlobalNamespace:                true,
-		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
-	}
-	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
-	s.NoError(err)
+	ns := createGlobalNamespace(s.Assertions, clusterNameAdvVis, []*testcore.TestCluster{s.cluster1, s.cluster2})
 
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
+	client1 := s.cluster1.FrontendClient() // active
+	client2 := s.cluster2.FrontendClient() // standby
+
 	if testcore.UseSQLVisibility() {
 		// When Elasticsearch is enabled, the search attribute aliases are not used.
-		_, err = client1.UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
-			Namespace: ns,
+		_, err := client1.UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
+			Namespace: ns.String(),
 			Config: &namespacepb.NamespaceConfig{
 				CustomSearchAttributeAliases: map[string]string{
 					"Bool01":     "CustomBoolField",
@@ -232,30 +213,15 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 			},
 		})
 		s.NoError(err)
-		// Wait for namespace cache to pick the UpdateNamespace changes.
-		time.Sleep(cacheRefreshInterval) // nolint:forbidigo
-	}
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		// Wait for namespace record to be replicated and loaded into memory.
-		for _, r := range s.cluster2.Host().FrontendNamespaceRegistries() {
-			_, err := r.GetNamespace(namespace.Name(ns))
+		// Check that SA aliases are replicated.
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			resp, err := client2.DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: ns.String()})
 			assert.NoError(t, err)
-		}
-	}, 15*time.Second, 500*time.Millisecond)
-
-	descReq := &workflowservice.DescribeNamespaceRequest{
-		Namespace: ns,
+			if resp != nil {
+				assert.Len(t, resp.Config.CustomSearchAttributeAliases, 6)
+			}
+		}, 15*time.Second, 500*time.Millisecond)
 	}
-	resp, err := client1.DescribeNamespace(testcore.NewContext(), descReq)
-	s.NoError(err)
-	s.NotNil(resp)
-
-	client2 := s.cluster2.FrontendClient() // standby
-	resp2, err := client2.DescribeNamespace(testcore.NewContext(), descReq)
-	s.NoError(err)
-	s.NotNil(resp2)
-	s.Equal(resp, resp2)
 
 	// start a workflow
 	id := "xdc-search-attr-test-" + uuid.New()
@@ -271,7 +237,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           ns,
+		Namespace:           ns.String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -291,24 +257,25 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	startFilter := &filterpb.StartTimeFilter{}
 	startFilter.EarliestTime = timestamppb.New(startTime)
 	saListRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		PageSize:  5,
 		Query:     fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal),
 	}
 
 	testListResult := func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		var openExecution *workflowpb.WorkflowExecutionInfo
-		for i := 0; i < numOfRetry; i++ {
+
+		s.Eventually(func() bool {
 			startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 
 			resp, err := client.ListWorkflowExecutions(testcore.NewContext(), lr)
 			s.NoError(err)
 			if len(resp.GetExecutions()) == 1 {
 				openExecution = resp.GetExecutions()[0]
-				break
+				return true
 			}
-			time.Sleep(waitTimeInMs * time.Millisecond) // nolint:forbidigo
-		}
+			return false
+		}, 20*time.Second, 100*time.Millisecond)
 		s.NotNil(openExecution)
 		s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
 		searchValPayload := openExecution.GetSearchAttributes().GetIndexedFields()[s.testSearchAttributeKey]
@@ -339,7 +306,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 
 	poller := testcore.TaskPoller{
 		Client:              client1,
-		Namespace:           ns,
+		Namespace:           ns.String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -350,8 +317,6 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
-
-	time.Sleep(waitForESToSettle) // nolint:forbidigo
 
 	testListResult = func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		s.Eventually(func() bool {
@@ -382,11 +347,11 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 			s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
 
 			return true
-		}, waitTimeInMs*time.Millisecond*numOfRetry, waitTimeInMs*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 	}
 
 	saListRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowId = "%s" and %s = "another string"`, id, s.testSearchAttributeKey),
 	}
@@ -397,7 +362,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	testListResult(engine2, saListRequest)
 
 	runningListRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
@@ -410,7 +375,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	terminateReason := "force terminate to make sure standby process tasks"
 	terminateDetails := payloads.EncodeString("terminate details")
 	_, err = client1.TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -422,7 +387,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 
 	// check terminate done
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -455,10 +420,10 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 				return nil
 			}
 			return historyResponse.History
-		}, waitTimeInMs*numOfRetry*time.Millisecond, waitTimeInMs*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 	terminatedListRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: ns,
+		Namespace: ns.String(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Terminated'`, wt),
 	}
