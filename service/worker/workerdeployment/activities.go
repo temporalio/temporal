@@ -57,3 +57,8 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *depl
 		VersionState: res.VersionState,
 	}, nil
 }
+
+func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.DeleteVersionArgs) error {
+	// TODO
+	return nil
+}

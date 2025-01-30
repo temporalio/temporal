@@ -25,6 +25,7 @@
 package workerdeployment
 
 import (
+	"slices"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -47,6 +48,7 @@ type (
 		metrics        sdkclient.MetricsHandler
 		lock           workflow.Mutex
 		pendingUpdates int
+		done           bool
 	}
 )
 
@@ -103,10 +105,37 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		DeleteDeployment,
+		d.handleDeleteDeployment,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateDeleteDeployment,
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		DeleteVersion,
+		d.handleDeleteVersion,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateDeleteVersion,
+		},
+	); err != nil {
+		return err
+	}
+
 	// Wait until we can continue as new or are cancelled.
-	err = workflow.Await(ctx, func() bool { return workflow.GetInfo(ctx).GetContinueAsNewSuggested() && pendingUpdates == 0 })
+	err = workflow.Await(ctx, func() bool {
+		return (workflow.GetInfo(ctx).GetContinueAsNewSuggested() && pendingUpdates == 0) || d.done
+	})
 	if err != nil {
 		return err
+	}
+	if d.done {
+		return nil
 	}
 
 	// Continue as new when there are no pending updates and history size is greater than requestsBeforeContinueAsNew.
@@ -114,6 +143,57 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
 	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkerDeploymentWorkflowArgs)
+}
+
+func (d *WorkflowRunner) validateDeleteDeployment(args *deploymentspb.DeleteDeploymentArgs) error {
+	if len(d.State.Versions) > 0 {
+		return serviceerror.NewFailedPrecondition("deployment can only be deleted when it has no versions")
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context, args *deploymentspb.DeleteDeploymentArgs) error {
+	// TODO (Carly): Do we need to do something with args.Identity here to log who deleted this? Or has the Update already logged that
+	d.done = true
+	return nil
+}
+
+func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+	if !slices.Contains(d.State.Versions, args.Version) {
+		return serviceerror.NewNotFound("version not found in deployment")
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	// ask version to delete itself
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var res deploymentspb.SyncVersionStateActivityResult
+	err = workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerDeploymentVersion, args).Get(ctx, &res)
+	if err != nil {
+		return err
+	}
+
+	// update local state
+	d.State.Versions = slices.DeleteFunc(d.State.Versions, func(v string) bool { return v == args.Version })
+
+	// update memo
+	if err = d.updateMemo(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {

@@ -51,6 +51,8 @@ const (
 	SyncVersionState             = "sync-version-state"               // for Worker Deployment Version wfs
 	SetCurrentVersion            = "set-current-version"              // for Worker Deployment wfs
 	AddVersionToWorkerDeployment = "add-version-to-worker-deployment" // for Worker Deployment wfs
+	DeleteDeployment             = "delete-deployment"                // for WorkerDeployment wfs
+	DeleteVersion                = "delete-version"                   // for WorkerDeployment wfs
 
 	// Signals
 	ForceCANSignalName      = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs

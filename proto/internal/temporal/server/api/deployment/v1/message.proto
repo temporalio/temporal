@@ -229,6 +229,17 @@ message SetCurrentVersionResponse {
     string previous_version = 1;
 }
 
+// used as Worker Deployment workflow update input:
+message DeleteVersionArgs {
+    string identity = 1;
+    string version = 2;
+}
+
+// used as Worker Deployment workflow update input:
+message DeleteDeploymentArgs {
+    string identity = 1;
+}
+
 // used as Worker Deployment activity input:
 message SyncVersionStateActivityArgs {
     string deployment_name = 1;
