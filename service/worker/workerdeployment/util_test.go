@@ -133,7 +133,13 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 			Description:   "Invalid buildID",
 			FieldName:     WorkerDeploymentBuildIDFieldName,
 			Input:         "__unversioned__",
-			ExpectedError: serviceerror.NewInvalidArgument("BuildID cannot contain '__'"),
+			ExpectedError: serviceerror.NewInvalidArgument("BuildID cannot start with '__'"),
+		},
+		{
+			Description:   "Valid buildID",
+			FieldName:     WorkerDeploymentBuildIDFieldName,
+			Input:         "valid_build__id",
+			ExpectedError: nil,
 		},
 		{
 			Description:   "Invalid deploymentName",

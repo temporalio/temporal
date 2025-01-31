@@ -114,9 +114,9 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain '/'", fieldName))
 	}
 
-	// buildID cannot have "__"
-	if fieldName == WorkerDeploymentBuildIDFieldName && strings.Contains(field, "__") {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain '__'", fieldName))
+	// buildID cannot start with "__"
+	if fieldName == WorkerDeploymentBuildIDFieldName && strings.HasPrefix(field, "__") {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot start with '__'", fieldName))
 	}
 
 	// UTF-8 check
