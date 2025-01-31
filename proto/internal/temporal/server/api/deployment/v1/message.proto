@@ -29,6 +29,7 @@ option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/enums/v1/deployment.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 
@@ -110,6 +111,9 @@ message VersionLocalState {
         // truth for that is the value at the root of WorkerDeploymentLocalState.
         map<int32, DeploymentVersionData> task_queues = 1;
     }
+
+    google.protobuf.Duration drainage_refresh_interval = 12;
+    google.protobuf.Duration drainage_visibility_grace_period = 13;
 }
 
 // used as Worker Deployment Version workflow input:
@@ -194,6 +198,13 @@ message VersionWorkflowMemo {
 message StartWorkerDeploymentRequest {
     string deployment_name = 1;
     string request_id = 2;
+}
+
+message DrainageWorkflowArgs {
+    temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
+    bool first = 2;
+    google.protobuf.Duration refresh_interval = 3;
+    google.protobuf.Duration visibility_grace_period = 4;
 }
 
 // used as Worker Deployment Version workflow activity input:

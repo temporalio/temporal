@@ -27,6 +27,7 @@ package workerdeployment
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -80,6 +81,10 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
+
+	// Defaults used in unexpected case where VersionLocalState is nil
+	defaultDrainageRefreshInterval       = 3 * time.Minute
+	defaultDrainageVisibilityGracePeriod = 3 * time.Minute
 )
 
 var (

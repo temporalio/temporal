@@ -26,6 +26,7 @@ package workerdeployment
 
 import (
 	"fmt"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -182,7 +183,20 @@ func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, first bool) 
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	})
-	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, d.VersionState.Version, first)
+	refresh := d.VersionState.DrainageRefreshInterval
+	if refresh == nil {
+		refresh = durationpb.New(defaultDrainageRefreshInterval)
+	}
+	grace := d.VersionState.DrainageVisibilityGracePeriod
+	if grace == nil {
+		grace = durationpb.New(defaultDrainageVisibilityGracePeriod)
+	}
+	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, &deploymentspb.DrainageWorkflowArgs{
+		Version:               d.VersionState.Version,
+		First:                 first,
+		RefreshInterval:       refresh,
+		VisibilityGracePeriod: grace,
+	})
 	d.drainageWorkflowFuture = &fut
 }
 
