@@ -136,6 +136,15 @@ type Client interface {
 		requestID string,
 	) (*deploymentspb.SyncVersionStateResponse, error)
 
+	// Used internally by the Worker Deployment workflow in its DeleteVersion Activity
+	DeleteVersionFromWorkerDeployment(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName, version string,
+		identity string,
+		requestID string,
+	) error
+
 	// Used internally by the Worker Deployment Version workflow in its AddVersionToWorkerDeployment Activity
 	AddVersionToWorkerDeployment(
 		ctx context.Context,
@@ -643,6 +652,43 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 		return nil, err
 	}
 	return &res, nil
+}
+
+func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName, version string,
+	identity string,
+	requestID string,
+) (retErr error) {
+	//revive:disable-next-line:defer
+	defer d.record("DeleteVersionFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
+
+	outcome, err := d.updateWithStartWorkerDeploymentVersion(
+		ctx,
+		namespaceEntry,
+		deploymentName,
+		version,
+		&updatepb.Request{
+			Input: &updatepb.Input{Name: DeleteVersion, Args: nil},
+			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+		},
+		identity,
+		requestID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if failure := outcome.GetFailure(); failure != nil {
+		return serviceerror.NewInternal(failure.Message)
+	}
+
+	success := outcome.GetSuccess()
+	if success == nil {
+		return serviceerror.NewInternal("outcome missing success and failure")
+	}
+	return nil
 }
 
 func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(

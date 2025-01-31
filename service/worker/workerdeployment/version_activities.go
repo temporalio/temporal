@@ -27,6 +27,9 @@ package workerdeployment
 import (
 	"cmp"
 	"context"
+	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"sync"
 
 	"go.temporal.io/sdk/activity"
@@ -139,6 +142,33 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 		err = cmp.Or(err, <-errs)
 	}
 	return err
+}
+
+// CheckIfTaskQueuesHavePollers returns true if any of the given task queues has any pollers
+func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, args *deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs) (bool, error) {
+	for _, tq := range args.TaskQueues {
+		res, err := a.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+			NamespaceId: a.namespace.ID().String(),
+			DescRequest: &workflowservice.DescribeTaskQueueRequest{
+				Namespace:     a.namespace.Name().String(),
+				TaskQueue:     tq,
+				ApiMode:       enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+				Versions:      &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{args.BuildId}},
+				ReportPollers: true,
+			},
+		})
+		if err != nil {
+			return false, err
+		}
+		typesInfo := res.GetDescResponse().GetVersionsInfo()[args.BuildId].GetTypesInfo()
+		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetPollers()) > 0 {
+			return true, nil
+		}
+		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].GetPollers()) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, input *deploymentspb.AddVersionToWorkerDeploymentRequest) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {

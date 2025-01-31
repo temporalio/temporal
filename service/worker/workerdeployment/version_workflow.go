@@ -26,6 +26,7 @@ package workerdeployment
 
 import (
 	"fmt"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -216,12 +217,13 @@ func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
 	return nil
 }
 
-func (d *VersionWorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
-	// TODO: fan out to all the task queues in this version and call describe. If any have pollers, return error
+func (d *VersionWorkflowRunner) validateDeleteVersion() error {
+	// We can't call DescribeTaskQueue here because that would be an Activity call / non-deterministic.
+	// Once we have PollersStatus on the version, we can check it here.
 	return nil
 }
 
-func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
+func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -243,41 +245,27 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 
 	state := d.GetVersionState()
 
-	// sync version removal to task queues
-	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
-		WorkerDeploymentVersion: state.GetVersion(),
-		ForgetVersion:           true,
-	}
-	for tqName, byType := range state.TaskQueueFamilies {
-		for tqType, _ := range byType.TaskQueues {
-			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-				Name: tqName,
-				Type: enumspb.TaskQueueType(tqType),
-			})
-		}
+	// describe all task queues in the deployment, if any have pollers, then cannot delete
+	var tqs []*taskqueuepb.TaskQueue
+	for tqName, _ := range state.TaskQueueFamilies {
+		tqs = append(tqs, &taskqueuepb.TaskQueue{
+			Name: tqName,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL, // TODO (Carly): could this be sticky?
+		})
 	}
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
-	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
+	checkPollersReq := &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs{
+		TaskQueues: tqs,
+		BuildId:    d.VersionState.Version.BuildId,
+	}
+	var hasPollers bool
+	err = workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
 	if err != nil {
-		// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 		return err
 	}
-
-	// wait for propagation
-	if len(syncRes.TaskQueueMaxVersions) > 0 {
-		err = workflow.ExecuteActivity(
-			activityCtx,
-			d.a.CheckWorkerDeploymentUserDataPropagation,
-			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
-			}).Get(ctx, nil)
-		if err != nil {
-			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
-			return err
-		}
+	if hasPollers {
+		return serviceerror.NewFailedPrecondition("cannot delete, task queues in this version still have pollers")
 	}
-
 	d.done = true
 	return nil
 }

@@ -291,7 +291,12 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 	// ask version to delete itself
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var res deploymentspb.SyncVersionStateActivityResult
-	err = workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerDeploymentVersion, args).Get(ctx, &res)
+	err = workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerDeploymentVersion, &deploymentspb.DeleteVersionActivityArgs{
+		Identity:       args.Identity,
+		DeploymentName: d.DeploymentName,
+		Version:        args.Version,
+		RequestId:      uuid.New(),
+	}).Get(ctx, &res)
 	if err != nil {
 		return err
 	}
