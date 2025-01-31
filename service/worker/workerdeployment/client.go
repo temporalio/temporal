@@ -988,6 +988,7 @@ func (d *ClientImpl) VerifyPollerPresenceInVersion(ctx context.Context, namespac
 	}
 
 	if len(missingTaskQueues) == 0 {
+		d.logger.Info("No missing task-queues found")
 		return true, nil
 	}
 
