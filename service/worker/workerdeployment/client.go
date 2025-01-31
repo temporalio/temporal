@@ -118,6 +118,15 @@ type Client interface {
 		conflictToken []byte,
 	) (*deploymentspb.SetRampingVersionResponse, error)
 
+	UpdateVersionMetadata(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		version string,
+		upsertEntries map[string]*commonpb.Payload,
+		removeEntries []string,
+		identity string,
+	) (*deploymentpb.VersionMetadata, error)
+
 	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
 	StartWorkerDeployment(
 		ctx context.Context,
@@ -173,7 +182,6 @@ type Client interface {
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
-
 type ErrRegister struct{ error }
 
 // ClientImpl implements Client
@@ -290,6 +298,56 @@ func (d *ClientImpl) DescribeVersion(
 	}
 
 	return versionStateToVersionInfo(queryResponse.VersionState), nil
+}
+
+func (d *ClientImpl) UpdateVersionMetadata(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	version string,
+	upsertEntries map[string]*commonpb.Payload,
+	removeEntries []string,
+	identity string,
+) (_ *deploymentpb.VersionMetadata, retErr error) {
+	//revive:disable-next-line:defer
+	defer d.record("UpdateVersionMetadata", &retErr, namespaceEntry.Name(), version, upsertEntries, removeEntries, identity)()
+	requestID := uuid.New()
+
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
+	}
+
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.UpdateVersionMetadataArgs{
+		UpsertEntries: upsertEntries,
+		RemoveEntries: removeEntries,
+		Identity:      identity,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, versionObj.GetDeploymentName(), versionObj.GetBuildId(), &updatepb.Request{
+		Input: &updatepb.Input{Name: UpdateVersionMetadata, Args: updatePayload},
+		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+	}, identity, requestID)
+	if err != nil {
+		return nil, err
+	}
+
+	if failure := outcome.GetFailure(); failure != nil {
+		return nil, errors.New(failure.Message)
+	}
+	success := outcome.GetSuccess()
+	if success == nil {
+		return nil, serviceerror.NewInternal("outcome missing success and failure")
+	}
+
+	var res deploymentspb.UpdateVersionMetadataResponse
+	if err := sdk.PreferProtoDataConverter.FromPayloads(outcome.GetSuccess(), &res); err != nil {
+		return nil, err
+	}
+
+	return res.Metadata, nil
 }
 
 func (d *ClientImpl) DescribeWorkerDeployment(
@@ -1065,7 +1123,6 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		}
 	}
 
-	// TODO (Shivam): Add metadata and aggregated pollers status
 	return &deploymentpb.WorkerDeploymentVersionInfo{
 		Version:            worker_versioning.WorkerDeploymentVersionToString(state.Version),
 		CreateTime:         state.CreateTime,
