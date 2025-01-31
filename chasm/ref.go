@@ -28,6 +28,10 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
+var (
+	defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.EntityID }
+)
+
 type EntityKey struct {
 	NamespaceID string
 	BusinessID  string

@@ -48,7 +48,7 @@ func NewRegistrableComponent[C Component](
 	rc := &RegistrableComponent{
 		name:       name,
 		goType:     reflect.TypeFor[C](),
-		shardingFn: func(_ EntityKey) string { return "" },
+		shardingFn: defaultShardingFn,
 	}
 	for _, opt := range opts {
 		opt(rc)
