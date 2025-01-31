@@ -129,6 +129,24 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 			Input:         "A",
 			ExpectedError: nil,
 		},
+		{
+			Description:   "Invalid buildID",
+			FieldName:     WorkerDeploymentBuildIDFieldName,
+			Input:         "__unversioned__",
+			ExpectedError: serviceerror.NewInvalidArgument("BuildID cannot start with '__'"),
+		},
+		{
+			Description:   "Valid buildID",
+			FieldName:     WorkerDeploymentBuildIDFieldName,
+			Input:         "valid_build__id",
+			ExpectedError: nil,
+		},
+		{
+			Description:   "Invalid deploymentName",
+			FieldName:     WorkerDeploymentFieldName,
+			Input:         "A/B",
+			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeployment cannot contain '/'"),
+		},
 	}
 
 	for _, test := range testCases {
