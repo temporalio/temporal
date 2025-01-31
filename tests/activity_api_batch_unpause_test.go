@@ -39,18 +39,15 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/searchattribute"
+
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type ActivityApiBatchUnpauseClientTestSuite struct {
 	testcore.FunctionalTestSdkSuite
-	tv                     *testvars.TestVars
-	initialRetryInterval   time.Duration
-	scheduleToCloseTimeout time.Duration
-	startToCloseTimeout    time.Duration
-
-	activityRetryPolicy *temporal.RetryPolicy
+	tv *testvars.TestVars
 }
 
 func TestActivityApiBatchUnpauseClientTestSuite(t *testing.T) {
@@ -62,38 +59,60 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) SetupTest() {
 	s.FunctionalTestSdkSuite.SetupTest()
 
 	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
-
-	s.initialRetryInterval = 1 * time.Second
-	s.scheduleToCloseTimeout = 30 * time.Minute
-	s.startToCloseTimeout = 15 * time.Minute
-
-	s.activityRetryPolicy = &temporal.RetryPolicy{
-		InitialInterval:    s.initialRetryInterval,
-		BackoffCoefficient: 1,
-	}
 }
 
-func (s *ActivityApiBatchUnpauseClientTestSuite) makeWorkflowFunc(activityFunction ActivityFunctions) WorkflowFunction {
-	return func(ctx workflow.Context) error {
+type internalTestWorkflow struct {
+	initialRetryInterval   time.Duration
+	scheduleToCloseTimeout time.Duration
+	startToCloseTimeout    time.Duration
 
-		var ret string
-		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			ActivityID:             "activity-id",
-			DisableEagerExecution:  true,
-			StartToCloseTimeout:    s.startToCloseTimeout,
-			ScheduleToCloseTimeout: s.scheduleToCloseTimeout,
-			RetryPolicy:            s.activityRetryPolicy,
-		}), activityFunction).Get(ctx, &ret)
-		return err
+	activityRetryPolicy *temporal.RetryPolicy
+
+	startedActivityCount atomic.Int32
+	letActivitySucceed   atomic.Bool
+}
+
+func newInternalWorkflow() *internalTestWorkflow {
+	wf := &internalTestWorkflow{
+		initialRetryInterval:   1 * time.Second,
+		scheduleToCloseTimeout: 30 * time.Minute,
+		startToCloseTimeout:    15 * time.Minute,
 	}
+	wf.activityRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval:    wf.initialRetryInterval,
+		BackoffCoefficient: 1,
+	}
+
+	return wf
+}
+
+func (w *internalTestWorkflow) WorkflowFunc(ctx workflow.Context) error {
+	var ret string
+	err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		ActivityID:             "activity-id",
+		DisableEagerExecution:  true,
+		StartToCloseTimeout:    w.startToCloseTimeout,
+		ScheduleToCloseTimeout: w.scheduleToCloseTimeout,
+		RetryPolicy:            w.activityRetryPolicy,
+	}), w.ActivityFunc).Get(ctx, &ret)
+	return err
+}
+
+func (w *internalTestWorkflow) ActivityFunc() (string, error) {
+	w.startedActivityCount.Add(1)
+	if w.letActivitySucceed.Load() == false {
+		activityErr := errors.New("bad-luck-please-retry")
+		return "", activityErr
+	}
+	return "done!", nil
 }
 
 func (s *ActivityApiBatchUnpauseClientTestSuite) createWorkflow(ctx context.Context, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
-	workflowOptions1 := sdkclient.StartWorkflowOptions{
+	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: s.TaskQueue(),
 	}
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions1, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
 
@@ -104,25 +123,13 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Accept
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var startedActivityCount atomic.Int32
-	var letActivitySucceed atomic.Bool
+	internalWorkflow := newInternalWorkflow()
 
-	activityFunction := func() (string, error) {
-		startedActivityCount.Add(1)
-		if letActivitySucceed.Load() == false {
-			activityErr := errors.New("bad-luck-please-retry")
-			return "", activityErr
-		}
-		return "done!", nil
-	}
+	s.Worker().RegisterWorkflow(internalWorkflow.WorkflowFunc)
+	s.Worker().RegisterActivity(internalWorkflow.ActivityFunc)
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
-
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
-
-	workflowRun1 := s.createWorkflow(ctx, workflowFn)
-	workflowRun2 := s.createWorkflow(ctx, workflowFn)
+	workflowRun1 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
+	workflowRun2 := s.createWorkflow(ctx, internalWorkflow.WorkflowFunc)
 
 	// wait for activity to start in both workflows
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -131,14 +138,14 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Accept
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.PendingActivities, 1)
 		}
-		assert.Greater(t, startedActivityCount.Load(), int32(0))
+		assert.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		assert.NoError(t, err)
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.PendingActivities, 1)
 		}
-		assert.Greater(t, startedActivityCount.Load(), int32(0))
+		assert.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activities in both workflows
@@ -168,30 +175,12 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Accept
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// yes, both workflow type and activity type are "func1". There is no way to specify them.
-	typeName := "func1"
+	workflowTypeName := "WorkflowFunc"
+	activityTypeName := "ActivityFunc"
 	// Make sure the activity is in visibility
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
-	//unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, typeName)
-	//query := fmt.Sprintf("(WorkflowType='%s' AND %s)", typeName, unpauseCause)
-	query := fmt.Sprintf("(WorkflowType='%s')", typeName)
-	s.Logger.Info(fmt.Sprintf("QQQQQQQ %s", query))
-
-	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
-		Namespace: s.Namespace().String(),
-		PageSize:  int32(10),
-		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, typeName),
-	}
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		scanResponse, err := s.FrontendClient().ScanWorkflowExecutions(testcore.NewContext(), scanRequest)
-		assert.NoError(t, err)
-		assert.NotNil(t, scanResponse)
-		if scanResponse != nil {
-			s.Logger.Info(fmt.Sprintf("QQQQQQQ ScanWorkflowExecutions %v", len(scanResponse.Executions)))
-			assert.Len(t, scanResponse.Executions, 2)
-		}
-
-	}, 5*time.Second, 500*time.Millisecond)
+	unpauseCause := fmt.Sprintf("%s = 'property:activityType=%s'", searchattribute.TemporalPauseInfo, activityTypeName)
+	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, unpauseCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		listResp, err = s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
@@ -202,7 +191,6 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Accept
 		assert.NoError(t, err)
 		assert.NotNil(t, listResp)
 		if listResp != nil {
-			s.Logger.Info(fmt.Sprintf("QQQQQQQ %v", len(listResp.Executions)))
 			assert.Len(t, listResp.Executions, 2)
 		}
 	}, 5*time.Second, 500*time.Millisecond)
@@ -212,10 +200,10 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Accept
 		Namespace: s.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
 			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
-				Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: typeName},
+				Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: activityTypeName},
 			},
 		},
-		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", typeName),
+		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
 		JobId:           uuid.New(),
 		Reason:          "test",
 	})
@@ -238,7 +226,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Accept
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let both of the activities succeed
-	letActivitySucceed.Store(true)
+	internalWorkflow.letActivitySucceed.Store(true)
 
 	var out string
 	err = workflowRun1.Get(ctx, &out)
