@@ -685,9 +685,11 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, req *historyservice.Des
 	if len(req.GetNamespaceId()) != 0 && req.GetWorkflowExecution() != nil {
 		shardID = common.WorkflowIDToHistoryShard(req.GetNamespaceId(), req.GetWorkflowExecution().GetWorkflowId(), h.config.NumberOfShards)
 	}
-	_, err := h.controller.GetShardByID(shardID)
-	if err != nil {
-		return nil, err
+	if shardID > 0 {
+		_, err := h.controller.GetShardByID(shardID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	itemsInCacheByIDCount, itemsInCacheByNameCount := h.namespaceRegistry.GetCacheSize()
