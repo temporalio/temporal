@@ -3396,9 +3396,11 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 		return nil, err
 	}
 
-	// TODO (Shivam): error out if build_ID is empty
+	if request.GetBuildId() == "" {
+		return nil, serviceerror.NewInvalidArgument("build_id cannot be empty")
+	}
 
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.BuildId, request.Identity)
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.BuildId, request.Identity, request.IgnoreMissingTaskQueues)
 	if err != nil {
 		return nil, err
 	}
@@ -3442,7 +3444,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		BuildId:        request.GetBuildId(),
 		DeploymentName: request.GetDeploymentName(),
 	}
-	resp, err := wh.workerDeploymentClient.SetWorkerDeploymentRampingVersion(ctx, namespaceEntry, deploymentVersion, request.GetPercentage(), request.GetIdentity())
+	resp, err := wh.workerDeploymentClient.SetWorkerDeploymentRampingVersion(ctx, namespaceEntry, deploymentVersion, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues)
 	if err != nil {
 		return nil, err
 	}

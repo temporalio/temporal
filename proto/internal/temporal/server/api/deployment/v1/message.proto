@@ -222,6 +222,7 @@ message CheckWorkerDeploymentUserDataPropagationRequest {
 message SetCurrentVersionArgs {
     string identity = 1;
     string version = 2;
+    bool ignore_missing_task_queues = 3;
 }
 
 // used as Worker Deployment update response:
@@ -241,6 +242,7 @@ message SetWorkerDeploymentRampingVersionArgs {
     string identity = 1;
     string version = 2;
     float percentage = 3;
+    bool ignore_missing_task_queues = 4;
 }
 
 // used as Worker Deployment activity input:
@@ -254,6 +256,17 @@ message SyncVersionStateActivityArgs {
 // used as Worker Deployment activity result:
 message SyncVersionStateActivityResult {
     VersionLocalState version_state = 1;
+}
+
+// used as Worker Deployment activity input:
+message VerifyPollerPresenceInVersionArgs {
+    string prev_current_version = 1;
+    string new_current_version = 2;
+}
+
+// used as Worker Deployment activity output:
+message VerifyPollerPresenceInVersionResult {
+    bool is_valid_version = 1;
 }
 
 // used as Worker Deployment workflow memo:

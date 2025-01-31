@@ -253,10 +253,11 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 
 	// SetCurrent tv1
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
-		Namespace:      s.Namespace().String(),
-		DeploymentName: tv1.DeploymentSeries(),
-		BuildId:        tv1.BuildID(),
-		Identity:       tv1.ClientIdentity(),
+		Namespace:               s.Namespace().String(),
+		DeploymentName:          tv1.DeploymentSeries(),
+		BuildId:                 tv1.BuildID(),
+		Identity:                tv1.ClientIdentity(),
+		IgnoreMissingTaskQueues: true,
 	})
 	s.Nil(err)
 	s.checkVersionIsCurrent(ctx, tv1)
@@ -267,10 +268,11 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 
 	// SetCurrent tv2 --> tv1 starts the child drainage workflow
 	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
-		Namespace:      s.Namespace().String(),
-		DeploymentName: tv2.DeploymentSeries(),
-		BuildId:        tv2.BuildID(),
-		Identity:       tv2.ClientIdentity(),
+		Namespace:               s.Namespace().String(),
+		DeploymentName:          tv2.DeploymentSeries(),
+		BuildId:                 tv2.BuildID(),
+		Identity:                tv2.ClientIdentity(),
+		IgnoreMissingTaskQueues: true,
 	})
 	s.Nil(err)
 

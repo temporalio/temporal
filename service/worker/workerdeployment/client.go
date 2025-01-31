@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -49,6 +50,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
@@ -88,6 +90,7 @@ type Client interface {
 		deploymentName string,
 		version string,
 		identity string,
+		ignoreMissingTaskQueues bool,
 	) (*deploymentspb.SetCurrentVersionResponse, error)
 
 	ListWorkerDeployments(
@@ -103,6 +106,7 @@ type Client interface {
 		version *deploymentpb.WorkerDeploymentVersion,
 		percentage float32,
 		identity string,
+		ignoreMissingTaskQueues bool,
 	) (*deploymentspb.SetWorkerDeploymentRampingVersionResponse, error)
 
 	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
@@ -140,6 +144,12 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName, version string) (enumspb.VersionDrainageStatus, error)
+
+	VerifyPollerPresenceInVersion(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		prevCurrentVersion, newCurrentVersion string,
+	) (bool, error)
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
@@ -151,6 +161,7 @@ type ClientImpl struct {
 	logger                    log.Logger
 	historyClient             historyservice.HistoryServiceClient
 	visibilityManager         manager.VisibilityManager
+	matchingClient            resource.MatchingClient
 	maxIDLengthLimit          dynamicconfig.IntPropertyFn
 	visibilityMaxPageSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxTaskQueuesInDeployment dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -337,14 +348,16 @@ func (d *ClientImpl) SetCurrentVersion(
 	deploymentName string,
 	version string,
 	identity string,
+	ignoreMissingTaskQueues bool,
 ) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
 	requestID := uuid.New()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
-		Identity: identity,
-		Version:  version,
+		Identity:                identity,
+		Version:                 version,
+		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
 	})
 	if err != nil {
 		return nil, err
@@ -390,15 +403,17 @@ func (d *ClientImpl) SetWorkerDeploymentRampingVersion(
 	version *deploymentpb.WorkerDeploymentVersion,
 	percentage float32,
 	identity string,
+	ignoreMissingTaskQueues bool,
 ) (_ *deploymentspb.SetWorkerDeploymentRampingVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SetWorkerDeploymentRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
 	requestID := uuid.New()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetWorkerDeploymentRampingVersionArgs{
-		Identity:   identity,
-		Version:    version.GetBuildId(),
-		Percentage: percentage,
+		Identity:                identity,
+		Version:                 version.GetBuildId(),
+		Percentage:              percentage,
+		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
 	})
 	if err != nil {
 		return nil, err
@@ -953,4 +968,125 @@ func makeDeploymentQuery(deploymentName, buildID string) string {
 	}))
 	statusFilter = "= 'Running'"
 	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
+}
+
+func (d *ClientImpl) VerifyPollerPresenceInVersion(ctx context.Context, namespaceEntry *namespace.Namespace, prevCurrentVersion, newCurrentVersion string) (bool, error) {
+	// Step 1: Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion
+	prevCurrentVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersion)
+	if err != nil {
+		return false, err
+	}
+
+	newCurrentVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, newCurrentVersion)
+	if err != nil {
+		return false, err
+	}
+
+	missingTaskQueues, err := d.checkForMissingTaskQueues(ctx, prevCurrentVersionInfo, newCurrentVersionInfo)
+	if err != nil {
+		return false, err
+	}
+
+	if len(missingTaskQueues) == 0 {
+		d.logger.Info("No missing task-queues found")
+		return true, nil
+	}
+
+	// Verify that all the missing task-queues have been added to another deployment or do not have any backlogged tasks
+	for _, missingTaskQueue := range missingTaskQueues {
+		isUnversionedAndActive, err := d.isTaskQueueUnversionedAndActive(ctx, namespaceEntry, missingTaskQueue, prevCurrentVersionInfo.Version.BuildId)
+		if err != nil {
+			return false, err
+		}
+		if isUnversionedAndActive {
+			// if one of the missing task queues is active,
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// isTaskQueueUnversionedAndActive checks if a task queue is unversioned and has backloggedtasks
+func (d *ClientImpl) isTaskQueueUnversionedAndActive(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	taskQueue *deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo,
+	buildID string,
+) (bool, error) {
+	// First check if task queue is assigned to another deployment
+	response, err := d.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		DescRequest: &workflowservice.DescribeTaskQueueRequest{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue.Name,
+				Kind: enumspb.TaskQueueKind(enumspb.TASK_QUEUE_KIND_NORMAL),
+			},
+			TaskQueueType: enumspb.TaskQueueType(taskQueue.Type),
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+
+	// Task queue has been added to another deployment; not considered active for this deployment
+	if response.DescResponse.VersioningInfo != nil &&
+		response.DescResponse.VersioningInfo.GetCurrentVersion() != nil &&
+		response.DescResponse.VersioningInfo.GetCurrentVersion().GetBuildId() != "" {
+		return false, nil
+	}
+
+	// Control flow coming here would mean that the task queue is unversioned. The task queue should not
+	// have any backlogged tasks.
+	response, err = d.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		DescRequest: &workflowservice.DescribeTaskQueueRequest{
+			ApiMode: enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue.Name,
+				Kind: enumspb.TaskQueueKind(enumspb.TASK_QUEUE_KIND_NORMAL),
+			},
+			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TaskQueueType(taskQueue.Type)},
+			Versions: &taskqueuepb.TaskQueueVersionSelection{
+				BuildIds: []string{buildID}, // todo (Shivam): Should we pass in this buildID if the task-queue is in an unversioned deployment?
+			},
+			ReportStats: true,
+		},
+	})
+	if err != nil {
+		d.logger.Error("error fetching AddRate for task-queue", tag.Error(err))
+		return false, err
+	}
+
+	typesInfo := response.GetDescResponse().GetVersionsInfo()[buildID].GetTypesInfo()
+	if typesInfo != nil {
+		typeStats := typesInfo[int32(enumspb.TaskQueueType(taskQueue.Type))]
+		if typeStats != nil && typeStats.GetStats() != nil && typeStats.GetStats().GetTasksAddRate() != 0 {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// checkForMissingTaskQueues checks if all the task-queues in the previous version are present in the new version
+func (d *ClientImpl) checkForMissingTaskQueues(ctx context.Context, prevCurrentVersionInfo, newCurrentVersionInfo *deploymentpb.WorkerDeploymentVersionInfo) ([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, error) {
+	prevCurrentVersionTaskQueues := prevCurrentVersionInfo.GetTaskQueueInfos()
+	newCurrentVersionTaskQueues := newCurrentVersionInfo.GetTaskQueueInfos()
+
+	missingTaskQueues := []*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{}
+	for _, prevTaskQueue := range prevCurrentVersionTaskQueues {
+		found := false
+		for _, newTaskQueue := range newCurrentVersionTaskQueues {
+			if prevTaskQueue.GetName() == newTaskQueue.GetName() && prevTaskQueue.GetType() == newTaskQueue.GetType() {
+				found = true
+				break
+			}
+		}
+		if !found {
+			missingTaskQueues = append(missingTaskQueues, prevTaskQueue)
+		}
+	}
+
+	return missingTaskQueues, nil
 }

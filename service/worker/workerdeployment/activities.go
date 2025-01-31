@@ -57,3 +57,19 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *depl
 		VersionState: res.VersionState,
 	}, nil
 }
+
+func (a *Activities) VerifyPollerPresenceInVersion(ctx context.Context, args *deploymentspb.VerifyPollerPresenceInVersionArgs) (*deploymentspb.VerifyPollerPresenceInVersionResult, error) {
+	res, err := a.deploymentClient.VerifyPollerPresenceInVersion(
+		ctx,
+		a.namespace,
+		args.PrevCurrentVersion,
+		args.NewCurrentVersion,
+	)
+	if err != nil {
+		// todo (Shivam): do we return a non-retryable error here since we want to fail the operation if this check has failed.
+		return nil, err
+	}
+	return &deploymentspb.VerifyPollerPresenceInVersionResult{
+		IsValidVersion: res,
+	}, nil
+}

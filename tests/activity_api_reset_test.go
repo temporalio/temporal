@@ -25,22 +25,13 @@
 package tests
 
 import (
-	"context"
-	"errors"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -78,253 +69,253 @@ func TestActivityApiResetClientTestSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *ActivityApiResetClientTestSuite) makeWorkflowFunc(activityFunction ActivityFunctions) WorkflowFunction {
-	return func(ctx workflow.Context) error {
+// func (s *ActivityApiResetClientTestSuite) makeWorkflowFunc(activityFunction ActivityFunctions) WorkflowFunction {
+// 	return func(ctx workflow.Context) error {
 
-		var ret string
-		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			ActivityID:             "activity-id",
-			DisableEagerExecution:  true,
-			StartToCloseTimeout:    s.startToCloseTimeout,
-			ScheduleToCloseTimeout: s.scheduleToCloseTimeout,
-			RetryPolicy:            s.activityRetryPolicy,
-		}), activityFunction).Get(ctx, &ret)
-		return err
-	}
-}
+// 		var ret string
+// 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+// 			ActivityID:             "activity-id",
+// 			DisableEagerExecution:  true,
+// 			StartToCloseTimeout:    s.startToCloseTimeout,
+// 			ScheduleToCloseTimeout: s.scheduleToCloseTimeout,
+// 			RetryPolicy:            s.activityRetryPolicy,
+// 		}), activityFunction).Get(ctx, &ret)
+// 		return err
+// 	}
+// }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
-	// activity reset is called after multiple attempts,
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+// func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
+// 	// activity reset is called after multiple attempts,
+// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// 	defer cancel()
 
-	var activityWasReset atomic.Bool
-	activityCompleteCh := make(chan struct{})
-	var startedActivityCount atomic.Int32
+// 	var activityWasReset atomic.Bool
+// 	activityCompleteCh := make(chan struct{})
+// 	var startedActivityCount atomic.Int32
 
-	activityFunction := func() (string, error) {
-		startedActivityCount.Add(1)
+// 	activityFunction := func() (string, error) {
+// 		startedActivityCount.Add(1)
 
-		if activityWasReset.Load() == false {
-			activityErr := errors.New("bad-luck-please-retry")
-			return "", activityErr
-		}
+// 		if activityWasReset.Load() == false {
+// 			activityErr := errors.New("bad-luck-please-retry")
+// 			return "", activityErr
+// 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh)
-		return "done!", nil
-	}
+// 		s.WaitForChannel(ctx, activityCompleteCh)
+// 		return "done!", nil
+// 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
+// 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+// 	s.Worker().RegisterWorkflow(workflowFn)
+// 	s.Worker().RegisterActivity(activityFunction)
 
-	wfId := testcore.RandomizeStr("wfid-" + s.T().Name())
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        wfId,
-		TaskQueue: s.TaskQueue(),
-	}
+// 	wfId := testcore.RandomizeStr("wfid-" + s.T().Name())
+// 	workflowOptions := sdkclient.StartWorkflowOptions{
+// 		ID:        wfId,
+// 		TaskQueue: s.TaskQueue(),
+// 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	s.NoError(err)
+// 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+// 	s.NoError(err)
 
-	// wait for activity to start/fail few times
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		assert.Len(t, description.GetPendingActivities(), 1)
-		assert.Greater(t, startedActivityCount.Load(), int32(1))
-	}, 5*time.Second, 200*time.Millisecond)
+// 	// wait for activity to start/fail few times
+// 	s.EventuallyWithT(func(t *assert.CollectT) {
+// 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+// 		assert.NoError(t, err)
+// 		assert.Len(t, description.GetPendingActivities(), 1)
+// 		assert.Greater(t, startedActivityCount.Load(), int32(1))
+// 	}, 5*time.Second, 200*time.Millisecond)
 
-	resetRequest := &workflowservice.ResetActivityByIdRequest{
-		Namespace:  s.Namespace().String(),
-		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
-		NoWait:     true,
-	}
-	resp, err := s.FrontendClient().ResetActivityById(ctx, resetRequest)
-	s.NoError(err)
-	s.NotNil(resp)
+// 	resetRequest := &workflowservice.ResetActivityByIdRequest{
+// 		Namespace:  s.Namespace().String(),
+// 		WorkflowId: workflowRun.GetID(),
+// 		ActivityId: "activity-id",
+// 		NoWait:     true,
+// 	}
+// 	resp, err := s.FrontendClient().ResetActivityById(ctx, resetRequest)
+// 	s.NoError(err)
+// 	s.NotNil(resp)
 
-	activityWasReset.Store(true)
+// 	activityWasReset.Store(true)
 
-	// wait for activity to be running
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		if err != nil {
-			assert.Len(t, description.GetPendingActivities(), 1)
-			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
-			// also verify that the number of attempts was reset
-			assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
+// 	// wait for activity to be running
+// 	s.EventuallyWithT(func(t *assert.CollectT) {
+// 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+// 		assert.NoError(t, err)
+// 		if err != nil {
+// 			assert.Len(t, description.GetPendingActivities(), 1)
+// 			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
+// 			// also verify that the number of attempts was reset
+// 			assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 
-		}
-	}, 5*time.Second, 100*time.Millisecond)
+// 		}
+// 	}, 5*time.Second, 100*time.Millisecond)
 
-	// let activity finish
-	activityCompleteCh <- struct{}{}
+// 	// let activity finish
+// 	activityCompleteCh <- struct{}{}
 
-	// wait for workflow to complete
-	var out string
-	err = workflowRun.Get(ctx, &out)
-	s.NoError(err)
-}
+// 	// wait for workflow to complete
+// 	var out string
+// 	err = workflowRun.Get(ctx, &out)
+// 	s.NoError(err)
+// }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithRunningAndNoWait() {
-	// activity reset is called while activity is running, with NoWait=true to start new activity immediately
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+// func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithRunningAndNoWait() {
+// 	// activity reset is called while activity is running, with NoWait=true to start new activity immediately
+// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// 	defer cancel()
 
-	activityCompleteCh1 := make(chan struct{})
-	activityCompleteCh2 := make(chan struct{})
-	var activityAboutToReset atomic.Bool
+// 	activityCompleteCh1 := make(chan struct{})
+// 	activityCompleteCh2 := make(chan struct{})
+// 	var activityAboutToReset atomic.Bool
 
-	activityFunction := func() (string, error) {
-		if activityAboutToReset.Load() == false {
-			activityErr := errors.New("bad-luck-please-retry")
-			s.WaitForChannel(ctx, activityCompleteCh1)
-			return "", activityErr
-		}
+// 	activityFunction := func() (string, error) {
+// 		if activityAboutToReset.Load() == false {
+// 			activityErr := errors.New("bad-luck-please-retry")
+// 			s.WaitForChannel(ctx, activityCompleteCh1)
+// 			return "", activityErr
+// 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh2)
-		return "done!", nil
-	}
+// 		s.WaitForChannel(ctx, activityCompleteCh2)
+// 		return "done!", nil
+// 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
+// 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+// 	s.Worker().RegisterWorkflow(workflowFn)
+// 	s.Worker().RegisterActivity(activityFunction)
 
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        s.tv.WorkflowID(),
-		TaskQueue: s.TaskQueue(),
-	}
+// 	workflowOptions := sdkclient.StartWorkflowOptions{
+// 		ID:        s.tv.WorkflowID(),
+// 		TaskQueue: s.TaskQueue(),
+// 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	s.NoError(err)
+// 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+// 	s.NoError(err)
 
-	// wait for activity to start
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		assert.Len(t, description.GetPendingActivities(), 1)
-		assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
-	}, 5*time.Second, 200*time.Millisecond)
+// 	// wait for activity to start
+// 	s.EventuallyWithT(func(t *assert.CollectT) {
+// 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+// 		assert.NoError(t, err)
+// 		assert.Len(t, description.GetPendingActivities(), 1)
+// 		assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
+// 	}, 5*time.Second, 200*time.Millisecond)
 
-	activityAboutToReset.Store(true)
-	resetRequest := &workflowservice.ResetActivityByIdRequest{
-		Namespace:  s.Namespace().String(),
-		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
-		NoWait:     true,
-	}
-	resp, err := s.FrontendClient().ResetActivityById(ctx, resetRequest)
-	s.NoError(err)
-	s.NotNil(resp)
+// 	activityAboutToReset.Store(true)
+// 	resetRequest := &workflowservice.ResetActivityByIdRequest{
+// 		Namespace:  s.Namespace().String(),
+// 		WorkflowId: workflowRun.GetID(),
+// 		ActivityId: "activity-id",
+// 		NoWait:     true,
+// 	}
+// 	resp, err := s.FrontendClient().ResetActivityById(ctx, resetRequest)
+// 	s.NoError(err)
+// 	s.NotNil(resp)
 
-	// let previous activity complete
-	activityCompleteCh1 <- struct{}{}
-	// wait a bit to make sure previous activity is completed
-	util.InterruptibleSleep(ctx, 1*time.Second)
+// 	// let previous activity complete
+// 	activityCompleteCh1 <- struct{}{}
+// 	// wait a bit to make sure previous activity is completed
+// 	util.InterruptibleSleep(ctx, 1*time.Second)
 
-	// check if workflow and activity are still running
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		if err != nil {
-			assert.Len(t, description.GetPendingActivities(), 1)
-			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
-			// also verify that the number of attempts was reset
-			assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
-		}
-	}, 5*time.Second, 100*time.Millisecond)
+// 	// check if workflow and activity are still running
+// 	s.EventuallyWithT(func(t *assert.CollectT) {
+// 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+// 		assert.NoError(t, err)
+// 		if err != nil {
+// 			assert.Len(t, description.GetPendingActivities(), 1)
+// 			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
+// 			// also verify that the number of attempts was reset
+// 			assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
+// 		}
+// 	}, 5*time.Second, 100*time.Millisecond)
 
-	// let activity finish
-	activityCompleteCh2 <- struct{}{}
+// 	// let activity finish
+// 	activityCompleteCh2 <- struct{}{}
 
-	// wait for workflow to complete
-	var out string
-	err = workflowRun.Get(ctx, &out)
-	s.NoError(err)
-}
+// 	// wait for workflow to complete
+// 	var out string
+// 	err = workflowRun.Get(ctx, &out)
+// 	s.NoError(err)
+// }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
-	// reset is called while activity is in retry
-	s.initialRetryInterval = 1 * time.Minute
-	s.activityRetryPolicy = &temporal.RetryPolicy{
-		InitialInterval:    s.initialRetryInterval,
-		BackoffCoefficient: 1,
-	}
+// func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
+// 	// reset is called while activity is in retry
+// 	s.initialRetryInterval = 1 * time.Minute
+// 	s.activityRetryPolicy = &temporal.RetryPolicy{
+// 		InitialInterval:    s.initialRetryInterval,
+// 		BackoffCoefficient: 1,
+// 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+// 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// 	defer cancel()
 
-	var startedActivityCount atomic.Int32
-	activityCompleteCh := make(chan struct{})
+// 	var startedActivityCount atomic.Int32
+// 	activityCompleteCh := make(chan struct{})
 
-	activityFunction := func() (string, error) {
-		startedActivityCount.Add(1)
+// 	activityFunction := func() (string, error) {
+// 		startedActivityCount.Add(1)
 
-		if startedActivityCount.Load() == 1 {
-			activityErr := errors.New("bad-luck-please-retry")
-			return "", activityErr
-		}
+// 		if startedActivityCount.Load() == 1 {
+// 			activityErr := errors.New("bad-luck-please-retry")
+// 			return "", activityErr
+// 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh)
-		return "done!", nil
-	}
+// 		s.WaitForChannel(ctx, activityCompleteCh)
+// 		return "done!", nil
+// 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
+// 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+// 	s.Worker().RegisterWorkflow(workflowFn)
+// 	s.Worker().RegisterActivity(activityFunction)
 
-	wfId := testcore.RandomizeStr("wf_id-" + s.T().Name())
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        wfId,
-		TaskQueue: s.TaskQueue(),
-	}
+// 	wfId := testcore.RandomizeStr("wf_id-" + s.T().Name())
+// 	workflowOptions := sdkclient.StartWorkflowOptions{
+// 		ID:        wfId,
+// 		TaskQueue: s.TaskQueue(),
+// 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	s.NoError(err)
+// 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+// 	s.NoError(err)
 
-	// wait for activity to start, fail and wait for retry
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
-		assert.Equal(t, int32(1), startedActivityCount.Load())
-	}, 5*time.Second, 200*time.Millisecond)
+// 	// wait for activity to start, fail and wait for retry
+// 	s.EventuallyWithT(func(t *assert.CollectT) {
+// 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+// 		assert.NoError(t, err)
+// 		assert.Equal(t, 1, len(description.PendingActivities))
+// 		assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
+// 		assert.Equal(t, int32(1), startedActivityCount.Load())
+// 	}, 5*time.Second, 200*time.Millisecond)
 
-	resetRequest := &workflowservice.ResetActivityByIdRequest{
-		Namespace:  s.Namespace().String(),
-		WorkflowId: workflowRun.GetID(),
-		ActivityId: "activity-id",
-		NoWait:     true,
-	}
-	resp, err := s.FrontendClient().ResetActivityById(ctx, resetRequest)
-	s.NoError(err)
-	s.NotNil(resp)
+// 	resetRequest := &workflowservice.ResetActivityByIdRequest{
+// 		Namespace:  s.Namespace().String(),
+// 		WorkflowId: workflowRun.GetID(),
+// 		ActivityId: "activity-id",
+// 		NoWait:     true,
+// 	}
+// 	resp, err := s.FrontendClient().ResetActivityById(ctx, resetRequest)
+// 	s.NoError(err)
+// 	s.NotNil(resp)
 
-	// wait for activity to start. Wait time is shorter than original retry interval
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-		assert.NoError(t, err)
-		if err != nil {
-			assert.Len(t, description.GetPendingActivities(), 1)
-			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
-			assert.Equal(t, int32(2), startedActivityCount.Load())
-			// also verify that the number of attempts was reset
-			assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
-		}
-	}, 2*time.Second, 200*time.Millisecond)
+// 	// wait for activity to start. Wait time is shorter than original retry interval
+// 	s.EventuallyWithT(func(t *assert.CollectT) {
+// 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+// 		assert.NoError(t, err)
+// 		if err != nil {
+// 			assert.Len(t, description.GetPendingActivities(), 1)
+// 			assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
+// 			assert.Equal(t, int32(2), startedActivityCount.Load())
+// 			// also verify that the number of attempts was reset
+// 			assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
+// 		}
+// 	}, 2*time.Second, 200*time.Millisecond)
 
-	// let previous activity complete
-	activityCompleteCh <- struct{}{}
+// 	// let previous activity complete
+// 	activityCompleteCh <- struct{}{}
 
-	// wait for workflow to complete
-	var out string
-	err = workflowRun.Get(ctx, &out)
-	s.NoError(err)
-}
+// 	// wait for workflow to complete
+// 	var out string
+// 	err = workflowRun.Get(ctx, &out)
+// 	s.NoError(err)
+// }

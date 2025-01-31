@@ -806,6 +806,80 @@ func (this *SyncVersionStateActivityResult) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type VerifyPollerPresenceInVersionArgs to the protobuf v3 wire format
+func (val *VerifyPollerPresenceInVersionArgs) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type VerifyPollerPresenceInVersionArgs from the protobuf v3 wire format
+func (val *VerifyPollerPresenceInVersionArgs) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *VerifyPollerPresenceInVersionArgs) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two VerifyPollerPresenceInVersionArgs values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *VerifyPollerPresenceInVersionArgs) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *VerifyPollerPresenceInVersionArgs
+	switch t := that.(type) {
+	case *VerifyPollerPresenceInVersionArgs:
+		that1 = t
+	case VerifyPollerPresenceInVersionArgs:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type VerifyPollerPresenceInVersionResult to the protobuf v3 wire format
+func (val *VerifyPollerPresenceInVersionResult) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type VerifyPollerPresenceInVersionResult from the protobuf v3 wire format
+func (val *VerifyPollerPresenceInVersionResult) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *VerifyPollerPresenceInVersionResult) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two VerifyPollerPresenceInVersionResult values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *VerifyPollerPresenceInVersionResult) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *VerifyPollerPresenceInVersionResult
+	switch t := that.(type) {
+	case *VerifyPollerPresenceInVersionResult:
+		that1 = t
+	case VerifyPollerPresenceInVersionResult:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type WorkerDeploymentWorkflowMemo to the protobuf v3 wire format
 func (val *WorkerDeploymentWorkflowMemo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
