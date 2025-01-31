@@ -150,8 +150,8 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 		return nil
 	case *historyservice.PauseActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetFrontendRequest().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetFrontendRequest().GetRunId()),
+			tag.WorkflowID(r.GetFrontendRequest().GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetFrontendRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.PollMutableStateRequest:
 		return []tag.Tag{
@@ -226,8 +226,8 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 		}
 	case *historyservice.ResetActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetFrontendRequest().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetFrontendRequest().GetRunId()),
+			tag.WorkflowID(r.GetFrontendRequest().GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetFrontendRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.ResetStickyTaskQueueRequest:
 		return []tag.Tag{
@@ -286,13 +286,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 		}
 	case *historyservice.UnpauseActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetFrontendRequest().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetFrontendRequest().GetRunId()),
+			tag.WorkflowID(r.GetFrontendRequest().GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetFrontendRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.UpdateActivityOptionsRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetUpdateRequest().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetUpdateRequest().GetRunId()),
+			tag.WorkflowID(r.GetUpdateRequest().GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetUpdateRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.UpdateWorkflowExecutionRequest:
 		return []tag.Tag{

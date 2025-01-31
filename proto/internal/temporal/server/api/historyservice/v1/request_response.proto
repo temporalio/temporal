@@ -1192,12 +1192,12 @@ message SyncWorkflowStateResponse {
 // (-- api-linter: core::0134::request-mask-required=disabled
 // (-- api-linter: core::0134::request-resource-required=disabled
 message UpdateActivityOptionsRequest {
-    option (routing).workflow_id = "update_request.workflow_id";
+    option (routing).workflow_id = "update_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.UpdateActivityOptionsByIdRequest update_request = 2;
+    temporal.api.workflowservice.v1.UpdateActivityOptionsRequest update_request = 2;
 }
 
 message UpdateActivityOptionsResponse {
@@ -1206,36 +1206,36 @@ message UpdateActivityOptionsResponse {
 }
 
 message PauseActivityRequest {
-    option (routing).workflow_id = "frontend_request.workflow_id";
+    option (routing).workflow_id = "frontend_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.PauseActivityByIdRequest frontend_request = 2;
+    temporal.api.workflowservice.v1.PauseActivityRequest frontend_request = 2;
 }
 
 message PauseActivityResponse {
 }
 
 message UnpauseActivityRequest {
-    option (routing).workflow_id = "frontend_request.workflow_id";
+    option (routing).workflow_id = "frontend_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.UnpauseActivityByIdRequest frontend_request = 2;
+    temporal.api.workflowservice.v1.UnpauseActivityRequest frontend_request = 2;
 }
 
 message UnpauseActivityResponse {
 }
 
 message ResetActivityRequest {
-    option (routing).workflow_id = "frontend_request.workflow_id";
+    option (routing).workflow_id = "frontend_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.ResetActivityByIdRequest frontend_request = 2;
+    temporal.api.workflowservice.v1.ResetActivityRequest frontend_request = 2;
 }
 
 message ResetActivityResponse {
