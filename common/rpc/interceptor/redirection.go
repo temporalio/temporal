@@ -127,10 +127,10 @@ var (
 		"StopBatchOperation":             func() any { return &workflowservice.StopBatchOperationResponse{} },
 		"DescribeBatchOperation":         func() any { return &workflowservice.DescribeBatchOperationResponse{} },
 		"ListBatchOperations":            func() any { return &workflowservice.ListBatchOperationsResponse{} },
-		"UpdateActivityOptionsById":      func() any { return &workflowservice.UpdateActivityOptionsByIdResponse{} },
-		"PauseActivityById":              func() any { return &workflowservice.PauseActivityByIdResponse{} },
-		"UnpauseActivityById":            func() any { return &workflowservice.UnpauseActivityByIdResponse{} },
-		"ResetActivityById":              func() any { return &workflowservice.ResetActivityByIdResponse{} },
+		"UpdateActivityOptionsById":      func() any { return &workflowservice.UpdateActivityOptionsResponse{} },
+		"PauseActivityById":              func() any { return &workflowservice.PauseActivityResponse{} },
+		"UnpauseActivityById":            func() any { return &workflowservice.UnpauseActivityResponse{} },
+		"ResetActivityById":              func() any { return &workflowservice.ResetActivityResponse{} },
 		"UpdateWorkflowExecutionOptions": func() any { return &workflowservice.UpdateWorkflowExecutionOptionsResponse{} },
 
 		"DescribeDeployment":                func() any { return &workflowservice.DescribeDeploymentResponse{} },        // [cleanup-wv-pre-release]

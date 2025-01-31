@@ -1301,6 +1301,36 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{CancelRequested: resp.GetCancelRequested()}, nil
 }
 
+// Implemented in server already
+func (wh *WorkflowHandler) PauseActivity(
+	ctx context.Context,
+	request *workflowservice.PauseActivityRequest,
+) (_ *workflowservice.PauseActivityResponse, retError error) {
+	panic("implement me")
+}
+
+// Implemented in server already
+func (wh *WorkflowHandler) UnpauseActivity(
+	ctx context.Context, request *workflowservice.UnpauseActivityRequest,
+) (_ *workflowservice.UnpauseActivityResponse, retError error) {
+	panic("implement me")
+}
+
+// Implemented in server already
+func (wh *WorkflowHandler) ResetActivity(
+	ctx context.Context, request *workflowservice.ResetActivityRequest,
+) (_ *workflowservice.ResetActivityResponse, retError error) {
+	panic("implement me")
+}
+
+// Implemented in server already
+func (wh *WorkflowHandler) UpdateActivityOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityOptionsRequest,
+) (_ *workflowservice.UpdateActivityOptionsResponse, retError error) {
+	panic("implement me")
+}
+
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
 // result in a new 'ActivityTaskCompleted' event being written to the workflow history and a new WorkflowTask
 // created for the workflow so new commands could be made.  Use the 'taskToken' provided as response of
@@ -3494,6 +3524,16 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 	}, nil
 }
 
+func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentRequest) (*workflowservice.DeleteWorkerDeploymentResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentVersionRequest) (*workflowservice.DeleteWorkerDeploymentVersionResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 // Returns the schedule description and current state of an existing schedule.
 func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workflowservice.DescribeScheduleRequest) (_ *workflowservice.DescribeScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
@@ -5570,8 +5610,8 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 
 func (wh *WorkflowHandler) UpdateActivityOptionsById(
 	ctx context.Context,
-	request *workflowservice.UpdateActivityOptionsByIdRequest,
-) (_ *workflowservice.UpdateActivityOptionsByIdResponse, retError error) {
+	request *workflowservice.UpdateActivityOptionsRequest,
+) (_ *workflowservice.UpdateActivityOptionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
@@ -5581,10 +5621,10 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if request.GetWorkflowId() == "" {
+	if request.GetExecution().GetWorkflowId() == "" {
 		return nil, errWorkflowIDNotSet
 	}
-	if request.GetActivityId() == "" {
+	if request.GetId() == "" {
 		return nil, errActivityIDNotSet
 	}
 
@@ -5602,15 +5642,15 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 		return nil, err
 	}
 
-	return &workflowservice.UpdateActivityOptionsByIdResponse{
+	return &workflowservice.UpdateActivityOptionsResponse{
 		ActivityOptions: response.ActivityOptions,
 	}, nil
 }
 
 func (wh *WorkflowHandler) PauseActivityById(
 	ctx context.Context,
-	request *workflowservice.PauseActivityByIdRequest,
-) (_ *workflowservice.PauseActivityByIdResponse, retError error) {
+	request *workflowservice.PauseActivityRequest,
+) (_ *workflowservice.PauseActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
@@ -5620,10 +5660,10 @@ func (wh *WorkflowHandler) PauseActivityById(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if request.GetWorkflowId() == "" {
+	if request.GetExecution().GetWorkflowId() == "" {
 		return nil, errWorkflowIDNotSet
 	}
-	if request.GetActivityId() == "" {
+	if request.GetId() == "" {
 		return nil, errActivityIDNotSet
 	}
 
@@ -5641,12 +5681,12 @@ func (wh *WorkflowHandler) PauseActivityById(
 		return nil, err
 	}
 
-	return &workflowservice.PauseActivityByIdResponse{}, nil
+	return &workflowservice.PauseActivityResponse{}, nil
 }
 
 func (wh *WorkflowHandler) UnpauseActivityById(
-	ctx context.Context, request *workflowservice.UnpauseActivityByIdRequest,
-) (_ *workflowservice.UnpauseActivityByIdResponse, retError error) {
+	ctx context.Context, request *workflowservice.UnpauseActivityRequest,
+) (_ *workflowservice.UnpauseActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
@@ -5656,10 +5696,10 @@ func (wh *WorkflowHandler) UnpauseActivityById(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if request.GetWorkflowId() == "" {
+	if request.GetExecution().GetWorkflowId() == "" {
 		return nil, errWorkflowIDNotSet
 	}
-	if request.GetActivityId() == "" {
+	if request.GetId() == "" {
 		return nil, errActivityIDNotSet
 	}
 
@@ -5677,12 +5717,12 @@ func (wh *WorkflowHandler) UnpauseActivityById(
 		return nil, err
 	}
 
-	return &workflowservice.UnpauseActivityByIdResponse{}, nil
+	return &workflowservice.UnpauseActivityResponse{}, nil
 }
 
 func (wh *WorkflowHandler) ResetActivityById(
-	ctx context.Context, request *workflowservice.ResetActivityByIdRequest,
-) (_ *workflowservice.ResetActivityByIdResponse, retError error) {
+	ctx context.Context, request *workflowservice.ResetActivityRequest,
+) (_ *workflowservice.ResetActivityResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
@@ -5692,10 +5732,10 @@ func (wh *WorkflowHandler) ResetActivityById(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if request.GetWorkflowId() == "" {
+	if request.GetExecution().GetWorkflowId() == "" {
 		return nil, errWorkflowIDNotSet
 	}
-	if request.GetActivityId() == "" {
+	if request.GetId() == "" {
 		return nil, errActivityIDNotSet
 	}
 
@@ -5713,5 +5753,5 @@ func (wh *WorkflowHandler) ResetActivityById(
 		return nil, err
 	}
 
-	return &workflowservice.ResetActivityByIdResponse{}, nil
+	return &workflowservice.ResetActivityResponse{}, nil
 }

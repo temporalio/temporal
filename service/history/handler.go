@@ -2492,7 +2492,7 @@ func (h *Handler) UpdateActivityOptions(
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	workflowID := request.GetUpdateRequest().WorkflowId
+	workflowID := request.GetUpdateRequest().GetExecution().WorkflowId
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -2520,7 +2520,7 @@ func (h *Handler) PauseActivity(
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	workflowID := request.GetFrontendRequest().WorkflowId
+	workflowID := request.GetFrontendRequest().GetExecution().WorkflowId
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -2548,7 +2548,7 @@ func (h *Handler) UnpauseActivity(
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	workflowID := request.GetFrontendRequest().WorkflowId
+	workflowID := request.GetFrontendRequest().GetExecution().WorkflowId
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -2576,7 +2576,7 @@ func (h *Handler) ResetActivity(
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	workflowID := request.GetFrontendRequest().WorkflowId
+	workflowID := request.GetFrontendRequest().GetExecution().WorkflowId
 	if request.GetNamespaceId() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}

@@ -24,10 +24,7 @@ package unpauseactivity
 
 import (
 	"context"
-	"fmt"
-
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/api"
@@ -49,8 +46,8 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
-			request.GetFrontendRequest().WorkflowId,
-			request.GetFrontendRequest().RunId,
+			request.GetFrontendRequest().GetExecution().WorkflowId,
+			request.GetFrontendRequest().GetExecution().RunId,
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
@@ -86,7 +83,7 @@ func processUnpauseActivityRequest(
 		return nil, consts.ErrWorkflowCompleted
 	}
 	frontendRequest := request.GetFrontendRequest()
-	activityId := frontendRequest.GetActivityId()
+	activityId := frontendRequest.GetId()
 
 	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
 
@@ -99,13 +96,14 @@ func processUnpauseActivityRequest(
 		return &historyservice.UnpauseActivityResponse{}, nil
 	}
 
-	switch op := request.GetFrontendRequest().Operation.(type) {
-	case *workflowservice.UnpauseActivityByIdRequest_Resume:
-		return workflow.UnpauseActivityWithResume(shardContext, mutableState, ai, op.Resume.NoWait)
-
-	case *workflowservice.UnpauseActivityByIdRequest_Reset_:
-		return workflow.UnpauseActivityWithReset(shardContext, mutableState, ai, op.Reset_.NoWait, op.Reset_.ResetHeartbeat)
-	default:
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
-	}
+	//switch op := request.GetFrontendRequest().Operation.(type) {
+	//case *workflowservice.UnpauseActivityByIdRequest_Resume:
+	//	return workflow.UnpauseActivityWithResume(shardContext, mutableState, ai, op.Resume.NoWait)
+	//
+	//case *workflowservice.UnpauseActivityByIdRequest_Reset_:
+	//	return workflow.UnpauseActivityWithReset(shardContext, mutableState, ai, op.Reset_.NoWait, op.Reset_.ResetHeartbeat)
+	//default:
+	//	return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
+	//}
+	return nil, serviceerror.NewUnimplemented("fix this on rebase cuz idk how it should be")
 }

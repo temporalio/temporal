@@ -61,8 +61,8 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
-			request.GetUpdateRequest().WorkflowId,
-			request.GetUpdateRequest().RunId,
+			request.GetUpdateRequest().GetExecution().WorkflowId,
+			request.GetUpdateRequest().GetExecution().RunId,
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
@@ -101,7 +101,7 @@ func updateActivityOptions(
 	if mergeFrom == nil {
 		return nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
 	}
-	activityId := updateRequest.GetActivityId()
+	activityId := updateRequest.GetId()
 
 	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
 
