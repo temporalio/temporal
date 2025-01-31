@@ -256,6 +256,17 @@ message SyncVersionStateActivityResult {
     VersionLocalState version_state = 1;
 }
 
+// used as Worker Deployment activity input:
+message VerifyPollerPresenceInVersionArgs {
+    string prev_current_version = 1;
+    string new_current_version = 2;
+}
+
+// used as Worker Deployment activity output:
+message VerifyPollerPresenceInVersionResult {
+    bool is_valid_version = 1;
+}
+
 // used as Worker Deployment workflow memo:
 message WorkerDeploymentWorkflowMemo {
     string deployment_name = 1;

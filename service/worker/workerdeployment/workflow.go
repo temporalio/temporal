@@ -184,7 +184,13 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 			rampingSinceTime = d.State.RoutingInfo.RampingVersionChangedTime
 			rampingVersionUpdateTime = d.State.RoutingInfo.RampingVersionChangedTime
 		} else {
-			rampingSinceTime = routingUpdateTime // version ramping for the first time
+			// version ramping for the first time
+
+			if _, err := d.verifyPollerPresenceInVersion(ctx, prevRampingVersion, newRampingVersion); err != nil {
+				d.logger.Info("New version does not have all the task queues from the previous current version or some missing task queues are unversioned and active", "error", err)
+				return nil, err
+			}
+			rampingSinceTime = routingUpdateTime
 			rampingVersionUpdateTime = routingUpdateTime
 		}
 
@@ -251,6 +257,11 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	prevCurrentVersion := d.State.RoutingInfo.CurrentVersion
 	newCurrentVersion := args.Version
 	updateTime := timestamppb.New(workflow.Now(ctx))
+
+	if _, err := d.verifyPollerPresenceInVersion(ctx, prevCurrentVersion, newCurrentVersion); err != nil {
+		d.logger.Info("New version does not have all the task queues from the previous current version or some missing task queues are unversioned and active", "error", err)
+		return nil, err
+	}
 
 	// tell new current that it's current
 	currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
@@ -336,6 +347,16 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 		RequestId:      d.newUUID(ctx),
 	}).Get(ctx, &res)
 	return res.VersionState, err
+}
+
+func (d *WorkflowRunner) verifyPollerPresenceInVersion(ctx workflow.Context, prevCurrentVersion string, newCurrentVersion string) (bool, error) {
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var res deploymentspb.VerifyPollerPresenceInVersionResult
+	err := workflow.ExecuteActivity(activityCtx, d.a.VerifyPollerPresenceInVersion, &deploymentspb.VerifyPollerPresenceInVersionArgs{
+		PrevCurrentVersion: prevCurrentVersion,
+		NewCurrentVersion:  newCurrentVersion,
+	}).Get(ctx, &res)
+	return res.IsValidVersion, err
 }
 
 func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
