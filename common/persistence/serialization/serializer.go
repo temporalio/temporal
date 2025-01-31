@@ -116,9 +116,6 @@ type (
 
 		NexusEndpointToBlob(endpoint *persistencespb.NexusEndpoint, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error)
-
-		WorkflowExecutionStateDetailsToBlob(requestIDs *persistencespb.WorkflowExecutionStateDetails, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		WorkflowExecutionStateDetailsFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionStateDetails, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -547,14 +544,6 @@ func (t *serializerImpl) NexusEndpointToBlob(endpoint *persistencespb.NexusEndpo
 func (t *serializerImpl) NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error) {
 	result := &persistencespb.NexusEndpoint{}
 	return result, ProtoDecodeBlob(data, result)
-}
-
-func (t *serializerImpl) WorkflowExecutionStateDetailsToBlob(requestIDs *persistencespb.WorkflowExecutionStateDetails, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return ProtoEncodeBlob(requestIDs, encodingType)
-}
-
-func (t *serializerImpl) WorkflowExecutionStateDetailsFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionStateDetails, error) {
-	return WorkflowExecutionStateDetailsFromBlob(data.GetData(), data.GetEncodingType().String())
 }
 
 func ProtoDecodeBlob(data *commonpb.DataBlob, result proto.Message) error {

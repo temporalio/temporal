@@ -353,12 +353,10 @@ func NewMutableState(
 	s.executionState = &persistencespb.WorkflowExecutionState{
 		RunId: runID,
 
-		State:     enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		StartTime: timestamppb.New(startTime),
-		Details: &persistencespb.WorkflowExecutionStateDetails{
-			RequestIds: make(map[string]*persistencespb.RequestIDInfo),
-		},
+		State:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		StartTime:  timestamppb.New(startTime),
+		RequestIds: make(map[string]*persistencespb.RequestIDInfo),
 	}
 	s.approximateSize += s.executionState.Size()
 
@@ -2095,13 +2093,10 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 
 func (ms *MutableStateImpl) attachRequestID(requestID string, eventType enumspb.EventType) {
 	ms.approximateSize -= ms.executionState.Size()
-	if ms.executionState.Details == nil {
-		ms.executionState.Details = &persistencespb.WorkflowExecutionStateDetails{}
+	if ms.executionState.RequestIds == nil {
+		ms.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
 	}
-	if ms.executionState.Details.RequestIds == nil {
-		ms.executionState.Details.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
-	}
-	ms.executionState.Details.RequestIds[requestID] = &persistencespb.RequestIDInfo{
+	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
 		EventType: eventType,
 	}
 	ms.approximateSize += ms.executionState.Size()
@@ -2338,7 +2333,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.approximateSize -= ms.executionState.Size()
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	ms.executionState.CreateRequestId = requestID
-	ms.executionState.Details.RequestIds[requestID] = &persistencespb.RequestIDInfo{
+	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
 		EventType: startEvent.EventType,
 	}
 

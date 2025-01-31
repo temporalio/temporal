@@ -179,7 +179,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 	}
 	s.DeepEqual(p.NewCurrentWorkflowConditionFailedError(
 		"",
-		newSnapshot.ExecutionState.Details.RequestIds,
+		newSnapshot.ExecutionState.RequestIds,
 		newSnapshot.ExecutionState.RunId,
 		newSnapshot.ExecutionState.State,
 		newSnapshot.ExecutionState.Status,
@@ -262,7 +262,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 	}
 	s.DeepEqual(p.NewCurrentWorkflowConditionFailedError(
 		"",
-		prevSnapshot.ExecutionState.Details.RequestIds,
+		prevSnapshot.ExecutionState.RequestIds,
 		prevSnapshot.ExecutionState.RunId,
 		prevSnapshot.ExecutionState.State,
 		prevSnapshot.ExecutionState.Status,

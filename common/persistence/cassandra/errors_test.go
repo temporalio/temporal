@@ -234,7 +234,12 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 	runID, _ := uuid.Parse(permanentRunID)
 	currentRunID := uuid.New()
 	startTime := time.Now().UTC()
-	stateDetails := &persistencespb.WorkflowExecutionStateDetails{
+	workflowState := &persistencespb.WorkflowExecutionState{
+		CreateRequestId: requestID.String(),
+		RunId:           currentRunID.String(),
+		State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		StartTime:       timestamp.TimePtr(startTime),
 		RequestIds: map[string]*persistencespb.RequestIDInfo{
 			requestID.String(): {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
@@ -243,14 +248,6 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 			},
 		},
-	}
-	workflowState := &persistencespb.WorkflowExecutionState{
-		CreateRequestId: requestID.String(),
-		RunId:           currentRunID.String(),
-		State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		StartTime:       timestamp.TimePtr(startTime),
-		Details:         stateDetails,
 	}
 	blob, err := serialization.WorkflowExecutionStateToBlob(workflowState)
 	lastWriteVersion := rand.Int63()
@@ -272,7 +269,7 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 	s.DeepEqual(
 		p.NewCurrentWorkflowConditionFailedError(
 			"",
-			workflowState.Details.RequestIds,
+			workflowState.RequestIds,
 			workflowState.RunId,
 			workflowState.State,
 			workflowState.Status,

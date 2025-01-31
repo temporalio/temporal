@@ -56,13 +56,11 @@ func WorkflowExecutionStateFromBlob(blob []byte, encoding string) (*persistences
 		return nil, err
 	}
 	// Initialize the WorkflowExecutionStateDetails for old records.
-	if result.Details == nil {
-		result.Details = &persistencespb.WorkflowExecutionStateDetails{
-			RequestIds: make(map[string]*persistencespb.RequestIDInfo),
-		}
+	if result.RequestIds == nil {
+		result.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
 	}
-	if result.CreateRequestId != "" && result.Details.RequestIds[result.CreateRequestId] == nil {
-		result.Details.RequestIds[result.CreateRequestId] = &persistencespb.RequestIDInfo{
+	if result.CreateRequestId != "" && result.RequestIds[result.CreateRequestId] == nil {
+		result.RequestIds[result.CreateRequestId] = &persistencespb.RequestIDInfo{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		}
 	}
@@ -136,19 +134,6 @@ func QueueStateToBlob(info *persistencespb.QueueState) (*commonpb.DataBlob, erro
 func QueueStateFromBlob(blob []byte, encoding string) (*persistencespb.QueueState, error) {
 	result := &persistencespb.QueueState{}
 	return result, proto3Decode(blob, encoding, result)
-}
-
-func WorkflowExecutionStateDetailsToBlob(details *persistencespb.WorkflowExecutionStateDetails) (*commonpb.DataBlob, error) {
-	return proto3Encode(details)
-}
-
-func WorkflowExecutionStateDetailsFromBlob(blob []byte, encoding string) (*persistencespb.WorkflowExecutionStateDetails, error) {
-	if len(blob) == 0 {
-		// For backwards compatibility, old records have blob and encoding not set.
-		return nil, nil
-	}
-	details := &persistencespb.WorkflowExecutionStateDetails{}
-	return details, proto3Decode(blob, encoding, details)
 }
 
 func encode(

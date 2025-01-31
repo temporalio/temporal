@@ -55,8 +55,9 @@ CREATE TABLE current_executions(
   start_version BIGINT NOT NULL DEFAULT 0,
   start_time DATETIME(6),
   last_write_version BIGINT NOT NULL,
-  details MEDIUMBLOB NULL,
-  details_encoding VARCHAR(16) NULL,
+  -- `data` contains the WorkflowExecutionState (same as in `executions.state` above)
+  data MEDIUMBLOB NULL,
+  data_encoding VARCHAR(16) NULL,
   PRIMARY KEY (shard_id, namespace_id, workflow_id)
 );
 
