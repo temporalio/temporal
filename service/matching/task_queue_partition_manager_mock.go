@@ -70,6 +70,20 @@ func (m *MocktaskQueuePartitionManager) EXPECT() *MocktaskQueuePartitionManagerM
 	return m.recorder
 }
 
+// AddSpooledTask mocks base method.
+func (m *MocktaskQueuePartitionManager) AddSpooledTask(ctx context.Context, task *internalTask, backlogQueue *PhysicalTaskQueueKey) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddSpooledTask", ctx, task, backlogQueue)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddSpooledTask indicates an expected call of AddSpooledTask.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) AddSpooledTask(ctx, task, backlogQueue any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTask", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).AddSpooledTask), ctx, task, backlogQueue)
+}
+
 // AddTask mocks base method.
 func (m *MocktaskQueuePartitionManager) AddTask(ctx context.Context, params addTaskParams) (string, bool, error) {
 	m.ctrl.T.Helper()
@@ -283,20 +297,6 @@ func (m *MocktaskQueuePartitionManager) PollTask(ctx context.Context, pollMetada
 func (mr *MocktaskQueuePartitionManagerMockRecorder) PollTask(ctx, pollMetadata any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollTask", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).PollTask), ctx, pollMetadata)
-}
-
-// ProcessSpooledTask mocks base method.
-func (m *MocktaskQueuePartitionManager) ProcessSpooledTask(ctx context.Context, task *internalTask, backlogQueue *PhysicalTaskQueueKey) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessSpooledTask", ctx, task, backlogQueue)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ProcessSpooledTask indicates an expected call of ProcessSpooledTask.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) ProcessSpooledTask(ctx, task, backlogQueue any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessSpooledTask", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).ProcessSpooledTask), ctx, task, backlogQueue)
 }
 
 // Start mocks base method.

@@ -94,12 +94,13 @@ type (
 	// to/from the persistence layer passes through userDataManager of the owning partition.
 	// All other partitions long-poll the latest user data from the owning partition.
 	userDataManagerImpl struct {
-		lock            sync.Mutex
-		onFatalErr      func(unloadCause)
-		partition       tqid.Partition
-		userData        *persistencespb.VersionedTaskQueueUserData
-		userDataChanged chan struct{}
-		userDataState   userDataState
+		lock              sync.Mutex
+		onFatalErr        func(unloadCause)
+		onUserDataChanged func() // if set, call this in new goroutine when user data changes
+		partition         tqid.Partition
+		userData          *persistencespb.VersionedTaskQueueUserData
+		userDataChanged   chan struct{}
+		userDataState     userDataState
 		// only set if this partition owns user data of its task queue
 		store             persistence.TaskManager
 		config            *taskQueueConfig
@@ -128,6 +129,7 @@ func newUserDataManager(
 	store persistence.TaskManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	onFatalErr func(unloadCause),
+	onUserDataChanged func(),
 	partition tqid.Partition,
 	config *taskQueueConfig,
 	logger log.Logger,
@@ -135,6 +137,7 @@ func newUserDataManager(
 ) *userDataManagerImpl {
 	m := &userDataManagerImpl{
 		onFatalErr:        onFatalErr,
+		onUserDataChanged: onUserDataChanged,
 		partition:         partition,
 		userDataChanged:   make(chan struct{}),
 		config:            config,
@@ -195,6 +198,9 @@ func (m *userDataManagerImpl) setUserDataLocked(userData *persistencespb.Version
 	m.userData = userData
 	close(m.userDataChanged)
 	m.userDataChanged = make(chan struct{})
+	if m.onUserDataChanged != nil {
+		go m.onUserDataChanged()
+	}
 }
 
 // Sets user data enabled/disabled and marks the future ready (if it's not ready yet).

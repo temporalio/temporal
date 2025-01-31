@@ -329,7 +329,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	return task, versionSetUsed, err
 }
 
-func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
+func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 	ctx context.Context,
 	task *internalTask,
 	backlogQueue *PhysicalTaskQueueKey,
@@ -342,47 +342,53 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 		// construct directive based on the build ID of the spool queue
 		directive = worker_versioning.MakeBuildIdDirective(assignedBuildId)
 	}
-	// Redirect and re-resolve if we're blocked in matcher and user data changes.
-	for {
-		newBacklogQueue, syncMatchQueue, userDataChanged, err := pm.getPhysicalQueuesForAdd(
-			ctx,
-			directive,
-			nil,
-			taskInfo.GetRunId(),
-		)
+	newBacklogQueue, syncMatchQueue, userDataChanged, err := pm.getPhysicalQueuesForAdd(
+		ctx,
+		directive,
+		nil,
+		taskInfo.GetRunId(),
+	)
+	if err != nil {
+		return err
+	}
+	// set redirect info if spoolQueue and syncMatchQueue build ids are different
+	if assignedBuildId != syncMatchQueue.QueueKey().Version().BuildId() {
+		task.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
+			AssignedBuildId: assignedBuildId,
+		}
+	} else {
+		// make sure to reset redirectInfo in case it was set in a previous loop cycle
+		task.redirectInfo = nil
+	}
+	if !backlogQueue.version.Deployment().Equal(newBacklogQueue.QueueKey().version.Deployment()) {
+		// Backlog queue has changed, spool to the new queue. This should happen rarely: when
+		// activity of pinned workflow was determined independent and sent to the default queue
+		// but now at dispatch time, the determination is different because the activity pollers
+		// on the pinned deployment have reached server.
+		// TODO: before spooling, try to sync-match the task on the new queue
+		err = newBacklogQueue.SpoolTask(taskInfo)
 		if err != nil {
+			// return the error so task_reader retries the outer call
 			return err
 		}
-		// set redirect info if spoolQueue and syncMatchQueue build ids are different
-		if assignedBuildId != syncMatchQueue.QueueKey().Version().BuildId() {
-			task.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
-				AssignedBuildId: assignedBuildId,
-			}
-		} else {
-			// make sure to reset redirectInfo in case it was set in a previous loop cycle
-			task.redirectInfo = nil
-		}
-		if !backlogQueue.version.Deployment().Equal(newBacklogQueue.QueueKey().version.Deployment()) {
-			// Backlog queue has changed, spool to the new queue. This should happen rarely: when
-			// activity of pinned workflow was determined independent and sent to the default queue
-			// but now at dispatch time, the determination is different because the activity pollers
-			// on the pinned deployment have reached server.
-			// TODO: before spooling, try to sync-match the task on the new queue
-			err = newBacklogQueue.SpoolTask(taskInfo)
-			if err != nil {
-				// return the error so task_reader retries the outer call
-				return err
-			}
-			// Finish the task because now it is copied to the other backlog. It should be considered
-			// invalid because a poller did not receive the task.
-			task.finish(nil, false)
-			return nil
-		}
-		err = syncMatchQueue.DispatchSpooledTask(ctx, task, userDataChanged)
-		if err != errInterrupted {
-			return err
+		// Finish the task because now it is copied to the other backlog. It should be considered
+		// invalid because a poller did not receive the task.
+		task.finish(nil, false)
+		return nil
+	}
+	// TODO(pri): Is this always necessary or can we determine that some can't be re-redirected?
+	// TODO(pri): Can we avoid allocating a closure when re-redirection is necessary?
+	task.checkRedirect = func() (handled bool) {
+		select {
+		case <-userDataChanged:
+			// user data has changed, call again to re-evaluate redirections
+			return pm.AddSpooledTask(ctx, task, backlogQueue) == nil
+		default:
+			return false // unchanged, leave task in matcher
 		}
 	}
+	syncMatchQueue.AddSpooledTaskToMatcher(task)
+	return nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
@@ -1014,4 +1020,16 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 	}
 	perType := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
 	return perType, userDataChanged, nil
+}
+
+func (pm *taskQueuePartitionManagerImpl) userDataChanged() {
+	// Notify all queues so they can re-evaluate their backlog.
+	pm.versionedQueuesLock.RLock()
+	for _, vq := range pm.versionedQueues {
+		go vq.UserDataChanged()
+	}
+	pm.versionedQueuesLock.RUnlock()
+
+	// Do this one in this goroutine.
+	pm.defaultQueue.UserDataChanged()
 }

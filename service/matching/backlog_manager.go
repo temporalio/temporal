@@ -181,15 +181,12 @@ func (c *backlogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error 
 	return err
 }
 
-func (c *backlogManagerImpl) processSpooledTask(
-	ctx context.Context,
-	task *internalTask,
-) error {
-	return c.pqMgr.ProcessSpooledTask(ctx, task)
+func (c *backlogManagerImpl) addSpooledTask(ctx context.Context, task *internalTask) error {
+	return c.pqMgr.AddSpooledTask(ctx, task)
 }
 
 func (c *backlogManagerImpl) BacklogCountHint() int64 {
-	return c.taskAckManager.getBacklogCountHint()
+	return c.taskReader.getLoadedTasks()
 }
 
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {

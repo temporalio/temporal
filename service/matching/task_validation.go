@@ -38,10 +38,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-const (
-	taskReaderOfferTimeout        = 60 * time.Second
-	taskReaderValidationThreshold = 600 * time.Second
-)
+const taskReaderValidationThreshold = 600 * time.Second
 
 type (
 	taskValidator interface {

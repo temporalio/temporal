@@ -214,6 +214,7 @@ func (w *taskWriter) appendTasks(
 			tag.WorkflowTaskQueueType(w.backlogMgr.queueKey().TaskType()))
 		return nil, err
 	}
+	// TODO(pri): we should signal taskreader here, not in the callers of appendTask
 	return resp, nil
 }
 

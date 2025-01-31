@@ -275,7 +275,7 @@ func newPhysicalTaskQueueManager(
 			return nil, err
 		}
 	}
-	pqMgr.matcher = newTaskMatcher(config, fwdr, pqMgr.metricsHandler)
+	pqMgr.matcher = newTaskMatcher(config, queue.partition, fwdr, pqMgr.taskValidator, pqMgr.metricsHandler)
 	for _, opt := range opts {
 		opt(pqMgr)
 	}
@@ -292,6 +292,7 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 	}
 	c.liveness.Start()
 	c.backlogMgr.Start()
+	c.matcher.Start()
 	c.logger.Info("Started physicalTaskQueueManager", tag.LifeCycleStarted, tag.Cause(c.config.loadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c, 1)
@@ -391,28 +392,16 @@ func (c *physicalTaskQueueManagerImpl) MarkAlive() {
 	c.liveness.markAlive()
 }
 
-// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
-// up the task or if rate limit is exceeded, this method will return error. Task
-// *will not* be persisted to db
-func (c *physicalTaskQueueManagerImpl) DispatchSpooledTask(
-	ctx context.Context,
-	task *internalTask,
-	userDataChanged <-chan struct{},
-) error {
-	return c.matcher.MustOffer(ctx, task, userDataChanged)
+func (c *physicalTaskQueueManagerImpl) AddSpooledTask(ctx context.Context, task *internalTask) error {
+	return c.partitionMgr.AddSpooledTask(ctx, task, c.queue)
 }
 
-func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
-	ctx context.Context,
-	task *internalTask,
-) error {
-	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
-		task.finish(nil, false)
-		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
-		// Don't try to set read level here because it may have been advanced already.
-		return nil
-	}
-	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue)
+func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
+	c.matcher.AddTask(task)
+}
+
+func (c *physicalTaskQueueManagerImpl) UserDataChanged() {
+	c.matcher.RecheckAllRedirects()
 }
 
 // DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
@@ -509,7 +498,7 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() *taskqueuesp
 		ReadLevel:        c.backlogMgr.taskAckManager.getReadLevel(),
 		AckLevel:         c.backlogMgr.taskAckManager.getAckLevel(),
 		TaskIdBlock:      &taskqueuepb.TaskIdBlock{StartId: c.backlogMgr.taskWriter.taskIDBlock.start, EndId: c.backlogMgr.taskWriter.taskIDBlock.end},
-		ReadBufferLength: int64(len(c.backlogMgr.taskReader.taskBuffer)),
+		ReadBufferLength: c.backlogMgr.taskReader.loadedTasks.Load(),
 	}
 }
 
@@ -534,10 +523,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 			return false, nil
 		}
 	}
-	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
-	defer cancel()
-
-	return c.matcher.Offer(childCtx, task)
+	return c.matcher.Offer(ctx, task)
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(

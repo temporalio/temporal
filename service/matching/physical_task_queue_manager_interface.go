@@ -51,10 +51,9 @@ type (
 		TrySyncMatch(ctx context.Context, task *internalTask) (bool, error)
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
-		ProcessSpooledTask(ctx context.Context, task *internalTask) error
-		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
-		// up the task, this method will return error. Task will not be persisted to db
-		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error
+		AddSpooledTask(ctx context.Context, task *internalTask) error
+		AddSpooledTaskToMatcher(task *internalTask)
+		UserDataChanged()
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
