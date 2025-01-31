@@ -43,12 +43,13 @@ type (
 	// WorkflowRunner holds the local state while running a deployment-series workflow
 	WorkflowRunner struct {
 		*deploymentspb.WorkerDeploymentWorkflowArgs
-		a              *Activities
-		logger         sdklog.Logger
-		metrics        sdkclient.MetricsHandler
-		lock           workflow.Mutex
-		pendingUpdates int
-		done           bool
+		a                *Activities
+		logger           sdklog.Logger
+		metrics          sdkclient.MetricsHandler
+		lock             workflow.Mutex
+		pendingUpdates   int
+		done             bool
+		signalsCompleted bool
 	}
 )
 
@@ -70,8 +71,6 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.State.CreateTime = timestamppb.New(time.Now())
 		d.State.RoutingInfo = &deploymentpb.RoutingInfo{}
 	}
-
-	var pendingUpdates int
 
 	err := workflow.SetQueryHandler(ctx, QueryDescribeDeployment, func() (*deploymentspb.QueryDescribeWorkerDeploymentResponse, error) {
 		return &deploymentspb.QueryDescribeWorkerDeploymentResponse{
@@ -138,10 +137,8 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
-	// Wait until we can continue as new or are cancelled.
-	err = workflow.Await(ctx, func() bool {
-		return (workflow.GetInfo(ctx).GetContinueAsNewSuggested() || d.done) && pendingUpdates == 0
-	})
+	// Wait on any pending signals and updates.
+	err = workflow.Await(ctx, func() bool { return (d.signalsCompleted || d.done) && d.pendingUpdates == 0 })
 	if err != nil {
 		return err
 	}
@@ -154,6 +151,37 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
 	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkerDeploymentWorkflowArgs)
+}
+
+func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
+	// Fetch signal channels
+	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
+	forceCAN := false
+	deleteVersionSignalChannel := workflow.GetSignalChannel(ctx, DeleteVersionSignal)
+
+	selector := workflow.NewSelector(ctx)
+	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+		// Process Signal
+		forceCAN = true
+	})
+	selector.AddReceive(deleteVersionSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+		var buildId string
+		c.Receive(ctx, &buildId)
+		err := d.handleDeleteVersion(ctx, &deploymentspb.DeleteVersionArgs{
+			Identity: "temporal-system-wf" + GenerateVersionWorkflowID(buildId),
+			Version:  buildId,
+		})
+		if err != nil {
+			// TODO (Carly): retry? the signal will be re-sent in another 5 minutes which is a form of retry
+		}
+	})
+
+	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
+		selector.Select(ctx)
+	}
+
+	// Done processing signals before CAN
+	d.signalsCompleted = true
 }
 
 func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) error {

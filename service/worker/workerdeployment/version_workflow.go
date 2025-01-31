@@ -46,14 +46,15 @@ type (
 	// VersionWorkflowRunner holds the local state for a deployment workflow
 	VersionWorkflowRunner struct {
 		*deploymentspb.WorkerDeploymentVersionWorkflowArgs
-		a                      *VersionActivities
-		logger                 sdklog.Logger
-		metrics                sdkclient.MetricsHandler
-		lock                   workflow.Mutex
-		pendingUpdates         int
-		signalsCompleted       bool
-		drainageWorkflowFuture *workflow.ChildWorkflowFuture
-		done                   bool
+		a                         *VersionActivities
+		logger                    sdklog.Logger
+		metrics                   sdkclient.MetricsHandler
+		lock                      workflow.Mutex
+		pendingUpdates            int
+		signalsCompleted          bool
+		drainageWorkflowFuture    *workflow.ChildWorkflowFuture
+		done                      bool
+		describeTaskQueueInterval time.Duration
 	}
 )
 
@@ -71,10 +72,11 @@ func VersionWorkflow(ctx workflow.Context, versionWorkflowArgs *deploymentspb.Wo
 	versionWorkflowRunner := &VersionWorkflowRunner{
 		WorkerDeploymentVersionWorkflowArgs: versionWorkflowArgs,
 
-		a:       nil,
-		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
-		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
-		lock:    workflow.NewMutex(ctx),
+		a:                         nil,
+		logger:                    sdklog.With(workflow.GetLogger(ctx), "wf-namespace", versionWorkflowArgs.NamespaceName),
+		metrics:                   workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
+		lock:                      workflow.NewMutex(ctx),
+		describeTaskQueueInterval: 5 * time.Minute, // TODO (Carly): Populate this from dynamic config
 	}
 	return versionWorkflowRunner.run(ctx)
 }
@@ -98,6 +100,9 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 			d.VersionState.DrainageInfo.Status = newInfo.Status
 			d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
 		}
+		if d.VersionState.DrainageInfo.Status == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+			workflow.Go(ctx, d.scavengeWhenReady)
+		}
 	})
 
 	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
@@ -106,6 +111,28 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 
 	// Done processing signals before CAN
 	d.signalsCompleted = true
+}
+
+func (d *VersionWorkflowRunner) scavengeWhenReady(ctx workflow.Context) {
+	v := d.VersionState.Version
+	versionStr := fmt.Sprintf("%s/%s", v.DeploymentName, v.BuildId)
+	for {
+		workflow.Sleep(ctx, d.describeTaskQueueInterval)
+		ready, err := d.readyToDelete(ctx)
+		d.logger.Error("error describing task queues while scavenging version:", "Error", err, "Version", versionStr)
+		if ready {
+			// signal Deployment Workflow that this version is ready to be deleted and return
+			d.logger.Info("signalling worker-deployment to delete version", "Version", versionStr)
+			deploymentWFID := GenerateDeploymentWorkflowID(d.VersionState.Version.DeploymentName)
+			err := workflow.SignalExternalWorkflow(ctx, deploymentWFID, "", DeleteVersionSignal, d.VersionState.Version.BuildId).Get(ctx, nil)
+			if err != nil {
+				d.logger.Error("error signalling worker-deployment to delete version:", err)
+				// TODO: Better backoff / error management?
+			} else {
+				return
+			}
+		}
+	}
 }
 
 func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
@@ -217,6 +244,32 @@ func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
 	return nil
 }
 
+// describe all task queues in the deployment, if any have pollers, then not ready to delete
+func (d *VersionWorkflowRunner) readyToDelete(ctx workflow.Context) (bool, error) {
+	state := d.GetVersionState()
+	var tqs []*taskqueuepb.TaskQueue
+	for tqName, _ := range state.TaskQueueFamilies {
+		tqs = append(tqs, &taskqueuepb.TaskQueue{
+			Name: tqName,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL, // TODO (Carly): could this be sticky?
+		})
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	checkPollersReq := &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs{
+		TaskQueues: tqs,
+		BuildId:    d.VersionState.Version.BuildId,
+	}
+	var hasPollers bool
+	err := workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
+	if err != nil {
+		return false, err
+	}
+	if hasPollers {
+		return false, nil
+	}
+	return true, nil
+}
+
 func (d *VersionWorkflowRunner) validateDeleteVersion() error {
 	// We can't call DescribeTaskQueue here because that would be an Activity call / non-deterministic.
 	// Once we have PollersStatus on the version, we can check it here.
@@ -243,27 +296,11 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 		return serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
 	}
 
-	state := d.GetVersionState()
-
-	// describe all task queues in the deployment, if any have pollers, then cannot delete
-	var tqs []*taskqueuepb.TaskQueue
-	for tqName, _ := range state.TaskQueueFamilies {
-		tqs = append(tqs, &taskqueuepb.TaskQueue{
-			Name: tqName,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL, // TODO (Carly): could this be sticky?
-		})
-	}
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	checkPollersReq := &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs{
-		TaskQueues: tqs,
-		BuildId:    d.VersionState.Version.BuildId,
-	}
-	var hasPollers bool
-	err = workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
+	ready, err := d.readyToDelete(ctx)
 	if err != nil {
 		return err
 	}
-	if hasPollers {
+	if !ready {
 		return serviceerror.NewFailedPrecondition("cannot delete, task queues in this version still have pollers")
 	}
 	d.done = true

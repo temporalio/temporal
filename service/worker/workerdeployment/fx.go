@@ -106,7 +106,7 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	registry.RegisterWorkflowWithOptions(
 		DrainageWorkflowWithDurations(s.drainageStatusVisibilityGracePeriod(ns.Name().String()), s.drainageStatusRefreshInterval(ns.Name().String())),
 		workflow.RegisterOptions{Name: WorkerDeploymentDrainageWorkflowType},
-	)
+	) // TODO (Carly): If I attach the drainage durations to the workflow function at registration time, how can it be updated? This likely needs to go in Args
 
 	versionActivities := &VersionActivities{
 		namespace:        ns,

@@ -283,7 +283,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		return nil, err
 	}
 
-	deploymentWorkflowID := GenerateWorkflowID(deploymentName)
+	deploymentWorkflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	req := &historyservice.QueryWorkflowRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -561,7 +561,7 @@ func (d *ClientImpl) StartWorkerDeployment(
 	//revive:disable-next-line:defer
 	defer d.record("StartWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
 
-	workflowID := GenerateWorkflowID(deploymentName)
+	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
 		NamespaceName:  namespaceEntry.Name().String(),
@@ -766,7 +766,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		return nil, err
 	}
 
-	workflowID := GenerateWorkflowID(deploymentName)
+	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
 		NamespaceName:  namespaceEntry.Name().String(),
 		NamespaceId:    namespaceEntry.ID().String(),
@@ -812,7 +812,7 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	}
 
-	workflowID := GenerateWorkflowID(deploymentName)
+	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	outcome, err := d.updateWithStart(
 		ctx,
