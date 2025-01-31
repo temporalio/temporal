@@ -80,6 +80,7 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
+	errConflictTokenMismatchType  = "errConflictTokenMismatch"
 )
 
 var (

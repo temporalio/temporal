@@ -3398,7 +3398,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 
 	// TODO (Shivam): error out if build_ID is empty
 
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.BuildId, request.Identity)
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.BuildId, request.Identity, request.GetConflictToken())
 	if err != nil {
 		return nil, err
 	}
@@ -3442,7 +3442,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		BuildId:        request.GetBuildId(),
 		DeploymentName: request.GetDeploymentName(),
 	}
-	resp, err := wh.workerDeploymentClient.SetWorkerDeploymentRampingVersion(ctx, namespaceEntry, deploymentVersion, request.GetPercentage(), request.GetIdentity())
+	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, deploymentVersion, request.GetPercentage(), request.GetIdentity(), request.GetConflictToken())
 	if err != nil {
 		return nil, err
 	}
@@ -3514,14 +3514,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 		return nil, err
 	}
 
-	workerDeploymentInfo, err := wh.workerDeploymentClient.DescribeWorkerDeployment(ctx, namespaceEntry, request.DeploymentName)
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.DescribeWorkerDeploymentResponse{
-		WorkerDeploymentInfo: workerDeploymentInfo,
-	}, nil
+	return wh.workerDeploymentClient.DescribeWorkerDeployment(ctx, namespaceEntry, request.DeploymentName)
 }
 
 func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentRequest) (*workflowservice.DeleteWorkerDeploymentResponse, error) {
