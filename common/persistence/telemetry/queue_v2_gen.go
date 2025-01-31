@@ -65,11 +65,18 @@ func newTelemetryQueueV2(
 
 // CreateQueue wraps QueueV2.CreateQueue.
 func (d telemetryQueueV2) CreateQueue(ctx context.Context, request *_sourcePersistence.InternalCreateQueueRequest) (ip1 *_sourcePersistence.InternalCreateQueueResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/CreateQueue")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.QueueV2/CreateQueue",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("QueueV2"),
+			attribute.Key("persistence.method").String("CreateQueue"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("QueueV2"))
-	span.SetAttributes(attribute.Key("persistence.method").String("CreateQueue"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	ip1, err = d.QueueV2.CreateQueue(ctx, request)
 	if err != nil {
@@ -99,11 +106,18 @@ func (d telemetryQueueV2) CreateQueue(ctx context.Context, request *_sourcePersi
 
 // EnqueueMessage wraps QueueV2.EnqueueMessage.
 func (d telemetryQueueV2) EnqueueMessage(ctx context.Context, request *_sourcePersistence.InternalEnqueueMessageRequest) (ip1 *_sourcePersistence.InternalEnqueueMessageResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/EnqueueMessage")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.QueueV2/EnqueueMessage",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("QueueV2"),
+			attribute.Key("persistence.method").String("EnqueueMessage"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("QueueV2"))
-	span.SetAttributes(attribute.Key("persistence.method").String("EnqueueMessage"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	ip1, err = d.QueueV2.EnqueueMessage(ctx, request)
 	if err != nil {
@@ -133,11 +147,18 @@ func (d telemetryQueueV2) EnqueueMessage(ctx context.Context, request *_sourcePe
 
 // ListQueues wraps QueueV2.ListQueues.
 func (d telemetryQueueV2) ListQueues(ctx context.Context, request *_sourcePersistence.InternalListQueuesRequest) (ip1 *_sourcePersistence.InternalListQueuesResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/ListQueues")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.QueueV2/ListQueues",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("QueueV2"),
+			attribute.Key("persistence.method").String("ListQueues"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("QueueV2"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ListQueues"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	ip1, err = d.QueueV2.ListQueues(ctx, request)
 	if err != nil {
@@ -167,11 +188,18 @@ func (d telemetryQueueV2) ListQueues(ctx context.Context, request *_sourcePersis
 
 // RangeDeleteMessages wraps QueueV2.RangeDeleteMessages.
 func (d telemetryQueueV2) RangeDeleteMessages(ctx context.Context, request *_sourcePersistence.InternalRangeDeleteMessagesRequest) (ip1 *_sourcePersistence.InternalRangeDeleteMessagesResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/RangeDeleteMessages")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.QueueV2/RangeDeleteMessages",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("QueueV2"),
+			attribute.Key("persistence.method").String("RangeDeleteMessages"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("QueueV2"))
-	span.SetAttributes(attribute.Key("persistence.method").String("RangeDeleteMessages"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	ip1, err = d.QueueV2.RangeDeleteMessages(ctx, request)
 	if err != nil {
@@ -201,11 +229,18 @@ func (d telemetryQueueV2) RangeDeleteMessages(ctx context.Context, request *_sou
 
 // ReadMessages wraps QueueV2.ReadMessages.
 func (d telemetryQueueV2) ReadMessages(ctx context.Context, request *_sourcePersistence.InternalReadMessagesRequest) (ip1 *_sourcePersistence.InternalReadMessagesResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.QueueV2/ReadMessages")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.QueueV2/ReadMessages",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("QueueV2"),
+			attribute.Key("persistence.method").String("ReadMessages"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("QueueV2"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ReadMessages"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	ip1, err = d.QueueV2.ReadMessages(ctx, request)
 	if err != nil {
