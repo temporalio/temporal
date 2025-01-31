@@ -62,7 +62,7 @@ func TestDescribeHistoryHost(t *testing.T) {
 	mockShard1 := shard.NewTestContext(
 		ctrl,
 		&persistencespb.ShardInfo{
-			ShardId: 2,
+			ShardId: 1,
 			RangeId: 1,
 		},
 		tests.NewDynamicConfig(),
