@@ -682,7 +682,7 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, req *historyservice.Des
 	// This API supports describe history host by 1. address 2. shard id 3. namespace id + workflow id
 	// if option 2/3 is provided, we want to check on the shard ownership to return the correct host address.
 	shardID := req.GetShardId()
-	if len(req.GetNamespaceId()) == 0 && req.GetWorkflowExecution() != nil {
+	if len(req.GetNamespaceId()) != 0 && req.GetWorkflowExecution() != nil {
 		shardID = common.WorkflowIDToHistoryShard(req.GetNamespaceId(), req.GetWorkflowExecution().GetWorkflowId(), h.config.NumberOfShards)
 	}
 	_, err := h.controller.GetShardByID(shardID)
