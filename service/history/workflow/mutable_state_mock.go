@@ -1905,6 +1905,20 @@ func (mr *MockMutableStateMockRecorder) GetChildExecutionInitiatedEvent(arg0, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChildExecutionInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).GetChildExecutionInitiatedEvent), arg0, arg1)
 }
 
+// GetChildrenInitializedPostResetPoint mocks base method.
+func (m *MockMutableState) GetChildrenInitializedPostResetPoint() map[string]bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChildrenInitializedPostResetPoint")
+	ret0, _ := ret[0].(map[string]bool)
+	return ret0
+}
+
+// GetChildrenInitializedPostResetPoint indicates an expected call of GetChildrenInitializedPostResetPoint.
+func (mr *MockMutableStateMockRecorder) GetChildrenInitializedPostResetPoint() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChildrenInitializedPostResetPoint", reflect.TypeOf((*MockMutableState)(nil).GetChildrenInitializedPostResetPoint))
+}
+
 // GetCloseVersion mocks base method.
 func (m *MockMutableState) GetCloseVersion() (int64, error) {
 	m.ctrl.T.Helper()
@@ -3024,6 +3038,18 @@ func (m *MockMutableState) SetBaseWorkflow(baseRunID string, baseRunLowestCommon
 func (mr *MockMutableStateMockRecorder) SetBaseWorkflow(baseRunID, baseRunLowestCommonAncestorEventID, baseRunLowestCommonAncestorEventVersion any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetBaseWorkflow", reflect.TypeOf((*MockMutableState)(nil).SetBaseWorkflow), baseRunID, baseRunLowestCommonAncestorEventID, baseRunLowestCommonAncestorEventVersion)
+}
+
+// SetChildrenInitializedPostResetPoint mocks base method.
+func (m *MockMutableState) SetChildrenInitializedPostResetPoint(children map[string]bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetChildrenInitializedPostResetPoint", children)
+}
+
+// SetChildrenInitializedPostResetPoint indicates an expected call of SetChildrenInitializedPostResetPoint.
+func (mr *MockMutableStateMockRecorder) SetChildrenInitializedPostResetPoint(children any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetChildrenInitializedPostResetPoint", reflect.TypeOf((*MockMutableState)(nil).SetChildrenInitializedPostResetPoint), children)
 }
 
 // SetCurrentBranchToken mocks base method.
