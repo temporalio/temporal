@@ -1070,11 +1070,6 @@ See DynamicRateLimitingParams comments for more details.`,
 		time.Minute,
 		`MatchingLongPollExpirationInterval is the long poll expiration interval in the matching service`,
 	)
-	MatchingSyncMatchWaitDuration = NewTaskQueueDurationSetting(
-		"matching.syncMatchWaitDuration",
-		200*time.Millisecond,
-		`MatchingSyncMatchWaitDuration is to wait time for sync match`,
-	)
 	MatchingHistoryMaxPageSize = NewNamespaceIntSetting(
 		"matching.historyMaxPageSize",
 		primitives.GetHistoryMaxPageSize,
@@ -1175,7 +1170,7 @@ for VERSIONED queues.`,
 		1,
 		`MatchingForwarderMaxOutstandingTasks is the max number of inflight addTask/queryTask from the forwarder`,
 	)
-	MatchingForwarderMaxRatePerSecond = NewTaskQueueIntSetting(
+	MatchingForwarderMaxRatePerSecond = NewTaskQueueFloatSetting(
 		"matching.forwarderMaxRatePerSecond",
 		10,
 		`MatchingForwarderMaxRatePerSecond is the max rate at which add/query can be forwarded`,
