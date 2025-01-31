@@ -27,14 +27,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"slices"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/queues"
 )
 
@@ -48,8 +51,10 @@ type CanGetNexusCompletion interface {
 }
 
 type nexusInvocation struct {
-	nexus      *persistencespb.Callback_Nexus
-	completion nexus.OperationCompletion
+	nexus             *persistencespb.Callback_Nexus
+	completion        nexus.OperationCompletion
+	workflowID, runID string
+	attempt           int32
 }
 
 func isRetryableHTTPResponse(response *http.Response) bool {
@@ -74,6 +79,20 @@ func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 }
 
 func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
+	if n.attempt >= int32(e.Config.HTTPTraceMinAttempt(ns.Name().String())) &&
+		n.attempt <= int32(e.Config.HTTPTraceMaxAttempt(ns.Name().String())) {
+		traceLogger := log.With(e.Logger,
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.Operation("CompleteNexusOperation"),
+			tag.NewStringTag("destination", task.destination),
+			tag.WorkflowID(n.workflowID),
+			tag.WorkflowRunID(n.runID),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.Attempt(n.attempt),
+		)
+		ctx = httptrace.WithClientTrace(ctx, commonnexus.NewHTTPClientTrace(traceLogger))
+	}
+
 	request, err := nexus.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
 	if err != nil {
 		return invocationResultFail{queues.NewUnprocessableTaskError(
