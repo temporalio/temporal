@@ -258,8 +258,8 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 	secondVersion := tv.WithBuildIDNumber(2)
 
 	routingInfo := &deploymentpb.RoutingInfo{
-		CurrentVersion:           firstVersion.DeploymentVersion().GetBuildId(),
-		CurrentVersionUpdateTime: timestamppb.Now(),
+		CurrentVersion:            firstVersion.DeploymentVersion().GetBuildId(),
+		CurrentVersionChangedTime: timestamppb.Now(),
 	}
 
 	s.setCurrentVersion(ctx, firstVersion, "")  // starts first version's version workflow
@@ -287,11 +287,11 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_TwoVersions_SameDeploy
 	rampingVersionVars := tv.WithBuildIDNumber(2)
 
 	routingInfo := &deploymentpb.RoutingInfo{
-		CurrentVersion:           currentVersionVars.DeploymentVersion().GetBuildId(),
-		CurrentVersionUpdateTime: timestamppb.Now(),
-		RampingVersion:           rampingVersionVars.DeploymentVersion().GetBuildId(),
-		RampingVersionPercentage: 50,
-		RampingVersionUpdateTime: timestamppb.Now(),
+		CurrentVersion:            currentVersionVars.DeploymentVersion().GetBuildId(),
+		CurrentVersionChangedTime: timestamppb.Now(),
+		RampingVersion:            rampingVersionVars.DeploymentVersion().GetBuildId(),
+		RampingVersionPercentage:  50,
+		RampingVersionChangedTime: timestamppb.Now(),
 	}
 
 	s.setCurrentVersion(ctx, currentVersionVars, "") // starts first version's version workflow + set it to current
@@ -323,11 +323,11 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_RampingVersionPercenta
 	s.setAndVerifyRampingVersion(ctx, rampingVersionVars, false, 50, "", nil) // set version as ramping
 
 	routingInfo := &deploymentpb.RoutingInfo{
-		CurrentVersion:           "",
-		CurrentVersionUpdateTime: nil,
-		RampingVersion:           rampingVersionVars.DeploymentVersion().GetBuildId(),
-		RampingVersionPercentage: 50,
-		RampingVersionUpdateTime: rampingVersionUpdateTime,
+		CurrentVersion:            "",
+		CurrentVersionChangedTime: nil,
+		RampingVersion:            rampingVersionVars.DeploymentVersion().GetBuildId(),
+		RampingVersionPercentage:  50,
+		RampingVersionChangedTime: rampingVersionUpdateTime,
 	}
 
 	// to simulate time passing before the next ramping version update
@@ -406,11 +406,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name: tv.DeploymentSeries(),
 			RoutingInfo: &deploymentpb.RoutingInfo{
-				RampingVersion:           rampingVersionVars.BuildID(),
-				RampingVersionPercentage: 50,
-				RampingVersionUpdateTime: timestamppb.Now(),
-				CurrentVersion:           "",
-				CurrentVersionUpdateTime: nil,
+				RampingVersion:            rampingVersionVars.BuildID(),
+				RampingVersionPercentage:  50,
+				RampingVersionChangedTime: timestamppb.Now(),
+				CurrentVersion:            "",
+				CurrentVersionChangedTime: nil,
 			},
 		},
 	})
@@ -428,11 +428,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name: tv.DeploymentSeries(),
 			RoutingInfo: &deploymentpb.RoutingInfo{
-				RampingVersion:           rampingVersionVars.BuildID(),
-				RampingVersionPercentage: 50,
-				RampingVersionUpdateTime: timestamppb.Now(),
-				CurrentVersion:           currentVersionVars.BuildID(),
-				CurrentVersionUpdateTime: timestamppb.Now(),
+				RampingVersion:            rampingVersionVars.BuildID(),
+				RampingVersionPercentage:  50,
+				RampingVersionChangedTime: timestamppb.Now(),
+				CurrentVersion:            currentVersionVars.BuildID(),
+				CurrentVersionChangedTime: timestamppb.Now(),
 			},
 		},
 	})
@@ -457,11 +457,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_DuplicateR
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name: rampingVersionVars.DeploymentSeries(),
 			RoutingInfo: &deploymentpb.RoutingInfo{
-				RampingVersion:           rampingVersionVars.BuildID(),
-				RampingVersionPercentage: 50,
-				RampingVersionUpdateTime: timestamppb.Now(),
-				CurrentVersion:           "",
-				CurrentVersionUpdateTime: nil,
+				RampingVersion:            rampingVersionVars.BuildID(),
+				RampingVersionPercentage:  50,
+				RampingVersionChangedTime: timestamppb.Now(),
+				CurrentVersion:            "",
+				CurrentVersionChangedTime: nil,
 			},
 		},
 	})
@@ -492,11 +492,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name: currentVersionVars.DeploymentSeries(),
 			RoutingInfo: &deploymentpb.RoutingInfo{
-				RampingVersion:           "",  // no ramping info should be set
-				RampingVersionPercentage: 0,   // no ramping info should be set
-				RampingVersionUpdateTime: nil, // no ramping info should be set
-				CurrentVersion:           currentVersionVars.BuildID(),
-				CurrentVersionUpdateTime: timestamppb.Now(),
+				RampingVersion:            "",  // no ramping info should be set
+				RampingVersionPercentage:  0,   // no ramping info should be set
+				RampingVersionChangedTime: nil, // no ramping info should be set
+				CurrentVersion:            currentVersionVars.BuildID(),
+				CurrentVersionChangedTime: timestamppb.Now(),
 			},
 		},
 	})
@@ -538,11 +538,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name: tv.DeploymentSeries(),
 			RoutingInfo: &deploymentpb.RoutingInfo{
-				RampingVersion:           rampingVersionVars.BuildID(),
-				RampingVersionPercentage: 50,
-				RampingVersionUpdateTime: timestamppb.Now(),
-				CurrentVersion:           currentVersionVars.BuildID(),
-				CurrentVersionUpdateTime: timestamppb.Now(),
+				RampingVersion:            rampingVersionVars.BuildID(),
+				RampingVersionPercentage:  50,
+				RampingVersionChangedTime: timestamppb.Now(),
+				CurrentVersion:            currentVersionVars.BuildID(),
+				CurrentVersionChangedTime: timestamppb.Now(),
 			},
 		},
 	})
@@ -562,11 +562,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name: tv.DeploymentSeries(),
 			RoutingInfo: &deploymentpb.RoutingInfo{
-				RampingVersion:           "",
-				RampingVersionPercentage: 0,
-				RampingVersionUpdateTime: nil,
-				CurrentVersion:           currentVersionVars.BuildID(),
-				CurrentVersionUpdateTime: timestamppb.Now(),
+				RampingVersion:            "",
+				RampingVersionPercentage:  0,
+				RampingVersionChangedTime: nil,
+				CurrentVersion:            currentVersionVars.BuildID(),
+				CurrentVersionChangedTime: timestamppb.Now(),
 			},
 		},
 	})
@@ -592,11 +592,11 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_SetRamping
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name: tv.DeploymentSeries(),
 			RoutingInfo: &deploymentpb.RoutingInfo{
-				RampingVersion:           "",                // no ramping info should be set
-				RampingVersionPercentage: 0,                 // no ramping info should be set
-				RampingVersionUpdateTime: timestamppb.Now(), // ramping version got updated to ""
-				CurrentVersion:           rampingVersionVars.BuildID(),
-				CurrentVersionUpdateTime: timestamppb.Now(),
+				RampingVersion:            "",                // no ramping info should be set
+				RampingVersionPercentage:  0,                 // no ramping info should be set
+				RampingVersionChangedTime: timestamppb.Now(), // ramping version got updated to ""
+				CurrentVersion:            rampingVersionVars.BuildID(),
+				CurrentVersionChangedTime: timestamppb.Now(),
 			},
 		},
 	})
@@ -627,10 +627,10 @@ func (s *WorkerDeploymentSuite) verifyDescribeWorkerDeployment(
 
 	s.Equal(expectedRoutingInfo.GetRampingVersion(), actualRoutingInfo.GetRampingVersion())
 	s.Equal(expectedRoutingInfo.GetRampingVersionPercentage(), actualRoutingInfo.GetRampingVersionPercentage())
-	s.True(expectedRoutingInfo.GetRampingVersionUpdateTime().AsTime().Sub(actualRoutingInfo.GetRampingVersionUpdateTime().AsTime()) < maxDurationBetweenTimeStamps)
+	s.True(expectedRoutingInfo.GetRampingVersionChangedTime().AsTime().Sub(actualRoutingInfo.GetRampingVersionChangedTime().AsTime()) < maxDurationBetweenTimeStamps)
 
 	s.Equal(expectedRoutingInfo.GetCurrentVersion(), actualRoutingInfo.GetCurrentVersion())
-	s.True(expectedRoutingInfo.GetCurrentVersionUpdateTime().AsTime().Sub(actualRoutingInfo.GetCurrentVersionUpdateTime().AsTime()) < maxDurationBetweenTimeStamps)
+	s.True(expectedRoutingInfo.GetCurrentVersionChangedTime().AsTime().Sub(actualRoutingInfo.GetCurrentVersionChangedTime().AsTime()) < maxDurationBetweenTimeStamps)
 
 }
 
@@ -682,8 +682,8 @@ func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context,
 			deployment.DeploymentSeries(),
 			timestamppb.Now(),
 			&deploymentpb.RoutingInfo{
-				CurrentVersion:           version.DeploymentVersion().GetBuildId(),
-				CurrentVersionUpdateTime: timestamppb.Now(),
+				CurrentVersion:            version.DeploymentVersion().GetBuildId(),
+				CurrentVersionChangedTime: timestamppb.Now(),
 			},
 		)
 		expectedDeploymentSummaries = append(expectedDeploymentSummaries, expectedDeployment)
@@ -711,7 +711,7 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 		s.Logger.Info("Current version mismatch")
 		return false
 	}
-	if expectedSummary.RoutingInfo.GetCurrentVersionUpdateTime().AsTime().Sub(actualSummary.RoutingInfo.GetCurrentVersionUpdateTime().AsTime()) > maxDurationBetweenTimeStamps {
+	if expectedSummary.RoutingInfo.GetCurrentVersionChangedTime().AsTime().Sub(actualSummary.RoutingInfo.GetCurrentVersionChangedTime().AsTime()) > maxDurationBetweenTimeStamps {
 		s.Logger.Info("Current version update time mismatch")
 		return false
 	}
@@ -725,7 +725,7 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 		s.Logger.Info("Ramping version percentage mismatch")
 		return false
 	}
-	if expectedSummary.RoutingInfo.GetRampingVersionUpdateTime().AsTime().Sub(actualSummary.RoutingInfo.GetRampingVersionUpdateTime().AsTime()) > maxDurationBetweenTimeStamps {
+	if expectedSummary.RoutingInfo.GetRampingVersionChangedTime().AsTime().Sub(actualSummary.RoutingInfo.GetRampingVersionChangedTime().AsTime()) > maxDurationBetweenTimeStamps {
 		s.Logger.Info("Ramping version update time mismatch")
 		return false
 	}

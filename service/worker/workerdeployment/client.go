@@ -933,7 +933,7 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		}
 	}
 
-	// TODO (Shivam): Add metadata and aggregated pollers status
+	// TODO (Shivam): add Aggregated pollers status
 	return &deploymentpb.WorkerDeploymentVersionInfo{
 		Version:                state.Version,
 		WorkflowVersioningMode: state.WorkflowVersioningMode,

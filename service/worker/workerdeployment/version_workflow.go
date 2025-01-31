@@ -198,6 +198,7 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 	}
 
 	for _, key := range args.RemoveEntries {
+		fmt.Printf("Removing key: %s\n", key)
 		delete(d.VersionState.Metadata.Entries, key)
 	}
 
