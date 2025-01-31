@@ -675,12 +675,24 @@ func (h *Handler) ExecuteMultiOperation(
 }
 
 // DescribeHistoryHost returns information about the internal states of a history host
-func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.DescribeHistoryHostRequest) (_ *historyservice.DescribeHistoryHostResponse, retError error) {
+func (h *Handler) DescribeHistoryHost(_ context.Context, req *historyservice.DescribeHistoryHostRequest) (_ *historyservice.DescribeHistoryHostResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
-	itemsInCacheByIDCount, itemsInCacheByNameCount := h.namespaceRegistry.GetCacheSize()
+	// This API supports describe history host by 1. address 2. shard id 3. namespace id + workflow id
+	// if option 2/3 is provided, we want to check on the shard ownership to return the correct host address.
+	shardID := req.GetShardId()
+	if len(req.GetNamespaceId()) != 0 && req.GetWorkflowExecution() != nil {
+		shardID = common.WorkflowIDToHistoryShard(req.GetNamespaceId(), req.GetWorkflowExecution().GetWorkflowId(), h.config.NumberOfShards)
+	}
+	if shardID > 0 {
+		_, err := h.controller.GetShardByID(shardID)
+		if err != nil {
+			return nil, err
+		}
+	}
 
+	itemsInCacheByIDCount, itemsInCacheByNameCount := h.namespaceRegistry.GetCacheSize()
 	ownedShardIDs := h.controller.ShardIDs()
 	resp := &historyservice.DescribeHistoryHostResponse{
 		ShardsNumber: int32(len(ownedShardIDs)),
