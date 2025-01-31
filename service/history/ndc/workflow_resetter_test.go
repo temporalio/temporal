@@ -824,6 +824,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		nextEventID,
 		branchToken,
 		nil,
+		map[int64]*historypb.HistoryEvent{},
 	)
 	s.NoError(err)
 	s.Equal(newRunID, nextRunID)
