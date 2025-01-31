@@ -65,11 +65,18 @@ func newTelemetryNexusEndpointStore(
 
 // CreateOrUpdateNexusEndpoint wraps NexusEndpointStore.CreateOrUpdateNexusEndpoint.
 func (d telemetryNexusEndpointStore) CreateOrUpdateNexusEndpoint(ctx context.Context, request *_sourcePersistence.InternalCreateOrUpdateNexusEndpointRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/CreateOrUpdateNexusEndpoint")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.NexusEndpointStore/CreateOrUpdateNexusEndpoint",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("NexusEndpointStore"),
+			attribute.Key("persistence.method").String("CreateOrUpdateNexusEndpoint"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("NexusEndpointStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("CreateOrUpdateNexusEndpoint"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	err = d.NexusEndpointStore.CreateOrUpdateNexusEndpoint(ctx, request)
 	if err != nil {
@@ -92,11 +99,18 @@ func (d telemetryNexusEndpointStore) CreateOrUpdateNexusEndpoint(ctx context.Con
 
 // DeleteNexusEndpoint wraps NexusEndpointStore.DeleteNexusEndpoint.
 func (d telemetryNexusEndpointStore) DeleteNexusEndpoint(ctx context.Context, request *_sourcePersistence.DeleteNexusEndpointRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/DeleteNexusEndpoint")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.NexusEndpointStore/DeleteNexusEndpoint",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("NexusEndpointStore"),
+			attribute.Key("persistence.method").String("DeleteNexusEndpoint"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("NexusEndpointStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteNexusEndpoint"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	err = d.NexusEndpointStore.DeleteNexusEndpoint(ctx, request)
 	if err != nil {
@@ -119,11 +133,18 @@ func (d telemetryNexusEndpointStore) DeleteNexusEndpoint(ctx context.Context, re
 
 // GetNexusEndpoint wraps NexusEndpointStore.GetNexusEndpoint.
 func (d telemetryNexusEndpointStore) GetNexusEndpoint(ctx context.Context, request *_sourcePersistence.GetNexusEndpointRequest) (ip1 *_sourcePersistence.InternalNexusEndpoint, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/GetNexusEndpoint")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.NexusEndpointStore/GetNexusEndpoint",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("NexusEndpointStore"),
+			attribute.Key("persistence.method").String("GetNexusEndpoint"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("NexusEndpointStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetNexusEndpoint"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	ip1, err = d.NexusEndpointStore.GetNexusEndpoint(ctx, request)
 	if err != nil {
@@ -153,11 +174,18 @@ func (d telemetryNexusEndpointStore) GetNexusEndpoint(ctx context.Context, reque
 
 // ListNexusEndpoints wraps NexusEndpointStore.ListNexusEndpoints.
 func (d telemetryNexusEndpointStore) ListNexusEndpoints(ctx context.Context, request *_sourcePersistence.ListNexusEndpointsRequest) (ip1 *_sourcePersistence.InternalListNexusEndpointsResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.NexusEndpointStore/ListNexusEndpoints")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.NexusEndpointStore/ListNexusEndpoints",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("NexusEndpointStore"),
+			attribute.Key("persistence.method").String("ListNexusEndpoints"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("NexusEndpointStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ListNexusEndpoints"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	ip1, err = d.NexusEndpointStore.ListNexusEndpoints(ctx, request)
 	if err != nil {

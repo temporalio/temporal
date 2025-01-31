@@ -66,11 +66,18 @@ func newTelemetryQueue(
 
 // DeleteMessageFromDLQ wraps Queue.DeleteMessageFromDLQ.
 func (d telemetryQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int64) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/DeleteMessageFromDLQ")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/DeleteMessageFromDLQ",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("DeleteMessageFromDLQ"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteMessageFromDLQ"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	err = d.Queue.DeleteMessageFromDLQ(ctx, messageID)
 	if err != nil {
@@ -93,11 +100,18 @@ func (d telemetryQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int6
 
 // DeleteMessagesBefore wraps Queue.DeleteMessagesBefore.
 func (d telemetryQueue) DeleteMessagesBefore(ctx context.Context, messageID int64) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/DeleteMessagesBefore")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/DeleteMessagesBefore",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("DeleteMessagesBefore"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteMessagesBefore"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	err = d.Queue.DeleteMessagesBefore(ctx, messageID)
 	if err != nil {
@@ -120,11 +134,18 @@ func (d telemetryQueue) DeleteMessagesBefore(ctx context.Context, messageID int6
 
 // EnqueueMessage wraps Queue.EnqueueMessage.
 func (d telemetryQueue) EnqueueMessage(ctx context.Context, blob *commonpb.DataBlob) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/EnqueueMessage")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/EnqueueMessage",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("EnqueueMessage"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("EnqueueMessage"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	err = d.Queue.EnqueueMessage(ctx, blob)
 	if err != nil {
@@ -147,11 +168,18 @@ func (d telemetryQueue) EnqueueMessage(ctx context.Context, blob *commonpb.DataB
 
 // EnqueueMessageToDLQ wraps Queue.EnqueueMessageToDLQ.
 func (d telemetryQueue) EnqueueMessageToDLQ(ctx context.Context, blob *commonpb.DataBlob) (i1 int64, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/EnqueueMessageToDLQ")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/EnqueueMessageToDLQ",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("EnqueueMessageToDLQ"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("EnqueueMessageToDLQ"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	i1, err = d.Queue.EnqueueMessageToDLQ(ctx, blob)
 	if err != nil {
@@ -181,11 +209,18 @@ func (d telemetryQueue) EnqueueMessageToDLQ(ctx context.Context, blob *commonpb.
 
 // GetAckLevels wraps Queue.GetAckLevels.
 func (d telemetryQueue) GetAckLevels(ctx context.Context) (ip1 *_sourcePersistence.InternalQueueMetadata, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/GetAckLevels")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/GetAckLevels",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("GetAckLevels"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetAckLevels"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	ip1, err = d.Queue.GetAckLevels(ctx)
 	if err != nil {
@@ -208,11 +243,18 @@ func (d telemetryQueue) GetAckLevels(ctx context.Context) (ip1 *_sourcePersisten
 
 // GetDLQAckLevels wraps Queue.GetDLQAckLevels.
 func (d telemetryQueue) GetDLQAckLevels(ctx context.Context) (ip1 *_sourcePersistence.InternalQueueMetadata, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/GetDLQAckLevels")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/GetDLQAckLevels",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("GetDLQAckLevels"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetDLQAckLevels"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	ip1, err = d.Queue.GetDLQAckLevels(ctx)
 	if err != nil {
@@ -235,11 +277,18 @@ func (d telemetryQueue) GetDLQAckLevels(ctx context.Context) (ip1 *_sourcePersis
 
 // Init wraps Queue.Init.
 func (d telemetryQueue) Init(ctx context.Context, blob *commonpb.DataBlob) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/Init")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/Init",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("Init"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("Init"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	err = d.Queue.Init(ctx, blob)
 	if err != nil {
@@ -262,11 +311,18 @@ func (d telemetryQueue) Init(ctx context.Context, blob *commonpb.DataBlob) (err 
 
 // RangeDeleteMessagesFromDLQ wraps Queue.RangeDeleteMessagesFromDLQ.
 func (d telemetryQueue) RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/RangeDeleteMessagesFromDLQ")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/RangeDeleteMessagesFromDLQ",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("RangeDeleteMessagesFromDLQ"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("RangeDeleteMessagesFromDLQ"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	err = d.Queue.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
 	if err != nil {
@@ -289,11 +345,18 @@ func (d telemetryQueue) RangeDeleteMessagesFromDLQ(ctx context.Context, firstMes
 
 // ReadMessages wraps Queue.ReadMessages.
 func (d telemetryQueue) ReadMessages(ctx context.Context, lastMessageID int64, maxCount int) (qpa1 []*_sourcePersistence.QueueMessage, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/ReadMessages")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/ReadMessages",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("ReadMessages"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ReadMessages"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	qpa1, err = d.Queue.ReadMessages(ctx, lastMessageID, maxCount)
 	if err != nil {
@@ -323,11 +386,18 @@ func (d telemetryQueue) ReadMessages(ctx context.Context, lastMessageID int64, m
 
 // ReadMessagesFromDLQ wraps Queue.ReadMessagesFromDLQ.
 func (d telemetryQueue) ReadMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) (qpa1 []*_sourcePersistence.QueueMessage, ba1 []byte, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/ReadMessagesFromDLQ")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/ReadMessagesFromDLQ",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("ReadMessagesFromDLQ"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ReadMessagesFromDLQ"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	qpa1, ba1, err = d.Queue.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
 	if err != nil {
@@ -357,11 +427,18 @@ func (d telemetryQueue) ReadMessagesFromDLQ(ctx context.Context, firstMessageID 
 
 // UpdateAckLevel wraps Queue.UpdateAckLevel.
 func (d telemetryQueue) UpdateAckLevel(ctx context.Context, metadata *_sourcePersistence.InternalQueueMetadata) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/UpdateAckLevel")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/UpdateAckLevel",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("UpdateAckLevel"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("UpdateAckLevel"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	err = d.Queue.UpdateAckLevel(ctx, metadata)
 	if err != nil {
@@ -384,11 +461,18 @@ func (d telemetryQueue) UpdateAckLevel(ctx context.Context, metadata *_sourcePer
 
 // UpdateDLQAckLevel wraps Queue.UpdateDLQAckLevel.
 func (d telemetryQueue) UpdateDLQAckLevel(ctx context.Context, metadata *_sourcePersistence.InternalQueueMetadata) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.Queue/UpdateDLQAckLevel")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.Queue/UpdateDLQAckLevel",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("Queue"),
+			attribute.Key("persistence.method").String("UpdateDLQAckLevel"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("Queue"))
-	span.SetAttributes(attribute.Key("persistence.method").String("UpdateDLQAckLevel"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+	}
 
 	err = d.Queue.UpdateDLQAckLevel(ctx, metadata)
 	if err != nil {
