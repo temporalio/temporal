@@ -154,11 +154,6 @@ type (
 	}
 )
 
-func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest) (*workflowservice.UpdateWorkerDeploymentVersionMetadataResponse, error) {
-	// TODO implement me
-	panic("implement me")
-}
-
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
 	config *Config,
@@ -3553,6 +3548,34 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 	}
 
 	return &workflowservice.DeleteWorkerDeploymentVersionResponse{}, nil
+}
+
+func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest) (_ *workflowservice.UpdateWorkerDeploymentVersionMetadataResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if request.RemoveEntries == nil && request.UpsertEntries == nil {
+		return nil, serviceerror.NewInvalidArgument("At least one of remove_entries or upsert_entries must be provided")
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// todo (Shivam): Should we get identity from the request?
+	identity := uuid.New()
+	updatedMetadata, err := wh.workerDeploymentClient.UpdateVersionMetadata(ctx, namespaceEntry, request.Version, request.UpsertEntries, request.RemoveEntries, identity)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkerDeploymentVersionMetadataResponse{
+		Metadata: updatedMetadata,
+	}, nil
 }
 
 // Returns the schedule description and current state of an existing schedule.
