@@ -272,7 +272,7 @@ func validateParams(params BatchParams) error {
 	case BatchTypeCancel, BatchTypeTerminate, BatchTypeDelete, BatchTypeReset:
 		return nil
 	case BatchTypeUnpauseActivities:
-		if params.UnpauseActivitiesParams.ActivityType == "" && !params.UnpauseActivitiesParams.MatchAll == false {
+		if params.UnpauseActivitiesParams.ActivityType == "" && !params.UnpauseActivitiesParams.MatchAll {
 			return fmt.Errorf("must provide ActivityType or MatchAll")
 		}
 		return nil
