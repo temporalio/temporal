@@ -80,7 +80,7 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName string,
-	) (*deploymentpb.WorkerDeploymentInfo, error)
+	) (*workflowservice.DescribeWorkerDeploymentResponse, error)
 
 	SetCurrentVersion(
 		ctx context.Context,
@@ -88,6 +88,7 @@ type Client interface {
 		deploymentName string,
 		version string,
 		identity string,
+		conflictToken []byte,
 	) (*deploymentspb.SetCurrentVersionResponse, error)
 
 	ListWorkerDeployments(
@@ -97,13 +98,14 @@ type Client interface {
 		nextPageToken []byte,
 	) ([]*deploymentspb.WorkerDeploymentSummary, []byte, error)
 
-	SetWorkerDeploymentRampingVersion(
+	SetRampingVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		version *deploymentpb.WorkerDeploymentVersion,
 		percentage float32,
 		identity string,
-	) (*deploymentspb.SetWorkerDeploymentRampingVersionResponse, error)
+		conflictToken []byte,
+	) (*deploymentspb.SetRampingVersionResponse, error)
 
 	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
 	StartWorkerDeployment(
@@ -252,7 +254,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
-) (_ *deploymentpb.WorkerDeploymentInfo, retErr error) {
+) (_ *workflowservice.DescribeWorkerDeploymentResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("DescribeWorkerDeployment", &retErr, deploymentName)()
 
@@ -286,7 +288,15 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		return nil, err
 	}
 
-	return d.deploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)
+	dInfo, err := d.deploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DescribeWorkerDeploymentResponse{
+		ConflictToken:        queryResponse.State.ConflictToken,
+		WorkerDeploymentInfo: dInfo,
+	}, nil
 }
 
 func (d *ClientImpl) ListWorkerDeployments(
@@ -337,14 +347,16 @@ func (d *ClientImpl) SetCurrentVersion(
 	deploymentName string,
 	version string,
 	identity string,
+	conflictToken []byte,
 ) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
 	requestID := uuid.New()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
-		Identity: identity,
-		Version:  version,
+		Identity:      identity,
+		Version:       version,
+		ConflictToken: conflictToken,
 	})
 	if err != nil {
 		return nil, err
@@ -384,21 +396,23 @@ func (d *ClientImpl) SetCurrentVersion(
 	return &res, nil
 }
 
-func (d *ClientImpl) SetWorkerDeploymentRampingVersion(
+func (d *ClientImpl) SetRampingVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	version *deploymentpb.WorkerDeploymentVersion,
 	percentage float32,
 	identity string,
-) (_ *deploymentspb.SetWorkerDeploymentRampingVersionResponse, retErr error) {
+	conflictToken []byte,
+) (_ *deploymentspb.SetRampingVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("SetWorkerDeploymentRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
+	defer d.record("SetRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
 	requestID := uuid.New()
 
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetWorkerDeploymentRampingVersionArgs{
-		Identity:   identity,
-		Version:    version.GetBuildId(),
-		Percentage: percentage,
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetRampingVersionArgs{
+		Identity:      identity,
+		Version:       version.GetBuildId(),
+		Percentage:    percentage,
+		ConflictToken: conflictToken,
 	})
 	if err != nil {
 		return nil, err
@@ -418,7 +432,7 @@ func (d *ClientImpl) SetWorkerDeploymentRampingVersion(
 		return nil, err
 	}
 
-	var res deploymentspb.SetWorkerDeploymentRampingVersionResponse
+	var res deploymentspb.SetRampingVersionResponse
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		res.PreviousVersion = version.GetBuildId()
 		res.PreviousPercentage = percentage

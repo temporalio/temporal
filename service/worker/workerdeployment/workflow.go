@@ -25,6 +25,7 @@
 package workerdeployment
 
 import (
+	"bytes"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -35,6 +36,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -47,6 +49,7 @@ type (
 		metrics        sdkclient.MetricsHandler
 		lock           workflow.Mutex
 		pendingUpdates int
+		conflictToken  []byte
 	}
 )
 
@@ -66,7 +69,8 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.State == nil {
 		d.State = &deploymentspb.WorkerDeploymentLocalState{}
 		d.State.CreateTime = timestamppb.New(time.Now())
-		d.State.RoutingInfo = &deploymentpb.RoutingInfo{}
+		d.State.RoutingInfo = &deploymentpb.RoutingInfo{CurrentVersion: worker_versioning.UnversionedBuildId}
+		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
 	}
 
 	var pendingUpdates int
@@ -95,9 +99,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		SetRampingVersion,
-		d.handleSetWorkerDeploymentRampingVersion,
+		d.handleSetRampingVersion,
 		workflow.UpdateHandlerOptions{
-			Validator: d.validateSetWorkerDeploymentRampingVersion,
+			Validator: d.validateSetRampingVersion,
 		},
 	); err != nil {
 		return err
@@ -127,12 +131,15 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkerDeploymentWorkflowArgs)
 }
 
-func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) error {
+func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
+	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
+		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
+	}
 	if args.Version == d.State.RoutingInfo.RampingVersion && args.Percentage == d.State.RoutingInfo.RampingVersionPercentage {
 		d.logger.Info("version already ramping, no change")
 		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
 	}
-	// todo: this will only work when "__unversioned__" is the default current-version of a deployment.
+	// TODO (Shivam): this will only work when "__unversioned__" is the default current-version of a deployment.
 	if args.Version == d.State.RoutingInfo.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
@@ -141,7 +148,7 @@ func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploym
 	return nil
 }
 
-func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Context, args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) (*deploymentspb.SetWorkerDeploymentRampingVersionResponse, error) {
+func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *deploymentspb.SetRampingVersionArgs) (*deploymentspb.SetRampingVersionResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -214,24 +221,28 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 	d.State.RoutingInfo.RampingVersion = newRampingVersion
 	d.State.RoutingInfo.RampingVersionPercentage = args.Percentage
 	d.State.RoutingInfo.RampingVersionChangedTime = rampingVersionUpdateTime
+	d.State.ConflictToken, _ = routingUpdateTime.AsTime().MarshalBinary()
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
 		return nil, err
 	}
 
-	return &deploymentspb.SetWorkerDeploymentRampingVersionResponse{
+	return &deploymentspb.SetRampingVersionResponse{
 		PreviousVersion:    prevRampingVersion,
 		PreviousPercentage: prevRampingVersionPercentage,
+		ConflictToken:      d.State.ConflictToken,
 	}, nil
 
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
+	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
+		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
+	}
 	if d.State.RoutingInfo.CurrentVersion == args.Version {
 		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
-
 	return nil
 }
 
@@ -279,6 +290,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// update local state
 	d.State.RoutingInfo.CurrentVersion = args.Version
 	d.State.RoutingInfo.CurrentVersionChangedTime = updateTime
+	d.State.ConflictToken, _ = updateTime.AsTime().MarshalBinary()
 
 	// unset ramping version if it was set to current version
 	if d.State.RoutingInfo.CurrentVersion == d.State.RoutingInfo.RampingVersion {
@@ -294,6 +306,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 	return &deploymentspb.SetCurrentVersionResponse{
 		PreviousVersion: prevCurrentVersion,
+		ConflictToken:   d.State.ConflictToken,
 	}, nil
 
 }
