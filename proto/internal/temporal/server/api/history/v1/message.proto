@@ -30,7 +30,6 @@ import "google/protobuf/timestamp.proto";
 
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
-import "temporal/api/enums/v1/event_type.proto";
 
 message TransientWorkflowTaskInfo {
     reserved 1;
@@ -68,9 +67,9 @@ message TaskRange {
     TaskKey exclusive_max_task_key = 2;
 }
 
+// StrippedHistoryEvent is a stripped down version of HistoryEvent that only contains the event_id and version.
 message StrippedHistoryEvent {
     int64 event_id = 1;
-    temporal.api.enums.v1.EventType event_type = 3;
     int64 version = 4;
 }
 
@@ -81,15 +80,12 @@ message StrippedHistoryEvents {
 // api-linter: core::0158::response-next-page-token-field=disabled
 // api-linter: core::0158::response-repeated-first-field=disabled
 // api-linter: core::0158::response-plural-first-field=disabled
-// GetWorkflowExecutionHistoryResponse is the response to GetWorkflowExecutionHistory call which returns raw bytes of
-// history events. Frontend service deserialize the response as HistoryEvents as this field is byte compatible with
-// the serialized form of HistoryEvents.
+// GetWorkflowExecutionHistoryResponse is added to the response of GetWorkflowExecutionHistory call. It contains raw
+// bytes for history events. The frontend service will deserialize this message as
+// temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse because the two message definitions are byte-compatible.
 message GetWorkflowExecutionHistoryResponse {
     repeated bytes history = 1;
-    // Raw history is an alternate representation of history that may be returned if configured on
-    // the frontend. This is not supported by all SDKs. Either this or `history` will be set.
     repeated temporal.api.common.v1.DataBlob raw_history = 2;
-    // Will be set if there are more history events than were included in this response
     bytes next_page_token = 3;
     bool archived = 4;
 }

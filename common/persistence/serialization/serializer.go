@@ -34,7 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/codec"
@@ -51,7 +51,7 @@ type (
 
 		SerializeEvent(event *historypb.HistoryEvent, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		DeserializeEvent(data *commonpb.DataBlob) (*historypb.HistoryEvent, error)
-		DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*history.StrippedHistoryEvent, error)
+		DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*historyspb.StrippedHistoryEvent, error)
 
 		SerializeClusterMetadata(icm *persistencespb.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		DeserializeClusterMetadata(data *commonpb.DataBlob) (*persistencespb.ClusterMetadata, error)
@@ -179,7 +179,7 @@ func (t *serializerImpl) DeserializeEvents(data *commonpb.DataBlob) ([]*historyp
 	return events.Events, nil
 }
 
-func (t *serializerImpl) DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*history.StrippedHistoryEvent, error) {
+func (t *serializerImpl) DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*historyspb.StrippedHistoryEvent, error) {
 	if data == nil {
 		return nil, nil
 	}
@@ -187,10 +187,13 @@ func (t *serializerImpl) DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*
 		return nil, nil
 	}
 
-	events := &history.StrippedHistoryEvents{}
+	events := &historyspb.StrippedHistoryEvents{}
 	var err error
+	//nolint:exhaustive
 	switch data.EncodingType {
 	case enumspb.ENCODING_TYPE_PROTO3:
+		// Discard unknown fields to improve performance. StrippedHistoryEvents is usually deserialized from HistoryEvent
+		// which has extra fields that are not needed for this message.
 		err = proto.UnmarshalOptions{
 			DiscardUnknown: true,
 		}.Unmarshal(data.Data, events)

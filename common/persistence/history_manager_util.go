@@ -31,7 +31,7 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -135,12 +135,12 @@ func sortAncestors(ans []*persistencespb.HistoryBranchRange) {
 }
 
 func ValidateBatch(
-	batch []*history.StrippedHistoryEvent,
+	batch []*historyspb.StrippedHistoryEvent,
 	branchToken []byte,
 	token *historyPagingToken,
 	logger log.Logger,
 ) error {
-	var firstEvent, lastEvent *history.StrippedHistoryEvent
+	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
 	var eventCount int
 	dataLossTags := func(cause string) []tag.Tag {
 		return []tag.Tag{
@@ -172,7 +172,7 @@ func ValidateBatch(
 }
 
 func VerifyHistoryIsComplete(
-	events []*history.StrippedHistoryEvent,
+	events []*historyspb.StrippedHistoryEvent,
 	expectedFirstEventID int64,
 	expectedLastEventID int64,
 	isFirstPage bool,

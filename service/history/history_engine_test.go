@@ -5545,6 +5545,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	}
 
 	historyBlob, err := history.Marshal()
+	s.NoError(err)
 
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,

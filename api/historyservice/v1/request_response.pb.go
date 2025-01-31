@@ -7405,6 +7405,7 @@ func (x *GetWorkflowExecutionHistoryResponse) GetResponse() *v1.GetWorkflowExecu
 	return nil
 }
 
+// This message must be wire compatible with GetWorkflowExecutionHistoryResponse.
 type GetWorkflowExecutionHistoryResponseWithRaw struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
