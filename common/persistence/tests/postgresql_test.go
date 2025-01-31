@@ -149,6 +149,19 @@ func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueTaskSuite() {
 	suite.Run(p.T(), s)
 }
 
+func (p *PostgreSQLSuite) TestPostgreSQLTaskQueueUserDataSuite() {
+	testData, tearDown := setUpPostgreSQLTest(p.T(), p.pluginName)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewTaskStore()
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+
+	s := NewTaskQueueUserDataSuite(p.T(), taskQueueStore, testData.Logger)
+	suite.Run(p.T(), s)
+}
+
 func (p *PostgreSQLSuite) TestPostgreSQLVisibilityPersistenceSuite() {
 	s := &VisibilityPersistenceSuite{
 		TestBase: persistencetests.NewTestBaseWithSQL(persistencetests.GetPostgreSQLTestClusterOption()),

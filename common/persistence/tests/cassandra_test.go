@@ -249,6 +249,19 @@ func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestCassandraTaskQueueUserDataSuite(t *testing.T) {
+	testData, tearDown := setUpCassandraTest(t)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+
+	s := NewTaskQueueUserDataSuite(t, taskQueueStore, testData.Logger)
+	suite.Run(t, s)
+}
+
 func TestCassandraHistoryV2Persistence(t *testing.T) {
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})

@@ -2410,8 +2410,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2436,8 +2439,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2462,8 +2468,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2535,8 +2544,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2616,8 +2628,11 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 	err := s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		})
 	s.NoError(err)
 
@@ -2712,10 +2727,13 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 
 	err := s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
-		TaskQueue:   tq,
-		UserData: &persistencespb.VersionedTaskQueueUserData{
-			Data:    userData,
-			Version: 34,
+		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+			tq: &persistence.SingleTaskQueueUserDataUpdate{
+				UserData: &persistencespb.VersionedTaskQueueUserData{
+					Data:    userData,
+					Version: 34,
+				},
+			},
 		},
 	})
 	s.Assert().NoError(err)
@@ -2762,10 +2780,13 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 
 	err = s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
-		TaskQueue:   tq,
-		UserData: &persistencespb.VersionedTaskQueueUserData{
-			Data:    userData,
-			Version: 34,
+		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+			tq: &persistence.SingleTaskQueueUserDataUpdate{
+				UserData: &persistencespb.VersionedTaskQueueUserData{
+					Data:    userData,
+					Version: 34,
+				},
+			},
 		},
 	})
 	s.NoError(err)
@@ -3893,16 +3914,18 @@ func (m *testTaskManager) GetTaskQueueUserData(_ context.Context, request *persi
 
 // UpdateTaskQueueUserData implements persistence.TaskManager
 func (m *testTaskManager) UpdateTaskQueueUserData(_ context.Context, request *persistence.UpdateTaskQueueUserDataRequest) error {
-	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	if err != nil {
-		return err
+	for tq, update := range request.Updates {
+		dbq, err := ParsePhysicalTaskQueueKey(tq, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		if err != nil {
+			return err
+		}
+		tlm := m.getQueueManager(dbq)
+		tlm.Lock()
+		newData := common.CloneProto(update.UserData)
+		newData.Version++
+		tlm.userData = newData
+		tlm.Unlock()
 	}
-	tlm := m.getQueueManager(dbq)
-	tlm.Lock()
-	defer tlm.Unlock()
-	newData := common.CloneProto(request.UserData)
-	newData.Version++
-	tlm.userData = newData
 	return nil
 }
 
