@@ -652,7 +652,7 @@ pollLoop:
 		}
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
-			switch err.(type) {
+			switch err := err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss:
 				if e.config.MatchingDropNonRetryableTasks() {
 					e.nonRetryableErrorsDropTask(task, taskQueueName, err)
@@ -707,8 +707,11 @@ pollLoop:
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.
+				// BUSY_WORKFLOW is limited to one workflow and is okay to retry.
 				task.finish(err, false)
-				return nil, err
+				if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+					return nil, err
+				}
 			default:
 				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
@@ -842,7 +845,7 @@ pollLoop:
 		}
 		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task)
 		if err != nil {
-			switch err.(type) {
+			switch err := err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss:
 				if e.config.MatchingDropNonRetryableTasks() {
 					e.nonRetryableErrorsDropTask(task, taskQueueName, err)
@@ -910,8 +913,11 @@ pollLoop:
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.
+				// BUSY_WORKFLOW is limited to one workflow and is okay to retry.
 				task.finish(err, false)
-				return nil, err
+				if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+					return nil, err
+				}
 			default:
 				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {

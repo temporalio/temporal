@@ -212,10 +212,11 @@ func (ch *commandHandler) HandleCancelCommand(
 
 	coll := nexusoperations.MachineCollection(ms.HSM())
 	nodeID := strconv.FormatInt(attrs.ScheduledEventId, 10)
-	_, err := coll.Node(nodeID)
+	node, err := coll.Node(nodeID)
+	hasBufferedEvent := ms.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId))
 	if err != nil {
 		if errors.Is(err, hsm.ErrStateMachineNotFound) {
-			if !ms.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId)) {
+			if !hasBufferedEvent {
 				return workflow.FailWorkflowTaskError{
 					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
 					Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
@@ -225,6 +226,26 @@ func (ch *commandHandler) HandleCancelCommand(
 		} else {
 			return err
 		}
+	}
+
+	if node != nil {
+		// TODO(bergundy): Remove this when operation auto-deletes itself on terminal state.
+		// Operation may already be in a terminal state because it doesn't yet delete itself. We don't want to accept
+		// cancelation in this case.
+		op, err := hsm.MachineData[nexusoperations.Operation](node)
+		if err != nil {
+			return err
+		}
+		// The operation is already in a terminal state and the terminal NexusOperation event has not just been buffered.
+		// We allow the workflow to request canceling an operation that has just completed while a workflow task is in
+		// flight since it cannot know about the state of the operation.
+		if !nexusoperations.TransitionCanceled.Possible(op) && !hasBufferedEvent {
+			return workflow.FailWorkflowTaskError{
+				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+				Message: fmt.Sprintf("requested cancelation for an already complete operation with scheduled event ID of %d", attrs.ScheduledEventId),
+			}
+		}
+		// END TODO
 	}
 
 	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
