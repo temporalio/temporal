@@ -27,6 +27,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,6 +60,10 @@ type (
 		testcore.FunctionalTestSuite
 		sdkClient sdkclient.Client
 	}
+)
+
+var (
+	testRandomMetadataValue = []byte("random metadata value")
 )
 
 func TestDeploymentVersionSuite(t *testing.T) {
@@ -196,10 +201,11 @@ func (s *DeploymentVersionSuite) Name() string {
 	if len(fullName) <= 30 {
 		return fullName
 	}
-	return fmt.Sprintf("%s-%08x",
+	short := fmt.Sprintf("%s-%08x",
 		fullName[len(fullName)-21:],
 		farm.Fingerprint32([]byte(fullName)),
 	)
+	return strings.Replace(short, "/", "|", -1)
 }
 
 //nolint:forbidigo
@@ -788,6 +794,66 @@ func (s *DeploymentVersionSuite) tryDeleteVersion(
 	} else {
 		s.Error(err)
 	}
+}
+
+func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv1.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+	}, time.Second*5, time.Millisecond*200)
+
+	metadata := map[string]*commonpb.Payload{
+		"key1": {Data: testRandomMetadataValue},
+		"key2": {Data: testRandomMetadataValue},
+	}
+
+	_, err := s.FrontendClient().UpdateWorkerDeploymentVersionMetadata(ctx, &workflowservice.UpdateWorkerDeploymentVersionMetadataRequest{
+		Namespace:     s.Namespace().String(),
+		Version:       tv1.DeploymentVersionString(),
+		UpsertEntries: metadata,
+		RemoveEntries: nil,
+	})
+	s.NoError(err)
+
+	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		Version:   tv1.DeploymentVersionString(),
+	})
+	s.NoError(err)
+
+	// validating the metadata
+	entries := resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
+	s.Equal(2, len(entries))
+	s.Equal(testRandomMetadataValue, entries["key1"].Data)
+	s.Equal(testRandomMetadataValue, entries["key2"].Data)
+
+	// Remove all the entries
+	_, err = s.FrontendClient().UpdateWorkerDeploymentVersionMetadata(ctx, &workflowservice.UpdateWorkerDeploymentVersionMetadataRequest{
+		Namespace:     s.Namespace().String(),
+		Version:       tv1.DeploymentVersionString(),
+		UpsertEntries: nil,
+		RemoveEntries: []string{"key1", "key2"},
+	})
+	s.NoError(err)
+
+	resp, err = s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		Version:   tv1.DeploymentVersionString(),
+	})
+	s.NoError(err)
+	entries = resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
+	s.Equal(0, len(entries))
 }
 
 func (s *DeploymentVersionSuite) checkVersionDrainage(

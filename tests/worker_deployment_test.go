@@ -652,7 +652,6 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 				RampingVersion:            "",
 				RampingVersionPercentage:  0,
 				RampingVersionChangedTime: nil,
-
 				CurrentVersion:            currentVersionVars.DeploymentVersionString(),
 				CurrentVersionChangedTime: timestamppb.Now(),
 			},
