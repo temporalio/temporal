@@ -174,7 +174,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	workflow.Go(ctx, d.listenToSignals)
 
 	// Wait on any pending signals and updates.
-	err := workflow.Await(ctx, func() bool { return (d.signalsCompleted || d.done) && d.pendingUpdates == 0 })
+	err := workflow.Await(ctx, func() bool { return (d.signalsCompleted && d.pendingUpdates == 0) || d.done })
 	if err != nil {
 		return err
 	}
