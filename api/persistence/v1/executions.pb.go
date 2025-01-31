@@ -348,7 +348,7 @@ type WorkflowExecutionInfo struct {
 	PreviousTransitionHistory       []*VersionedTransition `protobuf:"bytes,100,rep,name=previous_transition_history,json=previousTransitionHistory,proto3" json:"previous_transition_history,omitempty"`
 	LastTransitionHistoryBreakPoint *VersionedTransition   `protobuf:"bytes,101,opt,name=last_transition_history_break_point,json=lastTransitionHistoryBreakPoint,proto3" json:"last_transition_history_break_point,omitempty"`
 	// This is a set of child workflows that were initialized after the reset point in the parent workflow.
-	// The children are identified by the key "workflow_id:workflow_type". When the parent starts to make progress after reset, it uses this data to
+	// The children are identified by the key "workflow_type:workflow_id". When the parent starts to make progress after reset, it uses this data to
 	// determine the right start policy to apply to the child.
 	ChildrenInitializedPostResetPoint map[string]bool `protobuf:"bytes,102,rep,name=children_initialized_post_reset_point,json=childrenInitializedPostResetPoint,proto3" json:"children_initialized_post_reset_point,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
 }

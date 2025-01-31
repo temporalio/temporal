@@ -240,6 +240,8 @@ type (
 		UpdateResetRunID(runID string)
 		// IsResetRun returns true if this run is result of a reset operation.
 		IsResetRun() bool
+		SetChildrenInitializedPostResetPoint(children map[string]bool)
+		GetChildrenInitializedPostResetPoint() map[string]bool
 
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)

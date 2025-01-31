@@ -282,7 +282,7 @@ message WorkflowExecutionInfo {
     VersionedTransition last_transition_history_break_point = 101;
 
     // This is a set of child workflows that were initialized after the reset point in the parent workflow.
-    // The children are identified by the key "workflow_id:workflow_type". When the parent starts to make progress after reset, it uses this data to
+    // The children are identified by the key "workflow_type:workflow_id". When the parent starts to make progress after reset, it uses this data to
     // determine the right start policy to apply to the child.
     map<string, bool> children_initialized_post_reset_point = 102;
 }
