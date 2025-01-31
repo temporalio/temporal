@@ -42,7 +42,7 @@ import (
 const (
 	WorkflowName = "temporal-sys-reclaim-namespace-resources-workflow"
 
-	namespaceCacheRefreshDelay = 11 * time.Second
+	namespaceCacheRefreshDelay = 3 * time.Second
 )
 
 type (
