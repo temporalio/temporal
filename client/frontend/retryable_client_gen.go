@@ -1205,6 +1205,21 @@ func (c *retryableClient) UpdateWorkerBuildIdCompatibility(
 	return resp, err
 }
 
+func (c *retryableClient) UpdateWorkerVersionMetadata(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerVersionMetadataRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
+	var resp *workflowservice.UpdateWorkerVersionMetadataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateWorkerVersionMetadata(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) UpdateWorkerVersioningRules(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerVersioningRulesRequest,

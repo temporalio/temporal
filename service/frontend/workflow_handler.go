@@ -3534,6 +3534,34 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 	panic("implement me")
 }
 
+func (wh *WorkflowHandler) UpdateWorkerVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerVersionMetadataRequest) (_ *workflowservice.UpdateWorkerVersionMetadataResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if request.RemoveEntries == nil && request.UpsertEntries == nil {
+		return nil, serviceerror.NewInvalidArgument("At least one of remove_entries or upsert_entries must be provided")
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// todo (Shivam): Should we get identity from the request?
+	identity := uuid.New()
+	updatedMetadata, err := wh.workerDeploymentClient.UpdateWorkerVersionMetadata(ctx, namespaceEntry, request.Version, request.UpsertEntries, request.RemoveEntries, identity)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkerVersionMetadataResponse{
+		Metadata: updatedMetadata,
+	}, nil
+}
+
 // Returns the schedule description and current state of an existing schedule.
 func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workflowservice.DescribeScheduleRequest) (_ *workflowservice.DescribeScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)

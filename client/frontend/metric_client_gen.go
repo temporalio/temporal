@@ -1125,6 +1125,20 @@ func (c *metricClient) UpdateWorkerBuildIdCompatibility(
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
+func (c *metricClient) UpdateWorkerVersionMetadata(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerVersionMetadataRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.UpdateWorkerVersionMetadataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUpdateWorkerVersionMetadata")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateWorkerVersionMetadata(ctx, request, opts...)
+}
+
 func (c *metricClient) UpdateWorkerVersioningRules(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerVersioningRulesRequest,

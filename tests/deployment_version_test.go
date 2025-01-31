@@ -59,6 +59,10 @@ type (
 	}
 )
 
+var (
+	testRandomMetadataValue = []byte("random metadata value")
+)
+
 func TestDeploymentVersionSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(DeploymentVersionSuite))
@@ -303,6 +307,82 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetRampingVersion_NoOpenWFs(
 
 func (s *DeploymentVersionSuite) TestDrainageStatus_SetRampingVersion_YesOpenWFs() {
 	// todo carly: test with open workflows on the draining version that then complete
+}
+
+func (s *DeploymentVersionSuite) TestUpdateMetadata() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv1.DeploymentSeries(),
+				BuildId:        tv1.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	metadata := map[string]*commonpb.Payload{
+		"key1": {Data: testRandomMetadataValue},
+		"key2": {Data: testRandomMetadataValue},
+	}
+
+	_, err := s.FrontendClient().UpdateWorkerVersionMetadata(ctx, &workflowservice.UpdateWorkerVersionMetadataRequest{
+		Namespace: s.Namespace().String(),
+		Version: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: tv1.DeploymentSeries(),
+			BuildId:        tv1.BuildID(),
+		},
+		UpsertEntries: metadata,
+		RemoveEntries: nil,
+	})
+	s.NoError(err)
+
+	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		Version: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: tv1.DeploymentSeries(),
+			BuildId:        tv1.BuildID(),
+		},
+	})
+	s.NoError(err)
+
+	// validating the metadata
+	entries := resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
+	s.Equal(2, len(entries))
+	s.Equal(testRandomMetadataValue, entries["key1"].Data)
+	s.Equal(testRandomMetadataValue, entries["key2"].Data)
+
+	// Remove all the entries
+	_, err = s.FrontendClient().UpdateWorkerVersionMetadata(ctx, &workflowservice.UpdateWorkerVersionMetadataRequest{
+		Namespace: s.Namespace().String(),
+		Version: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: tv1.DeploymentSeries(),
+			BuildId:        tv1.BuildID(),
+		},
+		UpsertEntries: nil,
+		RemoveEntries: []string{"key1", "key2"},
+	})
+	s.NoError(err)
+
+	resp, err = s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		Version: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: tv1.DeploymentSeries(),
+			BuildId:        tv1.BuildID(),
+		},
+	})
+	s.NoError(err)
+	entries = resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
+	s.Equal(0, len(entries))
 }
 
 func (s *DeploymentVersionSuite) checkVersionDrainage(
