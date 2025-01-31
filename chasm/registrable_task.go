@@ -28,10 +28,6 @@ import (
 	"reflect"
 )
 
-var (
-	EmptyRegistrableTask = RegistrableTask{}
-)
-
 type (
 	RegistrableTask struct {
 		name            string
@@ -48,15 +44,15 @@ func NewRegistrableTask[C any, T any](
 	name string,
 	handler TaskHandler[C, T],
 	opts ...RegistrableTaskOption,
-) RegistrableTask {
-	rt := RegistrableTask{
+) *RegistrableTask {
+	rt := &RegistrableTask{
 		name:            name,
 		goType:          reflect.TypeFor[T](),
 		componentGoType: reflect.TypeFor[C](),
 		handler:         handler,
 	}
 	for _, opt := range opts {
-		opt(&rt)
+		opt(rt)
 	}
 	return rt
 }

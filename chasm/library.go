@@ -29,8 +29,8 @@ package chasm
 type (
 	Library interface {
 		Name() string
-		Components() []RegistrableComponent
-		Tasks() []RegistrableTask
+		Components() []*RegistrableComponent
+		Tasks() []*RegistrableTask
 		// Service()
 
 		mustEmbedUnimplementedLibrary()
@@ -39,11 +39,11 @@ type (
 	UnimplementedLibrary struct{}
 )
 
-func (UnimplementedLibrary) Components() []RegistrableComponent {
+func (UnimplementedLibrary) Components() []*RegistrableComponent {
 	return nil
 }
 
-func (UnimplementedLibrary) Tasks() []RegistrableTask {
+func (UnimplementedLibrary) Tasks() []*RegistrableTask {
 	return nil
 }
 

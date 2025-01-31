@@ -63,10 +63,10 @@ func (m *MockLibrary) EXPECT() *MockLibraryMockRecorder {
 }
 
 // Components mocks base method.
-func (m *MockLibrary) Components() []RegistrableComponent {
+func (m *MockLibrary) Components() []*RegistrableComponent {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Components")
-	ret0, _ := ret[0].([]RegistrableComponent)
+	ret0, _ := ret[0].([]*RegistrableComponent)
 	return ret0
 }
 
@@ -91,10 +91,10 @@ func (mr *MockLibraryMockRecorder) Name() *gomock.Call {
 }
 
 // Tasks mocks base method.
-func (m *MockLibrary) Tasks() []RegistrableTask {
+func (m *MockLibrary) Tasks() []*RegistrableTask {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Tasks")
-	ret0, _ := ret[0].([]RegistrableTask)
+	ret0, _ := ret[0].([]*RegistrableTask)
 	return ret0
 }
 

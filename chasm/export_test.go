@@ -24,59 +24,18 @@
 
 package chasm
 
-import (
-	"reflect"
-)
-
-type (
-	RegistrableComponent struct {
-		name   string
-		goType reflect.Type
-
-		ephemeral     bool
-		singleCluster bool
-		shardingFn    func(EntityKey) string
-	}
-
-	RegistrableComponentOption func(*RegistrableComponent)
-)
-
-func NewRegistrableComponent[C Component](
-	name string,
-	opts ...RegistrableComponentOption,
-) *RegistrableComponent {
-	rc := &RegistrableComponent{
-		name:       name,
-		goType:     reflect.TypeFor[C](),
-		shardingFn: func(_ EntityKey) string { return "" },
-	}
-	for _, opt := range opts {
-		opt(rc)
-	}
-	return rc
+func (r *Registry) Component(fqn string) (*RegistrableComponent, bool) {
+	return r.component(fqn)
 }
 
-func WithEphemeral() RegistrableComponentOption {
-	return func(rc *RegistrableComponent) {
-		rc.ephemeral = true
-	}
+func (r *Registry) Task(fqn string) (*RegistrableTask, bool) {
+	return r.task(fqn)
 }
 
-// Is there any use case where we don't want to replicate certain instances of a archetype?
-func WithSingleCluster() RegistrableComponentOption {
-	return func(rc *RegistrableComponent) {
-		rc.singleCluster = true
-	}
+func (r *Registry) ComponentFor(componentInstance any) (*RegistrableComponent, bool) {
+	return r.componentFor(componentInstance)
 }
 
-func WithShardingFn(
-	shardingFn func(EntityKey) string,
-) RegistrableComponentOption {
-	return func(rc *RegistrableComponent) {
-		rc.shardingFn = shardingFn
-	}
-}
-
-func (rc RegistrableComponent) Name() string {
-	return rc.name
+func (r *Registry) TaskFor(taskInstance any) (*RegistrableTask, bool) {
+	return r.taskFor(taskInstance)
 }
