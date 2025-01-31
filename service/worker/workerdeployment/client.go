@@ -94,13 +94,6 @@ type Client interface {
 		nextPageToken []byte,
 	) ([]*deploymentspb.WorkerDeploymentSummary, []byte, error)
 
-	DeleteWorkerDeployment(
-		ctx context.Context,
-		namespaceEntry *namespace.Namespace,
-		deploymentName string,
-		identity string,
-	) error
-
 	DeleteWorkerDeploymentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -403,50 +396,6 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, err
 	}
 	return &res, nil
-}
-
-func (d *ClientImpl) DeleteWorkerDeployment(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	deploymentName string,
-	identity string,
-) (retErr error) {
-	//revive:disable-next-line:defer
-	defer d.record("DeleteWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
-	requestID := uuid.New()
-
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteDeploymentArgs{
-		Identity: identity,
-	})
-	if err != nil {
-		return err
-	}
-
-	outcome, err := d.updateWithStartWorkerDeployment(
-		ctx,
-		namespaceEntry,
-		deploymentName,
-		&updatepb.Request{
-			Input: &updatepb.Input{Name: DeleteDeployment, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
-		},
-		identity,
-		requestID,
-	)
-
-	if err != nil {
-		return err
-	}
-
-	if failure := outcome.GetFailure(); failure != nil {
-		return serviceerror.NewInternal(failure.Message)
-	}
-
-	success := outcome.GetSuccess()
-	if success == nil {
-		return serviceerror.NewInternal("outcome missing success and failure")
-	}
-	return nil
 }
 
 func (d *ClientImpl) SetWorkerDeploymentRampingVersion(

@@ -52,7 +52,6 @@ const (
 	SetCurrentVersion            = "set-current-version"              // for Worker Deployment wfs
 	SetRampingVersion            = "set-ramping-version"              // for Worker Deployment wfs
 	AddVersionToWorkerDeployment = "add-version-to-worker-deployment" // for Worker Deployment wfs
-	DeleteDeployment             = "delete-deployment"                // for WorkerDeployment wfs
 	DeleteVersion                = "delete-version"                   // for WorkerDeployment wfs
 
 	// Signals
