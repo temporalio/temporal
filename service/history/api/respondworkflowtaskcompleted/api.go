@@ -237,9 +237,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 	var effects effect.Buffer
 	defer func() {
-		// `effects` are explicitly immediately canceled if WFT failed or persistence write returned an error,
-		// because logic in handlers of these cases might assume that effects are already canceled.
-		// This `defer` is to support some other rare cases when error is returned from this function.
+		// `effects` are canceled immediately on WFT failure or persistence errors.
+		// This `defer` handles rare cases where an error is returned but the cancellation didn't happen.
 		if retError != nil {
 			cancelled := effects.Cancel(ctx)
 			if cancelled {
