@@ -237,20 +237,18 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 	var effects effect.Buffer
 	defer func() {
-		// code in this file and workflowTaskHandler is inconsistent in the way
-		// errors are returned - some functions which appear to return error
-		// actually return nil in all cases and instead set a member variable
-		// that should be observed by other collaborating code (e.g.
-		// workflowtaskHandler.workflowTaskFailedCause). That made me paranoid
-		// about the way this function exits so while we have this defer here
-		// there is _also_ code to call effects.Cancel at key points.
+		// `effects` are explicitly immediately canceled if WFT failed or persistence write returned an error,
+		// because logic in handlers of these cases might assume that effects are already canceled.
+		// This `defer` is to support some other rare cases when error is returned from this function.
 		if retError != nil {
-			handler.logger.Info("Cancel effects due to error.",
-				tag.Error(retError),
-				tag.WorkflowID(token.GetWorkflowId()),
-				tag.WorkflowRunID(token.GetRunId()),
-				tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
-			effects.Cancel(ctx)
+			cancelled := effects.Cancel(ctx)
+			if cancelled {
+				handler.logger.Info("Canceled effects due to error.",
+					tag.Error(retError),
+					tag.WorkflowID(token.GetWorkflowId()),
+					tag.WorkflowRunID(token.GetRunId()),
+					tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
+			}
 		}
 	}()
 
@@ -518,6 +516,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	var newWorkflowTask *workflow.WorkflowTaskInfo
+
 	// Speculative workflow task will be created after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
 		versioningStamp := request.WorkerVersionStamp
