@@ -420,7 +420,7 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 	}
 
 	if current == nil && ramping == nil {
-		return nil
+		return nil // TODO (Shahab): __unversioned__
 	}
 
 	info := &taskqueuepb.TaskQueueVersioningInfo{

@@ -242,6 +242,20 @@ message DeleteDeploymentArgs {
     string identity = 1;
 }
 
+// used as Worker Deployment update response:
+message SetWorkerDeploymentRampingVersionResponse {
+    string previous_version = 1;
+    float previous_percentage = 2;
+    bytes conflict_token = 3;
+}
+
+// used as Worker Deployment workflow update input:
+message SetWorkerDeploymentRampingVersionArgs {
+    string identity = 1;
+    string version = 2;
+    float percentage = 3;
+}
+
 // used as Worker Deployment activity input:
 message SyncVersionStateActivityArgs {
     string deployment_name = 1;

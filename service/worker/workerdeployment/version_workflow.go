@@ -412,6 +412,16 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	state := d.GetVersionState()
 
+	// TODO (Shivam): __unversioned__
+
+	// only versions with WORKFLOW_VERSIONING_MODE_VERSIONING_BEHAVIORS can be set as current or ramping
+	// if args.RampPercentage > 0 || args.CurrentSinceTime != nil {
+	// 	if state.WorkflowVersioningMode != enumspb.WORKFLOW_VERSIONING_MODE_VERSIONING_BEHAVIORS {
+	// 		// non-retryable error since we don't want to retry syncing state for this version
+	// 		return nil, temporal.NewNonRetryableApplicationError("Deployment version cannot be set as current or ramping", "Invalid version mode", nil)
+	// 	}
+	// }
+
 	// sync to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		WorkerDeploymentVersion: state.GetVersion(),
