@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -164,6 +165,14 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	if err := workflow.SetUpdateHandler(
+		ctx,
+		UpdateVersionMetadata,
+		d.handleUpdateVersionMetadata,
+	); err != nil {
+		return err
+	}
+
 	// First ensure deployment workflow is running
 	if !d.VersionState.StartedDeploymentWorkflow {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -200,6 +209,25 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	nextArgs := d.WorkerDeploymentVersionWorkflowArgs
 	nextArgs.VersionState = d.VersionState
 	return workflow.NewContinueAsNewError(ctx, VersionWorkflow, nextArgs)
+}
+
+func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context, args *deploymentspb.UpdateVersionMetadataArgs) (*deploymentspb.UpdateVersionMetadataResponse, error) {
+	if d.VersionState.Metadata == nil && args.UpsertEntries != nil {
+		d.VersionState.Metadata = &deploymentpb.VersionMetadata{}
+		d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
+	}
+
+	for key, payload := range args.UpsertEntries {
+		d.VersionState.Metadata.Entries[key] = payload
+	}
+
+	for _, key := range args.RemoveEntries {
+		delete(d.VersionState.Metadata.Entries, key)
+	}
+
+	return &deploymentspb.UpdateVersionMetadataResponse{
+		Metadata: d.VersionState.Metadata,
+	}, nil
 }
 
 func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, first bool) {
