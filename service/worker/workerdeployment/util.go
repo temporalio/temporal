@@ -50,6 +50,7 @@ const (
 	RegisterWorkerInDeployment   = "register-task-queue-worker"       // for Worker Deployment Version wf
 	SyncVersionState             = "sync-version-state"               // for Worker Deployment Version wfs
 	SetCurrentVersion            = "set-current-version"              // for Worker Deployment wfs
+	SetRampingVersion            = "set-ramping-version"              // for Worker Deployment wfs
 	AddVersionToWorkerDeployment = "add-version-to-worker-deployment" // for Worker Deployment wfs
 
 	// Signals
@@ -78,6 +79,7 @@ const (
 	errNoChangeType               = "errNoChange"
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
+	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
 )
 
 var (
