@@ -292,6 +292,12 @@ message AddVersionToWorkerDeploymentRequest {
 message AddVersionToWorkerDeploymentResponse {
 }
 
+// Used as Worker Deployment update input:
+message AddVersionToWorkerDeploymentUpdateArgs {
+    string version = 1;
+    int32 max_versions = 2;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // Below this line are the messages for the pre-release Deployment APIs //
 //////////////////////////////////////////////////////////////////////////
