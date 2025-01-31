@@ -837,18 +837,18 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		token.LastTransactionID = lastNode.TransactionID
 	}
 
-	if err := VerifyHistoryIsComplete(
-		allEvents,
-		minNodeID,
-		maxNodeID-1,
-		len(request.NextPageToken) == 0,
-		len(token.StoreToken) == 0,
-		request.PageSize,
-	); err != nil {
-		m.logger.Error("getHistory: incomplete history",
-			tag.WorkflowBranchToken(branchToken),
-			tag.Error(err))
-	}
+	//if err := VerifyHistoryIsComplete(
+	//	allEvents,
+	//	minNodeID,
+	//	maxNodeID-1,
+	//	len(request.NextPageToken) == 0,
+	//	len(token.StoreToken) == 0,
+	//	request.PageSize,
+	//); err != nil {
+	//	m.logger.Error("getHistory: incomplete history",
+	//		tag.WorkflowBranchToken(branchToken),
+	//		tag.Error(err))
+	//}
 	return dataBlobs, transactionIDs, nodeIDs, token, dataSize, nil
 }
 
