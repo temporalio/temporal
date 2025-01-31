@@ -234,3 +234,16 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Accept
 	err = workflowRun2.Get(ctx, &out)
 	s.NoError(err)
 }
+
+func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Negative() {
+	// neither activity type not "match all" is provided
+	_, err := s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace: s.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
+			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{},
+		},
+		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "workflowTypeName"),
+		JobId:           uuid.New(),
+	})
+	s.Error(err)
+}
