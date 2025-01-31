@@ -41,8 +41,8 @@ func Invoke(
 	request := req.GetFrontendRequest()
 	workflowKey := definition.NewWorkflowKey(
 		req.NamespaceId,
-		request.GetWorkflowId(),
-		request.GetRunId(),
+		request.GetExecution().GetWorkflowId(),
+		request.GetExecution().GetRunId(),
 	)
 
 	err := api.GetAndUpdateWorkflowWithNew(
@@ -51,10 +51,10 @@ func Invoke(
 		workflowKey,
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
-			activityId := request.GetActivityId()
+			activityId := request.GetId()
 
 			if err := workflow.ResetActivityById(
-				shardContext, mutableState, activityId, request.NoWait, request.ResetHeartbeat,
+				shardContext, mutableState, activityId, false, request.ResetHeartbeat, // TODO: not false, fix in rebase
 			); err != nil {
 				return nil, err
 			}

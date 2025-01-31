@@ -886,7 +886,7 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		Version:                state.Version,
 		WorkflowVersioningMode: state.WorkflowVersioningMode,
 		CreateTime:             state.CreateTime,
-		RoutingUpdateTime:      state.RoutingUpdateTime,
+		RoutingChangedTime:     state.RoutingUpdateTime,
 		CurrentSinceTime:       state.CurrentSinceTime,
 		RampingSinceTime:       state.RampingSinceTime,
 		RampPercentage:         state.RampPercentage,
