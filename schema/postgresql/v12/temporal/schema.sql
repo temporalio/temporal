@@ -55,6 +55,7 @@ CREATE TABLE current_executions(
   start_version BIGINT NOT NULL DEFAULT 0,
   start_time TIMESTAMP NULL,
   last_write_version BIGINT NOT NULL,
+  attached_request_ids BYTEA NULL,
   PRIMARY KEY (shard_id, namespace_id, workflow_id)
 );
 

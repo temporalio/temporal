@@ -29,6 +29,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/lib/pq"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
@@ -61,15 +62,16 @@ type (
 
 	// CurrentExecutionsRow represents a row in current_executions table
 	CurrentExecutionsRow struct {
-		ShardID          int32
-		NamespaceID      primitives.UUID
-		WorkflowID       string
-		RunID            primitives.UUID
-		CreateRequestID  string
-		StartTime        *time.Time
-		LastWriteVersion int64
-		State            enumsspb.WorkflowExecutionState
-		Status           enumspb.WorkflowExecutionStatus
+		ShardID            int32
+		NamespaceID        primitives.UUID
+		WorkflowID         string
+		RunID              primitives.UUID
+		CreateRequestID    string
+		StartTime          *time.Time
+		LastWriteVersion   int64
+		State              enumsspb.WorkflowExecutionState
+		Status             enumspb.WorkflowExecutionStatus
+		AttachedRequestIDs pq.StringArray `db:"attached_request_ids"`
 	}
 
 	// CurrentExecutionsFilter contains the column names within current_executions table that

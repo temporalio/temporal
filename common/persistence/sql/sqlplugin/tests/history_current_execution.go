@@ -332,13 +332,14 @@ func (s *historyCurrentExecutionSuite) newRandomCurrentExecutionRow(
 	state := testHistoryExecutionStates[rand.Intn(len(testHistoryExecutionStates))]
 	status := testHistoryExecutionStatus[state][rand.Intn(len(testHistoryExecutionStatus[state]))]
 	return sqlplugin.CurrentExecutionsRow{
-		ShardID:          shardID,
-		NamespaceID:      namespaceID,
-		WorkflowID:       workflowID,
-		RunID:            runID,
-		CreateRequestID:  requestID,
-		LastWriteVersion: lastWriteVersion,
-		State:            state,
-		Status:           status,
+		ShardID:            shardID,
+		NamespaceID:        namespaceID,
+		WorkflowID:         workflowID,
+		RunID:              runID,
+		CreateRequestID:    requestID,
+		LastWriteVersion:   lastWriteVersion,
+		State:              state,
+		Status:             status,
+		AttachedRequestIDs: nil,
 	}
 }

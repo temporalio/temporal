@@ -122,13 +122,14 @@ type (
 
 	// CurrentWorkflowConditionFailedError represents a failed conditional update for current workflow record
 	CurrentWorkflowConditionFailedError struct {
-		Msg              string
-		RequestID        string
-		RunID            string
-		State            enumsspb.WorkflowExecutionState
-		Status           enumspb.WorkflowExecutionStatus
-		LastWriteVersion int64
-		StartTime        *time.Time
+		Msg                string
+		RequestID          string
+		RunID              string
+		State              enumsspb.WorkflowExecutionState
+		Status             enumspb.WorkflowExecutionStatus
+		LastWriteVersion   int64
+		StartTime          *time.Time
+		AttachedRequestIDs []string
 	}
 
 	// WorkflowConditionFailedError represents a failed conditional update for workflow record

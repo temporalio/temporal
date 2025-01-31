@@ -2090,6 +2090,13 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 	ms.approximateSize -= len(requestID)
 }
 
+func (ms *MutableStateImpl) attachRequestID(requestID string) {
+	if ms.executionState.AttachedRequestIds == nil {
+		ms.executionState.AttachedRequestIds = []string{}
+	}
+	ms.executionState.AttachedRequestIds = append(ms.executionState.AttachedRequestIds, requestID)
+}
+
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	execution *commonpb.WorkflowExecution,
@@ -4405,11 +4412,20 @@ func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.
 func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	versioningOverride *workflowpb.VersioningOverride,
 	unsetVersioningOverride bool,
+	attachRequestID string,
+	attachCompletionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
 	}
-	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride, unsetVersioningOverride)
+	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(
+		versioningOverride,
+		unsetVersioningOverride,
+		attachRequestID,
+		attachCompletionCallbacks,
+		links,
+	)
 	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
 		return nil, err
 	}
@@ -4424,7 +4440,18 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	} else if attributes.GetVersioningOverride() != nil {
 		err = ms.updateVersioningOverride(attributes.GetVersioningOverride())
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if attributes.GetAttachedRequestId() != "" {
+		ms.attachRequestID(attributes.GetAttachedRequestId())
+	}
+	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
+		if err := ms.addCompletionCallbacks(event, attributes.GetAttachedCompletionCallbacks()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (ms *MutableStateImpl) updateVersioningOverride(

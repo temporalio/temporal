@@ -1260,7 +1260,7 @@ func makeMockStartRequest(
 			WorkflowIdReusePolicy:    wfReusePolicy,
 			WorkflowIdConflictPolicy: wfConflictPolicy,
 			Identity:                 tv.WorkerIdentity(),
-			RequestId:                tv.Any().String(),
+			RequestId:                tv.RequestID(),
 		},
 	}
 }
@@ -1270,14 +1270,17 @@ func makeCurrentWorkflowConditionFailedError(
 	startTime *timestamppb.Timestamp,
 ) *persistence.CurrentWorkflowConditionFailedError {
 	lastWriteVersion := common.EmptyVersion
+	tv1 := tv.WithRequestID("AttachedRequestID1")
+	tv2 := tv.WithRequestID("AttachedRequestID2")
 	return &persistence.CurrentWorkflowConditionFailedError{
-		Msg:              "random message",
-		RequestID:        tv.RequestID(),
-		RunID:            tv.RunID(),
-		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		LastWriteVersion: lastWriteVersion,
-		StartTime:        timestamp.TimeValuePtr(startTime),
+		Msg:                "random message",
+		RequestID:          tv.RequestID(),
+		RunID:              tv.RunID(),
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		LastWriteVersion:   lastWriteVersion,
+		StartTime:          timestamp.TimeValuePtr(startTime),
+		AttachedRequestIDs: []string{tv1.RequestID(), tv2.RequestID()},
 	}
 }
 
@@ -1349,6 +1352,28 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameRequestID() 
 
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 
+	s.NoError(err)
+	s.True(resp.Started)
+	s.Equal(s.tv.RunID(), resp.GetRunId())
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameAttachedRequestID() {
+	// no error when request ID is the same
+	s.setupStartWorkflowExecutionForRunning()
+	startRequest := makeMockStartRequest(
+		s.tv,
+		enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+	)
+
+	startRequest.StartRequest.RequestId = s.tv.String("AttachedRequestID1")
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+	s.NoError(err)
+	s.True(resp.Started)
+	s.Equal(s.tv.RunID(), resp.GetRunId())
+
+	startRequest.StartRequest.RequestId = s.tv.String("AttachedRequestID2")
+	resp, err = s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 	s.NoError(err)
 	s.True(resp.Started)
 	s.Equal(s.tv.RunID(), resp.GetRunId())
@@ -1451,12 +1476,13 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 			requestID string,
 		) *persistence.CurrentWorkflowConditionFailedError {
 			return &persistence.CurrentWorkflowConditionFailedError{
-				Msg:              "random message",
-				RequestID:        requestID,
-				RunID:            prevRunID,
-				State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				LastWriteVersion: lastWriteVersion,
+				Msg:                "random message",
+				RequestID:          requestID,
+				RunID:              prevRunID,
+				State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				Status:             enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				LastWriteVersion:   lastWriteVersion,
+				AttachedRequestIDs: nil,
 			}
 		}
 
@@ -1550,12 +1576,13 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 					requestID string,
 				) *persistence.CurrentWorkflowConditionFailedError {
 					return &persistence.CurrentWorkflowConditionFailedError{
-						Msg:              "random message",
-						RequestID:        requestID,
-						RunID:            prevRunID,
-						State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-						Status:           status,
-						LastWriteVersion: lastWriteVersion,
+						Msg:                "random message",
+						RequestID:          requestID,
+						RunID:              prevRunID,
+						State:              enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+						Status:             status,
+						LastWriteVersion:   lastWriteVersion,
+						AttachedRequestIDs: nil,
 					}
 				}
 
@@ -1803,12 +1830,13 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &persistence.CurrentWorkflowConditionFailedError{
-		Msg:              "random message",
-		RequestID:        requestID, // use same requestID
-		RunID:            runID,
-		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		LastWriteVersion: common.EmptyVersion,
+		Msg:                "random message",
+		RequestID:          requestID, // use same requestID
+		RunID:              runID,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		LastWriteVersion:   common.EmptyVersion,
+		AttachedRequestIDs: nil,
 	}
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil).AnyTimes()
@@ -1869,12 +1897,13 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &persistence.CurrentWorkflowConditionFailedError{
-		Msg:              "random message",
-		RequestID:        "new request ID",
-		RunID:            runID,
-		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		LastWriteVersion: common.EmptyVersion,
+		Msg:                "random message",
+		RequestID:          "new request ID",
+		RunID:              runID,
+		State:              enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		LastWriteVersion:   common.EmptyVersion,
+		AttachedRequestIDs: nil,
 	}
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil).AnyTimes()

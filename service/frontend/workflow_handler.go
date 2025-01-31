@@ -479,6 +479,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 	enums.SetDefaultWorkflowIdConflictPolicy(&request.WorkflowIdConflictPolicy, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
 
+	if err := wh.validateOnConflictOptions(request.OnConflictOptions); err != nil {
+		return nil, err
+	}
+
 	sa, err := wh.unaliasedSearchAttributesFrom(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
@@ -4833,6 +4837,10 @@ func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 		wh.followReusePolicyAfterConflictPolicyTerminate(namespaceName.String()) {
 		return errIncompatibleIDReusePolicyRejectDuplicate
 	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateOnConflictOptions(_ *workflowpb.OnConflictOptions) error {
 	return nil
 }
 
