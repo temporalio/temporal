@@ -222,6 +222,7 @@ message CheckWorkerDeploymentUserDataPropagationRequest {
 message SetCurrentVersionArgs {
     string identity = 1;
     string version = 2;
+    bool ignore_missing_task_queues = 3;
 }
 
 // used as Worker Deployment update response:
@@ -241,6 +242,7 @@ message SetWorkerDeploymentRampingVersionArgs {
     string identity = 1;
     string version = 2;
     float percentage = 3;
+    bool ignore_missing_task_queues = 4;
 }
 
 // used as Worker Deployment activity input:

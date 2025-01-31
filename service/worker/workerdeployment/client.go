@@ -90,6 +90,7 @@ type Client interface {
 		deploymentName string,
 		version string,
 		identity string,
+		ignoreMissingTaskQueues bool,
 	) (*deploymentspb.SetCurrentVersionResponse, error)
 
 	ListWorkerDeployments(
@@ -105,6 +106,7 @@ type Client interface {
 		version *deploymentpb.WorkerDeploymentVersion,
 		percentage float32,
 		identity string,
+		ignoreMissingTaskQueues bool,
 	) (*deploymentspb.SetWorkerDeploymentRampingVersionResponse, error)
 
 	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
@@ -346,14 +348,16 @@ func (d *ClientImpl) SetCurrentVersion(
 	deploymentName string,
 	version string,
 	identity string,
+	ignoreMissingTaskQueues bool,
 ) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
 	requestID := uuid.New()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
-		Identity: identity,
-		Version:  version,
+		Identity:                identity,
+		Version:                 version,
+		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
 	})
 	if err != nil {
 		return nil, err
@@ -399,15 +403,17 @@ func (d *ClientImpl) SetWorkerDeploymentRampingVersion(
 	version *deploymentpb.WorkerDeploymentVersion,
 	percentage float32,
 	identity string,
+	ignoreMissingTaskQueues bool,
 ) (_ *deploymentspb.SetWorkerDeploymentRampingVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SetWorkerDeploymentRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
 	requestID := uuid.New()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetWorkerDeploymentRampingVersionArgs{
-		Identity:   identity,
-		Version:    version.GetBuildId(),
-		Percentage: percentage,
+		Identity:                identity,
+		Version:                 version.GetBuildId(),
+		Percentage:              percentage,
+		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
 	})
 	if err != nil {
 		return nil, err

@@ -186,9 +186,11 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 		} else {
 			// version ramping for the first time
 
-			if _, err := d.verifyPollerPresenceInVersion(ctx, prevRampingVersion, newRampingVersion); err != nil {
-				d.logger.Info("New version does not have all the task queues from the previous current version or some missing task queues are unversioned and active", "error", err)
-				return nil, err
+			if !args.IgnoreMissingTaskQueues {
+				if _, err := d.verifyPollerPresenceInVersion(ctx, prevRampingVersion, newRampingVersion); err != nil {
+					d.logger.Info("New version does not have all the task queues from the previous current version or some missing task queues are unversioned and active", "error", err)
+					return nil, err
+				}
 			}
 			rampingSinceTime = routingUpdateTime
 			rampingVersionUpdateTime = routingUpdateTime
@@ -258,9 +260,11 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	newCurrentVersion := args.Version
 	updateTime := timestamppb.New(workflow.Now(ctx))
 
-	if _, err := d.verifyPollerPresenceInVersion(ctx, prevCurrentVersion, newCurrentVersion); err != nil {
-		d.logger.Info("New version does not have all the task queues from the previous current version or some missing task queues are unversioned and active", "error", err)
-		return nil, err
+	if !args.IgnoreMissingTaskQueues {
+		if _, err := d.verifyPollerPresenceInVersion(ctx, prevCurrentVersion, newCurrentVersion); err != nil {
+			d.logger.Info("New version does not have all the task queues from the previous current version or some missing task queues are unversioned and active", "error", err)
+			return nil, err
+		}
 	}
 
 	// tell new current that it's current
