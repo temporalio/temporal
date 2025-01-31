@@ -47,14 +47,14 @@ func extractCurrentWorkflowConflictError(
 		)
 	}
 
-	details, err := deserializeWorkflowExecutionStateDetails(currentRow)
+	executionState, err := workflowExecutionStateFromCurrentExecutionsRow(currentRow)
 	if err != nil {
 		return err
 	}
 
 	return p.NewCurrentWorkflowConditionFailedError(
 		message,
-		details.GetRequestIds(),
+		executionState.RequestIds,
 		currentRow.RunID.String(),
 		currentRow.State,
 		currentRow.Status,

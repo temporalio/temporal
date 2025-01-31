@@ -294,16 +294,10 @@ message WorkflowExecutionState {
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
     VersionedTransition last_update_versioned_transition = 5;
     google.protobuf.Timestamp start_time = 6;
-    // New fields added to WorkflowExecutionState should be added to WorkflowExecutionStateDetails
-    // to avoid modifying the SQL table schema.
-    WorkflowExecutionStateDetails details = 7;
-}
-
-message WorkflowExecutionStateDetails {
     // Request IDs that are attached to the workflow execution. It can the request ID that started
     // the workflow execution or request IDs that were attached to an existing running workflow
     // execution via StartWorkflowExecutionRequest.OnConflictOptions.
-    map<string, RequestIDInfo> request_ids = 1;
+    map<string, RequestIDInfo> request_ids = 7;
 }
 
 message RequestIDInfo {
