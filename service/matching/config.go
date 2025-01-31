@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
 )
@@ -46,7 +47,6 @@ type (
 		PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
-		SyncMatchWaitDuration                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		RPS                                  dynamicconfig.IntPropertyFn
 		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
 		AlignMembershipChange                dynamicconfig.DurationPropertyFn
@@ -70,7 +70,7 @@ type (
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		ForwarderMaxOutstandingPolls             dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForwarderMaxOutstandingTasks             dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		ForwarderMaxRatePerSecond                dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ForwarderMaxRatePerSecond                dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		ForwarderMaxChildrenPerNode              dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		VersionCompatibleSetLimitPerQueue        dynamicconfig.IntPropertyFnWithNamespaceFilter
 		VersionBuildIdLimitPerQueue              dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -124,13 +124,13 @@ type (
 	forwarderConfig struct {
 		ForwarderMaxOutstandingPolls func() int
 		ForwarderMaxOutstandingTasks func() int
-		ForwarderMaxRatePerSecond    func() int
+		ForwarderMaxRatePerSecond    func() float64
 		ForwarderMaxChildrenPerNode  func() int
 	}
 
 	taskQueueConfig struct {
 		forwarderConfig
-		SyncMatchWaitDuration        func() time.Duration
+		CallerInfo                   headers.CallerInfo
 		BacklogNegligibleAge         func() time.Duration
 		MaxWaitForPollerBeforeFwd    func() time.Duration
 		QueryPollerUnavailableWindow func() time.Duration
@@ -213,7 +213,6 @@ func NewConfig(
 		PersistencePerShardNamespaceMaxQPS:       dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		PersistenceDynamicRateLimitingParams:     dynamicconfig.MatchingPersistenceDynamicRateLimitingParams.Get(dc),
 		PersistenceQPSBurstRatio:                 dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
-		SyncMatchWaitDuration:                    dynamicconfig.MatchingSyncMatchWaitDuration.Get(dc),
 		LoadUserData:                             dynamicconfig.MatchingLoadUserData.Get(dc),
 		HistoryMaxPageSize:                       dynamicconfig.MatchingHistoryMaxPageSize.Get(dc),
 		EnableDeployments:                        dynamicconfig.EnableDeployments.Get(dc),
@@ -285,7 +284,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	taskType := tq.TaskType()
 
 	return &taskQueueConfig{
-		RangeSize: config.RangeSize,
+		CallerInfo: headers.NewBackgroundCallerInfo(ns.String()),
+		RangeSize:  config.RangeSize,
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
 		},
@@ -297,9 +297,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		MinTaskThrottlingBurstSize: func() int {
 			return config.MinTaskThrottlingBurstSize(ns.String(), taskQueueName, taskType)
-		},
-		SyncMatchWaitDuration: func() time.Duration {
-			return config.SyncMatchWaitDuration(ns.String(), taskQueueName, taskType)
 		},
 		BacklogNegligibleAge: func() time.Duration {
 			return config.BacklogNegligibleAge(ns.String(), taskQueueName, taskType)
@@ -353,7 +350,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 			ForwarderMaxOutstandingTasks: func() int {
 				return config.ForwarderMaxOutstandingTasks(ns.String(), taskQueueName, taskType)
 			},
-			ForwarderMaxRatePerSecond: func() int {
+			ForwarderMaxRatePerSecond: func() float64 {
 				return config.ForwarderMaxRatePerSecond(ns.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxChildrenPerNode: func() int {

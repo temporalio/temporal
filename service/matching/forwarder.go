@@ -27,7 +27,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -37,7 +36,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -50,36 +48,11 @@ type (
 		queue     *PhysicalTaskQueueKey
 		partition *tqid.NormalPartition
 		client    matchingservice.MatchingServiceClient
-
-		// token channels that vend tokens necessary to make
-		// API calls exposed by forwarder. Tokens are used
-		// to enforce maxOutstanding forwarded calls from this
-		// instance. And channels are used so that the caller
-		// can use them in a select{} block along with other
-		// conditions
-		addReqToken  atomic.Value
-		pollReqToken atomic.Value
-
-		// cached values of maxOutstanding dynamic config values.
-		// these are used to detect changes
-		outstandingTasksLimit int32
-		outstandingPollsLimit int32
-
-		// todo: implement a rate limiter that automatically
-		// adjusts rate based on ServiceBusy errors from API calls
-		limiter *quotas.DynamicRateLimiterImpl
-	}
-	// ForwarderReqToken is the token that must be acquired before
-	// making forwarder API calls. This type contains the state
-	// for the token itself
-	ForwarderReqToken struct {
-		ch chan *ForwarderReqToken
 	}
 )
 
 var (
 	errInvalidTaskQueueType = errors.New("unrecognized task queue type")
-	errForwarderSlowDown    = errors.New("limit exceeded")
 )
 
 // newForwarder returns an instance of Forwarder object which
@@ -89,7 +62,6 @@ var (
 // methods can return the following errors:
 // Returns following errors:
 //   - taskqueue.ErrNoParent, taskqueue.ErrInvalidDegree: If this task queue doesn't have a parent to forward to
-//   - errForwarderSlowDown: When the rate limit is exceeded
 func newForwarder(
 	cfg *forwarderConfig,
 	queue *PhysicalTaskQueueKey,
@@ -99,21 +71,12 @@ func newForwarder(
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument("physical queue of normal partition expected")
 	}
-
-	fwdr := &Forwarder{
-		cfg:                   cfg,
-		client:                client,
-		partition:             partition,
-		queue:                 queue,
-		outstandingTasksLimit: int32(cfg.ForwarderMaxOutstandingTasks()),
-		outstandingPollsLimit: int32(cfg.ForwarderMaxOutstandingPolls()),
-		limiter: quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(cfg.ForwarderMaxRatePerSecond()) },
-		),
-	}
-	fwdr.addReqToken.Store(newForwarderReqToken(cfg.ForwarderMaxOutstandingTasks()))
-	fwdr.pollReqToken.Store(newForwarderReqToken(cfg.ForwarderMaxOutstandingPolls()))
-	return fwdr, nil
+	return &Forwarder{
+		cfg:       cfg,
+		client:    client,
+		partition: partition,
+		queue:     queue,
+	}, nil
 }
 
 // ForwardTask forwards an activity or workflow task to the parent task queue partition if it exists
@@ -122,10 +85,6 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	target, err := fwdr.partition.ParentPartition(degree)
 	if err != nil {
 		return err
-	}
-
-	if !fwdr.limiter.Allow() {
-		return errForwarderSlowDown
 	}
 
 	var expirationDuration *durationpb.Duration
@@ -179,7 +138,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		return errInvalidTaskQueueType
 	}
 
-	return fwdr.handleErr(err)
+	return err
 }
 
 func (fwdr *Forwarder) getForwardInfo(task *internalTask) *taskqueuespb.TaskForwardInfo {
@@ -190,14 +149,13 @@ func (fwdr *Forwarder) getForwardInfo(task *internalTask) *taskqueuespb.TaskForw
 		return clone
 	}
 	// task is forwarded for the first time
-	forwardInfo := &taskqueuespb.TaskForwardInfo{
+	return &taskqueuespb.TaskForwardInfo{
 		TaskSource:         task.source,
 		SourcePartition:    fwdr.partition.RpcName(),
 		DispatchBuildId:    fwdr.queue.Version().BuildId(),
 		DispatchVersionSet: fwdr.queue.Version().VersionSet(),
 		RedirectInfo:       task.redirectInfo,
 	}
-	return forwardInfo
 }
 
 // ForwardQueryTask forwards a query task to parent task queue partition, if it exists
@@ -222,7 +180,7 @@ func (fwdr *Forwarder) ForwardQueryTask(
 		ForwardInfo:      fwdr.getForwardInfo(task),
 	})
 
-	return resp, fwdr.handleErr(err)
+	return resp, err
 }
 
 // ForwardNexusTask forwards a nexus task to parent task queue partition, if it exists.
@@ -243,7 +201,7 @@ func (fwdr *Forwarder) ForwardNexusTask(ctx context.Context, task *internalTask)
 		ForwardInfo: fwdr.getForwardInfo(task),
 	})
 
-	return resp, fwdr.handleErr(err)
+	return resp, err
 }
 
 // ForwardPoll forwards a poll request to parent task queue partition if it exist
@@ -273,7 +231,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 			ForwardedSource: fwdr.partition.RpcName(),
 		})
 		if err != nil {
-			return nil, fwdr.handleErr(err)
+			return nil, err
 		}
 		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
@@ -291,7 +249,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 			ForwardedSource: fwdr.partition.RpcName(),
 		})
 		if err != nil {
-			return nil, fwdr.handleErr(err)
+			return nil, err
 		}
 		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_NEXUS:
@@ -310,54 +268,10 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 			ForwardedSource: fwdr.partition.RpcName(),
 		})
 		if err != nil {
-			return nil, fwdr.handleErr(err)
+			return nil, err
 		}
 		return newInternalStartedTask(&startedTaskInfo{nexusTaskInfo: resp}), nil
 	default:
 		return nil, errInvalidTaskQueueType
 	}
-}
-
-// AddReqTokenC returns a channel that can be used to wait for a token
-// that's necessary before making a ForwardTask or ForwardQueryTask API call.
-// After the API call is invoked, token.release() must be invoked
-func (fwdr *Forwarder) AddReqTokenC() <-chan *ForwarderReqToken {
-	fwdr.refreshTokenC(&fwdr.addReqToken, &fwdr.outstandingTasksLimit, int32(fwdr.cfg.ForwarderMaxOutstandingTasks()))
-	return fwdr.addReqToken.Load().(*ForwarderReqToken).ch
-}
-
-// PollReqTokenC returns a channel that can be used to wait for a token
-// that's necessary before making a ForwardPoll API call. After the API
-// call is invoked, token.release() must be invoked
-func (fwdr *Forwarder) PollReqTokenC() <-chan *ForwarderReqToken {
-	fwdr.refreshTokenC(&fwdr.pollReqToken, &fwdr.outstandingPollsLimit, int32(fwdr.cfg.ForwarderMaxOutstandingPolls()))
-	return fwdr.pollReqToken.Load().(*ForwarderReqToken).ch
-}
-
-func (fwdr *Forwarder) refreshTokenC(value *atomic.Value, curr *int32, maxLimit int32) {
-	currLimit := atomic.LoadInt32(curr)
-	if currLimit != maxLimit {
-		if atomic.CompareAndSwapInt32(curr, currLimit, maxLimit) {
-			value.Store(newForwarderReqToken(int(maxLimit)))
-		}
-	}
-}
-
-func (fwdr *Forwarder) handleErr(err error) error {
-	if _, ok := err.(*serviceerror.ResourceExhausted); ok {
-		return errForwarderSlowDown
-	}
-	return err
-}
-
-func newForwarderReqToken(maxOutstanding int) *ForwarderReqToken {
-	reqToken := &ForwarderReqToken{ch: make(chan *ForwarderReqToken, maxOutstanding)}
-	for i := 0; i < maxOutstanding; i++ {
-		reqToken.ch <- reqToken
-	}
-	return reqToken
-}
-
-func (token *ForwarderReqToken) release() {
-	token.ch <- token
 }
