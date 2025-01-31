@@ -213,7 +213,7 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 	var res deploymentspb.SyncVersionStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.SyncWorkerDeploymentVersion, &deploymentspb.SyncVersionStateActivityArgs{
 		DeploymentName: d.DeploymentName,
-		Version:        targetVersion,
+		BuildId:        targetVersion,
 		UpdateArgs:     versionUpdateArgs,
 		RequestId:      d.newUUID(ctx),
 	}).Get(ctx, &res)

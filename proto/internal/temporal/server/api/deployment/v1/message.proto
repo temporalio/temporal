@@ -187,7 +187,7 @@ message QueryDescribeWorkerDeploymentResponse {
 // used as Worker Deployment Version workflow memo:
 message VersionWorkflowMemo {
     string deployment_name = 1;
-    string version = 2;
+    string build_id = 2;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -232,7 +232,7 @@ message SetCurrentVersionResponse {
 // used as Worker Deployment activity input:
 message SyncVersionStateActivityArgs {
     string deployment_name = 1;
-    string version = 2;
+    string build_id = 2;
     SyncVersionStateUpdateArgs update_args = 3;
     string request_id = 4;
 }

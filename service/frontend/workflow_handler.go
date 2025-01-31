@@ -3335,7 +3335,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	workerDeploymentVersionInfo, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request.Version.BuildId) // todo carly: pass whole version
+	workerDeploymentVersionInfo, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request.Version)
 	if err != nil {
 		return nil, err
 	}

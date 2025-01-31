@@ -72,7 +72,7 @@ const (
 	WorkerDeploymentVersionWorkflowIDEscape      = "|"
 	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDDelimeter) + len(WorkerDeploymentVersionWorkflowIDPrefix) // todo (Shivam): Do we need 2 * len(WorkerDeploymentVersionWorkflowIDDelimeter)?
 	WorkerDeploymentFieldName                    = "WorkerDeployment"
-	WorkerDeploymentVersionFieldName             = "Version"
+	WorkerDeploymentBuildIDFieldName             = "BuildID"
 
 	// Application error names for rejected updates
 	errNoChangeType               = "errNoChange"
@@ -94,15 +94,27 @@ var (
 
 // validateVersionWfParams is a helper that verifies if the fields used for generating
 // Worker Deployment Version related workflowID's are valid
+// todo (Shivam): update with latest checks
+
 func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
 	}
 
-	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length))
-	if len(field) > (maxIDLengthLimit - WorkerDeploymentVersionWorkflowIDInitialSize) {
+	// Length of each field should be: (MaxIDLengthLimit - (prefix + delimeter length)) / 2
+	if len(field) > (maxIDLengthLimit-WorkerDeploymentVersionWorkflowIDInitialSize)/2 {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
+	}
+
+	// deploymentName cannot have "/"
+	if fieldName == WorkerDeploymentFieldName && strings.Contains(field, "/") {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain '/'", fieldName))
+	}
+
+	// buildID cannot have "__"
+	if fieldName == WorkerDeploymentBuildIDFieldName && strings.Contains(field, "__") {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain '__'", fieldName))
 	}
 
 	// UTF-8 check
@@ -117,26 +129,21 @@ func escapeChar(s string) string {
 	return s
 }
 
-// GenerateWorkflowID is a helper that generates a system accepted
+// GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment workflows
-func GenerateWorkflowID(WorkerDeploymentName string) string {
+func GenerateDeploymentWorkflowID(deploymentName string) string {
 	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	escapedWorkerDeploymentName := escapeChar(WorkerDeploymentName)
-	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedWorkerDeploymentName
+	escapedDeploymentName := escapeChar(deploymentName)
+	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedDeploymentName
 }
 
 // GenerateVersionWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment Version workflows
-func GenerateVersionWorkflowID(version string) string {
-	escapedVersion := escapeChar(version)
+func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
+	escapedDeploymentName := escapeChar(deploymentName)
+	escapedBuildID := escapeChar(buildID)
 
-	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedVersion
-}
-
-func GenerateVersionWorkflowIDForPatternMatching(seriesName string) string {
-	escapedSeriesName := escapeChar(seriesName)
-
-	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedSeriesName + WorkerDeploymentVersionWorkflowIDDelimeter
+	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedDeploymentName + WorkerDeploymentVersionWorkflowIDDelimeter + escapedBuildID
 }
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {

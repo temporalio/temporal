@@ -422,7 +422,8 @@ func (d *VersionWorkflowRunner) updateMemo(ctx workflow.Context) error {
 	return workflow.UpsertMemo(ctx, map[string]any{
 		WorkerDeploymentVersionMemoField: &deploymentspb.VersionWorkflowMemo{
 			DeploymentName: d.VersionState.Version.DeploymentName,
-			Version:        d.VersionState.Version.BuildId},
+			BuildId:        d.VersionState.Version.BuildId,
+		},
 	})
 }
 
