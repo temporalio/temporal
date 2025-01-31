@@ -298,13 +298,13 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 }
 
-func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) error {
-	if d.State.Versions == nil {
-		return nil
+func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(args *deploymentspb.AddVersionToWorkerDeploymentUpdateArgs) error {
+	if int32(len(d.State.Versions)) >= args.MaxVersions {
+		return temporal.NewApplicationError("maximum versions in deployment, adjust scavenger speed or delete manually to continue deploying", "todo (carly)")
 	}
 
 	for _, v := range d.State.Versions {
-		if v == version {
+		if v == args.Version {
 			return temporal.NewApplicationError("deployment version already registered", errVersionAlreadyExistsType)
 		}
 	}
@@ -312,7 +312,7 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) er
 	return nil
 }
 
-func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, version string) error {
+func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionToWorkerDeploymentUpdateArgs) error {
 	d.pendingUpdates++
 	defer func() {
 		d.pendingUpdates--
@@ -322,7 +322,7 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	if d.State.Versions == nil {
 		d.State.Versions = make([]string, 0)
 	}
-	d.State.Versions = append(d.State.Versions, version)
+	d.State.Versions = append(d.State.Versions, args.Version)
 	return nil
 }
 

@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -148,12 +149,16 @@ type ErrRegister struct{ error }
 
 // ClientImpl implements Client
 type ClientImpl struct {
-	logger                    log.Logger
-	historyClient             historyservice.HistoryServiceClient
-	visibilityManager         manager.VisibilityManager
-	maxIDLengthLimit          dynamicconfig.IntPropertyFn
-	visibilityMaxPageSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	maxTaskQueuesInDeployment dynamicconfig.IntPropertyFnWithNamespaceFilter
+	logger                              log.Logger
+	historyClient                       historyservice.HistoryServiceClient
+	visibilityManager                   manager.VisibilityManager
+	maxIDLengthLimit                    dynamicconfig.IntPropertyFn
+	visibilityMaxPageSize               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	maxDeployments                      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	maxVersionsInDeployment             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	maxTaskQueuesInDeployment           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	drainageStatusVisibilityGracePeriod dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	drainageStatusRefreshInterval       dynamicconfig.DurationPropertyFnWithNamespaceFilter
 }
 
 var _ Client = (*ClientImpl)(nil)
@@ -451,6 +456,15 @@ func (d *ClientImpl) StartWorkerDeployment(
 	//revive:disable-next-line:defer
 	defer d.record("StartWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
 
+	// TODO (Carly): either max page size or default page size is 1000, so if there are > 1000 this would not catch it
+	deps, _, err := d.ListWorkerDeployments(ctx, namespaceEntry, 0, nil)
+	if err != nil {
+		return err
+	}
+	if len(deps) >= d.maxDeployments(namespaceEntry.Name().String()) {
+		return serviceerror.NewFailedPrecondition("maximum deployments in namespace, adjust scavenger speed or delete manually to continue deploying.")
+	}
+
 	workflowID := GenerateWorkflowID(deploymentName)
 
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
@@ -573,14 +587,16 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 				DeploymentName: deploymentName,
 				BuildId:        version,
 			},
-			WorkflowVersioningMode: 0, // todo
-			CreateTime:             now,
-			RoutingUpdateTime:      now,
-			CurrentSinceTime:       nil, // not current
-			RampingSinceTime:       nil, // not ramping
-			RampPercentage:         0,   // not ramping
-			DrainageInfo:           nil, // not draining or drained
-			Metadata:               nil, // todo
+			WorkflowVersioningMode:        enumspb.WORKFLOW_VERSIONING_MODE_VERSIONING_BEHAVIORS,
+			CreateTime:                    now,
+			RoutingUpdateTime:             now,
+			CurrentSinceTime:              nil, // not current
+			RampingSinceTime:              nil, // not ramping
+			RampPercentage:                0,   // not ramping
+			DrainageInfo:                  nil, // not draining or drained
+			Metadata:                      nil, // todo
+			DrainageRefreshInterval:       durationpb.New(d.drainageStatusRefreshInterval(namespaceEntry.Name().String())),
+			DrainageVisibilityGracePeriod: durationpb.New(d.drainageStatusVisibilityGracePeriod(namespaceEntry.Name().String())),
 		},
 	})
 	if err != nil {
@@ -655,7 +671,10 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 	identity string,
 	requestID string,
 ) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(version)
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.AddVersionToWorkerDeploymentUpdateArgs{
+		Version:     version,
+		MaxVersions: int32(d.maxDeployments(namespaceEntry.Name().String())),
+	})
 	if err != nil {
 		return nil, err
 	}
