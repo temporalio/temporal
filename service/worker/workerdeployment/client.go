@@ -105,6 +105,15 @@ type Client interface {
 		identity string,
 	) (*deploymentspb.SetWorkerDeploymentRampingVersionResponse, error)
 
+	UpdateWorkerVersionMetadata(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		version *deploymentpb.WorkerDeploymentVersion,
+		upsertEntries map[string]*commonpb.Payload,
+		removeEntries []string,
+		identity string,
+	) (*deploymentpb.VersionMetadata, error)
+
 	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
 	StartWorkerDeployment(
 		ctx context.Context,
@@ -143,7 +152,6 @@ type Client interface {
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
-
 type ErrRegister struct{ error }
 
 // ClientImpl implements Client
@@ -246,6 +254,50 @@ func (d *ClientImpl) DescribeVersion(
 	}
 
 	return versionStateToVersionInfo(queryResponse.VersionState), nil
+}
+
+func (d *ClientImpl) UpdateWorkerVersionMetadata(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	version *deploymentpb.WorkerDeploymentVersion,
+	upsertEntries map[string]*commonpb.Payload,
+	removeEntries []string,
+	identity string,
+) (_ *deploymentpb.VersionMetadata, retErr error) {
+	defer d.record("UpdateWorkerVersionMetadata", &retErr, namespaceEntry.Name(), version, upsertEntries, removeEntries, identity)()
+	requestID := uuid.New()
+
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.UpdateVersionMetadataArgs{
+		UpsertEntries: upsertEntries,
+		RemoveEntries: removeEntries,
+		Identity:      identity,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, version.GetDeploymentName(), version.GetBuildId(), &updatepb.Request{
+		Input: &updatepb.Input{Name: UpdateVersionMetadata, Args: updatePayload},
+		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+	}, identity, requestID)
+	if err != nil {
+		return nil, err
+	}
+
+	if failure := outcome.GetFailure(); failure != nil {
+		return nil, errors.New(failure.Message)
+	}
+	success := outcome.GetSuccess()
+	if success == nil {
+		return nil, serviceerror.NewInternal("outcome missing success and failure")
+	}
+
+	var res deploymentspb.UpdateVersionMetadataResponse
+	if err := sdk.PreferProtoDataConverter.FromPayloads(outcome.GetSuccess(), &res); err != nil {
+		return nil, err
+	}
+
+	return res.Metadata, nil
 }
 
 func (d *ClientImpl) DescribeWorkerDeployment(
