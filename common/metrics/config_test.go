@@ -196,6 +196,16 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 			},
 			expectedType: &otelMetricsHandler{},
 		},
+		{
+			name: "", // default to otel
+			cfg: &Config{
+				Prometheus: &PrometheusConfig{
+					Framework:     FrameworkOpentelemetry,
+					ListenAddress: "localhost:0",
+				},
+			},
+			expectedType: &otelMetricsHandler{},
+		},
 	} {
 		c := c
 		t.Run(c.name, func(t *testing.T) {

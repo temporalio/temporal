@@ -461,19 +461,21 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 
-	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
-		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
-		if err != nil {
-			logger.Fatal(err.Error())
-		}
-
-		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkTally {
+		// only use tally if specifically asked to do so, will remove tally in future server version.
+		return NewTallyMetricsHandler(
+			c.ClientConfig,
+			NewScope(logger, c),
+		), nil
 	}
 
-	return NewTallyMetricsHandler(
-		c.ClientConfig,
-		NewScope(logger, c),
-	), nil
+	// if not specified, default to use otel
+	otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
+	if err != nil {
+		logger.Fatal(err.Error())
+	}
+
+	return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
 }
 
 func configExcludeTags(cfg ClientConfig) map[string]map[string]struct{} {
