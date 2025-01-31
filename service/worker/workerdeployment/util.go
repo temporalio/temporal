@@ -59,6 +59,7 @@ const (
 	ForceCANSignalName      = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
 	SyncDrainageSignalName  = "sync-drainage-status"
 	TerminateDrainageSignal = "terminate-drainage"
+	DeleteVersionSignal     = "delete-version-signal" // sent from Version wf to Deployment wf
 
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
@@ -121,9 +122,9 @@ func escapeChar(s string) string {
 	return s
 }
 
-// GenerateWorkflowID is a helper that generates a system accepted
+// GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment workflows
-func GenerateWorkflowID(WorkerDeploymentName string) string {
+func GenerateDeploymentWorkflowID(WorkerDeploymentName string) string {
 	// escaping the reserved workflow delimiter (|) from the inputs, if present
 	escapedWorkerDeploymentName := escapeChar(WorkerDeploymentName)
 	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedWorkerDeploymentName
