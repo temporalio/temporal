@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -106,7 +106,7 @@ func (tv *TestVars) uniqueString(key string) string {
 }
 
 func (tv *TestVars) uuidString(_ string) string {
-	return uuid.New()
+	return uuid.NewString()
 }
 
 func (tv *TestVars) emptyString(_ string) string {
@@ -230,6 +230,10 @@ func (tv *TestVars) WorkflowExecution() *commonpb.WorkflowExecution {
 
 func (tv *TestVars) RequestID() string {
 	return getOrCreate(tv, "request_id", tv.uuidString, tv.uuidNSetter)
+}
+
+func (tv *TestVars) WithRequestID(requestID string) *TestVars {
+	return tv.cloneSetVal("request_id", requestID)
 }
 
 func (tv *TestVars) BuildID() string {

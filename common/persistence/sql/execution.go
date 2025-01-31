@@ -198,15 +198,16 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 	}
 
 	row := sqlplugin.CurrentExecutionsRow{
-		ShardID:          shardID,
-		NamespaceID:      namespaceID,
-		WorkflowID:       workflowID,
-		RunID:            runID,
-		CreateRequestID:  newWorkflow.ExecutionState.CreateRequestId,
-		State:            newWorkflow.ExecutionState.State,
-		Status:           newWorkflow.ExecutionState.Status,
-		LastWriteVersion: lastWriteVersion,
-		StartTime:        getStartTimeFromState(newWorkflow.ExecutionState),
+		ShardID:            shardID,
+		NamespaceID:        namespaceID,
+		WorkflowID:         workflowID,
+		RunID:              runID,
+		CreateRequestID:    newWorkflow.ExecutionState.CreateRequestId,
+		State:              newWorkflow.ExecutionState.State,
+		Status:             newWorkflow.ExecutionState.Status,
+		LastWriteVersion:   lastWriteVersion,
+		StartTime:          getStartTimeFromState(newWorkflow.ExecutionState),
+		AttachedRequestIDs: newWorkflow.ExecutionState.AttachedRequestIds,
 	}
 
 	if err := createOrUpdateCurrentExecution(ctx, tx, row, request.Mode); err != nil {
@@ -406,6 +407,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			row.NamespaceID = primitives.MustParseUUID(newWorkflow.NamespaceID)
 			row.RunID = primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
 			row.StartTime = getStartTimeFromState(newWorkflow.ExecutionState)
+			row.AttachedRequestIDs = newWorkflow.ExecutionState.AttachedRequestIds
 
 			if !bytes.Equal(namespaceID, row.NamespaceID) {
 				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot continue as new to another namespace")
@@ -417,6 +419,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			row.LastWriteVersion = updateWorkflow.LastWriteVersion
 			row.RunID = runID
 			row.StartTime = getStartTimeFromState(updateWorkflow.ExecutionState)
+			row.AttachedRequestIDs = updateWorkflow.ExecutionState.AttachedRequestIds
 			// we still call update only to update the current record
 		}
 		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, runID); err != nil {
@@ -507,17 +510,19 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 		createRequestID := executionState.CreateRequestId
 		state := executionState.State
 		status := executionState.Status
+		attachedRequestIDs := executionState.AttachedRequestIds
 
 		row := sqlplugin.CurrentExecutionsRow{
-			ShardID:          shardID,
-			NamespaceID:      namespaceID,
-			WorkflowID:       workflowID,
-			RunID:            runID,
-			CreateRequestID:  createRequestID,
-			State:            state,
-			Status:           status,
-			LastWriteVersion: lastWriteVersion,
-			StartTime:        getStartTimeFromState(executionState),
+			ShardID:            shardID,
+			NamespaceID:        namespaceID,
+			WorkflowID:         workflowID,
+			RunID:              runID,
+			CreateRequestID:    createRequestID,
+			State:              state,
+			Status:             status,
+			LastWriteVersion:   lastWriteVersion,
+			StartTime:          getStartTimeFromState(executionState),
+			AttachedRequestIDs: attachedRequestIDs,
 		}
 		var prevRunID primitives.UUID
 		if currentWorkflow != nil {

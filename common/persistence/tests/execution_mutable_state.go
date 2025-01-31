@@ -177,12 +177,13 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 		err.Msg = ""
 	}
 	s.Equal(&p.CurrentWorkflowConditionFailedError{
-		Msg:              "",
-		RequestID:        newSnapshot.ExecutionState.CreateRequestId,
-		RunID:            newSnapshot.ExecutionState.RunId,
-		State:            newSnapshot.ExecutionState.State,
-		Status:           newSnapshot.ExecutionState.Status,
-		LastWriteVersion: lastWriteVersion,
+		Msg:                "",
+		RequestID:          newSnapshot.ExecutionState.CreateRequestId,
+		RunID:              newSnapshot.ExecutionState.RunId,
+		State:              newSnapshot.ExecutionState.State,
+		Status:             newSnapshot.ExecutionState.Status,
+		LastWriteVersion:   lastWriteVersion,
+		AttachedRequestIDs: newSnapshot.ExecutionState.AttachedRequestIds,
 	}, err)
 
 	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
@@ -259,12 +260,13 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 		err.Msg = ""
 	}
 	s.Equal(&p.CurrentWorkflowConditionFailedError{
-		Msg:              "",
-		RequestID:        prevSnapshot.ExecutionState.CreateRequestId,
-		RunID:            prevSnapshot.ExecutionState.RunId,
-		State:            prevSnapshot.ExecutionState.State,
-		Status:           prevSnapshot.ExecutionState.Status,
-		LastWriteVersion: prevLastWriteVersion,
+		Msg:                "",
+		RequestID:          prevSnapshot.ExecutionState.CreateRequestId,
+		RunID:              prevSnapshot.ExecutionState.RunId,
+		State:              prevSnapshot.ExecutionState.State,
+		Status:             prevSnapshot.ExecutionState.Status,
+		LastWriteVersion:   prevLastWriteVersion,
+		AttachedRequestIDs: prevSnapshot.ExecutionState.AttachedRequestIds,
 	}, err)
 
 	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above

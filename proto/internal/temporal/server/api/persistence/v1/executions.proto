@@ -279,7 +279,6 @@ message WorkflowExecutionInfo {
     // Should be deprecated once the transition history is fully launched
     repeated VersionedTransition previous_transition_history = 100;
     VersionedTransition last_transition_history_break_point = 101;
-
 }
 
 message ExecutionStats {
@@ -294,6 +293,11 @@ message WorkflowExecutionState {
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
     VersionedTransition last_update_versioned_transition = 5;
     google.protobuf.Timestamp start_time = 6;
+
+    // Request IDs that are attached to the workflow execution.
+    // They can be from StartWorkflowExecution requests with conflict policy USE_EXISTING and
+    // conflict options to attached completion callbacks.
+    repeated string attached_request_ids = 7;
 }
 
 // transfer column

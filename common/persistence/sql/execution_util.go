@@ -944,11 +944,12 @@ func assertRunIDAndUpdateCurrentExecution(
 					currentRow.RunID,
 					previousRunID,
 				),
-				RequestID:        currentRow.CreateRequestID,
-				RunID:            currentRow.RunID.String(),
-				State:            currentRow.State,
-				Status:           currentRow.Status,
-				LastWriteVersion: currentRow.LastWriteVersion,
+				RequestID:          currentRow.CreateRequestID,
+				RunID:              currentRow.RunID.String(),
+				State:              currentRow.State,
+				Status:             currentRow.Status,
+				LastWriteVersion:   currentRow.LastWriteVersion,
+				AttachedRequestIDs: currentRow.AttachedRequestIDs,
 			}
 		}
 		return nil

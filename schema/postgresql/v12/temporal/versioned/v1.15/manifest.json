@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.15",
+  "MinCompatibleVersion": "1.0",
+  "Description": "Add new attached_request_ids column",
+  "SchemaUpdateCqlFiles": [
+    "add_current_executions_attached_request_ids.sql"
+  ]
+}

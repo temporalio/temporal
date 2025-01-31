@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -317,7 +318,8 @@ func (s *Starter) handleConflict(
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	request := s.request.StartRequest
-	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() {
+	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() ||
+		slices.Contains(currentWorkflowConditionFailed.AttachedRequestIDs, request.GetRequestId()) {
 		resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
 		return resp, StartDeduped, err
 	}
@@ -423,17 +425,14 @@ func (s *Starter) resolveDuplicateWorkflowID(
 
 	switch {
 	case errors.Is(err, api.ErrUseCurrentExecution):
-		resp := &historyservice.StartWorkflowExecutionResponse{
-			RunId:   currentWorkflowConditionFailed.RunID,
-			Started: false, // set explicitly for emphasis
-		}
-		return resp, StartReused, nil
+		return s.handleUseExistingWorkflowOnConflictOptions(ctx, workflowKey, currentWorkflowConditionFailed)
 	case err != nil:
 		return nil, StartErr, err
 	case currentExecutionUpdateAction == nil:
 		return nil, StartNew, nil
 	}
 
+	// handle terminating the current execution (currentWorkflowUpdateAction) and starting a new workflow
 	var workflowLease api.WorkflowLease
 	var mutableStateInfo *mutableStateInfo
 	// Update current execution and create new execution in one transaction.
@@ -615,6 +614,75 @@ func (s *Starter) getWorkflowHistory(ctx context.Context, mutableState *mutableS
 	}
 
 	return events, nil
+}
+
+func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
+) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
+	var err error
+	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
+	if onConflictOptions != nil {
+		var completionCallbacks []*commonpb.Callback
+		if onConflictOptions.AttachCompletionCallbacks {
+			completionCallbacks = s.request.StartRequest.GetCompletionCallbacks()
+		}
+		var links []*commonpb.Link
+		if onConflictOptions.AttachLinks {
+			links = s.request.StartRequest.GetLinks()
+		}
+		err = api.GetAndUpdateWorkflowWithNew(
+			ctx,
+			nil,
+			workflowKey,
+			func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+				mutableState := workflowLease.GetMutableState()
+				if !mutableState.IsWorkflowExecutionRunning() {
+					return nil, consts.ErrWorkflowCompleted
+				}
+
+				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+					nil,
+					false,
+					s.request.StartRequest.GetRequestId(),
+					completionCallbacks,
+					links,
+				)
+				return api.UpdateWorkflowWithoutWorkflowTask, err
+			},
+			nil, // no new workflow
+			s.shardContext,
+			s.workflowConsistencyChecker,
+		)
+	}
+
+	switch err {
+	case nil:
+		resp := &historyservice.StartWorkflowExecutionResponse{
+			RunId:   workflowKey.RunID,
+			Started: false, // set explicitly for emphasis
+		}
+		return resp, StartReused, nil
+	case consts.ErrWorkflowCompleted:
+		// Need to re-evaluate the reuse policy because the previous check didn't lock the current
+		// execution. So it's possible the workflow completed after the first call of
+		// api.ResolveDuplicateWorkflowID and before being able to update the existing workflow.
+		err := api.ResolveWorkflowIDReusePolicy(
+			workflowKey,
+			currentWorkflowConditionFailed.Status,
+			currentWorkflowConditionFailed.RequestID,
+			s.request.StartRequest.GetWorkflowIdReusePolicy(),
+		)
+		if err != nil {
+			return nil, StartErr, err
+		}
+		// no error means allowing duplicate workflow id
+		// fallthrough to the logic creating a new workflow
+		return nil, StartNew, nil
+	default:
+		return nil, StartErr, err
+	}
 }
 
 // extractHistoryEvents extracts all history events from a batch of events sent to persistence.
