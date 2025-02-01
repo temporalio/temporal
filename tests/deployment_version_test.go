@@ -338,6 +338,10 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 
 	// Version has no active pollers so delete should succeed
 	s.tryDeleteVersion(ctx, tv1, true)
+
+	// todo: describe task queue and expect no current version
+
+	// todo: describe deployment version and expect not found error
 }
 
 func (s *DeploymentVersionSuite) tryDeleteVersion(
