@@ -450,5 +450,7 @@ type (
 
 		AddReapplyCandidateEvent(event *historypb.HistoryEvent)
 		GetReapplyCandidateEvents() []*historypb.HistoryEvent
+
+		DeleteSubStateMachine(path *persistencespb.StateMachinePath) error
 	}
 )
