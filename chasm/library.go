@@ -22,23 +22,29 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
+//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination library_mock.go
 
 package chasm
 
-import (
-	"context"
-	"time"
-)
-
 type (
-	TaskAttributes struct {
-		ScheduledTime time.Time
-		Destination   string
+	Library interface {
+		Name() string
+		Components() []*RegistrableComponent
+		Tasks() []*RegistrableTask
+		// Service()
+
+		mustEmbedUnimplementedLibrary()
 	}
 
-	TaskHandler[C any, T any] interface {
-		Validate(Context, C, T) error
-		Execute(context.Context, ComponentRef, T) error
-	}
+	UnimplementedLibrary struct{}
 )
+
+func (UnimplementedLibrary) Components() []*RegistrableComponent {
+	return nil
+}
+
+func (UnimplementedLibrary) Tasks() []*RegistrableTask {
+	return nil
+}
+
+func (UnimplementedLibrary) mustEmbedUnimplementedLibrary() {}

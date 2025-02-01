@@ -90,6 +90,10 @@ func (root) IsWorkflowExecutionRunning() bool {
 	return true
 }
 
+func (root) IsTransitionHistoryEnabled() bool {
+	return false
+}
+
 func mustNewScheduledEvent(schedTime time.Time, timeout time.Duration) *historypb.HistoryEvent {
 	conv := converter.GetDefaultDataConverter()
 	payload, err := conv.ToPayload("input")
