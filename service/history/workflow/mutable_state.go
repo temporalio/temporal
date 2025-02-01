@@ -221,7 +221,13 @@ type (
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool, links []*commonpb.Link) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflowpb.VersioningOverride, unsetVersioningOverride bool) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionOptionsUpdatedEvent(
+			versioningOverride *workflowpb.VersioningOverride,
+			unsetVersioningOverride bool,
+			attachRequestID string,
+			attachCompletionCallbacks []*commonpb.Callback,
+			links []*commonpb.Link,
+		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error

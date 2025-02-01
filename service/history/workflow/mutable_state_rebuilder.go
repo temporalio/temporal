@@ -675,6 +675,11 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED_EXTERNALLY:
 			return nil, serviceerror.NewUnimplemented("Workflow/activity property modification not implemented")
 
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+			if err := b.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
+				return nil, err
+			}
+
 		default:
 			def, ok := b.shard.StateMachineRegistry().EventDefinition(event.GetEventType())
 			if !ok {
