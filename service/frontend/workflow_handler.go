@@ -757,9 +757,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, err
 	}
 
-	isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
-
 	if !wh.config.SendRawWorkflowHistory(request.Namespace) {
+		isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 		if isCloseEventOnly {
 			if len(response.Response.History.GetEvents()) > 0 {
 				response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]

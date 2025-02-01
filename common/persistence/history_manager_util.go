@@ -62,6 +62,9 @@ func ReadFullPageEvents(
 	}
 }
 
+// ReadFullPageRawEvents reads a full page of raw history events from ExecutionManager. Due to storage format of V2 History
+// it is not guaranteed that pageSize amount of data is returned. Function returns the list of history blobs, the size
+// of data read, the next page token, and an error if present.
 func ReadFullPageRawEvents(
 	ctx context.Context,
 	executionMgr ExecutionManager,
