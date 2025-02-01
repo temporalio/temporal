@@ -27,6 +27,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/common/worker_versioning"
 	"testing"
 	"time"
 
@@ -328,6 +329,32 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
 	}, time.Second*5, time.Millisecond*200)
 
+	// SetCurrent so that the task queue puts the version in its versions info
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv1.DeploymentSeries(),
+		BuildId:        tv1.BuildID(),
+		ConflictToken:  nil,
+		Identity:       tv1.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	// describe tq and confirm that the current version is our version (so we can check that it was removed later)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: tv1.TaskQueue(),
+		})
+		a.NoError(err)
+		if resp != nil {
+			a.NotNil(resp.GetVersioningInfo().GetCurrentVersion())
+			a.Equal(tv1.BuildID(), resp.GetVersioningInfo().GetCurrentVersion().GetBuildId())
+			a.Equal(tv1.DeploymentSeries(), resp.GetVersioningInfo().GetCurrentVersion().GetDeploymentName())
+		}
+	}, time.Second*5, time.Millisecond*200)
+
+	// commented out because I'm hardcoding hasPollers = false right now
 	//// Version has active pollers so delete should fail
 	//s.tryDeleteVersion(ctx, tv1, false)
 
@@ -339,9 +366,52 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 	// Version has no active pollers so delete should succeed
 	s.tryDeleteVersion(ctx, tv1, true)
 
-	// todo: describe task queue and expect no current version
+	// describe deployment and expect that the versions list does NOT contain the deleted version
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv1.DeploymentSeries(),
+		})
+		a.NoError(err)
+		if resp != nil {
+			for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+				a.NotEqual(tv1.BuildID(), vs.BuildId)
+			}
+		}
+	}, time.Second*5, time.Millisecond*200)
 
-	// todo: describe deployment version and expect not found error
+	// Note: turns out you can successfully DescribeVersion even after that version has been deleted, because closed workflows can still answer queries
+	// do we want that behavior?
+
+	// list workflows with deployment-version workflow id and expect it to be closed
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: worker_versioning.GenerateVersionWorkflowID(tv1.BuildID()),
+				RunId:      "",
+			},
+		})
+		a.NoError(err)
+		if resp != nil {
+			a.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
+		}
+	}, time.Second*5, time.Millisecond*200)
+
+	// todo: describe TQ and expect no version
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: tv1.TaskQueue(),
+		})
+		a.NoError(err)
+		if resp != nil {
+			a.Nil(resp.GetVersioningInfo().GetCurrentVersion())
+		}
+	}, time.Second*5, time.Millisecond*200)
 }
 
 func (s *DeploymentVersionSuite) tryDeleteVersion(
