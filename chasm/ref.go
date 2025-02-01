@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.EntityID }
+	defaultShardingFn = func(key EntityKey) string { return key.NamespaceID + "_" + key.BusinessID }
 )
 
 type EntityKey struct {
