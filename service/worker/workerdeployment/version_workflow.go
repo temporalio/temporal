@@ -267,7 +267,41 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 		return serviceerror.NewFailedPrecondition("cannot delete, task queues in this version still have pollers")
 	}
 
-	// todo actually sycn with task queues
+	// sync version removal to task queues
+	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
+		WorkerDeploymentVersion: state.GetVersion(),
+		ForgetVersion:           true,
+	}
+	for tqName, byType := range state.TaskQueueFamilies {
+		for tqType, oldData := range byType.TaskQueues {
+
+			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+				Name: tqName,
+				Type: enumspb.TaskQueueType(tqType),
+				Data: oldData,
+			})
+		}
+	}
+	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
+	if err != nil {
+		// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+		return err
+	}
+
+	// wait for propagation
+	if len(syncRes.TaskQueueMaxVersions) > 0 {
+		err = workflow.ExecuteActivity(
+			activityCtx,
+			d.a.CheckWorkerDeploymentUserDataPropagation,
+			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+			}).Get(ctx, nil)
+		if err != nil {
+			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+			return err
+		}
+	}
 
 	d.done = true
 	return nil
