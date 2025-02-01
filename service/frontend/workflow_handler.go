@@ -89,7 +89,6 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -761,25 +760,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 
 	if !wh.config.SendRawWorkflowHistory(request.Namespace) {
-		token, err := api.DeserializeHistoryToken(request.GetNextPageToken())
-		if err != nil {
-			return nil, err
-		}
-		nextToken, err := api.DeserializeHistoryToken(response.Response.GetNextPageToken())
-		if err != nil {
-			return nil, err
-		}
-		err = events.VerifyHistoryIsComplete(
-			response.Response.History.Events,
-			token.GetFirstEventId(),
-			token.GetNextEventId(),
-			len(token.GetPersistenceToken()) == 0,
-			len(nextToken.GetPersistenceToken()) == 0,
-			int(request.GetMaximumPageSize()),
-		)
-		if err != nil {
-			return nil, err
-		}
 		if isCloseEventOnly {
 			if len(response.Response.History.GetEvents()) > 0 {
 				response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
@@ -794,7 +774,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			return nil, err
 		}
 	}
-
 	return response.Response, nil
 }
 

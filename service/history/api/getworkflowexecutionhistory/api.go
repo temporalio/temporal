@@ -198,7 +198,6 @@ func Invoke(
 				nil,
 				continuationToken.TransientWorkflowTask,
 				continuationToken.BranchToken,
-				persistenceVisibilityMgr,
 			)
 			if err != nil {
 				return nil, err
@@ -232,7 +231,6 @@ func Invoke(
 				continuationToken.PersistenceToken,
 				continuationToken.TransientWorkflowTask,
 				continuationToken.BranchToken,
-				persistenceVisibilityMgr,
 			)
 			if err != nil {
 				return nil, err

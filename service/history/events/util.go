@@ -27,12 +27,12 @@ package events
 import (
 	"fmt"
 
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/history/v1"
 )
 
 func VerifyHistoryIsComplete(
-	events []*historypb.HistoryEvent,
+	events []*history.StrippedHistoryEvent,
 	expectedFirstEventID int64,
 	expectedLastEventID int64,
 	isFirstPage bool,

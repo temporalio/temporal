@@ -26,8 +26,10 @@ package persistence
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
+	"go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -55,6 +57,27 @@ func ReadFullPageEvents(
 		size += response.Size
 		if len(historyEvents) >= req.PageSize || len(response.NextPageToken) == 0 {
 			return historyEvents, size, response.NextPageToken, nil
+		}
+		req.NextPageToken = response.NextPageToken
+	}
+}
+
+func ReadFullPageRawEvents(
+	ctx context.Context,
+	executionMgr ExecutionManager,
+	req *ReadHistoryBranchRequest,
+) ([]*common.DataBlob, int, []byte, error) {
+	var blobs []*common.DataBlob
+	size := 0
+	for {
+		response, err := executionMgr.ReadRawHistoryBranch(ctx, req)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		blobs = append(blobs, response.HistoryEventBlobs...)
+		size += response.Size
+		if len(blobs) >= req.PageSize || len(response.NextPageToken) == 0 {
+			return blobs, size, response.NextPageToken, nil
 		}
 		req.NextPageToken = response.NextPageToken
 	}
@@ -168,4 +191,60 @@ func ValidateBatch(
 	}
 	token.LastEventID = lastEvent.GetEventId()
 	return nil
+}
+
+func VerifyHistoryIsComplete(
+	events []*historyspb.StrippedHistoryEvent,
+	expectedFirstEventID int64,
+	expectedLastEventID int64,
+	isFirstPage bool,
+	isLastPage bool,
+	pageSize int,
+) error {
+
+	nEvents := len(events)
+	if nEvents == 0 {
+		if isLastPage {
+			// we seem to be returning a non-nil pageToken on the lastPage which
+			// in turn cases the client to call getHistory again - only to find
+			// there are no more events to consume - bail out if this is the case here
+			return nil
+		}
+		return serviceerror.NewDataLoss("History contains zero events.")
+	}
+
+	firstEventID := events[0].GetEventId()
+	lastEventID := events[nEvents-1].GetEventId()
+
+	if !isFirstPage { // at least one page of history has been read previously
+		if firstEventID <= expectedFirstEventID {
+			// not first page and no events have been read in the previous pages - not possible
+			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID))
+		}
+		expectedFirstEventID = firstEventID
+	}
+
+	if !isLastPage {
+		// estimate lastEventID based on pageSize. This is a lower bound
+		// since the persistence layer counts "batch of events" as a single page
+		expectedLastEventID = expectedFirstEventID + int64(pageSize) - 1
+	}
+
+	nExpectedEvents := expectedLastEventID - expectedFirstEventID + 1
+
+	if firstEventID == expectedFirstEventID &&
+		((isLastPage && lastEventID == expectedLastEventID && int64(nEvents) == nExpectedEvents) ||
+			(!isLastPage && lastEventID >= expectedLastEventID && int64(nEvents) >= nExpectedEvents)) {
+		return nil
+	}
+
+	return serviceerror.NewDataLoss(fmt.Sprintf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
+		expectedFirstEventID,
+		expectedLastEventID,
+		firstEventID,
+		lastEventID,
+		nEvents,
+		isFirstPage,
+		isLastPage,
+		pageSize))
 }

@@ -49,6 +49,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -2037,16 +2038,16 @@ func (s *WorkflowHandlerSuite) TestCountWorkflowExecutions() {
 }
 
 func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
-	events := make([]*historypb.HistoryEvent, 50)
+	events := make([]*history.StrippedHistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
-		events[i] = &historypb.HistoryEvent{EventId: int64(i + 1)}
+		events[i] = &history.StrippedHistoryEvent{EventId: int64(i + 1)}
 	}
-	var eventsWithHoles []*historypb.HistoryEvent
+	var eventsWithHoles []*history.StrippedHistoryEvent
 	eventsWithHoles = append(eventsWithHoles, events[9:12]...)
 	eventsWithHoles = append(eventsWithHoles, events[20:31]...)
 
 	testCases := []struct {
-		events       []*historypb.HistoryEvent
+		events       []*history.StrippedHistoryEvent
 		firstEventID int64
 		lastEventID  int64
 		isFirstPage  bool
