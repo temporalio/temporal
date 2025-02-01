@@ -49,7 +49,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -75,7 +75,6 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	e "go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -2038,16 +2037,16 @@ func (s *WorkflowHandlerSuite) TestCountWorkflowExecutions() {
 }
 
 func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
-	events := make([]*history.StrippedHistoryEvent, 50)
+	events := make([]*historyspb.StrippedHistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
-		events[i] = &history.StrippedHistoryEvent{EventId: int64(i + 1)}
+		events[i] = &historyspb.StrippedHistoryEvent{EventId: int64(i + 1)}
 	}
-	var eventsWithHoles []*history.StrippedHistoryEvent
+	var eventsWithHoles []*historyspb.StrippedHistoryEvent
 	eventsWithHoles = append(eventsWithHoles, events[9:12]...)
 	eventsWithHoles = append(eventsWithHoles, events[20:31]...)
 
 	testCases := []struct {
-		events       []*history.StrippedHistoryEvent
+		events       []*historyspb.StrippedHistoryEvent
 		firstEventID int64
 		lastEventID  int64
 		isFirstPage  bool
@@ -2081,7 +2080,7 @@ func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 
 	for i, tc := range testCases {
-		err := e.VerifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
+		err := persistence.VerifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
 		if tc.isResultErr {
 			s.Error(err, "testcase %v failed", i)
 		} else {

@@ -29,7 +29,7 @@ import (
 	"fmt"
 	"sort"
 
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -66,8 +66,8 @@ func ReadFullPageRawEvents(
 	ctx context.Context,
 	executionMgr ExecutionManager,
 	req *ReadHistoryBranchRequest,
-) ([]*common.DataBlob, int, []byte, error) {
-	var blobs []*common.DataBlob
+) ([]*commonpb.DataBlob, int, []byte, error) {
+	var blobs []*commonpb.DataBlob
 	size := 0
 	for {
 		response, err := executionMgr.ReadRawHistoryBranch(ctx, req)
