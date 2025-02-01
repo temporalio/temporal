@@ -67,9 +67,6 @@ type Client interface {
 		requestID string,
 	) error
 
-	// TODO (Shivam) -
-	// Add ListWorkerDeployment + DescribeWorkerDeployment + DeleteWorkerDeployment + DeleteDeploymentVersion
-
 	DescribeVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -97,6 +94,14 @@ type Client interface {
 		nextPageToken []byte,
 	) ([]*deploymentspb.WorkerDeploymentSummary, []byte, error)
 
+	DeleteWorkerDeploymentVersion(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName string,
+		buildId string,
+		conflictToken []byte,
+	) ([]byte, error)
+
 	SetWorkerDeploymentRampingVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -123,6 +128,15 @@ type Client interface {
 		identity string,
 		requestID string,
 	) (*deploymentspb.SyncVersionStateResponse, error)
+
+	// Used internally by the Worker Deployment workflow in its DeleteVersion Activity
+	DeleteVersionFromWorkerDeployment(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName, version string,
+		identity string,
+		requestID string,
+	) error
 
 	// Used internally by the Worker Deployment Version workflow in its AddVersionToWorkerDeployment Activity
 	AddVersionToWorkerDeployment(
@@ -441,6 +455,58 @@ func (d *ClientImpl) SetWorkerDeploymentRampingVersion(
 	return &res, nil
 }
 
+func (d *ClientImpl) DeleteWorkerDeploymentVersion(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName string,
+	buildId string,
+	conflictToken []byte,
+) (cT []byte, retErr error) {
+	// if version.drained and !version.has_pollers, delete
+	//revive:disable-next-line:defer
+	defer d.record("DeleteWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, buildId)()
+	requestID := uuid.New()
+	identity := requestID
+
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
+		Identity:      identity,
+		Version:       buildId,
+		ConflictToken: conflictToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+	outcome, err := d.updateWithStartWorkerDeployment(
+		ctx,
+		namespaceEntry,
+		deploymentName,
+		&updatepb.Request{
+			Input: &updatepb.Input{Name: DeleteVersion, Args: updatePayload},
+			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+		},
+		identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if failure := outcome.GetFailure(); failure != nil {
+		return nil, serviceerror.NewInternal(failure.Message)
+	}
+
+	success := outcome.GetSuccess()
+	if success == nil {
+		return nil, serviceerror.NewInternal("outcome missing success and failure")
+	}
+
+	var res *deploymentspb.DeleteVersionResponse
+	if err = sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
+		return nil, err
+	}
+	return res.GetConflictToken(), nil
+}
+
 func (d *ClientImpl) StartWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
@@ -542,6 +608,43 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 		return nil, err
 	}
 	return &res, nil
+}
+
+func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName, version string,
+	identity string,
+	requestID string,
+) (retErr error) {
+	//revive:disable-next-line:defer
+	defer d.record("DeleteVersionFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
+
+	outcome, err := d.updateWithStartWorkerDeploymentVersion(
+		ctx,
+		namespaceEntry,
+		deploymentName,
+		version,
+		&updatepb.Request{
+			Input: &updatepb.Input{Name: DeleteVersion, Args: nil},
+			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+		},
+		identity,
+		requestID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if failure := outcome.GetFailure(); failure != nil {
+		return serviceerror.NewInternal(failure.Message)
+	}
+
+	success := outcome.GetSuccess()
+	if success == nil {
+		return serviceerror.NewInternal("outcome missing success and failure")
+	}
+	return nil
 }
 
 func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(

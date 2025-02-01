@@ -57,7 +57,10 @@ const (
 	BuildIdSearchAttributeDelimiter         = ":"
 	BuildIdSearchAttributeEscape            = "|"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
-	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
+	UnversionedSearchAttribute                 = buildIdSearchAttributePrefixUnversioned
+	WorkerDeploymentVersionWorkflowIDPrefix    = "temporal-sys-worker-deployment-version"
+	WorkerDeploymentWorkflowIDPrefix           = "temporal-sys-worker-deployment"
+	WorkerDeploymentVersionWorkflowIDDelimeter = ":"
 )
 
 // EscapeChar is a helper which escapes the BuildIdSearchAttributeDelimiter character
@@ -482,4 +485,20 @@ func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deployme
 		return DeploymentFromDeploymentVersion(dv)
 	}
 	return directive.GetDeployment()
+}
+
+// GenerateWorkflowID is a helper that generates a system accepted
+// workflowID which are used in our Worker Deployment workflows
+func GenerateWorkflowID(WorkerDeploymentName string) string {
+	// escaping the reserved workflow delimiter (|) from the inputs, if present
+	escapedWorkerDeploymentName := escapeChar(WorkerDeploymentName)
+	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedWorkerDeploymentName
+}
+
+// GenerateVersionWorkflowID is a helper that generates a system accepted
+// workflowID which are used in our Worker Deployment Version workflows
+func GenerateVersionWorkflowID(version string) string {
+	escapedVersion := escapeChar(version)
+
+	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedVersion
 }
