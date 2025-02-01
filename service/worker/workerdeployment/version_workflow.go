@@ -266,6 +266,9 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 	if hasPollers {
 		return serviceerror.NewFailedPrecondition("cannot delete, task queues in this version still have pollers")
 	}
+
+	// todo actually sycn with task queues
+
 	d.done = true
 	return nil
 }

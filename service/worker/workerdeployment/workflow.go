@@ -246,12 +246,12 @@ func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersion
 	return nil
 }
 
-func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
+func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) (*deploymentspb.DeleteVersionResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
 		d.logger.Error("Could not acquire workflow lock")
-		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	d.pendingUpdates++
 	defer func() {
@@ -269,7 +269,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		RequestId:      uuid.New(),
 	}).Get(ctx, &res)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// update local state
@@ -277,9 +277,9 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return &deploymentspb.DeleteVersionResponse{}, nil // TODO: Add conflict token once merged with conflict token PR
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {

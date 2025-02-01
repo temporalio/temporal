@@ -305,6 +305,63 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetRampingVersion_YesOpenWFs
 	// todo carly: test with open workflows on the draining version that then complete
 }
 
+//nolint:forbidigo
+func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	pollerCtx1, pollerCancel1 := context.WithCancel(ctx)
+	go s.pollFromDeployment(pollerCtx1, tv1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv1.DeploymentSeries(),
+				BuildId:        tv1.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	// Version has active pollers so delete should fail
+	s.tryDeleteVersion(ctx, tv1, false)
+
+	// Stop the pollers
+	pollerCancel1()
+
+	// Wait some time?
+
+	// Version has no active pollers so delete should succeed
+	s.tryDeleteVersion(ctx, tv1, true)
+}
+
+func (s *DeploymentVersionSuite) tryDeleteVersion(
+	ctx context.Context,
+	tv *testvars.TestVars,
+	expectSuccess bool,
+) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		_, err := s.FrontendClient().DeleteWorkerDeploymentVersion(ctx, &workflowservice.DeleteWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+		})
+		if expectSuccess {
+			a.NoError(err)
+		} else {
+			a.Error(err)
+		}
+	}, 5*time.Second, time.Millisecond*100)
+}
+
 func (s *DeploymentVersionSuite) checkVersionDrainage(
 	ctx context.Context,
 	tv *testvars.TestVars,
