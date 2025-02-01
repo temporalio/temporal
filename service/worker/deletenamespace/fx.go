@@ -60,6 +60,7 @@ type (
 		allowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn
 		nexusEndpointListDefaultPageSize          dynamicconfig.IntPropertyFn
 		deleteActivityRPS                         dynamicconfig.TypedSubscribable[int]
+		namespaceCacheRefreshInterval             dynamicconfig.DurationPropertyFn
 	}
 	componentParams struct {
 		fx.In
@@ -92,6 +93,7 @@ func newComponent(
 		allowDeleteNamespaceIfNexusEndpointTarget: dynamicconfig.AllowDeleteNamespaceIfNexusEndpointTarget.Get(params.DynamicCollection),
 		nexusEndpointListDefaultPageSize:          dynamicconfig.NexusEndpointListDefaultPageSize.Get(params.DynamicCollection),
 		deleteActivityRPS:                         dynamicconfig.DeleteNamespaceDeleteActivityRPS.Subscribe(params.DynamicCollection),
+		namespaceCacheRefreshInterval:             dynamicconfig.NamespaceCacheRefreshInterval.Get(params.DynamicCollection),
 	}
 }
 
@@ -145,7 +147,7 @@ func (wc *deleteNamespaceComponent) reclaimResourcesActivities() *reclaimresourc
 }
 
 func (wc *deleteNamespaceComponent) reclaimResourcesLocalActivities() *reclaimresources.LocalActivities {
-	return reclaimresources.NewLocalActivities(wc.visibilityManager, wc.metadataManager, wc.logger)
+	return reclaimresources.NewLocalActivities(wc.visibilityManager, wc.metadataManager, wc.namespaceCacheRefreshInterval, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) deleteExecutionsActivities() *deleteexecutions.Activities {
