@@ -649,7 +649,13 @@ func (s *Starter) generateResponse(
 		}, nil
 	}
 
-	if err := api.ProcessOutgoingSearchAttributes(s.shardContext, historyEvents, s.namespace.ID(), s.visibilityManager); err != nil {
+	if err := api.ProcessOutgoingSearchAttributes(
+		shardCtx.GetNamespaceRegistry(),
+		shardCtx.GetSearchAttributesProvider(),
+		shardCtx.GetSearchAttributesMapperProvider(),
+		historyEvents,
+		s.namespace.ID(),
+		s.visibilityManager); err != nil {
 		return nil, err
 	}
 
