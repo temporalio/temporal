@@ -2700,7 +2700,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 		Namespace:              namespace,
 		RemoteCluster:          s.clusterNames[1],
 		AllowedLaggingSeconds:  10,
-		HandoverTimeoutSeconds: 30,
+		HandoverTimeoutSeconds: 10,
 	})
 	s.NoError(err)
 	err = run5.Get(testCtx, nil)

@@ -37,7 +37,7 @@ const (
 
 	minimumAllowedLaggingSeconds  = 5
 	maximumAllowedLaggingSeconds  = 120
-	maximumHandoverTimeoutSeconds = 10
+	maximumHandoverTimeoutSeconds = 30
 )
 
 type (
