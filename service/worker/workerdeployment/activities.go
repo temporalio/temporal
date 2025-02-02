@@ -58,6 +58,22 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *depl
 	}, nil
 }
 
+func (a *Activities) VerifyPollerPresenceInVersion(ctx context.Context, args *deploymentspb.VerifyPollerPresenceInVersionArgs) (*deploymentspb.VerifyPollerPresenceInVersionResult, error) {
+	res, err := a.deploymentClient.VerifyPollerPresenceInVersion(
+		ctx,
+		a.namespace,
+		args.PrevCurrentVersion,
+		args.NewCurrentVersion,
+	)
+	if err != nil {
+		// todo (Shivam): do we return a non-retryable error here since we want to fail the operation if this check has failed.
+		return nil, err
+	}
+	return &deploymentspb.VerifyPollerPresenceInVersionResult{
+		IsValidVersion: res,
+	}, nil
+}
+
 func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.DeleteVersionActivityArgs) error {
 	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
 	err := a.deploymentClient.DeleteVersionFromWorkerDeployment(
