@@ -413,9 +413,18 @@ func (d *ClientImpl) SetRampingVersion(
 	//revive:disable-next-line:defer
 	defer d.record("SetWorkerDeploymentRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
 	requestID := uuid.New()
-	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
+	var versionObj *deploymentpb.WorkerDeploymentVersion
+	var err error
+	if version == "" {
+		versionObj = &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        "",
+		}
+	} else {
+		versionObj, err = worker_versioning.WorkerDeploymentVersionFromString(version)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
+		}
 	}
 	if versionObj.GetDeploymentName() != deploymentName {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName))
@@ -939,16 +948,18 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namesp
 	workerDeploymentInfo.RoutingInfo = state.RoutingInfo
 
 	for _, version := range state.Versions {
-		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, &deploymentpb.WorkerDeploymentVersion{
-			DeploymentName: deploymentName,
-			BuildId:        version,
-		})
+		versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
+		if err != nil {
+			return nil, fmt.Errorf("invalid version string: %s", err.Error())
+		}
+
+		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, versionObj)
 		if err != nil {
 			return nil, err
 		}
 		// todo: Add WorkflowVersioningMode once it's ready
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-			Version:                versionInfo.Version.BuildId, // todo: concatenate
+			Version:                worker_versioning.WorkerDeploymentVersionToString(versionInfo.Version),
 			WorkflowVersioningMode: versionInfo.WorkflowVersioningMode,
 			CreateTime:             versionInfo.CreateTime,
 			DrainageStatus:         versionInfo.GetDrainageInfo().GetStatus(),
