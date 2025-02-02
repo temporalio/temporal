@@ -45,7 +45,7 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *depl
 		ctx,
 		a.namespace,
 		args.DeploymentName,
-		args.BuildId,
+		args.Version,
 		args.UpdateArgs,
 		identity,
 		args.RequestId,
