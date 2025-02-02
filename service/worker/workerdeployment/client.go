@@ -99,8 +99,7 @@ type Client interface {
 		namespaceEntry *namespace.Namespace,
 		deploymentName string,
 		buildId string,
-		conflictToken []byte,
-	) ([]byte, error)
+	) error
 
 	SetWorkerDeploymentRampingVersion(
 		ctx context.Context,
@@ -460,8 +459,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
 	buildId string,
-	conflictToken []byte,
-) (cT []byte, retErr error) {
+) (retErr error) {
 	// if version.drained and !version.has_pollers, delete
 	//revive:disable-next-line:defer
 	defer d.record("DeleteWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, buildId)()
@@ -469,12 +467,11 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	identity := requestID
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
-		Identity:      identity,
-		Version:       buildId,
-		ConflictToken: conflictToken,
+		Identity: identity,
+		Version:  buildId,
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
@@ -488,23 +485,18 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 		requestID,
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		return nil, serviceerror.NewInternal(failure.Message)
+		return serviceerror.NewInternal(failure.Message)
 	}
 
 	success := outcome.GetSuccess()
 	if success == nil {
-		return nil, serviceerror.NewInternal("outcome missing success and failure")
+		return serviceerror.NewInternal("outcome missing success and failure")
 	}
-
-	var res *deploymentspb.DeleteVersionResponse
-	if err = sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
-		return nil, err
-	}
-	return res.GetConflictToken(), nil
+	return nil
 }
 
 func (d *ClientImpl) StartWorkerDeployment(
@@ -1019,7 +1011,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namesp
 		}
 		// TODO (Shivam) - Add WorkflowVersioningMode + AcceptsNewExecutions
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-			BuildId:                versionInfo.Version.BuildId,
+			Version:                versionInfo.Version.BuildId, // TODO: concatenate
 			WorkflowVersioningMode: versionInfo.WorkflowVersioningMode,
 			CreateTime:             versionInfo.CreateTime,
 			DrainageStatus:         versionInfo.GetDrainageInfo().GetStatus(),

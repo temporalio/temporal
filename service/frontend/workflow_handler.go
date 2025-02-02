@@ -153,6 +153,11 @@ type (
 	}
 )
 
+func (wh *WorkflowHandler) UpdateWorkerVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerVersionMetadataRequest) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
 	config *Config,
@@ -3398,13 +3403,13 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 
 	// TODO (Shivam): error out if build_ID is empty
 
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.BuildId, request.Identity)
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.Identity)
 	if err != nil {
 		return nil, err
 	}
 
 	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
-		PreviousBuildId: resp.PreviousVersion,
+		PreviousVersion: resp.PreviousVersion,
 	}, nil
 }
 
@@ -3428,7 +3433,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, err
 	}
 
-	if request.GetBuildId() == "" {
+	if request.GetVersion() == "" {
 		if request.GetPercentage() != 0 {
 			return nil, serviceerror.NewInvalidArgument("Empty value for build_id must be paired with percentage=0")
 		}
@@ -3439,7 +3444,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	}
 
 	deploymentVersion := &deploymentpb.WorkerDeploymentVersion{
-		BuildId:        request.GetBuildId(),
+		BuildId:        request.GetVersion(),
 		DeploymentName: request.GetDeploymentName(),
 	}
 	resp, err := wh.workerDeploymentClient.SetWorkerDeploymentRampingVersion(ctx, namespaceEntry, deploymentVersion, request.GetPercentage(), request.GetIdentity())
@@ -3448,7 +3453,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	}
 
 	return &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousBuildId:    resp.PreviousVersion,
+		PreviousVersion:    resp.PreviousVersion,
 		PreviousPercentage: resp.PreviousPercentage,
 	}, nil
 }
@@ -3541,12 +3546,12 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 		return nil, err
 	}
 
-	cT, err := wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request.Version.DeploymentName, request.Version.BuildId, request.ConflictToken)
+	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request.Version.DeploymentName, request.Version.BuildId)
 	if err != nil {
 		return nil, err
 	}
 
-	return &workflowservice.DeleteWorkerDeploymentVersionResponse{ConflictToken: cT}, nil
+	return &workflowservice.DeleteWorkerDeploymentVersionResponse{}, nil
 }
 
 // Returns the schedule description and current state of an existing schedule.

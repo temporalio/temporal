@@ -237,12 +237,6 @@ message SetCurrentVersionResponse {
 message DeleteVersionArgs {
     string identity = 1;
     string version = 2;
-    bytes conflict_token = 3;
-}
-
-// used as Worker Deployment workflow update response:
-message DeleteVersionResponse {
-    bytes conflict_token = 1;
 }
 
 // used as Worker Deployment Activity input:
