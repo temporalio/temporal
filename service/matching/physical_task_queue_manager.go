@@ -344,7 +344,8 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	}
 
 	// [cleanup-wv-pre-release]
-	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
+	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) &&
+		pollMetadata.deploymentOptions.GetWorkflowVersioningMode() == enumspb.WORKFLOW_VERSIONING_MODE_UNSPECIFIED {
 		if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
 			return nil, err
 		}

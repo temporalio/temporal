@@ -25,6 +25,7 @@
 package workerdeployment
 
 import (
+	"slices"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -95,9 +96,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		SetRampingVersion,
-		d.handleSetWorkerDeploymentRampingVersion,
+		d.handleSetRampingVersion,
 		workflow.UpdateHandlerOptions{
-			Validator: d.validateSetWorkerDeploymentRampingVersion,
+			Validator: d.validateSetRampingVersion,
 		},
 	); err != nil {
 		return err
@@ -109,6 +110,17 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.handleAddVersionToWorkerDeployment,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateAddVersionToWorkerDeployment,
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		DeleteVersion,
+		d.handleDeleteVersion,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateDeleteVersion,
 		},
 	); err != nil {
 		return err
@@ -127,7 +139,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkerDeploymentWorkflowArgs)
 }
 
-func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) error {
+func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
 	if args.Version == d.State.RoutingInfo.RampingVersion && args.Percentage == d.State.RoutingInfo.RampingVersionPercentage {
 		d.logger.Info("version already ramping, no change")
 		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
@@ -141,7 +153,7 @@ func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploym
 	return nil
 }
 
-func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Context, args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) (*deploymentspb.SetWorkerDeploymentRampingVersionResponse, error) {
+func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *deploymentspb.SetRampingVersionArgs) (*deploymentspb.SetRampingVersionResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -180,7 +192,7 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 	} else {
 		// setting ramp
 
-		if prevRampingVersion == newRampingVersion { // the version was alread ramping, user changing ramp %
+		if prevRampingVersion == newRampingVersion { // the version was already ramping, user changing ramp %
 			rampingSinceTime = d.State.RoutingInfo.RampingVersionChangedTime
 			rampingVersionUpdateTime = d.State.RoutingInfo.RampingVersionChangedTime
 		} else {
@@ -228,11 +240,54 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 		return nil, err
 	}
 
-	return &deploymentspb.SetWorkerDeploymentRampingVersionResponse{
+	return &deploymentspb.SetRampingVersionResponse{
 		PreviousVersion:    prevRampingVersion,
 		PreviousPercentage: prevRampingVersionPercentage,
 	}, nil
 
+}
+
+func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+	if !slices.Contains(d.State.Versions, args.Version) {
+		return serviceerror.NewNotFound("version not found in deployment")
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	// ask version to delete itself
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var res deploymentspb.SyncVersionStateActivityResult
+	err = workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerDeploymentVersion, &deploymentspb.DeleteVersionActivityArgs{
+		Identity:       args.Identity,
+		DeploymentName: d.DeploymentName,
+		Version:        args.Version,
+		RequestId:      uuid.New(),
+	}).Get(ctx, &res)
+	if err != nil {
+		return err
+	}
+
+	// update local state
+	d.State.Versions = slices.DeleteFunc(d.State.Versions, func(v string) bool { return v == args.Version })
+
+	// update memo
+	if err = d.updateMemo(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {

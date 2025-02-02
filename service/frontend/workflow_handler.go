@@ -39,7 +39,6 @@ import (
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -152,6 +151,11 @@ type (
 		httpEnabled                     bool
 	}
 )
+
+func (wh *WorkflowHandler) UpdateWorkerVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerVersionMetadataRequest) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
@@ -3366,7 +3370,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	workerDeploymentVersionInfo, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request.Version.BuildId) // todo carly: pass whole version
+	workerDeploymentVersionInfo, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -3396,17 +3400,17 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 		return nil, err
 	}
 
-	if request.GetBuildId() == "" {
-		return nil, serviceerror.NewInvalidArgument("build_id cannot be empty")
+	if request.GetVersion() == "" {
+		return nil, serviceerror.NewInvalidArgument("version cannot be empty")
 	}
 
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.BuildId, request.Identity, request.IgnoreMissingTaskQueues)
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.Identity, request.IgnoreMissingTaskQueues)
 	if err != nil {
 		return nil, err
 	}
 
 	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
-		PreviousBuildId: resp.PreviousVersion,
+		PreviousVersion: resp.PreviousVersion,
 	}, nil
 }
 
@@ -3430,9 +3434,9 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, err
 	}
 
-	if request.GetBuildId() == "" {
+	if request.GetVersion() == "" {
 		if request.GetPercentage() != 0 {
-			return nil, serviceerror.NewInvalidArgument("Empty value for build_id must be paired with percentage=0")
+			return nil, serviceerror.NewInvalidArgument("Empty value for version must be paired with percentage=0")
 		}
 	}
 
@@ -3440,17 +3444,13 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
 	}
 
-	deploymentVersion := &deploymentpb.WorkerDeploymentVersion{
-		BuildId:        request.GetBuildId(),
-		DeploymentName: request.GetDeploymentName(),
-	}
-	resp, err := wh.workerDeploymentClient.SetWorkerDeploymentRampingVersion(ctx, namespaceEntry, deploymentVersion, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues)
+	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues)
 	if err != nil {
 		return nil, err
 	}
 
 	return &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousBuildId:    resp.PreviousVersion,
+		PreviousVersion:    resp.PreviousVersion,
 		PreviousPercentage: resp.PreviousPercentage,
 	}, nil
 }
@@ -3531,9 +3531,24 @@ func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *
 	panic("implement me")
 }
 
-func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentVersionRequest) (*workflowservice.DeleteWorkerDeploymentVersionResponse, error) {
-	//TODO implement me
-	panic("implement me")
+func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentVersionRequest) (_ *workflowservice.DeleteWorkerDeploymentVersionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request.Version.DeploymentName, request.Version.BuildId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteWorkerDeploymentVersionResponse{}, nil
 }
 
 // Returns the schedule description and current state of an existing schedule.

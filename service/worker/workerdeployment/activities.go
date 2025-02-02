@@ -73,3 +73,19 @@ func (a *Activities) VerifyPollerPresenceInVersion(ctx context.Context, args *de
 		IsValidVersion: res,
 	}, nil
 }
+
+func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.DeleteVersionActivityArgs) error {
+	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	err := a.deploymentClient.DeleteVersionFromWorkerDeployment(
+		ctx,
+		a.namespace,
+		args.DeploymentName,
+		args.Version,
+		identity,
+		args.RequestId,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}

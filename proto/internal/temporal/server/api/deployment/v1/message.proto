@@ -27,6 +27,7 @@ package temporal.server.api.deployment.v1;
 option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/enums/v1/deployment.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
@@ -102,6 +103,7 @@ message VersionLocalState {
 
     bool started_deployment_workflow = 10;
 
+    // Key: Task Queue Name
     map<string, TaskQueueFamilyData> task_queue_families = 11;
 
     message TaskQueueFamilyData {
@@ -187,7 +189,7 @@ message QueryDescribeWorkerDeploymentResponse {
 // used as Worker Deployment Version workflow memo:
 message VersionWorkflowMemo {
     string deployment_name = 1;
-    string version = 2;
+    string build_id = 2;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -198,8 +200,10 @@ message StartWorkerDeploymentRequest {
 
 // used as Worker Deployment Version workflow activity input:
 message SyncDeploymentVersionUserDataRequest {
-    temporal.api.deployment.v1.WorkerDeploymentVersion worker_deployment_version = 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
     repeated SyncUserData sync = 2;
+    // if true, the version will be forgotten from the task queue user data.
+    bool forget_version = 3; 
 
     message SyncUserData {
         string name = 1;
@@ -230,15 +234,40 @@ message SetCurrentVersionResponse {
     string previous_version = 1;
 }
 
+// used as Worker Deployment workflow update input:
+message DeleteVersionArgs {
+    string identity = 1;
+    string version = 2;
+}
+
+// used as Worker Deployment Activity input:
+message DeleteVersionActivityArgs {
+    string identity = 1;
+    string deployment_name = 2;
+    string version = 3;
+    string request_id = 4;
+}
+
+// used as Worker Deployment Activity input:
+message CheckTaskQueuesHaveNoPollersActivityArgs {
+    repeated temporal.api.taskqueue.v1.TaskQueue task_queues = 1;
+    string build_id = 3;
+}
+
+// used as Worker Deployment workflow update input:
+message DeleteDeploymentArgs {
+    string identity = 1;
+}
+
 // used as Worker Deployment update response:
-message SetWorkerDeploymentRampingVersionResponse {
+message SetRampingVersionResponse {
     string previous_version = 1;
     float previous_percentage = 2;
     bytes conflict_token = 3;
 }
 
 // used as Worker Deployment workflow update input:
-message SetWorkerDeploymentRampingVersionArgs {
+message SetRampingVersionArgs {
     string identity = 1;
     string version = 2;
     float percentage = 3;
@@ -248,6 +277,7 @@ message SetWorkerDeploymentRampingVersionArgs {
 // used as Worker Deployment activity input:
 message SyncVersionStateActivityArgs {
     string deployment_name = 1;
+    // <deployment_name>/<build_id> or possibly just <version_id> in the future
     string version = 2;
     SyncVersionStateUpdateArgs update_args = 3;
     string request_id = 4;
@@ -286,6 +316,7 @@ message WorkerDeploymentSummary {
 // Used as Worker Deployment Version workflow activity input:
 message AddVersionToWorkerDeploymentRequest {
     string deployment_name = 1;
+    // <deployment_name>/<build_id> or possibly just <version_id> in the future
     string version = 2;
     string request_id = 3;
 }
