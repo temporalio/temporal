@@ -255,7 +255,7 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv1.DeploymentSeries(),
-		Version:        tv1.BuildID(), // todo concat
+		Version:        tv1.DeploymentVersionString(),
 		Identity:       tv1.ClientIdentity(),
 	})
 	s.Nil(err)
@@ -269,7 +269,7 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv2.DeploymentSeries(),
-		Version:        tv2.BuildID(), // todo concat
+		Version:        tv2.DeploymentVersionString(),
 		Identity:       tv2.ClientIdentity(),
 	})
 	s.Nil(err)
