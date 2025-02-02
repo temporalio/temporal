@@ -34,8 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -70,6 +70,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 		ErrorCount:   0,
 	}, nil).Once()
 
+	env.OnActivity(la.GetNamespaceCacheRefreshInterval, mock.Anything).Return(10*time.Second, nil).Once()
 	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).Return(nil).Once()
 
@@ -120,6 +121,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 		ErrorCount:   0,
 	}, nil).Once()
 
+	env.OnActivity(la.GetNamespaceCacheRefreshInterval, mock.Anything).Return(10*time.Second, nil).Once()
 	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
 		Return(stderrors.New("specific_error_from_activity")).
@@ -168,6 +170,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 		ErrorCount:   0,
 	}, nil).Once()
 
+	env.OnActivity(la.GetNamespaceCacheRefreshInterval, mock.Anything).Return(10*time.Second, nil).Once()
 	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
 		Return(errors.NewExecutionsStillExist(1)).
@@ -233,16 +236,17 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewTestLogger(),
 	}
 	la := &LocalActivities{
-		visibilityManager: visibilityManager,
-		metadataManager:   metadataManager,
-		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewTestLogger(),
+		visibilityManager:             visibilityManager,
+		metadataManager:               metadataManager,
+		namespaceCacheRefreshInterval: dynamicconfig.GetDurationPropertyFn(10 * time.Second),
+
+		logger: log.NewTestLogger(),
 	}
 
+	env.RegisterActivity(la.GetNamespaceCacheRefreshInterval)
 	env.RegisterActivity(la.CountExecutionsAdvVisibilityActivity)
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 	env.RegisterActivity(la.DeleteNamespaceActivity)
@@ -312,15 +316,15 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewTestLogger(),
 	}
 	la := &LocalActivities{
-		visibilityManager: visibilityManager,
-		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewTestLogger(),
+		visibilityManager:             visibilityManager,
+		namespaceCacheRefreshInterval: dynamicconfig.GetDurationPropertyFn(10 * time.Second),
+		logger:                        log.NewTestLogger(),
 	}
 
+	env.RegisterActivity(la.GetNamespaceCacheRefreshInterval)
 	env.RegisterActivity(la.CountExecutionsAdvVisibilityActivity)
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 
@@ -373,6 +377,7 @@ func Test_ReclaimResourcesWorkflow_UpdateDeleteDelay(t *testing.T) {
 		ErrorCount:   0,
 	}, nil).Once()
 
+	env.OnActivity(la.GetNamespaceCacheRefreshInterval, mock.Anything).Return(10*time.Second, nil).Once()
 	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).Return(nil).Once()
 
