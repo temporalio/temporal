@@ -1729,6 +1729,20 @@ func (mr *MockMutableStateMockRecorder) DeleteSignalRequested(requestID any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSignalRequested", reflect.TypeOf((*MockMutableState)(nil).DeleteSignalRequested), requestID)
 }
 
+// DeleteSubStateMachine mocks base method.
+func (m *MockMutableState) DeleteSubStateMachine(path *persistence.StateMachinePath) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteSubStateMachine", path)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteSubStateMachine indicates an expected call of DeleteSubStateMachine.
+func (mr *MockMutableStateMockRecorder) DeleteSubStateMachine(path any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSubStateMachine", reflect.TypeOf((*MockMutableState)(nil).DeleteSubStateMachine), path)
+}
+
 // FlushBufferedEvents mocks base method.
 func (m *MockMutableState) FlushBufferedEvents() {
 	m.ctrl.T.Helper()
