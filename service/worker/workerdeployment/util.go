@@ -26,8 +26,6 @@ package workerdeployment
 
 import (
 	"fmt"
-	deploymentpb "go.temporal.io/api/deployment/v1"
-	"go.temporal.io/server/common/worker_versioning"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -124,33 +122,6 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 
 	// UTF-8 check
 	return common.ValidateUTF8String(fieldName, field)
-}
-
-// EscapeChar is a helper which escapes the WorkerDeploymentVersionWorkflowIDDelimeter character
-// in the input string
-func escapeChar(s string) string {
-	s = strings.Replace(s, WorkerDeploymentVersionWorkflowIDEscape, WorkerDeploymentVersionWorkflowIDEscape+WorkerDeploymentVersionWorkflowIDEscape, -1)
-	s = strings.Replace(s, WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionWorkflowIDDelimeter+WorkerDeploymentVersionWorkflowIDDelimeter, -1)
-	return s
-}
-
-// GenerateDeploymentWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our Worker Deployment workflows
-func GenerateDeploymentWorkflowID(deploymentName string) string {
-	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	escapedDeploymentName := escapeChar(deploymentName)
-	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedDeploymentName
-}
-
-// GenerateVersionWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our Worker Deployment Version workflows
-func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
-	escapedVersionString := escapeChar(worker_versioning.WorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
-		DeploymentName: deploymentName,
-		BuildId:        buildID,
-	}))
-
-	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedVersionString
 }
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {

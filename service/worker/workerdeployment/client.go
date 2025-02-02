@@ -240,7 +240,7 @@ func (d *ClientImpl) DescribeVersion(
 		return nil, err
 	}
 
-	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
+	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
 
 	req := &historyservice.QueryWorkflowRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -285,7 +285,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		return nil, err
 	}
 
-	deploymentWorkflowID := GenerateDeploymentWorkflowID(deploymentName)
+	deploymentWorkflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	req := &historyservice.QueryWorkflowRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -503,7 +503,10 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
 		Identity: identity,
-		Version:  buildId,
+		Version: worker_versioning.WorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildId,
+		}),
 	})
 	if err != nil {
 		return err
@@ -544,7 +547,7 @@ func (d *ClientImpl) StartWorkerDeployment(
 	//revive:disable-next-line:defer
 	defer d.record("StartWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
 
-	workflowID := GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
 		NamespaceName:  namespaceEntry.Name().String(),
@@ -652,11 +655,16 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	//revive:disable-next-line:defer
 	defer d.record("DeleteVersionFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
 
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
+	if err != nil {
+		return err
+	}
+
 	outcome, err := d.updateWithStartWorkerDeploymentVersion(
 		ctx,
 		namespaceEntry,
 		deploymentName,
-		version,
+		versionObj.BuildId,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: DeleteVersion, Args: nil},
 			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
@@ -696,7 +704,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 		return nil, err
 	}
 
-	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
+	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
 
 	now := timestamppb.Now()
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentVersionWorkflowArgs{
@@ -753,7 +761,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		return nil, err
 	}
 
-	workflowID := GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
 		NamespaceName:  namespaceEntry.Name().String(),
 		NamespaceId:    namespaceEntry.ID().String(),
@@ -799,7 +807,7 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	}
 
-	workflowID := GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	outcome, err := d.updateWithStart(
 		ctx,

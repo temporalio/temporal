@@ -333,7 +333,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv1.DeploymentSeries(),
-		BuildId:        tv1.BuildID(),
+		Version:        tv1.DeploymentVersionString(),
 		ConflictToken:  nil,
 		Identity:       tv1.ClientIdentity(),
 	})
@@ -376,7 +376,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 		a.NoError(err)
 		if resp != nil {
 			for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
-				a.NotEqual(tv1.BuildID(), vs.BuildId)
+				a.NotEqual(tv1.DeploymentVersionString(), vs.Version)
 			}
 		}
 	}, time.Second*5, time.Millisecond*200)
@@ -390,7 +390,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: worker_versioning.GenerateVersionWorkflowID(tv1.BuildID()),
+				WorkflowId: worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID()),
 				RunId:      "",
 			},
 		})
