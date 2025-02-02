@@ -40,7 +40,9 @@ CREATE TABLE executions(
   state BYTEA NOT NULL,
   state_encoding VARCHAR(16) NOT NULL,
   db_record_version BIGINT NOT NULL DEFAULT 0,
-  PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id)
+  PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id),
+  FAMILY f_keys (shard_id, namespace_id, workflow_id, run_id),
+  FAMILY f_data (db_record_version, next_event_id, last_write_version, data, data_encoding, state, state_encoding)
 );
 
 CREATE TABLE current_executions(
@@ -55,7 +57,9 @@ CREATE TABLE current_executions(
   start_version BIGINT NOT NULL DEFAULT 0,
   start_time TIMESTAMP NULL,
   last_write_version BIGINT NOT NULL,
-  PRIMARY KEY (shard_id, namespace_id, workflow_id)
+  PRIMARY KEY (shard_id, namespace_id, workflow_id),
+  FAMILY f_keys (shard_id, namespace_id, workflow_id),
+  FAMILY f_data (run_id, create_request_id, status, start_time, last_write_version)
 );
 
 CREATE TABLE buffered_events (

@@ -5,7 +5,7 @@ log:
 persistence:
   defaultStore: cockroach-default
   visibilityStore: cockroach-visibility
-  numHistoryShards: 4
+  numHistoryShards: 64
   datastores:
     cockroach-default:
       sql:
@@ -15,8 +15,8 @@ persistence:
         connectProtocol: "tcp"
         user: "temporal"
         password: "temporal"
-        maxConns: 20
-        maxIdleConns: 20
+        maxConns: 1024
+        maxIdleConns: 1024
         maxConnLifetime: "1h"
     cockroach-visibility:
       sql:
