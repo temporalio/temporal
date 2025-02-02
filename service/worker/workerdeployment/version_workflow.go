@@ -26,6 +26,7 @@ package workerdeployment
 
 import (
 	"fmt"
+	"go.temporal.io/server/common/worker_versioning"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -144,7 +145,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
-	// First ensure series workflow is running
+	// First ensure deployment workflow is running
 	if !d.VersionState.StartedDeploymentWorkflow {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		err := workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentWorkflow, &deploymentspb.StartWorkerDeploymentRequest{
@@ -226,10 +227,10 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		d.lock.Unlock()
 	}()
 
-	// wait until series workflow started
+	// wait until deployment workflow started
 	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
 	if err != nil {
-		d.logger.Error("Update canceled before series workflow started")
+		d.logger.Error("Update canceled before deployment workflow started")
 		return err
 	}
 
@@ -247,7 +248,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-		WorkerDeploymentVersion: d.VersionState.Version,
+		Version: d.VersionState.Version,
 		Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 			{
 				Name: args.TaskQueueName,
@@ -276,8 +277,8 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	// add version to worker-deployment workflow
 	activityCtx = workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
-		DeploymentName: d.VersionState.Version.DeploymentName,
-		Version:        d.VersionState.Version.BuildId,
+		DeploymentName: d.VersionState.Version.GetDeploymentName(),
+		Version:        worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
 		RequestId:      d.newUUID(ctx),
 	}).Get(ctx, nil)
 	if err != nil {
@@ -342,7 +343,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// sync to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
-		WorkerDeploymentVersion: state.GetVersion(),
+		Version: state.GetVersion(),
 	}
 	for tqName, byType := range state.TaskQueueFamilies {
 		for tqType, oldData := range byType.TaskQueues {

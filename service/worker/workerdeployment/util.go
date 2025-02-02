@@ -26,6 +26,8 @@ package workerdeployment
 
 import (
 	"fmt"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	"go.temporal.io/server/common/worker_versioning"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -142,10 +144,12 @@ func GenerateDeploymentWorkflowID(deploymentName string) string {
 // GenerateVersionWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment Version workflows
 func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
-	escapedDeploymentName := escapeChar(deploymentName)
-	escapedBuildID := escapeChar(buildID)
+	escapedVersionString := escapeChar(worker_versioning.WorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        buildID,
+	}))
 
-	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedDeploymentName + WorkerDeploymentVersionWorkflowIDDelimeter + escapedBuildID
+	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedVersionString
 }
 
 func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploymentWorkflowMemo {
