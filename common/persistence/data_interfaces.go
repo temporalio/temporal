@@ -122,8 +122,12 @@ type (
 
 	// CurrentWorkflowConditionFailedError represents a failed conditional update for current workflow record
 	CurrentWorkflowConditionFailedError struct {
-		Msg              string
-		RequestID        string
+		Msg string
+		// RequestIDs contains all request IDs associated with the workflow execution, ie., contain the
+		// request ID that started the workflow execution as well as the request IDs that were attached
+		// to the workflow execution when it was running.
+		RequestIDs       map[string]*persistencespb.RequestIDInfo
+		CreateRequestID  string
 		RunID            string
 		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus
@@ -1310,6 +1314,32 @@ func (e *InvalidPersistenceRequestError) Error() string {
 
 func (e *AppendHistoryTimeoutError) Error() string {
 	return e.Msg
+}
+
+func NewCurrentWorkflowConditionFailedError(
+	msg string,
+	requestIDs map[string]*persistencespb.RequestIDInfo,
+	runID string,
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
+	lastWriteVersion int64,
+	startTime *time.Time,
+) error {
+	err := &CurrentWorkflowConditionFailedError{
+		Msg:              msg,
+		RequestIDs:       requestIDs,
+		RunID:            runID,
+		State:            state,
+		Status:           status,
+		LastWriteVersion: lastWriteVersion,
+		StartTime:        startTime,
+	}
+	for requestID, info := range err.RequestIDs {
+		if info.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			err.CreateRequestID = requestID
+		}
+	}
+	return err
 }
 
 func (e *CurrentWorkflowConditionFailedError) Error() string {

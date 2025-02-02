@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/proto"
 )
@@ -176,14 +177,15 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 	if err, ok := err.(*p.CurrentWorkflowConditionFailedError); ok {
 		err.Msg = ""
 	}
-	s.Equal(&p.CurrentWorkflowConditionFailedError{
-		Msg:              "",
-		RequestID:        newSnapshot.ExecutionState.CreateRequestId,
-		RunID:            newSnapshot.ExecutionState.RunId,
-		State:            newSnapshot.ExecutionState.State,
-		Status:           newSnapshot.ExecutionState.Status,
-		LastWriteVersion: lastWriteVersion,
-	}, err)
+	s.DeepEqual(p.NewCurrentWorkflowConditionFailedError(
+		"",
+		newSnapshot.ExecutionState.RequestIds,
+		newSnapshot.ExecutionState.RunId,
+		newSnapshot.ExecutionState.State,
+		newSnapshot.ExecutionState.Status,
+		lastWriteVersion,
+		timestamp.TimeValuePtr(newSnapshot.ExecutionState.StartTime),
+	), err)
 
 	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
 	newSnapshot.ExecutionInfo.ExecutionStats = executionStats
@@ -258,14 +260,15 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 	if err, ok := err.(*p.CurrentWorkflowConditionFailedError); ok {
 		err.Msg = ""
 	}
-	s.Equal(&p.CurrentWorkflowConditionFailedError{
-		Msg:              "",
-		RequestID:        prevSnapshot.ExecutionState.CreateRequestId,
-		RunID:            prevSnapshot.ExecutionState.RunId,
-		State:            prevSnapshot.ExecutionState.State,
-		Status:           prevSnapshot.ExecutionState.Status,
-		LastWriteVersion: prevLastWriteVersion,
-	}, err)
+	s.DeepEqual(p.NewCurrentWorkflowConditionFailedError(
+		"",
+		prevSnapshot.ExecutionState.RequestIds,
+		prevSnapshot.ExecutionState.RunId,
+		prevSnapshot.ExecutionState.State,
+		prevSnapshot.ExecutionState.Status,
+		prevLastWriteVersion,
+		timestamp.TimeValuePtr(prevSnapshot.ExecutionState.StartTime),
+	), err)
 
 	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
 	prevSnapshot.ExecutionInfo.ExecutionStats = executionStats

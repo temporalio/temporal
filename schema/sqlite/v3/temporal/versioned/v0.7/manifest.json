@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.7",
+  "MinCompatibleVersion": "0.1",
+  "Description": "Add new column `data` to current_executions table",
+  "SchemaUpdateCqlFiles": [
+    "add_current_executions_data.sql"
+  ]
+}

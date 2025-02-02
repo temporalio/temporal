@@ -414,8 +414,17 @@ func (b *HistoryBuilder) AddWorkflowExecutionTerminatedEvent(
 func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 	versioningOverride *workflowpb.VersioningOverride,
 	unsetVersioningOverride bool,
+	attachRequestID string,
+	attachCompletionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(versioningOverride, unsetVersioningOverride)
+	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
+		versioningOverride,
+		unsetVersioningOverride,
+		attachRequestID,
+		attachCompletionCallbacks,
+		links,
+	)
 	event, _ = b.EventStore.add(event)
 	return event
 }

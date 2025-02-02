@@ -52,7 +52,19 @@ func WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState) (
 
 func WorkflowExecutionStateFromBlob(blob []byte, encoding string) (*persistencespb.WorkflowExecutionState, error) {
 	result := &persistencespb.WorkflowExecutionState{}
-	return result, proto3Decode(blob, encoding, result)
+	if err := proto3Decode(blob, encoding, result); err != nil {
+		return nil, err
+	}
+	// Initialize the WorkflowExecutionStateDetails for old records.
+	if result.RequestIds == nil {
+		result.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
+	}
+	if result.CreateRequestId != "" && result.RequestIds[result.CreateRequestId] == nil {
+		result.RequestIds[result.CreateRequestId] = &persistencespb.RequestIDInfo{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		}
+	}
+	return result, nil
 }
 
 func TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo) (*commonpb.DataBlob, error) {
@@ -173,13 +185,11 @@ func decode(
 }
 
 func proto3Encode(m proto.Message) (*commonpb.DataBlob, error) {
-	blob := commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3}
 	data, err := proto.Marshal(m)
 	if err != nil {
 		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
-	blob.Data = data
-	return &blob, nil
+	return &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}, nil
 }
 
 func proto3Decode(blob []byte, encoding string, result proto.Message) error {
