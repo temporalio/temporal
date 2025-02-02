@@ -43,13 +43,13 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
-			request.GetFrontendRequest().GetWorkflowId(),
-			request.GetFrontendRequest().GetRunId(),
+			request.GetFrontendRequest().GetExecution().GetWorkflowId(),
+			request.GetFrontendRequest().GetExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			frontendRequest := request.GetFrontendRequest()
-			activityId := frontendRequest.GetActivityId()
+			activityId := frontendRequest.GetId()
 
 			err := workflow.PauseActivityById(mutableState, activityId)
 			if err != nil {

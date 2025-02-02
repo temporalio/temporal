@@ -895,7 +895,7 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		Version:                state.Version,
 		WorkflowVersioningMode: state.WorkflowVersioningMode,
 		CreateTime:             state.CreateTime,
-		RoutingUpdateTime:      state.RoutingUpdateTime,
+		RoutingChangedTime:     state.RoutingUpdateTime,
 		CurrentSinceTime:       state.CurrentSinceTime,
 		RampingSinceTime:       state.RampingSinceTime,
 		RampPercentage:         state.RampPercentage,
@@ -927,9 +927,10 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namesp
 		}
 		// todo: Add WorkflowVersioningMode once it's ready
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-			BuildId:        versionInfo.Version.BuildId,
-			CreateTime:     versionInfo.CreateTime,
-			DrainageStatus: versionInfo.GetDrainageInfo().GetStatus(),
+			Version:                versionInfo.Version.BuildId, // todo: concatenate
+			WorkflowVersioningMode: versionInfo.WorkflowVersioningMode,
+			CreateTime:             versionInfo.CreateTime,
+			DrainageStatus:         versionInfo.GetDrainageInfo().GetStatus(),
 		})
 	}
 
