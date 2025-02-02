@@ -26,6 +26,7 @@ package workerdeployment
 
 import (
 	"fmt"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/common/worker_versioning"
 	"time"
 
@@ -53,6 +54,7 @@ type (
 		pendingUpdates         int
 		signalsCompleted       bool
 		drainageWorkflowFuture *workflow.ChildWorkflowFuture
+		done                   bool
 	}
 )
 
@@ -145,6 +147,17 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		DeleteVersion,
+		d.handleDeleteVersion,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateDeleteVersion,
+		},
+	); err != nil {
+		return err
+	}
+
 	// First ensure deployment workflow is running
 	if !d.VersionState.StartedDeploymentWorkflow {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -162,15 +175,19 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	workflow.Go(ctx, d.listenToSignals)
 
 	// Wait on any pending signals and updates.
-	err := workflow.Await(ctx, func() bool { return d.pendingUpdates == 0 && d.signalsCompleted })
+	err := workflow.Await(ctx, func() bool { return (d.signalsCompleted && d.pendingUpdates == 0) || d.done })
 	if err != nil {
 		return err
 	}
 
-	// Before continue-as-new, stop drainage wf if it exists.
+	// Before continue-as-new or done, stop drainage wf if it exists.
 	if d.drainageWorkflowFuture != nil {
 		d.logger.Debug("Version terminating drainage workflow before continue-as-new")
 		_ = d.stopDrainage(ctx) // child options say terminate-on-close, so if this fails the wf will terminate instead.
+	}
+
+	if d.done {
+		return nil
 	}
 
 	d.logger.Debug("Version doing continue-as-new")
@@ -198,6 +215,96 @@ func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
 		return err
 	}
 	d.drainageWorkflowFuture = nil
+	return nil
+}
+
+func (d *VersionWorkflowRunner) validateDeleteVersion() error {
+	// We can't call DescribeTaskQueue here because that would be an Activity call / non-deterministic.
+	// Once we have PollersStatus on the version, we can check it here.
+	return nil
+}
+
+func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	// wait until deployment workflow started
+	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
+	if err != nil {
+		d.logger.Error("Update canceled before worker deployment workflow started")
+		return serviceerror.NewDeadlineExceeded("Update canceled before worker deployment workflow started")
+	}
+
+	state := d.GetVersionState()
+
+	// describe all task queues in the deployment, if any have pollers, then cannot delete
+	var tqs []*taskqueuepb.TaskQueue
+	for tqName, _ := range state.TaskQueueFamilies {
+		tqs = append(tqs, &taskqueuepb.TaskQueue{
+			Name: tqName,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL, // TODO (Carly): could this be sticky?
+		})
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	checkPollersReq := &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs{
+		TaskQueues: tqs,
+		BuildId:    d.VersionState.Version.BuildId,
+	}
+	var hasPollers bool
+	err = workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
+	if err != nil {
+		return err
+	}
+	if hasPollers {
+		return serviceerror.NewFailedPrecondition("cannot delete, task queues in this version still have pollers")
+	}
+
+	// sync version removal to task queues
+	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
+		Version:       state.GetVersion(),
+		ForgetVersion: true,
+	}
+	for tqName, byType := range state.TaskQueueFamilies {
+		for tqType, oldData := range byType.TaskQueues {
+
+			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+				Name: tqName,
+				Type: enumspb.TaskQueueType(tqType),
+				Data: oldData,
+			})
+		}
+	}
+	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
+	if err != nil {
+		// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+		return err
+	}
+
+	// wait for propagation
+	if len(syncRes.TaskQueueMaxVersions) > 0 {
+		err = workflow.ExecuteActivity(
+			activityCtx,
+			d.a.CheckWorkerDeploymentUserDataPropagation,
+			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+			}).Get(ctx, nil)
+		if err != nil {
+			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+			return err
+		}
+	}
+
+	d.done = true
 	return nil
 }
 

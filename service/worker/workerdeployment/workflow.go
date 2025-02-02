@@ -25,6 +25,7 @@
 package workerdeployment
 
 import (
+	"slices"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -109,6 +110,17 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.handleAddVersionToWorkerDeployment,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateAddVersionToWorkerDeployment,
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		DeleteVersion,
+		d.handleDeleteVersion,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateDeleteVersion,
 		},
 	); err != nil {
 		return err
@@ -225,6 +237,49 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		PreviousPercentage: prevRampingVersionPercentage,
 	}, nil
 
+}
+
+func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+	if !slices.Contains(d.State.Versions, args.Version) {
+		return serviceerror.NewNotFound("version not found in deployment")
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	// ask version to delete itself
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var res deploymentspb.SyncVersionStateActivityResult
+	err = workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerDeploymentVersion, &deploymentspb.DeleteVersionActivityArgs{
+		Identity:       args.Identity,
+		DeploymentName: d.DeploymentName,
+		Version:        args.Version,
+		RequestId:      uuid.New(),
+	}).Get(ctx, &res)
+	if err != nil {
+		return err
+	}
+
+	// update local state
+	d.State.Versions = slices.DeleteFunc(d.State.Versions, func(v string) bool { return v == args.Version })
+
+	// update memo
+	if err = d.updateMemo(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
