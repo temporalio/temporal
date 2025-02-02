@@ -31,7 +31,7 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/dgryski/go-farm"
+	farm "github.com/dgryski/go-farm"
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -57,15 +57,21 @@ const (
 	BuildIdSearchAttributeDelimiter         = ":"
 	BuildIdSearchAttributeEscape            = "|"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
-	UnversionedSearchAttribute         = buildIdSearchAttributePrefixUnversioned
-	WorkerDeploymentVersionIdDelimiter = "/"
+	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
+
+	// Prefixes, Delimeters and Keys
+	WorkerDeploymentVersionIdDelimiter         = "/"
+	WorkerDeploymentVersionWorkflowIDPrefix    = "temporal-sys-worker-deployment-version"
+	WorkerDeploymentWorkflowIDPrefix           = "temporal-sys-worker-deployment"
+	WorkerDeploymentVersionWorkflowIDDelimeter = ":"
+	WorkerDeploymentVersionWorkflowIDEscape    = "|"
 )
 
 // EscapeChar is a helper which escapes the BuildIdSearchAttributeDelimiter character
 // in the input string
-func escapeChar(s string) string {
-	s = strings.Replace(s, BuildIdSearchAttributeEscape, BuildIdSearchAttributeEscape+BuildIdSearchAttributeEscape, -1)
-	s = strings.Replace(s, BuildIdSearchAttributeDelimiter, BuildIdSearchAttributeEscape+BuildIdSearchAttributeDelimiter, -1)
+func escapeChar(s, escape, delimiter string) string {
+	s = strings.Replace(s, escape, escape+escape, -1)
+	s = strings.Replace(s, delimiter, escape+delimiter, -1)
 	return s
 }
 
@@ -77,9 +83,9 @@ func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment) string {
 	return fmt.Sprintf("%s%s%s%s%s",
 		BuildIdSearchAttributePrefixPinned,
 		BuildIdSearchAttributeDelimiter,
-		escapeChar(deployment.GetSeriesName()),
+		escapeChar(deployment.GetSeriesName(), BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
 		BuildIdSearchAttributeDelimiter,
-		escapeChar(deployment.GetBuildId()),
+		escapeChar(deployment.GetBuildId(), BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
 	)
 }
 
@@ -503,4 +509,23 @@ func WorkerDeploymentVersionFromString(s string) (*deploymentpb.WorkerDeployment
 		DeploymentName: before,
 		BuildId:        after,
 	}, nil
+}
+
+// GenerateDeploymentWorkflowID is a helper that generates a system accepted
+// workflowID which are used in our Worker Deployment workflows
+func GenerateDeploymentWorkflowID(deploymentName string) string {
+	// escaping the reserved workflow delimiter (|) from the inputs, if present
+	escapedDeploymentName := escapeChar(deploymentName, WorkerDeploymentVersionWorkflowIDEscape, WorkerDeploymentVersionWorkflowIDDelimeter)
+	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedDeploymentName
+}
+
+// GenerateVersionWorkflowID is a helper that generates a system accepted
+// workflowID which are used in our Worker Deployment Version workflows
+func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
+	escapedVersionString := escapeChar(WorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        buildID,
+	}), WorkerDeploymentVersionWorkflowIDEscape, WorkerDeploymentVersionWorkflowIDDelimeter)
+
+	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedVersionString
 }
