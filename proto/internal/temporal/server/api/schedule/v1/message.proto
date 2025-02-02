@@ -52,6 +52,14 @@ message BufferedStart {
     // execution. Only used by the state machine scheduler (otherwise left
     // empty).
     string request_id = 6;
+    // When a BufferedStart fails execution, its attempt count here is incremented. Only
+    // used by the state machine scheduler (otherwise left empty).
+    int64 attempt = 7;
+    // If a BufferedStart is rate limited or needs to backoff while retrying,
+    // this time will be set, and the start will be held in the buffer until the
+    // backoff time has passed. Only used by the state machine scheduler
+    // (otherwise ignored).
+    google.protobuf.Timestamp backoff_time = 8;
 }
 
 message InternalState {
