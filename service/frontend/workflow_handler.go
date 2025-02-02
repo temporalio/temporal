@@ -88,6 +88,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -754,6 +755,23 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		})
 	if err != nil {
 		return nil, err
+	}
+
+	if !wh.config.SendRawWorkflowHistory(request.Namespace) {
+		isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
+		if isCloseEventOnly {
+			if len(response.Response.History.GetEvents()) > 0 {
+				response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
+			}
+		}
+		err = api.ProcessOutgoingSearchAttributes(wh.namespaceRegistry, wh.saProvider, wh.saMapperProvider, response.Response.History.Events, namespaceID, wh.visibilityMgr)
+		if err != nil {
+			return nil, err
+		}
+		err = api.FixFollowEvents(ctx, wh.versionChecker, isCloseEventOnly, response.Response.History)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return response.Response, nil
 }
