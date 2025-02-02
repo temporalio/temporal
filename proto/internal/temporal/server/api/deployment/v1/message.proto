@@ -189,7 +189,7 @@ message QueryDescribeWorkerDeploymentResponse {
 // used as Worker Deployment Version workflow memo:
 message VersionWorkflowMemo {
     string deployment_name = 1;
-    string version = 2;
+    string build_id = 2;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -200,7 +200,7 @@ message StartWorkerDeploymentRequest {
 
 // used as Worker Deployment Version workflow activity input:
 message SyncDeploymentVersionUserDataRequest {
-    temporal.api.deployment.v1.WorkerDeploymentVersion worker_deployment_version = 1;
+    temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
     repeated SyncUserData sync = 2;
     // if true, the version will be forgotten from the task queue user data.
     bool forget_version = 3; 
@@ -259,14 +259,14 @@ message DeleteDeploymentArgs {
 }
 
 // used as Worker Deployment update response:
-message SetWorkerDeploymentRampingVersionResponse {
+message SetRampingVersionResponse {
     string previous_version = 1;
     float previous_percentage = 2;
     bytes conflict_token = 3;
 }
 
 // used as Worker Deployment workflow update input:
-message SetWorkerDeploymentRampingVersionArgs {
+message SetRampingVersionArgs {
     string identity = 1;
     string version = 2;
     float percentage = 3;
@@ -275,6 +275,7 @@ message SetWorkerDeploymentRampingVersionArgs {
 // used as Worker Deployment activity input:
 message SyncVersionStateActivityArgs {
     string deployment_name = 1;
+    // <deployment_name>/<build_id> or possibly just <version_id> in the future
     string version = 2;
     SyncVersionStateUpdateArgs update_args = 3;
     string request_id = 4;
@@ -302,6 +303,7 @@ message WorkerDeploymentSummary {
 // Used as Worker Deployment Version workflow activity input:
 message AddVersionToWorkerDeploymentRequest {
     string deployment_name = 1;
+    // <deployment_name>/<build_id> or possibly just <version_id> in the future
     string version = 2;
     string request_id = 3;
 }

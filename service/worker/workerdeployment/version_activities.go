@@ -30,10 +30,10 @@ import (
 	"fmt"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/tqid"
 	"sync"
 
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -83,7 +83,7 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 					TaskQueue:     syncData.Name,
 					TaskQueueType: syncData.Type,
 					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
-						ForgetVersion: input.WorkerDeploymentVersion,
+						ForgetVersion: input.Version,
 					},
 				})
 			} else {

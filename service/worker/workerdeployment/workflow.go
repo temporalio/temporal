@@ -96,9 +96,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		SetRampingVersion,
-		d.handleSetWorkerDeploymentRampingVersion,
+		d.handleSetRampingVersion,
 		workflow.UpdateHandlerOptions{
-			Validator: d.validateSetWorkerDeploymentRampingVersion,
+			Validator: d.validateSetRampingVersion,
 		},
 	); err != nil {
 		return err
@@ -139,7 +139,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkerDeploymentWorkflowArgs)
 }
 
-func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) error {
+func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
 	if args.Version == d.State.RoutingInfo.RampingVersion && args.Percentage == d.State.RoutingInfo.RampingVersionPercentage {
 		d.logger.Info("version already ramping, no change")
 		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
@@ -153,7 +153,7 @@ func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploym
 	return nil
 }
 
-func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Context, args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) (*deploymentspb.SetWorkerDeploymentRampingVersionResponse, error) {
+func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *deploymentspb.SetRampingVersionArgs) (*deploymentspb.SetRampingVersionResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -192,7 +192,7 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 	} else {
 		// setting ramp
 
-		if prevRampingVersion == newRampingVersion { // the version was alread ramping, user changing ramp %
+		if prevRampingVersion == newRampingVersion { // the version was already ramping, user changing ramp %
 			rampingSinceTime = d.State.RoutingInfo.RampingVersionChangedTime
 			rampingVersionUpdateTime = d.State.RoutingInfo.RampingVersionChangedTime
 		} else {
@@ -232,7 +232,7 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 		return nil, err
 	}
 
-	return &deploymentspb.SetWorkerDeploymentRampingVersionResponse{
+	return &deploymentspb.SetRampingVersionResponse{
 		PreviousVersion:    prevRampingVersion,
 		PreviousPercentage: prevRampingVersionPercentage,
 	}, nil

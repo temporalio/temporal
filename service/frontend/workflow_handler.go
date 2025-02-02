@@ -39,7 +39,6 @@ import (
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -49,7 +48,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/api/workflowservice/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -3371,7 +3370,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	workerDeploymentVersionInfo, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request.Version.BuildId) // todo carly: pass whole version
+	workerDeploymentVersionInfo, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, request.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -3443,11 +3442,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
 	}
 
-	deploymentVersion := &deploymentpb.WorkerDeploymentVersion{
-		BuildId:        request.GetVersion(),
-		DeploymentName: request.GetDeploymentName(),
-	}
-	resp, err := wh.workerDeploymentClient.SetWorkerDeploymentRampingVersion(ctx, namespaceEntry, deploymentVersion, request.GetPercentage(), request.GetIdentity())
+	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.GetPercentage(), request.GetIdentity())
 	if err != nil {
 		return nil, err
 	}

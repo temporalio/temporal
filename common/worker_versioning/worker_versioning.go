@@ -31,7 +31,7 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/dgryski/go-farm"
+	farm "github.com/dgryski/go-farm"
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -57,10 +57,8 @@ const (
 	BuildIdSearchAttributeDelimiter         = ":"
 	BuildIdSearchAttributeEscape            = "|"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
-	UnversionedSearchAttribute                 = buildIdSearchAttributePrefixUnversioned
-	WorkerDeploymentVersionWorkflowIDPrefix    = "temporal-sys-worker-deployment-version"
-	WorkerDeploymentWorkflowIDPrefix           = "temporal-sys-worker-deployment"
-	WorkerDeploymentVersionWorkflowIDDelimeter = ":"
+	UnversionedSearchAttribute         = buildIdSearchAttributePrefixUnversioned
+	WorkerDeploymentVersionIdDelimiter = "/"
 )
 
 // EscapeChar is a helper which escapes the BuildIdSearchAttributeDelimiter character
@@ -487,18 +485,22 @@ func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deployme
 	return directive.GetDeployment()
 }
 
-// GenerateWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our Worker Deployment workflows
-func GenerateWorkflowID(WorkerDeploymentName string) string {
-	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	escapedWorkerDeploymentName := escapeChar(WorkerDeploymentName)
-	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedWorkerDeploymentName
+func WorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
+	if v == nil {
+		return "__unversioned__"
+	}
+	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
 }
-
-// GenerateVersionWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our Worker Deployment Version workflows
-func GenerateVersionWorkflowID(version string) string {
-	escapedVersion := escapeChar(version)
-
-	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedVersion
+func WorkerDeploymentVersionFromString(s string) (*deploymentpb.WorkerDeploymentVersion, error) {
+	if s == "__unversioned__" {
+		return nil, nil
+	}
+	before, after, found := strings.Cut(s, WorkerDeploymentVersionIdDelimiter)
+	if !found {
+		return nil, fmt.Errorf("expected delimiter %s not found in version string %s", WorkerDeploymentVersionIdDelimiter, s)
+	}
+	return &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: before,
+		BuildId:        after,
+	}, nil
 }
