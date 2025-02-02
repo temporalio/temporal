@@ -27,6 +27,7 @@ package testcore
 import (
 	"flag"
 
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/cockroach"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -51,7 +52,7 @@ func init() {
 
 func UseSQLVisibility() bool {
 	switch TestFlags.PersistenceDriver {
-	case mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
+	case cockroach.PluginName, mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
 		return true
 	// If the main storage is Cassandra, Elasticsearch is used for visibility.
 	default:

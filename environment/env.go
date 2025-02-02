@@ -68,6 +68,10 @@ const (
 	PostgresPort = "POSTGRES_PORT"
 	// PostgresDefaultPort Postgres default port
 	PostgresDefaultPort = 5432
+
+	CockroachSeeds       = "COCKROACH_SEEDS"
+	CockroachPort        = "COCKROACH_PORT"
+	CockroachDefaultPort = 26257
 )
 
 type varSpec struct {
@@ -115,6 +119,14 @@ var envVars = []varSpec{
 	{
 		name:       ESVersion,
 		getDefault: func() string { return ESDefaultVersion },
+	},
+	{
+		name:       CockroachSeeds,
+		getDefault: GetLocalhostIP,
+	},
+	{
+		name:       CockroachPort,
+		getDefault: func() string { return strconv.Itoa(CockroachDefaultPort) },
 	},
 }
 
@@ -221,6 +233,28 @@ func GetPostgreSQLPort() int {
 	p, err := strconv.Atoi(port)
 	if err != nil {
 		panic(fmt.Sprintf("error getting env %v", PostgresPort))
+	}
+	return p
+}
+
+// GetCockroachAddress return the CockroachDB address
+func GetCockroachAddress() string {
+	addr := os.Getenv(CockroachSeeds)
+	if addr == "" {
+		addr = GetLocalhostIP()
+	}
+	return addr
+}
+
+// GetCockroachPort return the CockroachDB port
+func GetCockroachPort() int {
+	port := os.Getenv(CockroachPort)
+	if port == "" {
+		return CockroachDefaultPort
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		panic(fmt.Sprintf("error getting env %v", CockroachPort))
 	}
 	return p
 }

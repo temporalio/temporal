@@ -26,6 +26,7 @@ package persistencetests
 
 import (
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/cockroach"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -40,6 +41,10 @@ const (
 	testPostgreSQLUser      = "temporal"
 	testPostgreSQLPassword  = "temporal"
 	testPostgreSQLSchemaDir = "schema/postgresql/v12"
+
+	testCockroachUser      = "temporal"
+	testCockroachPassword  = "temporal"
+	testCockroachSchemaDir = "schema/cockroach"
 
 	testSQLiteUser      = ""
 	testSQLitePassword  = ""
@@ -70,6 +75,19 @@ func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 		DBHost:          environment.GetPostgreSQLAddress(),
 		DBPort:          environment.GetPostgreSQLPort(),
 		SchemaDir:       testPostgreSQLSchemaDir,
+		StoreType:       config.StoreTypeSQL,
+	}
+}
+
+// GetCockroachTestClusterOption return test options
+func GetCockroachTestClusterOption() *TestBaseOptions {
+	return &TestBaseOptions{
+		SQLDBPluginName: cockroach.PluginName,
+		DBUsername:      testCockroachUser,
+		DBPassword:      testCockroachPassword,
+		DBHost:          environment.GetCockroachAddress(),
+		DBPort:          environment.GetCockroachPort(),
+		SchemaDir:       testCockroachSchemaDir,
 		StoreType:       config.StoreTypeSQL,
 	}
 }

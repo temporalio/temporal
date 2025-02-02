@@ -22,35 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package driver
 
 import (
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/cockroach"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/searchattribute"
+	"github.com/jmoiron/sqlx"
 )
 
-func NewQueryConverter(
-	pluginName string,
-	namespaceName namespace.Name,
-	namespaceID namespace.ID,
-	saTypeMap searchattribute.NameTypeMap,
-	saMapper searchattribute.Mapper,
-	queryString string,
-) *QueryConverter {
-	switch pluginName {
-	case cockroach.PluginName:
-		return newCockroachQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case mysql.PluginName:
-		return newMySQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case postgresql.PluginName, postgresql.PluginNamePGX:
-		return newPostgreSQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case sqlite.PluginName:
-		return newSqliteQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	default:
-		return nil
+const (
+	// check http://www.postgresql.org/docs/9.3/static/errcodes-appendix.html
+	dupEntryCode            = "23505"
+	dupDatabaseCode         = "42P04"
+	readOnlyTransactionCode = "25006"
+	cannotConnectNowCode    = "57P03"
+	featureNotSupportedCode = "0A000"
+
+	// Unsupported "feature" messages to look for
+	cannotSetReadWriteModeDuringRecoveryMsg = "cannot set transaction read-write mode during recovery"
+)
+
+type Driver interface {
+	CreateConnection(dsn string) (*sqlx.DB, error)
+	IsDupEntryError(error) bool
+	IsDupDatabaseError(error) bool
+	IsConnNeedsRefreshError(error) bool
+}
+
+func isConnNeedsRefreshError(code, message string) bool {
+	if code == readOnlyTransactionCode || code == cannotConnectNowCode {
+		return true
 	}
+	if code == featureNotSupportedCode && message == cannotSetReadWriteModeDuringRecoveryMsg {
+		return true
+	}
+	return false
 }
