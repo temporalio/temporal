@@ -241,7 +241,6 @@ func (tv *TestVars) BuildID() string {
 	return getOrCreate(tv, "build_id", tv.uniqueString, tv.stringNSetter)
 }
 
-// [cleanup-wv-pre-release]
 func (tv *TestVars) WithBuildIDNumber(n int) *TestVars {
 	return tv.cloneSetN("build_id", n)
 }
@@ -269,6 +268,13 @@ func (tv *TestVars) DeploymentVersion() *deploymentpb.WorkerDeploymentVersion {
 		BuildId:        tv.BuildID(),
 		DeploymentName: tv.DeploymentSeries(),
 	}
+}
+
+func (tv *TestVars) DeploymentVersionString() string {
+	return worker_versioning.WorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
+		BuildId:        tv.BuildID(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
 }
 
 func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionTransition {
