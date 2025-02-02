@@ -601,7 +601,7 @@ pollLoop:
 			// for query task, we don't need to update history to record workflow task started. but we need to know
 			// the NextEventID and the currently set sticky task queue.
 			// TODO: in theory we only need this lookup for non-sticky queries (to get NextEventID for populating
-			//		partial history in the response), but we need a new history API to to determine whether the query
+			//		partial history in the response), but we need a new history API to determine whether the query
 			//		is sticky or not without this call
 			mutableStateResp, err := e.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 				NamespaceId: req.GetNamespaceId(),
