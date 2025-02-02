@@ -939,3 +939,75 @@ func (s *namespaceValidatorSuite) TestSetNamespace() {
 	nvi.setNamespace(namespaceEntry, failActivityTaskReq)
 	s.Equal(namespaceRequestName, failActivityTaskReq.Namespace)
 }
+
+func (s *namespaceValidatorSuite) Test_HandleRequestWithHandoverRetry() {
+	testCases := []struct {
+		replicationState enumspb.ReplicationState
+		expectedErr      error
+		method           string
+		req              any
+	}{
+		{
+			replicationState: enumspb.REPLICATION_STATE_NORMAL,
+			expectedErr:      nil,
+			method:           api.WorkflowServicePrefix + "StartWorkflowExecution",
+			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+		{
+			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
+			expectedErr:      nil,
+			method:           api.WorkflowServicePrefix + "GetReplicationMessages",
+			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+		{
+			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
+			expectedErr:      common.ErrNamespaceHandover,
+			method:           api.WorkflowServicePrefix + "StartWorkflowExecution",
+			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
+	}
+
+	for _, testCase := range testCases {
+		nvi := NewNamespaceValidatorInterceptor(
+			s.mockRegistry,
+			dynamicconfig.GetBoolPropertyFn(false),
+			dynamicconfig.GetIntPropertyFn(100))
+		serverInfo := &grpc.UnaryServerInfo{
+			FullMethod: testCase.method,
+		}
+		reqWithNamespace, hasNamespace := testCase.req.(NamespaceNameGetter)
+		if !hasNamespace {
+			s.Fail("invalid test case without namespace")
+		}
+		namespaceName := reqWithNamespace.GetNamespace()
+
+		handlerCalled := false
+		_, err := nvi.handleRequestWithHandoverRetry(context.Background(), testCase.req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
+			handlerCalled = true
+			return &workflowservice.StartWorkflowExecutionResponse{}, nil
+		},
+			namespace.FromPersistentState(
+				&persistence.GetNamespaceResponse{
+					Namespace: &persistencespb.NamespaceDetail{
+						Config: &persistencespb.NamespaceConfig{},
+						ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+							State: testCase.replicationState,
+						},
+						Info: &persistencespb.NamespaceInfo{
+							Id:    namespaceName,
+							Name:  namespaceName,
+							State: enumspb.NAMESPACE_STATE_REGISTERED,
+						},
+					},
+				},
+			))
+
+		if testCase.expectedErr != nil {
+			s.IsType(testCase.expectedErr, err)
+			s.False(handlerCalled)
+		} else {
+			s.NoError(err)
+			s.True(handlerCalled)
+		}
+	}
+}
