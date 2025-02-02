@@ -305,6 +305,136 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetRampingVersion_YesOpenWFs
 	// todo carly: test with open workflows on the draining version that then complete
 }
 
+//nolint:forbidigo
+func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	pollerCtx1, pollerCancel1 := context.WithCancel(ctx)
+	go s.pollFromDeployment(pollerCtx1, tv1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv1.DeploymentSeries(),
+				BuildId:        tv1.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	// SetCurrent so that the task queue puts the version in its versions info
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv1.DeploymentSeries(),
+		Version:        tv1.DeploymentVersionString(),
+		ConflictToken:  nil,
+		Identity:       tv1.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	// describe tq and confirm that the current version is our version (so we can check that it was removed later)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: tv1.TaskQueue(),
+		})
+		a.NoError(err)
+		if resp != nil {
+			a.NotNil(resp.GetVersioningInfo().GetCurrentVersion())
+			a.Equal(tv1.BuildID(), resp.GetVersioningInfo().GetCurrentVersion().GetBuildId())
+			a.Equal(tv1.DeploymentSeries(), resp.GetVersioningInfo().GetCurrentVersion().GetDeploymentName())
+		}
+	}, time.Second*5, time.Millisecond*200)
+
+	// Version has active pollers so delete should fail
+	s.tryDeleteVersion(ctx, tv1, false)
+
+	// Stop the pollers
+	pollerCancel1()
+
+	// TODO (Shivam): Figure out how long to wait in this test for the task queue to forget the pollers. Can we accelerate the retention during test?
+	// below code passes when there are hard-coded no pollers, so the challenge is just to get the pollers to go away in the test.
+	//// Wait some time?
+	//
+	//// Version has no active pollers so delete should succeed
+	//s.tryDeleteVersion(ctx, tv1, true)
+	//
+	//// describe deployment and expect that the versions list does NOT contain the deleted version
+	//s.EventuallyWithT(func(t *assert.CollectT) {
+	//	a := assert.New(t)
+	//	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+	//		Namespace:      s.Namespace().String(),
+	//		DeploymentName: tv1.DeploymentSeries(),
+	//	})
+	//	a.NoError(err)
+	//	if resp != nil {
+	//		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+	//			a.NotEqual(tv1.DeploymentVersionString(), vs.Version)
+	//		}
+	//	}
+	//}, time.Second*5, time.Millisecond*200)
+	//
+	//// Note: turns out you can successfully DescribeVersion even after that version has been deleted, because closed workflows can still answer queries
+	//
+	//// list workflows with deployment-version workflow id and expect it to be closed
+	//s.EventuallyWithT(func(t *assert.CollectT) {
+	//	a := assert.New(t)
+	//	resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	//		Namespace: s.Namespace().String(),
+	//		Execution: &commonpb.WorkflowExecution{
+	//			WorkflowId: worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID()),
+	//			RunId:      "",
+	//		},
+	//	})
+	//	a.NoError(err)
+	//	if resp != nil {
+	//		a.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
+	//	}
+	//}, time.Second*5, time.Millisecond*200)
+	//
+	//// describe TQ and expect no version
+	//s.EventuallyWithT(func(t *assert.CollectT) {
+	//	a := assert.New(t)
+	//	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	//		Namespace: s.Namespace().String(),
+	//		TaskQueue: tv1.TaskQueue(),
+	//	})
+	//	a.NoError(err)
+	//	if resp != nil {
+	//		a.Nil(resp.GetVersioningInfo().GetCurrentVersion())
+	//	}
+	//}, time.Second*5, time.Millisecond*200)
+}
+
+func (s *DeploymentVersionSuite) tryDeleteVersion(
+	ctx context.Context,
+	tv *testvars.TestVars,
+	expectSuccess bool,
+) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		_, err := s.FrontendClient().DeleteWorkerDeploymentVersion(ctx, &workflowservice.DeleteWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+		})
+		if expectSuccess {
+			a.NoError(err)
+		} else {
+			a.Error(err)
+		}
+	}, 5*time.Second, time.Millisecond*100)
+}
+
 func (s *DeploymentVersionSuite) checkVersionDrainage(
 	ctx context.Context,
 	tv *testvars.TestVars,

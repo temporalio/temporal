@@ -3562,9 +3562,24 @@ func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *
 	panic("implement me")
 }
 
-func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentVersionRequest) (*workflowservice.DeleteWorkerDeploymentVersionResponse, error) {
-	//TODO implement me
-	panic("implement me")
+func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentVersionRequest) (_ *workflowservice.DeleteWorkerDeploymentVersionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request.Version.DeploymentName, request.Version.BuildId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteWorkerDeploymentVersionResponse{}, nil
 }
 
 // Returns the schedule description and current state of an existing schedule.

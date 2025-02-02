@@ -27,6 +27,7 @@ package temporal.server.api.deployment.v1;
 option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/enums/v1/deployment.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
@@ -102,6 +103,7 @@ message VersionLocalState {
 
     bool started_deployment_workflow = 10;
 
+    // Key: Task Queue Name
     map<string, TaskQueueFamilyData> task_queue_families = 11;
 
     message TaskQueueFamilyData {
@@ -200,6 +202,8 @@ message StartWorkerDeploymentRequest {
 message SyncDeploymentVersionUserDataRequest {
     temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
     repeated SyncUserData sync = 2;
+    // if true, the version will be forgotten from the task queue user data.
+    bool forget_version = 3; 
 
     message SyncUserData {
         string name = 1;
@@ -227,6 +231,31 @@ message SetCurrentVersionArgs {
 // used as Worker Deployment update response:
 message SetCurrentVersionResponse {
     string previous_version = 1;
+}
+
+// used as Worker Deployment workflow update input:
+message DeleteVersionArgs {
+    string identity = 1;
+    string version = 2;
+}
+
+// used as Worker Deployment Activity input:
+message DeleteVersionActivityArgs {
+    string identity = 1;
+    string deployment_name = 2;
+    string version = 3;
+    string request_id = 4;
+}
+
+// used as Worker Deployment Activity input:
+message CheckTaskQueuesHaveNoPollersActivityArgs {
+    repeated temporal.api.taskqueue.v1.TaskQueue task_queues = 1;
+    string build_id = 3;
+}
+
+// used as Worker Deployment workflow update input:
+message DeleteDeploymentArgs {
+    string identity = 1;
 }
 
 // used as Worker Deployment update response:
