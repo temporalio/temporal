@@ -57,7 +57,8 @@ const (
 	BuildIdSearchAttributeDelimiter         = ":"
 	BuildIdSearchAttributeEscape            = "|"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
-	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
+	UnversionedSearchAttribute         = buildIdSearchAttributePrefixUnversioned
+	WorkerDeploymentVersionIdDelimiter = "/"
 )
 
 // EscapeChar is a helper which escapes the BuildIdSearchAttributeDelimiter character
@@ -482,4 +483,24 @@ func DirectiveDeployment(directive *taskqueuespb.TaskVersionDirective) *deployme
 		return DeploymentFromDeploymentVersion(dv)
 	}
 	return directive.GetDeployment()
+}
+
+func WorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
+	if v == nil {
+		return "__unversioned__"
+	}
+	return v.GetDeploymentName() + WorkerDeploymentVersionIdDelimiter + v.GetBuildId()
+}
+func WorkerDeploymentVersionFromString(s string) (*deploymentpb.WorkerDeploymentVersion, error) {
+	if s == "__unversioned__" {
+		return nil, nil
+	}
+	before, after, found := strings.Cut(s, WorkerDeploymentVersionIdDelimiter)
+	if !found {
+		return nil, fmt.Errorf("expected delimiter %s not found in version string %s", WorkerDeploymentVersionIdDelimiter, s)
+	}
+	return &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: before,
+		BuildId:        after,
+	}, nil
 }
