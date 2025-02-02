@@ -50,13 +50,17 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 )
 
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy    func() backoff.RetryPolicy
+	RequestTimeout      dynamicconfig.DurationPropertyFnWithDestinationFilter
+	HTTPTraceMinAttempt dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HTTPTraceMaxAttempt dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RetryPolicy         func() backoff.RetryPolicy
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		RequestTimeout: RequestTimeout.Get(dc),
+		RequestTimeout:      RequestTimeout.Get(dc),
+		HTTPTraceMinAttempt: dynamicconfig.NexusHTTPTraceMinAttempt.Get(dc),
+		HTTPTraceMaxAttempt: dynamicconfig.NexusHTTPTraceMaxAttempt.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
