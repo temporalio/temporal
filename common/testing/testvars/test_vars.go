@@ -236,6 +236,10 @@ func (tv *TestVars) BuildID() string {
 	return getOrCreate(tv, "build_id", tv.uniqueString, tv.stringNSetter)
 }
 
+func (tv *TestVars) WithBuildIDString(s string) *TestVars {
+	return tv.cloneSetVal("build_id", s)
+}
+
 func (tv *TestVars) WithBuildIDNumber(n int) *TestVars {
 	return tv.cloneSetN("build_id", n)
 }
