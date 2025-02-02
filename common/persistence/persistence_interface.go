@@ -438,9 +438,9 @@ type (
 		RunID       string
 
 		ExecutionInfo      *persistencespb.WorkflowExecutionInfo
-		ExecutionInfoBlob  *commonpb.DataBlob
+		ExecutionInfoBlob  *commonpb.DataBlob `json:"-"` // redundant in JSON
 		ExecutionState     *persistencespb.WorkflowExecutionState
-		ExecutionStateBlob *commonpb.DataBlob
+		ExecutionStateBlob *commonpb.DataBlob `json:"-"` // redundant in JSON
 		NextEventID        int64
 		StartVersion       int64
 		LastWriteVersion   int64
@@ -476,9 +476,9 @@ type (
 		RunID       string
 
 		ExecutionInfo      *persistencespb.WorkflowExecutionInfo
-		ExecutionInfoBlob  *commonpb.DataBlob
+		ExecutionInfoBlob  *commonpb.DataBlob `json:"-"` // redundant in JSON
 		ExecutionState     *persistencespb.WorkflowExecutionState
-		ExecutionStateBlob *commonpb.DataBlob
+		ExecutionStateBlob *commonpb.DataBlob `json:"-"` // redundant in JSON
 		StartVersion       int64
 		LastWriteVersion   int64
 		NextEventID        int64
