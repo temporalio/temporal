@@ -916,7 +916,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namesp
 		}
 		// TODO (Shivam) - Add WorkflowVersioningMode + AcceptsNewExecutions
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
-			BuildId:                versionInfo.Version.BuildId,
+			Version:                versionInfo.Version.BuildId, // todo: concatenate
 			WorkflowVersioningMode: versionInfo.WorkflowVersioningMode,
 			CreateTime:             versionInfo.CreateTime,
 			DrainageStatus:         versionInfo.GetDrainageInfo().GetStatus(),

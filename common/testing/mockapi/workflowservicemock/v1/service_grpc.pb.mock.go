@@ -1625,6 +1625,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) UpdateWorkerBuildIdCompatibilit
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatibility", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateWorkerBuildIdCompatibility), varargs...)
 }
 
+// UpdateWorkerVersionMetadata mocks base method.
+func (m *MockWorkflowServiceClient) UpdateWorkerVersionMetadata(arg0 context.Context, arg1 *workflowservice.UpdateWorkerVersionMetadataRequest, arg2 ...grpc.CallOption) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateWorkerVersionMetadata", varargs...)
+	ret0, _ := ret[0].(*workflowservice.UpdateWorkerVersionMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerVersionMetadata indicates an expected call of UpdateWorkerVersionMetadata.
+func (mr *MockWorkflowServiceClientMockRecorder) UpdateWorkerVersionMetadata(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerVersionMetadata", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateWorkerVersionMetadata), varargs...)
+}
+
 // UpdateWorkerVersioningRules mocks base method.
 func (m *MockWorkflowServiceClient) UpdateWorkerVersioningRules(arg0 context.Context, arg1 *workflowservice.UpdateWorkerVersioningRulesRequest, arg2 ...grpc.CallOption) (*workflowservice.UpdateWorkerVersioningRulesResponse, error) {
 	m.ctrl.T.Helper()
