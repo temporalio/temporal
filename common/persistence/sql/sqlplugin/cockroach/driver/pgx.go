@@ -22,35 +22,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package driver
 
 import (
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/cockroach"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/searchattribute"
+	"github.com/jackc/pgx/v5/pgconn"
+	_ "github.com/jackc/pgx/v5/stdlib" // register pgx driver for sqlx
+	"github.com/jmoiron/sqlx"
 )
 
-func NewQueryConverter(
-	pluginName string,
-	namespaceName namespace.Name,
-	namespaceID namespace.ID,
-	saTypeMap searchattribute.NameTypeMap,
-	saMapper searchattribute.Mapper,
-	queryString string,
-) *QueryConverter {
-	switch pluginName {
-	case cockroach.PluginName:
-		return newCockroachQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case mysql.PluginName:
-		return newMySQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case postgresql.PluginName, postgresql.PluginNamePGX:
-		return newPostgreSQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case sqlite.PluginName:
-		return newSqliteQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	default:
-		return nil
+type PGXDriver struct{}
+
+func (p *PGXDriver) CreateConnection(dsn string) (*sqlx.DB, error) {
+	return sqlx.Connect("pgx", dsn)
+}
+
+func (p *PGXDriver) IsDupEntryError(err error) bool {
+	pgxErr, ok := err.(*pgconn.PgError)
+	return ok && pgxErr.Code == dupEntryCode
+}
+
+func (p *PGXDriver) IsDupDatabaseError(err error) bool {
+	pqErr, ok := err.(*pgconn.PgError)
+	return ok && pqErr.Code == dupDatabaseCode
+}
+
+func (p *PGXDriver) IsConnNeedsRefreshError(err error) bool {
+	pqErr, ok := err.(*pgconn.PgError)
+	if !ok {
+		return false
 	}
+	return isConnNeedsRefreshError(pqErr.Code, pqErr.Message)
 }

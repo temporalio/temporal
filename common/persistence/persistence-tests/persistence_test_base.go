@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/cockroach"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -152,6 +153,8 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 
 	if options.DBPort == 0 {
 		switch options.SQLDBPluginName {
+		case cockroach.PluginName:
+			options.DBPort = environment.GetCockroachPort()
 		case mysql.PluginName:
 			options.DBPort = environment.GetMySQLPort()
 		case postgresql.PluginName, postgresql.PluginNamePGX:
@@ -164,6 +167,8 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 	}
 	if options.DBHost == "" {
 		switch options.SQLDBPluginName {
+		case cockroach.PluginName:
+			options.DBHost = environment.GetCockroachAddress()
 		case mysql.PluginName:
 			options.DBHost = environment.GetMySQLAddress()
 		case postgresql.PluginName, postgresql.PluginNamePGX:

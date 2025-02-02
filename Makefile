@@ -30,8 +30,11 @@ GOPATH      ?= $(shell go env GOPATH)
 # Disable cgo by default.
 CGO_ENABLED ?= 0
 
-PERSISTENCE_TYPE ?= nosql
-PERSISTENCE_DRIVER ?= cassandra
+# PERSISTENCE_TYPE ?= nosql
+# PERSISTENCE_DRIVER ?= cassandra
+
+PERSISTENCE_TYPE ?= sql
+PERSISTENCE_DRIVER ?= cockroach
 
 # Optional args to create multiple keyspaces:
 # make install-schema TEMPORAL_DB=temporal2 VISIBILITY_DB=temporal_visibility2
@@ -502,6 +505,17 @@ install-schema-postgresql12: temporal-sql-tool
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres12 --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 5432 --pl postgres12 --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v12/visibility/versioned
 
+install-schema-cockroach: temporal-sql-tool
+	@printf $(COLOR) "Install Cockroach schema..."
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 26257 --pl cockroach --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 26257 --pl cockroach --db $(TEMPORAL_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 26257 --pl cockroach --db $(TEMPORAL_DB) setup -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 26257 --pl cockroach --db $(TEMPORAL_DB) update-schema -d ./schema/cockroach/temporal/versioned
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 26257 --pl cockroach --db $(VISIBILITY_DB) drop -f
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 26257 --pl cockroach --db $(VISIBILITY_DB) create
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 26257 --pl cockroach --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 26257 --pl cockroach --db $(VISIBILITY_DB) update-schema -d ./schema/cockroach/visibility/versioned
+
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
 	curl --fail -X PUT "http://127.0.0.1:9200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
@@ -590,6 +604,9 @@ start-xdc-cluster-b: temporal-server
 
 start-xdc-cluster-c: temporal-server
 	./temporal-server --env development-cluster-c --allow-no-auth start
+
+start-cockroach: temporal-server
+	./temporal-server --env development-cockroach --allow-no-auth start
 
 ##### Grafana #####
 update-dashboards:

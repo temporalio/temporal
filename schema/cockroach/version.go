@@ -22,35 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sql
+package cockroach
 
-import (
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/cockroach"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/searchattribute"
-)
+// NOTE: whenever there is a new database schema update, plz update the following versions
 
-func NewQueryConverter(
-	pluginName string,
-	namespaceName namespace.Name,
-	namespaceID namespace.ID,
-	saTypeMap searchattribute.NameTypeMap,
-	saMapper searchattribute.Mapper,
-	queryString string,
-) *QueryConverter {
-	switch pluginName {
-	case cockroach.PluginName:
-		return newCockroachQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case mysql.PluginName:
-		return newMySQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case postgresql.PluginName, postgresql.PluginNamePGX:
-		return newPostgreSQLQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	case sqlite.PluginName:
-		return newSqliteQueryConverter(namespaceName, namespaceID, saTypeMap, saMapper, queryString)
-	default:
-		return nil
-	}
-}
+// Version is the Postgres database release version
+// Temporal supports both MySQL and Postgres officially, so upgrade should be performed for both MySQL and Postgres
+const Version = "1.0"
+
+// VisibilityVersion is the Postgres visibility database release version
+// Temporal supports both MySQL and Postgres officially, so upgrade should be performed for both MySQL and Postgres
+const VisibilityVersion = "1.0"
