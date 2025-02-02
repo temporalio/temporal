@@ -271,6 +271,11 @@ func validateParams(params BatchParams) error {
 		return worker_versioning.ValidateVersioningOverride(params.UpdateOptionsParams.WorkflowExecutionOptions.VersioningOverride)
 	case BatchTypeCancel, BatchTypeTerminate, BatchTypeDelete, BatchTypeReset:
 		return nil
+	case BatchTypeUnpauseActivities:
+		if params.UnpauseActivitiesParams.ActivityType == "" && !params.UnpauseActivitiesParams.MatchAll {
+			return fmt.Errorf("must provide ActivityType or MatchAll")
+		}
+		return nil
 	default:
 		return fmt.Errorf("not supported batch type: %v", params.BatchType)
 	}
