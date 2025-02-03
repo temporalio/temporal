@@ -7345,7 +7345,7 @@ func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
 	vi := ms.GetExecutionInfo().GetVersioningInfo()
 	if t := vi.GetVersionTransition(); t != nil {
-		v, _ := worker_versioning.WorkerDeploymentVersionFromString(t.GetDeploymentVersion())
+		v, _ := worker_versioning.WorkerDeploymentVersionFromString(t.GetVersion())
 		return &workflowpb.DeploymentTransition{
 			Deployment: worker_versioning.DeploymentFromDeploymentVersion(v),
 		}
@@ -7388,7 +7388,7 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	//nolint:staticcheck // SA1019 deprecated DeploymentTransition will clean up later
 	versioningInfo.DeploymentTransition = nil
 	versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
-		DeploymentVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment)),
+		Version: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment)),
 	}
 
 	// Because deployment is changed, we clear sticky queue to make sure the next wf task does not

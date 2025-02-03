@@ -216,7 +216,7 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 	if versioningInfo == nil {
 		return nil
 	} else if transition := versioningInfo.GetVersionTransition(); transition != nil {
-		v, _ := worker_versioning.WorkerDeploymentVersionFromString(transition.GetDeploymentVersion())
+		v, _ := worker_versioning.WorkerDeploymentVersionFromString(transition.GetVersion())
 		return worker_versioning.DeploymentFromDeploymentVersion(v)
 	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
 		return transition.GetDeployment()
@@ -229,7 +229,7 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 		return override.GetDeployment()
 	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		//nolint:revive // nesting will be reduced after old code clean up
-		if v := versioningInfo.GetDeploymentVersion(); v != "" {
+		if v := versioningInfo.GetVersion(); v != "" {
 			dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
 			return worker_versioning.DeploymentFromDeploymentVersion(dv)
 		}

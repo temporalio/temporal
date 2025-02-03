@@ -274,7 +274,7 @@ func (tv *TestVars) DeploymentVersionString() string {
 
 func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionTransition {
 	return &workflowpb.DeploymentVersionTransition{
-		DeploymentVersion: tv.DeploymentVersionString(),
+		Version: tv.DeploymentVersionString(),
 	}
 }
 
@@ -420,8 +420,8 @@ func (tv *TestVars) WorkerDeploymentOptions(versioned bool) *deploymentpb.Worker
 		m = enumspb.WORKER_VERSIONING_MODE_VERSIONED
 	}
 	return &deploymentpb.WorkerDeploymentOptions{
-		BuildId:        tv.BuildID(),
-		DeploymentName: tv.DeploymentSeries(),
-		VersioningMode: m,
+		BuildId:              tv.BuildID(),
+		DeploymentName:       tv.DeploymentSeries(),
+		WorkerVersioningMode: m,
 	}
 }

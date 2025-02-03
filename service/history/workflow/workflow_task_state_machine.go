@@ -1105,7 +1105,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := attrs.GetDeployment()
-	if v := attrs.GetDeploymentVersion(); v != "" {
+	if v := attrs.GetWorkerDeploymentVersion(); v != "" {
 		dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
 		wftDeployment = worker_versioning.DeploymentFromDeploymentVersion(dv)
 	}
@@ -1152,7 +1152,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	if wftBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		if versioningInfo != nil {
 			// Deployment Version is not set for unversioned workers.
-			versioningInfo.DeploymentVersion = ""
+			versioningInfo.Version = ""
 			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 			versioningInfo.Deployment = nil
 		}
@@ -1160,7 +1160,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// Only populating the new field.
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
-		versioningInfo.DeploymentVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
+		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
 	}
 
 	// Deployment and behavior after applying the data came from the completed wft.

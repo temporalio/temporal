@@ -168,15 +168,15 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId:   scheduledEventID,
-			StartedEventId:     startedEventID,
-			Identity:           identity,
-			BinaryChecksum:     checksum,
-			WorkerVersion:      workerVersionStamp,
-			SdkMetadata:        sdkMetadata,
-			MeteringMetadata:   meteringMetadata,
-			DeploymentVersion:  dv,
-			VersioningBehavior: behavior,
+			ScheduledEventId:        scheduledEventID,
+			StartedEventId:          startedEventID,
+			Identity:                identity,
+			BinaryChecksum:          checksum,
+			WorkerVersion:           workerVersionStamp,
+			SdkMetadata:             sdkMetadata,
+			MeteringMetadata:        meteringMetadata,
+			WorkerDeploymentVersion: dv,
+			VersioningBehavior:      behavior,
 		},
 	}
 

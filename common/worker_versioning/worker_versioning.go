@@ -171,7 +171,7 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 // DeploymentFromCapabilities returns the deployment if it is using versioning V3, otherwise nil.
 // It returns the deployment from the `options` if present, otherwise, from `capabilities`,
 func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities, options *deploymentpb.WorkerDeploymentOptions) *deploymentpb.Deployment {
-	if options.GetVersioningMode() != enumspb.WORKER_VERSIONING_MODE_UNVERSIONED &&
+	if options.GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_UNVERSIONED &&
 		options.GetDeploymentName() != "" &&
 		options.GetBuildId() != "" {
 		return &deploymentpb.Deployment{
@@ -189,7 +189,7 @@ func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities
 }
 
 func DeploymentVersionFromOptions(options *deploymentpb.WorkerDeploymentOptions) *deploymentspb.WorkerDeploymentVersion {
-	if options.GetVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED {
+	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED {
 		return &deploymentspb.WorkerDeploymentVersion{
 			DeploymentName: options.GetDeploymentName(),
 			BuildId:        options.GetBuildId(),
