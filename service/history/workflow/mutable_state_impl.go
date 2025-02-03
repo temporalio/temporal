@@ -4421,7 +4421,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 			Behavior:      override.GetBehavior(),
 			PinnedVersion: override.GetPinnedVersion(),
 		}
-		if d := override.GetDeployment(); d != nil {
+		if d := override.GetDeployment(); d != nil { // if the old Deployment field was populated instead of PinnedVersion
 			// We read from both old and new fields but write in the new fields only.
 			ms.GetExecutionInfo().VersioningInfo.VersioningOverride.PinnedVersion = worker_versioning.WorkerDeploymentVersionToString(
 				worker_versioning.DeploymentVersionFromDeployment(d))

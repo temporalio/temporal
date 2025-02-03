@@ -329,7 +329,7 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 // or deployment name.
 func ValidateDeploymentVersion(version *deploymentspb.WorkerDeploymentVersion) error {
 	if version == nil {
-		return serviceerror.NewInvalidArgument("deployment cannot be nil")
+		return serviceerror.NewInvalidArgument("deployment version cannot be nil")
 	}
 	if version.GetDeploymentName() == "" {
 		return serviceerror.NewInvalidArgument("deployment name cannot be empty")
@@ -365,7 +365,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 			_, err := ValidateDeploymentVersionString(override.GetPinnedVersion())
 			return err
 		} else {
-			return serviceerror.NewInvalidArgument("must provide deployment if behavior is 'PINNED'")
+			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
 		}
 	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
 		if override.GetDeployment() != nil {
