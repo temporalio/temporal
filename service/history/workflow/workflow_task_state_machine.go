@@ -744,7 +744,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.SdkMetadata,
 		request.MeteringMetadata,
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-		worker_versioning.DeploymentOrVersion(request.Deployment, request.DeploymentVersion),
+		worker_versioning.DeploymentOrVersion(request.Deployment, worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions)),
 		request.VersioningBehavior,
 	)
 
@@ -1110,7 +1110,11 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
 
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-	wftDeployment := worker_versioning.DeploymentOrVersion(attrs.GetDeployment(), attrs.GetDeploymentVersion())
+	wftDeployment := attrs.GetDeployment()
+	if v := attrs.GetWorkerDeploymentVersion(); v != "" {
+		dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
+		wftDeployment = worker_versioning.DeploymentFromDeploymentVersion(dv)
+	}
 	wftBehavior := attrs.GetVersioningBehavior()
 	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
 	transition := m.ms.GetDeploymentTransition()
@@ -1154,7 +1158,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	if wftBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		if versioningInfo != nil {
 			// Deployment Version is not set for unversioned workers.
-			versioningInfo.DeploymentVersion = nil
+			versioningInfo.Version = ""
 			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 			versioningInfo.Deployment = nil
 		}
@@ -1162,7 +1166,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// Only populating the new field.
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
-		versioningInfo.DeploymentVersion = worker_versioning.DeploymentVersionFromDeployment(wftDeployment)
+		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
 	}
 
 	// Deployment and behavior after applying the data came from the completed wft.
