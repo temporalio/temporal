@@ -152,6 +152,11 @@ values in system search attributes.`,
 		`EnableNamespaceNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
 for signal / start / signal with start API if namespace is not active`,
 	)
+	EnableNamespaceHandoverWait = NewNamespaceBoolSetting(
+		"system.enableNamespaceHandoverWait",
+		true,
+		`EnableNamespaceHandoverWait whether waiting for namespace replication state update before serve the request`,
+	)
 	TransactionSizeLimit = NewGlobalIntSetting(
 		"system.transactionSizeLimit",
 		primitives.DefaultTransactionSizeLimit,

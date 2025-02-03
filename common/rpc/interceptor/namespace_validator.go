@@ -77,31 +77,27 @@ var (
 	allowedNamespaceStatesDefault = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 
 	allowedMethodsDuringHandover = map[string]struct{}{
-		"DescribeNamespace":                  {},
-		"UpdateNamespace":                    {},
-		"GetReplicationMessages":             {},
-		"ReplicateEventsV2":                  {},
-		"GetWorkflowExecutionRawHistory":     {},
-		"GetWorkflowExecutionRawHistoryV2":   {},
-		"GetWorkflowExecutionHistory":        {},
-		"GetWorkflowExecutionHistoryReverse": {},
-		"DescribeWorkflowExecution":          {},
-		"DescribeTaskQueue":                  {},
-		"ListTaskQueuePartitions":            {},
-		"ListOpenWorkflowExecutions":         {},
-		"ListClosedWorkflowExecutions":       {},
-		"ListWorkflowExecutions":             {},
-		"ListArchivedWorkflowExecutions":     {},
-		"ScanWorkflowExecutions":             {},
-		"CountWorkflowExecutions":            {},
-		"DescribeSchedule":                   {},
-		"ListScheduleMatchingTimes":          {},
-		"ListSchedules":                      {},
-		"GetWorkerBuildIdCompatibility":      {},
-		"GetWorkerVersioningRules":           {},
-		"GetWorkerTaskReachability":          {},
-		"DescribeBatchOperation":             {},
-		"ListBatchOperations":                {},
+		// Namespace APIs
+		"DeprecateNamespace": {},
+		"DescribeNamespace":  {},
+		"UpdateNamespace":    {},
+		"ListNamespaces":     {},
+		"RegisterNamespace":  {},
+		// Replication APIs
+		"GetReplicationMessages":           {},
+		"ReplicateEventsV2":                {},
+		"GetWorkflowExecutionRawHistory":   {},
+		"GetWorkflowExecutionRawHistoryV2": {},
+		// Visibility APIs
+		"ListTaskQueuePartitions":        {},
+		"ListOpenWorkflowExecutions":     {},
+		"ListClosedWorkflowExecutions":   {},
+		"ListWorkflowExecutions":         {},
+		"ListArchivedWorkflowExecutions": {},
+		"ScanWorkflowExecutions":         {},
+		"CountWorkflowExecutions":        {},
+		"ListSchedules":                  {},
+		"ListBatchOperations":            {},
 	}
 )
 
