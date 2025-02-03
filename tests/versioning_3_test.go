@@ -883,10 +883,18 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+
+	s.syncTaskQueueDeploymentData(tv, tqTypeWf, false, 20, false, t1)
+	wfInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     tv.TaskQueue(),
+		TaskQueueType: tqTypeWf,
+	})
+	s.NoError(err)
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: "__unversioned__", RampingVersion: tv.DeploymentVersionString(), RampingVersionPercentage: 20, UpdateTime: timestamp.TimePtr(t1)}, wfInfo.GetVersioningInfo())
 
 	s.syncTaskQueueDeploymentData(tv, tqTypeAct, true, 0, false, t1)
-	s.syncTaskQueueDeploymentData(tv, tqTypeWf, false, 20, false, t1)
-
 	actInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tv.TaskQueue(),
@@ -895,13 +903,15 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	s.NoError(err)
 	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersionString(), UpdateTime: timestamp.TimePtr(t1)}, actInfo.GetVersioningInfo())
 
-	wfInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+	// Now ramp to unversioned
+	s.syncTaskQueueDeploymentData(tv, tqTypeAct, true, 10, true, t2)
+	actInfo, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tv.TaskQueue(),
-		TaskQueueType: tqTypeWf,
+		TaskQueueType: tqTypeAct,
 	})
 	s.NoError(err)
-	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: "__unversioned__", RampingVersion: tv.DeploymentVersionString(), RampingVersionPercentage: 20, UpdateTime: timestamp.TimePtr(t1)}, wfInfo.GetVersioningInfo())
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersionString(), RampingVersionPercentage: 10, UpdateTime: timestamp.TimePtr(t2)}, actInfo.GetVersioningInfo())
 }
 
 func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
@@ -1127,8 +1137,8 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 	versioningInfo := dwf.WorkflowExecutionInfo.GetVersioningInfo()
 	s.Equal(behavior.String(), versioningInfo.GetBehavior().String())
 	var v *deploymentspb.WorkerDeploymentVersion
-	if versioningInfo.GetDeploymentVersion() != "" {
-		v, err = worker_versioning.WorkerDeploymentVersionFromString(versioningInfo.GetDeploymentVersion())
+	if versioningInfo.GetVersion() != "" {
+		v, err = worker_versioning.WorkerDeploymentVersionFromString(versioningInfo.GetVersion())
 		s.NoError(err)
 	}
 	actualDeployment := worker_versioning.DeploymentFromDeploymentVersion(v)

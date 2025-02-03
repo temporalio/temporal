@@ -128,9 +128,9 @@ func (s *DeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *tas
 		TaskQueue: taskQueue,
 		Identity:  "random",
 		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
-			BuildId:        deployment.BuildId,
-			DeploymentName: deployment.SeriesName,
-			VersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			BuildId:              deployment.BuildId,
+			DeploymentName:       deployment.SeriesName,
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
 	})
 }
@@ -142,9 +142,9 @@ func (s *DeploymentSuite) pollActivityFromDeployment(ctx context.Context, taskQu
 		TaskQueue: taskQueue,
 		Identity:  "random",
 		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
-			BuildId:        deployment.BuildId,
-			DeploymentName: deployment.SeriesName,
-			VersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			BuildId:              deployment.BuildId,
+			DeploymentName:       deployment.SeriesName,
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
 	})
 }
