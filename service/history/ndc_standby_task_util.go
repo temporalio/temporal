@@ -109,6 +109,10 @@ func isWorkflowExistOnSource(
 	clientBean client.Bean,
 	registry namespace.Registry,
 ) bool {
+	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(workflowKey.NamespaceID))
+	if err != nil {
+		return true
+	}
 	remoteClusterName, err := getSourceClusterName(
 		currentCluster,
 		registry,
@@ -122,7 +126,7 @@ func isWorkflowExistOnSource(
 		return true
 	}
 	_, err = remoteAdminClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: workflowKey.GetNamespaceID(),
+		Namespace: namespaceEntry.Name().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.GetWorkflowID(),
 			RunId:      workflowKey.GetRunID(),
