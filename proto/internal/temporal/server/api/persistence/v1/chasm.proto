@@ -46,8 +46,8 @@ message ChasmNode {
 
 message ChasmComponentAttributes {
     message Task {
-        // Fully qualified name of a registered task.
-        string name = 1;
+        // Fully qualified type name of a registered task.
+        string type = 1;
         string destination = 2;
         google.protobuf.Timestamp scheduled_time = 3;
         temporal.api.common.v1.DataBlob data = 4;
@@ -55,8 +55,8 @@ message ChasmComponentAttributes {
         VersionedTransition versioned_transition = 5;
     }
 
-    // Fully qualified name of a registered component.
-    string name = 1;
+    // Fully qualified type name of a registered component.
+    string type = 1;
     temporal.api.common.v1.DataBlob data = 2;
     repeated Task tasks = 3;
 }
