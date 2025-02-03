@@ -27,8 +27,10 @@ package matching
 import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -49,9 +51,9 @@ func findDeployment(deployments *persistencespb.DeploymentData, deployment *depl
 	return -1
 }
 
-func findDeploymentVersion(deployments *persistencespb.DeploymentData, dv *deploymentpb.WorkerDeploymentVersion) int {
-	for i, v := range deployments.GetVersions() {
-		if v.Version.Equal(dv) {
+func findDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
+	for i, vd := range deployments.GetVersions() {
+		if proto.Equal(v, vd.GetVersion()) {
 			return i
 		}
 	}
@@ -59,7 +61,7 @@ func findDeploymentVersion(deployments *persistencespb.DeploymentData, dv *deplo
 }
 
 //nolint:staticcheck
-func hasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentpb.WorkerDeploymentVersion) bool {
+func hasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) bool {
 	for _, d := range deployments.GetDeployments() {
 		if d.Deployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(v)) {
 			return true
@@ -67,7 +69,7 @@ func hasDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploym
 	}
 
 	for _, vd := range deployments.GetVersions() {
-		if v.Equal(vd.GetVersion()) {
+		if proto.Equal(v, vd.GetVersion()) {
 			return true
 		}
 	}
