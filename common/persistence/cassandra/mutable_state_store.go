@@ -859,15 +859,15 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 		}
 		return err
 	} else if resp.RunID == runID {
-		return p.NewCurrentWorkflowConditionFailedError(
-			fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
-			nil,
-			"",
-			enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
-			enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
-			0,
-			startTime,
-		)
+		return &p.CurrentWorkflowConditionFailedError{
+			Msg:              fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
+			RequestIDs:       nil,
+			RunID:            "",
+			State:            enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
+			LastWriteVersion: 0,
+			StartTime:        startTime,
+		}
 	}
 
 	return nil

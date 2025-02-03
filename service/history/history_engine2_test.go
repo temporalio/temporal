@@ -1272,9 +1272,9 @@ func makeCurrentWorkflowConditionFailedError(
 	lastWriteVersion := common.EmptyVersion
 	tv1 := tv.WithRequestID("AttachedRequestID1")
 	tv2 := tv.WithRequestID("AttachedRequestID2")
-	return persistence.NewCurrentWorkflowConditionFailedError(
-		"random message",
-		map[string]*persistencespb.RequestIDInfo{
+	return &persistence.CurrentWorkflowConditionFailedError{
+		Msg: "random message",
+		RequestIDs: map[string]*persistencespb.RequestIDInfo{
 			tv.RequestID(): {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
@@ -1285,12 +1285,12 @@ func makeCurrentWorkflowConditionFailedError(
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
 			},
 		},
-		tv.RunID(),
-		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		lastWriteVersion,
-		timestamp.TimeValuePtr(startTime),
-	)
+		RunID:            tv.RunID(),
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		LastWriteVersion: lastWriteVersion,
+		StartTime:        timestamp.TimeValuePtr(startTime),
+	}
 }
 
 func (s *engine2Suite) setupStartWorkflowExecutionDedup(startTime *timestamppb.Timestamp) *workflow.MutableStateImpl {
@@ -1486,19 +1486,19 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 		makeCurrentWorkflowConditionFailedError := func(
 			requestID string,
 		) error {
-			return persistence.NewCurrentWorkflowConditionFailedError(
-				"random message",
-				map[string]*persistencespb.RequestIDInfo{
+			return &persistence.CurrentWorkflowConditionFailedError{
+				Msg: "random message",
+				RequestIDs: map[string]*persistencespb.RequestIDInfo{
 					requestID: {
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 					},
 				},
-				prevRunID,
-				enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				lastWriteVersion,
-				nil,
-			)
+				RunID:            prevRunID,
+				State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				LastWriteVersion: lastWriteVersion,
+				StartTime:        nil,
+			}
 		}
 
 		updateExecutionRequest := mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
@@ -1590,19 +1590,19 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 				makeCurrentWorkflowConditionFailedError := func(
 					requestID string,
 				) error {
-					return persistence.NewCurrentWorkflowConditionFailedError(
-						"random message",
-						map[string]*persistencespb.RequestIDInfo{
+					return &persistence.CurrentWorkflowConditionFailedError{
+						Msg: "random message",
+						RequestIDs: map[string]*persistencespb.RequestIDInfo{
 							requestID: {
 								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 							},
 						},
-						prevRunID,
-						enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-						status,
-						lastWriteVersion,
-						nil,
-					)
+						RunID:            prevRunID,
+						State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+						Status:           status,
+						LastWriteVersion: lastWriteVersion,
+						StartTime:        nil,
+					}
 				}
 
 				s.Run(fmt.Sprintf("status %v", status), func() {
@@ -1848,20 +1848,20 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	wfMs.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
-	workflowAlreadyStartedErr := persistence.NewCurrentWorkflowConditionFailedError(
-		"random message",
-		map[string]*persistencespb.RequestIDInfo{
+	workflowAlreadyStartedErr := &persistence.CurrentWorkflowConditionFailedError{
+		Msg: "random message",
+		RequestIDs: map[string]*persistencespb.RequestIDInfo{
 			// use same requestID
 			requestID: {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
 		},
-		runID,
-		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		common.EmptyVersion,
-		nil,
-	)
+		RunID:            runID,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		LastWriteVersion: common.EmptyVersion,
+		StartTime:        nil,
+	}
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
@@ -1920,19 +1920,19 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	wfMs.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
-	workflowAlreadyStartedErr := persistence.NewCurrentWorkflowConditionFailedError(
-		"random message",
-		map[string]*persistencespb.RequestIDInfo{
+	workflowAlreadyStartedErr := &persistence.CurrentWorkflowConditionFailedError{
+		Msg: "random message",
+		RequestIDs: map[string]*persistencespb.RequestIDInfo{
 			"new request ID": {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
 		},
-		runID,
-		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		common.EmptyVersion,
-		nil,
-	)
+		RunID:            runID,
+		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		LastWriteVersion: common.EmptyVersion,
+		StartTime:        nil,
+	}
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)

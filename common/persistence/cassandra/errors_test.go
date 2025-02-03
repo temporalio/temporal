@@ -267,15 +267,15 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 		err.Msg = ""
 	}
 	s.DeepEqual(
-		p.NewCurrentWorkflowConditionFailedError(
-			"",
-			workflowState.RequestIds,
-			workflowState.RunId,
-			workflowState.State,
-			workflowState.Status,
-			lastWriteVersion,
-			&startTime,
-		),
+		&p.CurrentWorkflowConditionFailedError{
+			Msg:              "",
+			RequestIDs:       workflowState.RequestIds,
+			RunID:            workflowState.RunId,
+			State:            workflowState.State,
+			Status:           workflowState.Status,
+			LastWriteVersion: lastWriteVersion,
+			StartTime:        &startTime,
+		},
 		err,
 	)
 }

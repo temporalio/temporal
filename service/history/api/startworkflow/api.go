@@ -424,7 +424,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		newRunID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
-		currentWorkflowConditionFailed.CreateRequestID,
+		currentWorkflowConditionFailed.RequestIDs,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
 		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
 		currentWorkflowStartTime,
@@ -682,7 +682,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 		err := api.ResolveWorkflowIDReusePolicy(
 			workflowKey,
 			currentWorkflowConditionFailed.Status,
-			currentWorkflowConditionFailed.CreateRequestID,
+			currentWorkflowConditionFailed.RequestIDs,
 			s.request.StartRequest.GetWorkflowIdReusePolicy(),
 		)
 		if err != nil {

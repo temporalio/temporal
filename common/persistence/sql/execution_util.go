@@ -945,19 +945,19 @@ func assertRunIDAndUpdateCurrentExecution(
 				return err
 			}
 
-			return p.NewCurrentWorkflowConditionFailedError(
-				fmt.Sprintf(
+			return &p.CurrentWorkflowConditionFailedError{
+				Msg: fmt.Sprintf(
 					"assertRunIDAndUpdateCurrentExecution failed. current run ID: %v, request run ID: %v",
 					currentRow.RunID,
 					previousRunID,
 				),
-				executionState.RequestIds,
-				currentRow.RunID.String(),
-				currentRow.State,
-				currentRow.Status,
-				currentRow.LastWriteVersion,
-				currentRow.StartTime,
-			)
+				RequestIDs:       executionState.RequestIds,
+				RunID:            currentRow.RunID.String(),
+				State:            currentRow.State,
+				Status:           currentRow.Status,
+				LastWriteVersion: currentRow.LastWriteVersion,
+				StartTime:        currentRow.StartTime,
+			}
 		}
 		return nil
 	}

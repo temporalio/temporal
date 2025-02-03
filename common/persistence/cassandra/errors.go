@@ -239,18 +239,18 @@ func extractCurrentWorkflowConflictError(
 
 		// TODO maybe assert actualCurrentRunID == executionState.RunId ?
 
-		return p.NewCurrentWorkflowConditionFailedError(
-			fmt.Sprintf("Encounter current workflow error, request run ID: %v, actual run ID: %v",
+		return &p.CurrentWorkflowConditionFailedError{
+			Msg: fmt.Sprintf("Encounter current workflow error, request run ID: %v, actual run ID: %v",
 				requestCurrentRunID,
 				actualCurrentRunID,
 			),
-			executionState.RequestIds,
-			executionState.RunId,
-			executionState.State,
-			executionState.Status,
-			lastWriteVersion,
-			timestamp.TimeValuePtr(executionState.StartTime),
-		)
+			RequestIDs:       executionState.RequestIds,
+			RunID:            executionState.RunId,
+			State:            executionState.State,
+			Status:           executionState.Status,
+			LastWriteVersion: lastWriteVersion,
+			StartTime:        timestamp.TimeValuePtr(executionState.StartTime),
+		}
 	}
 	return nil
 }

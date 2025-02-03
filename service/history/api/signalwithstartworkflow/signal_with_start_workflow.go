@@ -182,7 +182,7 @@ func createWorkflowMutationFunction(
 		newRunID,
 		currentExecutionState.State,
 		currentExecutionState.Status,
-		currentExecutionState.CreateRequestId,
+		currentExecutionState.RequestIds,
 		workflowIDReusePolicy,
 		workflowIDConflictPolicy,
 		currentWorkflowStartTime,
@@ -278,7 +278,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	case nil:
 		return newWorkflowLease.GetContext().GetWorkflowKey().RunID, true, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
-		if failedErr.CreateRequestID == requestID {
+		if _, ok := failedErr.RequestIDs[requestID]; ok {
 			return failedErr.RunID, false, nil
 		}
 		return "", false, err

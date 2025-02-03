@@ -36,15 +36,15 @@ func extractCurrentWorkflowConflictError(
 	message string,
 ) error {
 	if currentRow == nil {
-		return p.NewCurrentWorkflowConditionFailedError(
-			message,
-			nil,
-			"",
-			enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
-			enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
-			0,
-			nil,
-		)
+		return &p.CurrentWorkflowConditionFailedError{
+			Msg:              message,
+			RequestIDs:       nil,
+			RunID:            "",
+			State:            enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
+			LastWriteVersion: 0,
+			StartTime:        nil,
+		}
 	}
 
 	executionState, err := workflowExecutionStateFromCurrentExecutionsRow(currentRow)
@@ -52,13 +52,13 @@ func extractCurrentWorkflowConflictError(
 		return err
 	}
 
-	return p.NewCurrentWorkflowConditionFailedError(
-		message,
-		executionState.RequestIds,
-		currentRow.RunID.String(),
-		currentRow.State,
-		currentRow.Status,
-		currentRow.LastWriteVersion,
-		currentRow.StartTime,
-	)
+	return &p.CurrentWorkflowConditionFailedError{
+		Msg:              message,
+		RequestIDs:       executionState.RequestIds,
+		RunID:            currentRow.RunID.String(),
+		State:            currentRow.State,
+		Status:           currentRow.Status,
+		LastWriteVersion: currentRow.LastWriteVersion,
+		StartTime:        currentRow.StartTime,
+	}
 }
