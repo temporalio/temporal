@@ -550,12 +550,12 @@ func (s *PartitionManagerTestSuite) pollWithIdentity(pollerId, buildId string, u
 	pm := &pollMetadata{}
 	if passOptions {
 		pm.deploymentOptions = &deploymentpb.WorkerDeploymentOptions{
-			DeploymentName:         "foo",
-			BuildId:                buildId,
-			WorkflowVersioningMode: enumspb.WORKFLOW_VERSIONING_MODE_UNVERSIONED,
+			DeploymentName:       "foo",
+			BuildId:              buildId,
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_UNVERSIONED,
 		}
 		if useVersioning {
-			pm.deploymentOptions.WorkflowVersioningMode = enumspb.WORKFLOW_VERSIONING_MODE_VERSIONING_BEHAVIORS
+			pm.deploymentOptions.WorkerVersioningMode = enumspb.WORKER_VERSIONING_MODE_VERSIONED
 		}
 	} else {
 		pm.workerVersionCapabilities = &commonpb.WorkerVersionCapabilities{

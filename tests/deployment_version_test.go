@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -137,15 +136,11 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
-			Version: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: tv.DeploymentSeries(),
-				BuildId:        tv.BuildID(),
-			},
+			Version:   tv.DeploymentVersionString(),
 		})
 		a.NoError(err)
 
-		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
-		a.Equal(tv.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 
 		a.Equal(numberOfDeployments, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
 		if len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()) < numberOfDeployments {
@@ -177,16 +172,12 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
-			Version: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: tv.DeploymentSeries(),
-				BuildId:        tv.BuildID(),
-			},
+			Version:   tv.DeploymentVersionString(),
 		})
 		if !a.NoError(err) {
 			return
 		}
-		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
-		a.Equal(tv.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 
 		if !a.Equal(2, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos())) {
 			return
@@ -221,14 +212,10 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 		a := assert.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
-			Version: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: tv1.DeploymentSeries(),
-				BuildId:        tv1.BuildID(),
-			},
+			Version:   tv1.DeploymentVersionString(),
 		})
 		a.NoError(err)
-		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
-		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 	}, time.Second*5, time.Millisecond*200)
 
 	// Start deployment workflow 2 and wait for the deployment version to exist
@@ -237,14 +224,10 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 		a := assert.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
-			Version: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: tv2.DeploymentSeries(),
-				BuildId:        tv2.BuildID(),
-			},
+			Version:   tv2.DeploymentVersionString(),
 		})
 		a.NoError(err)
-		a.Equal(tv2.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
-		a.Equal(tv2.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+		a.Equal(tv2.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 	}, time.Second*5, time.Millisecond*200)
 
 	// non-current deployments have never been used and have no drainage info
@@ -318,14 +301,10 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 		a := assert.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
-			Version: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: tv1.DeploymentSeries(),
-				BuildId:        tv1.BuildID(),
-			},
+			Version:   tv1.DeploymentVersionString(),
 		})
 		a.NoError(err)
-		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
-		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 	}, time.Second*5, time.Millisecond*200)
 
 	// SetCurrent so that the task queue puts the version in its versions info
@@ -348,8 +327,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 		a.NoError(err)
 		if resp != nil {
 			a.NotNil(resp.GetVersioningInfo().GetCurrentVersion())
-			a.Equal(tv1.BuildID(), resp.GetVersioningInfo().GetCurrentVersion().GetBuildId())
-			a.Equal(tv1.DeploymentSeries(), resp.GetVersioningInfo().GetCurrentVersion().GetDeploymentName())
+			a.Equal(tv1.DeploymentVersionString(), resp.GetVersioningInfo().GetCurrentVersion())
 		}
 	}, time.Second*5, time.Millisecond*200)
 
@@ -422,10 +400,7 @@ func (s *DeploymentVersionSuite) tryDeleteVersion(
 		a := assert.New(t)
 		_, err := s.FrontendClient().DeleteWorkerDeploymentVersion(ctx, &workflowservice.DeleteWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
-			Version: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: tv.DeploymentSeries(),
-				BuildId:        tv.BuildID(),
-			},
+			Version:   tv.DeploymentVersionString(),
 		})
 		if expectSuccess {
 			a.NoError(err)
@@ -444,10 +419,7 @@ func (s *DeploymentVersionSuite) checkVersionDrainage(
 		a := assert.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
-			Version: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: tv.DeploymentSeries(),
-				BuildId:        tv.BuildID(),
-			},
+			Version:   tv.DeploymentVersionString(),
 		})
 		a.NoError(err)
 
@@ -475,16 +447,12 @@ func (s *DeploymentVersionSuite) checkVersionIsCurrent(ctx context.Context, tv *
 
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
-			Version: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: tv.DeploymentSeries(),
-				BuildId:        tv.BuildID(),
-			},
+			Version:   tv.DeploymentVersionString(),
 		})
 		if !a.NoError(err) {
 			return
 		}
-		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
-		a.Equal(tv.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
 	}, time.Second*10, time.Millisecond*1000)
@@ -505,6 +473,6 @@ func (s *DeploymentVersionSuite) checkDescribeWorkflowAfterOverride(
 		a.NotNil(resp)
 		a.NotNil(resp.GetWorkflowExecutionInfo())
 		a.Equal(expectedOverride.GetBehavior(), resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetBehavior())
-		a.True(proto.Equal(expectedOverride.GetPinnedVersion(), resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetPinnedVersion()))
+		a.Equal(expectedOverride.GetPinnedVersion(), resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetPinnedVersion())
 	}, 5*time.Second, 50*time.Millisecond)
 }
