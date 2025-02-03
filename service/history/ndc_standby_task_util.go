@@ -121,11 +121,11 @@ func isWorkflowExistOnSource(
 	if err != nil {
 		return true
 	}
-	_, remoteAdminClient, err := clientBean.GetRemoteFrontendClient(remoteClusterName)
+	_, remoteFrontend, err := clientBean.GetRemoteFrontendClient(remoteClusterName)
 	if err != nil {
 		return true
 	}
-	_, err = remoteAdminClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	_, err = remoteFrontend.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: namespaceEntry.Name().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.GetWorkflowID(),
