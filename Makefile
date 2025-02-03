@@ -507,6 +507,7 @@ install-schema-postgresql12: temporal-sql-tool
 
 install-schema-cockroach: temporal-sql-tool
 	@printf $(COLOR) "Install Cockroach schema..."
+	@cockroach sql --insecure -e "CREATE ROLE temporal IF NOT EXISTS WITH login createdb";
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 26257 --pl cockroach --db $(TEMPORAL_DB) drop -f
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 26257 --pl cockroach --db $(TEMPORAL_DB) create
 	./temporal-sql-tool -u $(SQL_USER) --pw $(SQL_PASSWORD) -p 26257 --pl cockroach --db $(TEMPORAL_DB) setup -v 0.0
