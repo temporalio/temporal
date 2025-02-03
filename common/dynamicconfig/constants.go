@@ -214,7 +214,7 @@ response to a StartWorkflowExecution request and skipping the trip through match
 	)
 	NamespaceCacheRefreshInterval = NewGlobalDurationSetting(
 		"system.namespaceCacheRefreshInterval",
-		10*time.Second,
+		2*time.Second,
 		`NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config`,
 	)
 	PersistenceHealthSignalMetricsEnabled = NewGlobalBoolSetting(
