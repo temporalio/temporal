@@ -50,9 +50,9 @@ type ChasmNode struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Versioned transition when the node was last updated.
-	InitialVersionedTransition *VersionedTransition `protobuf:"bytes,1,opt,name=initial_versioned_transition,json=initialVersionedTransition,proto3" json:"initial_versioned_transition,omitempty"`
 	// Versioned transition when the node was instantiated.
+	InitialVersionedTransition *VersionedTransition `protobuf:"bytes,1,opt,name=initial_versioned_transition,json=initialVersionedTransition,proto3" json:"initial_versioned_transition,omitempty"`
+	// Versioned transition when the node was last updated.
 	LastUpdateVersionedTransition *VersionedTransition `protobuf:"bytes,2,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
 	// Types that are assignable to Attributes:
 	//
