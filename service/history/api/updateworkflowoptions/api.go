@@ -102,7 +102,7 @@ func Invoke(
 			if mergedOpts.GetVersioningOverride() == nil {
 				unsetOverride = true
 			}
-			_, err = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride)
+			_, err = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil)
 			if err != nil {
 				return nil, err
 			}

@@ -195,3 +195,32 @@ func (s *temporalSerializerSuite) TestSerializeShardInfo_Random() {
 
 	s.ProtoEqual(&shardInfo, deserializedShardInfo)
 }
+
+func (s *temporalSerializerSuite) TestSerializeWorkflowExecutionState() {
+	state := &persistencespb.WorkflowExecutionState{
+		RequestIds: make(map[string]*persistencespb.RequestIDInfo),
+	}
+	err := fakedata.FakeStruct(state)
+	s.NoError(err)
+
+	blob, err := s.serializer.WorkflowExecutionStateToBlob(state, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	deserializedState, err := s.serializer.WorkflowExecutionStateFromBlob(blob)
+	s.NoError(err)
+	s.NotNil(deserializedState)
+
+	// Deserialization adds the CreateRequestId to the Details.RequestIds map.
+	state.RequestIds[state.CreateRequestId] = &persistencespb.RequestIDInfo{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+	}
+	s.ProtoEqual(state, deserializedState)
+
+	blob, err = s.serializer.WorkflowExecutionStateToBlob(state, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	deserializedState, err = s.serializer.WorkflowExecutionStateFromBlob(blob)
+	s.NoError(err)
+	s.NotNil(deserializedState)
+	s.ProtoEqual(state, deserializedState)
+}

@@ -426,8 +426,7 @@ func (t *serializerImpl) WorkflowExecutionStateToBlob(info *persistencespb.Workf
 }
 
 func (t *serializerImpl) WorkflowExecutionStateFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionState, error) {
-	result := &persistencespb.WorkflowExecutionState{}
-	return result, ProtoDecodeBlob(data, result)
+	return WorkflowExecutionStateFromBlob(data.GetData(), data.GetEncodingType().String())
 }
 
 func (t *serializerImpl) ActivityInfoToBlob(info *persistencespb.ActivityInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
@@ -612,10 +611,5 @@ func ProtoEncodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.
 			EncodingType: encoding,
 		}, nil
 	}
-
-	data, err := proto.Marshal(m)
-	if err != nil {
-		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
-	}
-	return &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}, nil
+	return proto3Encode(m)
 }
