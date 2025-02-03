@@ -5487,8 +5487,10 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 ) error {
-	ms.executionStateUpdated = true
-	ms.visibilityUpdated = true // workflow status & state change triggers visibility change as well
+	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		ms.executionStateUpdated = true
+		ms.visibilityUpdated = true // workflow status & state change triggers visibility change as well
+	}
 	return setStateStatus(ms.executionState, state, status)
 }
 
