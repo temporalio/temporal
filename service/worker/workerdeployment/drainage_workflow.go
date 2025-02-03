@@ -30,11 +30,12 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/workflow"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func DrainageWorkflowWithDurations(visibilityGracePeriod, refreshInterval time.Duration) func(ctx workflow.Context, version *deploymentpb.WorkerDeploymentVersion, first bool) error {
-	return func(ctx workflow.Context, version *deploymentpb.WorkerDeploymentVersion, first bool) error {
+func DrainageWorkflowWithDurations(visibilityGracePeriod, refreshInterval time.Duration) func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
+	return func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		var a *DrainageActivities
 

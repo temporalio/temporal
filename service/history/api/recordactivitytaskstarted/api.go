@@ -29,9 +29,9 @@ import (
 	"errors"
 	"fmt"
 
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -260,7 +260,7 @@ func getDeploymentVersionForWorkflowId(
 	taskQueueType enumspb.TaskQueueType,
 	matchingClient matchingservice.MatchingServiceClient,
 	workflowId string,
-) (*deploymentpb.WorkerDeploymentVersion, error) {
+) (*deploymentspb.WorkerDeploymentVersion, error) {
 	resp, err := matchingClient.GetTaskQueueUserData(ctx,
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   namespaceID,
@@ -275,6 +275,6 @@ func getDeploymentVersionForWorkflowId(
 		// The TQ is unversioned
 		return nil, nil
 	}
-	versioningInfo := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
-	return worker_versioning.FindDeploymentVersionForWorkflowID(versioningInfo, workflowId), nil
+	current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
+	return worker_versioning.FindDeploymentVersionForWorkflowID(current, ramping, workflowId), nil
 }

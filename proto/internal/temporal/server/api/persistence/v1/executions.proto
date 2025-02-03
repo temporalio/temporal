@@ -279,7 +279,7 @@ message WorkflowExecutionInfo {
     // Should be deprecated once the transition history is fully launched
     repeated VersionedTransition previous_transition_history = 100;
     VersionedTransition last_transition_history_break_point = 101;
-
+    string worker_deployment = 102;
 }
 
 message ExecutionStats {
@@ -535,7 +535,7 @@ message ActivityInfo {
 
     // The deployment this activity was dispatched to most recently. Present only if the activity
     // was dispatched to a versioned worker.
-    temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 44;
+    string last_deployment_version = 44;
 }
 
 // timer_map column
