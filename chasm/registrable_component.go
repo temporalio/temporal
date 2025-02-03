@@ -22,23 +22,61 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
-
 package chasm
 
 import (
-	"context"
-	"time"
+	"reflect"
 )
 
 type (
-	TaskAttributes struct {
-		ScheduledTime time.Time
-		Destination   string
+	RegistrableComponent struct {
+		name   string
+		goType reflect.Type
+
+		ephemeral     bool
+		singleCluster bool
+		shardingFn    func(EntityKey) string
 	}
 
-	TaskHandler[C any, T any] interface {
-		Validate(Context, C, T) error
-		Execute(context.Context, ComponentRef, T) error
-	}
+	RegistrableComponentOption func(*RegistrableComponent)
 )
+
+func NewRegistrableComponent[C Component](
+	name string,
+	opts ...RegistrableComponentOption,
+) *RegistrableComponent {
+	rc := &RegistrableComponent{
+		name:       name,
+		goType:     reflect.TypeFor[C](),
+		shardingFn: defaultShardingFn,
+	}
+	for _, opt := range opts {
+		opt(rc)
+	}
+	return rc
+}
+
+func WithEphemeral() RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.ephemeral = true
+	}
+}
+
+// Is there any use case where we don't want to replicate certain instances of a archetype?
+func WithSingleCluster() RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.singleCluster = true
+	}
+}
+
+func WithShardingFn(
+	shardingFn func(EntityKey) string,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.shardingFn = shardingFn
+	}
+}
+
+func (rc RegistrableComponent) Name() string {
+	return rc.name
+}

@@ -22,23 +22,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
-
 package chasm
 
-import (
-	"context"
-	"time"
-)
+func (r *Registry) Component(fqn string) (*RegistrableComponent, bool) {
+	return r.component(fqn)
+}
 
-type (
-	TaskAttributes struct {
-		ScheduledTime time.Time
-		Destination   string
-	}
+func (r *Registry) Task(fqn string) (*RegistrableTask, bool) {
+	return r.task(fqn)
+}
 
-	TaskHandler[C any, T any] interface {
-		Validate(Context, C, T) error
-		Execute(context.Context, ComponentRef, T) error
-	}
-)
+func (r *Registry) ComponentFor(componentInstance any) (*RegistrableComponent, bool) {
+	return r.componentFor(componentInstance)
+}
+
+func (r *Registry) TaskFor(taskInstance any) (*RegistrableTask, bool) {
+	return r.taskFor(taskInstance)
+}
