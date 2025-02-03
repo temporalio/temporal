@@ -38,6 +38,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -260,30 +261,27 @@ func (tv *TestVars) Deployment() *deploymentpb.Deployment {
 	}
 }
 
-func (tv *TestVars) DeploymentVersion() *deploymentpb.WorkerDeploymentVersion {
-	return &deploymentpb.WorkerDeploymentVersion{
+func (tv *TestVars) DeploymentVersion() *deploymentspb.WorkerDeploymentVersion {
+	return &deploymentspb.WorkerDeploymentVersion{
 		BuildId:        tv.BuildID(),
 		DeploymentName: tv.DeploymentSeries(),
 	}
 }
 
 func (tv *TestVars) DeploymentVersionString() string {
-	return worker_versioning.WorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
-		BuildId:        tv.BuildID(),
-		DeploymentName: tv.DeploymentSeries(),
-	})
+	return worker_versioning.WorkerDeploymentVersionToString(tv.DeploymentVersion())
 }
 
 func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionTransition {
 	return &workflowpb.DeploymentVersionTransition{
-		DeploymentVersion: worker_versioning.DeploymentVersionFromDeployment(tv.Deployment()),
+		Version: tv.DeploymentVersionString(),
 	}
 }
 
 func (tv *TestVars) VersioningOverridePinned() *workflowpb.VersioningOverride {
 	return &workflowpb.VersioningOverride{
-		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-		Deployment: tv.Deployment(),
+		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+		PinnedVersion: tv.DeploymentVersionString(),
 	}
 }
 
@@ -417,13 +415,13 @@ func (tv *TestVars) Global() Global {
 }
 
 func (tv *TestVars) WorkerDeploymentOptions(versioned bool) *deploymentpb.WorkerDeploymentOptions {
-	m := enumspb.WORKFLOW_VERSIONING_MODE_UNVERSIONED
+	m := enumspb.WORKER_VERSIONING_MODE_UNVERSIONED
 	if versioned {
-		m = enumspb.WORKFLOW_VERSIONING_MODE_VERSIONING_BEHAVIORS
+		m = enumspb.WORKER_VERSIONING_MODE_VERSIONED
 	}
 	return &deploymentpb.WorkerDeploymentOptions{
-		BuildId:                tv.BuildID(),
-		DeploymentName:         tv.DeploymentSeries(),
-		WorkflowVersioningMode: m,
+		BuildId:              tv.BuildID(),
+		DeploymentName:       tv.DeploymentSeries(),
+		WorkerVersioningMode: m,
 	}
 }
