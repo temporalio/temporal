@@ -106,11 +106,16 @@ func (s *streamReceiverSuite) SetupTest() {
 		DLQWriter:                 NoopDLQWriter{},
 	}
 	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return("some-cluster-name").AnyTimes()
+	s.highPriorityTaskTracker.EXPECT().Resume()
+	s.lowPriorityTaskTracker.EXPECT().Resume()
 	s.streamReceiver = NewStreamReceiver(
+		processToolBox.Logger,
 		processToolBox,
 		NewExecutableTaskConverter(processToolBox),
 		NewClusterShardKey(rand.Int31(), rand.Int31()),
 		NewClusterShardKey(rand.Int31(), rand.Int31()),
+		s.highPriorityTaskTracker,
+		s.lowPriorityTaskTracker,
 	)
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(
 		map[string]cluster.ClusterInformation{

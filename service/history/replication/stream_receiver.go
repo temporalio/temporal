@@ -87,20 +87,17 @@ func NewClusterShardKey(
 }
 
 func NewStreamReceiver(
+	logger log.Logger,
 	processToolBox ProcessToolBox,
 	taskConverter ExecutableTaskConverter,
 	clientShardKey ClusterShardKey,
 	serverShardKey ClusterShardKey,
+	highPriorityTaskTracker ExecutableTaskTracker,
+	lowPriorityTaskTracker ExecutableTaskTracker,
 ) *StreamReceiverImpl {
-	logger := log.With(
-		processToolBox.Logger,
-		tag.SourceCluster(processToolBox.ClusterMetadata.ClusterNameForFailoverVersion(true, int64(serverShardKey.ClusterID))),
-		tag.SourceShardID(serverShardKey.ShardID),
-		tag.ShardID(clientShardKey.ShardID), // client is the local cluster (target cluster, passive cluster)
-		tag.Operation("replication-stream-receiver"),
-	)
-	highPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
-	lowPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
+	highPriorityTaskTracker.Resume()
+	lowPriorityTaskTracker.Resume()
+
 	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
 	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
 		return &FlowControlSignal{

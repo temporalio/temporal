@@ -256,8 +256,7 @@ func (e *ExecutableTaskImpl) Cancel() {
 		"replication task: %v encountered cancellation event",
 		e.taskID,
 	))
-	now := time.Now().UTC()
-	e.emitFinishMetrics(now)
+	// should not emit metrics for cancelled task
 }
 
 func (e *ExecutableTaskImpl) Reschedule() {

@@ -58,6 +58,7 @@ type (
 		LowWatermark() *WatermarkInfo
 		Size() int
 		Cancel()
+		Resume()
 	}
 	ExecutableTaskTrackerImpl struct {
 		logger         log.Logger
@@ -103,6 +104,9 @@ func (t *ExecutableTaskTrackerImpl) TrackTasks(
 	}
 
 	lastTaskID := int64(-1)
+	if t.exclusiveHighWatermarkInfo != nil {
+		lastTaskID = t.exclusiveHighWatermarkInfo.Watermark - 1 // exclusive
+	}
 	if item := t.taskQueue.Back(); item != nil {
 		lastTaskID = item.Value.(TrackableExecutableTask).TaskID()
 	}
@@ -204,6 +208,9 @@ func (t *ExecutableTaskTrackerImpl) Cancel() {
 
 	t.cancelled = true
 	t.cancelLocked()
+}
+func (t *ExecutableTaskTrackerImpl) Resume() {
+	t.cancelled = false
 }
 
 func (t *ExecutableTaskTrackerImpl) cancelLocked() {

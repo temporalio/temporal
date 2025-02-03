@@ -62,10 +62,17 @@ type (
 		shutdownOnce channel.ShutdownOnce
 
 		sync.Mutex
-		inboundStreams  map[ClusterShardKeyPair]StreamSender
-		outboundStreams map[ClusterShardKeyPair]StreamReceiver
-		previousStatus  map[ClusterShardKeyPair]*streamStatus
+		inboundStreams         map[ClusterShardKeyPair]StreamSender
+		outboundStreams        map[ClusterShardKeyPair]StreamReceiver
+		outboundStreamTrackers map[ClusterShardKeyPair]*streamTracker
+		previousStatus         map[ClusterShardKeyPair]*streamStatus
 	}
+
+	streamTracker struct {
+		highPriorityTaskTracker ExecutableTaskTracker
+		lowPriorityTaskTracker  ExecutableTaskTracker
+	}
+
 	streamStatus struct {
 		defaultAckLevel      int64
 		highPriorityAckLevel int64
@@ -88,8 +95,9 @@ func NewStreamReceiverMonitor(
 		status:       streamStatusInitialized,
 		shutdownOnce: channel.NewShutdownOnce(),
 
-		inboundStreams:  make(map[ClusterShardKeyPair]StreamSender),
-		outboundStreams: make(map[ClusterShardKeyPair]StreamReceiver),
+		inboundStreams:         make(map[ClusterShardKeyPair]StreamSender),
+		outboundStreams:        make(map[ClusterShardKeyPair]StreamReceiver),
+		outboundStreamTrackers: make(map[ClusterShardKeyPair]*streamTracker),
 	}
 }
 
@@ -300,13 +308,37 @@ func (m *StreamReceiverMonitorImpl) doReconcileOutboundStreams(
 			delete(m.outboundStreams, streamKey)
 		}
 	}
+
+	for streamKey := range m.outboundStreamTrackers {
+		if _, ok := streamKeys[streamKey]; !ok {
+			delete(m.outboundStreamTrackers, streamKey)
+		}
+	}
+
 	for streamKey := range streamKeys {
+		logger := log.With(
+			m.Logger,
+			tag.SourceCluster(m.ClusterMetadata.ClusterNameForFailoverVersion(true, int64(streamKey.Server.ClusterID))),
+			tag.SourceShardID(streamKey.Server.ShardID),
+			tag.ShardID(streamKey.Client.ShardID), // client is the local cluster (target cluster, passive cluster)
+			tag.Operation("replication-stream-receiver"),
+		)
+		if _, ok := m.outboundStreamTrackers[streamKey]; !ok {
+			logger.Info("Creating new stream tracker.")
+			m.outboundStreamTrackers[streamKey] = &streamTracker{
+				highPriorityTaskTracker: NewExecutableTaskTracker(logger, m.MetricsHandler),
+				lowPriorityTaskTracker:  NewExecutableTaskTracker(logger, m.MetricsHandler),
+			}
+		}
 		if _, ok := m.outboundStreams[streamKey]; !ok {
 			stream := NewStreamReceiver(
+				logger,
 				m.ProcessToolBox,
 				m.executableTaskConverter,
 				streamKey.Client,
 				streamKey.Server,
+				m.outboundStreamTrackers[streamKey].highPriorityTaskTracker,
+				m.outboundStreamTrackers[streamKey].lowPriorityTaskTracker,
 			)
 			stream.Start()
 			m.outboundStreams[streamKey] = stream

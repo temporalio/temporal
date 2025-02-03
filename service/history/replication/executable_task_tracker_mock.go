@@ -314,6 +314,18 @@ func (mr *MockExecutableTaskTrackerMockRecorder) LowWatermark() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LowWatermark", reflect.TypeOf((*MockExecutableTaskTracker)(nil).LowWatermark))
 }
 
+// Resume mocks base method.
+func (m *MockExecutableTaskTracker) Resume() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Resume")
+}
+
+// Resume indicates an expected call of Resume.
+func (mr *MockExecutableTaskTrackerMockRecorder) Resume() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resume", reflect.TypeOf((*MockExecutableTaskTracker)(nil).Resume))
+}
+
 // Size mocks base method.
 func (m *MockExecutableTaskTracker) Size() int {
 	m.ctrl.T.Helper()
