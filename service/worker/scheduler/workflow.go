@@ -221,7 +221,7 @@ var (
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
-		Version:                           UseLastAction,
+		Version:                           ActionResultIncludesStatus,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
