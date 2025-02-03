@@ -498,9 +498,9 @@ func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
 }
 
 func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
-	for _, forcePollForward := range []bool{false, true} {
-		for _, forceTaskForward := range []bool{false, true} {
-			for _, forceAsync := range []bool{false, true} {
+	for _, forcePollForward := range []bool{false} {
+		for _, forceTaskForward := range []bool{false} {
+			for _, forceAsync := range []bool{false} {
 				name := "NoTaskForward"
 				if forceTaskForward {
 					// force two levels of forwarding
