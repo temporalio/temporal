@@ -1,0 +1,72 @@
+// The MIT License
+//
+// Copyright (c) 2025 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+
+import "google/protobuf/timestamp.proto";
+
+import "temporal/server/api/persistence/v1/hsm.proto";
+import "temporal/api/common/v1/message.proto";
+
+message ChasmNode {
+    // Versioned transition when the node was last updated.
+    VersionedTransition initial_versioned_transition = 1;
+    // Versioned transition when the node was instantiated.
+    VersionedTransition last_update_versioned_transition = 2;
+
+    oneof attributes {
+        ChasmComponentAttributes component_attributes = 11;
+        ChasmDataAttributes data_attributes = 12;
+        ChasmCollectionAttributes collection_attributes = 13;
+        ChasmPointerAttributes pointer_attributes = 14;
+    }
+}
+
+message ChasmComponentAttributes {
+    message Task {
+        // Fully qualified name of a registered task.
+        string name = 1;
+        string destination = 2;
+        google.protobuf.Timestamp scheduled_time = 3;
+        temporal.api.common.v1.DataBlob data = 4;
+        // Versioned transition of the Entity when the task was created.
+        VersionedTransition versioned_transition = 5;
+    }
+
+    // Fully qualified name of a registered component.
+    string name = 1;
+    temporal.api.common.v1.DataBlob data = 2;
+    repeated Task tasks = 3;
+}
+
+message ChasmDataAttributes {
+    temporal.api.common.v1.DataBlob data = 1;
+}
+
+message ChasmCollectionAttributes {}
+
+message ChasmPointerAttributes {
+    repeated string node_path = 1;
+}
