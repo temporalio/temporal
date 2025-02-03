@@ -40,10 +40,14 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -307,6 +311,180 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetRampingVersion_YesOpenWFs
 	// todo carly: test with open workflows on the draining version that then complete
 }
 
+func (s *DeploymentVersionSuite) TestDeleteVersion_NotDrained() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	pollerCtx1, pollerCancel1 := context.WithCancel(ctx)
+	go s.pollFromDeployment(pollerCtx1, tv1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv1.DeploymentSeries(),
+				BuildId:        tv1.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	// SetCurrent so that the task queue puts the version in its versions info
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv1.DeploymentSeries(),
+		Version:        tv1.DeploymentVersionString(),
+		ConflictToken:  nil,
+		Identity:       tv1.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	// describe tq and confirm that the current version is our version (so we can check that it was removed later)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: tv1.TaskQueue(),
+		})
+		a.NoError(err)
+		if resp != nil {
+			a.NotNil(resp.GetVersioningInfo().GetCurrentVersion())
+			a.Equal(tv1.BuildID(), resp.GetVersioningInfo().GetCurrentVersion().GetBuildId())
+			a.Equal(tv1.DeploymentSeries(), resp.GetVersioningInfo().GetCurrentVersion().GetDeploymentName())
+		}
+	}, time.Second*5, time.Millisecond*200)
+
+	// Version is not "drained" so delete should fail
+	s.tryDeleteVersion(ctx, tv1, false)
+
+	pollerCancel1()
+
+	// Signal the first version to be drained. Only do this in tests.
+	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: versionWorkflowID,
+	}
+	input := &deploymentpb.VersionDrainageInfo{
+		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+		LastChangedTime: timestamppb.New(time.Now()),
+		LastCheckedTime: timestamppb.New(time.Now()),
+	}
+	marshaledData, err := input.Marshal()
+	s.NoError(err)
+	signalPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				Metadata: map[string][]byte{
+					"encoding": []byte("binary/protobuf"),
+				},
+				Data: marshaledData,
+			},
+		},
+	}
+
+	error := s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
+	s.Nil(error)
+
+	// Version will bypass "drained" check but delete should still fail since we have active pollers.
+	s.tryDeleteVersion(ctx, tv1, false)
+
+}
+
+func (s *DeploymentVersionSuite) TestCheckIfTaskQueueHavePollers() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1).WithTaskQueue("task-queue-1")
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	wftCompleted := make(chan any)
+	s.pollWftAndHandle(tv1, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			fmt.Println("Received task.")
+			s.NotNil(task)
+			return respondCompleteWorkflow(tv1, vbUnpinned), nil
+		})
+
+	// Start a workflow execution?
+	s.startWorkflow(tv1, nil)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv1.DeploymentSeries(),
+				BuildId:        tv1.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	<-wftCompleted
+
+	// Version has active pollers so delete should fail
+	s.tryDeleteVersion(ctx, tv1, false)
+
+}
+
+func (s *DeploymentVersionSuite) pollWftAndHandle(
+	tv *testvars.TestVars,
+	sticky bool,
+	async chan<- any,
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
+) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+	f := func() *workflowservice.RespondWorkflowTaskCompletedResponse {
+		tq := tv.TaskQueue()
+		if sticky {
+			tq = tv.StickyTaskQueue()
+		}
+		resp, err := poller.PollWorkflowTask(
+			&workflowservice.PollWorkflowTaskQueueRequest{
+				DeploymentOptions: tv.WorkerDeploymentOptions(true),
+				TaskQueue:         tq,
+			},
+		).HandleTask(tv, handler)
+		s.NoError(err)
+		return resp
+	}
+	if async == nil {
+		return poller, f()
+	} else {
+		go func() {
+			f()
+			close(async)
+		}()
+	}
+	return nil, nil
+}
+
+func (s *DeploymentVersionSuite) startWorkflow(
+	tv *testvars.TestVars,
+	override *workflowpb.VersioningOverride,
+) string {
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          tv.Any().String(),
+		Namespace:          s.Namespace().String(),
+		WorkflowId:         tv.WorkflowID(),
+		WorkflowType:       tv.WorkflowType(),
+		TaskQueue:          tv.TaskQueue(),
+		Identity:           tv.WorkerIdentity(),
+		VersioningOverride: override,
+	}
+
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err0)
+	return we.GetRunId()
+}
+
+func (s *DeploymentVersionSuite) TestDeleteVersion_Drained() {}
+
 //nolint:forbidigo
 func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -420,21 +598,18 @@ func (s *DeploymentVersionSuite) tryDeleteVersion(
 	tv *testvars.TestVars,
 	expectSuccess bool,
 ) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		_, err := s.FrontendClient().DeleteWorkerDeploymentVersion(ctx, &workflowservice.DeleteWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: tv.DeploymentSeries(),
-				BuildId:        tv.BuildID(),
-			},
-		})
-		if expectSuccess {
-			a.NoError(err)
-		} else {
-			a.Error(err)
-		}
-	}, 5*time.Second, time.Millisecond*100)
+	_, err := s.FrontendClient().DeleteWorkerDeploymentVersion(ctx, &workflowservice.DeleteWorkerDeploymentVersionRequest{
+		Namespace: s.Namespace().String(),
+		Version: &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: tv.DeploymentSeries(),
+			BuildId:        tv.BuildID(),
+		},
+	})
+	if expectSuccess {
+		s.Nil(err)
+	} else {
+		s.Error(err)
+	}
 }
 
 func (s *DeploymentVersionSuite) checkVersionDrainage(

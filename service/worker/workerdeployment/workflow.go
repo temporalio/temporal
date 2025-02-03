@@ -25,6 +25,7 @@
 package workerdeployment
 
 import (
+	"fmt"
 	"slices"
 	"time"
 
@@ -199,8 +200,9 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			// version ramping for the first time
 
 			if !args.IgnoreMissingTaskQueues {
+				// todo (Shivam): do poller presence checks comparing newRampingVersion with oldCurrentVersion (if it exists)
 				if _, err := d.verifyPollerPresenceInVersion(ctx, prevRampingVersion, newRampingVersion); err != nil {
-					d.logger.Info("New version does not have all the task queues from the previous current version or some missing task queues are unversioned and active", "error", err)
+					d.logger.Info("Ramping version does not have all the task queues from the previous current version or some missing task queues are unversioned and active", "error", err)
 					return nil, err
 				}
 			}
@@ -248,8 +250,13 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 }
 
 func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+	fmt.Printf("Deployment workflow ID %s\n", d.DeploymentName)
+	fmt.Printf("Length of versionso list is %d\n", len(d.State.Versions))
+	if len(d.State.Versions) != 0 {
+		fmt.Printf("Versions list is %v\n", d.State.Versions)
+	}
 	if !slices.Contains(d.State.Versions, args.Version) {
-		return serviceerror.NewNotFound("version not found in deployment")
+		return serviceerror.NewNotFound(fmt.Sprintf("version %s not found in deployment", args.Version))
 	}
 	return nil
 }
@@ -392,6 +399,8 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	if d.State.Versions == nil {
 		d.State.Versions = make([]string, 0)
 	}
+
+	fmt.Printf("Adding version %s to deployment %s\n", version, d.DeploymentName)
 	d.State.Versions = append(d.State.Versions, version)
 	return nil
 }

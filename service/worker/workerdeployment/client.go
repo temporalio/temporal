@@ -28,8 +28,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/api/workflowservice/v1"
 	"time"
+
+	"go.temporal.io/sdk/temporal"
+
+	"go.temporal.io/api/workflowservice/v1"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -526,6 +529,8 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf("Inside delete, deployment name is %s\n", deploymentName)
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
 		namespaceEntry,
@@ -692,7 +697,10 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		return serviceerror.NewInternal(failure.Message)
+		if failure.Message == errVersionNotDrained {
+			return temporal.NewNonRetryableApplicationError(errVersionNotDrained, "Invalid version", nil) // non-retryable error to stop multiple activity attempts
+		}
+		return serviceerror.NewInternal(failure.Message) // TODO (Shivam): is there an easy way to recover the original type here? If not, we would be retrying even if we do get non-retryable errors!
 	}
 
 	success := outcome.GetSuccess()
@@ -733,11 +741,11 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 			WorkflowVersioningMode: 0, // todo
 			CreateTime:             now,
 			RoutingUpdateTime:      now,
-			CurrentSinceTime:       nil, // not current
-			RampingSinceTime:       nil, // not ramping
-			RampPercentage:         0,   // not ramping
-			DrainageInfo:           nil, // not draining or drained
-			Metadata:               nil, // todo
+			CurrentSinceTime:       nil,                                 // not current
+			RampingSinceTime:       nil,                                 // not ramping
+			RampPercentage:         0,                                   // not ramping
+			DrainageInfo:           &deploymentpb.VersionDrainageInfo{}, // not draining or drained
+			Metadata:               nil,                                 // todo
 		},
 	})
 	if err != nil {
@@ -777,6 +785,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 	}
 
 	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
+
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
 		NamespaceName:  namespaceEntry.Name().String(),
 		NamespaceId:    namespaceEntry.ID().String(),
@@ -1216,7 +1225,8 @@ func (d *ClientImpl) isTaskQueueUnversionedAndActive(
 	typesInfo := response.GetDescResponse().GetVersionsInfo()[buildID].GetTypesInfo()
 	if typesInfo != nil {
 		typeStats := typesInfo[int32(enumspb.TaskQueueType(taskQueue.Type))]
-		if typeStats != nil && typeStats.GetStats() != nil && typeStats.GetStats().GetTasksAddRate() != 0 {
+		if typeStats != nil && typeStats.GetStats() != nil &&
+			(typeStats.GetStats().GetTasksAddRate() != 0 || typeStats.GetStats().GetApproximateBacklogCount() != 0) {
 			return true, nil
 		}
 	}

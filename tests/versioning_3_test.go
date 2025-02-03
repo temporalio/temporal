@@ -164,11 +164,7 @@ func (s *Versioning3Suite) TestWorkflowWithPinnedOverride_Sticky() {
 }
 
 func (s *Versioning3Suite) TestWorkflowWithPinnedOverride_NoSticky() {
-	s.RunTestWithMatchingBehavior(
-		func() {
-			s.testWorkflowWithPinnedOverride(false)
-		},
-	)
+	s.testWorkflowWithPinnedOverride(false)
 }
 
 func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {

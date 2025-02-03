@@ -81,6 +81,7 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
+	errVersionNotDrained          = "Version cannot be deleted since it is not drained."
 )
 
 var (
