@@ -86,6 +86,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -2585,13 +2586,14 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
+	updateReg update.Registry,
 	skipVersioningCheck bool,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(

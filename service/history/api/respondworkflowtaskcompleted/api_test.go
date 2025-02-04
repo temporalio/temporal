@@ -595,6 +595,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 		tv.Any().String(),
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	taskToken := &tokenspb.Task{
