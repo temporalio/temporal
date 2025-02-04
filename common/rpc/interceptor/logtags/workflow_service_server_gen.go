@@ -39,6 +39,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 		return nil
 	case *workflowservice.DeleteScheduleRequest:
 		return nil
+	case *workflowservice.DeleteWorkerDeploymentRequest:
+		return nil
+	case *workflowservice.DeleteWorkerDeploymentVersionRequest:
+		return nil
 	case *workflowservice.DeleteWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
@@ -117,10 +121,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 		return nil
 	case *workflowservice.PatchScheduleRequest:
 		return nil
-	case *workflowservice.PauseActivityByIdRequest:
+	case *workflowservice.PauseActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
 	case *workflowservice.PollActivityTaskQueueRequest:
 		return nil
@@ -152,10 +156,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
-	case *workflowservice.ResetActivityByIdRequest:
+	case *workflowservice.ResetActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
 	case *workflowservice.ResetStickyTaskQueueRequest:
 		return []tag.Tag{
@@ -230,21 +234,23 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
-	case *workflowservice.UnpauseActivityByIdRequest:
+	case *workflowservice.UnpauseActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
-	case *workflowservice.UpdateActivityOptionsByIdRequest:
+	case *workflowservice.UpdateActivityOptionsRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
 	case *workflowservice.UpdateNamespaceRequest:
 		return nil
 	case *workflowservice.UpdateScheduleRequest:
 		return nil
 	case *workflowservice.UpdateWorkerBuildIdCompatibilityRequest:
+		return nil
+	case *workflowservice.UpdateWorkerVersionMetadataRequest:
 		return nil
 	case *workflowservice.UpdateWorkerVersioningRulesRequest:
 		return nil
