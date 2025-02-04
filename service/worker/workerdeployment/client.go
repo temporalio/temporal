@@ -741,7 +741,6 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 
 	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
 
-	now := timestamppb.Now()
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
@@ -750,13 +749,6 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 				DeploymentName: deploymentName,
 				BuildId:        buildID,
 			},
-			CreateTime:        now,
-			RoutingUpdateTime: now,
-			CurrentSinceTime:  nil,                                 // not current
-			RampingSinceTime:  nil,                                 // not ramping
-			RampPercentage:    0,                                   // not ramping
-			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
-			Metadata:          nil,                                 // todo
 		},
 	})
 	if err != nil {
@@ -1066,7 +1058,7 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		RampingSinceTime:   state.RampingSinceTime,
 		RampPercentage:     state.RampPercentage,
 		TaskQueueInfos:     taskQueues,
-		DrainageInfo:       state.DrainageInfo,
+		DrainageInfo:       state.GetDrainageInfo(),
 		Metadata:           state.Metadata,
 	}
 }
