@@ -152,7 +152,7 @@ type (
 	}
 )
 
-func (wh *WorkflowHandler) UpdateWorkerVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerVersionMetadataRequest) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
+func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest) (*workflowservice.UpdateWorkerDeploymentVersionMetadataResponse, error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -3492,9 +3492,9 @@ func (wh *WorkflowHandler) ListWorkerDeployments(ctx context.Context, request *w
 	workerDeployments := make([]*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary, len(resp))
 	for i, d := range resp {
 		workerDeployments[i] = &workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary{
-			Name:        d.Name,
-			CreateTime:  d.CreateTime,
-			RoutingInfo: d.RoutingInfo,
+			Name:          d.Name,
+			CreateTime:    d.CreateTime,
+			RoutingConfig: d.RoutingConfig,
 		}
 	}
 
@@ -3543,7 +3543,7 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 		return nil, err
 	}
 
-	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request.Version.DeploymentName, request.Version.BuildId)
+	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request.Version)
 	if err != nil {
 		return nil, err
 	}

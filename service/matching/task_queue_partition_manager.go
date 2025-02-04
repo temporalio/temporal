@@ -496,7 +496,27 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		if err != nil {
 			return nil, err
 		}
-		resp.DescResponse.VersioningInfo = worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
+		current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
+
+		if current != nil || ramping != nil {
+			info := &taskqueuepb.TaskQueueVersioningInfo{
+				CurrentVersion: worker_versioning.WorkerDeploymentVersionToString(current.GetVersion()),
+				UpdateTime:     current.GetRoutingUpdateTime(),
+			}
+			if ramping.GetRampPercentage() > 0 {
+				info.RampingVersionPercentage = ramping.GetRampPercentage()
+				if ramping.GetVersion().GetBuildId() != "" {
+					// If version is "" it means it's ramping to unversioned, which needs special handling
+					info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(ramping.GetVersion())
+				} else {
+					info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(nil)
+				}
+				if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
+					info.UpdateTime = ramping.GetRoutingUpdateTime()
+				}
+			}
+			resp.DescResponse.VersioningInfo = info
+		}
 	}
 	return resp, nil
 }
@@ -875,8 +895,8 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		}
 	}
 
-	versioningInfo := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
-	currentDeployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.FindDeploymentVersionForWorkflowID(versioningInfo, workflowId))
+	current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
+	currentDeployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.FindDeploymentVersionForWorkflowID(current, ramping, workflowId))
 	if currentDeployment != nil &&
 		// Make sure the wf is not v1-2 versioned
 		directive.GetAssignedBuildId() == "" {

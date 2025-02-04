@@ -68,7 +68,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.State == nil {
 		d.State = &deploymentspb.WorkerDeploymentLocalState{}
 		d.State.CreateTime = timestamppb.New(time.Now())
-		d.State.RoutingInfo = &deploymentpb.RoutingInfo{}
+		d.State.RoutingConfig = &deploymentpb.RoutingConfig{}
 	}
 
 	var pendingUpdates int
@@ -141,12 +141,12 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 }
 
 func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
-	if args.Version == d.State.RoutingInfo.RampingVersion && args.Percentage == d.State.RoutingInfo.RampingVersionPercentage {
+	if args.Version == d.State.RoutingConfig.RampingVersion && args.Percentage == d.State.RoutingConfig.RampingVersionPercentage {
 		d.logger.Info("version already ramping, no change")
 		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
 	}
 	// todo: this will only work when "__unversioned__" is the default current-version of a deployment.
-	if args.Version == d.State.RoutingInfo.CurrentVersion {
+	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
 	}
@@ -167,8 +167,8 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		d.lock.Unlock()
 	}()
 
-	prevRampingVersion := d.State.RoutingInfo.RampingVersion
-	prevRampingVersionPercentage := d.State.RoutingInfo.RampingVersionPercentage
+	prevRampingVersion := d.State.RoutingConfig.RampingVersion
+	prevRampingVersionPercentage := d.State.RoutingConfig.RampingVersionPercentage
 
 	newRampingVersion := args.Version
 	routingUpdateTime := timestamppb.New(workflow.Now(ctx))
@@ -194,12 +194,12 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		// setting ramp
 
 		if prevRampingVersion == newRampingVersion { // the version was already ramping, user changing ramp %
-			rampingSinceTime = d.State.RoutingInfo.RampingVersionChangedTime
-			rampingVersionUpdateTime = d.State.RoutingInfo.RampingVersionChangedTime
+			rampingSinceTime = d.State.RoutingConfig.RampingVersionChangedTime
+			rampingVersionUpdateTime = d.State.RoutingConfig.RampingVersionChangedTime
 		} else {
 			// version ramping for the first time
 
-			currentVersion := d.State.RoutingInfo.CurrentVersion
+			currentVersion := d.State.RoutingConfig.CurrentVersion
 			if !args.IgnoreMissingTaskQueues && currentVersion != "" {
 				isMissingTaskQueues, err := d.isVersionMissingTaskQueues(ctx, currentVersion, newRampingVersion)
 				if err != nil {
@@ -237,9 +237,9 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 	}
 
 	// update local state
-	d.State.RoutingInfo.RampingVersion = newRampingVersion
-	d.State.RoutingInfo.RampingVersionPercentage = args.Percentage
-	d.State.RoutingInfo.RampingVersionChangedTime = rampingVersionUpdateTime
+	d.State.RoutingConfig.RampingVersion = newRampingVersion
+	d.State.RoutingConfig.RampingVersionPercentage = args.Percentage
+	d.State.RoutingConfig.RampingVersionChangedTime = rampingVersionUpdateTime
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
@@ -297,7 +297,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
-	if d.State.RoutingInfo.CurrentVersion == args.Version {
+	if d.State.RoutingConfig.CurrentVersion == args.Version {
 		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
 
@@ -317,7 +317,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.lock.Unlock()
 	}()
 
-	prevCurrentVersion := d.State.RoutingInfo.CurrentVersion
+	prevCurrentVersion := d.State.RoutingConfig.CurrentVersion
 	newCurrentVersion := args.Version
 	updateTime := timestamppb.New(workflow.Now(ctx))
 
@@ -357,14 +357,14 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	}
 
 	// update local state
-	d.State.RoutingInfo.CurrentVersion = args.Version
-	d.State.RoutingInfo.CurrentVersionChangedTime = updateTime
+	d.State.RoutingConfig.CurrentVersion = args.Version
+	d.State.RoutingConfig.CurrentVersionChangedTime = updateTime
 
 	// unset ramping version if it was set to current version
-	if d.State.RoutingInfo.CurrentVersion == d.State.RoutingInfo.RampingVersion {
-		d.State.RoutingInfo.RampingVersion = ""
-		d.State.RoutingInfo.RampingVersionPercentage = 0
-		d.State.RoutingInfo.RampingVersionChangedTime = updateTime // since ramp was removed
+	if d.State.RoutingConfig.CurrentVersion == d.State.RoutingConfig.RampingVersion {
+		d.State.RoutingConfig.RampingVersion = ""
+		d.State.RoutingConfig.RampingVersionPercentage = 0
+		d.State.RoutingConfig.RampingVersionChangedTime = updateTime // since ramp was removed
 	}
 
 	// update memo
@@ -443,7 +443,7 @@ func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 		WorkerDeploymentMemoField: &deploymentspb.WorkerDeploymentWorkflowMemo{
 			DeploymentName: d.DeploymentName,
 			CreateTime:     d.State.CreateTime,
-			RoutingInfo:    d.State.RoutingInfo,
+			RoutingConfig:  d.State.RoutingConfig,
 		},
 	})
 }
