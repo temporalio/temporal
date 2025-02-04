@@ -233,6 +233,7 @@ message CheckWorkerDeploymentUserDataPropagationRequest {
 message SetCurrentVersionArgs {
     string identity = 1;
     string version = 2;
+    bool ignore_missing_task_queues = 3;
 }
 
 // used as Worker Deployment update response:
@@ -257,7 +258,7 @@ message DeleteVersionActivityArgs {
 // used as Worker Deployment Activity input:
 message CheckTaskQueuesHaveNoPollersActivityArgs {
     repeated temporal.api.taskqueue.v1.TaskQueue task_queues = 1;
-    string build_id = 3;
+    WorkerDeploymentVersion worker_deployment_version = 2;
 }
 
 // used as Worker Deployment workflow update input:
@@ -277,6 +278,7 @@ message SetRampingVersionArgs {
     string identity = 1;
     string version = 2;
     float percentage = 3;
+    bool ignore_missing_task_queues = 4;
 }
 
 // used as Worker Deployment activity input:
@@ -291,6 +293,17 @@ message SyncVersionStateActivityArgs {
 // used as Worker Deployment activity result:
 message SyncVersionStateActivityResult {
     VersionLocalState version_state = 1;
+}
+
+// used as Worker Deployment activity input:
+message IsVersionMissingTaskQueuesArgs {
+    string prev_current_version = 1;
+    string new_current_version = 2;
+}
+
+// used as Worker Deployment activity output:
+message IsVersionMissingTaskQueuesResult {
+    bool is_missing_task_queues = 1;
 }
 
 // used as Worker Deployment workflow memo:
