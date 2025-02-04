@@ -757,12 +757,12 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 			Version:     lastItem.GetVersion(),
 			Priority:    enumsspb.TASK_PRIORITY_LOW,
 		}}
-		if r.mutableState.IsTransitionHistoryEnabled() {
+		if r.mutableState.IsTransitionHistoryEnabled() &&
+			// even though current cluster may enabled state transition, but transition history can be cleared
+			// by processing a replication task from a cluster that has state transition disabled
+			len(executionInfo.TransitionHistory) != 0 {
+
 			transitionHistory := executionInfo.TransitionHistory
-			if len(transitionHistory) == 0 {
-				// TODO: Handle the case where state-based replication is re-enabled.
-				return nil, 0, serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
-			}
 			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 				WorkflowKey:         workflowKey,
 				Priority:            enumsspb.TASK_PRIORITY_LOW,
@@ -801,12 +801,12 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		})
 	}
 
-	if r.mutableState.IsTransitionHistoryEnabled() {
+	if r.mutableState.IsTransitionHistoryEnabled()
+	// even though current cluster may enabled state transition, but transition history can be cleared
+	// by processing a replication task from a cluster that has state transition disabled
+		len(executionInfo.TransitionHistory) != 0 {
+		
 		transitionHistory := executionInfo.TransitionHistory
-		if len(transitionHistory) == 0 {
-			// TODO: Handle the case where state-based replication is re-enabled.
-			return nil, 0, serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
-		}
 		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 			WorkflowKey:         workflowKey,
 			Priority:            enumsspb.TASK_PRIORITY_LOW,
