@@ -472,7 +472,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
 		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueVersionData)
 	}
-	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{FirstPollerTime: args.FirstPollerTime}
+	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{}
 
 	return nil
 }
@@ -592,17 +592,6 @@ func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescr
 	return &deploymentspb.QueryDescribeVersionResponse{
 		VersionState: d.VersionState,
 	}, nil
-}
-
-// updateMemo should be called whenever the workflow updates its local state
-func (d *VersionWorkflowRunner) updateMemo(ctx workflow.Context) error {
-	// TODO (Shivam): Update memo to have current_since after proto changes.
-	return workflow.UpsertMemo(ctx, map[string]any{
-		WorkerDeploymentVersionMemoField: &deploymentspb.VersionWorkflowMemo{
-			DeploymentName: d.VersionState.Version.DeploymentName,
-			BuildId:        d.VersionState.Version.BuildId,
-		},
-	})
 }
 
 func (d *VersionWorkflowRunner) newUUID(ctx workflow.Context) string {
