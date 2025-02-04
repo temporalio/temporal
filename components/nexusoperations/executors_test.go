@@ -25,6 +25,7 @@ package nexusoperations_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -211,9 +212,12 @@ func TestProcessInvocationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return nil, nexus.NewFailedOperationError(&nexus.FailureError{
-					Failure: nexus.Failure{Message: "operation failed from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
-				})
+				return nil, &nexus.OperationError{
+					State: nexus.OperationStateFailed,
+					Cause: &nexus.FailureError{
+						Failure: nexus.Failure{Message: "operation failed from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
+					},
+				}
 			},
 			expectedMetricOutcome: "operation-unsuccessful:failed",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
@@ -257,11 +261,12 @@ func TestProcessInvocationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return nil, nexus.NewCanceledOperationError(
-					&nexus.FailureError{
+				return nil, &nexus.OperationError{
+					State: nexus.OperationStateCanceled,
+					Cause: &nexus.FailureError{
 						Failure: nexus.Failure{Message: "operation canceled from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
 					},
-				)
+				}
 			},
 			expectedMetricOutcome: "operation-unsuccessful:canceled",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
@@ -372,7 +377,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.Equal(t, 1, len(events))
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
-				require.NotNil(t, failure.GetApplicationFailureInfo())
+				require.NotNil(t, failure.GetNexusHandlerFailureInfo())
 				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.Message)
 			},
 		},
@@ -386,7 +391,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.Equal(t, 1, len(events))
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
-				require.NotNil(t, failure.GetApplicationFailureInfo())
+				require.NotNil(t, failure.GetNexusHandlerFailureInfo())
 				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.Message)
 			},
 		},
@@ -636,13 +641,18 @@ func TestProcessCancelationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
-				return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation not found")
+				// Check non retryable internal error.
+				return &nexus.HandlerError{
+					Type:          nexus.HandlerErrorTypeInternal,
+					Cause:         errors.New("operation not found"),
+					RetryBehavior: nexus.HandlerErrorRetryBehaviorNonRetryable,
+				}
 			},
-			expectedMetricOutcome: "handler-error:NOT_FOUND",
+			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
-				require.Equal(t, "handler error (NOT_FOUND): operation not found", c.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (INTERNAL): operation not found", c.LastAttemptFailure.Message)
 			},
 		},
 		{

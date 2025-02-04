@@ -65,7 +65,7 @@ func handleSuccessfulOperationResult(
 func handleUnsuccessfulOperationError(
 	node *hsm.Node,
 	operation Operation,
-	opFailedError *nexus.UnsuccessfulOperationError,
+	opFailedError *nexus.OperationError,
 ) error {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
@@ -169,7 +169,7 @@ func CompletionHandler(
 	startTime *timestamppb.Timestamp,
 	links []*commonpb.Link,
 	result *commonpb.Payload,
-	opFailedError *nexus.UnsuccessfulOperationError,
+	opFailedError *nexus.OperationError,
 ) error {
 	// The initial version of the completion token did not include a request ID.
 	// Only retry Access without a run ID if the request ID is not empty.

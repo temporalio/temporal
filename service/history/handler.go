@@ -2363,9 +2363,9 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		WorkflowKey:     definition.NewWorkflowKey(request.Completion.NamespaceId, request.Completion.WorkflowId, request.Completion.RunId),
 		StateMachineRef: request.Completion.Ref,
 	}
-	var opErr *nexus.UnsuccessfulOperationError
+	var opErr *nexus.OperationError
 	if request.State != string(nexus.OperationStateSucceeded) {
-		opErr = &nexus.UnsuccessfulOperationError{
+		opErr = &nexus.OperationError{
 			State: nexus.OperationState(request.GetState()),
 			Cause: &nexus.FailureError{
 				Failure: commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),

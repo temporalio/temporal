@@ -1796,7 +1796,7 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 		case "fail-handler-bad-request":
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad request")
 		case "fail-operation":
-			return nil, nexus.NewFailedOperationError(errors.New("some error"))
+			return nil, nexus.NewOperationFailedError("some error")
 		case "fail-operation-app-error":
 			return nil, temporal.NewNonRetryableApplicationError("app error", "TestError", nil, "details")
 		}
