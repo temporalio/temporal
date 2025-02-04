@@ -67,7 +67,6 @@ type Client interface {
 		deploymentName, buildId string,
 		taskQueueName string,
 		taskQueueType enumspb.TaskQueueType,
-		firstPoll time.Time,
 		identity string,
 		requestID string,
 	) error
@@ -205,7 +204,6 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	deploymentName, buildId string,
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
-	firstPoll time.Time,
 	identity string,
 	requestID string,
 ) (retErr error) {
@@ -213,10 +211,9 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	defer d.record("RegisterTaskQueueWorker", &retErr, taskQueueName, taskQueueType, identity)()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInVersionArgs{
-		TaskQueueName:   taskQueueName,
-		TaskQueueType:   taskQueueType,
-		FirstPollerTime: timestamppb.New(firstPoll),
-		MaxTaskQueues:   int32(d.maxTaskQueuesInDeployment(namespaceEntry.Name().String())),
+		TaskQueueName: taskQueueName,
+		TaskQueueType: taskQueueType,
+		MaxTaskQueues: int32(d.maxTaskQueuesInDeployment(namespaceEntry.Name().String())),
 	})
 	if err != nil {
 		return err
@@ -829,17 +826,12 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 		return nil, err
 	}
 
-	memo, err := d.buildInitialVersionMemo(deploymentName, buildID)
-	if err != nil {
-		return nil, err
-	}
-
 	return d.updateWithStart(
 		ctx,
 		namespaceEntry,
 		WorkerDeploymentVersionWorkflowType,
 		workflowID,
-		memo,
+		nil,
 		input,
 		updateRequest,
 		identity,
@@ -1039,23 +1031,6 @@ func (d *ClientImpl) updateWithStart(
 	}, policy, isRetryable)
 
 	return outcome, err
-}
-
-// TODO (Shivam): Verify if memo needs changes.
-func (d *ClientImpl) buildInitialVersionMemo(deploymentName, buildID string) (*commonpb.Memo, error) {
-	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.VersionWorkflowMemo{
-		DeploymentName: deploymentName,
-		BuildId:        buildID,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{
-			WorkerDeploymentMemoField: pl,
-		},
-	}, nil
 }
 
 func (d *ClientImpl) buildInitialMemo(deploymentName string) (*commonpb.Memo, error) {
