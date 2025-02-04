@@ -118,7 +118,8 @@ type (
 	// WorkflowHandler - gRPC handler interface for workflowservice
 	WorkflowHandler struct {
 		workflowservice.UnimplementedWorkflowServiceServer
-		status                                        int32
+		status int32
+
 		tokenSerializer                               *tasktoken.Serializer
 		config                                        *Config
 		versionChecker                                headers.VersionChecker
@@ -3498,13 +3499,14 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 		return nil, err
 	}
 
-	workerDeploymentInfo, err := wh.workerDeploymentClient.DescribeWorkerDeployment(ctx, namespaceEntry, request.DeploymentName)
+	workerDeploymentInfo, cT, err := wh.workerDeploymentClient.DescribeWorkerDeployment(ctx, namespaceEntry, request.DeploymentName)
 	if err != nil {
 		return nil, err
 	}
 
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,
+		ConflictToken:        cT,
 	}, nil
 }
 

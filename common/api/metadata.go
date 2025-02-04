@@ -154,9 +154,9 @@ var (
 		"DescribeWorkerDeployment":              {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"SetWorkerDeploymentCurrentVersion":     {Scope: ScopeNamespace, Access: AccessWrite},
 		"SetWorkerDeploymentRampingVersion":     {Scope: ScopeNamespace, Access: AccessWrite},
-		"UpdateWorkerDeploymentVersionMetadata": {Scope: ScopeNamespace, Access: AccessWrite},
 		"DeleteWorkerDeployment":                {Scope: ScopeNamespace, Access: AccessWrite},
 		"DeleteWorkerDeploymentVersion":         {Scope: ScopeNamespace, Access: AccessWrite},
+		"UpdateWorkerDeploymentVersionMetadata": {Scope: ScopeNamespace, Access: AccessWrite},
 		"ListWorkerDeployments":                 {Scope: ScopeNamespace, Access: AccessReadOnly},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{

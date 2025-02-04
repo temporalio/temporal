@@ -53,14 +53,6 @@ func Invoke(
 		workflowKey,
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
-<<<<<<< HEAD
-			activityId := request.GetId()
-
-			if err := workflow.ResetActivityById(
-				shardContext, mutableState, activityId, false, request.ResetHeartbeat, // TODO: not false, fix in rebase
-			); err != nil {
-				return nil, err
-=======
 			var activityIDs []string
 			switch a := request.GetActivity().(type) {
 			case *workflowservice.ResetActivityRequest_Id:
@@ -85,7 +77,6 @@ func Invoke(
 				); err != nil {
 					return nil, err
 				}
->>>>>>> 214cd5eec9192237111ce97cdac605b1ff2cfb66
 			}
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
