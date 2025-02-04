@@ -116,10 +116,7 @@ ifeq ($(UNIT_TEST_DIRS),)
 UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
 endif
 
-# github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
 PINNED_DEPENDENCIES := \
-	github.com/go-sql-driver/mysql@v1.5.0 \
-	github.com/urfave/cli/v2@v2.4.0
 
 # Code coverage & test report output files.
 TEST_OUTPUT_ROOT        := ./.testoutput
