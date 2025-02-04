@@ -230,8 +230,6 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 		}
 	}
 
-	d.logger.Info("Registering worker in deployment")
-
 	// if successful, add the task queue to the local state
 	if d.State.TaskQueueFamilies == nil {
 		d.State.TaskQueueFamilies = make(map[string]*deploymentspb.DeploymentLocalState_TaskQueueFamilyData)
