@@ -760,7 +760,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		if r.mutableState.IsTransitionHistoryEnabled() &&
 			// even though current cluster may enabled state transition, but transition history can be cleared
 			// by processing a replication task from a cluster that has state transition disabled
-			len(executionInfo.TransitionHistory) != 0 {
+			len(executionInfo.TransitionHistory) > 0 {
 
 			transitionHistory := executionInfo.TransitionHistory
 			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
@@ -801,11 +801,11 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		})
 	}
 
-	if r.mutableState.IsTransitionHistoryEnabled()
-	// even though current cluster may enabled state transition, but transition history can be cleared
-	// by processing a replication task from a cluster that has state transition disabled
-		len(executionInfo.TransitionHistory) != 0 {
-		
+	if r.mutableState.IsTransitionHistoryEnabled() &&
+		// even though current cluster may enabled state transition, but transition history can be cleared
+		// by processing a replication task from a cluster that has state transition disabled
+		len(executionInfo.TransitionHistory) > 0 {
+
 		transitionHistory := executionInfo.TransitionHistory
 		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 			WorkflowKey:         workflowKey,
