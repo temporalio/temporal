@@ -822,11 +822,11 @@ func (ms *MutableStateImpl) IsResetRun() bool {
 	return len(originalExecutionRunID) != 0 && originalExecutionRunID != ms.GetExecutionState().GetRunId()
 }
 
-func (ms *MutableStateImpl) SetChildrenInitializedPostResetPoint(children map[string]bool) {
+func (ms *MutableStateImpl) SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo) {
 	ms.executionInfo.ChildrenInitializedPostResetPoint = children
 }
 
-func (ms *MutableStateImpl) GetChildrenInitializedPostResetPoint() map[string]bool {
+func (ms *MutableStateImpl) GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo {
 	return ms.executionInfo.GetChildrenInitializedPostResetPoint()
 }
 
