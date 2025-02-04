@@ -84,7 +84,6 @@ func VersionWorkflow(ctx workflow.Context, versionWorkflowArgs *deploymentspb.Wo
 }
 
 func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
-	fmt.Println("HIAIIII")
 
 	// Fetch signal channels
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
@@ -93,18 +92,15 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 
 	selector := workflow.NewSelector(ctx)
 	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-		fmt.Println("Received forceCAN signal")
 		// Process Signal
 		forceCAN = true
 	})
 	selector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		var newInfo *deploymentpb.VersionDrainageInfo
 		c.Receive(ctx, &newInfo)
-		fmt.Println("Received drainage status signal")
 		d.VersionState.DrainageInfo.LastCheckedTime = newInfo.LastCheckedTime
 		if d.VersionState.DrainageInfo.Status != newInfo.Status {
 			d.VersionState.DrainageInfo.Status = newInfo.Status
-			fmt.Println("Drained!")
 			d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
 		}
 	})
@@ -124,6 +120,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 
 	// if we were draining and just continued-as-new, restart drainage child wf
 	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
+		fmt.Println("Starting drainage workflow when starting the version workflow")
 		d.startDrainage(ctx, false)
 	}
 
@@ -542,6 +539,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// stopped accepting new workflows --> start drainage child wf
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
+		fmt.Println("here?")
 		d.startDrainage(ctx, true)
 	}
 

@@ -765,7 +765,8 @@ func (s *DeploymentVersionSuite) checkVersionDrainage(
 		dInfo := resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo()
 
 		if expectedDrainageInfo == nil {
-			a.Nil(dInfo)
+			a.NotNil(dInfo)
+			a.Equal(enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, dInfo.GetStatus())
 			return
 		}
 
