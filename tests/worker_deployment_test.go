@@ -266,6 +266,49 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 	}, time.Second*10, time.Millisecond*1000)
 }
 
+func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	tv := testvars.New(s)
+
+	firstVersion := tv.WithBuildIDNumber(1)
+
+	// Start deployment version workflow + worker-deployment workflow. Only one version is stared manually
+	// to prevent erroring out in the successive DescribeWorkerDeployment call.
+	go s.pollFromDeployment(ctx, firstVersion)
+
+	cTWrong, _ := time.Now().MarshalBinary() // wrong token
+	// Wait until deployment exists
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal("", resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+	}, time.Second*10, time.Millisecond*1000)
+
+	// Set first version as current version with wrong token
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        firstVersion.DeploymentVersionString(),
+		ConflictToken:  cTWrong,
+	})
+	s.NotNil(err)
+
+	// Set first version as ramping version with wrong token
+	_, err = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        firstVersion.DeploymentVersionString(),
+		Percentage:     5,
+		ConflictToken:  cTWrong,
+	})
+	s.NotNil(err)
+}
+
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Idempotent() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
