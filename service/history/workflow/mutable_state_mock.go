@@ -1906,10 +1906,10 @@ func (mr *MockMutableStateMockRecorder) GetChildExecutionInitiatedEvent(arg0, ar
 }
 
 // GetChildrenInitializedPostResetPoint mocks base method.
-func (m *MockMutableState) GetChildrenInitializedPostResetPoint() map[string]bool {
+func (m *MockMutableState) GetChildrenInitializedPostResetPoint() map[string]*persistence.ResetChildInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetChildrenInitializedPostResetPoint")
-	ret0, _ := ret[0].(map[string]bool)
+	ret0, _ := ret[0].(map[string]*persistence.ResetChildInfo)
 	return ret0
 }
 
@@ -3041,7 +3041,7 @@ func (mr *MockMutableStateMockRecorder) SetBaseWorkflow(baseRunID, baseRunLowest
 }
 
 // SetChildrenInitializedPostResetPoint mocks base method.
-func (m *MockMutableState) SetChildrenInitializedPostResetPoint(children map[string]bool) {
+func (m *MockMutableState) SetChildrenInitializedPostResetPoint(children map[string]*persistence.ResetChildInfo) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetChildrenInitializedPostResetPoint", children)
 }
