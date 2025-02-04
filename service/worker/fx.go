@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -101,8 +102,8 @@ var Module = fx.Options(
 		clusterMetadata cluster.Metadata,
 		metadataManager persistence.MetadataManager,
 		logger log.Logger,
-	) namespace.ReplicationTaskExecutor {
-		return namespace.NewReplicationTaskExecutor(
+	) nsreplication.TaskExecutor {
+		return nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
 			logger,

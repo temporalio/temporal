@@ -214,7 +214,7 @@ response to a StartWorkflowExecution request and skipping the trip through match
 	)
 	NamespaceCacheRefreshInterval = NewGlobalDurationSetting(
 		"system.namespaceCacheRefreshInterval",
-		10*time.Second,
+		2*time.Second,
 		`NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config`,
 	)
 	PersistenceHealthSignalMetricsEnabled = NewGlobalBoolSetting(
@@ -286,39 +286,6 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		"system.deadlock.MaxWorkersPerRoot",
 		10,
 		`How many extra goroutines can be created per root.`,
-	)
-
-	// utf-8 validation
-
-	ValidateUTF8SampleRPCRequest = NewGlobalFloatSetting(
-		"system.validateUTF8.sample.rpcRequest",
-		0.0,
-		`Sample rate of utf-8 string validation for rpc requests`,
-	)
-	ValidateUTF8SampleRPCResponse = NewGlobalFloatSetting(
-		"system.validateUTF8.sample.rpcResponse",
-		0.0,
-		`Sample rate of utf-8 string validation for rpc responses`,
-	)
-	ValidateUTF8SamplePersistence = NewGlobalFloatSetting(
-		"system.validateUTF8.sample.persistence",
-		0.0,
-		`Sample rate of utf-8 string validation for persistence [de]serialization`,
-	)
-	ValidateUTF8FailRPCRequest = NewGlobalBoolSetting(
-		"system.validateUTF8.fail.rpcRequest",
-		false,
-		`Whether to fail rpcs on utf-8 string validation errors`,
-	)
-	ValidateUTF8FailRPCResponse = NewGlobalBoolSetting(
-		"system.validateUTF8.fail.rpcResponse",
-		false,
-		`Whether to fail rpcs on utf-8 string validation errors`,
-	)
-	ValidateUTF8FailPersistence = NewGlobalBoolSetting(
-		"system.validateUTF8.fail.persistence",
-		false,
-		`Whether to fail persistence [de]serialization on utf-8 string validation errors`,
 	)
 
 	// keys for size limit
@@ -1100,14 +1067,6 @@ See DynamicRateLimitingParams comments for more details.`,
 		primitives.GetHistoryMaxPageSize,
 		`MatchingHistoryMaxPageSize is the maximum page size of history events returned on PollWorkflowTaskQueue requests`,
 	)
-	MatchingLoadUserData = NewTaskQueueBoolSetting(
-		"matching.loadUserData",
-		true,
-		`MatchingLoadUserData can be used to entirely disable loading user data from persistence (and the inter node RPCs
-that propoagate it). When turned off, features that rely on user data (e.g. worker versioning) will essentially
-be disabled. When disabled, matching will drop tasks for versioned workflows and activities to avoid breaking
-versioning semantics. Operator intervention will be required to reschedule the dropped tasks.`,
-	)
 	MatchingUpdateAckInterval = NewTaskQueueDurationSettingWithConstrainedDefault(
 		"matching.updateAckInterval",
 		[]TypedConstrainedValue[time.Duration]{
@@ -1280,23 +1239,6 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		1000,
 		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registed in a single deployment`,
 	)
-	// for matching testing only:
-
-	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(
-		"test.matching.disableSyncMatch",
-		false,
-		`TestMatchingDisableSyncMatch forces tasks to go through the db once`,
-	)
-	TestMatchingLBForceReadPartition = NewGlobalIntSetting(
-		"test.matching.lbForceReadPartition",
-		-1,
-		`TestMatchingLBForceReadPartition forces polls to go to a specific partition`,
-	)
-	TestMatchingLBForceWritePartition = NewGlobalIntSetting(
-		"test.matching.lbForceWritePartition",
-		-1,
-		`TestMatchingLBForceWritePartition forces adds to go to a specific partition`,
-	)
 
 	// keys for history
 
@@ -1425,6 +1367,12 @@ This feature is still under development and should NOT be enabled.`,
 		0*time.Second,
 		`HistoryStartupMembershipJoinDelay is the duration a history instance waits
 before joining membership after starting.`,
+	)
+	HistoryAlignMembershipChange = NewGlobalDurationSetting(
+		"history.alignMembershipChange",
+		0*time.Second,
+		`HistoryAlignMembershipChange is a duration to align history's membership changes to.
+This can help reduce effects of shard movement.`,
 	)
 	HistoryShutdownDrainDuration = NewGlobalDurationSetting(
 		"history.shutdownDrainDuration",
@@ -2011,10 +1959,15 @@ archivalQueueProcessor`,
 		10,
 		`WorkflowExecutionMaxInFlightUpdates is the max number of updates that can be in-flight (admitted but not yet completed) for any given workflow execution. Set to zero to disable limit.`,
 	)
+	WorkflowExecutionMaxInFlightUpdatePayloads = NewNamespaceIntSetting(
+		"history.maxInFlightUpdatePayloads",
+		10*1024*1024,
+		`WorkflowExecutionMaxInFlightUpdatePayloads is the max total payload size (in bytes) of in-flight updates (admitted but not yet completed) for any given workflow execution. Set to zero to disable.`,
+	)
 	WorkflowExecutionMaxTotalUpdates = NewNamespaceIntSetting(
 		"history.maxTotalUpdates",
 		2000,
-		`WorkflowExecutionMaxTotalUpdates is the max number of updates that any given workflow execution can receive.`,
+		`WorkflowExecutionMaxTotalUpdates is the max number of updates that any given workflow execution can receive. Set to zero to disable.`,
 	)
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(
@@ -2097,6 +2050,13 @@ the user has not specified an explicit RetryPolicy`,
 		retrypolicy.DefaultDefaultRetrySettings,
 		`DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
 where the user has set an explicit RetryPolicy, but not specified all the fields`,
+	)
+	FollowReusePolicyAfterConflictPolicyTerminate = NewNamespaceTypedSetting(
+		"history.followReusePolicyAfterConflictPolicyTerminate",
+		true,
+		`Follows WorkflowIdReusePolicy RejectDuplicate and AllowDuplicateFailedOnly after WorkflowIdReusePolicy TerminateExisting was applied.
+If true (the default), RejectDuplicate is disallowed and AllowDuplicateFailedOnly will be honored after TerminateExisting is applied.
+This configuration will be become the default behavior in the next release and removed subsequently.`,
 	)
 	AllowResetWithPendingChildren = NewNamespaceBoolSetting(
 		"history.allowResetWithPendingChildren",

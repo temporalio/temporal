@@ -446,8 +446,13 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
+	if mutableState == nil {
+		release(nil)
+		return consts.ErrWorkflowExecutionNotFound
+	}
+	if !mutableState.IsWorkflowExecutionRunning() {
+		release(nil)
+		return consts.ErrWorkflowCompleted
 	}
 
 	// TODO: deprecated, remove below 3 metrics after v1.25
@@ -476,7 +481,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 
 	if mutableState.HadOrHasWorkflowTask() {
 		// already has workflow task
-		return nil
+		release(nil)
+		return errNoTimerFired
 	}
 
 	// schedule first workflow task

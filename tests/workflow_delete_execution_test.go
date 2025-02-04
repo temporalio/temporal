@@ -36,6 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -45,9 +46,9 @@ const (
 	// Internal task processing for DeleteExecutionTask checks if there is no pending CloseExecutionTask
 	// comparing ack levels of the last processed task and DeleteExecutionTask TaskID.
 	// Queue states/ack levels are updated with delay from "history.transferProcessorUpdateAckInterval"
-	// which default 30s, but it is overridden in tests to 1s (see overrideHistoryDynamicConfig in onebox.go).
+	// which default 30s, but it is overridden in this suite to 1s (see SetupSuite below).
 	// With few executions closed and deleted in parallel, it is hard to predict time needed for every DeleteExecutionTask
-	// to process. Set it to 20s here, as minimum sufficient interval. Increase it, if tests in this file are failing with
+	// to process. Set it to 20s here, as a minimum sufficient interval. Increase it, if tests in this file are failing with
 	// "Condition never satisfied" error.
 	waitForTaskProcessing = 20 * time.Second
 )
@@ -59,6 +60,14 @@ type WorkflowDeleteExecutionSuite struct {
 func TestWorkflowDeleteExecutionSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(WorkflowDeleteExecutionSuite))
+}
+
+func (s *WorkflowDeleteExecutionSuite) SetupSuite() {
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.TransferProcessorUpdateAckInterval.Key():   1 * time.Second,
+		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(): 1 * time.Second,
+	}
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkflow() {
@@ -176,8 +185,8 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 				Execution: we,
 			},
 		)
-		var invalidArgumentErr *serviceerror.InvalidArgument
-		s.ErrorAs(err, &invalidArgumentErr)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
 		s.Nil(historyResponse)
 
 		s.Eventually(
@@ -291,8 +300,8 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 				Execution: we,
 			},
 		)
-		var invalidArgumentErr *serviceerror.InvalidArgument
-		s.ErrorAs(err, &invalidArgumentErr)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
 		s.Nil(historyResponse)
 
 		s.Eventually(
@@ -420,8 +429,8 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 				Execution: we,
 			},
 		)
-		var invalidArgumentErr *serviceerror.InvalidArgument
-		s.ErrorAs(err, &invalidArgumentErr)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
 		s.Nil(historyResponse)
 
 		s.Eventually(

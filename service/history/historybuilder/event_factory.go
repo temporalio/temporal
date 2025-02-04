@@ -400,13 +400,21 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 
 func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	versioningOverride *workflowpb.VersioningOverride,
+	unsetVersioningOverride bool,
+	attachRequestID string,
+	attachCompletionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
 		WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
-			VersioningOverride: versioningOverride,
+			VersioningOverride:          versioningOverride,
+			UnsetVersioningOverride:     unsetVersioningOverride,
+			AttachedRequestId:           attachRequestID,
+			AttachedCompletionCallbacks: attachCompletionCallbacks,
 		},
 	}
+	event.Links = links
 	event.WorkerMayIgnore = true
 	return event
 }

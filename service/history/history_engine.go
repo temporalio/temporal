@@ -55,6 +55,8 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/addtasks"
 	"go.temporal.io/server/service/history/api/deleteworkflow"
@@ -132,7 +134,7 @@ type (
 		nDCHSMStateReplicator      ndc.HSMStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
 		eventNotifier              events.Notifier
-		tokenSerializer            common.TaskTokenSerializer
+		tokenSerializer            *tasktoken.Serializer
 		metricsHandler             metrics.Handler
 		logger                     log.Logger
 		throttledLogger            log.Logger
@@ -157,6 +159,7 @@ type (
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
 		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		testHooks                  testhooks.TestHooks
 	}
 )
 
@@ -183,6 +186,7 @@ func NewEngineWithShardContext(
 	dlqWriter replication.DLQWriter,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	testHooks testhooks.TestHooks,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -211,7 +215,7 @@ func NewEngineWithShardContext(
 		clusterMetadata:            shard.GetClusterMetadata(),
 		timeSource:                 shard.GetTimeSource(),
 		executionManager:           executionManager,
-		tokenSerializer:            common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:            tasktoken.NewSerializer(),
 		logger:                     log.With(logger, tag.ComponentHistoryEngine),
 		throttledLogger:            log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
 		metricsHandler:             shard.GetMetricsHandler(),
@@ -232,6 +236,7 @@ func NewEngineWithShardContext(
 		replicationProgressCache:   replicationProgressCache,
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
+		testHooks:                  testHooks,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -429,6 +434,7 @@ func (e *historyEngineImpl) ExecuteMultiOperation(
 		e.tokenSerializer,
 		e.persistenceVisibilityMgr,
 		e.matchingClient,
+		e.testHooks,
 	)
 }
 

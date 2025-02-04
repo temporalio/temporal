@@ -26,15 +26,17 @@ package telemetry
 
 import (
 	"context"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"go.temporal.io/server/common"
+	otelnoop "go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -66,7 +68,7 @@ func NewServerStatsHandler(
 	tmp propagation.TextMapPropagator,
 	logger log.Logger,
 ) ServerStatsHandler {
-	if !IsEnabled(tp) {
+	if !isEnabled(tp) {
 		return nil
 	}
 
@@ -86,7 +88,7 @@ func NewClientStatsHandler(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,
 ) ClientStatsHandler {
-	if !IsEnabled(tp) {
+	if !isEnabled(tp) {
 		return nil
 	}
 
@@ -103,7 +105,7 @@ func newCustomServerStatsHandler(
 	return &customServerStatsHandler{
 		wrapped: handler,
 		isDebug: DebugMode(),
-		tags:    logtags.NewWorkflowTags(common.NewProtoTaskTokenSerializer(), logger),
+		tags:    logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
 	}
 }
 
@@ -133,27 +135,20 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 	c.wrapped.HandleRPC(ctx, stat)
 
 	switch s := stat.(type) {
+	case *stats.InHeader:
+		if c.isDebug {
+			span := trace.SpanFromContext(ctx)
+			for key, values := range s.Header {
+				span.SetAttributes(attribute.StringSlice("rpc.request.headers."+key, values))
+			}
+			deadline, ok := ctx.Deadline()
+			if ok {
+				span.SetAttributes(attribute.String("rpc.request.timeout", deadline.Format(time.RFC3339Nano)))
+			}
+		}
 	case *stats.InPayload:
 		span := trace.SpanFromContext(ctx)
-
-		methodName, ok := ctx.Value(methodNameKey{}).(string)
-		if !ok {
-			methodName = "unknown"
-		}
-
-		// annotate span with workflow tags (same ones the Temporal SDKs use)
-		for _, logTag := range c.tags.Extract(s.Payload, methodName) {
-			var k string
-			switch logTag.Key() {
-			case tag.WorkflowIDKey:
-				k = "temporalWorkflowID"
-			case tag.WorkflowRunIDKey:
-				k = "temporalRunID"
-			default:
-				continue
-			}
-			span.SetAttributes(attribute.Key(k).String(logTag.Value().(string)))
-		}
+		c.annotateTags(ctx, span, s.Payload)
 
 		// annotate with gRPC request payload
 		if c.isDebug {
@@ -164,11 +159,19 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 			span.SetAttributes(attribute.Key("rpc.request.payload").String(string(payload)))
 			span.SetAttributes(attribute.Key("rpc.request.type").String(msgType))
 		}
-	case *stats.OutPayload:
-		// annotate with gRPC response payload
+	case *stats.OutHeader:
 		if c.isDebug {
 			span := trace.SpanFromContext(ctx)
+			for key, values := range s.Header {
+				span.SetAttributes(attribute.StringSlice("rpc.response.headers."+key, values))
+			}
+		}
+	case *stats.OutPayload:
+		span := trace.SpanFromContext(ctx)
+		c.annotateTags(ctx, span, s.Payload)
 
+		// annotate with gRPC response payload
+		if c.isDebug {
 			//revive:disable-next-line:unchecked-type-assertion
 			respMsg := s.Payload.(proto.Message)
 			payload, _ := protojson.Marshal(respMsg)
@@ -179,10 +182,40 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 	}
 }
 
+func (c *customServerStatsHandler) annotateTags(
+	ctx context.Context,
+	span trace.Span,
+	payload any,
+) {
+	methodName, ok := ctx.Value(methodNameKey{}).(string)
+	if !ok {
+		methodName = "unknown"
+	}
+
+	// annotate span with workflow tags (same ones the Temporal SDKs use)
+	for _, logTag := range c.tags.Extract(payload, methodName) {
+		var k string
+		switch logTag.Key() {
+		case tag.WorkflowIDKey:
+			k = WorkflowIDKey
+		case tag.WorkflowRunIDKey:
+			k = WorkflowRunIDKey
+		default:
+			continue
+		}
+		span.SetAttributes(attribute.Key(k).String(logTag.Value().(string)))
+	}
+}
+
 func (c *customServerStatsHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) context.Context {
 	return c.wrapped.TagConn(ctx, info)
 }
 
 func (c *customServerStatsHandler) HandleConn(ctx context.Context, stat stats.ConnStats) {
 	c.wrapped.HandleConn(ctx, stat)
+}
+
+func isEnabled(tp trace.TracerProvider) bool {
+	_, isNoop := tp.(otelnoop.TracerProvider)
+	return !isNoop
 }

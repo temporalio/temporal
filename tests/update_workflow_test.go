@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -50,6 +49,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -1325,16 +1325,16 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			_, err := poller.PollAndProcessWorkflowTask()
 			updateResult := <-updateResultCh
 			if tc.RespondWorkflowTaskError != "" {
-				require.Error(s.T(), err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
-				require.Contains(s.T(), err.Error(), tc.RespondWorkflowTaskError)
+				s.Error(err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
+				s.Contains(err.Error(), tc.RespondWorkflowTaskError)
 
 				// When worker returns validation error, API caller got timeout error.
-				require.Error(s.T(), updateResult.err)
-				require.True(s.T(), common.IsContextDeadlineExceededErr(updateResult.err), updateResult.err.Error())
-				require.Nil(s.T(), updateResult.response)
+				s.Error(updateResult.err)
+				s.True(common.IsContextDeadlineExceededErr(updateResult.err), updateResult.err.Error())
+				s.Nil(updateResult.response)
 			} else {
-				require.NoError(s.T(), err)
-				require.NoError(s.T(), updateResult.err)
+				s.NoError(err)
+				s.NoError(updateResult.err)
 			}
 		})
 	}
@@ -1393,9 +1393,9 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 								Messages: s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
 							}, nil
 						})
-				require.NoError(s.T(), err)
-				require.NotNil(s.T(), res)
-				require.EqualValues(s.T(), 0, res.ResetHistoryEventId)
+				s.NoError(err)
+				s.NotNil(res)
+				s.EqualValues(0, res.ResetHistoryEventId)
 			}()
 
 			// This is to make sure that sticky poller above reached server first.
@@ -5340,23 +5340,80 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		})
 	})
 
+	s.Run("workflow start conflict", func() {
+
+		s.Run("workflow id conflict policy fail: use-existing", func() {
+			tv := testvars.New(s.T())
+
+			startReq := startWorkflowReq(tv)
+			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			updateReq := s.updateWorkflowRequest(tv,
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+
+			// simulate a race condition
+			s.InjectHook(testhooks.UpdateWithStartInBetweenLockAndStart, func() {
+				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startReq)
+				s.NoError(err)
+			})
+
+			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+
+			_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+				})
+			s.NoError(err)
+
+			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
+						Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
+					}, nil
+				})
+			s.NoError(err)
+
+			<-uwsCh
+		})
+	})
+
 	s.Run("return update rate limit error", func() {
 		// lower maximum total number of updates for testing purposes
-		maxTotalUpdates := 0
+		maxTotalUpdates := 1
 		cleanup := s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, maxTotalUpdates)
 		defer cleanup()
 
+		ctx := testcore.NewContext()
 		tv := testvars.New(s.T())
-
 		startReq := startWorkflowReq(tv)
-		updateReq := s.updateWorkflowRequest(tv,
-			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-		err := (<-sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)).err
-		s.Error(err)
-		errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
-		s.Len(errs, 2)
-		s.Equal("Operation was aborted.", errs[0].Error())
-		s.Contains(errs[1].Error(), "limit on the total number of distinct updates in this workflow has been reached")
+		startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+
+		// allows 1st
+		updateReq := s.updateWorkflowRequest(tv.WithUpdateIDNumber(0),
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
+		uwsCh := sendUpdateWithStart(ctx, startReq, updateReq)
+		_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
+				}, nil
+			})
+		s.NoError(err)
+		uwsRes := <-uwsCh
+		s.NoError(uwsRes.err)
+
+		// denies 2nd
+		updateReq = s.updateWorkflowRequest(tv.WithUpdateIDNumber(1), updateReq.WaitPolicy)
+		select {
+		case <-sendUpdateWithStart(ctx, startReq, updateReq):
+			err = (<-sendUpdateWithStart(ctx, startReq, updateReq)).err
+			s.Error(err)
+			errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
+			s.Len(errs, 2)
+			s.Equal("Operation was aborted.", errs[0].Error())
+			s.Contains(errs[1].Error(), "limit on the total number of distinct updates in this workflow has been reached")
+		case <-ctx.Done():
+			s.Fail("timed out waiting for update")
+		}
 	})
 }
 

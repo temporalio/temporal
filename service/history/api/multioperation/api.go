@@ -34,11 +34,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflow"
@@ -46,9 +47,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
-var (
-	multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
-)
+var multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
 
 type (
 	// updateError is a wrapper to distinguish an update error from a start error.
@@ -62,6 +61,7 @@ type (
 		shardContext       shard.Context
 		namespaceId        namespace.ID
 		consistencyChecker api.WorkflowConsistencyChecker
+		testHooks          testhooks.TestHooks
 
 		updateReq *historyservice.UpdateWorkflowExecutionRequest
 		startReq  *historyservice.StartWorkflowExecutionRequest
@@ -76,9 +76,10 @@ func Invoke(
 	req *historyservice.ExecuteMultiOperationRequest,
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	tokenSerializer common.TaskTokenSerializer,
+	tokenSerializer *tasktoken.Serializer,
 	visibilityManager manager.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
+	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
 	if len(req.Operations) != 2 {
 		return nil, serviceerror.NewInvalidArgument("expected exactly 2 operations")
@@ -98,6 +99,7 @@ func Invoke(
 		shardContext:       shardContext,
 		namespaceId:        namespace.ID(req.NamespaceId),
 		consistencyChecker: workflowConsistencyChecker,
+		testHooks:          testHooks,
 		updateReq:          updateReq,
 		startReq:           startReq,
 	}
@@ -156,6 +158,8 @@ func (mo *multiOp) Invoke(ctx context.Context) (*historyservice.ExecuteMultiOper
 		}
 		return mo.updateWorkflow(ctx, runningWorkflowLease)
 	}
+
+	testhooks.Call(mo.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart)
 
 	// Workflow hasn't been started yet ...
 	resp, err := mo.startAndUpdateWorkflow(ctx)

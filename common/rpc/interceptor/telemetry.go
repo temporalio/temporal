@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -125,7 +126,7 @@ func NewTelemetryInterceptor(
 		namespaceRegistry: namespaceRegistry,
 		metricsHandler:    metricsHandler,
 		logger:            logger,
-		workflowTags:      logtags.NewWorkflowTags(common.NewProtoTaskTokenSerializer(), logger),
+		workflowTags:      logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
 		logAllReqErrors:   logAllReqErrors,
 	}
 }

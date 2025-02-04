@@ -41,7 +41,6 @@ import (
 type (
 	workerComponent struct {
 		activityDeps activityDeps
-		enabledForNs dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -93,7 +92,6 @@ func NewResult(
 	return fxResult{
 		Component: &workerComponent{
 			activityDeps: params,
-			enabledForNs: dynamicconfig.EnableDeployments.Get(dc),
 		},
 	}
 }

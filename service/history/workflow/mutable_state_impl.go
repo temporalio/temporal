@@ -353,9 +353,10 @@ func NewMutableState(
 	s.executionState = &persistencespb.WorkflowExecutionState{
 		RunId: runID,
 
-		State:     enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		StartTime: timestamppb.New(startTime),
+		State:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		StartTime:  timestamppb.New(startTime),
+		RequestIds: make(map[string]*persistencespb.RequestIDInfo),
 	}
 	s.approximateSize += s.executionState.Size()
 
@@ -2045,10 +2046,8 @@ func (ms *MutableStateImpl) IsWorkflowCloseAttempted() bool {
 func (ms *MutableStateImpl) IsSignalRequested(
 	requestID string,
 ) bool {
-	if _, ok := ms.pendingSignalRequestedIDs[requestID]; ok {
-		return true
-	}
-	return false
+	_, ok := ms.pendingSignalRequestedIDs[requestID]
+	return ok
 }
 
 func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
@@ -2090,6 +2089,18 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 	delete(ms.updateSignalRequestedIDs, requestID)
 	ms.deleteSignalRequestedIDs[requestID] = struct{}{}
 	ms.approximateSize -= len(requestID)
+}
+
+func (ms *MutableStateImpl) attachRequestID(requestID string, eventType enumspb.EventType) {
+	ms.approximateSize -= ms.executionState.Size()
+	if ms.executionState.RequestIds == nil {
+		ms.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
+	}
+	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
+		EventType: eventType,
+	}
+	ms.approximateSize += ms.executionState.Size()
+	ms.executionStateUpdated = true
 }
 
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
@@ -2319,8 +2330,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	}
 
 	ms.approximateSize -= ms.executionInfo.Size()
+	ms.approximateSize -= ms.executionState.Size()
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	ms.executionState.CreateRequestId = requestID
+	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
+		EventType: startEvent.EventType,
+	}
+
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	ms.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	ms.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
@@ -2329,32 +2345,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
-	coll := callbacks.MachineCollection(ms.HSM())
-	for idx, cb := range event.GetCompletionCallbacks() {
-		persistenceCB := &persistencespb.Callback{}
-		switch variant := cb.Variant.(type) {
-		case *commonpb.Callback_Nexus_:
-			persistenceCB.Variant = &persistencespb.Callback_Nexus_{
-				Nexus: &persistencespb.Callback_Nexus{
-					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
-				},
-			}
-		case *commonpb.Callback_Internal_:
-			err := proto.Unmarshal(cb.GetInternal().GetData(), persistenceCB)
-			if err != nil {
-				return err
-			}
-		}
-		machine := callbacks.NewCallback(startEvent.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
-		// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
-		// IDs that are deterministically created across clusters.
-		// TODO: Replicate the state machine state and allocate a uuid there instead of relying on history event
-		// replication.
-		id := fmt.Sprintf("%d-%d-%d", startEvent.GetVersion(), startEvent.GetEventId(), idx)
-		if _, err := coll.Add(id, machine); err != nil {
-			return err
-		}
+	if err := ms.addCompletionCallbacks(startEvent, event.GetCompletionCallbacks()); err != nil {
+		return err
 	}
 	if err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -2475,8 +2467,51 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.MostRecentWorkerVersionStamp = event.SourceVersionStamp
 
 	ms.approximateSize += ms.executionInfo.Size()
+	ms.approximateSize += ms.executionState.Size()
 
 	ms.writeEventToCache(startEvent)
+	return nil
+}
+
+func (ms *MutableStateImpl) addCompletionCallbacks(
+	event *historypb.HistoryEvent,
+	completionCallbaks []*commonpb.Callback,
+) error {
+	coll := callbacks.MachineCollection(ms.HSM())
+	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	if len(completionCallbaks)+coll.Size() > maxCallbacksPerWorkflow {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
+			maxCallbacksPerWorkflow,
+			coll.Size(),
+		))
+	}
+	for idx, cb := range completionCallbaks {
+		persistenceCB := &persistencespb.Callback{}
+		switch variant := cb.Variant.(type) {
+		case *commonpb.Callback_Nexus_:
+			persistenceCB.Variant = &persistencespb.Callback_Nexus_{
+				Nexus: &persistencespb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		case *commonpb.Callback_Internal_:
+			err := proto.Unmarshal(cb.GetInternal().GetData(), persistenceCB)
+			if err != nil {
+				return err
+			}
+		}
+		machine := callbacks.NewCallback(event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
+		// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
+		// IDs that are deterministically created across clusters.
+		// TODO: Replicate the state machine state and allocate a uuid there instead of relying on history event
+		// replication.
+		id := fmt.Sprintf("%d-%d-%d", event.GetVersion(), event.GetEventId(), idx)
+		if _, err := coll.Add(id, machine); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -4398,11 +4433,21 @@ func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.
 
 func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	versioningOverride *workflowpb.VersioningOverride,
+	unsetVersioningOverride bool,
+	attachRequestID string,
+	attachCompletionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
 	}
-	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride)
+	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(
+		versioningOverride,
+		unsetVersioningOverride,
+		attachRequestID,
+		attachCompletionCallbacks,
+		links,
+	)
 	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
 		return nil, err
 	}
@@ -4410,7 +4455,30 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
-	override := event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride()
+	attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+	var err error
+	if attributes.GetUnsetVersioningOverride() {
+		err = ms.updateVersioningOverride(nil)
+	} else if attributes.GetVersioningOverride() != nil {
+		err = ms.updateVersioningOverride(attributes.GetVersioningOverride())
+	}
+	if err != nil {
+		return err
+	}
+	if attributes.GetAttachedRequestId() != "" {
+		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType)
+	}
+	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
+		if err := ms.addCompletionCallbacks(event, attributes.GetAttachedCompletionCallbacks()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ms *MutableStateImpl) updateVersioningOverride(
+	override *workflowpb.VersioningOverride,
+) error {
 	previousEffectiveDeployment := ms.GetEffectiveDeployment()
 	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	if override != nil {
@@ -5940,6 +6008,39 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 	}
 
 	var tombstones []*persistencespb.StateMachineTombstone
+	if ms.stateMachineNode != nil {
+		opLog, err := ms.stateMachineNode.OpLog()
+		if err != nil {
+			panic(fmt.Sprintf("Failed to get HSM operation log: %v", err))
+		}
+
+		for _, op := range opLog {
+			if deleteOp, ok := op.(hsm.DeleteOperation); ok {
+				path := deleteOp.Path()
+				if len(path) == 0 {
+					continue // Skip root deletion
+				}
+
+				tombstone := &persistencespb.StateMachineTombstone{
+					StateMachineKey: &persistencespb.StateMachineTombstone_StateMachinePath{
+						StateMachinePath: &persistencespb.StateMachinePath{
+							Path: make([]*persistencespb.StateMachineKey, len(path)),
+						},
+					},
+				}
+
+				for i, key := range path {
+					tombstone.GetStateMachinePath().Path[i] = &persistencespb.StateMachineKey{
+						Type: key.Type,
+						Id:   key.ID,
+					}
+				}
+
+				tombstones = append(tombstones, tombstone)
+			}
+		}
+	}
+
 	for scheduledEventID := range ms.deleteActivityInfos {
 		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
 			StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
@@ -5980,9 +6081,11 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 	// This requires tracking the lastUpdateVersionedTransition for each signalRequestedID,
 	// which is not supported by today's DB schema.
 	// TODO: we don't delete updateInfo and StateMachine today. Track them here when we do.
+	transitionHistory := ms.executionInfo.TransitionHistory
+	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
 
 	tombstoneBatch := &persistencespb.StateMachineTombstoneBatch{
-		VersionedTransition:    ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
+		VersionedTransition:    currentVersionedTransition,
 		StateMachineTombstones: tombstones,
 	}
 	// As an optimization, we only track the first empty tombstone batch. So we can know the start point of the tombstone batch
@@ -6069,6 +6172,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					ms.executionState.RunId,
 				)
 				var firstEventID, firstEventVersion, nextEventID int64
+				var lastVersionHistoryItem *historyspb.VersionHistoryItem
 				if len(eventBatches) > 0 {
 					firstEventID = eventBatches[0][0].EventId
 					firstEventVersion = eventBatches[0][0].Version
@@ -6083,9 +6187,10 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					if err != nil {
 						return err
 					}
-					firstEventID = item.EventId
-					firstEventVersion = item.Version
-					nextEventID = item.EventId + 1
+					firstEventID = common.EmptyEventID
+					firstEventVersion = common.EmptyVersion
+					nextEventID = common.EmptyEventID
+					lastVersionHistoryItem = versionhistory.CopyVersionHistoryItem(item)
 				}
 				transitionHistory := ms.executionInfo.TransitionHistory
 				if len(transitionHistory) > 0 && CompareVersionedTransition(
@@ -6093,14 +6198,15 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
 				) != 0 {
 					syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
-						WorkflowKey:         workflowKey,
-						VisibilityTimestamp: now,
-						Priority:            enumsspb.TASK_PRIORITY_HIGH,
-						VersionedTransition: transitionHistory[len(transitionHistory)-1],
-						FirstEventID:        firstEventID,
-						FirstEventVersion:   firstEventVersion,
-						NextEventID:         nextEventID,
-						TaskEquivalents:     replicationTasks,
+						WorkflowKey:            workflowKey,
+						VisibilityTimestamp:    now,
+						Priority:               enumsspb.TASK_PRIORITY_HIGH,
+						VersionedTransition:    transitionHistory[len(transitionHistory)-1],
+						FirstEventID:           firstEventID,
+						FirstEventVersion:      firstEventVersion,
+						NextEventID:            nextEventID,
+						TaskEquivalents:        replicationTasks,
+						LastVersionHistoryItem: lastVersionHistoryItem,
 					}
 
 					// versioned transition updated in the transaction
@@ -6439,7 +6545,7 @@ func (ms *MutableStateImpl) startTransactionHandleNamespaceMigration(
 
 	// local namespace -> global namespace && with started workflow task
 	if lastWriteVersion == common.EmptyVersion && namespaceEntry.FailoverVersion() > common.EmptyVersion && ms.HasStartedWorkflowTask() {
-		localNamespaceMutation := namespace.NewPretendAsLocalNamespace(
+		localNamespaceMutation := namespace.WithPretendLocalNamespace(
 			ms.clusterMetadata.GetCurrentClusterName(),
 		)
 		return namespaceEntry.Clone(localNamespaceMutation), nil

@@ -31,12 +31,14 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -938,17 +940,23 @@ func assertRunIDAndUpdateCurrentExecution(
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
+			executionState, err := workflowExecutionStateFromCurrentExecutionsRow(currentRow)
+			if err != nil {
+				return err
+			}
+
 			return &p.CurrentWorkflowConditionFailedError{
 				Msg: fmt.Sprintf(
 					"assertRunIDAndUpdateCurrentExecution failed. current run ID: %v, request run ID: %v",
 					currentRow.RunID,
 					previousRunID,
 				),
-				RequestID:        currentRow.CreateRequestID,
+				RequestIDs:       executionState.RequestIds,
 				RunID:            currentRow.RunID.String(),
 				State:            currentRow.State,
 				Status:           currentRow.Status,
 				LastWriteVersion: currentRow.LastWriteVersion,
+				StartTime:        currentRow.StartTime,
 			}
 		}
 		return nil
@@ -1034,7 +1042,8 @@ func buildExecutionRow(
 	dbRecordVersion int64,
 	shardID int32,
 ) (row *sqlplugin.ExecutionsRow, err error) {
-
+	// TODO: double encoding execution state? executionState could've been passed to the function as
+	// *commonpb.DataBlob like executionInfo
 	stateBlob, err := serialization.WorkflowExecutionStateToBlob(executionState)
 	if err != nil {
 		return nil, err
@@ -1151,4 +1160,29 @@ func updateExecution(
 	}
 
 	return nil
+}
+
+func workflowExecutionStateFromCurrentExecutionsRow(
+	row *sqlplugin.CurrentExecutionsRow,
+) (*persistencespb.WorkflowExecutionState, error) {
+	if len(row.Data) > 0 {
+		return serialization.WorkflowExecutionStateFromBlob(row.Data, row.DataEncoding)
+	}
+
+	// Old records don't have the serialized WorkflowExecutionState stored in DB.
+	executionState := &persistencespb.WorkflowExecutionState{
+		CreateRequestId: row.CreateRequestID,
+		RunId:           row.RunID.String(),
+		State:           row.State,
+		Status:          row.Status,
+		RequestIds: map[string]*persistencespb.RequestIDInfo{
+			row.CreateRequestID: {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+	if row.StartTime != nil {
+		executionState.StartTime = timestamp.TimePtr(*row.StartTime)
+	}
+	return executionState, nil
 }

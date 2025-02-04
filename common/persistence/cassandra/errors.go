@@ -244,7 +244,7 @@ func extractCurrentWorkflowConflictError(
 				requestCurrentRunID,
 				actualCurrentRunID,
 			),
-			RequestID:        executionState.CreateRequestId,
+			RequestIDs:       executionState.RequestIds,
 			RunID:            executionState.RunId,
 			State:            executionState.State,
 			Status:           executionState.Status,

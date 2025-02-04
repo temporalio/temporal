@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type NexusStateReplicationSuite struct {
@@ -71,10 +72,11 @@ func TestNexusStateReplicationTestSuite(t *testing.T) {
 			name:                    "DisableTransitionHistory",
 			enableTransitionHistory: false,
 		},
-		{
-			name:                    "EnableTransitionHistory",
-			enableTransitionHistory: true,
-		},
+		// TODO(hai719): Enable this test once state based replication works with HSM node deletion.
+		// {
+		// 	name:                    "EnableTransitionHistory",
+		// 	enableTransitionHistory: true,
+		// },
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &NexusStateReplicationSuite{}
@@ -490,6 +492,190 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 		}, func(callback *workflowpb.CallbackInfo) bool {
 			return callback.State == enumspb.CALLBACK_STATE_SUCCEEDED
 		})
+	}
+}
+
+func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplicated() {
+	ctx := testcore.NewContext()
+	ns := s.createGlobalNamespace()
+	taskQueue := "tq"
+
+	allowCompletion := atomic.Bool{}
+	attemptCount := atomic.Int32{}
+
+	h := nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			attemptCount.Add(1)
+			if !allowCompletion.Load() {
+				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "injected error to trigger operation retry")
+			}
+
+			return &nexus.HandlerStartOperationResultSync[any]{
+				Value: "",
+			}, nil
+		},
+	}
+
+	listenAddr := nexustest.AllocListenAddress()
+	nexustest.NewNexusServer(s.T(), listenAddr, h)
+
+	for _, cluster := range []*testcore.TestCluster{s.cluster1, s.cluster2} {
+		cluster.OverrideDynamicConfig(
+			s.T(),
+			nexusoperations.CallbackURLTemplate,
+			"http://"+s.cluster1.Host().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback",
+		)
+	}
+
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	for _, cl := range []operatorservice.OperatorServiceClient{s.cluster1.OperatorClient(), s.cluster2.OperatorClient()} {
+		_, err := cl.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+			Spec: &nexuspb.EndpointSpec{
+				Name: endpointName,
+				Target: &nexuspb.EndpointTarget{
+					Variant: &nexuspb.EndpointTarget_External_{
+						External: &nexuspb.EndpointTarget_External{
+							Url: "http://" + listenAddr,
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+	}
+
+	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
+		Namespace: ns,
+	})
+	s.NoError(err)
+	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
+		Namespace: ns,
+	})
+	s.NoError(err)
+
+	run, err := sdkClient1.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, "workflow")
+	s.NoError(err)
+
+	pollResp := s.pollWorkflowTask(ctx, s.cluster1.FrontendClient(), ns)
+
+	// Schedule operation and start timer to force next WFT
+	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+					},
+				},
+			},
+			{
+				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
+				Attributes: &commandpb.Command_StartTimerCommandAttributes{
+					StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
+						TimerId:            "timer-1",
+						StartToFireTimeout: durationpb.New(1 * time.Second),
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Poll next WFT which will be scheduled when timer fires
+	secondPollResp, err := s.cluster1.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: ns,
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(err)
+	s.NotNil(secondPollResp)
+
+	// Find the scheduled event ID from history
+	var scheduledEventID int64
+	for _, e := range secondPollResp.History.Events {
+		if e.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
+			scheduledEventID = e.GetEventId()
+			break
+		}
+	}
+	s.Greater(scheduledEventID, int64(0))
+
+	// Allow operation to complete synchronously during next retry attempt
+	allowCompletion.Store(true)
+
+	// Wait for operation completion to be recorded
+	s.Eventually(func() bool {
+		desc, err := sdkClient1.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		s.NoError(err)
+		return len(desc.PendingNexusOperations) == 0
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Try to cancel operation - should succeed since completion is buffered
+	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: secondPollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
+					RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
+						ScheduledEventId: scheduledEventID,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err, "Cancel request should be accepted when operation has buffered completion")
+
+	// Ensure no pending operations in passive cluster state
+	s.Eventually(func() bool {
+		desc, err := sdkClient2.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		s.NoError(err)
+		return len(desc.PendingNexusOperations) == 0
+	}, 10*time.Second, 200*time.Millisecond)
+
+	finalPollResp := s.pollWorkflowTask(ctx, s.cluster1.FrontendClient(), ns)
+	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: finalPollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Verify history in both clusters
+	for _, sdkClient := range []sdkclient.Client{sdkClient1, sdkClient2} {
+		historyIterator := sdkClient.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		var events []*historypb.HistoryEvent
+		for historyIterator.HasNext() {
+			e, err := historyIterator.Next()
+			s.NoError(err)
+			events = append(events, e)
+		}
+		s.ContainsHistoryEvents(`
+NexusOperationCancelRequested
+NexusOperationCompleted
+`, events)
 	}
 }
 

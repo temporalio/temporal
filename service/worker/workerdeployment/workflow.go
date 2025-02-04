@@ -151,7 +151,7 @@ func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampin
 		d.logger.Info("version already ramping, no change")
 		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
 	}
-	// TODO (Shivam): this will only work when "__unversioned__" is the default current-version of a deployment.
+	// todo: this will only work when "__unversioned__" is the default current-version of a deployment.
 	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)

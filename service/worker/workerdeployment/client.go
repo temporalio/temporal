@@ -77,7 +77,7 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName string,
-	) (*workflowservice.DescribeWorkerDeploymentResponse, error)
+	) (*deploymentpb.WorkerDeploymentInfo, []byte, error)
 
 	SetCurrentVersion(
 		ctx context.Context,
@@ -280,14 +280,14 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
-) (_ *workflowservice.DescribeWorkerDeploymentResponse, retErr error) {
+) (_ *deploymentpb.WorkerDeploymentInfo, conflictToken []byte, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("DescribeWorkerDeployment", &retErr, deploymentName)()
 
 	// validating params
 	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	deploymentWorkflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
@@ -305,24 +305,19 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 
 	res, err := d.historyClient.QueryWorkflow(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var queryResponse deploymentspb.QueryDescribeWorkerDeploymentResponse
 	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
 	dInfo, err := d.deploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	return &workflowservice.DescribeWorkerDeploymentResponse{
-		ConflictToken:        queryResponse.State.ConflictToken,
-		WorkerDeploymentInfo: dInfo,
-	}, nil
+	return dInfo, queryResponse.GetState().GetConflictToken(), nil
 }
 
 func (d *ClientImpl) ListWorkerDeployments(
@@ -491,7 +486,6 @@ func (d *ClientImpl) SetRampingVersion(
 	} else if failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyCurrentType {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("Ramping version %v is already current", version))
 	} else if failure != nil {
-		// TODO: is there an easy way to recover the original type here?
 		return nil, serviceerror.NewInternal(failure.Message)
 	}
 

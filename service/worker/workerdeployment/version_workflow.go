@@ -248,7 +248,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 
 	// describe all task queues in the deployment, if any have pollers, then cannot delete
 	var tqs []*taskqueuepb.TaskQueue
-	for tqName, _ := range state.TaskQueueFamilies {
+	for tqName := range state.TaskQueueFamilies {
 		tqs = append(tqs, &taskqueuepb.TaskQueue{
 			Name: tqName,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL, // TODO (Carly): could this be sticky?

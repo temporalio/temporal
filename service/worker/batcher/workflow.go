@@ -64,6 +64,8 @@ const (
 	BatchTypeReset = "reset"
 	// BatchTypeUpdateOptions is batch type for updating the options of workflow executions
 	BatchTypeUpdateOptions = "update_options"
+	// BatchTypePauseActivities is batch type for unpausing activities
+	BatchTypeUnpauseActivities = "unpause_activities"
 )
 
 var (
@@ -112,6 +114,14 @@ type (
 		UpdateMask               *fieldmaskpb.FieldMask
 	}
 
+	UnpauseActivitiesParams struct {
+		ActivityType   string
+		MatchAll       bool
+		ResetAttempts  bool
+		ResetHeartbeat bool
+		Jitter         time.Duration
+	}
+
 	// BatchParams is the parameters for batch operation workflow
 	BatchParams struct {
 		// Target namespace to execute batch operation
@@ -138,6 +148,9 @@ type (
 		ResetParams ResetParams
 		// UpdateOptionsParams is params only for BatchTypeUpdateOptions
 		UpdateOptionsParams UpdateOptionsParams
+		// UnpauseActivitiesParams is params only for BatchTypeUnpauseActivities
+		UnpauseActivitiesParams UnpauseActivitiesParams
+
 		// RPS sets the requests-per-second limit for the batch.
 		// The default (and max) is defined by `worker.BatcherRPS` in the dynamic config.
 		RPS float64

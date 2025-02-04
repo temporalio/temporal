@@ -30,6 +30,7 @@ import "google/protobuf/timestamp.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/common.proto";
+import "temporal/api/enums/v1/event_type.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
@@ -294,6 +295,14 @@ message WorkflowExecutionState {
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
     VersionedTransition last_update_versioned_transition = 5;
     google.protobuf.Timestamp start_time = 6;
+    // Request IDs that are attached to the workflow execution. It can the request ID that started
+    // the workflow execution or request IDs that were attached to an existing running workflow
+    // execution via StartWorkflowExecutionRequest.OnConflictOptions.
+    map<string, RequestIDInfo> request_ids = 7;
+}
+
+message RequestIDInfo {
+    temporal.api.enums.v1.EventType event_type = 1;
 }
 
 // transfer column
@@ -355,6 +364,7 @@ message ReplicationTaskInfo {
     // TODO: Remove this field when state-based replication is stable and
     // doesn't need to be disabled.
     repeated ReplicationTaskInfo task_equivalents = 20;
+    history.v1.VersionHistoryItem last_version_history_item = 21;
 }
 
 // visibility_task_data column
@@ -681,8 +691,8 @@ message NexusOperationInfo {
     // Operation name.
     string operation = 3;
 
-    // If set the state machine will remove itself from the HSM tree on completion.
-    bool delete_on_completion = 4;
+    // reserved due to removal of delete_on_completion
+    reserved 4;
 
     // Token for fetching the scheduled event.
     bytes scheduled_event_token = 5;

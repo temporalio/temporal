@@ -65,7 +65,7 @@ type Operation struct {
 }
 
 // AddChild adds a new operation child machine to the given node and transitions it to the SCHEDULED state.
-func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventToken []byte, deleteOnCompletion bool) (*hsm.Node, error) {
+func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventToken []byte) (*hsm.Node, error) {
 	attrs := event.GetNexusOperationScheduledEventAttributes()
 
 	node, err := node.AddChild(hsm.Key{Type: OperationMachineType, ID: id}, Operation{
@@ -78,9 +78,7 @@ func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventTok
 			ScheduleToCloseTimeout: attrs.ScheduleToCloseTimeout,
 			RequestId:              attrs.RequestId,
 			State:                  enumsspb.NEXUS_OPERATION_STATE_UNSPECIFIED,
-			// TODO(bergundy): actually delete on completion if this is set.
-			DeleteOnCompletion:  deleteOnCompletion,
-			ScheduledEventToken: eventToken,
+			ScheduledEventToken:    eventToken,
 		},
 	})
 
@@ -235,22 +233,6 @@ func (operationMachineDefinition) CompareState(state1, state2 any) (int, error) 
 	return int(attempts1 - attempts2), nil
 }
 
-// CompletionSource is an enum specifying where an operation completion originated from.
-type CompletionSource int
-
-const (
-	// CompletionSourceUnspecified indicates that the source is unspecified (e.g. when reapplying a history event that
-	// doesn't record this information).
-	CompletionSourceUnspecified = CompletionSource(iota)
-	// CompletionSourceResponse indicates that a completion came synchronously from a response to a StartOperation
-	// request.
-	CompletionSourceResponse
-	// CompletionSourceResponse indicates that a completion came asynchronously from a callback.
-	CompletionSourceCallback
-	// CompletionSourceCancelRequested indicates that the operation was canceled due to workflow cancelation request.
-	CompletionSourceCancelRequested
-)
-
 // EventScheduled is triggered when the operation is meant to be scheduled - immediately after initialization.
 type EventScheduled struct {
 	Node *hsm.Node
@@ -304,10 +286,9 @@ var TransitionAttemptFailed = hsm.NewTransition(
 
 // EventFailed is triggered when an invocation attempt is failed with a non retryable error.
 type EventFailed struct {
-	Time             time.Time
-	Node             *hsm.Node
-	Attributes       *historypb.NexusOperationFailedEventAttributes
-	CompletionSource CompletionSource
+	Time       time.Time
+	Node       *hsm.Node
+	Attributes *historypb.NexusOperationFailedEventAttributes
 }
 
 var TransitionFailed = hsm.NewTransition(
@@ -318,24 +299,9 @@ var TransitionFailed = hsm.NewTransition(
 	},
 	enumsspb.NEXUS_OPERATION_STATE_FAILED,
 	func(op Operation, event EventFailed) (hsm.TransitionOutput, error) {
-		// When reapplying history, assume that if we transition from the SCHEDULED state the completion comes from a
-		// response to a StartOpration request.  This may not be the case if a completion comes in before a response to
-		// the request but we ignore that detail for simplicity.
-		if event.CompletionSource == CompletionSourceResponse ||
-			event.CompletionSource == CompletionSourceUnspecified && op.State() == enumsspb.NEXUS_OPERATION_STATE_SCHEDULED {
-			op.recordAttempt(event.Time)
-			op.LastAttemptFailure = &failurepb.Failure{
-				// The top level failure in the event is just a wrapper for the actual cause.
-				Message: event.Attributes.GetFailure().GetCause().GetMessage(),
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-						NonRetryable: true,
-					},
-				},
-			}
-		}
-		// Keep last attempt information as-is for debuggability when completed asynchronously.
-		// When used in a workflow, this machine node will be deleted from the tree after this transition.
+		// Not recording the last attempt information here since the state machine will be deleted immediately after this transition.
+		// If we ever use this code for a standalone state machine implementation we will want to record the last
+		// attempt information in case the completion is a result of a synchronous operation.
 		return op.output()
 	},
 )
@@ -343,9 +309,8 @@ var TransitionFailed = hsm.NewTransition(
 // EventSucceeded is triggered when an invocation attempt succeeds.
 type EventSucceeded struct {
 	// Only set if the operation completed synchronously, as a response to a StartOperation RPC.
-	Time             time.Time
-	Node             *hsm.Node
-	CompletionSource CompletionSource
+	Time time.Time
+	Node *hsm.Node
 }
 
 var TransitionSucceeded = hsm.NewTransition(
@@ -356,24 +321,17 @@ var TransitionSucceeded = hsm.NewTransition(
 	},
 	enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED,
 	func(op Operation, event EventSucceeded) (hsm.TransitionOutput, error) {
-		// When reapplying history, assume that if we transition from the SCHEDULED state the completion comes from a
-		// response to a StartOpration request.  This may not be the case if a completion comes in before a response to
-		// the request but we ignore that detail for simplicity.
-		if event.CompletionSource == CompletionSourceResponse ||
-			event.CompletionSource == CompletionSourceUnspecified && op.State() == enumsspb.NEXUS_OPERATION_STATE_SCHEDULED {
-			op.recordAttempt(event.Time)
-		}
-		// Keep last attempt information as-is for debuggability when completed asynchronously.
-		// When used in a workflow, this machine node will be deleted from the tree after this transition.
+		// Not recording the last attempt information here since the state machine will be deleted immediately after this transition.
+		// If we ever use this code for a standalone state machine implementation we will want to record the last
+		// attempt information in case the completion is a result of a synchronous operation.
 		return op.output()
 	},
 )
 
 // EventCanceled is triggered when an invocation attempt succeeds.
 type EventCanceled struct {
-	Time             time.Time
-	Node             *hsm.Node
-	CompletionSource CompletionSource
+	Time time.Time
+	Node *hsm.Node
 }
 
 var TransitionCanceled = hsm.NewTransition(
@@ -384,17 +342,9 @@ var TransitionCanceled = hsm.NewTransition(
 	},
 	enumsspb.NEXUS_OPERATION_STATE_CANCELED,
 	func(op Operation, event EventCanceled) (hsm.TransitionOutput, error) {
-		// When reapplying history, assume that if we transition from the SCHEDULED state the completion comes from a
-		// response to a StartOpration request.  This may not be the case if a completion comes in before a response to
-		// the request but we ignore that detail for simplicity.
-		if event.CompletionSource == CompletionSourceResponse ||
-			// TODO: we'll never be in SCHEDULED state here, the state changes before calling the apply function.
-			event.CompletionSource == CompletionSourceUnspecified && op.State() == enumsspb.NEXUS_OPERATION_STATE_SCHEDULED {
-			op.recordAttempt(event.Time)
-			op.LastAttemptFailure = nil
-		}
-		// Keep last attempt information as-is for debuggability when completed asynchronously.
-		// When used in a workflow, this machine node will be deleted from the tree after this transition.
+		// Not recording the last attempt information here since the state machine will be deleted immediately after this transition.
+		// If we ever use this code for a standalone state machine implementation we will want to record the last
+		// attempt information in case the completion is a result of a synchronous operation.
 		return op.output()
 	},
 )

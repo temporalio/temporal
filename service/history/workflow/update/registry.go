@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 
 	"go.opentelemetry.io/otel/trace"
@@ -41,7 +40,7 @@ import (
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/utf8validator"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -110,11 +109,12 @@ type (
 		// and completed Updates are loaded. Practically it is a Mutable State.
 		store UpdateStore
 
-		instrumentation instrumentation
-		maxInFlight     func() int
-		maxTotal        func() int
-		completedCount  int
-		failoverVersion int64
+		instrumentation      instrumentation
+		maxInFlight          func() int
+		maxTotal             func() int
+		maxRegistrySizeLimit func() int
+		completedCount       int
+		failoverVersion      int64
 	}
 
 	Option func(*registry)
@@ -127,6 +127,14 @@ var _ Registry = (*registry)(nil)
 func WithInFlightLimit(f func() int) Option {
 	return func(r *registry) {
 		r.maxInFlight = f
+	}
+}
+
+// WithRegistrySizeLimit provides an optional limit to the total payload size of incomplete
+// Updates that a Registry instance will allow.
+func WithRegistrySizeLimit(f func() int) Option {
+	return func(r *registry) {
+		r.maxRegistrySizeLimit = f
 	}
 }
 
@@ -155,7 +163,7 @@ func WithMetrics(m metrics.Handler) Option {
 // trace.Tracer) to be used by Registry and its Updates.
 func WithTracerProvider(t trace.TracerProvider) Option {
 	return func(r *registry) {
-		r.instrumentation.tracer = t.Tracer(libraryName)
+		r.instrumentation.tracer = t.Tracer(telemetry.ComponentUpdateRegistry)
 	}
 }
 
@@ -164,12 +172,13 @@ func NewRegistry(
 	opts ...Option,
 ) Registry {
 	r := &registry{
-		updates:         make(map[string]*Update),
-		store:           store,
-		instrumentation: noopInstrumentation,
-		maxInFlight:     func() int { return 0 }, // ie disabled
-		maxTotal:        func() int { return math.MaxInt },
-		failoverVersion: store.GetCurrentVersion(),
+		updates:              make(map[string]*Update),
+		store:                store,
+		instrumentation:      noopInstrumentation,
+		maxRegistrySizeLimit: func() int { return 0 }, // ie disabled
+		maxInFlight:          func() int { return 0 }, // ie disabled
+		maxTotal:             func() int { return 0 }, // ie disabled
+		failoverVersion:      store.GetCurrentVersion(),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -219,7 +228,7 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	if err := r.checkLimits(); err != nil {
 		return nil, false, err
 	}
-	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	upd := New(id, r.remover(id), r.payloadSizeLimiter(), withInstrumentation(&r.instrumentation))
 	r.updates[id] = upd
 	return upd, false, nil
 }
@@ -238,11 +247,6 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 	body, err := acptOrRejMsg.Body.UnmarshalNew()
 	if err != nil {
 		return nil, invalidArgf("unable to unmarshal request: %v", err)
-	}
-
-	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
-	if err != nil {
-		return nil, invalidArgf("unable to validate utf-8 request: %v", err)
 	}
 
 	var reqMsg *updatepb.Request
@@ -406,12 +410,36 @@ func (r *registry) checkInflightLimit() error {
 	return nil
 }
 
+func (r *registry) payloadSizeLimiter() updateOpt {
+	return withLimitChecker(
+		func(req *updatepb.Request) error {
+			maxRegistrySize := r.maxRegistrySizeLimit()
+			if maxRegistrySize == 0 {
+				// limit is disabled
+				return nil
+			}
+			registrySize := r.GetSize()
+			payloadBytes := req.Size()
+			if registrySize+payloadBytes >= maxRegistrySize {
+				r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes)
+				// TODO: return serviceerror.ResourceExhausted
+			}
+			return nil
+		},
+	)
+}
+
 func (r *registry) checkTotalLimit() error {
-	if len(r.updates)+r.completedCount >= r.maxTotal() {
+	maxTotal := r.maxTotal()
+	if maxTotal == 0 {
+		// limit is disabled
+		return nil
+	}
+	if len(r.updates)+r.completedCount >= maxTotal {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("The limit on the total number of distinct updates in this workflow has been reached (%v). "+
-				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process", r.maxTotal()),
+				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process", maxTotal),
 		)
 	}
 	return nil

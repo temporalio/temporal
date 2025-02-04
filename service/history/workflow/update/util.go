@@ -32,10 +32,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/protobuf/proto"
 )
-
-const libraryName = "go.temporal.io/service/history/workflow/update"
 
 type (
 	instrumentation struct {
@@ -49,7 +48,7 @@ var (
 	noopInstrumentation = instrumentation{
 		log:     log.NewNoopLogger(),
 		metrics: metrics.NoopMetricsHandler,
-		tracer:  trace.NewNoopTracerProvider().Tracer(libraryName),
+		tracer:  telemetry.NoopTracer,
 	}
 )
 
@@ -79,6 +78,15 @@ func (i *instrumentation) countResponseMsg() {
 
 func (i *instrumentation) countRateLimited() {
 	i.oneOf(metrics.WorkflowExecutionUpdateRequestRateLimited.Name())
+}
+
+func (i *instrumentation) countRegistrySizeLimited(updateCount, registrySize, payloadSize int) {
+	i.oneOf(metrics.WorkflowExecutionUpdateRegistrySizeLimited.Name())
+	// TODO: remove log once limit is enforced everywhere
+	i.log.Warn("update registry size limit reached",
+		tag.NewInt("registry-size", registrySize),
+		tag.NewInt("payload-size", payloadSize),
+		tag.NewInt("update-count", updateCount))
 }
 
 func (i *instrumentation) countTooMany() {

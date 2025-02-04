@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/sdk/temporalnexus"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -324,6 +325,18 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
+
+	// Use this test case to verify that the state machine is actually deleted, the workflowservice
+	// DescribeWorkflowExecution API filters out operations in terminal state in case they complete in a server version
+	// without state machine deletion enabled, hence the use of the adminservice API here.
+	desc, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+		},
+	})
+	s.NoError(err)
+	s.Len(desc.DatabaseMutableState.GetExecutionInfo().SubStateMachinesByType, 0)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload() {
