@@ -59,14 +59,19 @@ func NewOpenTelemetryProvider(
 	clientConfig *ClientConfig,
 ) (*openTelemetryProviderImpl, error) {
 	reg := prometheus.NewRegistry()
-	exporter, err := exporters.New(exporters.WithRegisterer(reg))
+	exporterOpts := []exporters.Option{exporters.WithRegisterer(reg)}
+	if clientConfig.WithoutUnits {
+		exporterOpts = append(exporterOpts, exporters.WithoutUnits())
+	}
+	exporter, err := exporters.New(exporterOpts...)
+
 	if err != nil {
 		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
 		return nil, err
 	}
 
 	var views []sdkmetrics.View
-	for _, u := range []string{Dimensionless, Bytes, Milliseconds} {
+	for _, u := range []string{Dimensionless, Bytes, Milliseconds, Seconds} {
 		views = append(views, sdkmetrics.NewView(
 			sdkmetrics.Instrument{
 				Kind: sdkmetrics.InstrumentKindHistogram,
