@@ -58,8 +58,8 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *depl
 	}, nil
 }
 
-func (a *Activities) VerifyPollerPresenceInVersion(ctx context.Context, args *deploymentspb.VerifyPollerPresenceInVersionArgs) (*deploymentspb.VerifyPollerPresenceInVersionResult, error) {
-	res, err := a.deploymentClient.VerifyPollerPresenceInVersion(
+func (a *Activities) IsVersionMissingTaskQueues(ctx context.Context, args *deploymentspb.IsVersionMissingTaskQueuesArgs) (*deploymentspb.IsVersionMissingTaskQueuesResult, error) {
+	res, err := a.deploymentClient.IsVersionMissingTaskQueues(
 		ctx,
 		a.namespace,
 		args.PrevCurrentVersion,
@@ -69,8 +69,8 @@ func (a *Activities) VerifyPollerPresenceInVersion(ctx context.Context, args *de
 		// todo (Shivam): do we return a non-retryable error here since we want to fail the operation if this check has failed.
 		return nil, err
 	}
-	return &deploymentspb.VerifyPollerPresenceInVersionResult{
-		IsValidVersion: res,
+	return &deploymentspb.IsVersionMissingTaskQueuesResult{
+		IsMissingTaskQueues: res,
 	}, nil
 }
 

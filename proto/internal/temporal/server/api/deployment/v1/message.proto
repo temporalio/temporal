@@ -289,14 +289,14 @@ message SyncVersionStateActivityResult {
 }
 
 // used as Worker Deployment activity input:
-message VerifyPollerPresenceInVersionArgs {
+message IsVersionMissingTaskQueuesArgs {
     string prev_current_version = 1;
     string new_current_version = 2;
 }
 
 // used as Worker Deployment activity output:
-message VerifyPollerPresenceInVersionResult {
-    bool is_valid_version = 1;
+message IsVersionMissingTaskQueuesResult {
+    bool is_missing_task_queues = 1;
 }
 
 // used as Worker Deployment workflow memo:

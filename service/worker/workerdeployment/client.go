@@ -162,10 +162,12 @@ type Client interface {
 		namespaceEntry *namespace.Namespace,
 		deploymentName, version string) (enumspb.VersionDrainageStatus, error)
 
-	VerifyPollerPresenceInVersion(
+	// Used internally by the Worker Deployment workflow in its IsVersionMissingTaskQueues Activity
+	// to verify if there are missing task queues in the new current/ramping version.
+	IsVersionMissingTaskQueues(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		prevCurrentVersion, newCurrentVersion string,
+		prevCurrentVersion, newVersion string,
 	) (bool, error)
 }
 
@@ -1127,54 +1129,58 @@ func makeDeploymentQuery(deploymentName, buildID string) string {
 	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
 }
 
-func (d *ClientImpl) VerifyPollerPresenceInVersion(ctx context.Context, namespaceEntry *namespace.Namespace, prevCurrentVersion, newCurrentVersion string) (bool, error) {
+func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEntry *namespace.Namespace, prevCurrentVersion, newVersion string) (bool, error) {
 	prevCurrentVersionObj, err := worker_versioning.WorkerDeploymentVersionFromString(prevCurrentVersion)
 	if err != nil {
 		return false, err
 	}
-	newCurrentVersionObj, err := worker_versioning.WorkerDeploymentVersionFromString(newCurrentVersion)
+	newVersionObj, err := worker_versioning.WorkerDeploymentVersionFromString(newVersion)
 	if err != nil {
 		return false, err
 	}
 
-	// Step 1: Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion
+	// Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion
 	prevCurrentVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersionObj)
 	if err != nil {
 		return false, err
 	}
 
-	newCurrentVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, newCurrentVersionObj)
+	newVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, newVersionObj)
 	if err != nil {
 		return false, err
 	}
 
-	missingTaskQueues, err := d.checkForMissingTaskQueues(ctx, prevCurrentVersionInfo, newCurrentVersionInfo)
+	missingTaskQueues, err := d.checkForMissingTaskQueues(prevCurrentVersionInfo, newVersionInfo)
 	if err != nil {
 		return false, err
 	}
 
 	if len(missingTaskQueues) == 0 {
 		d.logger.Info("No missing task-queues found")
-		return true, nil
+		return false, nil
 	}
 
-	// Verify that all the missing task-queues have been added to another deployment or do not have any backlogged tasks
+	// Verify that all the missing task-queues have been added to another deployment or do not have backlogged tasks/add-rate > 0
 	for _, missingTaskQueue := range missingTaskQueues {
-		isActive, err := d.isTaskQueueUnversionedAndActive(ctx, namespaceEntry, missingTaskQueue, prevCurrentVersionInfo)
+		isExpectedInNewVersion, err := d.isTaskQueueExpectedInNewVersion(ctx, namespaceEntry, missingTaskQueue, prevCurrentVersionInfo)
 		if err != nil {
 			return false, err
 		}
-		if isActive {
-			// One of the missing task queues is unversioned and active
-			return false, nil
+		if isExpectedInNewVersion {
+			// one of the missing task queues is expected in the new version
+			return true, nil
 		}
 	}
 
-	return true, nil
+	// all expected task queues are present in the new version
+	d.logger.Info("All expected task queues are present in the new version")
+	return false, nil
 }
 
-// isTaskQueueUnversionedAndActive checks if a task queue is unversioned and has backloggedtasks
-func (d *ClientImpl) isTaskQueueUnversionedAndActive(
+// isTaskQueueExpectedInNewVersion checks if a task queue is expected in the new version. A task queue is expected in the new version if:
+// 1. It is not assigned to a deployment different from the deployment's current version.
+// 2. It has backlogged tasks or add-rate > 0.
+func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	taskQueue *deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo,
@@ -1202,8 +1208,7 @@ func (d *ClientImpl) isTaskQueueUnversionedAndActive(
 		return false, nil
 	}
 
-	// Control flow coming here would mean that the task queue is unversioned. The task queue should not
-	// have any backlogged tasks.
+	// Check if task queue has backlogged tasks or add-rate > 0
 	response, err = d.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
 		NamespaceId: namespaceEntry.ID().String(),
 		DescRequest: &workflowservice.DescribeTaskQueueRequest{
@@ -1214,9 +1219,10 @@ func (d *ClientImpl) isTaskQueueUnversionedAndActive(
 			},
 			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TaskQueueType(taskQueue.Type)},
 			Versions: &taskqueuepb.TaskQueueVersionSelection{
-				BuildIds: []string{worker_versioning.WorkerDeploymentVersionToString(prevCurrentVersionInfo.Version)}, // todo (Shivam): Should we pass in this buildID if the task-queue is in an unversioned deployment?
+				BuildIds: []string{worker_versioning.WorkerDeploymentVersionToString(prevCurrentVersionInfo.Version)},
 			},
-			ReportStats: true,
+			TaskQueueType: enumspb.TaskQueueType(taskQueue.Type), // since request doesn't pass through frontend, this field is not automatically populated
+			ReportStats:   true,
 		},
 	})
 	if err != nil {
@@ -1237,7 +1243,7 @@ func (d *ClientImpl) isTaskQueueUnversionedAndActive(
 }
 
 // checkForMissingTaskQueues checks if all the task-queues in the previous version are present in the new version
-func (d *ClientImpl) checkForMissingTaskQueues(ctx context.Context, prevCurrentVersionInfo, newCurrentVersionInfo *deploymentpb.WorkerDeploymentVersionInfo) ([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, error) {
+func (d *ClientImpl) checkForMissingTaskQueues(prevCurrentVersionInfo, newCurrentVersionInfo *deploymentpb.WorkerDeploymentVersionInfo) ([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, error) {
 	prevCurrentVersionTaskQueues := prevCurrentVersionInfo.GetTaskQueueInfos()
 	newCurrentVersionTaskQueues := newCurrentVersionInfo.GetTaskQueueInfos()
 

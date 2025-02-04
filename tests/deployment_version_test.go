@@ -494,76 +494,12 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	}, time.Second*5, time.Millisecond*200)
 }
 
-func (s *DeploymentVersionSuite) TestSetCurrentVersion_PollerPresenceChecks() {
+// VersionMissingTaskQueues
+func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentVersion() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	tv1 := testvars.New(s).WithBuildIDNumber(1).WithTaskQueue("task_queue_1")
-
-	// Start deployment workflow 1 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: tv1.DeploymentSeries(),
-				BuildId:        tv1.BuildID(),
-			},
-		})
-		a.NoError(err)
-		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
-		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
-	}, time.Second*5, time.Millisecond*200)
-
-	// SetCurrent so that the task queue puts the version in its versions info
-	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
-		Namespace:      s.Namespace().String(),
-		DeploymentName: tv1.DeploymentSeries(),
-		Version:        tv1.DeploymentVersionString(),
-		ConflictToken:  nil,
-		Identity:       tv1.ClientIdentity(),
-	})
-	s.Nil(err)
-
-	tv2 := testvars.New(s).WithBuildIDNumber(2).WithTaskQueue("task_queue_2")
-
-	// Start deployment workflow 2 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv2)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version: &deploymentpb.WorkerDeploymentVersion{
-				DeploymentName: tv2.DeploymentSeries(),
-				BuildId:        tv2.BuildID(),
-			},
-		})
-		a.NoError(err)
-		a.Equal(tv2.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
-		a.Equal(tv2.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
-	}, time.Second*5, time.Millisecond*200)
-
-	// SetCurrent tv2
-	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
-		Namespace:               s.Namespace().String(),
-		DeploymentName:          tv2.DeploymentSeries(),
-		Version:                 tv2.DeploymentVersionString(),
-		ConflictToken:           nil,
-		Identity:                tv2.ClientIdentity(),
-		IgnoreMissingTaskQueues: false,
-	})
-
-	// SetCurrent should fail since task_queue_1 does not have a current version than the deployment's existing current version
-	// and it also has a backlog of tasks being present.
-	s.Error(err)
-
-}
-
-//nolint:forbidigo
-func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv := testvars.New(s)
+	tv1 := tv.WithBuildIDNumber(1).WithTaskQueue(tv.Any().String())
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
 	pollerCtx1, pollerCancel1 := context.WithCancel(ctx)
@@ -592,79 +528,268 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 	})
 	s.Nil(err)
 
-	// describe tq and confirm that the current version is our version (so we can check that it was removed later)
+	// new version with a different registered task-queue
+	tv2 := testvars.New(s).WithBuildIDNumber(2).WithTaskQueue(testvars.New(s.T()).Any().String())
+
+	// Start deployment workflow 2 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv2)
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
-			TaskQueue: tv1.TaskQueue(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv2.DeploymentSeries(),
+				BuildId:        tv2.BuildID(),
+			},
 		})
 		a.NoError(err)
-		if resp != nil {
-			a.NotNil(resp.GetVersioningInfo().GetCurrentVersion())
-			a.Equal(tv1.BuildID(), resp.GetVersioningInfo().GetCurrentVersion().GetBuildId())
-			a.Equal(tv1.DeploymentSeries(), resp.GetVersioningInfo().GetCurrentVersion().GetDeploymentName())
-		}
+		a.Equal(tv2.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv2.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
 	}, time.Second*5, time.Millisecond*200)
 
-	// Version has active pollers so delete should fail
-	s.tryDeleteVersion(ctx, tv1, false)
-
-	// Stop the pollers
+	// Cancel pollers on task_queue_1 to increase the backlog of tasks
 	pollerCancel1()
 
-	// TODO (Shivam): Figure out how long to wait in this test for the task queue to forget the pollers. Can we accelerate the retention during test?
-	// below code passes when there are hard-coded no pollers, so the challenge is just to get the pollers to go away in the test.
-	//// Wait some time?
-	//
-	//// Version has no active pollers so delete should succeed
-	//s.tryDeleteVersion(ctx, tv1, true)
-	//
-	//// describe deployment and expect that the versions list does NOT contain the deleted version
-	//s.EventuallyWithT(func(t *assert.CollectT) {
-	//	a := assert.New(t)
-	//	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-	//		Namespace:      s.Namespace().String(),
-	//		DeploymentName: tv1.DeploymentSeries(),
-	//	})
-	//	a.NoError(err)
-	//	if resp != nil {
-	//		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
-	//			a.NotEqual(tv1.DeploymentVersionString(), vs.Version)
-	//		}
-	//	}
-	//}, time.Second*5, time.Millisecond*200)
-	//
-	//// Note: turns out you can successfully DescribeVersion even after that version has been deleted, because closed workflows can still answer queries
-	//
-	//// list workflows with deployment-version workflow id and expect it to be closed
-	//s.EventuallyWithT(func(t *assert.CollectT) {
-	//	a := assert.New(t)
-	//	resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-	//		Namespace: s.Namespace().String(),
-	//		Execution: &commonpb.WorkflowExecution{
-	//			WorkflowId: worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID()),
-	//			RunId:      "",
-	//		},
-	//	})
-	//	a.NoError(err)
-	//	if resp != nil {
-	//		a.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
-	//	}
-	//}, time.Second*5, time.Millisecond*200)
-	//
-	//// describe TQ and expect no version
-	//s.EventuallyWithT(func(t *assert.CollectT) {
-	//	a := assert.New(t)
-	//	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-	//		Namespace: s.Namespace().String(),
-	//		TaskQueue: tv1.TaskQueue(),
-	//	})
-	//	a.NoError(err)
-	//	if resp != nil {
-	//		a.Nil(resp.GetVersioningInfo().GetCurrentVersion())
-	//	}
-	//}, time.Second*5, time.Millisecond*200)
+	// Start a workflow on task_queue_1 to increase the add rate
+	s.startWorkflow(tv1, tv1.VersioningOverridePinned())
+
+	// SetCurrent tv2
+	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:               s.Namespace().String(),
+		DeploymentName:          tv2.DeploymentSeries(),
+		Version:                 tv2.DeploymentVersionString(),
+		ConflictToken:           nil,
+		Identity:                tv2.ClientIdentity(),
+		IgnoreMissingTaskQueues: false,
+	})
+
+	// SetCurrent should fail since task_queue_1 does not have a current version than the deployment's existing current version
+	// and it either has a backlog of tasks being present or an add rate > 0.
+	s.Error(err)
+
+}
+
+func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetCurrentVersion() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv := testvars.New(s)
+
+	tv1 := tv.WithBuildIDNumber(1).WithTaskQueue(tv.Any().String())
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv1.DeploymentSeries(),
+				BuildId:        tv1.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	// SetCurrent so that the task queue puts the version in its versions info
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv1.DeploymentSeries(),
+		Version:        tv1.DeploymentVersionString(),
+		ConflictToken:  nil,
+		Identity:       tv1.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	// new version with a different registered task-queue
+	tv2 := tv.WithBuildIDNumber(2).WithTaskQueue(tv.Any().String())
+
+	// Start deployment workflow 2 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv2)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv2.DeploymentSeries(),
+				BuildId:        tv2.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv2.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv2.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	// SetCurrent tv2
+	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:               s.Namespace().String(),
+		DeploymentName:          tv2.DeploymentSeries(),
+		Version:                 tv2.DeploymentVersionString(),
+		ConflictToken:           nil,
+		Identity:                tv2.ClientIdentity(),
+		IgnoreMissingTaskQueues: false,
+	})
+
+	// SetCurrent tv2 should succeed as task_queue_1, despite missing from the new current version, has no backlogged tasks/add-rate > 0
+	s.Nil(err)
+}
+
+func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingVersion() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv := testvars.New(s)
+	tv1 := tv.WithBuildIDNumber(1).WithTaskQueue(tv.Any().String())
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	pollerCtx1, pollerCancel1 := context.WithCancel(ctx)
+	go s.pollFromDeployment(pollerCtx1, tv1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv1.DeploymentSeries(),
+				BuildId:        tv1.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	// SetCurrent so that the task queue puts the version in its versions info
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv1.DeploymentSeries(),
+		Version:        tv1.DeploymentVersionString(),
+		ConflictToken:  nil,
+		Identity:       tv1.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	// new version with a different registered task-queue
+	tv2 := tv.WithBuildIDNumber(2).WithTaskQueue(tv.Any().String())
+
+	// Start deployment workflow 2 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv2)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv2.DeploymentSeries(),
+				BuildId:        tv2.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv2.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv2.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	// Cancel pollers on task_queue_1 to increase the backlog of tasks
+	pollerCancel1()
+
+	// Start a workflow on task_queue_1 to increase the add rate
+	s.startWorkflow(tv1, tv1.VersioningOverridePinned())
+
+	// SetRampingVersion to tv2
+	_, err = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+		Namespace:               s.Namespace().String(),
+		DeploymentName:          tv2.DeploymentSeries(),
+		Version:                 tv2.DeploymentVersionString(),
+		ConflictToken:           nil,
+		Identity:                tv2.ClientIdentity(),
+		IgnoreMissingTaskQueues: false,
+	})
+
+	// SetRampingVersion should fail since task_queue_1 does not have a current version than the deployment's existing current version
+	// and it either has a backlog of tasks being present or an add rate > 0.
+	s.Error(err)
+}
+
+func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetRampingVersion() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv := testvars.New(s)
+	tv1 := tv.WithBuildIDNumber(1).WithTaskQueue(tv.Any().String())
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv1.DeploymentSeries(),
+				BuildId:        tv1.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	// SetCurrent so that the task queue puts the version in its versions info
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv1.DeploymentSeries(),
+		Version:        tv1.DeploymentVersionString(),
+		ConflictToken:  nil,
+		Identity:       tv1.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	// new version with a different registered task-queue
+	tv2 := tv.WithBuildIDNumber(2).WithTaskQueue(tv.Any().String())
+
+	// Start deployment workflow 2 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv2)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv2.DeploymentSeries(),
+				BuildId:        tv2.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv2.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv2.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	// SetRampingVersion to tv2
+	_, err = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+		Namespace:               s.Namespace().String(),
+		DeploymentName:          tv2.DeploymentSeries(),
+		Version:                 tv2.DeploymentVersionString(),
+		ConflictToken:           nil,
+		Identity:                tv2.ClientIdentity(),
+		IgnoreMissingTaskQueues: false,
+	})
+
+	// SetRampingVersion to tv2 should succeed as task_queue_1, despite missing from the new current version, has no backlogged tasks/add-rate > 0
+	s.Nil(err)
+}
+
+func (s *DeploymentVersionSuite) startWorkflow(
+	tv *testvars.TestVars,
+	override *workflowpb.VersioningOverride,
+) string {
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          tv.Any().String(),
+		Namespace:          s.Namespace().String(),
+		WorkflowId:         tv.WorkflowID(),
+		WorkflowType:       tv.WorkflowType(),
+		TaskQueue:          tv.TaskQueue(),
+		Identity:           tv.WorkerIdentity(),
+		VersioningOverride: override,
+	}
+
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err0)
+	return we.GetRunId()
 }
 
 func (s *DeploymentVersionSuite) tryDeleteVersion(
