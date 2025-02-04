@@ -110,7 +110,7 @@ func NexusFailureToAPIFailure(failure nexus.Failure, retryable bool) (*failurepb
 	return apiFailure, nil
 }
 
-func UnsuccessfulOperationErrorToTemporalFailure(opErr *nexus.UnsuccessfulOperationError) (*failurepb.Failure, error) {
+func UnsuccessfulOperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
 	var nexusFailure nexus.Failure
 	failureErr, ok := opErr.Cause.(*nexus.FailureError)
 	if ok {
