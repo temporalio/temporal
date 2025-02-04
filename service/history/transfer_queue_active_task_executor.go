@@ -1496,25 +1496,27 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		UserMetadata:          userMetadata,
 		VersioningOverride:    inheritedOverride,
 	}
+	parentExecutionInfo := &workflowspb.ParentExecutionInfo{
+		NamespaceId: task.NamespaceID,
+		Namespace:   namespace.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: task.WorkflowID,
+			RunId:      task.RunID,
+		},
+		InitiatedId:      task.InitiatedEventID,
+		InitiatedVersion: task.Version,
+		Clock:            vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
+	}
 	if terminateChildIfRunning {
 		startRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 		startRequest.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+		parentExecutionInfo.IsResetRun = true
 	}
 
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
 		startRequest,
-		&workflowspb.ParentExecutionInfo{
-			NamespaceId: task.NamespaceID,
-			Namespace:   namespace.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: task.WorkflowID,
-				RunId:      task.RunID,
-			},
-			InitiatedId:      task.InitiatedEventID,
-			InitiatedVersion: task.Version,
-			Clock:            vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
-		},
+		parentExecutionInfo,
 		rootExecutionInfo,
 		t.shardContext.GetTimeSource().Now(),
 	)
