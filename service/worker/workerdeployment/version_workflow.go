@@ -119,7 +119,9 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	if d.GetVersionState().Version == nil {
 		return fmt.Errorf("version cannot be nil on start")
 	}
-	d.VersionState.CreateTime = timestamppb.New(workflow.Now(ctx))
+	if d.VersionState.GetCreateTime() == nil {
+		d.VersionState.CreateTime = timestamppb.New(workflow.Now(ctx))
+	}
 
 	// if we were draining and just continued-as-new, restart drainage child wf
 	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
