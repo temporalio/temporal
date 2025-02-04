@@ -339,12 +339,12 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 
 	// TODO (Shivam): Figure out how long to wait in this test for the task queue to forget the pollers. Can we accelerate the retention during test?
 	// below code passes when there are hard-coded no pollers, so the challenge is just to get the pollers to go away in the test.
-	//// Wait some time?
+	// // Wait some time?
 	//
-	//// Version has no active pollers so delete should succeed
+	// // Version has no active pollers so delete should succeed
 	//s.tryDeleteVersion(ctx, tv1, true)
 	//
-	//// describe deployment and expect that the versions list does NOT contain the deleted version
+	// // describe deployment and expect that the versions list does NOT contain the deleted version
 	//s.EventuallyWithT(func(t *assert.CollectT) {
 	//	a := assert.New(t)
 	//	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -359,9 +359,9 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 	//	}
 	//}, time.Second*5, time.Millisecond*200)
 	//
-	//// Note: turns out you can successfully DescribeVersion even after that version has been deleted, because closed workflows can still answer queries
+	// // Note: turns out you can successfully DescribeVersion even after that version has been deleted, because closed workflows can still answer queries
 	//
-	//// list workflows with deployment-version workflow id and expect it to be closed
+	// // list workflows with deployment-version workflow id and expect it to be closed
 	//s.EventuallyWithT(func(t *assert.CollectT) {
 	//	a := assert.New(t)
 	//	resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
@@ -377,7 +377,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 	//	}
 	//}, time.Second*5, time.Millisecond*200)
 	//
-	//// describe TQ and expect no version
+	// // describe TQ and expect no version
 	//s.EventuallyWithT(func(t *assert.CollectT) {
 	//	a := assert.New(t)
 	//	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
