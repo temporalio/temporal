@@ -1160,12 +1160,12 @@ func (d *ClientImpl) VerifyPollerPresenceInVersion(ctx context.Context, namespac
 
 	// Verify that all the missing task-queues have been added to another deployment or do not have any backlogged tasks
 	for _, missingTaskQueue := range missingTaskQueues {
-		isUnversionedAndActive, err := d.isTaskQueueUnversionedAndActive(ctx, namespaceEntry, missingTaskQueue, prevCurrentVersionInfo.Version.BuildId)
+		isActive, err := d.isTaskQueueUnversionedAndActive(ctx, namespaceEntry, missingTaskQueue, prevCurrentVersionInfo)
 		if err != nil {
 			return false, err
 		}
-		if isUnversionedAndActive {
-			// if one of the missing task queues is active,
+		if isActive {
+			// One of the missing task queues is unversioned and active
 			return false, nil
 		}
 	}
@@ -1178,7 +1178,7 @@ func (d *ClientImpl) isTaskQueueUnversionedAndActive(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	taskQueue *deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo,
-	buildID string,
+	prevCurrentVersionInfo *deploymentpb.WorkerDeploymentVersionInfo,
 ) (bool, error) {
 	// First check if task queue is assigned to another deployment
 	response, err := d.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
@@ -1195,10 +1195,10 @@ func (d *ClientImpl) isTaskQueueUnversionedAndActive(
 		return false, err
 	}
 
-	// Task queue has been added to another deployment; not considered active for this deployment
+	// Task Queue has been moved to another Worker Deployment
 	if response.DescResponse.VersioningInfo != nil &&
 		response.DescResponse.VersioningInfo.GetCurrentVersion() != nil &&
-		response.DescResponse.VersioningInfo.GetCurrentVersion().GetBuildId() != "" {
+		response.DescResponse.VersioningInfo.GetCurrentVersion().GetBuildId() != prevCurrentVersionInfo.Version.GetBuildId() {
 		return false, nil
 	}
 
@@ -1214,7 +1214,7 @@ func (d *ClientImpl) isTaskQueueUnversionedAndActive(
 			},
 			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TaskQueueType(taskQueue.Type)},
 			Versions: &taskqueuepb.TaskQueueVersionSelection{
-				BuildIds: []string{buildID}, // todo (Shivam): Should we pass in this buildID if the task-queue is in an unversioned deployment?
+				BuildIds: []string{worker_versioning.WorkerDeploymentVersionToString(prevCurrentVersionInfo.Version)}, // todo (Shivam): Should we pass in this buildID if the task-queue is in an unversioned deployment?
 			},
 			ReportStats: true,
 		},
@@ -1224,7 +1224,7 @@ func (d *ClientImpl) isTaskQueueUnversionedAndActive(
 		return false, err
 	}
 
-	typesInfo := response.GetDescResponse().GetVersionsInfo()[buildID].GetTypesInfo()
+	typesInfo := response.GetDescResponse().GetVersionsInfo()[worker_versioning.WorkerDeploymentVersionToString(prevCurrentVersionInfo.Version)].GetTypesInfo()
 	if typesInfo != nil {
 		typeStats := typesInfo[int32(enumspb.TaskQueueType(taskQueue.Type))]
 		if typeStats != nil && typeStats.GetStats() != nil &&

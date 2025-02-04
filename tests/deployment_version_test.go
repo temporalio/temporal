@@ -494,6 +494,71 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	}, time.Second*5, time.Millisecond*200)
 }
 
+func (s *DeploymentVersionSuite) TestSetCurrentVersion_PollerPresenceChecks() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1).WithTaskQueue("task_queue_1")
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv1)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv1.DeploymentSeries(),
+				BuildId:        tv1.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	// SetCurrent so that the task queue puts the version in its versions info
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv1.DeploymentSeries(),
+		Version:        tv1.DeploymentVersionString(),
+		ConflictToken:  nil,
+		Identity:       tv1.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	tv2 := testvars.New(s).WithBuildIDNumber(2).WithTaskQueue("task_queue_2")
+
+	// Start deployment workflow 2 and wait for the deployment version to exist
+	go s.pollFromDeployment(ctx, tv2)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: tv2.DeploymentSeries(),
+				BuildId:        tv2.BuildID(),
+			},
+		})
+		a.NoError(err)
+		a.Equal(tv2.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
+		a.Equal(tv2.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
+	}, time.Second*5, time.Millisecond*200)
+
+	// SetCurrent tv2
+	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:               s.Namespace().String(),
+		DeploymentName:          tv2.DeploymentSeries(),
+		Version:                 tv2.DeploymentVersionString(),
+		ConflictToken:           nil,
+		Identity:                tv2.ClientIdentity(),
+		IgnoreMissingTaskQueues: false,
+	})
+
+	// SetCurrent should fail since task_queue_1 does not have a current version than the deployment's existing current version
+	// and it also has a backlog of tasks being present.
+	s.Error(err)
+
+}
+
 //nolint:forbidigo
 func (s *DeploymentVersionSuite) TestDeleteVersion_NoOpenWFs() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
