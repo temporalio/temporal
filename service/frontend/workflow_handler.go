@@ -3385,9 +3385,11 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 		return nil, err
 	}
 
-	// TODO (Shivam): error out if build_ID is empty
+	if request.GetVersion() == "" {
+		return nil, serviceerror.NewInvalidArgument("version cannot be empty")
+	}
 
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.Identity, request.GetConflictToken())
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.Identity, request.IgnoreMissingTaskQueues, request.GetConflictToken())
 	if err != nil {
 		return nil, err
 	}
@@ -3419,7 +3421,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 
 	if request.GetVersion() == "" {
 		if request.GetPercentage() != 0 {
-			return nil, serviceerror.NewInvalidArgument("Empty value for build_id must be paired with percentage=0")
+			return nil, serviceerror.NewInvalidArgument("Empty value for version must be paired with percentage=0")
 		}
 	}
 
@@ -3427,7 +3429,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
 	}
 
-	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.GetPercentage(), request.GetIdentity(), request.GetConflictToken())
+	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.GetPercentage(), request.GetIdentity(), request.IgnoreMissingTaskQueues, request.GetConflictToken())
 	if err != nil {
 		return nil, err
 	}
