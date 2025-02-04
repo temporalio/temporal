@@ -58,6 +58,21 @@ func (a *Activities) SyncWorkerDeploymentVersion(ctx context.Context, args *depl
 	}, nil
 }
 
+func (a *Activities) IsVersionMissingTaskQueues(ctx context.Context, args *deploymentspb.IsVersionMissingTaskQueuesArgs) (*deploymentspb.IsVersionMissingTaskQueuesResult, error) {
+	res, err := a.deploymentClient.IsVersionMissingTaskQueues(
+		ctx,
+		a.namespace,
+		args.PrevCurrentVersion,
+		args.NewCurrentVersion,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &deploymentspb.IsVersionMissingTaskQueuesResult{
+		IsMissingTaskQueues: res,
+	}, nil
+}
+
 func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *deploymentspb.DeleteVersionActivityArgs) error {
 	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
 	err := a.deploymentClient.DeleteVersionFromWorkerDeployment(
