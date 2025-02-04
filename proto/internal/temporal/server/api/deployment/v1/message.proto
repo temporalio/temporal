@@ -147,7 +147,8 @@ message WorkerDeploymentLocalState {
     // - It has no active pollers (see WorkerDeploymentVersionInfo.pollers_status) 
     // - It is drained (see WorkerDeploymentVersionInfo.drainage_status)
     // TODO (Shivam) - Removal of registered versions based on the above conditions.
-    repeated string versions = 3; 
+    repeated string versions = 3;
+    bytes conflict_token = 4;
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -233,11 +234,13 @@ message CheckWorkerDeploymentUserDataPropagationRequest {
 message SetCurrentVersionArgs {
     string identity = 1;
     string version = 2;
+    bytes conflict_token = 3;
 }
 
 // used as Worker Deployment update response:
 message SetCurrentVersionResponse {
     string previous_version = 1;
+    bytes conflict_token = 2;
 }
 
 // used as Worker Deployment workflow update input:
@@ -277,6 +280,7 @@ message SetRampingVersionArgs {
     string identity = 1;
     string version = 2;
     float percentage = 3;
+    bytes conflict_token = 4;
 }
 
 // used as Worker Deployment activity input:

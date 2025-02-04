@@ -200,6 +200,72 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	}, time.Second*10, time.Millisecond*1000)
 }
 
+func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	tv := testvars.New(s)
+
+	firstVersion := tv.WithBuildIDNumber(1)
+	secondVersion := tv.WithBuildIDNumber(2)
+
+	// Start deployment version workflow + worker-deployment workflow. Only one version is stared manually
+	// to prevent erroring out in the successive DescribeWorkerDeployment call.
+	go s.pollFromDeployment(ctx, firstVersion)
+
+	var cT []byte
+	// No current deployment version set.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal("", resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+		cT = resp.GetConflictToken()
+	}, time.Second*10, time.Millisecond*1000)
+
+	// Set first version as current version
+	_, _ = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        firstVersion.DeploymentVersionString(),
+		ConflictToken:  cT,
+	})
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal(firstVersion.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+		cT = resp.GetConflictToken()
+	}, time.Second*10, time.Millisecond*1000)
+
+	// Set second version as ramping version
+	_, _ = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        secondVersion.DeploymentVersionString(),
+		Percentage:     5,
+		ConflictToken:  cT,
+	})
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal(secondVersion.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+	}, time.Second*10, time.Millisecond*1000)
+}
+
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Idempotent() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
