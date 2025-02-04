@@ -66,7 +66,6 @@ func (a *Activities) IsVersionMissingTaskQueues(ctx context.Context, args *deplo
 		args.NewCurrentVersion,
 	)
 	if err != nil {
-		// todo (Shivam): do we return a non-retryable error here since we want to fail the operation if this check has failed.
 		return nil, err
 	}
 	return &deploymentspb.IsVersionMissingTaskQueuesResult{

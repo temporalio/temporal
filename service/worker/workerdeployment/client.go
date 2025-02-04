@@ -541,7 +541,6 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 		return err
 	}
 
-	fmt.Printf("Inside delete, deployment name is %s\n", deploymentName)
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
 		namespaceEntry,
@@ -1129,7 +1128,7 @@ func makeDeploymentQuery(deploymentName, buildID string) string {
 }
 
 func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEntry *namespace.Namespace, prevCurrentVersion, newVersion string) (bool, error) {
-	// Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion
+	// Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion (newVersion is either the new ramping version or the new current version)
 	prevCurrentVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersion)
 	if err != nil {
 		return false, err
@@ -1146,7 +1145,6 @@ func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEn
 	}
 
 	if len(missingTaskQueues) == 0 {
-		d.logger.Info("No missing task-queues found")
 		return false, nil
 	}
 
@@ -1163,7 +1161,6 @@ func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEn
 	}
 
 	// all expected task queues are present in the new version
-	d.logger.Info("All expected task queues are present in the new version")
 	return false, nil
 }
 
@@ -1208,7 +1205,7 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 			},
 			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TaskQueueType(taskQueue.Type)},
 			Versions: &taskqueuepb.TaskQueueVersionSelection{
-				BuildIds: []string{prevCurrentVersionInfo.GetVersion()},
+				BuildIds: []string{prevCurrentVersionInfo.GetVersion()}, // pretending the version string is a build id
 			},
 			TaskQueueType: enumspb.TaskQueueType(taskQueue.Type), // since request doesn't pass through frontend, this field is not automatically populated
 			ReportStats:   true,

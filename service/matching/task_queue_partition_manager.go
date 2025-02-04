@@ -521,6 +521,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 	return resp, nil
 }
 
+// In order to accommodate the changes brought in by versioning-3.1, `buildIDs` will now also accept versionID's that represent worker-deployment versions.
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	ctx context.Context,
 	buildIds map[string]bool,
@@ -544,6 +545,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		} else {
 			found := false
 			for k := range pm.versionedQueues {
+				// Storing the versioned queue if the buildID is a v2 based buildID or a versionID representing a worker-deployment version.
 				if k.BuildId() == b || worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(k.Deployment())) == b {
 					versions[k] = true
 					found = true
@@ -566,6 +568,9 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
 		}
 
+		// `getPhysicalQueue` always needs the right buildID passed to function correctly. If the version is a worker-deployment version and an empty buildID is passed,
+		// the function returns the default queue which is not what we want.
+		// The following assigns buildID to either a v2 based buildID or a buildID part of a worker-deployment version.
 		buildID := v.BuildId()
 		if v.Deployment() != nil {
 			buildID = v.Deployment().BuildId
@@ -584,8 +589,12 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			vInfo.PhysicalTaskQueueInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
 		}
 
+		// The following assigns buildID to either a v2 based buildID or a versionID representing a worker-deployment version.
+		// This is required to populate the right value inside the versionsInfo map. If a user is requesting information for a worker-deployment version,
+		// the full worker-deployment version string is used as an entry in the versionsInfo map. Moreover, to keep things backwards compatible, users requesting
+		// information for non-deployment related builds will only see the buildID as an entry in the versionsInfo map.
 		bid := v.BuildId()
-		if bid == "" && v.Deployment() != nil {
+		if v.Deployment() != nil {
 			bid = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(v.Deployment()))
 		}
 		versionsInfo[bid] = vInfo

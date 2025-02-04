@@ -207,7 +207,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 					return nil, err
 				}
 				if isMissingTaskQueues {
-					return nil, serviceerror.NewFailedPrecondition("New ramping version does not have all the task queues from the previous current version and some missing task queues are unversioned and active")
+					return nil, serviceerror.NewFailedPrecondition("New ramping version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after this operation")
 				}
 			}
 			rampingSinceTime = routingUpdateTime
@@ -328,7 +328,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			return nil, err
 		}
 		if isMissingTaskQueues {
-			return nil, serviceerror.NewFailedPrecondition("New current version does not have all the task queues from the previous current version and some missing task queues are unversioned and active")
+			return nil, serviceerror.NewFailedPrecondition("New current version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after this operation")
 		}
 	}
 
@@ -403,7 +403,6 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 		d.State.Versions = make([]string, 0)
 	}
 
-	fmt.Printf("Adding version %s to deployment %s\n", version, d.DeploymentName)
 	d.State.Versions = append(d.State.Versions, version)
 	return nil
 }
