@@ -707,6 +707,7 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
 					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
@@ -901,6 +902,7 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
 					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
@@ -915,6 +917,7 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
 					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 				)
 				task.finish(nil, false)
