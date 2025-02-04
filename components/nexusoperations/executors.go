@@ -753,21 +753,12 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 	if errors.As(callErr, &handlerErr) {
 		failure := &failurepb.Failure{
 			Message: handlerErr.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					Type:         "NexusHandlerError",
-					NonRetryable: !retryable,
+			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+					Type: string(handlerErr.Type),
 				},
 			},
-			// TODO: Replace with the FailureInfo below once there are more SDKs that support NexusHandlerFailureInfo in
-			// the wild.
-			// FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
-			// 	NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-			// 		Type: string(handlerErr.Type),
-			// 	},
-			// },
 		}
-
 		var failureError *nexus.FailureError
 		if errors.As(handlerErr.Cause, &failureError) {
 			var err error
