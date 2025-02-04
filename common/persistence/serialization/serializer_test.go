@@ -32,6 +32,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -194,4 +195,83 @@ func (s *temporalSerializerSuite) TestSerializeShardInfo_Random() {
 	s.NotNil(deserializedShardInfo)
 
 	s.ProtoEqual(&shardInfo, deserializedShardInfo)
+}
+
+func (s *temporalSerializerSuite) TestDeserializeStrippedEvents() {
+	// 1. Nil data blob
+	s.Run("NilDataBlob", func() {
+		events, err := s.serializer.DeserializeStrippedEvents(nil)
+		s.NoError(err)
+		s.Nil(events)
+	})
+
+	// 2. Empty data
+	s.Run("EmptyDataBlob", func() {
+		// Data is nil
+		events, err := s.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+			Data:         nil,
+		})
+		s.NoError(err)
+		s.Nil(events)
+
+		// Data is empty byte array
+		events, err = s.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+			Data:         []byte{},
+		})
+		s.NoError(err)
+		s.Nil(events)
+	})
+
+	// 3. Unknown encoding type
+	s.Run("UnknownEncodingType", func() {
+		_, err := s.serializer.DeserializeStrippedEvents(&commonpb.DataBlob{
+			EncodingType: enumspb.ENCODING_TYPE_JSON, // Not handled by our switch
+			Data:         []byte("irrelevant-data"),
+		})
+		s.Error(err)
+		s.Contains(err.Error(), "unknown or unsupported encoding type")
+	})
+
+	// 4. Proper proto decoding, discarding unknown fields
+	s.Run("ProtoDiscardUnknownFields", func() {
+		// Build a HistoryEvent that contains fields *not* present in StrippedHistoryEvent
+		historyEvent := &historypb.HistoryEvent{
+			EventId:   123,
+			Version:   456,
+			EventTime: nil, // or a valid timestamp
+			// This is an extra field not present in StrippedHistoryEvent
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+					WorkflowType: &commonpb.WorkflowType{Name: "some-workflow-type"},
+				},
+			},
+		}
+
+		historyEvents := &historypb.History{
+			Events: []*historypb.HistoryEvent{historyEvent},
+		}
+
+		// Marshal to protobuf
+		data, err := historyEvents.Marshal()
+		s.Require().NoError(err)
+
+		dataBlob := &commonpb.DataBlob{
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+			Data:         data,
+		}
+
+		// Deserialize into StrippedHistoryEvents (should drop unknown fields)
+		deserializedEvents, err := s.serializer.DeserializeStrippedEvents(dataBlob)
+		s.NoError(err)
+		s.Require().Len(deserializedEvents, 1)
+
+		// Known fields should be preserved
+		s.EqualValues(123, deserializedEvents[0].EventId)
+		s.EqualValues(456, deserializedEvents[0].Version)
+
+		reflectMsg := deserializedEvents[0].ProtoReflect()
+		s.Empty(reflectMsg.GetUnknown(), "Unknown fields should have been discarded")
+	})
 }
