@@ -75,6 +75,34 @@ func (c *metricClient) DeleteSchedule(
 	return c.client.DeleteSchedule(ctx, request, opts...)
 }
 
+func (c *metricClient) DeleteWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DeleteWorkerDeploymentResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDeleteWorkerDeployment")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeleteWorkerDeployment(ctx, request, opts...)
+}
+
+func (c *metricClient) DeleteWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DeleteWorkerDeploymentVersionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDeleteWorkerDeploymentVersion")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeleteWorkerDeploymentVersion(ctx, request, opts...)
+}
+
 func (c *metricClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.DeleteWorkflowExecutionRequest,
@@ -1095,6 +1123,20 @@ func (c *metricClient) UpdateWorkerBuildIdCompatibility(
 	}()
 
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateWorkerVersionMetadata(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerVersionMetadataRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.UpdateWorkerVersionMetadataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUpdateWorkerVersionMetadata")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateWorkerVersionMetadata(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateWorkerVersioningRules(

@@ -63,6 +63,26 @@ func (c *clientImpl) DeleteSchedule(
 	return c.client.DeleteSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) DeleteWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkerDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DeleteWorkerDeployment(ctx, request, opts...)
+}
+
+func (c *clientImpl) DeleteWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkerDeploymentVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DeleteWorkerDeploymentVersion(ctx, request, opts...)
+}
+
 func (c *clientImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.DeleteWorkflowExecutionRequest,
@@ -791,6 +811,16 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateWorkerVersionMetadata(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerVersionMetadataRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkerVersionMetadata(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateWorkerVersioningRules(
