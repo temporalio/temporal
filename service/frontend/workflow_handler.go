@@ -3387,7 +3387,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 
 	// TODO (Shivam): error out if build_ID is empty
 
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.Identity)
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.Identity, request.GetConflictToken())
 	if err != nil {
 		return nil, err
 	}
@@ -3427,7 +3427,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, serviceerror.NewInvalidArgument("Percentage must be between 0 and 100 (inclusive)")
 	}
 
-	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.GetPercentage(), request.GetIdentity())
+	resp, err := wh.workerDeploymentClient.SetRampingVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.GetPercentage(), request.GetIdentity(), request.GetConflictToken())
 	if err != nil {
 		return nil, err
 	}
@@ -3499,19 +3499,21 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 		return nil, err
 	}
 
-	workerDeploymentInfo, err := wh.workerDeploymentClient.DescribeWorkerDeployment(ctx, namespaceEntry, request.DeploymentName)
+	workerDeploymentInfo, cT, err := wh.workerDeploymentClient.DescribeWorkerDeployment(ctx, namespaceEntry, request.DeploymentName)
 	if err != nil {
 		return nil, err
 	}
 
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,
+		ConflictToken:        cT,
 	}, nil
 }
 
 func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentRequest) (*workflowservice.DeleteWorkerDeploymentResponse, error) {
-	// TODO implement me
+	//TODO implement me
 	panic("implement me")
+	return nil, nil
 }
 
 func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentVersionRequest) (_ *workflowservice.DeleteWorkerDeploymentVersionResponse, retError error) {
