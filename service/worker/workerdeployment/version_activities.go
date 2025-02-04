@@ -30,7 +30,6 @@ import (
 	"fmt"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/common/tqid"
 	"sync"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -148,26 +147,25 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 
 // CheckIfTaskQueuesHavePollers returns true if any of the given task queues has any pollers
 func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, args *deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs) (bool, error) {
-	for _, tq := range args.TaskQueues {
-		if testRootPartition, err := tqid.PartitionFromProto(tq, a.namespace.Name().String(), enumspb.TASK_QUEUE_TYPE_WORKFLOW); err != nil {
-			return false, fmt.Errorf("task queue partition for tq with name %s was invalid", tq.GetName())
-		} else if !testRootPartition.IsRoot() {
-			return false, fmt.Errorf("task queue partition for tq with name %s was not root", tq.GetName())
+	for tqName, tqFamilyData := range args.TaskQueueFamilies {
+		var tqTypes []enumspb.TaskQueueType
+		for tqType, _ := range tqFamilyData.TaskQueues {
+			tqTypes = append(tqTypes, enumspb.TaskQueueType(tqType))
 		}
-
 		res, err := a.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
 			NamespaceId: a.namespace.ID().String(),
 			DescRequest: &workflowservice.DescribeTaskQueueRequest{
-				Namespace:     a.namespace.Name().String(),
-				TaskQueue:     tq,
-				ApiMode:       enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-				Versions:      &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{args.BuildId}},
-				ReportPollers: true,
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				Namespace:      a.namespace.Name().String(),
+				TaskQueueTypes: tqTypes,
+				TaskQueue:      &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+				Versions:       &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{args.BuildId}},
+				ReportPollers:  true,
+				TaskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			},
 		})
 		if err != nil {
-			return false, fmt.Errorf("error describing task queue with name %s: %s", tq.GetName(), err)
+			return false, fmt.Errorf("error describing task queue with name %s: %s", tqName, err)
 		}
 		typesInfo := res.GetDescResponse().GetVersionsInfo()[args.BuildId].GetTypesInfo()
 		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetPollers()) > 0 {

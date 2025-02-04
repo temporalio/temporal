@@ -26,7 +26,6 @@ package workerdeployment
 
 import (
 	"fmt"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/common/worker_versioning"
 	"time"
 
@@ -247,17 +246,10 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 	state := d.GetVersionState()
 
 	// describe all task queues in the deployment, if any have pollers, then cannot delete
-	var tqs []*taskqueuepb.TaskQueue
-	for tqName, _ := range state.TaskQueueFamilies {
-		tqs = append(tqs, &taskqueuepb.TaskQueue{
-			Name: tqName,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL, // TODO (Carly): could this be sticky?
-		})
-	}
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	checkPollersReq := &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs{
-		TaskQueues: tqs,
-		BuildId:    d.VersionState.Version.BuildId,
+		TaskQueueFamilies: state.TaskQueueFamilies,
+		BuildId:           d.VersionState.Version.BuildId,
 	}
 	var hasPollers bool
 	err = workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
@@ -272,16 +264,6 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version:       state.GetVersion(),
 		ForgetVersion: true,
-	}
-	for tqName, byType := range state.TaskQueueFamilies {
-		for tqType, oldData := range byType.TaskQueues {
-
-			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-				Name: tqName,
-				Type: enumspb.TaskQueueType(tqType),
-				Data: oldData,
-			})
-		}
 	}
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
@@ -348,7 +330,6 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		CurrentSinceTime:  d.VersionState.CurrentSinceTime,
 		RampingSinceTime:  d.VersionState.RampingSinceTime,
 		RampPercentage:    d.VersionState.RampPercentage,
-		FirstPollerTime:   args.FirstPollerTime,
 	}
 
 	// sync to user data
@@ -394,15 +375,15 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 
 	// if successful, add the task queue to the local state
 	if d.VersionState.TaskQueueFamilies == nil {
-		d.VersionState.TaskQueueFamilies = make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
+		d.VersionState.TaskQueueFamilies = make(map[string]*deploymentspb.TaskQueueFamilyData)
 	}
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName] == nil {
-		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{}
+		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.TaskQueueFamilyData{}
 	}
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
-		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.DeploymentVersionData)
+		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueVersionData)
 	}
-	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = data
+	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{FirstPollerTime: args.FirstPollerTime}
 
 	return nil
 }
@@ -440,33 +421,24 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// TODO (Shivam): __unversioned__
 
-	// only versions with WORKFLOW_VERSIONING_MODE_VERSIONING_BEHAVIORS can be set as current or ramping
-	// if args.RampPercentage > 0 || args.CurrentSinceTime != nil {
-	// 	if state.WorkflowVersioningMode != enumspb.WORKFLOW_VERSIONING_MODE_VERSIONING_BEHAVIORS {
-	// 		// non-retryable error since we don't want to retry syncing state for this version
-	// 		return nil, temporal.NewNonRetryableApplicationError("Deployment version cannot be set as current or ramping", "Invalid version mode", nil)
-	// 	}
-	// }
-
 	// sync to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version: state.GetVersion(),
 	}
 	for tqName, byType := range state.TaskQueueFamilies {
-		for tqType, oldData := range byType.TaskQueues {
-			newData := &deploymentspb.DeploymentVersionData{
-				Version:           oldData.Version,
+		for tqType, _ := range byType.TaskQueues {
+			data := &deploymentspb.DeploymentVersionData{
+				Version:           d.VersionState.Version,
 				RoutingUpdateTime: args.RoutingUpdateTime,
 				CurrentSinceTime:  args.CurrentSinceTime,
 				RampingSinceTime:  args.RampingSinceTime,
 				RampPercentage:    args.RampPercentage,
-				FirstPollerTime:   oldData.FirstPollerTime,
 			}
 
 			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 				Name: tqName,
 				Type: enumspb.TaskQueueType(tqType),
-				Data: newData,
+				Data: data,
 			})
 		}
 	}
