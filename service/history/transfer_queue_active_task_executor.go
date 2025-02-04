@@ -843,33 +843,40 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// But if it's FALSE then the child *may or maynot* be started (ex: we failed to record ChildExecutionStarted event previously.)
 	// Hence we need to check the child workflow ID and attempt to reconnect before proceeding to start a new instance of the child.
 	// This path is usually taken when the parent is being reset and the reset point (i.e baseWorkflowInfo.LowestCommonAncestorEventId) is after the child was initiated.
-	baseWorkflowInfo := mutableState.GetBaseWorkflowInfo()
-	if mutableState.IsResetRun() && baseWorkflowInfo != nil && baseWorkflowInfo.LowestCommonAncestorEventId >= childInfo.InitiatedEventId {
-		childRunID, err := t.verifyChildWorkflow(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
-		if err != nil {
-			return err
-		}
-		if childRunID != "" {
-			childExecution := &commonpb.WorkflowExecution{
-				WorkflowId: childInfo.StartedWorkflowId,
-				RunId:      childRunID,
-			}
-			childClock := childInfo.Clock
-			// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
-			err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
+	resetTerminateChildIfRunning := false
+	resetChildID := fmt.Sprintf("%s:%s", attributes.GetWorkflowType().Name, attributes.GetWorkflowId())
+	if mutableState.IsResetRun() {
+		baseWorkflowInfo := mutableState.GetBaseWorkflowInfo()
+		childWasInitialized := mutableState.GetExecutionInfo().GetChildrenInitializedPostResetPoint()[resetChildID]
+		if baseWorkflowInfo != nil && baseWorkflowInfo.LowestCommonAncestorEventId >= childInfo.InitiatedEventId { // child was started before the reset point.
+			childRunID, err := t.verifyChildWorkflow(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
 			if err != nil {
 				return err
 			}
-			// NOTE: do not access anything related mutable state after this lock release
-			// release the context lock since we no longer need mutable state and
-			// the rest of logic is making RPC call, which takes time.
-			release(nil)
+			if childRunID != "" {
+				childExecution := &commonpb.WorkflowExecution{
+					WorkflowId: childInfo.StartedWorkflowId,
+					RunId:      childRunID,
+				}
+				childClock := childInfo.Clock
+				// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
+				err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
+				if err != nil {
+					return err
+				}
+				// NOTE: do not access anything related mutable state after this lock release
+				// release the context lock since we no longer need mutable state and
+				// the rest of logic is making RPC call, which takes time.
+				release(nil)
 
-			parentClock, err := t.shardContext.NewVectorClock()
-			if err != nil {
-				return err
+				parentClock, err := t.shardContext.NewVectorClock()
+				if err != nil {
+					return err
+				}
+				return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
 			}
-			return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
+		} else if childWasInitialized { // child was recorded to have been started after the reset point.
+			resetTerminateChildIfRunning = true
 		}
 		// now if there was no child found after reset then it could mean one of the following.
 		// 1. The parent never got a chance to start the child. So we should go ahead and start one (below)
@@ -898,6 +905,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedBuildId,
 		initiatedEvent.GetUserMetadata(),
 		mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(),
+		resetTerminateChildIfRunning,
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -916,6 +924,13 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			return err
 		}
 
+		// if resetTerminateChildIfRunning is true, it means the child was started after the reset point we attempted to terminate it before starting a new one.
+		// We should update the parent execution info to reflect that the child was potentially terminated and started.
+		if resetTerminateChildIfRunning {
+			childrenInitializedPostResetPoint := executionInfo.ChildrenInitializedPostResetPoint
+			childrenInitializedPostResetPoint[resetChildID] = false
+			mutableState.SetChildrenInitializedPostResetPoint(childrenInitializedPostResetPoint)
+		}
 		return t.recordStartChildExecutionFailed(
 			ctx,
 			task,
@@ -1458,30 +1473,37 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedBuildId string,
 	userMetadata *sdkpb.UserMetadata,
 	inheritedOverride *workflowpb.VersioningOverride,
+	terminateChildIfRunning bool,
 ) (string, *clockspb.VectorClock, error) {
+	startRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                targetNamespace.String(),
+		WorkflowId:               attributes.WorkflowId,
+		WorkflowType:             attributes.WorkflowType,
+		TaskQueue:                attributes.TaskQueue,
+		Input:                    attributes.Input,
+		Header:                   attributes.Header,
+		WorkflowExecutionTimeout: attributes.WorkflowExecutionTimeout,
+		WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
+		WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
+
+		// Use the same request ID to dedupe StartWorkflowExecution calls
+		RequestId:             childRequestID,
+		WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
+		RetryPolicy:           attributes.RetryPolicy,
+		CronSchedule:          attributes.CronSchedule,
+		Memo:                  attributes.Memo,
+		SearchAttributes:      attributes.SearchAttributes,
+		UserMetadata:          userMetadata,
+		VersioningOverride:    inheritedOverride,
+	}
+	if terminateChildIfRunning {
+		startRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+		startRequest.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+	}
+
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
-		&workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                targetNamespace.String(),
-			WorkflowId:               attributes.WorkflowId,
-			WorkflowType:             attributes.WorkflowType,
-			TaskQueue:                attributes.TaskQueue,
-			Input:                    attributes.Input,
-			Header:                   attributes.Header,
-			WorkflowExecutionTimeout: attributes.WorkflowExecutionTimeout,
-			WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
-			WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
-
-			// Use the same request ID to dedupe StartWorkflowExecution calls
-			RequestId:             childRequestID,
-			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
-			RetryPolicy:           attributes.RetryPolicy,
-			CronSchedule:          attributes.CronSchedule,
-			Memo:                  attributes.Memo,
-			SearchAttributes:      attributes.SearchAttributes,
-			UserMetadata:          userMetadata,
-			VersioningOverride:    inheritedOverride,
-		},
+		startRequest,
 		&workflowspb.ParentExecutionInfo{
 			NamespaceId: task.NamespaceID,
 			Namespace:   namespace.String(),
