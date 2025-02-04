@@ -135,7 +135,6 @@ type Config struct {
 	// VisibilityArchival system protection
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
 
-	// DEPRECATED
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// DefaultWorkflowTaskTimeout the default workflow task timeout
