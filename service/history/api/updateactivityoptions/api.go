@@ -102,6 +102,7 @@ func processActivityOptionsRequest(
 	if mergeFrom == nil {
 		return nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
 	}
+
 	var activityIDs []string
 	switch a := updateRequest.GetActivity().(type) {
 	case *workflowservice.UpdateActivityOptionsRequest_Id:

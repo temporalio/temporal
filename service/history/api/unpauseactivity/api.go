@@ -24,6 +24,7 @@ package unpauseactivity
 
 import (
 	"context"
+
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
@@ -122,5 +123,6 @@ func processUnpauseActivityRequest(
 		}
 
 	}
+
 	return &historyservice.UnpauseActivityResponse{}, nil
 }
