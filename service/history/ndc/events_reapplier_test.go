@@ -91,6 +91,63 @@ func (s *nDCEventReapplicationSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExecutionOptionsUpdated() {
+	runID := uuid.NewString()
+	execution := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: uuid.NewString(),
+	}
+	event := &historypb.HistoryEvent{
+		EventId:   1,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+				VersioningOverride:          nil,
+				UnsetVersioningOverride:     false,
+				AttachedRequestId:           "test-attached-request-id",
+				AttachedCompletionCallbacks: nil,
+			},
+		},
+		Links: []*commonpb.Link{
+			{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{
+						Namespace:  "whatever",
+						WorkflowId: "abc",
+						RunId:      uuid.NewString(),
+					},
+				},
+			},
+		},
+	}
+	attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+
+	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
+	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
+	updateRegistry := update.NewRegistry(msCurrent)
+	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
+	msCurrent.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+		attr.GetVersioningOverride(),
+		attr.GetUnsetVersioningOverride(),
+		attr.GetAttachedRequestId(),
+		attr.GetAttachedCompletionCallbacks(),
+		event.Links,
+	).Return(event, nil)
+	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
+	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
+	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
+	msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
+	events := []*historypb.HistoryEvent{
+		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		event,
+	}
+	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
+	s.NoError(err)
+	s.Equal(1, len(appliedEvent))
+}
+
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 	runID := uuid.NewString()
 	execution := &persistencespb.WorkflowExecutionInfo{

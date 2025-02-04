@@ -850,18 +850,6 @@ func reapplyEvents(
 	var reappliedEvents []*historypb.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
-			attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
-			if _, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
-				attr.GetVersioningOverride(),
-				attr.GetUnsetVersioningOverride(),
-				attr.GetAttachedRequestId(),
-				attr.GetAttachedCompletionCallbacks(),
-				event.Links,
-			); err != nil {
-				return reappliedEvents, err
-			}
-			reappliedEvents = append(reappliedEvents, event)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			if excludeSignal || isDuplicate(event) {
 				continue
@@ -941,6 +929,21 @@ func reapplyEvents(
 			}
 			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent(
 				request,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+			if isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+			if _, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+				attr.GetVersioningOverride(),
+				attr.GetUnsetVersioningOverride(),
+				attr.GetAttachedRequestId(),
+				attr.GetAttachedCompletionCallbacks(),
+				event.Links,
 			); err != nil {
 				return reappliedEvents, err
 			}
