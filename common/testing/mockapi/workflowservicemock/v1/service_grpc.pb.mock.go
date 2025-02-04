@@ -125,6 +125,46 @@ func (mr *MockWorkflowServiceClientMockRecorder) DeleteSchedule(arg0, arg1 any, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSchedule", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DeleteSchedule), varargs...)
 }
 
+// DeleteWorkerDeployment mocks base method.
+func (m *MockWorkflowServiceClient) DeleteWorkerDeployment(arg0 context.Context, arg1 *workflowservice.DeleteWorkerDeploymentRequest, arg2 ...grpc.CallOption) (*workflowservice.DeleteWorkerDeploymentResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteWorkerDeployment", varargs...)
+	ret0, _ := ret[0].(*workflowservice.DeleteWorkerDeploymentResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteWorkerDeployment indicates an expected call of DeleteWorkerDeployment.
+func (mr *MockWorkflowServiceClientMockRecorder) DeleteWorkerDeployment(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkerDeployment", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DeleteWorkerDeployment), varargs...)
+}
+
+// DeleteWorkerDeploymentVersion mocks base method.
+func (m *MockWorkflowServiceClient) DeleteWorkerDeploymentVersion(arg0 context.Context, arg1 *workflowservice.DeleteWorkerDeploymentVersionRequest, arg2 ...grpc.CallOption) (*workflowservice.DeleteWorkerDeploymentVersionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteWorkerDeploymentVersion", varargs...)
+	ret0, _ := ret[0].(*workflowservice.DeleteWorkerDeploymentVersionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteWorkerDeploymentVersion indicates an expected call of DeleteWorkerDeploymentVersion.
+func (mr *MockWorkflowServiceClientMockRecorder) DeleteWorkerDeploymentVersion(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkerDeploymentVersion", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DeleteWorkerDeploymentVersion), varargs...)
+}
+
 // DeleteWorkflowExecution mocks base method.
 func (m *MockWorkflowServiceClient) DeleteWorkflowExecution(arg0 context.Context, arg1 *workflowservice.DeleteWorkflowExecutionRequest, arg2 ...grpc.CallOption) (*workflowservice.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1583,6 +1623,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) UpdateWorkerBuildIdCompatibilit
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdCompatibility", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateWorkerBuildIdCompatibility), varargs...)
+}
+
+// UpdateWorkerVersionMetadata mocks base method.
+func (m *MockWorkflowServiceClient) UpdateWorkerVersionMetadata(arg0 context.Context, arg1 *workflowservice.UpdateWorkerVersionMetadataRequest, arg2 ...grpc.CallOption) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateWorkerVersionMetadata", varargs...)
+	ret0, _ := ret[0].(*workflowservice.UpdateWorkerVersionMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerVersionMetadata indicates an expected call of UpdateWorkerVersionMetadata.
+func (mr *MockWorkflowServiceClientMockRecorder) UpdateWorkerVersionMetadata(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerVersionMetadata", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateWorkerVersionMetadata), varargs...)
 }
 
 // UpdateWorkerVersioningRules mocks base method.

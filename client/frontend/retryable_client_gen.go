@@ -80,6 +80,36 @@ func (c *retryableClient) DeleteSchedule(
 	return resp, err
 }
 
+func (c *retryableClient) DeleteWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkerDeploymentResponse, error) {
+	var resp *workflowservice.DeleteWorkerDeploymentResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeleteWorkerDeployment(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DeleteWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkerDeploymentVersionResponse, error) {
+	var resp *workflowservice.DeleteWorkerDeploymentVersionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeleteWorkerDeploymentVersion(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.DeleteWorkflowExecutionRequest,
@@ -1169,6 +1199,21 @@ func (c *retryableClient) UpdateWorkerBuildIdCompatibility(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateWorkerVersionMetadata(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerVersionMetadataRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
+	var resp *workflowservice.UpdateWorkerVersionMetadataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateWorkerVersionMetadata(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
