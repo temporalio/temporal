@@ -659,7 +659,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 
 	// track the child workflows initiated after reset.
 	// This will be saved in the parent workflow (in execution info) and used by the parent later to determine how to start these child workflows again.
-	childrenInitializedAfterReset := make(map[string]bool)
+	childrenInitializedAfterReset := make(map[string]*persistencespb.ResetChildInfo)
 
 	// First, special handling of remaining events for base workflow
 	nextRunID, err := r.reapplyEventsFromBranch(
@@ -748,12 +748,8 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			return "", err
 		}
 	}
-	resetChildInfoMap := map[string]bool{}
-	for key, _ := range childrenInitializedAfterReset {
-		resetChildInfoMap[key] = true
-	}
-	if len(resetChildInfoMap) > 0 {
-		resetMutableState.SetChildrenInitializedPostResetPoint(resetChildInfoMap)
+	if len(childrenInitializedAfterReset) > 0 {
+		resetMutableState.SetChildrenInitializedPostResetPoint(childrenInitializedAfterReset)
 	}
 	return lastVisitedRunID, nil
 }
@@ -765,7 +761,7 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 	nextEventID int64,
 	branchToken []byte,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
-	childrenInitializedAfterReset map[string]bool,
+	childrenInitializedAfterReset map[string]*persistencespb.ResetChildInfo,
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -798,7 +794,9 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 				// TODO: there is a possibility the childIDs constructed this way may not be unique. But the probability of that is very low.
 				// Need to figure out a better way to track these child workflows.
 				childID := fmt.Sprintf("%s:%s", attr.GetWorkflowType().Name, attr.GetWorkflowId())
-				childrenInitializedAfterReset[childID] = true
+				childrenInitializedAfterReset[childID] = &persistencespb.ResetChildInfo{
+					ShouldTerminateAndStart: true,
+				}
 				if len(childrenInitializedAfterReset) > maxChildrenInResetMutableState {
 					return "", errWorkflowResetterMaxChildren
 				}
