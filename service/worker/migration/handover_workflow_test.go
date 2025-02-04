@@ -62,7 +62,7 @@ func TestHandoverWorkflow(t *testing.T) {
 		Namespace:              "test-ns",
 		RemoteCluster:          "test-remote",
 		AllowedLaggingSeconds:  10,
-		HandoverTimeoutSeconds: 30,
+		HandoverTimeoutSeconds: 10,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())

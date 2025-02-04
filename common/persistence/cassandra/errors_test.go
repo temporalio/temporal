@@ -28,20 +28,26 @@ import (
 	"errors"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 type (
 	cassandraErrorsSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 	}
 )
 
@@ -59,6 +65,7 @@ func (s *cassandraErrorsSuite) TearDownSuite() {
 
 func (s *cassandraErrorsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 }
 
 func (s *cassandraErrorsSuite) TearDownTest() {
@@ -223,10 +230,27 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 }
 
 func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success() {
+	requestID := uuid.New()
 	runID, _ := uuid.Parse(permanentRunID)
 	currentRunID := uuid.New()
-	workflowState := &persistencespb.WorkflowExecutionState{}
+	startTime := time.Now().UTC()
+	workflowState := &persistencespb.WorkflowExecutionState{
+		CreateRequestId: requestID.String(),
+		RunId:           currentRunID.String(),
+		State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		StartTime:       timestamp.TimePtr(startTime),
+		RequestIds: map[string]*persistencespb.RequestIDInfo{
+			requestID.String(): {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+			uuid.NewString(): {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			},
+		},
+	}
 	blob, err := serialization.WorkflowExecutionStateToBlob(workflowState)
+	lastWriteVersion := rand.Int63()
 	s.NoError(err)
 	t := rowTypeExecution
 	record := map[string]interface{}{
@@ -235,11 +259,25 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 		"current_run_id":              gocql.UUID(currentRunID),
 		"execution_state":             blob.Data,
 		"execution_state_encoding":    blob.EncodingType.String(),
-		"workflow_last_write_version": rand.Int63(),
+		"workflow_last_write_version": lastWriteVersion,
 	}
 
 	err = extractCurrentWorkflowConflictError(record, uuid.New().String())
-	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
+	if err, ok := err.(*p.CurrentWorkflowConditionFailedError); ok {
+		err.Msg = ""
+	}
+	s.DeepEqual(
+		&p.CurrentWorkflowConditionFailedError{
+			Msg:              "",
+			RequestIDs:       workflowState.RequestIds,
+			RunID:            workflowState.RunId,
+			State:            workflowState.State,
+			Status:           workflowState.Status,
+			LastWriteVersion: lastWriteVersion,
+			StartTime:        &startTime,
+		},
+		err,
+	)
 }
 
 func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed() {

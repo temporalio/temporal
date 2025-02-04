@@ -28,10 +28,13 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/shuffle"
@@ -331,6 +334,18 @@ func (s *historyCurrentExecutionSuite) newRandomCurrentExecutionRow(
 ) sqlplugin.CurrentExecutionsRow {
 	state := testHistoryExecutionStates[rand.Intn(len(testHistoryExecutionStates))]
 	status := testHistoryExecutionStatus[state][rand.Intn(len(testHistoryExecutionStatus[state]))]
+	executionState := &persistencespb.WorkflowExecutionState{
+		CreateRequestId: requestID,
+		RunId:           runID.String(),
+		State:           state,
+		Status:          status,
+		RequestIds: map[string]*persistencespb.RequestIDInfo{
+			uuid.NewString(): {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			},
+		},
+	}
+	executionStateBlob, _ := serialization.WorkflowExecutionStateToBlob(executionState)
 	return sqlplugin.CurrentExecutionsRow{
 		ShardID:          shardID,
 		NamespaceID:      namespaceID,
@@ -340,5 +355,7 @@ func (s *historyCurrentExecutionSuite) newRandomCurrentExecutionRow(
 		LastWriteVersion: lastWriteVersion,
 		State:            state,
 		Status:           status,
+		Data:             executionStateBlob.Data,
+		DataEncoding:     executionStateBlob.EncodingType.String(),
 	}
 }
