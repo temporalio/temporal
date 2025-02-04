@@ -199,9 +199,10 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		} else {
 			// version ramping for the first time
 
-			if !args.IgnoreMissingTaskQueues {
-				// todo (Shivam): do poller presence checks comparing newRampingVersion with oldCurrentVersion (if it exists)
-				if _, err := d.verifyPollerPresenceInVersion(ctx, prevRampingVersion, newRampingVersion); err != nil {
+			currentVersion := d.State.RoutingInfo.CurrentVersion
+			if !args.IgnoreMissingTaskQueues && currentVersion != "" {
+				// Poller presence checks comparing newRampingVersion and the existing current version
+				if _, err := d.verifyPollerPresenceInVersion(ctx, currentVersion, newRampingVersion); err != nil {
 					d.logger.Info("Ramping version does not have all the task queues from the previous current version or some missing task queues are unversioned and active", "error", err)
 					return nil, err
 				}
@@ -250,11 +251,6 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 }
 
 func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
-	fmt.Printf("Deployment workflow ID %s\n", d.DeploymentName)
-	fmt.Printf("Length of versionso list is %d\n", len(d.State.Versions))
-	if len(d.State.Versions) != 0 {
-		fmt.Printf("Versions list is %v\n", d.State.Versions)
-	}
 	if !slices.Contains(d.State.Versions, args.Version) {
 		return serviceerror.NewNotFound(fmt.Sprintf("version %s not found in deployment", args.Version))
 	}

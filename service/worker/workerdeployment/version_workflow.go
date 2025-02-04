@@ -253,42 +253,37 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 	}
 
 	state := d.GetVersionState()
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
 	// Manual deletion of versions is only possible when:
 	// 1. The version is not current or ramping
 	// 2. The version is drained. (check skipped when `skip-drainage=true` )
 	// 3. The version has no active pollers.
 
-	// 1. Check if the version is drained.
-	// if state.GetDrainageInfo() == nil || state.GetDrainageInfo().Status != enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
-	// 	return serviceerror.NewFailedPrecondition(errVersionNotDrained) // todo (Shivam): Convert into a non-retryable error and ensure it gets transferred across boundaries.
-	// }
-
-	// fmt.Println("Version is drained")
-
-	// 2. Check if the version has any active pollers.
-	var tqs []*taskqueuepb.TaskQueue
-	for tqName, _ := range state.TaskQueueFamilies {
-		tqs = append(tqs, &taskqueuepb.TaskQueue{
-			Name: tqName,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL, // TODO (Carly): could this be sticky?
-		})
+	// 1. Check if the version is not current or ramping.
+	if state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil {
+		// activity won't retry on this error since version not eligible for deletion
+		return serviceerror.NewFailedPrecondition(errVersionIsCurrentOrRamping)
 	}
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	checkPollersReq := &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs{
-		TaskQueues: tqs,
-		BuildId:    d.VersionState.Version.BuildId,
+
+	// 2. Check if the version is drained.
+	if state.GetDrainageInfo() == nil || state.GetDrainageInfo().Status != enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+		// activity won't retry on this error since version not eligible for deletion
+		return serviceerror.NewFailedPrecondition(errVersionNotDrained)
 	}
-	var hasPollers bool
-	err = workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
+
+	// 3. Check if the version has any active pollers.
+	hasPollers, err := d.doesVersionHaveActivePollers(ctx)
+	if hasPollers {
+		// activity won't retry on this error since version not eligible for deletion
+		return serviceerror.NewFailedPrecondition(errVersionHasPollers)
+	}
 	if err != nil {
+		// some other error allowing activity retries
 		return err
 	}
-	if hasPollers {
-		return serviceerror.NewFailedPrecondition("Cannot delete version since it has active pollers") // todo (Shivam): Convert into a non-retryable error and ensure it gets transferred across boundaries.
-	}
 
-	fmt.Println("Version has no active pollers")
+	d.logger.Info("Version is eligible for deletion")
 
 	// sync version removal to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
@@ -328,6 +323,28 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 
 	d.done = true
 	return nil
+}
+
+// doesVersionHaveActivePollers returns true if the version has active pollers.
+func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Context) (bool, error) {
+	var tqs []*taskqueuepb.TaskQueue
+	for tqName := range d.VersionState.TaskQueueFamilies {
+		tqs = append(tqs, &taskqueuepb.TaskQueue{
+			Name: tqName,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL, // TODO (Carly): could this be sticky?
+		})
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	checkPollersReq := &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs{
+		TaskQueues:              tqs,
+		WorkerDeploymentVersion: d.VersionState.Version,
+	}
+	var hasPollers bool
+	err := workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
+	if err != nil {
+		return false, err
+	}
+	return hasPollers, nil
 }
 
 func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInVersionArgs) error {

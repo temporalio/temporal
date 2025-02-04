@@ -698,7 +698,9 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 
 	if failure := outcome.GetFailure(); failure != nil {
 		if failure.Message == errVersionNotDrained {
-			return temporal.NewNonRetryableApplicationError(errVersionNotDrained, "Invalid version", nil) // non-retryable error to stop multiple activity attempts
+			return temporal.NewNonRetryableApplicationError(errVersionNotDrained, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
+		} else if failure.Message == errVersionHasPollers {
+			return temporal.NewNonRetryableApplicationError(errVersionHasPollers, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
 		}
 		return serviceerror.NewInternal(failure.Message) // TODO (Shivam): is there an easy way to recover the original type here? If not, we would be retrying even if we do get non-retryable errors!
 	}

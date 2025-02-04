@@ -506,25 +506,51 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	buildIds map[string]bool,
 	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
+
+	versions := make(map[PhysicalTaskQueueVersion]bool)
+
 	// Active means that the physical queue for that version is loaded.
 	// An empty string refers to the unversioned queue, which is always loaded.
 	// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
 	if includeAllActive {
 		for k := range pm.versionedQueues {
-			// TODO: add deployment info to DescribeTaskQueue
-			if b := k.BuildId(); b != "" {
-				buildIds[b] = true
+			versions[k] = true
+		}
+	}
+
+	for b := range buildIds {
+		if b == "" {
+			versions[pm.defaultQueue.QueueKey().Version()] = true
+		} else {
+			found := false
+			for k := range pm.versionedQueues {
+				if k.BuildId() == b || worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(k.Deployment())) == b {
+					versions[k] = true
+					found = true
+					break
+				}
+			}
+			if !found {
+				// still add it as a v2 version because user explicitly asked for the stats, we'd
+				// make sure to load the TQ.
+				versions[PhysicalTaskQueueVersion{buildId: b}] = true
 			}
 		}
 	}
+
 	pm.versionedQueuesLock.RUnlock()
 
 	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
-	for bid := range buildIds {
+	for v := range versions {
 		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
 			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
 		}
-		physicalQueue, err := pm.getPhysicalQueue(ctx, bid)
+
+		buildID := v.BuildId()
+		if v.Deployment() != nil {
+			buildID = v.Deployment().BuildId
+		}
+		physicalQueue, err := pm.getPhysicalQueue(ctx, buildID, v.Deployment())
 		if err != nil {
 			return nil, err
 		}
@@ -536,6 +562,11 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 		if internalTaskQueueStatus {
 			vInfo.PhysicalTaskQueueInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
+		}
+
+		bid := v.BuildId()
+		if bid == "" && v.Deployment() != nil {
+			bid = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(v.Deployment()))
 		}
 		versionsInfo[bid] = vInfo
 	}
@@ -658,11 +689,12 @@ func (pm *taskQueuePartitionManagerImpl) unloadFromEngine(unloadCause unloadCaus
 	pm.engine.unloadTaskQueuePartition(pm, unloadCause)
 }
 
-func (pm *taskQueuePartitionManagerImpl) getPhysicalQueue(ctx context.Context, buildId string) (physicalTaskQueueManager, error) {
+func (pm *taskQueuePartitionManagerImpl) getPhysicalQueue(ctx context.Context, buildId string, deployment *deploymentpb.Deployment) (physicalTaskQueueManager, error) {
 	if buildId == "" {
 		return pm.defaultQueue, nil
 	}
-	return pm.getVersionedQueue(ctx, "", buildId, nil, true)
+
+	return pm.getVersionedQueue(ctx, "", buildId, deployment, true)
 }
 
 // Pass either versionSet or build ID
@@ -959,12 +991,12 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			return nil, nil, nil, err
 		}
 	} else {
-		syncMatchQueue, err = pm.getPhysicalQueue(ctx, redirectBuildId)
+		syncMatchQueue, err = pm.getPhysicalQueue(ctx, redirectBuildId, nil)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		// redirect rules are not applied when spooling a task. They'll be applied when dispatching the spool task.
-		spoolQueue, err = pm.getPhysicalQueue(ctx, buildId)
+		spoolQueue, err = pm.getPhysicalQueue(ctx, buildId, nil)
 		if err != nil {
 			return nil, nil, nil, err
 		}

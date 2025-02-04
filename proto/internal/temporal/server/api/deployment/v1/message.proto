@@ -251,7 +251,7 @@ message DeleteVersionActivityArgs {
 // used as Worker Deployment Activity input:
 message CheckTaskQueuesHaveNoPollersActivityArgs {
     repeated temporal.api.taskqueue.v1.TaskQueue task_queues = 1;
-    string build_id = 3;
+    temporal.api.deployment.v1.WorkerDeploymentVersion worker_deployment_version = 2;
 }
 
 // used as Worker Deployment workflow update input:
