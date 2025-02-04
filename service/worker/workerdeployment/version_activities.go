@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 type (
@@ -149,31 +149,30 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 // CheckIfTaskQueuesHavePollers returns true if any of the given task queues has any pollers
 func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, args *deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs) (bool, error) {
 	for _, tq := range args.TaskQueues {
-		if testRootPartition, err := tqid.PartitionFromProto(tq, a.namespace.Name().String(), enumspb.TASK_QUEUE_TYPE_WORKFLOW); err != nil {
-			return false, fmt.Errorf("task queue partition for tq with name %s was invalid", tq.GetName())
-		} else if !testRootPartition.IsRoot() {
-			return false, fmt.Errorf("task queue partition for tq with name %s was not root", tq.GetName())
-		}
 
 		res, err := a.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
 			NamespaceId: a.namespace.ID().String(),
 			DescRequest: &workflowservice.DescribeTaskQueueRequest{
-				Namespace:     a.namespace.Name().String(),
-				TaskQueue:     tq,
-				ApiMode:       enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-				Versions:      &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{args.BuildId}},
-				ReportPollers: true,
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				Namespace:      a.namespace.Name().String(),
+				TaskQueue:      tq,
+				ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+				Versions:       &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{worker_versioning.WorkerDeploymentVersionToString(args.WorkerDeploymentVersion)}},
+				ReportPollers:  true,
+				TaskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 			},
 		})
 		if err != nil {
 			return false, fmt.Errorf("error describing task queue with name %s: %s", tq.GetName(), err)
 		}
-		typesInfo := res.GetDescResponse().GetVersionsInfo()[args.BuildId].GetTypesInfo()
+		typesInfo := res.GetDescResponse().GetVersionsInfo()[worker_versioning.WorkerDeploymentVersionToString(args.WorkerDeploymentVersion)].GetTypesInfo()
 		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetPollers()) > 0 {
 			return true, nil
 		}
 		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].GetPollers()) > 0 {
+			return true, nil
+		}
+		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_NEXUS)].GetPollers()) > 0 {
 			return true, nil
 		}
 	}
