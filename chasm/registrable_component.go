@@ -30,8 +30,8 @@ import (
 
 type (
 	RegistrableComponent struct {
-		name   string
-		goType reflect.Type
+		componentType string
+		goType        reflect.Type
 
 		ephemeral     bool
 		singleCluster bool
@@ -42,13 +42,13 @@ type (
 )
 
 func NewRegistrableComponent[C Component](
-	name string,
+	componentType string,
 	opts ...RegistrableComponentOption,
 ) *RegistrableComponent {
 	rc := &RegistrableComponent{
-		name:       name,
-		goType:     reflect.TypeFor[C](),
-		shardingFn: defaultShardingFn,
+		componentType: componentType,
+		goType:        reflect.TypeFor[C](),
+		shardingFn:    defaultShardingFn,
 	}
 	for _, opt := range opts {
 		opt(rc)
@@ -77,6 +77,6 @@ func WithShardingFn(
 	}
 }
 
-func (rc RegistrableComponent) Name() string {
-	return rc.name
+func (rc RegistrableComponent) Type() string {
+	return rc.componentType
 }
