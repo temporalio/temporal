@@ -150,7 +150,7 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 			tag.WorkflowID(r.GetRequest().GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetRequest().GetExecution().GetRunId()),
 		}
-	case *historyservice.GetWorkflowExecutionHistoryResponse:
+	case *historyservice.GetWorkflowExecutionHistoryResponseWithRaw:
 		return nil
 	case *historyservice.GetWorkflowExecutionHistoryReverseRequest:
 		return []tag.Tag{
