@@ -158,8 +158,6 @@ func (r *StreamReceiverImpl) Stop() {
 
 	r.shutdownChan.Shutdown()
 	r.stream.Close()
-	r.highPriorityTaskTracker.Cancel()
-	r.lowPriorityTaskTracker.Cancel()
 
 	r.logger.Info("StreamReceiver shutting down.")
 }

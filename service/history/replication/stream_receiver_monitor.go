@@ -311,6 +311,8 @@ func (m *StreamReceiverMonitorImpl) doReconcileOutboundStreams(
 
 	for streamKey := range m.outboundStreamTrackers {
 		if _, ok := streamKeys[streamKey]; !ok {
+			m.outboundStreamTrackers[streamKey].highPriorityTaskTracker.Cancel()
+			m.outboundStreamTrackers[streamKey].lowPriorityTaskTracker.Cancel()
 			delete(m.outboundStreamTrackers, streamKey)
 		}
 	}
