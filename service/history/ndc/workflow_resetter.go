@@ -60,7 +60,7 @@ import (
 )
 
 const (
-	maxChildrenInResetMutableState = 1000
+	maxChildrenInResetMutableState = 1000 // max number of children tracked in reset mutable state
 )
 
 var (
@@ -658,7 +658,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	}
 
 	// track the child workflow initiated (but not yet completed) events after reset.
-	// This will be saved in the parent workflow (in execution info) and used by the parent later to determine how to handle starting of these child workflows again.
+	// This will be saved in the parent workflow (in execution info) and used by the parent later to determine how to start these child workflows again.
 	childInitEventsAfterReset := make(map[int64]*historypb.HistoryEvent)
 
 	// First, special handling of remaining events for base workflow
@@ -748,15 +748,14 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			return "", err
 		}
 	}
-	r.logger.Info(fmt.Sprintf("[%d] child workflows initiated after reset :[%+v]", len(childInitEventsAfterReset), childInitEventsAfterReset))
-	childrenStartedAfterReset := make(map[string]bool)
+	childrenInitializedAfterReset := make(map[string]bool)
 	for _, event := range childInitEventsAfterReset {
 		attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-		childID := fmt.Sprintf("%s:%s", attr.GetWorkflowId(), attr.GetWorkflowType().Name)
-		childrenStartedAfterReset[childID] = true
+		childID := fmt.Sprintf("%s:%s", attr.GetWorkflowType().Name, attr.GetWorkflowId())
+		childrenInitializedAfterReset[childID] = true
 	}
-	if len(childrenStartedAfterReset) > 0 {
-		resetMutableState.SetChildrenInitializedPostResetPoint(childrenStartedAfterReset)
+	if len(childrenInitializedAfterReset) > 0 {
+		resetMutableState.SetChildrenInitializedPostResetPoint(childrenInitializedAfterReset)
 	}
 	return lastVisitedRunID, nil
 }
@@ -812,24 +811,34 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 	return nextRunID, nil
 }
 
-// populateChildInitEventsAfterReset populates the childrenInitializedAfterReset map with the children initiated after reset.
-func (r *workflowResetterImpl) populateChildInitEventsAfterReset(childrenInitializedAfterReset map[int64]*historypb.HistoryEvent, event *historypb.HistoryEvent) {
+// populateChildInitEventsAfterReset populates the childInitEventsAfterReset map with the init events of child workflows that are not yet completed.
+func (r *workflowResetterImpl) populateChildInitEventsAfterReset(childInitEventsAfterReset map[int64]*historypb.HistoryEvent, event *historypb.HistoryEvent) {
 	switch event.GetEventType() {
 	// track the child if it has been initiated after reset
 	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
-		childrenInitializedAfterReset[event.GetEventId()] = event
+		childInitEventsAfterReset[event.GetEventId()] = event
 
 	// remove the child if it has reached a terminal state
-	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
-		attr := event.GetChildWorkflowExecutionCanceledEventAttributes()
-		delete(childrenInitializedAfterReset, attr.InitiatedEventId)
-	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
-		attr := event.GetChildWorkflowExecutionCompletedEventAttributes()
-		delete(childrenInitializedAfterReset, attr.InitiatedEventId)
 	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
 		attr := event.GetStartChildWorkflowExecutionFailedEventAttributes()
-		delete(childrenInitializedAfterReset, attr.InitiatedEventId)
-		// TODO: Add more cases here.
+		delete(childInitEventsAfterReset, attr.InitiatedEventId)
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+		attr := event.GetChildWorkflowExecutionCompletedEventAttributes()
+		delete(childInitEventsAfterReset, attr.InitiatedEventId)
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+		attr := event.GetChildWorkflowExecutionCanceledEventAttributes()
+		delete(childInitEventsAfterReset, attr.InitiatedEventId)
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+		attr := event.GetChildWorkflowExecutionFailedEventAttributes()
+		delete(childInitEventsAfterReset, attr.InitiatedEventId)
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+		attr := event.GetChildWorkflowExecutionTerminatedEventAttributes()
+		delete(childInitEventsAfterReset, attr.InitiatedEventId)
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+		attr := event.GetChildWorkflowExecutionTimedOutEventAttributes()
+		delete(childInitEventsAfterReset, attr.InitiatedEventId)
+	default:
+		return
 	}
 }
 
