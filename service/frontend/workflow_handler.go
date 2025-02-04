@@ -154,6 +154,11 @@ type (
 	}
 )
 
+func (wh *WorkflowHandler) UpdateWorkerVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerVersionMetadataRequest) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
 	config *Config,
@@ -1313,6 +1318,36 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		CancelRequested: resp.GetCancelRequested(),
 		ActivityPaused:  resp.GetActivityPaused(),
 	}, nil
+}
+
+// Implemented in server already
+func (wh *WorkflowHandler) PauseActivity(
+	ctx context.Context,
+	request *workflowservice.PauseActivityRequest,
+) (_ *workflowservice.PauseActivityResponse, retError error) {
+	panic("implement me")
+}
+
+// Implemented in server already
+func (wh *WorkflowHandler) UnpauseActivity(
+	ctx context.Context, request *workflowservice.UnpauseActivityRequest,
+) (_ *workflowservice.UnpauseActivityResponse, retError error) {
+	panic("implement me")
+}
+
+// Implemented in server already
+func (wh *WorkflowHandler) ResetActivity(
+	ctx context.Context, request *workflowservice.ResetActivityRequest,
+) (_ *workflowservice.ResetActivityResponse, retError error) {
+	panic("implement me")
+}
+
+// Implemented in server already
+func (wh *WorkflowHandler) UpdateActivityOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityOptionsRequest,
+) (_ *workflowservice.UpdateActivityOptionsResponse, retError error) {
+	panic("implement me")
 }
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
@@ -3383,13 +3418,13 @@ func (wh *WorkflowHandler) SetWorkerDeploymentCurrentVersion(ctx context.Context
 
 	// TODO (Shivam): error out if build_ID is empty
 
-	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.BuildId, request.Identity)
+	resp, err := wh.workerDeploymentClient.SetCurrentVersion(ctx, namespaceEntry, request.DeploymentName, request.Version, request.Identity)
 	if err != nil {
 		return nil, err
 	}
 
 	return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{
-		PreviousBuildId: resp.PreviousVersion,
+		PreviousVersion: resp.PreviousVersion,
 	}, nil
 }
 
@@ -3413,7 +3448,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 		return nil, err
 	}
 
-	if request.GetBuildId() == "" {
+	if request.GetVersion() == "" {
 		if request.GetPercentage() != 0 {
 			return nil, serviceerror.NewInvalidArgument("Empty value for build_id must be paired with percentage=0")
 		}
@@ -3424,7 +3459,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	}
 
 	deploymentVersion := &deploymentpb.WorkerDeploymentVersion{
-		BuildId:        request.GetBuildId(),
+		BuildId:        request.GetVersion(),
 		DeploymentName: request.GetDeploymentName(),
 	}
 	resp, err := wh.workerDeploymentClient.SetWorkerDeploymentRampingVersion(ctx, namespaceEntry, deploymentVersion, request.GetPercentage(), request.GetIdentity())
@@ -3433,7 +3468,7 @@ func (wh *WorkflowHandler) SetWorkerDeploymentRampingVersion(ctx context.Context
 	}
 
 	return &workflowservice.SetWorkerDeploymentRampingVersionResponse{
-		PreviousBuildId:    resp.PreviousVersion,
+		PreviousVersion:    resp.PreviousVersion,
 		PreviousPercentage: resp.PreviousPercentage,
 	}, nil
 }
@@ -3507,6 +3542,16 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,
 	}, nil
+}
+
+func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentRequest) (*workflowservice.DeleteWorkerDeploymentResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentVersionRequest) (*workflowservice.DeleteWorkerDeploymentVersionResponse, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 // Returns the schedule description and current state of an existing schedule.
