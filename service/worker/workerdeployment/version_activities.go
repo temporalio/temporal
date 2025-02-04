@@ -28,6 +28,8 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"sync"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -37,7 +39,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/tqid"
-	"sync"
 )
 
 type (
