@@ -250,7 +250,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 		return nil
 	case *workflowservice.UpdateWorkerBuildIdCompatibilityRequest:
 		return nil
-	case *workflowservice.UpdateWorkerVersionMetadataRequest:
+	case *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest:
 		return nil
 	case *workflowservice.UpdateWorkerVersioningRulesRequest:
 		return nil

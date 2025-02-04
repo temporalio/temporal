@@ -152,7 +152,7 @@ type (
 	}
 )
 
-func (wh *WorkflowHandler) UpdateWorkerVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerVersionMetadataRequest) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
+func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest) (*workflowservice.UpdateWorkerDeploymentVersionMetadataResponse, error) {
 	//TODO implement me
 	panic("implement me")
 }
