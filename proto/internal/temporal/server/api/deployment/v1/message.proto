@@ -258,7 +258,12 @@ message DeleteVersionActivityArgs {
 // used as Worker Deployment Activity input:
 message CheckTaskQueuesHaveNoPollersActivityArgs {
     // Key: Task Queue Name
-    map<string, TaskQueueFamilyData> task_queue_families = 11;
+    map<string, TaskQueueTypes> task_queues_and_types = 11;
+
+    message TaskQueueTypes {
+        repeated temporal.api.enums.v1.TaskQueueType types = 1;
+    }
+
     string build_id = 3;
 }
 

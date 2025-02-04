@@ -147,16 +147,12 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 
 // CheckIfTaskQueuesHavePollers returns true if any of the given task queues has any pollers
 func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, args *deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs) (bool, error) {
-	for tqName, tqFamilyData := range args.TaskQueueFamilies {
-		var tqTypes []enumspb.TaskQueueType
-		for tqType, _ := range tqFamilyData.TaskQueues {
-			tqTypes = append(tqTypes, enumspb.TaskQueueType(tqType))
-		}
+	for tqName, tqTypes := range args.TaskQueuesAndTypes {
 		res, err := a.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
 			NamespaceId: a.namespace.ID().String(),
 			DescRequest: &workflowservice.DescribeTaskQueueRequest{
 				Namespace:      a.namespace.Name().String(),
-				TaskQueueTypes: tqTypes,
+				TaskQueueTypes: tqTypes.Types,
 				TaskQueue:      &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 				Versions:       &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{args.BuildId}},

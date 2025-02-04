@@ -247,9 +247,17 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 
 	// describe all task queues in the deployment, if any have pollers, then cannot delete
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	tqNameToTypes := make(map[string]*deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs_TaskQueueTypes)
+	for tqName, tqFamilyData := range state.TaskQueueFamilies {
+		var tqTypes []enumspb.TaskQueueType
+		for tqType, _ := range tqFamilyData.TaskQueues {
+			tqTypes = append(tqTypes, enumspb.TaskQueueType(tqType))
+		}
+		tqNameToTypes[tqName] = &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs_TaskQueueTypes{Types: tqTypes}
+	}
 	checkPollersReq := &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs{
-		TaskQueueFamilies: state.TaskQueueFamilies,
-		BuildId:           d.VersionState.Version.BuildId,
+		TaskQueuesAndTypes: tqNameToTypes,
+		BuildId:            d.VersionState.Version.BuildId,
 	}
 	var hasPollers bool
 	err = workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
