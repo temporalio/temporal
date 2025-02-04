@@ -154,8 +154,8 @@ type (
 	}
 )
 
-func (wh *WorkflowHandler) UpdateWorkerVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerVersionMetadataRequest) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
-	//TODO implement me
+func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Context, request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest) (*workflowservice.UpdateWorkerDeploymentVersionMetadataResponse, error) {
+	// TODO implement me
 	panic("implement me")
 }
 
@@ -1335,36 +1335,6 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		CancelRequested: resp.GetCancelRequested(),
 		ActivityPaused:  resp.GetActivityPaused(),
 	}, nil
-}
-
-// Implemented in server already
-func (wh *WorkflowHandler) PauseActivity(
-	ctx context.Context,
-	request *workflowservice.PauseActivityRequest,
-) (_ *workflowservice.PauseActivityResponse, retError error) {
-	panic("implement me")
-}
-
-// Implemented in server already
-func (wh *WorkflowHandler) UnpauseActivity(
-	ctx context.Context, request *workflowservice.UnpauseActivityRequest,
-) (_ *workflowservice.UnpauseActivityResponse, retError error) {
-	panic("implement me")
-}
-
-// Implemented in server already
-func (wh *WorkflowHandler) ResetActivity(
-	ctx context.Context, request *workflowservice.ResetActivityRequest,
-) (_ *workflowservice.ResetActivityResponse, retError error) {
-	panic("implement me")
-}
-
-// Implemented in server already
-func (wh *WorkflowHandler) UpdateActivityOptions(
-	ctx context.Context,
-	request *workflowservice.UpdateActivityOptionsRequest,
-) (_ *workflowservice.UpdateActivityOptionsResponse, retError error) {
-	panic("implement me")
 }
 
 // RespondActivityTaskCompleted is called by application worker when it is done processing an ActivityTask.  It will
@@ -3558,7 +3528,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 }
 
 func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentRequest) (*workflowservice.DeleteWorkerDeploymentResponse, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 

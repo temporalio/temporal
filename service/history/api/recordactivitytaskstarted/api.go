@@ -171,6 +171,7 @@ func recordActivityTaskStarted(
 
 	wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 	wfDeployment := mutableState.GetEffectiveDeployment()
+	//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
 	pollerDeployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities, request.PollRequest.DeploymentOptions)
 	err = worker_versioning.ValidateTaskVersionDirective(request.GetVersionDirective(), wfBehavior, wfDeployment, request.ScheduledDeployment)
 	if err != nil {
