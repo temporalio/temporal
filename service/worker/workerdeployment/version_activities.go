@@ -27,8 +27,13 @@ package workerdeployment
 import (
 	"cmp"
 	"context"
+	"fmt"
+	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/tqid"
 	"sync"
 
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -72,14 +77,26 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 			var res *matchingservice.SyncDeploymentUserDataResponse
 			var err error
 
-			res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-				NamespaceId:   a.namespace.ID().String(),
-				TaskQueue:     syncData.Name,
-				TaskQueueType: syncData.Type,
-				Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-					UpdateVersionData: syncData.Data,
-				},
-			})
+			if input.ForgetVersion {
+				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+					NamespaceId:   a.namespace.ID().String(),
+					TaskQueue:     syncData.Name,
+					TaskQueueType: syncData.Type,
+					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
+						ForgetVersion: input.Version,
+					},
+				})
+			} else {
+
+				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+					NamespaceId:   a.namespace.ID().String(),
+					TaskQueue:     syncData.Name,
+					TaskQueueType: syncData.Type,
+					Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+						UpdateVersionData: syncData.Data,
+					},
+				})
+			}
 
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
@@ -127,6 +144,40 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 		err = cmp.Or(err, <-errs)
 	}
 	return err
+}
+
+// CheckIfTaskQueuesHavePollers returns true if any of the given task queues has any pollers
+func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, args *deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs) (bool, error) {
+	for _, tq := range args.TaskQueues {
+		if testRootPartition, err := tqid.PartitionFromProto(tq, a.namespace.Name().String(), enumspb.TASK_QUEUE_TYPE_WORKFLOW); err != nil {
+			return false, fmt.Errorf("task queue partition for tq with name %s was invalid", tq.GetName())
+		} else if !testRootPartition.IsRoot() {
+			return false, fmt.Errorf("task queue partition for tq with name %s was not root", tq.GetName())
+		}
+
+		res, err := a.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+			NamespaceId: a.namespace.ID().String(),
+			DescRequest: &workflowservice.DescribeTaskQueueRequest{
+				Namespace:     a.namespace.Name().String(),
+				TaskQueue:     tq,
+				ApiMode:       enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+				Versions:      &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{args.BuildId}},
+				ReportPollers: true,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			},
+		})
+		if err != nil {
+			return false, fmt.Errorf("error describing task queue with name %s: %s", tq.GetName(), err)
+		}
+		typesInfo := res.GetDescResponse().GetVersionsInfo()[args.BuildId].GetTypesInfo()
+		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetPollers()) > 0 {
+			return true, nil
+		}
+		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].GetPollers()) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, input *deploymentspb.AddVersionToWorkerDeploymentRequest) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
