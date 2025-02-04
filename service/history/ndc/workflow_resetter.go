@@ -813,6 +813,7 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 
 // populateChildInitEventsAfterReset populates the childInitEventsAfterReset map with the init events of child workflows that are not yet completed.
 func (r *workflowResetterImpl) populateChildInitEventsAfterReset(childInitEventsAfterReset map[int64]*historypb.HistoryEvent, event *historypb.HistoryEvent) {
+	// nolint:exhaustive
 	switch event.GetEventType() {
 	// track the child if it has been initiated after reset
 	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
