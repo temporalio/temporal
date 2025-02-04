@@ -713,7 +713,7 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 		} else if failure.Message == errVersionHasPollers {
 			return temporal.NewNonRetryableApplicationError(errVersionHasPollers, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
 		}
-		return serviceerror.NewInternal(failure.Message) // TODO (Shivam): is there an easy way to recover the original type here? If not, we would be retrying even if we do get non-retryable errors!
+		return serviceerror.NewInternal(failure.Message)
 	}
 
 	success := outcome.GetSuccess()
@@ -797,7 +797,6 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 	}
 
 	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
-
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
 		NamespaceName:  namespaceEntry.Name().String(),
 		NamespaceId:    namespaceEntry.ID().String(),

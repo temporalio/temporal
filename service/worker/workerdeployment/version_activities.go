@@ -156,7 +156,7 @@ func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, ar
 				Namespace:      a.namespace.Name().String(),
 				TaskQueue:      tq,
 				ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-				Versions:       &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{worker_versioning.WorkerDeploymentVersionToString(args.WorkerDeploymentVersion)}}, // todo (Shivam) - pass a full version here
+				Versions:       &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{worker_versioning.WorkerDeploymentVersionToString(args.WorkerDeploymentVersion)}},
 				ReportPollers:  true,
 				TaskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},

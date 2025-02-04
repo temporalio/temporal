@@ -234,8 +234,8 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 	}, time.Second*5, time.Millisecond*200)
 
 	// non-current deployments have never been used and have no drainage info
-	s.checkVersionDrainage(ctx, tv1, nil)
-	s.checkVersionDrainage(ctx, tv2, nil)
+	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{})
+	s.checkVersionDrainage(ctx, tv2, &deploymentpb.VersionDrainageInfo{})
 
 	// SetCurrent tv1
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -249,8 +249,8 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 	s.checkVersionIsCurrent(ctx, tv1)
 
 	// both still nil since neither are draining
-	s.checkVersionDrainage(ctx, tv1, nil)
-	s.checkVersionDrainage(ctx, tv2, nil)
+	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{})
+	s.checkVersionDrainage(ctx, tv2, &deploymentpb.VersionDrainageInfo{})
 
 	// SetCurrent tv2 --> tv1 starts the child drainage workflow
 	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -763,12 +763,6 @@ func (s *DeploymentVersionSuite) checkVersionDrainage(
 		a.NoError(err)
 
 		dInfo := resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo()
-
-		if expectedDrainageInfo == nil {
-			a.NotNil(dInfo)
-			a.Equal(enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, dInfo.GetStatus())
-			return
-		}
 
 		a.Equal(expectedDrainageInfo.Status, dInfo.GetStatus())
 		if expectedDrainageInfo.LastCheckedTime != nil {

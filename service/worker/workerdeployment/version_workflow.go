@@ -78,7 +78,6 @@ func VersionWorkflow(ctx workflow.Context, versionWorkflowArgs *deploymentspb.Wo
 		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
 		lock:    workflow.NewMutex(ctx),
 	}
-	versionWorkflowRunner.logger.Info("Running Version Workflow with workflow ID", "workflowID", workflow.GetInfo(ctx).WorkflowExecution.ID)
 
 	return versionWorkflowRunner.run(ctx)
 }
@@ -120,7 +119,6 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 
 	// if we were draining and just continued-as-new, restart drainage child wf
 	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
-		fmt.Println("Starting drainage workflow when starting the version workflow")
 		d.startDrainage(ctx, false)
 	}
 
@@ -230,6 +228,8 @@ func (d *VersionWorkflowRunner) validateDeleteVersion() error {
 }
 
 func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error {
+	// TODO (Shivam): add `skip_drainage` flag
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -539,7 +539,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// stopped accepting new workflows --> start drainage child wf
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
-		fmt.Println("here?")
 		d.startDrainage(ctx, true)
 	}
 
