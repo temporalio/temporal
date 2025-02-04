@@ -4495,7 +4495,6 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 				worker_versioning.DeploymentVersionFromDeployment(d))
 		}
 	} else if ms.GetExecutionInfo().GetVersioningInfo() != nil {
-		// TODO (shahab): this behavior has changed in main branch. Update it when merging to main.
 		ms.GetExecutionInfo().VersioningInfo.VersioningOverride = nil
 	}
 
