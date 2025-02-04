@@ -904,14 +904,14 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersionString(), UpdateTime: timestamp.TimePtr(t1)}, actInfo.GetVersioningInfo())
 
 	// Now ramp to unversioned
-	s.syncTaskQueueDeploymentData(tv, tqTypeAct, true, 10, true, t2)
+	s.syncTaskQueueDeploymentData(tv, tqTypeAct, false, 10, true, t2)
 	actInfo, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tv.TaskQueue(),
 		TaskQueueType: tqTypeAct,
 	})
 	s.NoError(err)
-	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersionString(), RampingVersionPercentage: 10, UpdateTime: timestamp.TimePtr(t2)}, actInfo.GetVersioningInfo())
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersionString(), RampingVersion: "__unversioned__", RampingVersionPercentage: 10, UpdateTime: timestamp.TimePtr(t2)}, actInfo.GetVersioningInfo())
 }
 
 func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {

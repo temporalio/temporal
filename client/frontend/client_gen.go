@@ -813,14 +813,14 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
 }
 
-func (c *clientImpl) UpdateWorkerVersionMetadata(
+func (c *clientImpl) UpdateWorkerDeploymentVersionMetadata(
 	ctx context.Context,
-	request *workflowservice.UpdateWorkerVersionMetadataRequest,
+	request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateWorkerVersionMetadataResponse, error) {
+) (*workflowservice.UpdateWorkerDeploymentVersionMetadataResponse, error) {
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return c.client.UpdateWorkerVersionMetadata(ctx, request, opts...)
+	return c.client.UpdateWorkerDeploymentVersionMetadata(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateWorkerVersioningRules(

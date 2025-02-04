@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	deploymentpb "go.temporal.io/api/deployment/v1"
