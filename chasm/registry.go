@@ -33,7 +33,7 @@ import (
 
 var (
 	// This is golang type identifier regex.
-	typeNameValidator = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	nameValidator = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
 
 type (
@@ -56,7 +56,7 @@ func NewRegistry() *Registry {
 }
 
 func (r *Registry) Register(lib Library) error {
-	if err := r.validateTypeName(lib.Name()); err != nil {
+	if err := r.validateName(lib.Name()); err != nil {
 		return err
 	}
 	for _, c := range lib.Components() {
@@ -100,7 +100,7 @@ func (r *Registry) registerComponent(
 	libName string,
 	rc *RegistrableComponent,
 ) error {
-	if err := r.validateTypeName(rc.componentType); err != nil {
+	if err := r.validateName(rc.componentType); err != nil {
 		return err
 	}
 	fqn := r.fqn(libName, rc.componentType)
@@ -124,7 +124,7 @@ func (r *Registry) registerTask(
 	libName string,
 	rt *RegistrableTask,
 ) error {
-	if err := r.validateTypeName(rt.taskType); err != nil {
+	if err := r.validateName(rt.taskType); err != nil {
 		return err
 	}
 	fqn := r.fqn(libName, rt.taskType)
@@ -150,12 +150,12 @@ func (r *Registry) registerTask(
 	return nil
 }
 
-func (r *Registry) validateTypeName(n string) error {
+func (r *Registry) validateName(n string) error {
 	if n == "" {
 		return errors.New("name must not be empty")
 	}
-	if !typeNameValidator.MatchString(n) {
-		return fmt.Errorf("name %s is invalid. name must follow golang identifier rules: %s", n, typeNameValidator.String())
+	if !nameValidator.MatchString(n) {
+		return fmt.Errorf("name %s is invalid. name must follow golang identifier rules: %s", n, nameValidator.String())
 	}
 	return nil
 }
