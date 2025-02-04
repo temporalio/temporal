@@ -30,6 +30,10 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/temporal"
+
+	"go.temporal.io/api/workflowservice/v1"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -38,9 +42,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -49,6 +53,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
@@ -85,6 +90,7 @@ type Client interface {
 		deploymentName string,
 		version string,
 		identity string,
+		ignoreMissingTaskQueues bool,
 		conflictToken []byte,
 	) (*deploymentspb.SetCurrentVersionResponse, error)
 
@@ -108,6 +114,7 @@ type Client interface {
 		version string,
 		percentage float32,
 		identity string,
+		ignoreMissingTaskQueues bool,
 		conflictToken []byte,
 	) (*deploymentspb.SetRampingVersionResponse, error)
 
@@ -154,7 +161,15 @@ type Client interface {
 	GetVersionDrainageStatus(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		deploymentName, buildID string) (enumspb.VersionDrainageStatus, error)
+		deploymentName, version string) (enumspb.VersionDrainageStatus, error)
+
+	// Used internally by the Worker Deployment workflow in its IsVersionMissingTaskQueues Activity
+	// to verify if there are missing task queues in the new current/ramping version.
+	IsVersionMissingTaskQueues(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		prevCurrentVersion, newVersion string,
+	) (bool, error)
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
@@ -166,6 +181,7 @@ type ClientImpl struct {
 	logger                    log.Logger
 	historyClient             historyservice.HistoryServiceClient
 	visibilityManager         manager.VisibilityManager
+	matchingClient            resource.MatchingClient
 	maxIDLengthLimit          dynamicconfig.IntPropertyFn
 	visibilityMaxPageSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	maxTaskQueuesInDeployment dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -368,6 +384,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	deploymentName string,
 	version string,
 	identity string,
+	ignoreMissingTaskQueues bool,
 	conflictToken []byte,
 ) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
@@ -382,9 +399,10 @@ func (d *ClientImpl) SetCurrentVersion(
 	}
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
-		Identity:      identity,
-		Version:       version,
-		ConflictToken: conflictToken,
+		Identity:                identity,
+		Version:                 version,
+		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
+		ConflictToken:           conflictToken,
 	})
 	if err != nil {
 		return nil, err
@@ -432,6 +450,7 @@ func (d *ClientImpl) SetRampingVersion(
 	version string,
 	percentage float32,
 	identity string,
+	ignoreMissingTaskQueues bool,
 	conflictToken []byte,
 ) (_ *deploymentspb.SetRampingVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
@@ -455,10 +474,11 @@ func (d *ClientImpl) SetRampingVersion(
 	}
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetRampingVersionArgs{
-		Identity:      identity,
-		Version:       version,
-		Percentage:    percentage,
-		ConflictToken: conflictToken,
+		Identity:                identity,
+		Version:                 version,
+		Percentage:              percentage,
+		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
+		ConflictToken:           conflictToken,
 	})
 	if err != nil {
 		return nil, err
@@ -528,6 +548,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	if err != nil {
 		return err
 	}
+
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
 		namespaceEntry,
@@ -694,6 +715,11 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
+		if failure.Message == errVersionNotDrained {
+			return temporal.NewNonRetryableApplicationError(errVersionNotDrained, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
+		} else if failure.Message == errVersionHasPollers {
+			return temporal.NewNonRetryableApplicationError(errVersionHasPollers, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
+		}
 		return serviceerror.NewInternal(failure.Message)
 	}
 
@@ -734,11 +760,11 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 			},
 			CreateTime:        now,
 			RoutingUpdateTime: now,
-			CurrentSinceTime:  nil, // not current
-			RampingSinceTime:  nil, // not ramping
-			RampPercentage:    0,   // not ramping
-			DrainageInfo:      nil, // not draining or drained
-			Metadata:          nil, // todo
+			CurrentSinceTime:  nil,                                 // not current
+			RampingSinceTime:  nil,                                 // not ramping
+			RampPercentage:    0,                                   // not ramping
+			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
+			Metadata:          nil,                                 // todo
 		},
 	})
 	if err != nil {
@@ -1107,4 +1133,127 @@ func makeDeploymentQuery(deploymentName, buildID string) string {
 	}))
 	statusFilter = "= 'Running'"
 	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
+}
+
+func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEntry *namespace.Namespace, prevCurrentVersion, newVersion string) (bool, error) {
+	// Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion (newVersion is either the new ramping version or the new current version)
+	prevCurrentVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersion)
+	if err != nil {
+		return false, err
+	}
+
+	newVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, newVersion)
+	if err != nil {
+		return false, err
+	}
+
+	missingTaskQueues, err := d.checkForMissingTaskQueues(prevCurrentVersionInfo, newVersionInfo)
+	if err != nil {
+		return false, err
+	}
+
+	if len(missingTaskQueues) == 0 {
+		return false, nil
+	}
+
+	// Verify that all the missing task-queues have been added to another deployment or do not have backlogged tasks/add-rate > 0
+	for _, missingTaskQueue := range missingTaskQueues {
+		isExpectedInNewVersion, err := d.isTaskQueueExpectedInNewVersion(ctx, namespaceEntry, missingTaskQueue, prevCurrentVersionInfo)
+		if err != nil {
+			return false, err
+		}
+		if isExpectedInNewVersion {
+			// one of the missing task queues is expected in the new version
+			return true, nil
+		}
+	}
+
+	// all expected task queues are present in the new version
+	return false, nil
+}
+
+// isTaskQueueExpectedInNewVersion checks if a task queue is expected in the new version. A task queue is expected in the new version if:
+// 1. It is not assigned to a deployment different from the deployment's current version.
+// 2. It has backlogged tasks or add-rate > 0.
+func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	taskQueue *deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo,
+	prevCurrentVersionInfo *deploymentpb.WorkerDeploymentVersionInfo,
+) (bool, error) {
+	// First check if task queue is assigned to another deployment
+	response, err := d.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		DescRequest: &workflowservice.DescribeTaskQueueRequest{
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue.Name,
+				Kind: enumspb.TaskQueueKind(enumspb.TASK_QUEUE_KIND_NORMAL),
+			},
+			TaskQueueType: enumspb.TaskQueueType(taskQueue.Type),
+		},
+	})
+	if err != nil {
+		return false, err
+	}
+
+	// Task Queue has been moved to another Worker Deployment
+	if response.DescResponse.VersioningInfo != nil &&
+		response.DescResponse.VersioningInfo.GetCurrentVersion() != prevCurrentVersionInfo.GetVersion() {
+		return false, nil
+	}
+
+	// Check if task queue has backlogged tasks or add-rate > 0
+	response, err = d.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		DescRequest: &workflowservice.DescribeTaskQueueRequest{
+			ApiMode: enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue.Name,
+				Kind: enumspb.TaskQueueKind(enumspb.TASK_QUEUE_KIND_NORMAL),
+			},
+			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TaskQueueType(taskQueue.Type)},
+			Versions: &taskqueuepb.TaskQueueVersionSelection{
+				BuildIds: []string{prevCurrentVersionInfo.GetVersion()}, // pretending the version string is a build id
+			},
+			TaskQueueType: enumspb.TaskQueueType(taskQueue.Type), // since request doesn't pass through frontend, this field is not automatically populated
+			ReportStats:   true,
+		},
+	})
+	if err != nil {
+		d.logger.Error("error fetching AddRate for task-queue", tag.Error(err))
+		return false, err
+	}
+
+	typesInfo := response.GetDescResponse().GetVersionsInfo()[prevCurrentVersionInfo.GetVersion()].GetTypesInfo()
+	if typesInfo != nil {
+		typeStats := typesInfo[int32(enumspb.TaskQueueType(taskQueue.Type))]
+		if typeStats != nil && typeStats.GetStats() != nil &&
+			(typeStats.GetStats().GetTasksAddRate() != 0 || typeStats.GetStats().GetApproximateBacklogCount() != 0) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// checkForMissingTaskQueues checks if all the task-queues in the previous version are present in the new version
+func (d *ClientImpl) checkForMissingTaskQueues(prevCurrentVersionInfo, newCurrentVersionInfo *deploymentpb.WorkerDeploymentVersionInfo) ([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, error) {
+	prevCurrentVersionTaskQueues := prevCurrentVersionInfo.GetTaskQueueInfos()
+	newCurrentVersionTaskQueues := newCurrentVersionInfo.GetTaskQueueInfos()
+
+	missingTaskQueues := []*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{}
+	for _, prevTaskQueue := range prevCurrentVersionTaskQueues {
+		found := false
+		for _, newTaskQueue := range newCurrentVersionTaskQueues {
+			if prevTaskQueue.GetName() == newTaskQueue.GetName() && prevTaskQueue.GetType() == newTaskQueue.GetType() {
+				found = true
+				break
+			}
+		}
+		if !found {
+			missingTaskQueues = append(missingTaskQueues, prevTaskQueue)
+		}
+	}
+
+	return missingTaskQueues, nil
 }
