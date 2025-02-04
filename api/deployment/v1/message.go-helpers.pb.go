@@ -140,43 +140,6 @@ func (this *VersionLocalState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type TaskQueueFamilyData to the protobuf v3 wire format
-func (val *TaskQueueFamilyData) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type TaskQueueFamilyData from the protobuf v3 wire format
-func (val *TaskQueueFamilyData) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *TaskQueueFamilyData) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two TaskQueueFamilyData values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *TaskQueueFamilyData) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *TaskQueueFamilyData
-	switch t := that.(type) {
-	case *TaskQueueFamilyData:
-		that1 = t
-	case TaskQueueFamilyData:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
 // Marshal an object of type TaskQueueVersionData to the protobuf v3 wire format
 func (val *TaskQueueVersionData) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

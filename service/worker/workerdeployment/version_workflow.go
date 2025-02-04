@@ -273,6 +273,16 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 		Version:       state.GetVersion(),
 		ForgetVersion: true,
 	}
+
+	for tqName, byType := range state.TaskQueueFamilies {
+		for tqType, _ := range byType.TaskQueues {
+			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+				Name: tqName,
+				Type: enumspb.TaskQueueType(tqType),
+			})
+		}
+	}
+
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
 	if err != nil {
@@ -383,10 +393,10 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 
 	// if successful, add the task queue to the local state
 	if d.VersionState.TaskQueueFamilies == nil {
-		d.VersionState.TaskQueueFamilies = make(map[string]*deploymentspb.TaskQueueFamilyData)
+		d.VersionState.TaskQueueFamilies = make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
 	}
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName] == nil {
-		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.TaskQueueFamilyData{}
+		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{}
 	}
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
 		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueVersionData)

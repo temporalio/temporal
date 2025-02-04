@@ -125,8 +125,8 @@ message DeploymentData {
     // (or unspecified) WorkflowVersioningMode will receive the tasks.
     repeated temporal.server.api.deployment.v1.DeploymentVersionData versions = 2;
 
-    // Present if the task queue's ramping version or current version is unversioned.
-    temporal.server.api.deployment.v1.DeploymentVersionData unversioned_data = 3;
+    // Present if the task queue's ramping version is unversioned.
+    temporal.server.api.deployment.v1.DeploymentVersionData unversioned_ramp_data = 3;
 
     // Deprecated.
     message DeploymentDataItem {
