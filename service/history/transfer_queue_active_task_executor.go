@@ -924,13 +924,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			return err
 		}
 
-		// if resetTerminateChildIfRunning is true, it means the child was started after the reset point we attempted to terminate it before starting a new one.
-		// We should update the parent execution info to reflect that the child was potentially terminated and started.
-		if resetTerminateChildIfRunning {
-			childrenInitializedPostResetPoint := executionInfo.ChildrenInitializedPostResetPoint
-			childrenInitializedPostResetPoint[resetChildID] = false
-			mutableState.SetChildrenInitializedPostResetPoint(childrenInitializedPostResetPoint)
-		}
 		return t.recordStartChildExecutionFailed(
 			ctx,
 			task,
@@ -942,6 +935,14 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 
 	t.logger.Debug("Child Execution started successfully",
 		tag.WorkflowID(attributes.WorkflowId), tag.WorkflowRunID(childRunID))
+
+	// if resetTerminateChildIfRunning is true, it means the child was started after the reset point we attempted to terminate it before starting a new one.
+	// We should update the parent execution info to reflect that the child was potentially terminated and started.
+	if resetTerminateChildIfRunning {
+		childrenInitializedPostResetPoint := executionInfo.ChildrenInitializedPostResetPoint
+		childrenInitializedPostResetPoint[resetChildID] = false
+		mutableState.SetChildrenInitializedPostResetPoint(childrenInitializedPostResetPoint)
+	}
 
 	// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
 	err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
