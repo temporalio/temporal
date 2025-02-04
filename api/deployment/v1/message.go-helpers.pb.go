@@ -436,43 +436,6 @@ func (this *QueryDescribeWorkerDeploymentResponse) Equal(that interface{}) bool 
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type VersionWorkflowMemo to the protobuf v3 wire format
-func (val *VersionWorkflowMemo) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type VersionWorkflowMemo from the protobuf v3 wire format
-func (val *VersionWorkflowMemo) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *VersionWorkflowMemo) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two VersionWorkflowMemo values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *VersionWorkflowMemo) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *VersionWorkflowMemo
-	switch t := that.(type) {
-	case *VersionWorkflowMemo:
-		that1 = t
-	case VersionWorkflowMemo:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
-}
-
 // Marshal an object of type StartWorkerDeploymentRequest to the protobuf v3 wire format
 func (val *StartWorkerDeploymentRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

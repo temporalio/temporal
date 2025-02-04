@@ -71,24 +71,24 @@ message DeploymentVersionData {
 // Local state for Worker Deployment Version
 message VersionLocalState {
     WorkerDeploymentVersion version = 1;
-    google.protobuf.Timestamp create_time = 3;
+    google.protobuf.Timestamp create_time = 2;
 
     // Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
-    google.protobuf.Timestamp routing_update_time = 4;
+    google.protobuf.Timestamp routing_update_time = 3;
 
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
     // Nil if not current.
-    google.protobuf.Timestamp current_since_time = 5;
+    google.protobuf.Timestamp current_since_time = 4;
 
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
     // Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
-    google.protobuf.Timestamp ramping_since_time = 6;
+    google.protobuf.Timestamp ramping_since_time = 5;
 
     // Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
     // Can be in the range [0, 100] if the version is ramping.
-    float ramp_percentage = 7;
+    float ramp_percentage = 6;
 
     // Helps user determine when it is safe to decommission the workers of this
     // Version. Not present when version is current or ramping.
@@ -103,15 +103,15 @@ message VersionLocalState {
     //   This means if the Version is "drained" but new workflows are sent to it via
     //   Pinned Versioning Override, the status does not account for those Pinned-override
     //   executions and remains "drained".
-    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 8;
+    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 7;
 
     // Arbitrary user-provided metadata attached to this version.
-    temporal.api.deployment.v1.VersionMetadata metadata = 9;
+    temporal.api.deployment.v1.VersionMetadata metadata = 8;
 
-    bool started_deployment_workflow = 10;
+    bool started_deployment_workflow = 9;
 
     // Key: Task Queue Name
-    map<string, TaskQueueFamilyData> task_queue_families = 11;
+    map<string, TaskQueueFamilyData> task_queue_families = 10;
 
     message TaskQueueFamilyData {
         // Key: enums.TaskQueueType, Value: TaskQueueData
@@ -191,12 +191,6 @@ message QueryDescribeVersionResponse {
 // used as Worker Deployment Version workflow query response:
 message QueryDescribeWorkerDeploymentResponse {
     WorkerDeploymentLocalState state = 1;
-}
-
-// used as Worker Deployment Version workflow memo:
-message VersionWorkflowMemo {
-    string deployment_name = 1;
-    string build_id = 2;
 }
 
 // used as Worker Deployment Version workflow activity input:

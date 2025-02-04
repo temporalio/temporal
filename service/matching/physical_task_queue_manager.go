@@ -527,7 +527,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 	return nil
 }
 
-// TODO (Shivam): Complete the implementation of this.
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
