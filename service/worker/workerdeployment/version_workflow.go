@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -164,6 +165,14 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	if err := workflow.SetUpdateHandler(
+		ctx,
+		UpdateVersionMetadata,
+		d.handleUpdateVersionMetadata,
+	); err != nil {
+		return err
+	}
+
 	// First ensure deployment workflow is running
 	if !d.VersionState.StartedDeploymentWorkflow {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -200,6 +209,25 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	nextArgs := d.WorkerDeploymentVersionWorkflowArgs
 	nextArgs.VersionState = d.VersionState
 	return workflow.NewContinueAsNewError(ctx, VersionWorkflow, nextArgs)
+}
+
+func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context, args *deploymentspb.UpdateVersionMetadataArgs) (*deploymentspb.UpdateVersionMetadataResponse, error) {
+	if d.VersionState.Metadata == nil && args.UpsertEntries != nil {
+		d.VersionState.Metadata = &deploymentpb.VersionMetadata{}
+		d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
+	}
+
+	for key, payload := range args.UpsertEntries {
+		d.VersionState.Metadata.Entries[key] = payload
+	}
+
+	for _, key := range args.RemoveEntries {
+		delete(d.VersionState.Metadata.Entries, key)
+	}
+
+	return &deploymentspb.UpdateVersionMetadataResponse{
+		Metadata: d.VersionState.Metadata,
+	}, nil
 }
 
 func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, first bool) {
@@ -444,7 +472,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
 		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueVersionData)
 	}
-	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{FirstPollerTime: args.FirstPollerTime}
+	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{}
 
 	return nil
 }
@@ -564,17 +592,6 @@ func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescr
 	return &deploymentspb.QueryDescribeVersionResponse{
 		VersionState: d.VersionState,
 	}, nil
-}
-
-// updateMemo should be called whenever the workflow updates its local state
-func (d *VersionWorkflowRunner) updateMemo(ctx workflow.Context) error {
-	// TODO (Shivam): Update memo to have current_since after proto changes.
-	return workflow.UpsertMemo(ctx, map[string]any{
-		WorkerDeploymentVersionMemoField: &deploymentspb.VersionWorkflowMemo{
-			DeploymentName: d.VersionState.Version.DeploymentName,
-			BuildId:        d.VersionState.Version.BuildId,
-		},
-	})
 }
 
 func (d *VersionWorkflowRunner) newUUID(ctx workflow.Context) string {
