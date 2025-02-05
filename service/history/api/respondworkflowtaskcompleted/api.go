@@ -561,6 +561,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				request.Identity,
 				versioningStamp,
 				nil,
+				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
 			)
 			if err != nil {
@@ -683,6 +684,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			request.Identity,
 			versioningStamp,
 			nil,
+			workflowLease.GetContext().UpdateRegistry(ctx),
 			false,
 		)
 		if err != nil {
