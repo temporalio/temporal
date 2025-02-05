@@ -866,18 +866,6 @@ used when the first cache layer has a miss. Requires server restart for change t
 		`The TTL of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
 used when the first cache layer has a miss. Requires server restart for change to be applied.`,
 	)
-	NexusHTTPTraceMinAttempt = NewNamespaceIntSetting(
-		"system.nexusHTTPTraceMinAttempt",
-		2,
-		`The minimum attempt of a Nexus request which will log additional HTTP request tracing information.
-WARNING: setting to 0 or 1 will log additional tracing information for ALL Nexus HTTP requests and may be expensive.`,
-	)
-	NexusHTTPTraceMaxAttempt = NewNamespaceIntSetting(
-		"system.nexusHTTPTraceMaxAttempt",
-		5,
-		`The maximum attempt of a Nexus request which will log additional HTTP request tracing information.
-Set to 0 to disable tracing.`,
-	)
 	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSetting(
 		"frontend.nexusRequestHeadersBlacklist",
 		[]string(nil),

@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/queues"
 )
 
@@ -79,18 +78,17 @@ func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 }
 
 func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
-	if n.attempt >= int32(e.Config.HTTPTraceMinAttempt(ns.Name().String())) &&
-		n.attempt <= int32(e.Config.HTTPTraceMaxAttempt(ns.Name().String())) {
-		traceLogger := log.With(e.Logger,
-			tag.WorkflowNamespace(ns.Name().String()),
-			tag.Operation("CompleteNexusOperation"),
-			tag.NewStringTag("destination", task.destination),
-			tag.WorkflowID(n.workflowID),
-			tag.WorkflowRunID(n.runID),
-			tag.AttemptStart(time.Now().UTC()),
-			tag.Attempt(n.attempt),
-		)
-		ctx = httptrace.WithClientTrace(ctx, commonnexus.NewHTTPClientTrace(traceLogger))
+	traceLogger := log.With(e.Logger,
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.Operation("CompleteNexusOperation"),
+		tag.NewStringTag("destination", task.destination),
+		tag.WorkflowID(n.workflowID),
+		tag.WorkflowRunID(n.runID),
+		tag.AttemptStart(time.Now().UTC()),
+		tag.Attempt(n.attempt),
+	)
+	if trace := e.HTTPTraceProvider.NewTrace(ns.Name().String(), n.attempt, traceLogger); trace != nil {
+		ctx = httptrace.WithClientTrace(ctx, trace)
 	}
 
 	request, err := nexus.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
