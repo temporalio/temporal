@@ -128,6 +128,19 @@ func (s *DeploymentVersionSuite) pollActivityFromDeployment(ctx context.Context,
 	})
 }
 
+func (s *DeploymentVersionSuite) startVersionWorkflow(tv *testvars.TestVars, ctx context.Context) {
+	go s.pollFromDeployment(ctx, tv)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+	}, time.Second*5, time.Millisecond*200)
+}
+
 func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -300,9 +313,12 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetRampingVersion_YesOpenWFs
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Create a deployment version
+	s.startVersionWorkflow(tv1, ctx)
 
 	// set version as current
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -324,7 +340,10 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 	defer cancel()
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
-	// set version as current
+	// Create a deployment version
+	s.startVersionWorkflow(tv1, ctx)
+
+	// set version as ramping
 	_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv1.DeploymentSeries(),
@@ -334,6 +353,8 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 	})
 	s.Nil(err)
 
+	// deleting this version should fail since the version is ramping
+	s.tryDeleteVersion(ctx, tv1, false)
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_NotDrained() {
@@ -342,16 +363,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NotDrained() {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv1, ctx)
 
 	// Version is not "drained" so delete should fail
 	s.tryDeleteVersion(ctx, tv1, false)
@@ -363,16 +375,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv1, ctx)
 
 	// Make the version current
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -385,17 +388,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 
 	// Start another version workflow
 	tv2 := testvars.New(s).WithBuildIDNumber(2)
-
-	go s.pollFromDeployment(ctx, tv2)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv2.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv2.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv2, ctx)
 
 	// Setting this version to current should start the drainage workflow for version1
 	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -445,16 +438,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv1, ctx)
 
 	// Signal the first version to be drained. Only do this in tests.
 	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
@@ -521,16 +505,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
 	pollerCtx1, pollerCancel1 := context.WithCancel(ctx)
-	go s.pollFromDeployment(pollerCtx1, tv1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv1, pollerCtx1)
 
 	// SetCurrent so that the task queue puts the version in its versions info
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -544,20 +519,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentV
 
 	// new version with a different registered task-queue
 	tv2 := testvars.New(s).WithBuildIDNumber(2).WithTaskQueue(testvars.New(s.T()).Any().String())
-
-	// Start deployment workflow 2 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv2)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv2.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		if resp != nil {
-			a.Equal(tv2.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-		}
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv2, ctx)
 
 	// Cancel pollers on task_queue_1 to increase the backlog of tasks
 	pollerCancel1()
@@ -587,18 +549,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetCurrentVer
 	tv := testvars.New(s)
 
 	tv1 := tv.WithBuildIDNumber(1).WithTaskQueue(tv.Any().String())
-
-	// Start deployment workflow 1 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv1, ctx)
 
 	// SetCurrent so that the task queue puts the version in its versions info
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -612,18 +563,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetCurrentVer
 
 	// new version with a different registered task-queue
 	tv2 := tv.WithBuildIDNumber(2).WithTaskQueue(tv.Any().String())
-
-	// Start deployment workflow 2 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv2)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv2.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv2.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv2, ctx)
 
 	// SetCurrent tv2
 	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -647,16 +587,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingV
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
 	pollerCtx1, pollerCancel1 := context.WithCancel(ctx)
-	go s.pollFromDeployment(pollerCtx1, tv1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv1, pollerCtx1)
 
 	// SetCurrent so that the task queue puts the version in its versions info
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -670,18 +601,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetRampingV
 
 	// new version with a different registered task-queue
 	tv2 := tv.WithBuildIDNumber(2).WithTaskQueue(tv.Any().String())
-
-	// Start deployment workflow 2 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv2)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv2.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv2.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv2, ctx)
 
 	// Cancel pollers on task_queue_1 to increase the backlog of tasks
 	pollerCancel1()
@@ -711,16 +631,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetRampingVer
 	tv1 := tv.WithBuildIDNumber(1).WithTaskQueue(tv.Any().String())
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv1, ctx)
 
 	// SetCurrent so that the task queue puts the version in its versions info
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -734,18 +645,7 @@ func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_ValidSetRampingVer
 
 	// new version with a different registered task-queue
 	tv2 := tv.WithBuildIDNumber(2).WithTaskQueue(tv.Any().String())
-
-	// Start deployment workflow 2 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv2)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv2.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv2.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv2, ctx)
 
 	// SetRampingVersion to tv2
 	_, err = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
@@ -802,16 +702,7 @@ func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(tv1, ctx)
 
 	metadata := map[string]*commonpb.Payload{
 		"key1": {Data: testRandomMetadataValue},
