@@ -1311,7 +1311,7 @@ func (s *Versioning3Suite) Name() string {
 		fullName[len(fullName)-21:],
 		farm.Fingerprint32([]byte(fullName)),
 	)
-	return strings.Replace(short, "/", "|", -1)
+	return strings.Replace(short, "/", "|", -1) // TODO: Carly do we want this to be replacing "." instead?
 }
 
 // pollWftAndHandle can be used in sync and async mode. For async mode pass the async channel. It

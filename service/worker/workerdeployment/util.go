@@ -26,6 +26,7 @@ package workerdeployment
 
 import (
 	"fmt"
+	"go.temporal.io/server/common/worker_versioning"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -74,7 +75,7 @@ const (
 	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
 	WorkerDeploymentVersionWorkflowIDEscape      = "|"
 	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDDelimeter) + len(WorkerDeploymentVersionWorkflowIDPrefix) // todo (Shivam): Do we need 2 * len(WorkerDeploymentVersionWorkflowIDDelimeter)?
-	WorkerDeploymentFieldName                    = "WorkerDeployment"
+	WorkerDeploymentFieldName                    = "DeploymentName"
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
 
 	// Application error names for rejected updates
@@ -115,12 +116,12 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
 	}
 
-	// deploymentName cannot have "/"
-	if fieldName == WorkerDeploymentFieldName && strings.Contains(field, "/") {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain '/'", fieldName))
+	// deploymentName cannot have "."
+	if fieldName == WorkerDeploymentFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiter) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain '%s'", fieldName, worker_versioning.WorkerDeploymentVersionIdDelimiter))
 	}
 
-	// buildID cannot start with "__"
+	// buildID cannot start with "__"  // TODO (Carly): Do we still want this requirement?
 	if fieldName == WorkerDeploymentBuildIDFieldName && strings.HasPrefix(field, "__") {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot start with '__'", fieldName))
 	}
