@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
@@ -903,6 +902,8 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
+
+	s.waitForClusterSynced()
 
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
@@ -1942,7 +1943,6 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.NoError(worker1.Start())
 
 	// Start a workflow
-	startTime := time.Now()
 	workflowID := "functional-activity-heartbeat-workflow-failover-test"
 	run1, err := client1.ExecuteWorkflow(testcore.NewContext(), sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
@@ -1960,22 +1960,7 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	worker1.Stop() // stop worker1 so cluster 1 won't make any progress
 	s.failover(namespace, 0, s.clusterNames[1], 2)
 
-	// verify things are replicated over
-	resp, err := s.cluster1.HistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
-	s.NoError(err)
-	s.Equal(1, len(resp.Shards)) // test cluster has only one history shard
-	shard := resp.Shards[0]
-	s.True(shard.MaxReplicationTaskId > 0)
-	s.NotNil(shard.ShardLocalTime)
-	s.True(shard.ShardLocalTime.AsTime().Before(time.Now()))
-	s.True(shard.ShardLocalTime.AsTime().After(startTime))
-	s.NotNil(shard.RemoteClusters)
-	standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
-	s.True(ok)
-	s.LessOrEqual(shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
-	s.NotNil(standbyAckInfo.AckedTaskVisibilityTime)
-	s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now()))
-	s.True(standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(startTime))
+	s.waitForClusterSynced()
 
 	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
 	// has heartbeat timeout. Also make sure the information is recorded when the activity state

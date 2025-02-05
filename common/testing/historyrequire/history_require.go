@@ -389,7 +389,7 @@ func (h HistoryRequire) formatHistoryEvents(historyEvents []*historypb.HistoryEv
 
 		var versionStr string
 		if event.GetVersion() != 0 {
-			versionStr = fmt.Sprintf("v%2d ", event.GetVersion())
+			versionStr = fmt.Sprintf("%3s ", "v"+strconv.Itoa(int(event.GetVersion())))
 		}
 
 		var eventAttrsJsonStr string
