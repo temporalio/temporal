@@ -210,7 +210,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	s.waitOperationRetry(ctx, sdkClient2, run)
 
 	// Now failover, and let cluster2 be the active.
-	s.failover(ns, s.clusterNames[1], 2, s.cluster1.FrontendClient())
+	s.failover(ns, 0, s.clusterNames[1], 2)
 
 	s.NoError(sdkClient2.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "dont-care", nil))
 
@@ -249,7 +249,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	s.waitEvent(ctx, sdkClient1, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 
 	// Fail back to cluster1.
-	s.failover(ns, s.clusterNames[0], 11, s.cluster2.FrontendClient())
+	s.failover(ns, 1, s.clusterNames[0], 11)
 
 	s.completeNexusOperation(ctx, "result", publicCallbackUrl, callbackToken)
 
@@ -478,7 +478,7 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	})
 
 	// Failover to cluster2.
-	s.failover(ns, s.clusterNames[1], 2, s.cluster1.FrontendClient())
+	s.failover(ns, 0, s.clusterNames[1], 2)
 
 	// Unblock callback after failover.
 	failCallback.Store(false)

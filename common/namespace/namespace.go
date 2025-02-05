@@ -294,6 +294,7 @@ func (ns *Namespace) Retention() time.Duration {
 	return ns.config.Retention.AsDuration()
 }
 
+// CustomSearchAttributesMapper is a part of temporary solution. Do not use this method.
 func (ns *Namespace) CustomSearchAttributesMapper() CustomSearchAttributesMapper {
 	return ns.customSearchAttributesMapper
 }
