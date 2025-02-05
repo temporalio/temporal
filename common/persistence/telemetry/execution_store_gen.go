@@ -33,6 +33,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -65,11 +66,19 @@ func newTelemetryExecutionStore(
 
 // AddHistoryTasks wraps ExecutionStore.AddHistoryTasks.
 func (d telemetryExecutionStore) AddHistoryTasks(ctx context.Context, request *_sourcePersistence.InternalAddHistoryTasksRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/AddHistoryTasks")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/AddHistoryTasks",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("AddHistoryTasks"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("AddHistoryTasks"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.AddHistoryTasks(ctx, request)
 	if err != nil {
@@ -92,11 +101,19 @@ func (d telemetryExecutionStore) AddHistoryTasks(ctx context.Context, request *_
 
 // AppendHistoryNodes wraps ExecutionStore.AppendHistoryNodes.
 func (d telemetryExecutionStore) AppendHistoryNodes(ctx context.Context, request *_sourcePersistence.InternalAppendHistoryNodesRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/AppendHistoryNodes")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/AppendHistoryNodes",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("AppendHistoryNodes"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("AppendHistoryNodes"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.AppendHistoryNodes(ctx, request)
 	if err != nil {
@@ -119,11 +136,19 @@ func (d telemetryExecutionStore) AppendHistoryNodes(ctx context.Context, request
 
 // CompleteHistoryTask wraps ExecutionStore.CompleteHistoryTask.
 func (d telemetryExecutionStore) CompleteHistoryTask(ctx context.Context, request *_sourcePersistence.CompleteHistoryTaskRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/CompleteHistoryTask")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/CompleteHistoryTask",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("CompleteHistoryTask"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("CompleteHistoryTask"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.CompleteHistoryTask(ctx, request)
 	if err != nil {
@@ -146,11 +171,19 @@ func (d telemetryExecutionStore) CompleteHistoryTask(ctx context.Context, reques
 
 // ConflictResolveWorkflowExecution wraps ExecutionStore.ConflictResolveWorkflowExecution.
 func (d telemetryExecutionStore) ConflictResolveWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalConflictResolveWorkflowExecutionRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ConflictResolveWorkflowExecution")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/ConflictResolveWorkflowExecution",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("ConflictResolveWorkflowExecution"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ConflictResolveWorkflowExecution"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.ConflictResolveWorkflowExecution(ctx, request)
 	if err != nil {
@@ -173,11 +206,19 @@ func (d telemetryExecutionStore) ConflictResolveWorkflowExecution(ctx context.Co
 
 // CreateWorkflowExecution wraps ExecutionStore.CreateWorkflowExecution.
 func (d telemetryExecutionStore) CreateWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalCreateWorkflowExecutionRequest) (ip1 *_sourcePersistence.InternalCreateWorkflowExecutionResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/CreateWorkflowExecution")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/CreateWorkflowExecution",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("CreateWorkflowExecution"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("CreateWorkflowExecution"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ExecutionStore.CreateWorkflowExecution(ctx, request)
 	if err != nil {
@@ -207,11 +248,19 @@ func (d telemetryExecutionStore) CreateWorkflowExecution(ctx context.Context, re
 
 // DeleteCurrentWorkflowExecution wraps ExecutionStore.DeleteCurrentWorkflowExecution.
 func (d telemetryExecutionStore) DeleteCurrentWorkflowExecution(ctx context.Context, request *_sourcePersistence.DeleteCurrentWorkflowExecutionRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteCurrentWorkflowExecution")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/DeleteCurrentWorkflowExecution",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("DeleteCurrentWorkflowExecution"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteCurrentWorkflowExecution"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.DeleteCurrentWorkflowExecution(ctx, request)
 	if err != nil {
@@ -234,11 +283,19 @@ func (d telemetryExecutionStore) DeleteCurrentWorkflowExecution(ctx context.Cont
 
 // DeleteHistoryBranch wraps ExecutionStore.DeleteHistoryBranch.
 func (d telemetryExecutionStore) DeleteHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalDeleteHistoryBranchRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteHistoryBranch")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/DeleteHistoryBranch",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("DeleteHistoryBranch"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteHistoryBranch"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.DeleteHistoryBranch(ctx, request)
 	if err != nil {
@@ -261,11 +318,19 @@ func (d telemetryExecutionStore) DeleteHistoryBranch(ctx context.Context, reques
 
 // DeleteHistoryNodes wraps ExecutionStore.DeleteHistoryNodes.
 func (d telemetryExecutionStore) DeleteHistoryNodes(ctx context.Context, request *_sourcePersistence.InternalDeleteHistoryNodesRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteHistoryNodes")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/DeleteHistoryNodes",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("DeleteHistoryNodes"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteHistoryNodes"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.DeleteHistoryNodes(ctx, request)
 	if err != nil {
@@ -288,11 +353,19 @@ func (d telemetryExecutionStore) DeleteHistoryNodes(ctx context.Context, request
 
 // DeleteReplicationTaskFromDLQ wraps ExecutionStore.DeleteReplicationTaskFromDLQ.
 func (d telemetryExecutionStore) DeleteReplicationTaskFromDLQ(ctx context.Context, request *_sourcePersistence.DeleteReplicationTaskFromDLQRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteReplicationTaskFromDLQ")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/DeleteReplicationTaskFromDLQ",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("DeleteReplicationTaskFromDLQ"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteReplicationTaskFromDLQ"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.DeleteReplicationTaskFromDLQ(ctx, request)
 	if err != nil {
@@ -315,11 +388,19 @@ func (d telemetryExecutionStore) DeleteReplicationTaskFromDLQ(ctx context.Contex
 
 // DeleteWorkflowExecution wraps ExecutionStore.DeleteWorkflowExecution.
 func (d telemetryExecutionStore) DeleteWorkflowExecution(ctx context.Context, request *_sourcePersistence.DeleteWorkflowExecutionRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/DeleteWorkflowExecution")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/DeleteWorkflowExecution",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("DeleteWorkflowExecution"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteWorkflowExecution"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.DeleteWorkflowExecution(ctx, request)
 	if err != nil {
@@ -342,11 +423,19 @@ func (d telemetryExecutionStore) DeleteWorkflowExecution(ctx context.Context, re
 
 // ForkHistoryBranch wraps ExecutionStore.ForkHistoryBranch.
 func (d telemetryExecutionStore) ForkHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalForkHistoryBranchRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ForkHistoryBranch")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/ForkHistoryBranch",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("ForkHistoryBranch"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ForkHistoryBranch"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.ForkHistoryBranch(ctx, request)
 	if err != nil {
@@ -369,11 +458,19 @@ func (d telemetryExecutionStore) ForkHistoryBranch(ctx context.Context, request 
 
 // GetAllHistoryTreeBranches wraps ExecutionStore.GetAllHistoryTreeBranches.
 func (d telemetryExecutionStore) GetAllHistoryTreeBranches(ctx context.Context, request *_sourcePersistence.GetAllHistoryTreeBranchesRequest) (ip1 *_sourcePersistence.InternalGetAllHistoryTreeBranchesResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetAllHistoryTreeBranches")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/GetAllHistoryTreeBranches",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("GetAllHistoryTreeBranches"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetAllHistoryTreeBranches"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ExecutionStore.GetAllHistoryTreeBranches(ctx, request)
 	if err != nil {
@@ -403,11 +500,19 @@ func (d telemetryExecutionStore) GetAllHistoryTreeBranches(ctx context.Context, 
 
 // GetCurrentExecution wraps ExecutionStore.GetCurrentExecution.
 func (d telemetryExecutionStore) GetCurrentExecution(ctx context.Context, request *_sourcePersistence.GetCurrentExecutionRequest) (ip1 *_sourcePersistence.InternalGetCurrentExecutionResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetCurrentExecution")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/GetCurrentExecution",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("GetCurrentExecution"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetCurrentExecution"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ExecutionStore.GetCurrentExecution(ctx, request)
 	if err != nil {
@@ -437,11 +542,19 @@ func (d telemetryExecutionStore) GetCurrentExecution(ctx context.Context, reques
 
 // GetHistoryTasks wraps ExecutionStore.GetHistoryTasks.
 func (d telemetryExecutionStore) GetHistoryTasks(ctx context.Context, request *_sourcePersistence.GetHistoryTasksRequest) (ip1 *_sourcePersistence.InternalGetHistoryTasksResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetHistoryTasks")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/GetHistoryTasks",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("GetHistoryTasks"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetHistoryTasks"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ExecutionStore.GetHistoryTasks(ctx, request)
 	if err != nil {
@@ -471,11 +584,19 @@ func (d telemetryExecutionStore) GetHistoryTasks(ctx context.Context, request *_
 
 // GetHistoryTreeContainingBranch wraps ExecutionStore.GetHistoryTreeContainingBranch.
 func (d telemetryExecutionStore) GetHistoryTreeContainingBranch(ctx context.Context, request *_sourcePersistence.InternalGetHistoryTreeContainingBranchRequest) (ip1 *_sourcePersistence.InternalGetHistoryTreeContainingBranchResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetHistoryTreeContainingBranch")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/GetHistoryTreeContainingBranch",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("GetHistoryTreeContainingBranch"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetHistoryTreeContainingBranch"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ExecutionStore.GetHistoryTreeContainingBranch(ctx, request)
 	if err != nil {
@@ -505,11 +626,19 @@ func (d telemetryExecutionStore) GetHistoryTreeContainingBranch(ctx context.Cont
 
 // GetReplicationTasksFromDLQ wraps ExecutionStore.GetReplicationTasksFromDLQ.
 func (d telemetryExecutionStore) GetReplicationTasksFromDLQ(ctx context.Context, request *_sourcePersistence.GetReplicationTasksFromDLQRequest) (ip1 *_sourcePersistence.InternalGetReplicationTasksFromDLQResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetReplicationTasksFromDLQ")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/GetReplicationTasksFromDLQ",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("GetReplicationTasksFromDLQ"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetReplicationTasksFromDLQ"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ExecutionStore.GetReplicationTasksFromDLQ(ctx, request)
 	if err != nil {
@@ -539,11 +668,19 @@ func (d telemetryExecutionStore) GetReplicationTasksFromDLQ(ctx context.Context,
 
 // GetWorkflowExecution wraps ExecutionStore.GetWorkflowExecution.
 func (d telemetryExecutionStore) GetWorkflowExecution(ctx context.Context, request *_sourcePersistence.GetWorkflowExecutionRequest) (ip1 *_sourcePersistence.InternalGetWorkflowExecutionResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/GetWorkflowExecution")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/GetWorkflowExecution",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("GetWorkflowExecution"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetWorkflowExecution"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ExecutionStore.GetWorkflowExecution(ctx, request)
 	if err != nil {
@@ -573,11 +710,19 @@ func (d telemetryExecutionStore) GetWorkflowExecution(ctx context.Context, reque
 
 // IsReplicationDLQEmpty wraps ExecutionStore.IsReplicationDLQEmpty.
 func (d telemetryExecutionStore) IsReplicationDLQEmpty(ctx context.Context, request *_sourcePersistence.GetReplicationTasksFromDLQRequest) (b1 bool, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/IsReplicationDLQEmpty")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/IsReplicationDLQEmpty",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("IsReplicationDLQEmpty"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("IsReplicationDLQEmpty"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	b1, err = d.ExecutionStore.IsReplicationDLQEmpty(ctx, request)
 	if err != nil {
@@ -607,11 +752,19 @@ func (d telemetryExecutionStore) IsReplicationDLQEmpty(ctx context.Context, requ
 
 // ListConcreteExecutions wraps ExecutionStore.ListConcreteExecutions.
 func (d telemetryExecutionStore) ListConcreteExecutions(ctx context.Context, request *_sourcePersistence.ListConcreteExecutionsRequest) (ip1 *_sourcePersistence.InternalListConcreteExecutionsResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ListConcreteExecutions")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/ListConcreteExecutions",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("ListConcreteExecutions"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ListConcreteExecutions"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ExecutionStore.ListConcreteExecutions(ctx, request)
 	if err != nil {
@@ -641,11 +794,19 @@ func (d telemetryExecutionStore) ListConcreteExecutions(ctx context.Context, req
 
 // PutReplicationTaskToDLQ wraps ExecutionStore.PutReplicationTaskToDLQ.
 func (d telemetryExecutionStore) PutReplicationTaskToDLQ(ctx context.Context, request *_sourcePersistence.PutReplicationTaskToDLQRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/PutReplicationTaskToDLQ")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/PutReplicationTaskToDLQ",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("PutReplicationTaskToDLQ"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("PutReplicationTaskToDLQ"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.PutReplicationTaskToDLQ(ctx, request)
 	if err != nil {
@@ -668,11 +829,19 @@ func (d telemetryExecutionStore) PutReplicationTaskToDLQ(ctx context.Context, re
 
 // RangeCompleteHistoryTasks wraps ExecutionStore.RangeCompleteHistoryTasks.
 func (d telemetryExecutionStore) RangeCompleteHistoryTasks(ctx context.Context, request *_sourcePersistence.RangeCompleteHistoryTasksRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/RangeCompleteHistoryTasks")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/RangeCompleteHistoryTasks",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("RangeCompleteHistoryTasks"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("RangeCompleteHistoryTasks"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.RangeCompleteHistoryTasks(ctx, request)
 	if err != nil {
@@ -695,11 +864,19 @@ func (d telemetryExecutionStore) RangeCompleteHistoryTasks(ctx context.Context, 
 
 // RangeDeleteReplicationTaskFromDLQ wraps ExecutionStore.RangeDeleteReplicationTaskFromDLQ.
 func (d telemetryExecutionStore) RangeDeleteReplicationTaskFromDLQ(ctx context.Context, request *_sourcePersistence.RangeDeleteReplicationTaskFromDLQRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/RangeDeleteReplicationTaskFromDLQ")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/RangeDeleteReplicationTaskFromDLQ",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("RangeDeleteReplicationTaskFromDLQ"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("RangeDeleteReplicationTaskFromDLQ"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 	if err != nil {
@@ -722,11 +899,19 @@ func (d telemetryExecutionStore) RangeDeleteReplicationTaskFromDLQ(ctx context.C
 
 // ReadHistoryBranch wraps ExecutionStore.ReadHistoryBranch.
 func (d telemetryExecutionStore) ReadHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalReadHistoryBranchRequest) (ip1 *_sourcePersistence.InternalReadHistoryBranchResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/ReadHistoryBranch")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/ReadHistoryBranch",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("ReadHistoryBranch"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ReadHistoryBranch"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ExecutionStore.ReadHistoryBranch(ctx, request)
 	if err != nil {
@@ -756,11 +941,19 @@ func (d telemetryExecutionStore) ReadHistoryBranch(ctx context.Context, request 
 
 // SetWorkflowExecution wraps ExecutionStore.SetWorkflowExecution.
 func (d telemetryExecutionStore) SetWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalSetWorkflowExecutionRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/SetWorkflowExecution")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/SetWorkflowExecution",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("SetWorkflowExecution"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("SetWorkflowExecution"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.SetWorkflowExecution(ctx, request)
 	if err != nil {
@@ -783,11 +976,19 @@ func (d telemetryExecutionStore) SetWorkflowExecution(ctx context.Context, reque
 
 // UpdateWorkflowExecution wraps ExecutionStore.UpdateWorkflowExecution.
 func (d telemetryExecutionStore) UpdateWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalUpdateWorkflowExecutionRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ExecutionStore/UpdateWorkflowExecution")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/UpdateWorkflowExecution",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("UpdateWorkflowExecution"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ExecutionStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("UpdateWorkflowExecution"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ExecutionStore.UpdateWorkflowExecution(ctx, request)
 	if err != nil {
