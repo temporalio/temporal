@@ -68,25 +68,25 @@ type (
 
 func TestFuncClustersTestSuite(t *testing.T) {
 	t.Parallel()
-	// for _, tc := range []struct {
-	// 	name                    string
-	// 	enableTransitionHistory bool
-	// }{
-	// 	{
-	// 		name:                    "EnableTransitionHistory",
-	// 		enableTransitionHistory: true,
-	// 	},
-	// 	{
-	// 		name:                    "DisableTransitionHistory",
-	// 		enableTransitionHistory: false,
-	// 	},
-	// } {
-	// 	t.Run(tc.name, func(t *testing.T) {
-	s := &FunctionalClustersTestSuite{}
-	// s.enableTransitionHistory = tc.enableTransitionHistory
-	suite.Run(t, s)
-	// 	})
-	// }
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &FunctionalClustersTestSuite{}
+			s.enableTransitionHistory = tc.enableTransitionHistory
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *FunctionalClustersTestSuite) SetupSuite() {
