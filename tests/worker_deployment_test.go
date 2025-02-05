@@ -83,14 +83,14 @@ func (s *WorkerDeploymentSuite) pollFromDeployment(ctx context.Context, tv *test
 	})
 }
 
-func (s *WorkerDeploymentSuite) ensureCreateVersion(ctx context.Context, tv *testvars.TestVars, timeout time.Duration) {
+func (s *WorkerDeploymentSuite) ensureCreateVersion(ctx context.Context, tv *testvars.TestVars) {
 	s.Eventually(func() bool {
 		respV, _ := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
 		})
 		return len(respV.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()) > 0
-	}, timeout, 100*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions() {
@@ -723,8 +723,8 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 	defer cancel()
 	tv := testvars.New(s)
 	currentVars := tv.WithBuildIDNumber(1)
-	s.pollFromDeployment(ctx, currentVars)
-	s.ensureCreateVersion(ctx, currentVars, 5*time.Second)
+	go s.pollFromDeployment(ctx, currentVars)
+	s.ensureCreateVersion(ctx, currentVars)
 
 	// check that the current version's task queues have current version unversioned to start
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
@@ -734,8 +734,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), "", 0)
 
 	// set current unversioned and check that the current version's task queues have current version unversioned again
-	s.setCurrentVersionUnversionedOption(ctx, currentVars, true, worker_versioning.UnversionedVersionId, true)
-	// todo: task queues still think they're unversioned
+	s.setCurrentVersionUnversionedOption(ctx, currentVars, true, currentVars.DeploymentVersionString(), true)
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
 
 	// check that deployment has current version == __unversioned__
@@ -748,7 +747,26 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 }
 
 // Should see that the current version of the task queue becomes unversioned, and the unversioned ramping version of the task queue is removed
-func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_UnversionedRamp() {
+func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_PromoteUnversionedRamp() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	tv := testvars.New(s)
+	currentVars := tv.WithBuildIDNumber(1)
+	s.pollFromDeployment(ctx, currentVars)
+	s.ensureCreateVersion(ctx, currentVars)
+
+	// make the current version versioned, so that we can set ramp to unversioned
+	s.setCurrentVersion(ctx, currentVars, worker_versioning.UnversionedVersionId, true)
+	// set ramp to unversioned
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, "", nil)
+	// check that the current version's task queues have ramping version == __unversioned__
+	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
+
+	// set current to unversioned
+	s.setCurrentVersionUnversionedOption(ctx, tv, true, currentVars.DeploymentVersionString(), true)
+
+	// check that the current version's task queues have ramping version == "" and current version == "__unversioned__"
+	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
 }
 
 // Should see it fail because unversioned is already current
@@ -760,20 +778,6 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unversioned_UnversionedCur
 	s.setAndVerifyRampingVersionUnversionedOption(ctx, rampingVars, true, false, 50, true, "Ramping version __unversioned__ is already current", nil)
 }
 
-func (s *WorkerDeploymentSuite) TestTwoPollers_EnsureCreateVersion() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-	defer cancel()
-	tv := testvars.New(s)
-	currentVars := tv.WithBuildIDNumber(1)
-	rampingVars := tv.WithBuildIDNumber(2)
-
-	s.pollFromDeployment(ctx, currentVars)
-	s.pollFromDeployment(ctx, rampingVars)
-
-	s.ensureCreateVersion(ctx, currentVars, 5*time.Second)
-	s.ensureCreateVersion(ctx, rampingVars, 5*time.Second)
-}
-
 // Should see that the ramping version of the task queues in the current version is unversioned
 func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unversioned_VersionedCurrent() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
@@ -781,7 +785,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unversioned_VersionedCurre
 	tv := testvars.New(s)
 	currentVars := tv.WithBuildIDNumber(1)
 	s.pollFromDeployment(ctx, currentVars)
-	s.ensureCreateVersion(ctx, currentVars, 5*time.Second)
+	s.ensureCreateVersion(ctx, currentVars)
 
 	// check that the current version's task queues have ramping version == ""
 	s.setCurrentVersion(ctx, currentVars, worker_versioning.UnversionedVersionId, true)
@@ -800,6 +804,21 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unversioned_VersionedCurre
 
 	// check that the current version's task queues have ramping version == __unversioned__
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), currentVars.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
+}
+
+func (s *WorkerDeploymentSuite) TestTwoPollers_EnsureCreateVersion() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer func() {
+		cancel()
+	}()
+	tv := testvars.New(s)
+	tv1 := tv.WithBuildIDNumber(1)
+	tv2 := tv.WithBuildIDNumber(2)
+
+	go s.pollFromDeployment(ctx, tv1)
+	go s.pollFromDeployment(ctx, tv2)
+	s.ensureCreateVersion(ctx, tv1)
+	s.ensureCreateVersion(ctx, tv2)
 }
 
 func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Context, tq *taskqueuepb.TaskQueue, expectedCurrentVersion, expectedRampingVersion string, expectedPercentage float32) {
