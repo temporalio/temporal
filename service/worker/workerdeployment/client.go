@@ -964,48 +964,6 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	)
 }
 
-func (d *ClientImpl) updateWithStartWorkerDeployment(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	deploymentName string,
-	updateRequest *updatepb.Request,
-	identity string,
-	requestID string,
-) (*updatepb.Outcome, error) {
-	// validate params which are used for building workflowIDs
-	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
-	if err != nil {
-		return nil, err
-	}
-
-	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
-		NamespaceName:  namespaceEntry.Name().String(),
-		NamespaceId:    namespaceEntry.ID().String(),
-		DeploymentName: deploymentName,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	memo, err := d.buildInitialMemo(deploymentName)
-	if err != nil {
-		return nil, err
-	}
-
-	return d.updateWithStart(
-		ctx,
-		namespaceEntry,
-		WorkerDeploymentWorkflowType,
-		workflowID,
-		memo,
-		input,
-		updateRequest,
-		identity,
-		requestID,
-	)
-}
-
 func (d *ClientImpl) AddVersionToWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
