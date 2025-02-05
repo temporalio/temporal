@@ -50,7 +50,6 @@ var Module = fx.Module(
 	fx.Provide(DefaultNexusTransportProvider),
 	fx.Provide(CallbackTokenGeneratorProvider),
 	fx.Provide(EndpointRegistryProvider),
-	fx.Provide(commonnexus.NewLoggedHTTPClientTraceProvider),
 	fx.Invoke(EndpointRegistryLifetimeHooks),
 	fx.Invoke(RegisterStateMachines),
 	fx.Invoke(RegisterTaskSerializers),

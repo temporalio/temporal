@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
 )
@@ -43,7 +42,6 @@ var Module = fx.Module(
 	"component.callbacks",
 	fx.Provide(ConfigProvider),
 	fx.Provide(HTTPCallerProviderProvider),
-	fx.Provide(commonnexus.NewLoggedHTTPClientTraceProvider),
 	fx.Invoke(RegisterTaskSerializers),
 	fx.Invoke(RegisterStateMachine),
 	fx.Invoke(RegisterExecutor),
