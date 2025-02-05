@@ -150,7 +150,7 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 			tag.WorkflowID(r.GetRequest().GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetRequest().GetExecution().GetRunId()),
 		}
-	case *historyservice.GetWorkflowExecutionHistoryResponse:
+	case *historyservice.GetWorkflowExecutionHistoryResponseWithRaw:
 		return nil
 	case *historyservice.GetWorkflowExecutionHistoryReverseRequest:
 		return []tag.Tag{
@@ -215,8 +215,8 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		return nil
 	case *historyservice.PauseActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetFrontendRequest().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetFrontendRequest().GetRunId()),
+			tag.WorkflowID(r.GetFrontendRequest().GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetFrontendRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.PauseActivityResponse:
 		return nil
@@ -328,8 +328,8 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		return nil
 	case *historyservice.ResetActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetFrontendRequest().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetFrontendRequest().GetRunId()),
+			tag.WorkflowID(r.GetFrontendRequest().GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetFrontendRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.ResetActivityResponse:
 		return nil
@@ -426,15 +426,15 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		return nil
 	case *historyservice.UnpauseActivityRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetFrontendRequest().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetFrontendRequest().GetRunId()),
+			tag.WorkflowID(r.GetFrontendRequest().GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetFrontendRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.UnpauseActivityResponse:
 		return nil
 	case *historyservice.UpdateActivityOptionsRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetUpdateRequest().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetUpdateRequest().GetRunId()),
+			tag.WorkflowID(r.GetUpdateRequest().GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetUpdateRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.UpdateActivityOptionsResponse:
 		return nil

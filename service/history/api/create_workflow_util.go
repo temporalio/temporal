@@ -136,6 +136,7 @@ func NewWorkflowWithSignal(
 			startRequest.StartRequest.Identity,
 			nil,
 			nil,
+			nil,
 			false,
 		)
 		if err != nil {

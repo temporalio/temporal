@@ -405,12 +405,12 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
 	var handlerErr *nexus.HandlerError
-	var opFailedErr *nexus.UnsuccessfulOperationError
+	var opFailedErr *nexus.OperationError
 
 	if errors.As(callErr, &opFailedErr) {
 		return handleUnsuccessfulOperationError(node, operation, opFailedErr)
 	} else if errors.As(callErr, &handlerErr) {
-		if !isRetryableHandlerError(handlerErr.Type) {
+		if !handlerErr.Retryable() {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 			// Although Failure is nullable, Nexus SDK is expected to always populate this field
 			return handleNonRetryableStartOperationError(node, operation, handlerErr)
@@ -631,7 +631,7 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
 				var handlerErr *nexus.HandlerError
-				isRetryable := !errors.Is(callErr, ErrOperationTimeoutBelowMin) && (!errors.As(callErr, &handlerErr) || isRetryableHandlerError(handlerErr.Type))
+				isRetryable := !errors.Is(callErr, ErrOperationTimeoutBelowMin) && (!errors.As(callErr, &handlerErr) || handlerErr.Retryable())
 				failure, err := callErrToFailure(callErr, isRetryable)
 				if err != nil {
 					return hsm.TransitionOutput{}, err
@@ -702,7 +702,7 @@ func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *f
 
 func startCallOutcomeTag(callCtx context.Context, result *nexus.ClientStartOperationResult[*nexus.LazyValue], callErr error) string {
 	var handlerError *nexus.HandlerError
-	var opFailedError *nexus.UnsuccessfulOperationError
+	var opFailedError *nexus.OperationError
 
 	if callErr != nil {
 		if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
@@ -741,34 +741,14 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 	return "successful"
 }
 
-func isRetryableHandlerError(eType nexus.HandlerErrorType) bool {
-	switch eType {
-	case nexus.HandlerErrorTypeResourceExhausted,
-		nexus.HandlerErrorTypeInternal,
-		nexus.HandlerErrorTypeUnavailable,
-		nexus.HandlerErrorTypeUpstreamTimeout:
-		return true
-	case nexus.HandlerErrorTypeBadRequest,
-		nexus.HandlerErrorTypeUnauthenticated,
-		nexus.HandlerErrorTypeUnauthorized,
-		nexus.HandlerErrorTypeNotFound,
-		nexus.HandlerErrorTypeNotImplemented:
-		return false
-	default:
-		// Default to retryable in case other error types are added in the future.
-		// It's better to retry than unexpectedly fail.
-		return true
-	}
-}
-
 func isDestinationDown(err error) bool {
 	var handlerError *nexus.HandlerError
-	var opFailedErr *nexus.UnsuccessfulOperationError
+	var opFailedErr *nexus.OperationError
 	if errors.As(err, &opFailedErr) {
 		return false
 	}
 	if errors.As(err, &handlerError) {
-		return isRetryableHandlerError(handlerError.Type)
+		return handlerError.Retryable()
 	}
 	if errors.Is(err, ErrResponseBodyTooLarge) {
 		return false
@@ -784,21 +764,12 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 	if errors.As(callErr, &handlerErr) {
 		failure := &failurepb.Failure{
 			Message: handlerErr.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					Type:         "NexusHandlerError",
-					NonRetryable: !retryable,
+			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+					Type: string(handlerErr.Type),
 				},
 			},
-			// TODO: Replace with the FailureInfo below once there are more SDKs that support NexusHandlerFailureInfo in
-			// the wild.
-			// FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
-			// 	NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-			// 		Type: string(handlerErr.Type),
-			// 	},
-			// },
 		}
-
 		var failureError *nexus.FailureError
 		if errors.As(handlerErr.Cause, &failureError) {
 			var err error
