@@ -95,8 +95,11 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	selector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		var newInfo *deploymentpb.VersionDrainageInfo
 		c.Receive(ctx, &newInfo)
+		if d.VersionState.GetDrainageInfo() == nil {
+			d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
+		}
 		d.VersionState.DrainageInfo.LastCheckedTime = newInfo.LastCheckedTime
-		if d.VersionState.DrainageInfo.Status != newInfo.Status {
+		if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
 			d.VersionState.DrainageInfo.Status = newInfo.Status
 			d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
 		}
@@ -111,8 +114,11 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 }
 
 func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
-	if d.VersionState == nil {
-		d.VersionState = &deploymentspb.VersionLocalState{}
+	if d.GetVersionState().Version == nil {
+		return fmt.Errorf("version cannot be nil on start")
+	}
+	if d.VersionState.GetCreateTime() == nil {
+		d.VersionState.CreateTime = timestamppb.New(workflow.Now(ctx))
 	}
 
 	// if we were draining and just continued-as-new, restart drainage child wf
