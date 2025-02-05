@@ -24,7 +24,6 @@ package unpauseactivity
 
 import (
 	"context"
-
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
