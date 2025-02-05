@@ -1689,14 +1689,13 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			}
 		} else if vd := req.GetUpdateVersionData(); vd != nil {
 			if vd.GetVersion() == nil { // unversioned ramp
-				if vd.GetRampingSinceTime() == nil {
-					// unset unversioned ramp
+				if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
+					return nil, false, errUserDataUnmodified
+				}
+				// only update if the timestamp is more recent
+				if vd.GetRampingSinceTime() == nil { // unset
 					deploymentData.UnversionedRampData = nil
-				} else {
-					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
-						return nil, false, errUserDataUnmodified
-					}
-					// only update if the timestamp is more recent
+				} else { // set or update
 					deploymentData.UnversionedRampData = vd
 				}
 			} else if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
