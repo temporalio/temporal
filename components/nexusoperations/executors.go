@@ -209,7 +209,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		tag.AttemptStart(time.Now().UTC()),
 		tag.Attempt(task.Attempt),
 	)
-	if trace := e.HTTPTraceProvider.NewTrace(ns.Name().String(), task.Attempt, traceLogger); trace != nil {
+	if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
 		callCtx = httptrace.WithClientTrace(callCtx, trace)
 	}
 
@@ -562,7 +562,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		tag.AttemptStart(time.Now().UTC()),
 		tag.Attempt(task.Attempt),
 	)
-	if trace := e.HTTPTraceProvider.NewTrace(ns.Name().String(), task.Attempt, traceLogger); trace != nil {
+	if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
 		callCtx = httptrace.WithClientTrace(callCtx, trace)
 	}
 

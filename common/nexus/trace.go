@@ -37,10 +37,10 @@ type HTTPClientTraceProvider interface {
 	// lifecycle. This trace must be added to the HTTP request context using httptrace.WithClientTrace for the hooks to
 	// be invoked. The provided logger should already be tagged with relevant request information
 	// e.g. using log.With(logger, tag.RequestID(id), tag.Operation(op), ...).
-	NewTrace(namespace string, attempt int32, logger log.Logger) *httptrace.ClientTrace
+	NewTrace(attempt int32, logger log.Logger) *httptrace.ClientTrace
 }
 
-var HTTPTraceConfig = dynamicconfig.NewNamespaceTypedSetting(
+var HTTPTraceConfig = dynamicconfig.NewGlobalTypedSetting(
 	"system.nexusHTTPTraceConfig",
 	HTTPClientTraceConfig{
 		Enabled:    false,
@@ -64,7 +64,7 @@ type HTTPClientTraceConfig struct {
 }
 
 type LoggedHTTPClientTraceProvider struct {
-	Config dynamicconfig.TypedPropertyFnWithNamespaceFilter[HTTPClientTraceConfig]
+	Config dynamicconfig.TypedPropertyFn[HTTPClientTraceConfig]
 }
 
 func NewLoggedHTTPClientTraceProvider(dc *dynamicconfig.Collection) HTTPClientTraceProvider {
@@ -73,8 +73,8 @@ func NewLoggedHTTPClientTraceProvider(dc *dynamicconfig.Collection) HTTPClientTr
 	}
 }
 
-func (p *LoggedHTTPClientTraceProvider) NewTrace(ns string, attempt int32, logger log.Logger) *httptrace.ClientTrace {
-	config := p.Config(ns)
+func (p *LoggedHTTPClientTraceProvider) NewTrace(attempt int32, logger log.Logger) *httptrace.ClientTrace {
+	config := p.Config()
 	if !config.Enabled {
 		return nil
 	}

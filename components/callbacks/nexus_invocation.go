@@ -87,7 +87,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		tag.AttemptStart(time.Now().UTC()),
 		tag.Attempt(n.attempt),
 	)
-	if trace := e.HTTPTraceProvider.NewTrace(ns.Name().String(), n.attempt, traceLogger); trace != nil {
+	if trace := e.HTTPTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 		ctx = httptrace.WithClientTrace(ctx, trace)
 	}
 
