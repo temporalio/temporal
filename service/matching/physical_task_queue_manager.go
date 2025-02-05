@@ -570,9 +570,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	// we need to update the deployment workflow to tell it about this task queue
 	// TODO: add some backoff here if we got an error last time
 
-	if c.firstPoll.IsZero() {
-		c.firstPoll = c.partitionMgr.engine.timeSource.Now()
-	}
 	err = c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
 		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
 		"matching service", uuid.New())
