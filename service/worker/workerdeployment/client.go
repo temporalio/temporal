@@ -411,7 +411,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
 		namespaceEntry,
-		versionObj.DeploymentName,
+		deploymentName,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
 			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
