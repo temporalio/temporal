@@ -51,6 +51,7 @@ type (
 		lock           workflow.Mutex
 		pendingUpdates int
 		conflictToken  []byte
+		done           bool
 	}
 )
 
@@ -128,10 +129,26 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		DeleteDeployment,
+		d.handleDeleteDeployment,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateDeleteDeployment,
+		},
+	); err != nil {
+		return err
+	}
 	// Wait until we can continue as new or are cancelled.
-	err = workflow.Await(ctx, func() bool { return workflow.GetInfo(ctx).GetContinueAsNewSuggested() && d.pendingUpdates == 0 })
+	err = workflow.Await(ctx, func() bool {
+		return (workflow.GetInfo(ctx).GetContinueAsNewSuggested() && d.pendingUpdates == 0) || d.done
+	})
 	if err != nil {
 		return err
+	}
+
+	if d.done {
+		return nil
 	}
 
 	// Continue as new when there are no pending updates and history size is greater than requestsBeforeContinueAsNew.
@@ -139,6 +156,20 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
 	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkerDeploymentWorkflowArgs)
+}
+
+func (d *WorkflowRunner) validateDeleteDeployment() error {
+	if len(d.State.Versions) > 0 {
+		return serviceerror.NewFailedPrecondition("deployment has versions, can't be deleted")
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
+	if len(d.State.Versions) == 0 {
+		d.done = true
+	}
+	return nil
 }
 
 func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
