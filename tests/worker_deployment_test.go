@@ -27,6 +27,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -1050,8 +1051,9 @@ func (s *WorkerDeploymentSuite) Name() string {
 	if len(fullName) <= 30 {
 		return fullName
 	}
-	return fmt.Sprintf("%s-%08x",
+	short := fmt.Sprintf("%s-%08x",
 		fullName[len(fullName)-21:],
 		farm.Fingerprint32([]byte(fullName)),
 	)
+	return strings.Replace(short, ".", "|", -1)
 }
