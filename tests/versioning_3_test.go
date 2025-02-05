@@ -878,22 +878,25 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 }
 
 func (s *Versioning3Suite) TestChildWorkflowInheritance_PinnedParent() {
-	s.testChildWorkflowInheritance_PinnedParent(false, false, false)
+	s.testChildWorkflowInheritance_ExpectInherit(false, false, vbPinned)
 }
 
 func (s *Versioning3Suite) TestChildWorkflowInheritance_PinnedParent_CrossTQ() {
-	s.testChildWorkflowInheritance_PinnedParent(true, false, false)
+	s.T().Skip() // until cross TQ inheritance is implemented
+	s.testChildWorkflowInheritance_ExpectInherit(true, false, vbPinned)
 }
 
 func (s *Versioning3Suite) TestChildWorkflowInheritance_PinnedParent_CrossTQ_WithOverride() {
-	s.testChildWorkflowInheritance_PinnedParent(true, true, false)
+	s.T().Skip() // until cross TQ inheritance is implemented
+	s.testChildWorkflowInheritance_ExpectInherit(true, true, vbPinned)
 }
 
 func (s *Versioning3Suite) TestChildWorkflowInheritance_PinnedParent_CrossTQ_WithOverrideButUnpinnedParentRegistration() {
-	s.testChildWorkflowInheritance_PinnedParent(true, true, true)
+	s.T().Skip() // until cross TQ inheritance is implemented
+	s.testChildWorkflowInheritance_ExpectInherit(true, true, vbUnpinned)
 }
 
-func (s *Versioning3Suite) testChildWorkflowInheritance_PinnedParent(crossTq bool, withOverride bool, unpinnedParentRegistration bool) {
+func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectInherit(crossTq bool, withOverride bool, parentRegistrationBehavior enumspb.VersioningBehavior) {
 	// Child wf of a pinned parent starts on the parents pinned version.
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
@@ -902,6 +905,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_PinnedParent(crossTq boo
 	if crossTq {
 		tv1Child = tv1Child.WithTaskQueue("child-tq")
 	}
+	tv2Child := tv1Child.WithBuildIDNumber(2)
 
 	var override *workflowpb.VersioningOverride
 	var sdkOverride sdkclient.VersioningOverride
@@ -918,10 +922,8 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_PinnedParent(crossTq boo
 
 	// This is the registered behavior which can be unpinned, but only if withOverride. We want
 	// parent's effective behavior to always be pinned.
-	parentBehavior := vbPinned
 	sdkParentBehavior := workflow.VersioningBehaviorPinned
-	if unpinnedParentRegistration {
-		parentBehavior = vbUnpinned
+	if parentRegistrationBehavior == vbUnpinned {
 		sdkParentBehavior = workflow.VersioningBehaviorAutoUpgrade
 	}
 
@@ -948,7 +950,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_PinnedParent(crossTq boo
 		var val1 string
 		s.NoError(fut1.Get(ctx, &val1))
 
-		s.verifyWorkflowVersioning(tv1, parentBehavior, tv1.Deployment(), override, nil)
+		s.verifyWorkflowVersioning(tv1, parentRegistrationBehavior, tv1.Deployment(), override, nil)
 		return val1, nil
 	}
 
@@ -1008,7 +1010,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_PinnedParent(crossTq boo
 	// make v2 current for both parent and child and unblock the wf to start the child
 	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf)
 	if crossTq {
-		s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf)
+		s.updateTaskQueueDeploymentData(tv2Child, true, 0, false, 0, tqTypeWf)
 	}
 	currentChanged <- struct{}{}
 
@@ -1018,15 +1020,31 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_PinnedParent(crossTq boo
 }
 
 func (s *Versioning3Suite) TestChildWorkflowInheritance_UnpinnedParent() {
-	s.testChildWorkflowInheritance_UnpinnedParent()
+	s.testChildWorkflowInheritance_ExpectNoInherit(false, vbUnpinned)
 }
 
-func (s *Versioning3Suite) testChildWorkflowInheritance_UnpinnedParent() {
+func (s *Versioning3Suite) TestChildWorkflowInheritance_CrossTQ() {
+	// TODO: remove this test once cross-TQ inheritance is implemented
+	s.testChildWorkflowInheritance_ExpectNoInherit(true, vbPinned)
+}
+
+func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq bool, parentBehavior enumspb.VersioningBehavior) {
 	// Child wf of an unpinned parent is always started on the Current Version of its TQ.
+	// For the time being, cross-TQ children do not inherit parents pinned version until that part
+	// is implemented.
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
-	tv2Child := tv2.WithWorkflowIDNumber(2)
+	tv1Child := tv1.WithWorkflowIDNumber(2)
+	if crossTq {
+		tv1Child = tv1Child.WithTaskQueue("child-tq")
+	}
+	tv2Child := tv1Child.WithBuildIDNumber(2)
+
+	sdkParentBehavior := workflow.VersioningBehaviorPinned
+	if parentBehavior == vbUnpinned {
+		sdkParentBehavior = workflow.VersioningBehaviorAutoUpgrade
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1052,32 +1070,32 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_UnpinnedParent() {
 			TaskQueue:  tv2Child.TaskQueue().GetName(),
 			WorkflowID: tv2Child.WorkflowID(),
 		}), "child")
-		fmt.Printf("shahab> child initiated \n")
 		var val1 string
 		s.NoError(fut1.Get(ctx, &val1))
 
-		s.verifyWorkflowVersioning(tv1, vbUnpinned, tv2.Deployment(), nil, nil)
+		s.verifyWorkflowVersioning(tv1, parentBehavior, tv1.Deployment(), nil, nil)
 		return val1, nil
 	}
 
 	// Same as v1 without channel blocking
 	wf2 := func(ctx workflow.Context) (string, error) {
-		fmt.Printf("shahab> v2 task started \n")
 		// run two child workflows
 		fut1 := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 			TaskQueue:  tv2Child.TaskQueue().GetName(),
 			WorkflowID: tv2Child.WorkflowID(),
 		}), "child")
 		var val1 string
-		fmt.Printf("shahab> v2 task started after child init \n")
 		s.NoError(fut1.Get(ctx, &val1))
 
-		s.verifyWorkflowVersioning(tv1, vbUnpinned, tv2.Deployment(), nil, nil)
+		s.verifyWorkflowVersioning(tv1, parentBehavior, tv2.Deployment(), nil, nil)
 		return val1, nil
 	}
 
 	// v1 is current for both parent and child
 	s.updateTaskQueueDeploymentData(tv1, true, 0, false, 0, tqTypeWf)
+	if crossTq {
+		s.updateTaskQueueDeploymentData(tv1Child, true, 0, false, 0, tqTypeWf)
+	}
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
@@ -1085,6 +1103,20 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_UnpinnedParent() {
 	})
 	s.NoError(err)
 
+	if crossTq {
+		w1xtq := worker.New(sdkClient, tv1Child.TaskQueue().GetName(), worker.Options{
+			BuildID:                 tv1Child.BuildID(),
+			UseBuildIDForVersioning: true,
+			DeploymentOptions: worker.DeploymentOptions{
+				DeploymentSeriesName:      tv1Child.DeploymentSeries(),
+				DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+			},
+			MaxConcurrentWorkflowTaskPollers: numPollers,
+		})
+		w1xtq.RegisterWorkflowWithOptions(childv1, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorPinned})
+		s.NoError(w1xtq.Start())
+		defer w1xtq.Stop()
+	}
 	w1 := worker.New(sdkClient, tv1.TaskQueue().GetName(), worker.Options{
 		BuildID:                 tv1.BuildID(),
 		UseBuildIDForVersioning: true,
@@ -1094,11 +1126,27 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_UnpinnedParent() {
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
-	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
-	w1.RegisterWorkflowWithOptions(childv1, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorPinned})
+	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf", VersioningBehavior: sdkParentBehavior})
+	if !crossTq {
+		w1.RegisterWorkflowWithOptions(childv1, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorPinned})
+	}
 	s.NoError(w1.Start())
 	defer w1.Stop()
 
+	if crossTq {
+		w2xtq := worker.New(sdkClient, tv2Child.TaskQueue().GetName(), worker.Options{
+			BuildID:                 tv2Child.BuildID(),
+			UseBuildIDForVersioning: true,
+			DeploymentOptions: worker.DeploymentOptions{
+				DeploymentSeriesName:      tv2Child.DeploymentSeries(),
+				DefaultVersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+			},
+			MaxConcurrentWorkflowTaskPollers: numPollers,
+		})
+		w2xtq.RegisterWorkflowWithOptions(childv2, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorPinned})
+		s.NoError(w2xtq.Start())
+		defer w2xtq.Stop()
+	}
 	w2 := worker.New(sdkClient, tv2.TaskQueue().GetName(), worker.Options{
 		BuildID:                 tv2.BuildID(),
 		UseBuildIDForVersioning: true,
@@ -1108,8 +1156,10 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_UnpinnedParent() {
 		},
 		MaxConcurrentWorkflowTaskPollers: numPollers,
 	})
-	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf", VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade})
-	w2.RegisterWorkflowWithOptions(childv2, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorPinned})
+	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf", VersioningBehavior: sdkParentBehavior})
+	if !crossTq {
+		w2.RegisterWorkflowWithOptions(childv2, workflow.RegisterOptions{Name: "child", VersioningBehavior: workflow.VersioningBehaviorPinned})
+	}
 	s.NoError(w2.Start())
 	defer w2.Stop()
 
@@ -1125,6 +1175,9 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_UnpinnedParent() {
 
 	// make v2 current for both parent and child and unblock the wf to start the child
 	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf)
+	if crossTq {
+		s.updateTaskQueueDeploymentData(tv2Child, true, 0, false, 0, tqTypeWf)
+	}
 	currentChanged <- struct{}{}
 
 	var out string

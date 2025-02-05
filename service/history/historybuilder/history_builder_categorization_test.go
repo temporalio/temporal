@@ -1234,17 +1234,16 @@ func (s *sutTestingAdapter) AddWorkflowTaskStartedEvent(_ ...eventConfig) *histo
 }
 
 func (s *sutTestingAdapter) AddWorkflowTaskCompletedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddWorkflowTaskCompletedEvent(
-		64,
+	return s.HistoryBuilder.AddWorkflowTaskCompletedEvent(64,
 		32,
 		"identity-1",
 		"checksum",
 		nil,
 		nil,
 		nil,
+		"",
 		nil,
-		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
-	)
+		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 }
 
 func (s *sutTestingAdapter) AddActivityTaskFailedEvent(optionalConfig ...eventConfig) *historypb.HistoryEvent {

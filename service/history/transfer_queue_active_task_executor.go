@@ -888,13 +888,16 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 
 	parentPinnedVersion := ""
-	if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		parentPinnedVersion = worker_versioning.WorkerDeploymentVersionToString(
-			worker_versioning.DeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment()))
-	}
 	var parentPinnedOverride *workflowpb.VersioningOverride
-	if mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		parentPinnedOverride = mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
+	if attributes.TaskQueue.GetName() == mutableState.GetExecutionInfo().GetTaskQueue() {
+		// TODO (shahab): also inherit when the child TQ is different, but in the same Version
+		if mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+			parentPinnedVersion = worker_versioning.WorkerDeploymentVersionToString(
+				worker_versioning.DeploymentVersionFromDeployment(mutableState.GetEffectiveDeployment()))
+		}
+		if mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+			parentPinnedOverride = mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
+		}
 	}
 
 	childRunID, childClock, err := t.startWorkflow(
