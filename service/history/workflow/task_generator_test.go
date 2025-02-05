@@ -25,6 +25,7 @@
 package workflow
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -51,6 +52,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -844,6 +846,148 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 					require.Equal(t, tc.expectedTaskTypes[i], task.GetType())
 				}
 			}
+		})
+	}
+}
+
+func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_WithTrimming(t *testing.T) {
+	testCases := []struct {
+		name     string
+		setup    func(*gomock.Controller, *MockMutableState) (*hsm.Registry, *hsm.Node)
+		validate func(*testing.T, []tasks.Task, []*persistencespb.StateMachineTimerGroup)
+	}{
+		{
+			name: "transition history disabled",
+			setup: func(ctrl *gomock.Controller, ms *MockMutableState) (*hsm.Registry, *hsm.Node) {
+				ms.EXPECT().IsTransitionHistoryEnabled().Return(false).AnyTimes()
+				ms.EXPECT().GetCurrentVersion().Return(int64(3)).AnyTimes()
+				ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+					StateMachineTimers: nil,
+				}).AnyTimes()
+				ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
+					tests.NamespaceID.String(),
+					tests.WorkflowID,
+					tests.RunID,
+				)).AnyTimes()
+
+				reg := hsm.NewRegistry()
+				require.NoError(t, RegisterStateMachine(reg))
+				require.NoError(t, callbacks.RegisterStateMachine(reg))
+
+				root, err := hsm.NewRoot(reg, StateMachineType, nil, map[string]*persistencespb.StateMachineMap{}, ms)
+				require.NoError(t, err)
+				ms.EXPECT().HSM().Return(root).AnyTimes()
+				return reg, root
+			},
+			validate: func(t *testing.T, tasks []tasks.Task, timers []*persistencespb.StateMachineTimerGroup) {
+				require.Empty(t, tasks)
+				require.Empty(t, timers)
+			},
+		},
+		{
+			name: "generate tasks with transitions",
+			setup: func(ctrl *gomock.Controller, ms *MockMutableState) (*hsm.Registry, *hsm.Node) {
+				ms.EXPECT().IsTransitionHistoryEnabled().Return(true).AnyTimes()
+				ms.EXPECT().GetCurrentVersion().Return(int64(3)).AnyTimes()
+				ms.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
+
+				currentTransition := &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: 3,
+					TransitionCount:          3,
+				}
+				ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+					TransitionHistory: []*persistencespb.VersionedTransition{currentTransition},
+				}).AnyTimes()
+
+				reg := hsm.NewRegistry()
+				require.NoError(t, RegisterStateMachine(reg))
+				require.NoError(t, callbacks.RegisterStateMachine(reg))
+				require.NoError(t, callbacks.RegisterTaskSerializers(reg))
+				require.NoError(t, nexusoperations.RegisterStateMachines(reg))
+				require.NoError(t, nexusoperations.RegisterTaskSerializers(reg))
+
+				root, err := hsm.NewRoot(reg, StateMachineType, nil, map[string]*persistencespb.StateMachineMap{}, ms)
+				require.NoError(t, err)
+
+				coll := callbacks.MachineCollection(root)
+				callback := callbacks.NewCallback(
+					timestamppb.Now(),
+					callbacks.NewWorkflowClosedTrigger(),
+					&persistencespb.Callback{
+						Variant: &persistencespb.Callback_Nexus_{
+							Nexus: &persistencespb.Callback_Nexus{
+								Url: "http://test-endpoint",
+							},
+						},
+					},
+				)
+
+				_, err = coll.Add("test-callback", callback)
+				require.NoError(t, err)
+
+				err = coll.Transition("test-callback", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
+					return callbacks.TransitionScheduled.Apply(cb, callbacks.EventScheduled{})
+				})
+				require.NoError(t, err)
+
+				err = coll.Transition("test-callback", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
+					return callbacks.TransitionAttemptFailed.Apply(cb, callbacks.EventAttemptFailed{
+						Time:        time.Now(),
+						Err:         errors.New("test error"),
+						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
+					})
+				})
+				require.NoError(t, err)
+
+				ms.EXPECT().HSM().Return(root).AnyTimes()
+				ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
+					tests.NamespaceID.String(),
+					tests.WorkflowID,
+					tests.RunID,
+				)).AnyTimes()
+
+				return reg, root
+			},
+			validate: func(t *testing.T, tasks []tasks.Task, timers []*persistencespb.StateMachineTimerGroup) {
+				require.Equal(t, 1, len(tasks))
+				outboundTask, ok := tasks[0].(*historytasks.StateMachineOutboundTask)
+				require.True(t, ok)
+				require.NotNil(t, outboundTask)
+
+				require.Equal(t, 1, len(timers))
+				require.Equal(t, 1, len(timers[0].Infos))
+				require.Equal(t, callbacks.TaskTypeBackoff, timers[0].Infos[0].Type)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			ms := NewMockMutableState(ctrl)
+			var genTasks []tasks.Task
+			ms.EXPECT().AddTasks(gomock.Any()).DoAndReturn(func(tasks ...tasks.Task) {
+				genTasks = append(genTasks, tasks...)
+			}).AnyTimes()
+
+			reg, _ := tc.setup(ctrl, ms)
+
+			cfg := &configs.Config{}
+			archivalMetadata := archiver.NewMockArchivalMetadata(ctrl)
+			taskGenerator := NewTaskGenerator(
+				namespace.NewMockRegistry(ctrl),
+				ms,
+				cfg,
+				archivalMetadata,
+			)
+
+			err := taskGenerator.GenerateDirtySubStateMachineTasks(reg)
+			require.NoError(t, err)
+
+			timers := ms.GetExecutionInfo().StateMachineTimers
+			tc.validate(t, genTasks, timers)
 		})
 	}
 }

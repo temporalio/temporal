@@ -27,6 +27,7 @@
 package workflow
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -295,6 +296,24 @@ func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
 func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	stateMachineRegistry *hsm.Registry,
 ) error {
+	if r.mutableState.IsTransitionHistoryEnabled() {
+		// Get the current versioned transition
+		transitionHistory := r.mutableState.GetExecutionInfo().TransitionHistory
+		if len(transitionHistory) == 0 {
+			return serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
+		}
+		currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+
+		// Trim any invalid/stale state machine timers using the current versioned transition
+		if err := TrimStateMachineTimers(r.mutableState, currentVersionedTransition); err != nil {
+			if errors.Is(err, hsm.ErrStateMachineNotFound) {
+				// This is expected if the state machine was deleted
+				return nil
+			}
+			return fmt.Errorf("failed to trim state machine timers: %w", err)
+		}
+	}
+
 	tree := r.mutableState.HSM()
 	opLog, err := tree.OpLog()
 	if err != nil {
@@ -328,7 +347,10 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 		}
 	}
 
-	AddNextStateMachineTimerTask(r.mutableState)
+	if r.mutableState.IsTransitionHistoryEnabled() {
+		// Ensure there's a timer task scheduled if needed
+		AddNextStateMachineTimerTask(r.mutableState)
+	}
 
 	return nil
 }
