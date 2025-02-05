@@ -457,7 +457,6 @@ func (s *xdcBaseSuite) failover(
 	targetCluster string,
 	targetFailoverVersion int64,
 ) {
-	// wait for replication task propagation
 	s.waitForClusterSynced()
 
 	// update namespace to fail over
@@ -484,6 +483,8 @@ func (s *xdcBaseSuite) failover(
 			}
 		}
 	}, replicationWaitTime, replicationCheckInterval)
+
+	s.waitForClusterSynced()
 }
 
 func (s *xdcBaseSuite) mustToPayload(v any) *commonpb.Payload {

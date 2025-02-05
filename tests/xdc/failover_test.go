@@ -1401,7 +1401,7 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 	s.failover(namespace, 0, s.clusterNames[1], 2)
 
 	// Update the namespace in cluster 2 to be a single cluster namespace
-	s.updateNamespaceClusters(namespace, 1, s.clusterNames[1:], []*testcore.TestCluster{s.cluster2})
+	s.updateNamespaceClusters(namespace, 0, s.clusterNames[1:], []*testcore.TestCluster{s.cluster2})
 
 	// Send a signal to cluster 2, namespace contains one cluster
 	signalName := "my signal"
