@@ -57,7 +57,7 @@ const (
 	BuildIdSearchAttributeEscape            = "|"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
-	UnversionedBuildId         = "__unversioned__"
+	UnversionedVersionId       = "__unversioned__"
 
 	// Prefixes, Delimeters and Keys
 	WorkerDeploymentVersionIdDelimiter         = "."
@@ -392,10 +392,6 @@ func FindDeploymentVersionForWorkflowID(
 ) *deploymentspb.WorkerDeploymentVersion {
 	ramp := ramping.GetRampPercentage()
 	rampingVersion := ramping.GetVersion()
-	if rampingVersion.GetBuildId() == "" {
-		// Ramping to unversioned
-		rampingVersion = nil
-	}
 	if ramp <= 0 {
 		// No ramp
 		return current.GetVersion()
@@ -427,7 +423,7 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 	}
 
 	var current *deploymentspb.DeploymentVersionData
-	var ramping *deploymentspb.DeploymentVersionData
+	ramping := deployments.GetUnversionedRampData() // nil if there is no unversioned ramp
 
 	// Find old current
 	for _, d := range deployments.GetDeployments() {
@@ -449,7 +445,7 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 				current = v
 			}
 		}
-		if v.RoutingUpdateTime != nil && v.GetRampPercentage() > 0 {
+		if v.RoutingUpdateTime != nil && v.GetRampingSinceTime() != nil {
 			if t := v.RoutingUpdateTime.AsTime(); t.After(ramping.GetRoutingUpdateTime().AsTime()) {
 				ramping = v
 			}
@@ -525,7 +521,6 @@ func WorkerDeploymentVersionFromString(s string) (*deploymentspb.WorkerDeploymen
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment workflows
 func GenerateDeploymentWorkflowID(deploymentName string) string {
-	// escaping the reserved workflow delimiter (|) from the inputs, if present
 	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + deploymentName
 }
 
@@ -536,6 +531,5 @@ func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 	})
-
 	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + versionString
 }
