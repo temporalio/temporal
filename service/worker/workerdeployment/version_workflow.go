@@ -32,7 +32,6 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
@@ -293,7 +292,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 	}
 
 	for tqName, byType := range state.TaskQueueFamilies {
-		for tqType, _ := range byType.TaskQueues {
+		for tqType := range byType.TaskQueues {
 			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 				Name: tqName,
 				Type: enumspb.TaskQueueType(tqType),
@@ -334,7 +333,7 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 	tqNameToTypes := make(map[string]*deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes)
 	for tqName, tqFamilyData := range d.VersionState.TaskQueueFamilies {
 		var tqTypes []enumspb.TaskQueueType
-		for tqType, _ := range tqFamilyData.TaskQueues {
+		for tqType := range tqFamilyData.TaskQueues {
 			tqTypes = append(tqTypes, enumspb.TaskQueueType(tqType))
 		}
 		tqNameToTypes[tqName] = &deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes{Types: tqTypes}
@@ -488,7 +487,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		Version: state.GetVersion(),
 	}
 	for tqName, byType := range state.TaskQueueFamilies {
-		for tqType, _ := range byType.TaskQueues {
+		for tqType := range byType.TaskQueues {
 			data := &deploymentspb.DeploymentVersionData{
 				Version:           d.VersionState.Version,
 				RoutingUpdateTime: args.RoutingUpdateTime,
