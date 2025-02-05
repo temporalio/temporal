@@ -64,7 +64,7 @@ const (
 )
 
 var (
-	errWorkflowResetterMaxChildren = serviceerror.NewInternal(fmt.Sprintf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState))
+	errWorkflowResetterMaxChildren = serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState))
 )
 
 type (
