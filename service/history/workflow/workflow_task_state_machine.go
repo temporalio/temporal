@@ -1146,23 +1146,21 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	wfDeploymentBefore := m.ms.GetEffectiveDeployment()
 	wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
 
-	// Change behavior based on the completed wft.
-	if wfBehaviorBefore != wftBehavior {
-		if versioningInfo == nil {
-			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
-			m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
-		}
-		versioningInfo.Behavior = wftBehavior
-	}
-	// Change deployment based on completed wft.
+	// Change deployment and behavior based on completed wft.
 	if wftBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		if versioningInfo != nil {
+			versioningInfo.Behavior = wftBehavior
 			// Deployment Version is not set for unversioned workers.
 			versioningInfo.Version = ""
 			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 			versioningInfo.Deployment = nil
 		}
 	} else {
+		if versioningInfo == nil {
+			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+			m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
+		}
+		versioningInfo.Behavior = wftBehavior
 		// Only populating the new field.
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
