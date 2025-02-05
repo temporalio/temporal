@@ -1666,55 +1666,62 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		if data.PerType == nil {
 			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
 		}
-		if data.PerType[int32(req.TaskQueueType)] == nil {
-			data.PerType[int32(req.TaskQueueType)] = &persistencespb.TaskQueueTypeUserData{}
-		}
-		if data.PerType[int32(req.TaskQueueType)].DeploymentData == nil {
-			data.PerType[int32(req.TaskQueueType)].DeploymentData = &persistencespb.DeploymentData{}
+
+		if req.TaskQueueType != enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+			req.TaskQueueTypes = append(req.TaskQueueTypes, req.TaskQueueType)
 		}
 
-		// set/append the new data
-		deploymentData := data.PerType[int32(req.TaskQueueType)].DeploymentData
-		if d := req.Deployment; d != nil {
-			// [cleanup-old-wv]
-			//nolint:staticcheck
-			if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
-				deploymentData.Deployments[idx].Data = req.Data
+		for _, t := range req.TaskQueueTypes {
+			if data.PerType[int32(t)] == nil {
+				data.PerType[int32(t)] = &persistencespb.TaskQueueTypeUserData{}
+			}
+			if data.PerType[int32(t)].DeploymentData == nil {
+				data.PerType[int32(t)].DeploymentData = &persistencespb.DeploymentData{}
+			}
+
+			// set/append the new data
+			deploymentData := data.PerType[int32(t)].DeploymentData
+			if d := req.Deployment; d != nil {
+				// [cleanup-old-wv]
+				//nolint:staticcheck
+				if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
+					deploymentData.Deployments[idx].Data = req.Data
+				} else {
+					deploymentData.Deployments = append(
+						deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
+							Deployment: req.Deployment,
+							Data:       req.Data,
+						})
+				}
+			} else if vd := req.GetUpdateVersionData(); vd != nil {
+				if vd.GetVersion() == nil { // unversioned ramp
+					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
+						return nil, false, errUserDataUnmodified
+					}
+					// only update if the timestamp is more recent
+					if vd.GetRampingSinceTime() == nil { // unset
+						deploymentData.UnversionedRampData = nil
+					} else { // set or update
+						deploymentData.UnversionedRampData = vd
+					}
+				} else if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
+					old := deploymentData.Versions[idx]
+					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
+						return nil, false, errUserDataUnmodified
+					}
+					// only update if the timestamp is more recent
+					deploymentData.Versions[idx] = vd
+				} else {
+					deploymentData.Versions = append(deploymentData.Versions, vd)
+				}
+			} else if v := req.GetForgetVersion(); v != nil {
+				if idx := findDeploymentVersion(deploymentData, v); idx >= 0 {
+					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
+				}
 			} else {
-				deploymentData.Deployments = append(
-					deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
-						Deployment: req.Deployment,
-						Data:       req.Data,
-					})
+				// No-op
+				return nil, false, errUserDataUnmodified
 			}
-		} else if vd := req.GetUpdateVersionData(); vd != nil {
-			if vd.GetVersion() == nil { // unversioned ramp
-				if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
-					return nil, false, errUserDataUnmodified
-				}
-				// only update if the timestamp is more recent
-				if vd.GetRampingSinceTime() == nil { // unset
-					deploymentData.UnversionedRampData = nil
-				} else { // set or update
-					deploymentData.UnversionedRampData = vd
-				}
-			} else if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
-				old := deploymentData.Versions[idx]
-				if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
-					return nil, false, errUserDataUnmodified
-				}
-				// only update if the timestamp is more recent
-				deploymentData.Versions[idx] = vd
-			} else {
-				deploymentData.Versions = append(deploymentData.Versions, vd)
-			}
-		} else if v := req.GetForgetVersion(); v != nil {
-			if idx := findDeploymentVersion(deploymentData, v); idx >= 0 {
-				deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
-			}
-		} else {
-			// No-op
-			return nil, false, errUserDataUnmodified
 		}
 
 		data.Clock = now

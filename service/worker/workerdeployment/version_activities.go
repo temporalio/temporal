@@ -72,26 +72,25 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 
 	for _, e := range input.Sync {
 		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
-			logger.Info("syncing task queue userdata for deployment version", "taskQueue", syncData.Name, "type", syncData.Type)
+			logger.Info("syncing task queue userdata for deployment version", "taskQueue", syncData.Name, "types", syncData.Types)
 
 			var res *matchingservice.SyncDeploymentUserDataResponse
 			var err error
 
 			if input.ForgetVersion {
 				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-					NamespaceId:   a.namespace.ID().String(),
-					TaskQueue:     syncData.Name,
-					TaskQueueType: syncData.Type,
+					NamespaceId:    a.namespace.ID().String(),
+					TaskQueue:      syncData.Name,
+					TaskQueueTypes: syncData.Types,
 					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
 						ForgetVersion: input.Version,
 					},
 				})
 			} else {
-
 				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-					NamespaceId:   a.namespace.ID().String(),
-					TaskQueue:     syncData.Name,
-					TaskQueueType: syncData.Type,
+					NamespaceId:    a.namespace.ID().String(),
+					TaskQueue:      syncData.Name,
+					TaskQueueTypes: syncData.Types,
 					Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
 						UpdateVersionData: syncData.Data,
 					},
@@ -99,7 +98,7 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 			}
 
 			if err != nil {
-				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
+				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types, "error", err)
 			} else {
 				lock.Lock()
 				maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
