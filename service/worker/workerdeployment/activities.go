@@ -68,8 +68,7 @@ func (a *Activities) SyncUnversionedRamp(
 	input *deploymentspb.SyncUnversionedRampActivityArgs,
 ) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 	logger := activity.GetLogger(ctx)
-	// first, get all the task queues in the current version
-
+	// Get all the task queues in the current version and put them into SyncUserData format
 	currVersionInfo, err := a.deploymentClient.DescribeVersion(ctx, a.namespace, input.CurrentVersion)
 	if err != nil {
 		return nil, err
@@ -89,25 +88,21 @@ func (a *Activities) SyncUnversionedRamp(
 		})
 	}
 
+	// For each task queue, sync the unversioned ramp data
 	errs := make(chan error)
-
 	var lock sync.Mutex
 	maxVersionByTQName := make(map[string]int64)
-
 	for _, e := range taskQueueSyncs {
 		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
 			logger.Info("syncing unversioned ramp to task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type)
-
 			var res *matchingservice.SyncDeploymentUserDataResponse
 			var err error
-
 			res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 				NamespaceId:   a.namespace.ID().String(),
 				TaskQueue:     syncData.Name,
 				TaskQueueType: syncData.Type,
 				Operation:     &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{UpdateVersionData: syncData.Data},
 			})
-
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
 			} else {
@@ -118,7 +113,6 @@ func (a *Activities) SyncUnversionedRamp(
 			errs <- err
 		}(e)
 	}
-
 	for range taskQueueSyncs {
 		err = cmp.Or(err, <-errs)
 	}

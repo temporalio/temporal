@@ -322,7 +322,7 @@ func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersio
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
 		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
 	}
-	if d.State.RoutingConfig.CurrentVersion == args.Version && d.State.RoutingConfig.CurrentVersionChangedTime != nil {
+	if d.State.RoutingConfig.CurrentVersion == args.Version {
 		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
 	return nil
