@@ -392,10 +392,6 @@ func FindDeploymentVersionForWorkflowID(
 ) *deploymentspb.WorkerDeploymentVersion {
 	ramp := ramping.GetRampPercentage()
 	rampingVersion := ramping.GetVersion()
-	if rampingVersion.GetBuildId() == "" {
-		// Ramping to unversioned
-		rampingVersion = nil
-	}
 	if ramp <= 0 {
 		// No ramp
 		return current.GetVersion()
@@ -427,7 +423,7 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 	}
 
 	var current *deploymentspb.DeploymentVersionData
-	var ramping *deploymentspb.DeploymentVersionData
+	ramping := deployments.GetUnversionedRampData() // nil if there is no unversioned ramp
 
 	// Find old current
 	for _, d := range deployments.GetDeployments() {
@@ -449,7 +445,7 @@ func CalculateTaskQueueVersioningInfo(deployments *persistencespb.DeploymentData
 				current = v
 			}
 		}
-		if v.RoutingUpdateTime != nil && v.GetRampPercentage() > 0 {
+		if v.RoutingUpdateTime != nil && v.GetRampingSinceTime() != nil {
 			if t := v.RoutingUpdateTime.AsTime(); t.After(ramping.GetRoutingUpdateTime().AsTime()) {
 				ramping = v
 			}

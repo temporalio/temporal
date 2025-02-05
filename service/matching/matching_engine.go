@@ -1659,7 +1659,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		// clone the whole thing so we can just mutate
 		data = common.CloneProto(data)
 
-		// fill in enough structure so we can set/append the new deployment data
+		// fill in enough structure so that we can set/append the new deployment data
 		if data == nil {
 			data = &persistencespb.TaskQueueUserData{}
 		}
@@ -1688,7 +1688,18 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 					})
 			}
 		} else if vd := req.GetUpdateVersionData(); vd != nil {
-			if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
+			if vd.GetVersion() == nil { // unversioned ramp
+				if vd.GetRampingSinceTime() == nil {
+					// unset unversioned ramp
+					deploymentData.UnversionedRampData = nil
+				} else {
+					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
+						return nil, false, errUserDataUnmodified
+					}
+					// only update if the timestamp is more recent
+					deploymentData.UnversionedRampData = vd
+				}
+			} else if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 				old := deploymentData.Versions[idx]
 				if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
 					return nil, false, errUserDataUnmodified

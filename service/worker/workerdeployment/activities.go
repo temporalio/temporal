@@ -105,9 +105,7 @@ func (a *Activities) SyncUnversionedRamp(
 				NamespaceId:   a.namespace.ID().String(),
 				TaskQueue:     syncData.Name,
 				TaskQueueType: syncData.Type,
-				Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
-					UpdateVersionData: syncData.Data,
-				},
+				Operation:     &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{UpdateVersionData: syncData.Data},
 			})
 
 			if err != nil {
