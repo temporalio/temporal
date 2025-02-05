@@ -30,7 +30,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -116,7 +115,7 @@ func Invoke(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = CreateRecordWorkflowTaskStartedResponseWithRaw(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
+					resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
 					if err != nil {
 						return nil, err
 					}
@@ -229,7 +228,7 @@ func Invoke(
 				),
 			).Record(workflowScheduleToStartLatency)
 
-			resp, err = CreateRecordWorkflowTaskStartedResponseWithRaw(
+			resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 				ctx,
 				mutableState,
 				updateRegistry,
@@ -336,16 +335,6 @@ func setHistoryForRecordWfTaskStartedResp(
 	for i, blob := range rawHistory {
 		historyBlobs[i] = blob.Data
 	}
-	// If there are no events in the history, frontend will not be able to deserialize the raw bytes response to History object.
-	// In that case, create an empty history object and set it in the response.
-	if len(historyBlobs) == 0 {
-		history := historypb.History{}
-		blob, err := history.Marshal()
-		if err != nil {
-			return err
-		}
-		historyBlobs = append(historyBlobs, blob)
-	}
 	response.History = historyBlobs
 	response.NextPageToken = continuation
 	return nil
@@ -417,7 +406,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 	return response, nil
 }
 
-func CreateRecordWorkflowTaskStartedResponseWithRaw(
+func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 	ctx context.Context,
 	ms workflow.MutableState,
 	updateRegistry update.Registry,
