@@ -447,7 +447,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 	}
-	if versionObj.GetDeploymentName() != deploymentName {
+	if versionObj.GetDeploymentName() != "" && versionObj.GetDeploymentName() != deploymentName {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName))
 	}
 
@@ -464,7 +464,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
 		namespaceEntry,
-		versionObj.DeploymentName,
+		deploymentName,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
 			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
@@ -511,18 +511,11 @@ func (d *ClientImpl) SetRampingVersion(
 	requestID := uuid.New()
 	var versionObj *deploymentspb.WorkerDeploymentVersion
 	var err error
-	if version == "" {
-		versionObj = &deploymentspb.WorkerDeploymentVersion{
-			DeploymentName: deploymentName,
-			BuildId:        "",
-		}
-	} else {
-		versionObj, err = worker_versioning.WorkerDeploymentVersionFromString(version)
-		if err != nil {
-			return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
-		}
+	versionObj, err = worker_versioning.WorkerDeploymentVersionFromString(version)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
 	}
-	if versionObj.GetDeploymentName() != deploymentName {
+	if versionObj.GetDeploymentName() != "" && versionObj.GetDeploymentName() != deploymentName {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName))
 	}
 
@@ -539,7 +532,7 @@ func (d *ClientImpl) SetRampingVersion(
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
 		namespaceEntry,
-		versionObj.GetDeploymentName(),
+		deploymentName,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetRampingVersion, Args: updatePayload},
 			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
