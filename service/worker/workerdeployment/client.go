@@ -30,6 +30,10 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/temporal"
+
+	"go.temporal.io/api/workflowservice/v1"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -38,8 +42,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
-	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -739,6 +741,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 
 	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
 
+	now := timestamppb.Now()
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
@@ -747,6 +750,13 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 				DeploymentName: deploymentName,
 				BuildId:        buildID,
 			},
+			CreateTime:        now,
+			RoutingUpdateTime: now,
+			CurrentSinceTime:  nil,                                 // not current
+			RampingSinceTime:  nil,                                 // not ramping
+			RampPercentage:    0,                                   // not ramping
+			DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
+			Metadata:          nil,                                 // todo
 		},
 	})
 	if err != nil {
@@ -1056,7 +1066,7 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		RampingSinceTime:   state.RampingSinceTime,
 		RampPercentage:     state.RampPercentage,
 		TaskQueueInfos:     taskQueues,
-		DrainageInfo:       state.GetDrainageInfo(),
+		DrainageInfo:       state.DrainageInfo,
 		Metadata:           state.Metadata,
 	}
 }
