@@ -33,6 +33,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -75,7 +76,8 @@ func (d telemetryQueueV2) CreateQueue(ctx context.Context, request *_sourcePersi
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	ip1, err = d.QueueV2.CreateQueue(ctx, request)
@@ -116,7 +118,8 @@ func (d telemetryQueueV2) EnqueueMessage(ctx context.Context, request *_sourcePe
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	ip1, err = d.QueueV2.EnqueueMessage(ctx, request)
@@ -157,7 +160,8 @@ func (d telemetryQueueV2) ListQueues(ctx context.Context, request *_sourcePersis
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	ip1, err = d.QueueV2.ListQueues(ctx, request)
@@ -198,7 +202,8 @@ func (d telemetryQueueV2) RangeDeleteMessages(ctx context.Context, request *_sou
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	ip1, err = d.QueueV2.RangeDeleteMessages(ctx, request)
@@ -239,7 +244,8 @@ func (d telemetryQueueV2) ReadMessages(ctx context.Context, request *_sourcePers
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	ip1, err = d.QueueV2.ReadMessages(ctx, request)

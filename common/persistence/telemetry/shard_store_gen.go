@@ -33,6 +33,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -75,7 +76,8 @@ func (d telemetryMetadataStore) CreateNamespace(ctx context.Context, request *_s
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	cp1, err = d.MetadataStore.CreateNamespace(ctx, request)
@@ -116,7 +118,8 @@ func (d telemetryMetadataStore) DeleteNamespace(ctx context.Context, request *_s
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	err = d.MetadataStore.DeleteNamespace(ctx, request)
@@ -150,7 +153,8 @@ func (d telemetryMetadataStore) DeleteNamespaceByName(ctx context.Context, reque
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	err = d.MetadataStore.DeleteNamespaceByName(ctx, request)
@@ -184,7 +188,8 @@ func (d telemetryMetadataStore) GetMetadata(ctx context.Context) (gp1 *_sourcePe
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	gp1, err = d.MetadataStore.GetMetadata(ctx)
@@ -218,7 +223,8 @@ func (d telemetryMetadataStore) GetNamespace(ctx context.Context, request *_sour
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	ip1, err = d.MetadataStore.GetNamespace(ctx, request)
@@ -259,7 +265,8 @@ func (d telemetryMetadataStore) ListNamespaces(ctx context.Context, request *_so
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	ip1, err = d.MetadataStore.ListNamespaces(ctx, request)
@@ -300,7 +307,8 @@ func (d telemetryMetadataStore) RenameNamespace(ctx context.Context, request *_s
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	err = d.MetadataStore.RenameNamespace(ctx, request)
@@ -334,7 +342,8 @@ func (d telemetryMetadataStore) UpdateNamespace(ctx context.Context, request *_s
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	err = d.MetadataStore.UpdateNamespace(ctx, request)

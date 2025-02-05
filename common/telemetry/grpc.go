@@ -26,6 +26,7 @@ package telemetry
 
 import (
 	"context"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
@@ -141,7 +142,8 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 				span.SetAttributes(attribute.StringSlice("rpc.request.headers."+key, values))
 			}
 			if deadline, ok := ctx.Deadline(); ok {
-				span.SetAttributes(attribute.Int64("rpc.request.deadline", deadline.UnixNano()))
+				span.SetAttributes(attribute.String("rpc.request.deadline", deadline.Format(time.RFC3339Nano)))
+				span.SetAttributes(attribute.String("rpc.request.timeout", time.Until(deadline).String()))
 			}
 		}
 	case *stats.InPayload:

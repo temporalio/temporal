@@ -33,6 +33,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -75,7 +76,8 @@ func (d telemetryShardStore) AssertShardOwnership(ctx context.Context, request *
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	err = d.ShardStore.AssertShardOwnership(ctx, request)
@@ -109,7 +111,8 @@ func (d telemetryShardStore) GetOrCreateShard(ctx context.Context, request *_sou
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	ip1, err = d.ShardStore.GetOrCreateShard(ctx, request)
@@ -150,7 +153,8 @@ func (d telemetryShardStore) UpdateShard(ctx context.Context, request *_sourcePe
 	defer span.End()
 
 	if deadline, ok := ctx.Deadline(); ok {
-		span.SetAttributes(attribute.Int64("persistence.deadline", deadline.UnixNano()))
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
 	err = d.ShardStore.UpdateShard(ctx, request)
