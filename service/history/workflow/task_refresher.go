@@ -28,6 +28,7 @@ package workflow
 
 import (
 	"context"
+	"slices"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -656,10 +657,21 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 	}
 
 	if len(nodesToRefresh) != 0 {
-		// TODO: after hsm node tombstone is tracked in mutable state,
-		// also trigger trim when there are new tombstones after minVersionedTransition
-		if err := TrimStateMachineTimers(mutableState, minVersionedTransition); err != nil {
-			return err
+		haveNewDeletedStateMachines := slices.ContainsFunc(mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches, func(batch *persistencespb.StateMachineTombstoneBatch) bool {
+			isFreshBatch := CompareVersionedTransition(
+				batch.VersionedTransition,
+				minVersionedTransition,
+			) >= 0
+			return isFreshBatch || slices.ContainsFunc(batch.StateMachineTombstones, func(ts *persistencespb.StateMachineTombstone) bool {
+				// At least one state machine node was deleted.
+				return ts.GetStateMachinePath() != nil
+			})
+		})
+
+		if len(nodesToRefresh) != 0 || haveNewDeletedStateMachines {
+			if err := TrimStateMachineTimers(mutableState, minVersionedTransition); err != nil {
+				return err
+			}
 		}
 	}
 
