@@ -1084,6 +1084,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		timeSinceLastFanOut := rootPM.TimeSinceLastFanOut()
 		lastFanOutTTL := tqConfig.TaskQueueInfoByBuildIdTTL()
 
+		// TODO bug fix: We cache the same map regardless of VersionSelection or TaskQueueTypes, so if someone queries the Activity Task Queue type of this task queue name, we cache that result and return it even if the next DescribeTQ call is about the WF TQ
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		if timeSinceLastFanOut > lastFanOutTTL {
 			// collect internal info
