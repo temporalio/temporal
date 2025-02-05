@@ -347,10 +347,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 		}
 	}
 
-	if r.mutableState.IsTransitionHistoryEnabled() {
-		// Ensure there's a timer task scheduled if needed
-		AddNextStateMachineTimerTask(r.mutableState)
-	}
+	AddNextStateMachineTimerTask(r.mutableState)
 
 	return nil
 }
