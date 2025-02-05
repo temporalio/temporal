@@ -29,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sync/atomic"
 
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -38,11 +37,9 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -117,12 +114,11 @@ type (
 		store UpdateStore
 
 		instrumentation      instrumentation
-		maxInFlight          atomic.Int32
-		maxTotal             atomic.Int32
-		maxRegistrySizeLimit atomic.Int32
+		maxInFlight          func() int
+		maxTotal             func() int
+		maxRegistrySizeLimit func() int
 		completedCount       int
 		failoverVersion      int64
-		onClear              []func()
 	}
 
 	Option func(*registry)
@@ -132,45 +128,24 @@ var _ Registry = (*registry)(nil)
 
 // WithInFlightLimit provides an optional limit to the number of incomplete
 // Updates that a Registry instance will allow.
-func WithInFlightLimit(
-	ns namespace.Name,
-	dc dynamicconfig.TypedSubscribableWithNamespaceFilter[int],
-) Option {
+func WithInFlightLimit(f func() int) Option {
 	return func(r *registry) {
-		init, cancel := dc(ns.String(), func(i int) {
-			r.maxInFlight.Store(int32(i))
-		})
-		r.maxInFlight.Store(int32(init))
-		r.onClear = append(r.onClear, cancel)
+		r.maxInFlight = f
 	}
 }
 
 // WithRegistrySizeLimit provides an optional limit to the total payload size of incomplete
 // Updates that a Registry instance will allow.
-func WithRegistrySizeLimit(
-	ns namespace.Name,
-	dc dynamicconfig.TypedSubscribableWithNamespaceFilter[int],
-) Option {
+func WithRegistrySizeLimit(f func() int) Option {
 	return func(r *registry) {
-		init, cancel := dc(ns.String(), func(i int) {
-			r.maxRegistrySizeLimit.Store(int32(i))
-		})
-		r.maxRegistrySizeLimit.Store(int32(init))
-		r.onClear = append(r.onClear, cancel)
+		r.maxRegistrySizeLimit = f
 	}
 }
 
 // WithTotalLimit provides an optional limit to the total number of Updates for workflow run.
-func WithTotalLimit(
-	ns namespace.Name,
-	dc dynamicconfig.TypedSubscribableWithNamespaceFilter[int],
-) Option {
+func WithTotalLimit(f func() int) Option {
 	return func(r *registry) {
-		init, cancel := dc(ns.String(), func(i int) {
-			r.maxTotal.Store(int32(i))
-		})
-		r.maxTotal.Store(int32(init))
-		r.onClear = append(r.onClear, cancel)
+		r.maxTotal = f
 	}
 }
 
@@ -201,10 +176,13 @@ func NewRegistry(
 	opts ...Option,
 ) Registry {
 	r := &registry{
-		updates:         make(map[string]*Update),
-		store:           store,
-		instrumentation: noopInstrumentation,
-		failoverVersion: store.GetCurrentVersion(),
+		updates:              make(map[string]*Update),
+		store:                store,
+		instrumentation:      noopInstrumentation,
+		maxRegistrySizeLimit: func() int { return 0 }, // ie disabled
+		maxInFlight:          func() int { return 0 }, // ie disabled
+		maxTotal:             func() int { return 0 }, // ie disabled
+		failoverVersion:      store.GetCurrentVersion(),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -384,10 +362,6 @@ func (r *registry) Send(
 func (r *registry) Clear() {
 	r.Abort(AbortReasonRegistryCleared)
 
-	for _, f := range r.onClear {
-		f()
-	}
-
 	r.updates = nil
 	r.completedCount = 0
 }
@@ -424,7 +398,7 @@ func (r *registry) checkLimits() error {
 }
 
 func (r *registry) checkInflightLimit() error {
-	maxInFlight := int(r.maxInFlight.Load())
+	maxInFlight := r.maxInFlight()
 	if maxInFlight == 0 {
 		// limit is disabled
 		return nil
@@ -443,7 +417,7 @@ func (r *registry) checkInflightLimit() error {
 func (r *registry) payloadSizeLimiter() updateOpt {
 	return withLimitChecker(
 		func(req *updatepb.Request) error {
-			maxRegistrySize := int(r.maxRegistrySizeLimit.Load())
+			maxRegistrySize := r.maxRegistrySizeLimit()
 			if maxRegistrySize == 0 {
 				// limit is disabled
 				return nil
@@ -460,7 +434,7 @@ func (r *registry) payloadSizeLimiter() updateOpt {
 }
 
 func (r *registry) checkTotalLimit() error {
-	maxTotal := int(r.maxTotal.Load())
+	maxTotal := r.maxTotal()
 	if maxTotal == 0 {
 		// limit is disabled
 		return nil
