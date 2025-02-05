@@ -768,9 +768,11 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 				response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
 			}
 		}
-		err = api.ProcessOutgoingSearchAttributes(wh.namespaceRegistry, wh.saProvider, wh.saMapperProvider, response.Response.History.Events, namespaceID, wh.visibilityMgr)
-		if err != nil {
-			return nil, err
+		if response.Response.History != nil {
+			err = api.ProcessOutgoingSearchAttributes(wh.namespaceRegistry, wh.saProvider, wh.saMapperProvider, response.Response.History.Events, namespaceID, wh.visibilityMgr)
+			if err != nil {
+				return nil, err
+			}
 		}
 		err = fixFollowEvents(ctx, wh.versionChecker, isCloseEventOnly, response.Response.History)
 		if err != nil {
