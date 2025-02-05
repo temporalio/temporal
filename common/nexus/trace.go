@@ -73,6 +73,7 @@ func NewLoggedHTTPClientTraceProvider(dc *dynamicconfig.Collection) HTTPClientTr
 	}
 }
 
+//nolint:revive // cognitive complexity 30 (> 25 max) but is just adding a function for each method in the list.
 func (p *LoggedHTTPClientTraceProvider) NewTrace(attempt int32, logger log.Logger) *httptrace.ClientTrace {
 	config := p.Config()
 	if !config.Enabled {
