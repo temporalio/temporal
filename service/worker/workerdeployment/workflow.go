@@ -241,7 +241,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		}
 
 		// tell previous ramping version, if present, that it's no longer ramping
-		if prevRampingVersion != newRampingVersion {
+		if prevRampingVersion != "" && prevRampingVersion != newRampingVersion {
 			unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 				RoutingUpdateTime: routingUpdateTime,
 				RampingSinceTime:  nil, // remove ramp
@@ -484,7 +484,7 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 	// check propagation
 	err = workflow.ExecuteActivity(
 		activityCtx,
-		d.a.CheckWorkerDeploymentUserDataPropagation,
+		d.a.CheckUnversionedRampUserDataPropagation,
 		&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
 			TaskQueueMaxVersions: res.TaskQueueMaxVersions,
 		}).Get(ctx, nil)

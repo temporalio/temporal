@@ -128,7 +128,7 @@ func (a *Activities) SyncUnversionedRamp(
 	return &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: maxVersionByTQName}, nil
 }
 
-func (a *Activities) CheckWorkerDeploymentUserDataPropagation(ctx context.Context, input *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
+func (a *Activities) CheckUnversionedRampUserDataPropagation(ctx context.Context, input *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
 	logger := activity.GetLogger(ctx)
 
 	errs := make(chan error)
