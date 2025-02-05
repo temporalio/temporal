@@ -520,14 +520,16 @@ func (d *ClientImpl) SetRampingVersion(
 	//revive:disable-next-line:defer
 	defer d.record("SetRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
 	requestID := uuid.New()
-	var versionObj *deploymentspb.WorkerDeploymentVersion
 	var err error
-	versionObj, err = worker_versioning.WorkerDeploymentVersionFromString(version)
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
-	}
-	if versionObj.GetDeploymentName() != "" && versionObj.GetDeploymentName() != deploymentName {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName))
+	if version != "" {
+		var versionObj *deploymentspb.WorkerDeploymentVersion
+		versionObj, err = worker_versioning.WorkerDeploymentVersionFromString(version)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
+		}
+		if versionObj.GetDeploymentName() != "" && versionObj.GetDeploymentName() != deploymentName {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName))
+		}
 	}
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetRampingVersionArgs{
