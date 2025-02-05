@@ -424,8 +424,8 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 		},
 	}
 
-	error := s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
-	s.Nil(error)
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
+	s.Nil(err)
 
 	// Version will bypass "drained" check but delete should still fail since we have active pollers.
 	s.tryDeleteVersion(ctx, tv1, false)
@@ -473,8 +473,8 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 		},
 	}
 
-	error := s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
-	s.Nil(error)
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
+	s.Nil(err)
 
 	// Wait for pollers going away
 	s.EventuallyWithT(func(t *assert.CollectT) {

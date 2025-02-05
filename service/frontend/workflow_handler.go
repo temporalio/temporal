@@ -3513,9 +3513,8 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 }
 
 func (wh *WorkflowHandler) DeleteWorkerDeployment(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentRequest) (*workflowservice.DeleteWorkerDeploymentResponse, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
-	return nil, nil
 }
 
 func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, request *workflowservice.DeleteWorkerDeploymentVersionRequest) (_ *workflowservice.DeleteWorkerDeploymentVersionResponse, retError error) {
