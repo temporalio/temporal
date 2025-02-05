@@ -38,6 +38,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
@@ -45,7 +47,6 @@ import (
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protorequire"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -1324,6 +1325,8 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 	const pageSize = 1
 	pageCount := 0
 	outputNamespaces := make(map[string]*p.GetNamespaceResponse)
+	lastPageEmpty := false
+
 	for {
 		resp, err := m.ListNamespaces(pageSize, token)
 		m.NoError(err)
@@ -1336,12 +1339,18 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 		}
 		pageCount++
 		if len(token) == 0 {
+			lastPageEmpty = len(resp.Namespaces) == 0
 			break
 		}
 	}
 
-	// 2 pages with data and 1 empty page which is unavoidable.
-	m.Equal(pageCount, 3)
+	// There should be 2 non-empty pages. Some persistence backends return an unavoidable empty final page.
+	if lastPageEmpty {
+		m.Equal(pageCount, 3)
+	} else {
+		m.Equal(pageCount, 2)
+	}
+
 	m.Equal(len(inputNamespaces), len(outputNamespaces))
 	for _, namespace := range inputNamespaces {
 		m.DeepEqual(namespace, outputNamespaces[namespace.Namespace.Info.Id])
@@ -1410,6 +1419,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 	var token []byte
 	var listNamespacesPageSize2 []*p.GetNamespaceResponse
 	pageCount := 0
+	lastPageEmpty := false
 	for {
 		resp, err := m.ListNamespaces(2, token)
 		m.NoError(err)
@@ -1417,18 +1427,24 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 		listNamespacesPageSize2 = append(listNamespacesPageSize2, resp.Namespaces...)
 		pageCount++
 		if len(token) == 0 {
+			lastPageEmpty = len(resp.Namespaces) == 0
 			break
 		}
 	}
 
-	// 1 page with data and 1 empty page which is unavoidable.
-	m.Equal(2, pageCount)
+	// There should be 1 non-empty page. Some persistence backends return an unavoidable empty final page.
+	if lastPageEmpty {
+		m.Equal(2, pageCount)
+	} else {
+		m.Equal(1, pageCount)
+	}
 	m.Len(listNamespacesPageSize2, 2)
 	for _, namespace := range listNamespacesPageSize2 {
 		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
 	}
 
 	pageCount = 0
+	lastPageEmpty = false
 	var listNamespacesPageSize1 []*p.GetNamespaceResponse
 	for {
 		resp, err := m.ListNamespaces(1, token)
@@ -1437,12 +1453,17 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 		listNamespacesPageSize1 = append(listNamespacesPageSize1, resp.Namespaces...)
 		pageCount++
 		if len(token) == 0 {
+			lastPageEmpty = len(resp.Namespaces) == 0
 			break
 		}
 	}
 
-	// 2 pages with data and 1 empty page which is unavoidable.
-	m.Equal(3, pageCount)
+	// There should be 2 non-empty pages. Some persistence backends return an unavoidable empty final page.
+	if lastPageEmpty {
+		m.Equal(3, pageCount)
+	} else {
+		m.Equal(2, pageCount)
+	}
 	m.Len(listNamespacesPageSize1, 2)
 	for _, namespace := range listNamespacesPageSize1 {
 		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
