@@ -768,7 +768,7 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 }
 
 func failureSourceFromContext(callCtx context.Context) string {
-	val := callCtx.Value(commonnexus.FailureSourceContextKey{})
+	val := callCtx.Value(commonnexus.FailureSourceContextKey)
 	if val == nil {
 		return ""
 	}

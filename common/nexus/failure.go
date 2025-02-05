@@ -44,7 +44,9 @@ const (
 	FailureSourceWorker = "worker"
 )
 
-type FailureSourceContextKey struct{}
+type failureSourceContextKeyType struct{}
+
+var FailureSourceContextKey = failureSourceContextKeyType{}
 
 var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
 

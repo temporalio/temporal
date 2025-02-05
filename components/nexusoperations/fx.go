@@ -142,7 +142,7 @@ func ClientProviderFactory(
 				if resp != nil && resp.Header != nil {
 					if failureSource := resp.Header.Get(commonnexus.FailureSourceHeaderName); failureSource != "" {
 						// Abuse the context to propagate this value back to the task executor since it cannot access response headers directly.
-						ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey{}, failureSource)
+						ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, failureSource)
 					}
 				}
 				return resp, callErr
