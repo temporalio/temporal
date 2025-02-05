@@ -288,10 +288,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
-	//s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
-	//s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
-	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
-		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
 	namespaceID := tests.NamespaceID
 	we := &commonpb.WorkflowExecution{
@@ -612,10 +608,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
-	//s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
-	//s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
-	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
-		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
 	namespaceID := tests.NamespaceID
 	workflowExecution := &commonpb.WorkflowExecution{

@@ -5662,13 +5662,13 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	s.NoError(err)
 	s.False(resp.Response.Archived)
 	s.Empty(resp.Response.History)
-	s.Len(resp.Response.RawHistory, 4)
-	event, err := s.mockShard.GetPayloadSerializer().DeserializeEvent(resp.Response.RawHistory[2])
+	s.Len(resp.Response.RawHistory, 3)
+	history := historypb.History{}
+	err = history.Unmarshal(resp.Response.RawHistory[2].Data)
 	s.NoError(err)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, event.EventType)
-	event, err = s.mockShard.GetPayloadSerializer().DeserializeEvent(resp.Response.RawHistory[3])
-	s.NoError(err)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, event.EventType)
+	s.Len(history.Events, 2)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, history.Events[0].EventType)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, history.Events[1].EventType)
 }
 
 func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkflowID() {
