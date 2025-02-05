@@ -276,7 +276,7 @@ func createNamespace(
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range clusters[0].Host().FrontendNamespaceRegistries() {
+		for _, r := range clusters[0].Host().NamespaceRegistries() {
 			resp, err := r.GetNamespace(namespace.Name(ns))
 			assert.NoError(t, err)
 			if assert.NotNil(t, resp) {
@@ -290,7 +290,7 @@ func createNamespace(
 		// Check other clusters too.
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			for _, c := range clusters[1:] {
-				for _, r := range c.Host().FrontendNamespaceRegistries() {
+				for _, r := range c.Host().NamespaceRegistries() {
 					resp, err := r.GetNamespace(namespace.Name(ns))
 					assert.NoError(t, err)
 					if assert.NotNil(t, resp) {
@@ -315,7 +315,9 @@ func updateNamespaceConfig(
 
 	configVersion := int64(-1)
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range clusters[inClusterIndex].Host().FrontendNamespaceRegistries() {
+		for _, r := range clusters[inClusterIndex].Host().NamespaceRegistries() {
+			// TODO(alex): here and everywere else in this file: instead of waiting for registry to be updated
+			// r.RefreshNamespaceById() can be used. It will require to pass nsID everywhere.
 			resp, err := r.GetNamespace(namespace.Name(ns))
 			assert.NoError(t, err)
 			if assert.NotNil(t, resp) {
@@ -340,7 +342,7 @@ func updateNamespaceConfig(
 	configVersion++
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range clusters[inClusterIndex].Host().FrontendNamespaceRegistries() {
+		for _, r := range clusters[inClusterIndex].Host().NamespaceRegistries() {
 			resp, err := r.GetNamespace(namespace.Name(ns))
 			assert.NoError(t, err)
 			if assert.NotNil(t, resp) {
@@ -356,7 +358,7 @@ func updateNamespaceConfig(
 				if ci == inClusterIndex {
 					continue
 				}
-				for _, r := range c.Host().FrontendNamespaceRegistries() {
+				for _, r := range c.Host().NamespaceRegistries() {
 					resp, err := r.GetNamespace(namespace.Name(ns))
 					assert.NoError(t, err)
 					if assert.NotNil(t, resp) {
@@ -399,7 +401,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 
 	var isGlobalNamespace bool
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range clusters[inClusterIndex].Host().FrontendNamespaceRegistries() {
+		for _, r := range clusters[inClusterIndex].Host().NamespaceRegistries() {
 			resp, err := r.GetNamespace(namespace.Name(ns))
 			assert.NoError(t, err)
 			if assert.NotNil(t, resp) {
@@ -417,7 +419,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 				if ci == inClusterIndex {
 					continue
 				}
-				for _, r := range c.Host().FrontendNamespaceRegistries() {
+				for _, r := range c.Host().NamespaceRegistries() {
 					resp, err := r.GetNamespace(namespace.Name(ns))
 					assert.NoError(t, err)
 					if assert.NotNil(t, resp) {
@@ -441,7 +443,7 @@ func (s *xdcBaseSuite) promoteNamespace(
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range s.clusterAt(inClusterIndex).Host().FrontendNamespaceRegistries() {
+		for _, r := range s.clusterAt(inClusterIndex).Host().NamespaceRegistries() {
 			resp, err := r.GetNamespace(namespace.Name(ns))
 			assert.NoError(t, err)
 			if assert.NotNil(t, resp) {
@@ -474,7 +476,7 @@ func (s *xdcBaseSuite) failover(
 	// check local and remote clusters
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		for _, c := range []*testcore.TestCluster{s.cluster1, s.cluster2} {
-			for _, r := range c.Host().FrontendNamespaceRegistries() {
+			for _, r := range c.Host().NamespaceRegistries() {
 				resp, err := r.GetNamespace(namespace.Name(ns))
 				assert.NoError(t, err)
 				if assert.NotNil(t, resp) {
