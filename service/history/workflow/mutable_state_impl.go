@@ -555,21 +555,6 @@ func NewMutableStateInChain(
 	// carry over necessary fields from current mutable state
 	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
 
-	// Copy completion callbacks to new run.
-	oldCallbacks := callbacks.MachineCollection(currentMutableState.HSM())
-	newCallbacks := callbacks.MachineCollection(newMutableState.HSM())
-	for _, node := range oldCallbacks.List() {
-		cb, err := oldCallbacks.Data(node.Key.ID)
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := cb.GetTrigger().GetVariant().(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); ok {
-			if _, err := newCallbacks.Add(node.Key.ID, cb); err != nil {
-				return nil, err
-			}
-		}
-	}
-
 	// TODO: Today other information like autoResetPoints, previousRunID, firstRunID, etc.
 	// are carried over in AddWorkflowExecutionStartedEventWithOptions. Ideally all information
 	// should be carried over here since some information is not part of the startedEvent.
@@ -2165,6 +2150,39 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	// for other fields as well.
 	runTimeout := command.GetWorkflowRunTimeout()
 
+	cbColl := callbacks.MachineCollection(previousExecutionState.HSM())
+	completionCallbacks := make([]*commonpb.Callback, 0, cbColl.Size())
+	for _, node := range cbColl.List() {
+		cb, err := cbColl.Data(node.Key.ID)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := cb.Trigger.Variant.(*persistencespb.CallbackInfo_Trigger_WorkflowClosed); !ok {
+			continue
+		}
+		cbSpec := &commonpb.Callback{}
+		switch variant := cb.Callback.Variant.(type) {
+		case *persistencespb.Callback_Nexus_:
+			cbSpec.Variant = &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url:    variant.Nexus.GetUrl(),
+					Header: variant.Nexus.GetHeader(),
+				},
+			}
+		default:
+			data, err := proto.Marshal(cb.Callback)
+			if err != nil {
+				return nil, err
+			}
+			cbSpec.Variant = &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{
+					Data: data,
+				},
+			}
+		}
+		completionCallbacks = append(completionCallbacks, cbSpec)
+	}
+
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
 		Namespace:                ms.namespaceEntry.Name().String(),
@@ -2182,6 +2200,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		SearchAttributes:         command.SearchAttributes,
 		// No need to request eager execution here (for now)
 		RequestEagerExecution: false,
+		CompletionCallbacks:   completionCallbacks,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
