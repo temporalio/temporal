@@ -27,7 +27,6 @@ package tests
 import (
 	"context"
 	"fmt"
-
 	"strings"
 	"testing"
 	"time"

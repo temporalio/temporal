@@ -27,6 +27,7 @@ package workerdeployment
 import (
 	"bytes"
 	"fmt"
+	"slices"
 
 	"github.com/pborman/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -38,7 +39,6 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"slices"
 )
 
 type (

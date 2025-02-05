@@ -27,9 +27,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/common/worker_versioning"
-
 	"testing"
 	"time"
 
@@ -37,9 +34,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
