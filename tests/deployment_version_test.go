@@ -205,7 +205,7 @@ func (s *DeploymentVersionSuite) Name() string {
 		fullName[len(fullName)-21:],
 		farm.Fingerprint32([]byte(fullName)),
 	)
-	return strings.Replace(short, "/", "|", -1)
+	return strings.Replace(short, ".", "|", -1)
 }
 
 //nolint:forbidigo

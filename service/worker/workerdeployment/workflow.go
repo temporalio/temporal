@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"fmt"
 	"slices"
-	"time"
 
 	"github.com/pborman/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -69,8 +69,8 @@ func Workflow(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflow
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.State == nil {
 		d.State = &deploymentspb.WorkerDeploymentLocalState{}
-		d.State.CreateTime = timestamppb.New(time.Now())
-		d.State.RoutingConfig = &deploymentpb.RoutingConfig{}
+		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
+		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
 	}
 
@@ -149,7 +149,6 @@ func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampin
 		d.logger.Info("version already ramping, no change")
 		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
 	}
-	// todo: this will only work when "__unversioned__" is the default current-version of a deployment.
 	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
@@ -184,14 +183,20 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 	// unsetting ramp
 	if newRampingVersion == "" {
 
-		rampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 			RoutingUpdateTime: routingUpdateTime,
 			RampingSinceTime:  nil, // remove ramp
 			RampPercentage:    0,   // remove ramp
 		}
 
-		if _, err := d.syncVersion(ctx, prevRampingVersion, rampUpdateArgs); err != nil {
-			return nil, err
+		if prevRampingVersion != worker_versioning.UnversionedVersionId {
+			if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
+				return nil, err
+			}
 		}
 
 		rampingVersionUpdateTime = routingUpdateTime // ramp was updated to ""
@@ -205,7 +210,9 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			// version ramping for the first time
 
 			currentVersion := d.State.RoutingConfig.CurrentVersion
-			if !args.IgnoreMissingTaskQueues && currentVersion != "" {
+			if !args.IgnoreMissingTaskQueues &&
+				currentVersion != worker_versioning.UnversionedVersionId &&
+				newRampingVersion != worker_versioning.UnversionedVersionId {
 				isMissingTaskQueues, err := d.isVersionMissingTaskQueues(ctx, currentVersion, newRampingVersion)
 				if err != nil {
 					d.logger.Info("Error verifying poller presence in version", "error", err)
@@ -219,24 +226,36 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			rampingVersionUpdateTime = routingUpdateTime
 		}
 
-		rampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		setRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 			RoutingUpdateTime: routingUpdateTime,
 			RampingSinceTime:  rampingSinceTime,
 			RampPercentage:    args.Percentage,
 		}
-		if _, err := d.syncVersion(ctx, newRampingVersion, rampUpdateArgs); err != nil {
-			return nil, err
+		if newRampingVersion != worker_versioning.UnversionedVersionId {
+			if _, err := d.syncVersion(ctx, newRampingVersion, setRampUpdateArgs); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := d.syncUnversionedRamp(ctx, setRampUpdateArgs); err != nil {
+				return nil, err
+			}
 		}
 
 		// tell previous ramping version, if present, that it's no longer ramping
 		if prevRampingVersion != "" && prevRampingVersion != newRampingVersion {
-			prevRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 				RoutingUpdateTime: routingUpdateTime,
 				RampingSinceTime:  nil, // remove ramp
 				RampPercentage:    0,   // remove ramp
 			}
-			if _, err := d.syncVersion(ctx, prevRampingVersion, prevRampUpdateArgs); err != nil {
-				return nil, err
+			if prevRampingVersion != worker_versioning.UnversionedVersionId {
+				if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs); err != nil {
+					return nil, err
+				}
+			} else {
+				if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -327,7 +346,9 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	newCurrentVersion := args.Version
 	updateTime := timestamppb.New(workflow.Now(ctx))
 
-	if !args.IgnoreMissingTaskQueues && prevCurrentVersion != "" {
+	if !args.IgnoreMissingTaskQueues &&
+		prevCurrentVersion != worker_versioning.UnversionedVersionId &&
+		newCurrentVersion != worker_versioning.UnversionedVersionId {
 		isMissingTaskQueues, err := d.isVersionMissingTaskQueues(ctx, prevCurrentVersion, newCurrentVersion)
 		if err != nil {
 			d.logger.Info("Error verifying poller presence in version", "error", err)
@@ -338,19 +359,37 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		}
 	}
 
-	// tell new current that it's current
-	currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-		RoutingUpdateTime: updateTime,
-		CurrentSinceTime:  updateTime,
-		RampingSinceTime:  nil, // remove ramp if it existed
-		RampPercentage:    0,   // remove ramp if it existed
+	if newCurrentVersion != worker_versioning.UnversionedVersionId {
+		// Tell new current version that it's current
+		currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			RoutingUpdateTime: updateTime,
+			CurrentSinceTime:  updateTime,
+			RampingSinceTime:  nil, // remove ramp for that version if it was ramping
+			RampPercentage:    0,   // remove ramp for that version if it was ramping
+		}
+		if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs); err != nil {
+			return nil, err
+		}
+	} else if d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId {
+		// If the new current is unversioned, and it was previously ramping, we need to tell
+		// all the task queues with unversioned ramp that they no longer have unversioned ramp.
+		// The task queues with unversioned ramp are the task queues of the previous current version.
+		// TODO (Carly): Should we ban people from changing the task queues in the current version while they have an unversioned ramp?
+		unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			RoutingUpdateTime: updateTime,
+			RampingSinceTime:  nil, // remove ramp
+			RampPercentage:    0,   // remove ramp
+		}
+		if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
+			return nil, err
+		}
 	}
-	if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs); err != nil {
-		return nil, err
-	}
+	// If the new current version is unversioned and there was no unversioned ramp, all we need to
+	// do is tell the previous current version that it is not current. Then, the task queues in the
+	// previous current version will have no current version and will become unversioned implicitly.
 
-	if prevCurrentVersion != "" {
-		// tell previous current that it's no longer current
+	if prevCurrentVersion != worker_versioning.UnversionedVersionId {
+		// Tell previous current that it's no longer current
 		prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
 			RoutingUpdateTime: updateTime,
 			CurrentSinceTime:  nil, // remove current
@@ -361,6 +400,9 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			return nil, err
 		}
 	}
+	// If the previous current version was unversioned, there is nothing in the task queues
+	// to remove, because they were implicitly unversioned. We don't have to remove any
+	// unversioned ramps, because current and ramping cannot both be unversioned.
 
 	// update local state
 	d.State.RoutingConfig.CurrentVersion = args.Version
@@ -425,6 +467,29 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 		RequestId:      d.newUUID(ctx),
 	}).Get(ctx, &res)
 	return res.VersionState, err
+}
+
+func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) error {
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var res deploymentspb.SyncUnversionedRampActivityResponse
+	err := workflow.ExecuteActivity(
+		activityCtx,
+		d.a.SyncUnversionedRamp,
+		&deploymentspb.SyncUnversionedRampActivityArgs{
+			CurrentVersion: d.State.RoutingConfig.CurrentVersion,
+			UpdateArgs:     versionUpdateArgs,
+		}).Get(ctx, &res)
+	if err != nil {
+		return err
+	}
+	// check propagation
+	err = workflow.ExecuteActivity(
+		activityCtx,
+		d.a.CheckUnversionedRampUserDataPropagation,
+		&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+			TaskQueueMaxVersions: res.TaskQueueMaxVersions,
+		}).Get(ctx, nil)
+	return err
 }
 
 func (d *WorkflowRunner) isVersionMissingTaskQueues(ctx workflow.Context, prevCurrentVersion string, newCurrentVersion string) (bool, error) {

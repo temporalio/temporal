@@ -497,26 +497,19 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 			return nil, err
 		}
 		current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
-
-		if current != nil || ramping != nil {
-			info := &taskqueuepb.TaskQueueVersioningInfo{
-				CurrentVersion: worker_versioning.WorkerDeploymentVersionToString(current.GetVersion()),
-				UpdateTime:     current.GetRoutingUpdateTime(),
-			}
-			if ramping.GetRampPercentage() > 0 {
-				info.RampingVersionPercentage = ramping.GetRampPercentage()
-				if ramping.GetVersion().GetBuildId() != "" {
-					// If version is "" it means it's ramping to unversioned, which needs special handling
-					info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(ramping.GetVersion())
-				} else {
-					info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(nil)
-				}
-				if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
-					info.UpdateTime = ramping.GetRoutingUpdateTime()
-				}
-			}
-			resp.DescResponse.VersioningInfo = info
+		info := &taskqueuepb.TaskQueueVersioningInfo{
+			CurrentVersion: worker_versioning.WorkerDeploymentVersionToString(current.GetVersion()),
+			UpdateTime:     current.GetRoutingUpdateTime(),
 		}
+		if ramping.GetRampingSinceTime() != nil {
+			info.RampingVersionPercentage = ramping.GetRampPercentage()
+			// If task queue is ramping to unversioned, ramping will be nil, which converts to "__unversioned__"
+			info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(ramping.GetVersion())
+			if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
+				info.UpdateTime = ramping.GetRoutingUpdateTime()
+			}
+		}
+		resp.DescResponse.VersioningInfo = info
 	}
 	return resp, nil
 }
