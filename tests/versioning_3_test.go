@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -353,7 +354,7 @@ func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller() {
 		})
 	s.waitForDeploymentDataPropagation(tv, false, tqTypeWf)
 
-	override := makePinnedOverride(tv.Deployment())
+	override := tv.VersioningOverridePinned()
 	s.startWorkflow(tv, override)
 
 	<-wftCompleted
@@ -882,25 +883,35 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	t1 := time.Now()
+	t2 := t1.Add(time.Second)
 
-	s.syncTaskQueueDeploymentData(tv, tqTypeAct, true, 0, false, t1)
 	s.syncTaskQueueDeploymentData(tv, tqTypeWf, false, 20, false, t1)
-
-	actInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-		Namespace:     s.Namespace().String(),
-		TaskQueue:     tv.TaskQueue(),
-		TaskQueueType: tqTypeAct,
-	})
-	s.NoError(err)
-	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersion(), UpdateTime: timestamp.TimePtr(t1)}, actInfo.GetVersioningInfo())
-
 	wfInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tv.TaskQueue(),
 		TaskQueueType: tqTypeWf,
 	})
 	s.NoError(err)
-	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{RampingVersion: tv.DeploymentVersion(), RampingVersionPercentage: 20, UpdateTime: timestamp.TimePtr(t1)}, wfInfo.GetVersioningInfo())
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: "__unversioned__", RampingVersion: tv.DeploymentVersionString(), RampingVersionPercentage: 20, UpdateTime: timestamp.TimePtr(t1)}, wfInfo.GetVersioningInfo())
+
+	s.syncTaskQueueDeploymentData(tv, tqTypeAct, true, 0, false, t1)
+	actInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     tv.TaskQueue(),
+		TaskQueueType: tqTypeAct,
+	})
+	s.NoError(err)
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersionString(), UpdateTime: timestamp.TimePtr(t1)}, actInfo.GetVersioningInfo())
+
+	// Now ramp to unversioned
+	s.syncTaskQueueDeploymentData(tv, tqTypeAct, true, 10, true, t2)
+	actInfo, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace().String(),
+		TaskQueue:     tv.TaskQueue(),
+		TaskQueueType: tqTypeAct,
+	})
+	s.NoError(err)
+	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: tv.DeploymentVersionString(), RampingVersionPercentage: 10, UpdateTime: timestamp.TimePtr(t2)}, actInfo.GetVersioningInfo())
 }
 
 func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
@@ -1125,7 +1136,12 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 
 	versioningInfo := dwf.WorkflowExecutionInfo.GetVersioningInfo()
 	s.Equal(behavior.String(), versioningInfo.GetBehavior().String())
-	actualDeployment := worker_versioning.DeploymentFromDeploymentVersion(versioningInfo.GetDeploymentVersion())
+	var v *deploymentspb.WorkerDeploymentVersion
+	if versioningInfo.GetVersion() != "" {
+		v, err = worker_versioning.WorkerDeploymentVersionFromString(versioningInfo.GetVersion())
+		s.NoError(err)
+	}
+	actualDeployment := worker_versioning.DeploymentFromDeploymentVersion(v)
 	if !deployment.Equal(actualDeployment) {
 		s.Fail(fmt.Sprintf("deployment version mismatch. expected: {%s}, actual: {%s}",
 			deployment,
@@ -1134,7 +1150,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 	}
 
 	s.Equal(override.GetBehavior().String(), versioningInfo.GetVersioningOverride().GetBehavior().String())
-	if actualOverrideDeployment := versioningInfo.GetVersioningOverride().GetPinnedVersion(); !override.GetPinnedVersion().Equal(actualOverrideDeployment) {
+	if actualOverrideDeployment := versioningInfo.GetVersioningOverride().GetPinnedVersion(); override.GetPinnedVersion() != actualOverrideDeployment {
 		s.Fail(fmt.Sprintf("pinned override mismatch. expected: {%s}, actual: {%s}",
 			override.GetPinnedVersion(),
 			actualOverrideDeployment,
@@ -1291,10 +1307,11 @@ func (s *Versioning3Suite) Name() string {
 	if len(fullName) <= 30 {
 		return fullName
 	}
-	return fmt.Sprintf("%s-%08x",
+	short := fmt.Sprintf("%s-%08x",
 		fullName[len(fullName)-21:],
 		farm.Fingerprint32([]byte(fullName)),
 	)
+	return strings.Replace(short, "/", "|", -1)
 }
 
 // pollWftAndHandle can be used in sync and async mode. For async mode pass the async channel. It
@@ -1611,8 +1628,4 @@ func (s *Versioning3Suite) validateBacklogCount(
 		a := assert.New(t)
 		a.Equal(expectedCount, typeInfo.Stats.GetApproximateBacklogCount())
 	}, 6*time.Second, 100*time.Millisecond)
-}
-
-func makePinnedOverride(d *deploymentpb.Deployment) *workflowpb.VersioningOverride {
-	return &workflowpb.VersioningOverride{Behavior: vbPinned, PinnedVersion: worker_versioning.DeploymentVersionFromDeployment(d)}
 }

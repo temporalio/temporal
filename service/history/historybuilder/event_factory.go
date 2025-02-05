@@ -161,18 +161,22 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
+	dv := ""
+	if deployment != nil {
+		dv = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment))
+	}
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId:   scheduledEventID,
-			StartedEventId:     startedEventID,
-			Identity:           identity,
-			BinaryChecksum:     checksum,
-			WorkerVersion:      workerVersionStamp,
-			SdkMetadata:        sdkMetadata,
-			MeteringMetadata:   meteringMetadata,
-			DeploymentVersion:  worker_versioning.DeploymentVersionFromDeployment(deployment),
-			VersioningBehavior: behavior,
+			ScheduledEventId:        scheduledEventID,
+			StartedEventId:          startedEventID,
+			Identity:                identity,
+			BinaryChecksum:          checksum,
+			WorkerVersion:           workerVersionStamp,
+			SdkMetadata:             sdkMetadata,
+			MeteringMetadata:        meteringMetadata,
+			WorkerDeploymentVersion: dv,
+			VersioningBehavior:      behavior,
 		},
 	}
 

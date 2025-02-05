@@ -30,23 +30,21 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	deploymentpb "go.temporal.io/api/deployment/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 var (
-	v1 = &deploymentpb.WorkerDeploymentVersion{
+	v1 = &deploymentspb.WorkerDeploymentVersion{
 		BuildId:        "v1",
 		DeploymentName: "foo",
 	}
-	v2 = &deploymentpb.WorkerDeploymentVersion{
+	v2 = &deploymentspb.WorkerDeploymentVersion{
 		BuildId:        "v2",
 		DeploymentName: "foo",
 	}
-	v3 = &deploymentpb.WorkerDeploymentVersion{
+	v3 = &deploymentspb.WorkerDeploymentVersion{
 		BuildId:        "v3",
 		DeploymentName: "foo",
 	}
@@ -58,19 +56,20 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 	t3 := timestamp.TimePtr(time.Now())
 
 	tests := []struct {
-		name string
-		want *taskqueuepb.TaskQueueVersioningInfo
-		data *persistencespb.DeploymentData
+		name        string
+		wantCurrent *deploymentspb.DeploymentVersionData
+		wantRamping *deploymentspb.DeploymentVersionData
+		data        *persistencespb.DeploymentData
 	}{
-		{name: "nil data", want: nil, data: nil},
-		{name: "empty data", want: nil, data: &persistencespb.DeploymentData{}},
-		{name: "old data", want: &taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: v1, UpdateTime: t1},
+		{name: "nil data"},
+		{name: "empty data", data: &persistencespb.DeploymentData{}},
+		{name: "old data", wantCurrent: &deploymentspb.DeploymentVersionData{Version: v1, RoutingUpdateTime: t1},
 			data: &persistencespb.DeploymentData{
 				Deployments: []*persistencespb.DeploymentData_DeploymentDataItem{
 					{Deployment: DeploymentFromDeploymentVersion(v1), Data: &deploymentspb.TaskQueueData{LastBecameCurrentTime: t1}},
 				}},
 		},
-		{name: "old and new data", want: &taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: v2, UpdateTime: t2},
+		{name: "old and new data", wantCurrent: &deploymentspb.DeploymentVersionData{Version: v2, RoutingUpdateTime: t2, CurrentSinceTime: t2},
 			data: &persistencespb.DeploymentData{
 				Deployments: []*persistencespb.DeploymentData_DeploymentDataItem{
 					{Deployment: DeploymentFromDeploymentVersion(v1), Data: &deploymentspb.TaskQueueData{LastBecameCurrentTime: t1}},
@@ -80,17 +79,19 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				},
 			},
 		},
-		{name: "two current + two ramping", want: &taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: v2, UpdateTime: t3, RampingVersion: v3, RampingVersionPercentage: 20},
+		{name: "two current + two ramping",
+			wantCurrent: &deploymentspb.DeploymentVersionData{Version: v2, RoutingUpdateTime: t2, CurrentSinceTime: t2},
+			wantRamping: &deploymentspb.DeploymentVersionData{Version: v3, RoutingUpdateTime: t3, RampPercentage: 20, RampingSinceTime: t1},
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1},
 					{Version: v2, CurrentSinceTime: t2, RoutingUpdateTime: t2},
 					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2},
-					{Version: v3, RampPercentage: 20, RoutingUpdateTime: t3},
+					{Version: v3, RampPercentage: 20, RoutingUpdateTime: t3, RampingSinceTime: t1},
 				},
 			},
 		},
-		{name: "ramp without current", want: &taskqueuepb.TaskQueueVersioningInfo{UpdateTime: t3, RampingVersion: v3, RampingVersionPercentage: 20},
+		{name: "ramp without current", wantRamping: &deploymentspb.DeploymentVersionData{Version: v3, RoutingUpdateTime: t3, RampPercentage: 20},
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2},
@@ -98,20 +99,25 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				},
 			},
 		},
-		{name: "ramp to unversioned", want: &taskqueuepb.TaskQueueVersioningInfo{UpdateTime: t2, RampingVersionPercentage: 20},
+		{name: "ramp to unversioned",
+			wantRamping: &deploymentspb.DeploymentVersionData{Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "foo"}, RoutingUpdateTime: t2, RampPercentage: 20},
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t1},
 					// Passing only deployment name without version
-					{Version: &deploymentpb.WorkerDeploymentVersion{DeploymentName: "foo"}, RampPercentage: 20, RoutingUpdateTime: t2},
+					{Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "foo"}, RampPercentage: 20, RoutingUpdateTime: t2},
 				},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := CalculateTaskQueueVersioningInfo(tt.data); !got.Equal(tt.want) {
-				t.Errorf("CalculateTaskQueueVersioningInfo() = %v, want %v", got, tt.want)
+			current, ramping := CalculateTaskQueueVersioningInfo(tt.data)
+			if !current.Equal(tt.wantCurrent) {
+				t.Errorf("got current = %v, want %v", current, tt.wantCurrent)
+			}
+			if !ramping.Equal(tt.wantRamping) {
+				t.Errorf("got ramping = %v, want %v", ramping, tt.wantRamping)
 			}
 		})
 	}
@@ -119,20 +125,20 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 
 func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 	tests := []struct {
-		name           string
-		versioningInfo *taskqueuepb.TaskQueueVersioningInfo
-		want           *deploymentpb.WorkerDeploymentVersion
+		name    string
+		current *deploymentspb.DeploymentVersionData
+		ramping *deploymentspb.DeploymentVersionData
+		want    *deploymentspb.WorkerDeploymentVersion
 	}{
-		{name: "nil versioning info", versioningInfo: nil, want: nil},
-		{name: "empty versioning info", versioningInfo: &taskqueuepb.TaskQueueVersioningInfo{}, want: nil},
-		{name: "with current version", versioningInfo: &taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: v1}, want: v1},
-		{name: "with full ramp", versioningInfo: &taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: v1, RampingVersion: v2, RampingVersionPercentage: 100}, want: v2},
-		{name: "with full ramp to unversioned", versioningInfo: &taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: v1, RampingVersionPercentage: 100}, want: nil},
-		{name: "with full ramp from unversioned", versioningInfo: &taskqueuepb.TaskQueueVersioningInfo{RampingVersion: v1, RampingVersionPercentage: 100}, want: v1},
+		{name: "nil current and ramping info", want: nil},
+		{name: "with current version", current: &deploymentspb.DeploymentVersionData{Version: v1}, want: v1},
+		{name: "with full ramp", current: &deploymentspb.DeploymentVersionData{Version: v1}, ramping: &deploymentspb.DeploymentVersionData{Version: v2, RampPercentage: 100}, want: v2},
+		{name: "with full ramp to unversioned", current: &deploymentspb.DeploymentVersionData{Version: v1}, ramping: &deploymentspb.DeploymentVersionData{RampPercentage: 100}, want: nil},
+		{name: "with full ramp from unversioned", ramping: &deploymentspb.DeploymentVersionData{Version: v1, RampPercentage: 100}, want: v1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := FindDeploymentVersionForWorkflowID(tt.versioningInfo, "my-wf-id"); !got.Equal(tt.want) {
+			if got := FindDeploymentVersionForWorkflowID(tt.current, tt.ramping, "my-wf-id"); !got.Equal(tt.want) {
 				t.Errorf("FindDeploymentVersionForWorkflowID() = %v, want %v", got, tt.want)
 			}
 		})
@@ -142,8 +148,8 @@ func TestFindDeploymentVersionForWorkflowID(t *testing.T) {
 func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 	tests := []struct {
 		name string
-		from *deploymentpb.WorkerDeploymentVersion
-		to   *deploymentpb.WorkerDeploymentVersion
+		from *deploymentspb.WorkerDeploymentVersion
+		to   *deploymentspb.WorkerDeploymentVersion
 	}{
 		{name: "from v1 to v2", from: v1, to: v2},
 		{name: "from v1 to unversioned", from: v1},
@@ -151,15 +157,21 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			versioningInfo := &taskqueuepb.TaskQueueVersioningInfo{
-				CurrentVersion:           tt.from,
-				RampingVersion:           tt.to,
-				RampingVersionPercentage: 30,
+			var current *deploymentspb.DeploymentVersionData
+			var ramping *deploymentspb.DeploymentVersionData
+			if tt.from != nil {
+				current = &deploymentspb.DeploymentVersionData{
+					Version: tt.from,
+				}
+			}
+			ramping = &deploymentspb.DeploymentVersionData{
+				Version:        tt.to,
+				RampPercentage: 30,
 			}
 			histogram := make(map[string]int)
 			runs := 1000000
 			for i := 0; i < runs; i++ {
-				v := FindDeploymentVersionForWorkflowID(versioningInfo, "wf-"+strconv.Itoa(i))
+				v := FindDeploymentVersionForWorkflowID(current, ramping, "wf-"+strconv.Itoa(i))
 				histogram[v.GetBuildId()]++
 			}
 

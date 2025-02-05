@@ -338,7 +338,7 @@ message SyncDeploymentUserDataRequest {
         // The deployment version and its data that is being updated.
         temporal.server.api.deployment.v1.DeploymentVersionData update_version_data = 6;
         // The version whose data should be cleaned from the task queue.
-        temporal.api.deployment.v1.WorkerDeploymentVersion forget_version = 7;
+        temporal.server.api.deployment.v1.WorkerDeploymentVersion forget_version = 7;
     }
 }
 

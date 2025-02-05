@@ -25,6 +25,8 @@
 package workerdeployment
 
 import (
+	"fmt"
+	"slices"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -66,7 +68,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.State == nil {
 		d.State = &deploymentspb.WorkerDeploymentLocalState{}
 		d.State.CreateTime = timestamppb.New(time.Now())
-		d.State.RoutingInfo = &deploymentpb.RoutingInfo{}
+		d.State.RoutingConfig = &deploymentpb.RoutingConfig{}
 	}
 
 	var pendingUpdates int
@@ -95,9 +97,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		SetRampingVersion,
-		d.handleSetWorkerDeploymentRampingVersion,
+		d.handleSetRampingVersion,
 		workflow.UpdateHandlerOptions{
-			Validator: d.validateSetWorkerDeploymentRampingVersion,
+			Validator: d.validateSetRampingVersion,
 		},
 	); err != nil {
 		return err
@@ -109,6 +111,17 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.handleAddVersionToWorkerDeployment,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateAddVersionToWorkerDeployment,
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		DeleteVersion,
+		d.handleDeleteVersion,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateDeleteVersion,
 		},
 	); err != nil {
 		return err
@@ -127,13 +140,13 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkerDeploymentWorkflowArgs)
 }
 
-func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) error {
-	if args.Version == d.State.RoutingInfo.RampingVersion && args.Percentage == d.State.RoutingInfo.RampingVersionPercentage {
+func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
+	if args.Version == d.State.RoutingConfig.RampingVersion && args.Percentage == d.State.RoutingConfig.RampingVersionPercentage {
 		d.logger.Info("version already ramping, no change")
 		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
 	}
 	// todo: this will only work when "__unversioned__" is the default current-version of a deployment.
-	if args.Version == d.State.RoutingInfo.CurrentVersion {
+	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
 	}
@@ -141,7 +154,7 @@ func (d *WorkflowRunner) validateSetWorkerDeploymentRampingVersion(args *deploym
 	return nil
 }
 
-func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Context, args *deploymentspb.SetWorkerDeploymentRampingVersionArgs) (*deploymentspb.SetWorkerDeploymentRampingVersionResponse, error) {
+func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *deploymentspb.SetRampingVersionArgs) (*deploymentspb.SetRampingVersionResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -154,8 +167,8 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 		d.lock.Unlock()
 	}()
 
-	prevRampingVersion := d.State.RoutingInfo.RampingVersion
-	prevRampingVersionPercentage := d.State.RoutingInfo.RampingVersionPercentage
+	prevRampingVersion := d.State.RoutingConfig.RampingVersion
+	prevRampingVersionPercentage := d.State.RoutingConfig.RampingVersionPercentage
 
 	newRampingVersion := args.Version
 	routingUpdateTime := timestamppb.New(workflow.Now(ctx))
@@ -180,11 +193,24 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 	} else {
 		// setting ramp
 
-		if prevRampingVersion == newRampingVersion { // the version was alread ramping, user changing ramp %
-			rampingSinceTime = d.State.RoutingInfo.RampingVersionChangedTime
-			rampingVersionUpdateTime = d.State.RoutingInfo.RampingVersionChangedTime
+		if prevRampingVersion == newRampingVersion { // the version was already ramping, user changing ramp %
+			rampingSinceTime = d.State.RoutingConfig.RampingVersionChangedTime
+			rampingVersionUpdateTime = d.State.RoutingConfig.RampingVersionChangedTime
 		} else {
-			rampingSinceTime = routingUpdateTime // version ramping for the first time
+			// version ramping for the first time
+
+			currentVersion := d.State.RoutingConfig.CurrentVersion
+			if !args.IgnoreMissingTaskQueues && currentVersion != "" {
+				isMissingTaskQueues, err := d.isVersionMissingTaskQueues(ctx, currentVersion, newRampingVersion)
+				if err != nil {
+					d.logger.Info("Error verifying poller presence in version", "error", err)
+					return nil, err
+				}
+				if isMissingTaskQueues {
+					return nil, serviceerror.NewFailedPrecondition("New ramping version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after this operation")
+				}
+			}
+			rampingSinceTime = routingUpdateTime
 			rampingVersionUpdateTime = routingUpdateTime
 		}
 
@@ -211,24 +237,67 @@ func (d *WorkflowRunner) handleSetWorkerDeploymentRampingVersion(ctx workflow.Co
 	}
 
 	// update local state
-	d.State.RoutingInfo.RampingVersion = newRampingVersion
-	d.State.RoutingInfo.RampingVersionPercentage = args.Percentage
-	d.State.RoutingInfo.RampingVersionChangedTime = rampingVersionUpdateTime
+	d.State.RoutingConfig.RampingVersion = newRampingVersion
+	d.State.RoutingConfig.RampingVersionPercentage = args.Percentage
+	d.State.RoutingConfig.RampingVersionChangedTime = rampingVersionUpdateTime
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
 		return nil, err
 	}
 
-	return &deploymentspb.SetWorkerDeploymentRampingVersionResponse{
+	return &deploymentspb.SetRampingVersionResponse{
 		PreviousVersion:    prevRampingVersion,
 		PreviousPercentage: prevRampingVersionPercentage,
 	}, nil
 
 }
 
+func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+	if !slices.Contains(d.State.Versions, args.Version) {
+		return serviceerror.NewNotFound(fmt.Sprintf("version %s not found in deployment", args.Version))
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	// ask version to delete itself
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var res deploymentspb.SyncVersionStateActivityResult
+	err = workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerDeploymentVersion, &deploymentspb.DeleteVersionActivityArgs{
+		Identity:       args.Identity,
+		DeploymentName: d.DeploymentName,
+		Version:        args.Version,
+		RequestId:      uuid.New(),
+	}).Get(ctx, &res)
+	if err != nil {
+		return err
+	}
+
+	// update local state
+	d.State.Versions = slices.DeleteFunc(d.State.Versions, func(v string) bool { return v == args.Version })
+
+	// update memo
+	if err = d.updateMemo(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
-	if d.State.RoutingInfo.CurrentVersion == args.Version {
+	if d.State.RoutingConfig.CurrentVersion == args.Version {
 		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
 
@@ -248,9 +317,20 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.lock.Unlock()
 	}()
 
-	prevCurrentVersion := d.State.RoutingInfo.CurrentVersion
+	prevCurrentVersion := d.State.RoutingConfig.CurrentVersion
 	newCurrentVersion := args.Version
 	updateTime := timestamppb.New(workflow.Now(ctx))
+
+	if !args.IgnoreMissingTaskQueues && prevCurrentVersion != "" {
+		isMissingTaskQueues, err := d.isVersionMissingTaskQueues(ctx, prevCurrentVersion, newCurrentVersion)
+		if err != nil {
+			d.logger.Info("Error verifying poller presence in version", "error", err)
+			return nil, err
+		}
+		if isMissingTaskQueues {
+			return nil, serviceerror.NewFailedPrecondition("New current version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after this operation")
+		}
+	}
 
 	// tell new current that it's current
 	currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
@@ -277,14 +357,14 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	}
 
 	// update local state
-	d.State.RoutingInfo.CurrentVersion = args.Version
-	d.State.RoutingInfo.CurrentVersionChangedTime = updateTime
+	d.State.RoutingConfig.CurrentVersion = args.Version
+	d.State.RoutingConfig.CurrentVersionChangedTime = updateTime
 
 	// unset ramping version if it was set to current version
-	if d.State.RoutingInfo.CurrentVersion == d.State.RoutingInfo.RampingVersion {
-		d.State.RoutingInfo.RampingVersion = ""
-		d.State.RoutingInfo.RampingVersionPercentage = 0
-		d.State.RoutingInfo.RampingVersionChangedTime = updateTime // since ramp was removed
+	if d.State.RoutingConfig.CurrentVersion == d.State.RoutingConfig.RampingVersion {
+		d.State.RoutingConfig.RampingVersion = ""
+		d.State.RoutingConfig.RampingVersionPercentage = 0
+		d.State.RoutingConfig.RampingVersionChangedTime = updateTime // since ramp was removed
 	}
 
 	// update memo
@@ -338,6 +418,16 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 	return res.VersionState, err
 }
 
+func (d *WorkflowRunner) isVersionMissingTaskQueues(ctx workflow.Context, prevCurrentVersion string, newCurrentVersion string) (bool, error) {
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var res deploymentspb.IsVersionMissingTaskQueuesResult
+	err := workflow.ExecuteActivity(activityCtx, d.a.IsVersionMissingTaskQueues, &deploymentspb.IsVersionMissingTaskQueuesArgs{
+		PrevCurrentVersion: prevCurrentVersion,
+		NewCurrentVersion:  newCurrentVersion,
+	}).Get(ctx, &res)
+	return res.IsMissingTaskQueues, err
+}
+
 func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
 	var val string
 	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
@@ -351,7 +441,7 @@ func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 		WorkerDeploymentMemoField: &deploymentspb.WorkerDeploymentWorkflowMemo{
 			DeploymentName: d.DeploymentName,
 			CreateTime:     d.State.CreateTime,
-			RoutingInfo:    d.State.RoutingInfo,
+			RoutingConfig:  d.State.RoutingConfig,
 		},
 	})
 }

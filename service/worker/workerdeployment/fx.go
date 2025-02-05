@@ -66,6 +66,7 @@ var Module = fx.Options(
 func ClientProvider(
 	logger log.Logger,
 	historyClient resource.HistoryClient,
+	matchingClient resource.MatchingClient,
 	visibilityManager manager.VisibilityManager,
 	dc *dynamicconfig.Collection,
 ) Client {
@@ -73,6 +74,7 @@ func ClientProvider(
 		logger:                              logger,
 		historyClient:                       historyClient,
 		visibilityManager:                   visibilityManager,
+		matchingClient:                      matchingClient,
 		maxIDLengthLimit:                    dynamicconfig.MaxIDLengthLimit.Get(dc),
 		visibilityMaxPageSize:               dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		maxDeployments:                      dynamicconfig.MatchingMaxDeployments.Get(dc),

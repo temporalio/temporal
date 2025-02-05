@@ -496,35 +496,86 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 		if err != nil {
 			return nil, err
 		}
-		resp.DescResponse.VersioningInfo = worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
+		current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
+
+		if current != nil || ramping != nil {
+			info := &taskqueuepb.TaskQueueVersioningInfo{
+				CurrentVersion: worker_versioning.WorkerDeploymentVersionToString(current.GetVersion()),
+				UpdateTime:     current.GetRoutingUpdateTime(),
+			}
+			if ramping.GetRampPercentage() > 0 {
+				info.RampingVersionPercentage = ramping.GetRampPercentage()
+				if ramping.GetVersion().GetBuildId() != "" {
+					// If version is "" it means it's ramping to unversioned, which needs special handling
+					info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(ramping.GetVersion())
+				} else {
+					info.RampingVersion = worker_versioning.WorkerDeploymentVersionToString(nil)
+				}
+				if info.GetUpdateTime().AsTime().Before(ramping.GetRoutingUpdateTime().AsTime()) {
+					info.UpdateTime = ramping.GetRoutingUpdateTime()
+				}
+			}
+			resp.DescResponse.VersioningInfo = info
+		}
 	}
 	return resp, nil
 }
 
+// In order to accommodate the changes brought in by versioning-3.1, `buildIDs` will now also accept versionID's that represent worker-deployment versions.
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	ctx context.Context,
 	buildIds map[string]bool,
 	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
+
+	versions := make(map[PhysicalTaskQueueVersion]bool)
+
 	// Active means that the physical queue for that version is loaded.
 	// An empty string refers to the unversioned queue, which is always loaded.
 	// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
 	if includeAllActive {
 		for k := range pm.versionedQueues {
-			// TODO: add deployment info to DescribeTaskQueue
-			if b := k.BuildId(); b != "" {
-				buildIds[b] = true
+			versions[k] = true
+		}
+	}
+
+	for b := range buildIds {
+		if b == "" {
+			versions[pm.defaultQueue.QueueKey().Version()] = true
+		} else {
+			found := false
+			for k := range pm.versionedQueues {
+				// Storing the versioned queue if the buildID is a v2 based buildID or a versionID representing a worker-deployment version.
+				if k.BuildId() == b || worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(k.Deployment())) == b {
+					versions[k] = true
+					found = true
+					break
+				}
+			}
+			if !found {
+				// still add it as a v2 version because user explicitly asked for the stats, we'd
+				// make sure to load the TQ.
+				versions[PhysicalTaskQueueVersion{buildId: b}] = true
 			}
 		}
 	}
+
 	pm.versionedQueuesLock.RUnlock()
 
 	versionsInfo := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal, 0)
-	for bid := range buildIds {
+	for v := range versions {
 		vInfo := &taskqueuespb.TaskQueueVersionInfoInternal{
 			PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{},
 		}
-		physicalQueue, err := pm.getPhysicalQueue(ctx, bid)
+
+		// `getPhysicalQueue` always needs the right buildID passed to function correctly. If the version is a worker-deployment version and an empty buildID is passed,
+		// the function returns the default queue which is not what we want.
+		// The following assigns buildID to either a v2 based buildID or a buildID part of a worker-deployment version.
+		buildID := v.BuildId()
+		if v.Deployment() != nil {
+			buildID = v.Deployment().BuildId
+		}
+		physicalQueue, err := pm.getPhysicalQueue(ctx, buildID, v.Deployment())
 		if err != nil {
 			return nil, err
 		}
@@ -536,6 +587,15 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 		if internalTaskQueueStatus {
 			vInfo.PhysicalTaskQueueInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
+		}
+
+		// The following assigns buildID to either a v2 based buildID or a versionID representing a worker-deployment version.
+		// This is required to populate the right value inside the versionsInfo map. If a user is requesting information for a worker-deployment version,
+		// the full worker-deployment version string is used as an entry in the versionsInfo map. Moreover, to keep things backwards compatible, users requesting
+		// information for non-deployment related builds will only see the buildID as an entry in the versionsInfo map.
+		bid := v.BuildId()
+		if v.Deployment() != nil {
+			bid = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(v.Deployment()))
 		}
 		versionsInfo[bid] = vInfo
 	}
@@ -658,11 +718,12 @@ func (pm *taskQueuePartitionManagerImpl) unloadFromEngine(unloadCause unloadCaus
 	pm.engine.unloadTaskQueuePartition(pm, unloadCause)
 }
 
-func (pm *taskQueuePartitionManagerImpl) getPhysicalQueue(ctx context.Context, buildId string) (physicalTaskQueueManager, error) {
+func (pm *taskQueuePartitionManagerImpl) getPhysicalQueue(ctx context.Context, buildId string, deployment *deploymentpb.Deployment) (physicalTaskQueueManager, error) {
 	if buildId == "" {
 		return pm.defaultQueue, nil
 	}
-	return pm.getVersionedQueue(ctx, "", buildId, nil, true)
+
+	return pm.getVersionedQueue(ctx, "", buildId, deployment, true)
 }
 
 // Pass either versionSet or build ID
@@ -843,8 +904,8 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		}
 	}
 
-	versioningInfo := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
-	currentDeployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.FindDeploymentVersionForWorkflowID(versioningInfo, workflowId))
+	current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(deploymentData)
+	currentDeployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.FindDeploymentVersionForWorkflowID(current, ramping, workflowId))
 	if currentDeployment != nil &&
 		// Make sure the wf is not v1-2 versioned
 		directive.GetAssignedBuildId() == "" {
@@ -959,12 +1020,12 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			return nil, nil, nil, err
 		}
 	} else {
-		syncMatchQueue, err = pm.getPhysicalQueue(ctx, redirectBuildId)
+		syncMatchQueue, err = pm.getPhysicalQueue(ctx, redirectBuildId, nil)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		// redirect rules are not applied when spooling a task. They'll be applied when dispatching the spool task.
-		spoolQueue, err = pm.getPhysicalQueue(ctx, buildId)
+		spoolQueue, err = pm.getPhysicalQueue(ctx, buildId, nil)
 		if err != nil {
 			return nil, nil, nil, err
 		}

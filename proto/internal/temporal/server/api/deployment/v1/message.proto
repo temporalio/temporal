@@ -27,17 +27,26 @@ package temporal.server.api.deployment.v1;
 option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
-import "temporal/api/enums/v1/deployment.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 
+// Identifies a Worker Deployment Version. The combination of `deployment_name` and `build_id`
+// serve as the identifier.
+message WorkerDeploymentVersion {
+    // The name of the Deployment this version belongs too.
+    string deployment_name = 1;
+    // Build ID uniquely identifies the Deployment Version within a Deployment, but the same Build
+    // ID can be used in multiple Deployments.
+    string build_id = 2;
+}
 
 // The source of truth for this data is in the WorkerDeployment entity workflows, which is
 // synced to all TQs whenever the source changes.
 message DeploymentVersionData {
-    temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
+    // Nil means unversioned.
+    WorkerDeploymentVersion version = 1;
 
     // Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
     google.protobuf.Timestamp routing_update_time = 2;
@@ -55,33 +64,29 @@ message DeploymentVersionData {
     // Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
     // Can be in the range [0, 100] if the version is ramping.
     float ramp_percentage = 5;
-
-    // Experimental
-    google.protobuf.Timestamp first_poller_time = 6;
 }
 
 // Local state for Worker Deployment Version
 message VersionLocalState {
-    temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
-    temporal.api.enums.v1.WorkflowVersioningMode workflow_versioning_mode = 2;
-    google.protobuf.Timestamp create_time = 3;
+    WorkerDeploymentVersion version = 1;
+    google.protobuf.Timestamp create_time = 2;
 
     // Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.
-    google.protobuf.Timestamp routing_update_time = 4;
+    google.protobuf.Timestamp routing_update_time = 3;
 
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
     // Nil if not current.
-    google.protobuf.Timestamp current_since_time = 5;
+    google.protobuf.Timestamp current_since_time = 4;
 
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: 'Since' captures the field semantics despite being a preposition. --)
     // Nil if not ramping. Updated when the version first starts ramping, not on each ramp change.
-    google.protobuf.Timestamp ramping_since_time = 6;
+    google.protobuf.Timestamp ramping_since_time = 5;
 
     // Range: [0, 100]. Must be zero if the version is not ramping (i.e. `ramping_since_time` is nil).
     // Can be in the range [0, 100] if the version is ramping.
-    float ramp_percentage = 7;
+    float ramp_percentage = 6;
 
     // Helps user determine when it is safe to decommission the workers of this
     // Version. Not present when version is current or ramping.
@@ -96,24 +101,29 @@ message VersionLocalState {
     //   This means if the Version is "drained" but new workflows are sent to it via
     //   Pinned Versioning Override, the status does not account for those Pinned-override
     //   executions and remains "drained".
-    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 8;
+    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 7;
 
     // Arbitrary user-provided metadata attached to this version.
-    temporal.api.deployment.v1.VersionMetadata metadata = 9;
+    temporal.api.deployment.v1.VersionMetadata metadata = 8;
 
-    bool started_deployment_workflow = 10;
+    bool started_deployment_workflow = 9;
 
-    map<string, TaskQueueFamilyData> task_queue_families = 11;
+    // Key: Task Queue Name
+    map<string, TaskQueueFamilyData> task_queue_families = 10;
 
     message TaskQueueFamilyData {
-        // Key: enums.TaskQueueType, Value: TaskQueueData
-        // All fields in TaskQueueData are valid except last_became_current_time, the source of
-        // truth for that is the value at the root of WorkerDeploymentLocalState.
-        map<int32, DeploymentVersionData> task_queues = 1;
+        // Key: Task Queue Type
+        map<int32, TaskQueueVersionData> task_queues = 1;
     }
 
     google.protobuf.Duration drainage_refresh_interval = 12;
     google.protobuf.Duration drainage_visibility_grace_period = 13;
+}
+
+// Data specific to a task queue, from the perspective of a worker deployment version.
+message TaskQueueVersionData {
+    // Experimental. First time this task queue received a poller with this worker version.
+    google.protobuf.Timestamp first_poller_time = 1;
 }
 
 // used as Worker Deployment Version workflow input:
@@ -135,7 +145,7 @@ message WorkerDeploymentWorkflowArgs {
 message WorkerDeploymentLocalState {
     google.protobuf.Timestamp create_time = 1;
     // Encapsulates task routing information for this deployment.
-    temporal.api.deployment.v1.RoutingInfo routing_info = 2;
+    temporal.api.deployment.v1.RoutingConfig routing_config = 2;
     // Deployment Versions that are currently tracked in this Deployment. 
     // A DeploymentVersion will be cleaned up automatically if all the following conditions meet:
     // - It does not receive new executions (see WorkerDeploymentVersionInfo.accepts_new_executions) 
@@ -191,7 +201,7 @@ message QueryDescribeWorkerDeploymentResponse {
 // used as Worker Deployment Version workflow memo:
 message VersionWorkflowMemo {
     string deployment_name = 1;
-    string version = 2;
+    string build_id = 2;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -201,7 +211,7 @@ message StartWorkerDeploymentRequest {
 }
 
 message DrainageWorkflowArgs {
-    temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
+    WorkerDeploymentVersion version = 1;
     bool first = 2;
     google.protobuf.Duration refresh_interval = 3;
     google.protobuf.Duration visibility_grace_period = 4;
@@ -209,8 +219,10 @@ message DrainageWorkflowArgs {
 
 // used as Worker Deployment Version workflow activity input:
 message SyncDeploymentVersionUserDataRequest {
-    temporal.api.deployment.v1.WorkerDeploymentVersion worker_deployment_version = 1;
+    WorkerDeploymentVersion version = 1;
     repeated SyncUserData sync = 2;
+    // if true, the version will be forgotten from the task queue user data.
+    bool forget_version = 3; 
 
     message SyncUserData {
         string name = 1;
@@ -233,6 +245,7 @@ message CheckWorkerDeploymentUserDataPropagationRequest {
 message SetCurrentVersionArgs {
     string identity = 1;
     string version = 2;
+    bool ignore_missing_task_queues = 3;
 }
 
 // used as Worker Deployment update response:
@@ -240,23 +253,56 @@ message SetCurrentVersionResponse {
     string previous_version = 1;
 }
 
+// used as Worker Deployment workflow update input:
+message DeleteVersionArgs {
+    string identity = 1;
+    string version = 2;
+}
+
+// used as Worker Deployment Activity input:
+message DeleteVersionActivityArgs {
+    string identity = 1;
+    string deployment_name = 2;
+    string version = 3;
+    string request_id = 4;
+}
+
+// used as Worker Deployment Activity input:
+message CheckTaskQueuesHavePollersActivityArgs {
+    // Key: Task Queue Name
+    map<string, TaskQueueTypes> task_queues_and_types = 1;
+
+    message TaskQueueTypes {
+        repeated temporal.api.enums.v1.TaskQueueType types = 1;
+    }
+
+    WorkerDeploymentVersion worker_deployment_version = 2;
+}
+
+// used as Worker Deployment workflow update input:
+message DeleteDeploymentArgs {
+    string identity = 1;
+}
+
 // used as Worker Deployment update response:
-message SetWorkerDeploymentRampingVersionResponse {
+message SetRampingVersionResponse {
     string previous_version = 1;
     float previous_percentage = 2;
     bytes conflict_token = 3;
 }
 
 // used as Worker Deployment workflow update input:
-message SetWorkerDeploymentRampingVersionArgs {
+message SetRampingVersionArgs {
     string identity = 1;
     string version = 2;
     float percentage = 3;
+    bool ignore_missing_task_queues = 4;
 }
 
 // used as Worker Deployment activity input:
 message SyncVersionStateActivityArgs {
     string deployment_name = 1;
+    // <deployment_name>/<build_id> or possibly just <version_id> in the future
     string version = 2;
     SyncVersionStateUpdateArgs update_args = 3;
     string request_id = 4;
@@ -267,23 +313,35 @@ message SyncVersionStateActivityResult {
     VersionLocalState version_state = 1;
 }
 
+// used as Worker Deployment activity input:
+message IsVersionMissingTaskQueuesArgs {
+    string prev_current_version = 1;
+    string new_current_version = 2;
+}
+
+// used as Worker Deployment activity output:
+message IsVersionMissingTaskQueuesResult {
+    bool is_missing_task_queues = 1;
+}
+
 // used as Worker Deployment workflow memo:
 message WorkerDeploymentWorkflowMemo {
     string deployment_name = 1;
     google.protobuf.Timestamp create_time = 2;
-    temporal.api.deployment.v1.RoutingInfo routing_info = 3;
+    temporal.api.deployment.v1.RoutingConfig routing_config = 3;
 }
 
 // Subset of fields of WorkerDeploymentInfo returned in ListWorkerDeploymentsResponse
 message WorkerDeploymentSummary {
     string name = 1;
     google.protobuf.Timestamp create_time = 2;
-    temporal.api.deployment.v1.RoutingInfo routing_info = 3;
+    temporal.api.deployment.v1.RoutingConfig routing_config = 3;
 }
 
 // Used as Worker Deployment Version workflow activity input:
 message AddVersionToWorkerDeploymentRequest {
     string deployment_name = 1;
+    // <deployment_name>/<build_id> or possibly just <version_id> in the future
     string version = 2;
     string request_id = 3;
 }
