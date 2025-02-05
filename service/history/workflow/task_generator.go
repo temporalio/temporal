@@ -27,7 +27,6 @@
 package workflow
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -296,53 +295,54 @@ func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
 func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	stateMachineRegistry *hsm.Registry,
 ) error {
-	if r.mutableState.IsTransitionHistoryEnabled() {
-		// Get the current versioned transition
-		transitionHistory := r.mutableState.GetExecutionInfo().TransitionHistory
-		if len(transitionHistory) == 0 {
-			return serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
-		}
-		currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
-
-		// Trim any invalid/stale state machine timers using the current versioned transition
-		if err := TrimStateMachineTimers(r.mutableState, currentVersionedTransition); err != nil {
-			if errors.Is(err, hsm.ErrStateMachineNotFound) {
-				// This is expected if the state machine was deleted
-				return nil
-			}
-			return fmt.Errorf("failed to trim state machine timers: %w", err)
-		}
-	}
-
 	tree := r.mutableState.HSM()
 	opLog, err := tree.OpLog()
 	if err != nil {
 		return err
 	}
+
 	for _, op := range opLog {
-		transitionOp, ok := op.(hsm.TransitionOperation)
-		if !ok {
-			continue
-		}
+		switch transitionOp := op.(type) {
+		case hsm.DeleteOperation:
+			execInfo := r.mutableState.GetExecutionInfo()
+			trimmedTimers := make([]*persistencespb.StateMachineTimerGroup, 0, len(execInfo.StateMachineTimers))
 
-		node, err := tree.Child(transitionOp.Path())
-		if err != nil {
-			return err
-		}
+			for _, group := range execInfo.StateMachineTimers {
+				trimmedInfos := make([]*persistencespb.StateMachineTaskInfo, 0, len(group.Infos))
+				for _, info := range group.GetInfos() {
+					if !isPathAffectedByDelete(transitionOp.Path(), info.GetRef().GetPath()) {
+						trimmedInfos = append(trimmedInfos, info)
+					}
+				}
+				if len(trimmedInfos) > 0 {
+					trimmedTimers = append(trimmedTimers, &persistencespb.StateMachineTimerGroup{
+						Infos:     trimmedInfos,
+						Deadline:  group.Deadline,
+						Scheduled: group.Scheduled,
+					})
+				}
+			}
+			execInfo.StateMachineTimers = trimmedTimers
 
-		for _, task := range transitionOp.Output.Tasks {
-			// since this method is called after transition history is updated for the current transition,
-			// we can safely call generateSubStateMachineTask which sets MutableStateVersionedTransition
-			// to the last versioned transition in StateMachineRef
-			if err := generateSubStateMachineTask(
-				r.mutableState,
-				stateMachineRegistry,
-				node,
-				transitionOp.Path(),
-				transitionOp.Output.TransitionCount,
-				task,
-			); err != nil {
+		case hsm.TransitionOperation:
+			node, err := tree.Child(transitionOp.Path())
+			if err != nil {
 				return err
+			}
+			for _, task := range transitionOp.Output.Tasks {
+				// since this method is called after transition history is updated for the current transition,
+				// we can safely call generateSubStateMachineTask which sets MutableStateVersionedTransition
+				// to the last versioned transition in StateMachineRef
+				if err := generateSubStateMachineTask(
+					r.mutableState,
+					stateMachineRegistry,
+					node,
+					transitionOp.Path(),
+					transitionOp.Output.TransitionCount,
+					task,
+				); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -944,4 +944,16 @@ func generateSubStateMachineTask(
 	}
 
 	return nil
+}
+
+func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.StateMachineKey) bool {
+	if len(deletePath) > len(timerPath) {
+		return false
+	}
+	for i := range deletePath {
+		if deletePath[i].Type != timerPath[i].GetType() || deletePath[i].ID != timerPath[i].GetId() {
+			return false
+		}
+	}
+	return true
 }
