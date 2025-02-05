@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
@@ -78,7 +77,7 @@ const (
 type Starter struct {
 	shardContext                                  shard.Context
 	workflowConsistencyChecker                    api.WorkflowConsistencyChecker
-	tokenSerializer                               common.TaskTokenSerializer
+	tokenSerializer                               *tasktoken.Serializer
 	visibilityManager                             manager.VisibilityManager
 	request                                       *historyservice.StartWorkflowExecutionRequest
 	namespace                                     *namespace.Namespace
@@ -109,7 +108,7 @@ type mutableStateInfo struct {
 func NewStarter(
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	tokenSerializer common.TaskTokenSerializer,
+	tokenSerializer *tasktoken.Serializer,
 	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
@@ -318,9 +317,18 @@ func (s *Starter) handleConflict(
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	request := s.request.StartRequest
-	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() {
-		resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
-		return resp, StartDeduped, err
+	currentWorkflowRequestIDs := currentWorkflowConditionFailed.RequestIDs
+	if requestIDInfo, ok := currentWorkflowRequestIDs[request.GetRequestId()]; ok {
+		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
+			return resp, StartDeduped, err
+		}
+
+		resp := &historyservice.StartWorkflowExecutionResponse{
+			RunId:   currentWorkflowConditionFailed.RunID,
+			Started: false,
+		}
+		return resp, StartDeduped, nil
 	}
 
 	if err := s.verifyNamespaceActive(creationParams, currentWorkflowConditionFailed); err != nil {
@@ -416,7 +424,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		newRunID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
-		currentWorkflowConditionFailed.RequestID,
+		currentWorkflowConditionFailed.RequestIDs,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
 		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
 		currentWorkflowStartTime,
@@ -424,17 +432,14 @@ func (s *Starter) resolveDuplicateWorkflowID(
 
 	switch {
 	case errors.Is(err, api.ErrUseCurrentExecution):
-		resp := &historyservice.StartWorkflowExecutionResponse{
-			RunId:   currentWorkflowConditionFailed.RunID,
-			Started: false, // set explicitly for emphasis
-		}
-		return resp, StartReused, nil
+		return s.handleUseExistingWorkflowOnConflictOptions(ctx, workflowKey, currentWorkflowConditionFailed)
 	case err != nil:
 		return nil, StartErr, err
 	case currentExecutionUpdateAction == nil:
 		return nil, StartNew, nil
 	}
 
+	// handle terminating the current execution (currentWorkflowUpdateAction) and starting a new workflow
 	var workflowLease api.WorkflowLease
 	var mutableStateInfo *mutableStateInfo
 	// Update current execution and create new execution in one transaction.
@@ -443,11 +448,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		definition.NewWorkflowKey(
-			s.namespace.ID().String(),
-			workflowID,
-			currentWorkflowConditionFailed.RunID,
-		),
+		workflowKey,
 		currentExecutionUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
 			newMutableState, err := api.NewWorkflowWithSignal(
@@ -622,6 +623,79 @@ func (s *Starter) getWorkflowHistory(ctx context.Context, mutableState *mutableS
 	return events, nil
 }
 
+func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
+) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
+	var err error
+	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
+	if onConflictOptions != nil {
+		requestID := ""
+		if onConflictOptions.AttachRequestId {
+			requestID = s.request.StartRequest.GetRequestId()
+		}
+		var completionCallbacks []*commonpb.Callback
+		if onConflictOptions.AttachCompletionCallbacks {
+			completionCallbacks = s.request.StartRequest.GetCompletionCallbacks()
+		}
+		var links []*commonpb.Link
+		if onConflictOptions.AttachLinks {
+			links = s.request.StartRequest.GetLinks()
+		}
+		err = api.GetAndUpdateWorkflowWithNew(
+			ctx,
+			nil,
+			workflowKey,
+			func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+				mutableState := workflowLease.GetMutableState()
+				if !mutableState.IsWorkflowExecutionRunning() {
+					return nil, consts.ErrWorkflowCompleted
+				}
+
+				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+					nil,
+					false,
+					requestID,
+					completionCallbacks,
+					links,
+				)
+				return api.UpdateWorkflowWithoutWorkflowTask, err
+			},
+			nil, // no new workflow
+			s.shardContext,
+			s.workflowConsistencyChecker,
+		)
+	}
+
+	switch err {
+	case nil:
+		resp := &historyservice.StartWorkflowExecutionResponse{
+			RunId:   workflowKey.RunID,
+			Started: false, // set explicitly for emphasis
+		}
+		return resp, StartReused, nil
+	case consts.ErrWorkflowCompleted:
+		// Need to re-evaluate the reuse policy because the previous check didn't lock the current
+		// execution. So it's possible the workflow completed after the first call of
+		// api.ResolveDuplicateWorkflowID and before being able to update the existing workflow.
+		err := api.ResolveWorkflowIDReusePolicy(
+			workflowKey,
+			currentWorkflowConditionFailed.Status,
+			currentWorkflowConditionFailed.RequestIDs,
+			s.request.StartRequest.GetWorkflowIdReusePolicy(),
+		)
+		if err != nil {
+			return nil, StartErr, err
+		}
+		// no error means allowing duplicate workflow id
+		// fallthrough to the logic creating a new workflow
+		return nil, StartNew, nil
+	default:
+		return nil, StartErr, err
+	}
+}
+
 // extractHistoryEvents extracts all history events from a batch of events sent to persistence.
 // It's unlikely that persistence events would span multiple batches but better safe than sorry.
 func extractHistoryEvents(persistenceEvents []*persistence.WorkflowEvents) []*historypb.HistoryEvent {
@@ -654,7 +728,13 @@ func (s *Starter) generateResponse(
 		}, nil
 	}
 
-	if err := api.ProcessOutgoingSearchAttributes(s.shardContext, historyEvents, s.namespace.ID(), s.visibilityManager); err != nil {
+	if err := api.ProcessOutgoingSearchAttributes(
+		shardCtx.GetNamespaceRegistry(),
+		shardCtx.GetSearchAttributesProvider(),
+		shardCtx.GetSearchAttributesMapperProvider(),
+		historyEvents,
+		s.namespace.ID(),
+		s.visibilityManager); err != nil {
 		return nil, err
 	}
 

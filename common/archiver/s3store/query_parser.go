@@ -29,11 +29,10 @@ package s3store
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/temporalio/sqlparser"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/sqlquery"
 	"go.temporal.io/server/common/util"
 )
 
@@ -70,10 +69,6 @@ const (
 	PrecisionMinute = "Minute"
 	PrecisionSecond = "Second"
 )
-const (
-	queryTemplate         = "select * from dummy where %s"
-	defaultDateTimeFormat = time.RFC3339
-)
 
 // NewQueryParser creates a new query parser for filestore
 func NewQueryParser() QueryParser {
@@ -81,7 +76,7 @@ func NewQueryParser() QueryParser {
 }
 
 func (p *queryParser) Parse(query string) (*parsedQuery, error) {
-	stmt, err := sqlparser.Parse(fmt.Sprintf(queryTemplate, query))
+	stmt, err := sqlparser.Parse(fmt.Sprintf(sqlquery.QueryTemplate, query))
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +147,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 
 	switch colNameStr {
 	case WorkflowTypeName:
-		val, err := extractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -164,7 +159,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowTypeName = util.Ptr(val)
 	case WorkflowID:
-		val, err := extractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -176,7 +171,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.workflowID = util.Ptr(val)
 	case CloseTime:
-		timestamp, err := convertToTime(valStr)
+		timestamp, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -185,7 +180,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.closeTime = &timestamp
 	case StartTime:
-		timestamp, err := convertToTime(valStr)
+		timestamp, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
 			return err
 		}
@@ -194,7 +189,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		}
 		parsedQuery.startTime = &timestamp
 	case SearchPrecision:
-		val, err := extractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
@@ -219,27 +214,4 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 	}
 
 	return nil
-}
-
-func convertToTime(timeStr string) (time.Time, error) {
-	ts, err := strconv.ParseInt(timeStr, 10, 64)
-	if err == nil {
-		return timestamp.UnixOrZeroTime(ts), nil
-	}
-	timestampStr, err := extractStringValue(timeStr)
-	if err != nil {
-		return time.Time{}, err
-	}
-	parsedTime, err := time.Parse(defaultDateTimeFormat, timestampStr)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return parsedTime, nil
-}
-
-func extractStringValue(s string) (string, error) {
-	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
-		return s[1 : len(s)-1], nil
-	}
-	return "", fmt.Errorf("value %s is not a string value", s)
 }

@@ -981,6 +981,11 @@ message GetWorkflowExecutionHistoryResponse {
     temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse response = 1;
 }
 
+// This message must be wire compatible with GetWorkflowExecutionHistoryResponse.
+message GetWorkflowExecutionHistoryResponseWithRaw {
+    temporal.server.api.history.v1.GetWorkflowExecutionHistoryResponse response = 1;
+}
+
 message GetWorkflowExecutionHistoryReverseRequest {
     option (routing).workflow_id = "request.execution.workflow_id";
 
@@ -1124,8 +1129,8 @@ message CompleteNexusOperationRequest {
         // Operation failure, only set if state != successful.
         temporal.api.nexus.v1.Failure failure = 4;
     }
-    // Operation ID - used when the completion is received before the started response.
-    string operation_id = 5;
+    // Operation token - used when the completion is received before the started response.
+    string operation_token = 5;
     // Time the operation was started. Used when completion is received before the started response.
     google.protobuf.Timestamp start_time = 6;
     // Links to be attached to a fabricated start event if completion is received before started response.
@@ -1194,12 +1199,12 @@ message SyncWorkflowStateResponse {
 // (-- api-linter: core::0134::request-mask-required=disabled
 // (-- api-linter: core::0134::request-resource-required=disabled
 message UpdateActivityOptionsRequest {
-    option (routing).workflow_id = "update_request.workflow_id";
+    option (routing).workflow_id = "update_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.UpdateActivityOptionsByIdRequest update_request = 2;
+    temporal.api.workflowservice.v1.UpdateActivityOptionsRequest update_request = 2;
 }
 
 message UpdateActivityOptionsResponse {
@@ -1208,36 +1213,36 @@ message UpdateActivityOptionsResponse {
 }
 
 message PauseActivityRequest {
-    option (routing).workflow_id = "frontend_request.workflow_id";
+    option (routing).workflow_id = "frontend_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.PauseActivityByIdRequest frontend_request = 2;
+    temporal.api.workflowservice.v1.PauseActivityRequest frontend_request = 2;
 }
 
 message PauseActivityResponse {
 }
 
 message UnpauseActivityRequest {
-    option (routing).workflow_id = "frontend_request.workflow_id";
+    option (routing).workflow_id = "frontend_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.UnpauseActivityByIdRequest frontend_request = 2;
+    temporal.api.workflowservice.v1.UnpauseActivityRequest frontend_request = 2;
 }
 
 message UnpauseActivityResponse {
 }
 
 message ResetActivityRequest {
-    option (routing).workflow_id = "frontend_request.workflow_id";
+    option (routing).workflow_id = "frontend_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.ResetActivityByIdRequest frontend_request = 2;
+    temporal.api.workflowservice.v1.ResetActivityRequest frontend_request = 2;
 }
 
 message ResetActivityResponse {

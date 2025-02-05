@@ -341,13 +341,16 @@ type HistoryServiceClient interface {
 	//
 	// Pausing an activity means:
 	//   - If the activity is currently waiting for a retry or is running and subsequently fails,
-	//     it will not be rescheduled until it is unpaused.
+	//     it will not be rescheduled until it is unpause.
 	//   - If the activity is already paused, calling this method will have no effect.
-	//   - If the activity is running and will finish successfully, activity will be completed.
-	//   - If the activity is running and will finish with failure:
-	//   - if there is no retry left - activity will be completed.
-	//   - if there are more retries left - activity will be paused.
+	//   - If the activity is running and finishes successfully, the activity will be completed.
+	//   - If the activity is running and finishes with failure:
+	//   - if there is no retry left - the activity will be completed.
+	//   - if there are more retries left - the activity will be paused.
 	//
+	// For long-running activities:
+	// - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
+	// - The activity should respond to the cancellation accordingly.
 	// For long-running activities:
 	// - activity in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
 	// - The activity should respond to the cancellation accordingly.
@@ -355,31 +358,36 @@ type HistoryServiceClient interface {
 	// (-- api-linter: core::0134::response-message-name=disabled
 	PauseActivity(ctx context.Context, in *PauseActivityRequest, opts ...grpc.CallOption) (*PauseActivityResponse, error)
 	// UnpauseActivity unpauses the execution of an activity specified by its ID.
+	//
+	// If activity is not paused, this call will have no effect.
+	// If the activity is waiting for retry, it will be scheduled immediately (* see 'jitter' flag).
+	// Once the activity is unpause, all timeout timers will be regenerated.
+	//
+	// Flags:
+	// 'jitter': the activity will be scheduled at a random time within the jitter duration.
+	// 'reset_attempts': the number of attempts will be reset.
+	// 'reset_heartbeat': the activity heartbeat timer and heartbeats will be reset.
+	//
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
-	// There are two 'modes' of unpausing an activity:
-	// 'resume' - If the activity is paused, it will be resumed and scheduled for execution.
-	//   - If activity is currently running Unpause with 'resume' has no effect.
-	//   - if 'no_wait' flag is set and activity is waiting, the activity will be scheduled immediately.
-	//
-	// 'reset' - If the activity is paused, it will be reset to its initial state and (depending on parameters) scheduled for execution.
-	//   - If activity is currently running Unpause with 'reset' will reset the number of attempts.
-	//   - if 'no_wait' flag is set, the activity will be scheduled immediately.
-	//   - if 'reset_heartbeats' flag is set, the activity heartbeat timer and heartbeats will be reset.
-	//
-	// If activity is in waiting for retry and past it retry timeout, it will be scheduled immediately.
-	// Once activity is unpaused, all timeout timers will be regenerated.
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	UnpauseActivity(ctx context.Context, in *UnpauseActivityRequest, opts ...grpc.CallOption) (*UnpauseActivityResponse, error)
 	// ResetActivity resets the execution of an activity specified by its ID.
-	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	//
 	// Resetting an activity means:
-	// * number of attempts will be reset to 0.
-	// * activity timeouts will be resetted.
-	// If activity currently running:
-	// *  if 'no_wait' flag is provided, new instance of activity will be scheduled immediately.
-	// *  if 'no_wait' flag is not provided, activity will be scheduled after current instance completes if needed.
-	// If 'reset_heartbeats' flag is set, the activity heartbeat timer and heartbeats will be reset.
+	//   - number of attempts will be reset to 0.
+	//   - activity timeouts will be reset.
+	//   - if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
+	//     it will be scheduled immediately (* see 'jitter' flag),
+	//
+	// Flags:
+	//
+	// 'jitter': the activity will be scheduled at a random time within the jitter duration.
+	// If the activity currently paused it will be unpause, unless 'keep_paused' flag is provided.
+	// 'reset_heartbeats': the activity heartbeat timer and heartbeats will be reset.
+	// 'keep_paused': if the activity is paused, it will remain paused.
+	//
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error)
@@ -1246,7 +1254,7 @@ type HistoryServiceServer interface {
 	//	aip.dev/not-precedent: This service does not follow the update method API --)
 	PollWorkflowExecutionUpdate(context.Context, *PollWorkflowExecutionUpdateRequest) (*PollWorkflowExecutionUpdateResponse, error)
 	StreamWorkflowReplicationMessages(HistoryService_StreamWorkflowReplicationMessagesServer) error
-	GetWorkflowExecutionHistory(context.Context, *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error)
+	GetWorkflowExecutionHistory(context.Context, *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponseWithRaw, error)
 	GetWorkflowExecutionHistoryReverse(context.Context, *GetWorkflowExecutionHistoryReverseRequest) (*GetWorkflowExecutionHistoryReverseResponse, error)
 	GetWorkflowExecutionRawHistoryV2(context.Context, *GetWorkflowExecutionRawHistoryV2Request) (*GetWorkflowExecutionRawHistoryV2Response, error)
 	GetWorkflowExecutionRawHistory(context.Context, *GetWorkflowExecutionRawHistoryRequest) (*GetWorkflowExecutionRawHistoryResponse, error)
@@ -1280,13 +1288,16 @@ type HistoryServiceServer interface {
 	//
 	// Pausing an activity means:
 	//   - If the activity is currently waiting for a retry or is running and subsequently fails,
-	//     it will not be rescheduled until it is unpaused.
+	//     it will not be rescheduled until it is unpause.
 	//   - If the activity is already paused, calling this method will have no effect.
-	//   - If the activity is running and will finish successfully, activity will be completed.
-	//   - If the activity is running and will finish with failure:
-	//   - if there is no retry left - activity will be completed.
-	//   - if there are more retries left - activity will be paused.
+	//   - If the activity is running and finishes successfully, the activity will be completed.
+	//   - If the activity is running and finishes with failure:
+	//   - if there is no retry left - the activity will be completed.
+	//   - if there are more retries left - the activity will be paused.
 	//
+	// For long-running activities:
+	// - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
+	// - The activity should respond to the cancellation accordingly.
 	// For long-running activities:
 	// - activity in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
 	// - The activity should respond to the cancellation accordingly.
@@ -1294,31 +1305,36 @@ type HistoryServiceServer interface {
 	// (-- api-linter: core::0134::response-message-name=disabled
 	PauseActivity(context.Context, *PauseActivityRequest) (*PauseActivityResponse, error)
 	// UnpauseActivity unpauses the execution of an activity specified by its ID.
+	//
+	// If activity is not paused, this call will have no effect.
+	// If the activity is waiting for retry, it will be scheduled immediately (* see 'jitter' flag).
+	// Once the activity is unpause, all timeout timers will be regenerated.
+	//
+	// Flags:
+	// 'jitter': the activity will be scheduled at a random time within the jitter duration.
+	// 'reset_attempts': the number of attempts will be reset.
+	// 'reset_heartbeat': the activity heartbeat timer and heartbeats will be reset.
+	//
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
-	// There are two 'modes' of unpausing an activity:
-	// 'resume' - If the activity is paused, it will be resumed and scheduled for execution.
-	//   - If activity is currently running Unpause with 'resume' has no effect.
-	//   - if 'no_wait' flag is set and activity is waiting, the activity will be scheduled immediately.
-	//
-	// 'reset' - If the activity is paused, it will be reset to its initial state and (depending on parameters) scheduled for execution.
-	//   - If activity is currently running Unpause with 'reset' will reset the number of attempts.
-	//   - if 'no_wait' flag is set, the activity will be scheduled immediately.
-	//   - if 'reset_heartbeats' flag is set, the activity heartbeat timer and heartbeats will be reset.
-	//
-	// If activity is in waiting for retry and past it retry timeout, it will be scheduled immediately.
-	// Once activity is unpaused, all timeout timers will be regenerated.
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	UnpauseActivity(context.Context, *UnpauseActivityRequest) (*UnpauseActivityResponse, error)
 	// ResetActivity resets the execution of an activity specified by its ID.
-	// Returns a `NotFound` error if there is no pending activity with the provided ID.
+	//
 	// Resetting an activity means:
-	// * number of attempts will be reset to 0.
-	// * activity timeouts will be resetted.
-	// If activity currently running:
-	// *  if 'no_wait' flag is provided, new instance of activity will be scheduled immediately.
-	// *  if 'no_wait' flag is not provided, activity will be scheduled after current instance completes if needed.
-	// If 'reset_heartbeats' flag is set, the activity heartbeat timer and heartbeats will be reset.
+	//   - number of attempts will be reset to 0.
+	//   - activity timeouts will be reset.
+	//   - if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
+	//     it will be scheduled immediately (* see 'jitter' flag),
+	//
+	// Flags:
+	//
+	// 'jitter': the activity will be scheduled at a random time within the jitter duration.
+	// If the activity currently paused it will be unpause, unless 'keep_paused' flag is provided.
+	// 'reset_heartbeats': the activity heartbeat timer and heartbeats will be reset.
+	// 'keep_paused': if the activity is paused, it will remain paused.
+	//
+	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error)
@@ -1488,7 +1504,7 @@ func (UnimplementedHistoryServiceServer) PollWorkflowExecutionUpdate(context.Con
 func (UnimplementedHistoryServiceServer) StreamWorkflowReplicationMessages(HistoryService_StreamWorkflowReplicationMessagesServer) error {
 	return status.Errorf(codes.Unimplemented, "method StreamWorkflowReplicationMessages not implemented")
 }
-func (UnimplementedHistoryServiceServer) GetWorkflowExecutionHistory(context.Context, *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponse, error) {
+func (UnimplementedHistoryServiceServer) GetWorkflowExecutionHistory(context.Context, *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponseWithRaw, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflowExecutionHistory not implemented")
 }
 func (UnimplementedHistoryServiceServer) GetWorkflowExecutionHistoryReverse(context.Context, *GetWorkflowExecutionHistoryReverseRequest) (*GetWorkflowExecutionHistoryReverseResponse, error) {

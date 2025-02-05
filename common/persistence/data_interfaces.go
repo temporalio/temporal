@@ -122,8 +122,11 @@ type (
 
 	// CurrentWorkflowConditionFailedError represents a failed conditional update for current workflow record
 	CurrentWorkflowConditionFailedError struct {
-		Msg              string
-		RequestID        string
+		Msg string
+		// RequestIDs contains all request IDs associated with the workflow execution, ie., contain the
+		// request ID that started the workflow execution as well as the request IDs that were attached
+		// to the workflow execution when it was running.
+		RequestIDs       map[string]*persistencespb.RequestIDInfo
 		RunID            string
 		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus

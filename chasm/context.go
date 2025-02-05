@@ -22,32 +22,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package utf8validator
+package chasm
 
 import (
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.uber.org/fx"
+	"context"
+	"time"
 )
 
-var Module = fx.Options(
-	fx.Provide(utf8ValidatorProvider),
-)
+type Context interface {
+	// Context is not bound to any component,
+	// so all methods needs to take in component as a parameter
 
-func utf8ValidatorProvider(
-	logger log.Logger,
-	metrics metrics.Handler,
-	col *dynamicconfig.Collection,
-) *Validator {
-	return newValidator(
-		logger,
-		metrics,
-		dynamicconfig.ValidateUTF8SampleRPCRequest.Get(col),
-		dynamicconfig.ValidateUTF8SampleRPCResponse.Get(col),
-		dynamicconfig.ValidateUTF8SamplePersistence.Get(col),
-		dynamicconfig.ValidateUTF8FailRPCRequest.Get(col),
-		dynamicconfig.ValidateUTF8FailRPCResponse.Get(col),
-		dynamicconfig.ValidateUTF8FailPersistence.Get(col),
-	)
+	// NOTE: component created in the current transaction won't have a ref
+	// this is a Ref to the component state at the start of the transition
+	Ref(Component) (ComponentRef, bool)
+	Now(Component) time.Time
+
+	// Intent() OperationIntent
+	// ComponentOptions(Component) []ComponentOption
+
+	getContext() context.Context
+}
+
+type MutableContext interface {
+	Context
+
+	AddTask(Component, TaskAttributes, any) error
+
+	// Add more methods here for other storage commands/primitives.
+	// e.g. HistoryEvent
+
+	// Get a Ref for the component
+	// This ref to the component state at the end of the transition
+	// Same as Ref(Component) method in Context,
+	// this only works for components that already exists at the start of the transition
+	//
+	// If we provide this method, then the method on the engine doesn't need to
+	// return a Ref
+	// NewRef(Component) (ComponentRef, bool)
 }

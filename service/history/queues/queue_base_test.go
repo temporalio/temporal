@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -567,6 +568,7 @@ func (s *queueBaseSuite) newQueueBase(
 		mockShard.GetClusterMetadata(),
 		s.logger,
 		s.metricsHandler,
+		telemetry.NoopTracer,
 		nil,
 		func() bool {
 			return false

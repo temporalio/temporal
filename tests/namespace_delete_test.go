@@ -32,7 +32,6 @@ import (
 	"strconv"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
@@ -45,7 +44,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/testing/testvars"
@@ -60,9 +58,7 @@ type (
 )
 
 func TestNamespaceSuite(t *testing.T) {
-	// Test_NamespaceDelete_InvalidUTF8 can't run in parallel because of the global utf-8
-	// validator. Enable this after the utf-8 stuff is gone.
-	// TODO: enable this later: t.Parallel()
+	t.Parallel()
 	suite.Run(t, &namespaceTestSuite{})
 }
 
@@ -75,62 +71,6 @@ func (s *namespaceTestSuite) SetupSuite() {
 		dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(): 1 * time.Second,
 	}
 	s.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-}
-
-func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {
-	// don't fail for this test, we're testing this behavior specifically
-	s.OverrideDynamicConfig(dynamicconfig.ValidateUTF8FailRPCRequest, false)
-	s.OverrideDynamicConfig(dynamicconfig.ValidateUTF8FailRPCResponse, false)
-	s.OverrideDynamicConfig(dynamicconfig.ValidateUTF8FailPersistence, false)
-
-	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
-
-	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
-	defer cancel()
-	s.False(utf8.Valid([]byte(testcore.InvalidUTF8)))
-	retention := 24 * time.Hour
-	_, err := s.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        "valid-utf8", // we verify internally that these must be valid
-		Description:                      testcore.InvalidUTF8,
-		Data:                             map[string]string{testcore.InvalidUTF8: testcore.InvalidUTF8},
-		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
-		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
-		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
-	})
-	s.NoError(err)
-
-	descResp, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: "valid-utf8",
-	})
-	s.NoError(err)
-	nsID := descResp.GetNamespaceInfo().GetId()
-
-	delResp, err := s.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
-		NamespaceId: nsID,
-	})
-	s.NoError(err)
-	s.Equal("valid-utf8-deleted-"+nsID[:5], delResp.GetDeletedNamespace())
-
-	descResp2, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-		Id: nsID,
-	})
-	s.NoError(err)
-	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
-	s.Eventually(func() bool {
-		_, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-			Id: nsID,
-		})
-		var notFound *serviceerror.NamespaceNotFound
-		if !errors.As(err, &notFound) {
-			return false
-		}
-
-		return true
-	}, 20*time.Second, time.Second)
-
-	// check that we saw some validation errors
-	s.NotEmpty(capture.Snapshot()[metrics.UTF8ValidationErrors.Name()])
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {

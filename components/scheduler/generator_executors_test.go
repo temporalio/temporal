@@ -27,7 +27,6 @@ package scheduler_test
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common"
@@ -51,7 +50,7 @@ func registerGeneratorExecutor(t *testing.T, ctrl *gomock.Controller, registry *
 }
 
 func TestExecuteBufferTask_ProcessTimeRangeFails(t *testing.T) {
-	env := fakeEnv{}
+	env := newFakeEnv()
 	registry := newRegistry(t)
 	ctrl := gomock.NewController(t)
 	backend := &hsmtest.NodeBackend{}
@@ -74,7 +73,7 @@ func TestExecuteBufferTask_ProcessTimeRangeFails(t *testing.T) {
 }
 
 func TestExecuteBufferTask_Basic(t *testing.T) {
-	env := fakeEnv{}
+	env := newFakeEnv()
 	registry := newRegistry(t)
 	ctrl := gomock.NewController(t)
 	backend := &hsmtest.NodeBackend{}
@@ -91,7 +90,7 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	// against system time) to generate buffered actions.
 	generator, err := hsm.MachineData[scheduler.Generator](generatorNode)
 	require.NoError(t, err)
-	highWatermark := time.Now().UTC().Add(-defaultInterval * 5)
+	highWatermark := env.Now().UTC().Add(-defaultInterval * 5)
 	generator.LastProcessedTime = timestamppb.New(highWatermark)
 
 	// Execute the buffer task.
@@ -105,8 +104,8 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	executor, err := hsm.MachineData[scheduler.Executor](executorNode)
 	require.NoError(t, err)
 
-	// We expect 5 buffered starts, but the executor uses time.Now(), so GTE to be safe.
-	require.GreaterOrEqual(t, 5, len(executor.BufferedStarts))
+	// We expect 5 buffered starts.
+	require.Equal(t, 5, len(executor.BufferedStarts))
 
 	// Generator's high water mark should have advanced.
 	generator, err = hsm.MachineData[scheduler.Generator](generatorNode)
@@ -116,7 +115,7 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	require.True(t, generator.NextInvocationTime.AsTime().After(newHighWatermark))
 
 	// We should have enqueued an Execute task, and another Buffer task.
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 	require.Equal(t, 2, len(opLog))
 

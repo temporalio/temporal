@@ -22,37 +22,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package chasm
 
-import (
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/persistence"
-)
-
-type (
-	PretendAsLocalNamespace struct {
-		localClusterName string
-	}
-)
-
-var _ Mutation = PretendAsLocalNamespace{}
-
-// NewPretendAsLocalNamespace create a Mutation which update namespace replication
-// config as if this namespace is local
-func NewPretendAsLocalNamespace(
-	localClusterName string,
-) PretendAsLocalNamespace {
-	return PretendAsLocalNamespace{
-		localClusterName: localClusterName,
-	}
+func (r *Registry) Component(fqn string) (*RegistrableComponent, bool) {
+	return r.component(fqn)
 }
 
-func (c PretendAsLocalNamespace) apply(response *persistence.GetNamespaceResponse) {
-	response.IsGlobalNamespace = false
-	response.Namespace.ReplicationConfig = &persistencespb.NamespaceReplicationConfig{
-		ActiveClusterName: c.localClusterName,
-		Clusters:          persistence.GetOrUseDefaultClusters(c.localClusterName, nil),
-	}
-	response.Namespace.FailoverVersion = common.EmptyVersion
+func (r *Registry) Task(fqn string) (*RegistrableTask, bool) {
+	return r.task(fqn)
+}
+
+func (r *Registry) ComponentFor(componentInstance any) (*RegistrableComponent, bool) {
+	return r.componentFor(componentInstance)
+}
+
+func (r *Registry) TaskFor(taskInstance any) (*RegistrableTask, bool) {
+	return r.taskFor(taskInstance)
 }

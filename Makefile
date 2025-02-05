@@ -38,9 +38,7 @@ PERSISTENCE_DRIVER ?= cassandra
 TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
 
-# Always use "protolegacy" tag to allow disabling utf-8 validation on proto messages
-# during proto library transition.
-ALL_BUILD_TAGS := protolegacy,$(BUILD_TAG)
+ALL_BUILD_TAGS := $(BUILD_TAG),
 ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
 TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
@@ -118,10 +116,7 @@ ifeq ($(UNIT_TEST_DIRS),)
 UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
 endif
 
-# github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
 PINNED_DEPENDENCIES := \
-	github.com/go-sql-driver/mysql@v1.5.0 \
-	github.com/urfave/cli/v2@v2.4.0
 
 # Code coverage & test report output files.
 TEST_OUTPUT_ROOT        := ./.testoutput

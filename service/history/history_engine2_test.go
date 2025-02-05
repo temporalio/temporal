@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/api"
@@ -202,7 +203,7 @@ func (s *engine2Suite) SetupTest() {
 		logger:             s.logger,
 		throttledLogger:    s.logger,
 		metricsHandler:     metrics.NoopMetricsHandler,
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:    tasktoken.NewSerializer(),
 		config:             s.config,
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
@@ -1267,11 +1268,23 @@ func makeMockStartRequest(
 func makeCurrentWorkflowConditionFailedError(
 	tv *testvars.TestVars,
 	startTime *timestamppb.Timestamp,
-) *persistence.CurrentWorkflowConditionFailedError {
+) error {
 	lastWriteVersion := common.EmptyVersion
+	tv1 := tv.WithRequestID("AttachedRequestID1")
+	tv2 := tv.WithRequestID("AttachedRequestID2")
 	return &persistence.CurrentWorkflowConditionFailedError{
-		Msg:              "random message",
-		RequestID:        tv.RequestID(),
+		Msg: "random message",
+		RequestIDs: map[string]*persistencespb.RequestIDInfo{
+			tv.RequestID(): {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+			tv1.RequestID(): {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			},
+			tv2.RequestID(): {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+			},
+		},
 		RunID:            tv.RunID(),
 		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1350,6 +1363,30 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameRequestID() 
 
 	s.NoError(err)
 	s.True(resp.Started)
+	s.Equal(s.tv.RunID(), resp.GetRunId())
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameAttachedRequestID() {
+	// no error when request ID is the same
+	s.setupStartWorkflowExecutionForRunning()
+	startRequest := makeMockStartRequest(
+		s.tv,
+		enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+	)
+
+	tv1 := s.tv.WithRequestID("AttachedRequestID1")
+	startRequest.StartRequest.RequestId = tv1.RequestID()
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+	s.NoError(err)
+	s.False(resp.Started)
+	s.Equal(s.tv.RunID(), resp.GetRunId())
+
+	tv2 := s.tv.WithRequestID("AttachedRequestID2")
+	startRequest.StartRequest.RequestId = tv2.RequestID()
+	resp, err = s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+	s.NoError(err)
+	s.False(resp.Started)
 	s.Equal(s.tv.RunID(), resp.GetRunId())
 }
 
@@ -1448,14 +1485,19 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 	s.Run("when workflow completed", func() {
 		makeCurrentWorkflowConditionFailedError := func(
 			requestID string,
-		) *persistence.CurrentWorkflowConditionFailedError {
+		) error {
 			return &persistence.CurrentWorkflowConditionFailedError{
-				Msg:              "random message",
-				RequestID:        requestID,
+				Msg: "random message",
+				RequestIDs: map[string]*persistencespb.RequestIDInfo{
+					requestID: {
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
 				RunID:            prevRunID,
 				State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				LastWriteVersion: lastWriteVersion,
+				StartTime:        nil,
 			}
 		}
 
@@ -1547,14 +1589,19 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 			for _, status := range failureStatuses {
 				makeCurrentWorkflowConditionFailedError := func(
 					requestID string,
-				) *persistence.CurrentWorkflowConditionFailedError {
+				) error {
 					return &persistence.CurrentWorkflowConditionFailedError{
-						Msg:              "random message",
-						RequestID:        requestID,
+						Msg: "random message",
+						RequestIDs: map[string]*persistencespb.RequestIDInfo{
+							requestID: {
+								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							},
+						},
 						RunID:            prevRunID,
 						State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 						Status:           status,
 						LastWriteVersion: lastWriteVersion,
+						StartTime:        nil,
 					}
 				}
 
@@ -1802,12 +1849,18 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &persistence.CurrentWorkflowConditionFailedError{
-		Msg:              "random message",
-		RequestID:        requestID, // use same requestID
+		Msg: "random message",
+		RequestIDs: map[string]*persistencespb.RequestIDInfo{
+			// use same requestID
+			requestID: {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
 		RunID:            runID,
 		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: common.EmptyVersion,
+		StartTime:        nil,
 	}
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil).AnyTimes()
@@ -1868,12 +1921,17 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &persistence.CurrentWorkflowConditionFailedError{
-		Msg:              "random message",
-		RequestID:        "new request ID",
+		Msg: "random message",
+		RequestIDs: map[string]*persistencespb.RequestIDInfo{
+			"new request ID": {
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
 		RunID:            runID,
 		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: common.EmptyVersion,
+		StartTime:        nil,
 	}
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil).AnyTimes()

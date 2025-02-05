@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"time"
 
@@ -38,12 +39,10 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	serverClient "go.temporal.io/server/client"
-	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -52,26 +51,11 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/searchattribute"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"go.temporal.io/server/common/rpc/interceptor"
+	"google.golang.org/grpc/metadata"
 )
 
 type (
-	activities struct {
-		historyShardCount              int32
-		executionManager               persistence.ExecutionManager
-		taskManager                    persistence.TaskManager
-		namespaceRegistry              namespace.Registry
-		historyClient                  historyservice.HistoryServiceClient
-		frontendClient                 workflowservice.WorkflowServiceClient
-		clientFactory                  serverClient.Factory
-		clientBean                     serverClient.Bean
-		logger                         log.Logger
-		metricsHandler                 metrics.Handler
-		forceReplicationMetricsHandler metrics.Handler
-		namespaceReplicationQueue      persistence.NamespaceReplicationQueue
-	}
-
 	SkippedWorkflowExecution struct {
 		WorkflowExecution *commonpb.WorkflowExecution
 		Reason            string
@@ -87,6 +71,70 @@ type (
 	verifyResult struct {
 		status verifyStatus
 		reason string
+	}
+
+	listWorkflowsResponse struct {
+		Executions    []*commonpb.WorkflowExecution
+		NextPageToken []byte
+		Error         error
+
+		// These can be used to help report progress of the force-replication scan
+		LastCloseTime time.Time
+		LastStartTime time.Time
+	}
+
+	countWorkflowResponse struct {
+		WorkflowCount int64
+	}
+
+	generateReplicationTasksRequest struct {
+		NamespaceID      string
+		Executions       []*commonpb.WorkflowExecution
+		RPS              float64
+		GetParentInfoRPS float64
+	}
+
+	verifyReplicationTasksRequest struct {
+		Namespace             string
+		NamespaceID           string
+		TargetClusterEndpoint string
+		TargetClusterName     string
+		VerifyInterval        time.Duration `validate:"gte=0"`
+		Executions            []*commonpb.WorkflowExecution
+	}
+
+	verifyReplicationTasksResponse struct {
+		VerifiedWorkflowCount int64
+	}
+
+	metadataRequest struct {
+		Namespace string
+	}
+
+	metadataResponse struct {
+		ShardCount  int32
+		NamespaceID string
+	}
+
+	waitCatchupRequest struct {
+		ActiveCluster string
+		RemoteCluster string
+		Namespace     string
+	}
+
+	activities struct {
+		historyShardCount              int32
+		executionManager               persistence.ExecutionManager
+		taskManager                    persistence.TaskManager
+		namespaceRegistry              namespace.Registry
+		historyClient                  historyservice.HistoryServiceClient
+		frontendClient                 workflowservice.WorkflowServiceClient
+		clientFactory                  serverClient.Factory
+		clientBean                     serverClient.Bean
+		logger                         log.Logger
+		metricsHandler                 metrics.Handler
+		forceReplicationMetricsHandler metrics.Handler
+		namespaceReplicationQueue      persistence.NamespaceReplicationQueue
 	}
 )
 
@@ -106,7 +154,7 @@ func (r verifyResult) isVerified() bool {
 
 // TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
 // However, activity background context is per-worker, which means once set, all activities processed by the
-// worker will use CallerTypePreemptable, including those not related to migration. This is not ideal.
+// worker will use CallerType Preemptable, including those not related to migration. This is not ideal.
 // Using a different task queue and a dedicated worker for migration can solve the issue but requires
 // changing all existing tooling around namespace migration to start workflows & activities on the new task queue.
 // Another approach is to use separate workers for workflow tasks and activities and keep existing tooling unchanged.
@@ -179,7 +227,6 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 
 	for _, shard := range resp.Shards {
 		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.RemoteCluster]
-		actualLag := shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())
 		if hasClusterInfo {
 			// WE are all caught up
 			if shard.MaxReplicationTaskId == clusterInfo.AckedTaskId {
@@ -190,7 +237,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 			// Caught up to the last checked IDs, and within allowed lagging range
 			if clusterInfo.AckedTaskId >= waitRequest.WaitForTaskIds[shard.ShardId] &&
 				(shard.MaxReplicationTaskId-clusterInfo.AckedTaskId <= waitRequest.AllowedLaggingTasks ||
-					actualLag <= waitRequest.AllowedLagging) {
+					shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime()) <= waitRequest.AllowedLagging) {
 				readyShardCount++
 				continue
 			}
@@ -210,10 +257,10 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
 				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
 				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
-				tag.NewDurationTag("ActualLagging", actualLag),
+				tag.NewDurationTag("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
 				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
-				tag.NewTimePtrTag("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime),
-				tag.NewTimePtrTag("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime),
+				tag.NewTimeTag("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime.AsTime()),
+				tag.NewTimeTag("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime.AsTime()),
 				tag.NewInt64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
 				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
 			)
@@ -221,7 +268,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 	}
 
 	// emit metrics about how many shards are ready
-	metrics.CatchUpReadyShardCountGauge.With(a.metricsHandler).Record(
+	a.metricsHandler.Gauge(metrics.CatchUpReadyShardCountGauge.Name()).Record(
 		float64(readyShardCount),
 		metrics.OperationTag(metrics.MigrationWorkflowScope),
 		metrics.TargetClusterTag(waitRequest.RemoteCluster))
@@ -299,7 +346,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	}
 
 	// emit metrics about how many shards are ready
-	metrics.HandoverReadyShardCountGauge.With(a.metricsHandler).Record(
+	a.metricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.Name()).Record(
 		float64(readyShardCount),
 		metrics.OperationTag(metrics.MigrationWorkflowScope),
 		metrics.TargetClusterTag(waitRequest.RemoteCluster),
@@ -400,63 +447,144 @@ func (a *activities) UpdateActiveCluster(ctx context.Context, req updateActiveCl
 func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(request.Namespace, headers.CallerTypePreemptable, ""))
 
-	// modify query to include all namespace divisions
-	request.Query = searchattribute.QueryWithAnyNamespaceDivision(request.Query)
-
 	resp, err := a.frontendClient.ListWorkflowExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}
-	var lastCloseTime, lastStartTime *timestamppb.Timestamp
+	var lastCloseTime, lastStartTime time.Time
 
 	executions := make([]*commonpb.WorkflowExecution, len(resp.Executions))
 	for i, e := range resp.Executions {
 		executions[i] = e.Execution
 
 		if e.CloseTime != nil {
-			lastCloseTime = e.CloseTime
+			lastCloseTime = e.CloseTime.AsTime()
 		}
 
 		if e.StartTime != nil {
-			lastStartTime = e.StartTime
+			lastStartTime = e.StartTime.AsTime()
 		}
 	}
-	return &listWorkflowsResponse{Executions: executions, NextPageToken: resp.NextPageToken, LastCloseTime: lastCloseTime.AsTime(), LastStartTime: lastStartTime.AsTime()}, nil
+	return &listWorkflowsResponse{Executions: executions, NextPageToken: resp.NextPageToken, LastCloseTime: lastCloseTime, LastStartTime: lastStartTime}, nil
+}
+
+func (a *activities) CountWorkflow(ctx context.Context, request *workflowservice.CountWorkflowExecutionsRequest) (*countWorkflowResponse, error) {
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(request.Namespace, headers.CallerTypePreemptable, ""))
+
+	resp, err := a.frontendClient.CountWorkflowExecutions(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return &countWorkflowResponse{
+		WorkflowCount: resp.Count,
+	}, nil
 }
 
 func (a *activities) GenerateReplicationTasks(ctx context.Context, request *generateReplicationTasksRequest) error {
-	ctx = a.setCallerInfoForGenReplicationTask(ctx, namespace.ID(request.NamespaceID))
+	ctx = a.setCallerInfoForServerAPI(ctx, namespace.ID(request.NamespaceID))
 	rateLimiter := quotas.NewRateLimiter(request.RPS, int(math.Ceil(request.RPS)))
 
 	start := time.Now()
 	defer func() {
-		metrics.GenerateReplicationTasksLatency.With(a.forceReplicationMetricsHandler).Record(time.Since(start))
+		a.forceReplicationMetricsHandler.Timer(metrics.GenerateReplicationTasksLatency.Name()).Record(time.Since(start))
 	}()
 
 	startIndex := 0
 	if activity.HasHeartbeatDetails(ctx) {
-		var finishedIndex int
-		if err := activity.GetHeartbeatDetails(ctx, &finishedIndex); err == nil {
-			startIndex = finishedIndex + 1 // start from next one
+		if err := activity.GetHeartbeatDetails(ctx, &startIndex); err == nil {
+			startIndex = startIndex + 1 // start from next one
 		}
 	}
 
 	for i := startIndex; i < len(request.Executions); i++ {
-		we := request.Executions[i]
-		if err := a.generateWorkflowReplicationTask(ctx, rateLimiter, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId)); err != nil {
-			if !isNotFoundServiceError(err) {
-				a.logger.Error("force-replication failed to generate replication task", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
-				return err
+		var executionCandidates []definition.WorkflowKey
+		executionCandidates = []definition.WorkflowKey{definition.NewWorkflowKey(request.NamespaceID, request.Executions[i].GetWorkflowId(), request.Executions[i].GetRunId())}
+
+		for _, we := range executionCandidates {
+			if err := a.generateWorkflowReplicationTask(ctx, rateLimiter, we); err != nil {
+				if !isNotFoundServiceError(err) {
+					a.logger.Error("force-replication failed to generate replication task",
+						tag.WorkflowNamespaceID(we.GetNamespaceID()),
+						tag.WorkflowID(we.GetWorkflowID()),
+						tag.WorkflowRunID(we.GetRunID()),
+						tag.Error(err))
+					return err
+				}
+
+				a.logger.Warn("force-replication ignore replication task due to NotFoundServiceError",
+					tag.WorkflowNamespaceID(we.GetNamespaceID()),
+					tag.WorkflowID(we.GetWorkflowID()),
+					tag.WorkflowRunID(we.GetRunID()),
+					tag.Error(err))
 			}
 		}
-
 		activity.RecordHeartbeat(ctx, i)
 	}
 
 	return nil
 }
 
-func (a *activities) setCallerInfoForGenReplicationTask(
+func (a *activities) generateExecutionsToReplicate(
+	ctx context.Context,
+	rateLimiter quotas.RateLimiter,
+	executionDedupMap map[definition.WorkflowKey]struct{},
+	namespaceID string,
+	baseWf *commonpb.WorkflowExecution,
+) ([]definition.WorkflowKey, error) {
+
+	start := time.Now()
+	defer func() {
+		a.forceReplicationMetricsHandler.Timer("GenerateParentWorkflowExecutionsLatency").Record(time.Since(start))
+	}()
+
+	var resultStack []definition.WorkflowKey
+	baseWfKey := definition.NewWorkflowKey(namespaceID, baseWf.GetWorkflowId(), baseWf.GetRunId())
+	queue := []definition.WorkflowKey{baseWfKey}
+	for len(queue) > 0 {
+		var currWorkflow definition.WorkflowKey
+		currWorkflow, queue = queue[0], queue[1:]
+
+		if _, ok := executionDedupMap[currWorkflow]; ok {
+			// already in the result set
+			continue
+		}
+		executionDedupMap[currWorkflow] = struct{}{}
+
+		if err := rateLimiter.WaitN(ctx, 1); err != nil {
+			return nil, err
+		}
+		// Reason to use history client
+		// 1. Reduce networking routing
+		// 2. Bypass frontend per namespace rate limiter
+		resp, err := a.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+			NamespaceId: currWorkflow.GetNamespaceID(),
+			Request: &workflowservice.DescribeWorkflowExecutionRequest{
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: currWorkflow.GetWorkflowID(),
+					RunId:      currWorkflow.GetRunID(),
+				},
+			},
+		})
+		if err != nil {
+			if isNotFoundServiceError(err) {
+				continue
+			}
+			return nil, err
+		}
+		resultStack = append(resultStack, currWorkflow)
+
+		parentExecInfo := resp.GetWorkflowExecutionInfo().GetParentExecution()
+		if parentExecInfo != nil {
+			parentExecution := definition.NewWorkflowKey(resp.GetWorkflowExecutionInfo().GetParentNamespaceId(), parentExecInfo.GetWorkflowId(), parentExecInfo.GetRunId())
+			queue = append(queue, parentExecution)
+		}
+	}
+
+	slices.Reverse(resultStack)
+	return resultStack, nil
+}
+
+func (a *activities) setCallerInfoForServerAPI(
 	ctx context.Context,
 	namespaceID namespace.ID,
 ) context.Context {
@@ -584,7 +712,7 @@ func (a *activities) checkSkipWorkflowExecution(
 		if isNotFoundServiceError(err) {
 			// The outstanding workflow execution may be deleted (due to retention) on source cluster after replication tasks were generated.
 			// Since retention runs on both source/target clusters, such execution may also be deleted (hence not found) from target cluster.
-			metrics.EncounterNotFoundWorkflowCount.With(a.forceReplicationMetricsHandler).Record(1)
+			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.EncounterNotFoundWorkflowCount.Name()).Record(1)
 			return verifyResult{
 				status: skipped,
 				reason: reasonWorkflowNotFound,
@@ -599,7 +727,7 @@ func (a *activities) checkSkipWorkflowExecution(
 	// Zombie workflow should be a transient state. However, if there is Zombie workflow on the source cluster,
 	// it is skipped to avoid such workflow being processed on the target cluster.
 	if resp.GetDatabaseMutableState().GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		metrics.EncounterZombieWorkflowCount.With(a.forceReplicationMetricsHandler).Record(1)
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.EncounterZombieWorkflowCount.Name()).Record(1)
 		a.logger.Info("createReplicationTasks skip Zombie workflow", tags...)
 		return verifyResult{
 			status: skipped,
@@ -611,7 +739,7 @@ func (a *activities) checkSkipWorkflowExecution(
 	if closeTime := resp.GetDatabaseMutableState().GetExecutionInfo().GetCloseTime(); closeTime != nil && ns != nil && ns.Retention() > 0 {
 		deleteTime := closeTime.AsTime().Add(ns.Retention())
 		if deleteTime.Before(time.Now()) {
-			metrics.EncounterPassRetentionWorkflowCount.With(a.forceReplicationMetricsHandler).Record(1)
+			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.EncounterPassRetentionWorkflowCount.Name()).Record(1)
 			return verifyResult{
 				status: skipped,
 				reason: reasonWorkflowCloseToRetention,
@@ -627,43 +755,43 @@ func (a *activities) checkSkipWorkflowExecution(
 func (a *activities) verifySingleReplicationTask(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
-	remoteClient adminservice.AdminServiceClient,
+	remoteClient workflowservice.WorkflowServiceClient,
 	ns *namespace.Namespace,
 	we *commonpb.WorkflowExecution,
-) (result verifyResult, rerr error) {
+) (verifyResult, error) {
 	s := time.Now()
 	// Check if execution exists on remote cluster
-	_, err := remoteClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+	_, err := remoteClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: request.Namespace,
 		Execution: we,
 	})
-	metrics.VerifyDescribeMutableStateLatency.With(a.forceReplicationMetricsHandler).Record(time.Since(s))
+	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
 
 	switch err.(type) {
 	case nil:
-		metrics.VerifyReplicationTaskSuccess.With(a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace))).Record(1)
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
 		return verifyResult{
 			status: verified,
 		}, nil
 
 	case *serviceerror.NotFound:
-		metrics.VerifyReplicationTaskNotFound.With(a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace))).Record(1)
-		// Calling checkSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workfow being deleted due to retention.
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
+		// Calling checkSkipWorkflowExecution for every NotFound is sub-optimal as most common case to skip is workflow being deleted due to retention.
 		// A better solution is to only check the existence for workflow which is close to retention period.
 		return a.checkSkipWorkflowExecution(ctx, request, we, ns)
 
 	case *serviceerror.NamespaceNotFound:
 		return verifyResult{
 			status: notVerified,
-		}, temporal.NewNonRetryableApplicationError("remoteClient.DescribeMutableState call failed", "NamespaceNotFound", err)
+		}, temporal.NewNonRetryableApplicationError("failed to describe workflow from the remote cluster", "NamespaceNotFound", err)
 
 	default:
-		metrics.VerifyReplicationTaskFailed.With(a.forceReplicationMetricsHandler.
-			WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err))).Record(1)
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace), metrics.ServiceErrorTypeTag(err)).
+			Counter(metrics.VerifyReplicationTaskFailed.Name()).Record(1)
 
 		return verifyResult{
 			status: notVerified,
-		}, errors.WithMessage(err, "remoteClient.DescribeMutableState call failed")
+		}, errors.WithMessage(err, "failed to describe workflow from the remote cluster")
 	}
 }
 
@@ -671,7 +799,7 @@ func (a *activities) verifyReplicationTasks(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
 	details *replicationTasksHeartbeatDetails,
-	remoteClient adminservice.AdminServiceClient,
+	remoteClient workflowservice.WorkflowServiceClient,
 	ns *namespace.Namespace,
 	heartbeat func(details replicationTasksHeartbeatDetails),
 ) (bool, error) {
@@ -684,8 +812,10 @@ func (a *activities) verifyReplicationTasks(
 		}
 
 		heartbeat(*details)
-		metrics.VerifyReplicationTasksLatency.With(a.forceReplicationMetricsHandler).Record(time.Since(start))
+		a.forceReplicationMetricsHandler.Timer(metrics.VerifyReplicationTasksLatency.Name()).Record(time.Since(start))
 	}()
+
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(interceptor.DCRedirectionContextHeaderName, "false"))
 
 	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {
 		we := request.Executions[details.NextIndex]
@@ -711,25 +841,7 @@ const (
 )
 
 func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verifyReplicationTasksRequest) (verifyReplicationTasksResponse, error) {
-	ctx = headers.SetCallerInfo(ctx, headers.NewPreemptableCallerInfo(request.Namespace))
 	var response verifyReplicationTasksResponse
-	var remoteClient adminservice.AdminServiceClient
-	var err error
-
-	if len(request.TargetClusterName) > 0 {
-		remoteClient, err = a.clientBean.GetRemoteAdminClient(request.TargetClusterName)
-		if err != nil {
-			return response, err
-		}
-	} else {
-		// TODO: remove once TargetClusterEndpoint is no longer used.
-		remoteClient = a.clientFactory.NewRemoteAdminClientWithTimeout(
-			request.TargetClusterEndpoint,
-			admin.DefaultTimeout,
-			admin.DefaultLargeTimeout,
-		)
-	}
-
 	var details replicationTasksHeartbeatDetails
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &details); err != nil {
@@ -741,6 +853,11 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		activity.RecordHeartbeat(ctx, details)
 	}
 
+	_, remoteClient, err := a.clientBean.GetRemoteFrontendClient(request.TargetClusterName)
+	if err != nil {
+		return response, err
+	}
+
 	nsEntry, err := a.namespaceRegistry.GetNamespace(namespace.Name(request.Namespace))
 	if err != nil {
 		return response, err
@@ -750,7 +867,7 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 	//  1. replication lag
 	//  2. Zombie workflow execution
 	//  3. workflow execution was deleted (due to retention) after replication task was created
-	//  4. workflow execution was not applied succesfully on target cluster (i.e, bug)
+	//  4. workflow execution was not applied successfully on target cluster (i.e, bug)
 	//
 	// The verification step is retried for every VerifyInterval to handle #1. Verification progress
 	// is recorded in activity heartbeat. The verification is considered of making progress if there was at least one new execution
@@ -771,6 +888,7 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		}
 
 		if verified == true {
+			response.VerifiedWorkflowCount = int64(len(request.Executions))
 			return response, nil
 		}
 
@@ -778,10 +896,124 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		if diff > defaultNoProgressNotRetryableTimeout {
 			// Potentially encountered a missing execution, return non-retryable error
 			return response, temporal.NewNonRetryableApplicationError(
-				fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (not retryable). Not found WorkflowExecution: %v, Checkpoint: %v",
+				fmt.Sprintf("verifyReplicationTasks was not able to make progress for more than %v minutes (not retryable): could not find WorkflowExecution: '%v' in TargetCluster: '%s': Checkpoint: '%v', ",
 					diff.Minutes(),
-					details.LastNotVerifiedWorkflowExecution, details.CheckPoint),
-				"", nil)
+					details.LastNotVerifiedWorkflowExecution, request.TargetClusterName, details.CheckPoint),
+				"",
+				nil)
 		}
 	}
+}
+
+func (a *activities) WaitCatchup(ctx context.Context, params CatchUpParams) error {
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(params.Namespace, headers.CallerTypeAPI, ""))
+
+	descResp, err := a.frontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: params.Namespace,
+	})
+	if err != nil {
+		return err
+	}
+
+	waitCatchupRequest := waitCatchupRequest{
+		Namespace:     params.Namespace,
+		RemoteCluster: params.RemoteCluster,
+		ActiveCluster: descResp.ReplicationConfig.GetActiveClusterName(),
+	}
+
+	activeAckIDOnShard, err := a.getActiveClusterReplicationStatus(ctx, waitCatchupRequest)
+	if err != nil {
+		return err
+	}
+
+	for {
+		done, err := a.checkReplicationOnRemoteCluster(ctx, waitCatchupRequest, activeAckIDOnShard)
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+
+		// keep waiting and check again
+		time.Sleep(time.Second)
+		activity.RecordHeartbeat(ctx, nil)
+	}
+}
+
+// Check if remote cluster has caught up on all shards on replication tasks from passive replica.
+func (a *activities) getActiveClusterReplicationStatus(ctx context.Context, waitRequest waitCatchupRequest) (map[int32]int64, error) {
+	activeAckIDOnShard := make(map[int32]int64)
+
+	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
+		RemoteClusters: []string{waitRequest.ActiveCluster},
+	})
+	if err != nil {
+		return activeAckIDOnShard, err
+	}
+
+	// record the acked task id from active for each shard
+	for _, shard := range resp.Shards {
+		activeInfo, hasActiveInfo := shard.RemoteClusters[waitRequest.ActiveCluster]
+		if hasActiveInfo {
+			activeAckIDOnShard[shard.ShardId] = activeInfo.AckedTaskId
+		}
+	}
+
+	return activeAckIDOnShard, nil
+}
+
+// Check if remote cluster has caught up on all shards on replication tasks from passive replica.
+func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRequest waitCatchupRequest, activeAckIDOnShard map[int32]int64) (bool, error) {
+
+	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
+		RemoteClusters: []string{waitRequest.RemoteCluster},
+	})
+	if err != nil {
+		return false, err
+	}
+
+	expectedShardCount := len(activeAckIDOnShard)
+
+	readyShardCount := 0
+	logged := false
+	// check that on every shard, all source clusters have caught up with target cluster
+	for _, shard := range resp.Shards {
+		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.RemoteCluster]
+		if hasClusterInfo {
+			value, exists := activeAckIDOnShard[shard.ShardId]
+			// If the active acked task ID is not found, the shard is considered ready, as the remote ack level
+			// is assumed to be more up-to-date than the active ack level.
+			if !exists {
+				readyShardCount++
+				continue
+			}
+			if clusterInfo.AckedTaskId >= value {
+				readyShardCount++
+				continue
+			}
+		}
+
+		// shard is not ready, log first non-ready shard
+		if !logged {
+			logged = true
+			if !hasClusterInfo {
+				a.logger.Info("Wait handover missing remote cluster info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
+				// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
+				return false, temporal.NewNonRetryableApplicationError(fmt.Sprintf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster), "", nil)
+			}
+
+			a.logger.Info("Wait handover not ready",
+				tag.NewInt32("ShardId", shard.ShardId),
+				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
+				tag.NewStringTag("Namespace", waitRequest.Namespace),
+				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
+				tag.NewInt64("activeAckIDOnShard", activeAckIDOnShard[shard.ShardId]),
+			)
+
+		}
+
+	}
+
+	return readyShardCount == expectedShardCount, nil
 }

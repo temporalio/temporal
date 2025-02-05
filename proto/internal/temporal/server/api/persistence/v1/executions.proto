@@ -30,6 +30,7 @@ import "google/protobuf/timestamp.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/common.proto";
+import "temporal/api/enums/v1/event_type.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
@@ -280,6 +281,10 @@ message WorkflowExecutionInfo {
     repeated VersionedTransition previous_transition_history = 100;
     VersionedTransition last_transition_history_break_point = 101;
 
+    // This is a set of child workflows that were initialized after the reset point in the parent workflow.
+    // The children are identified by the key "workflow_type:workflow_id". When the parent starts to make progress after reset, it uses this data to
+    // determine the right start policy to apply to the child. This list will include children initiated in continue-as-new runs.
+    map<string, ResetChildInfo> children_initialized_post_reset_point = 102;
 }
 
 message ExecutionStats {
@@ -294,6 +299,14 @@ message WorkflowExecutionState {
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
     VersionedTransition last_update_versioned_transition = 5;
     google.protobuf.Timestamp start_time = 6;
+    // Request IDs that are attached to the workflow execution. It can the request ID that started
+    // the workflow execution or request IDs that were attached to an existing running workflow
+    // execution via StartWorkflowExecutionRequest.OnConflictOptions.
+    map<string, RequestIDInfo> request_ids = 7;
+}
+
+message RequestIDInfo {
+    temporal.api.enums.v1.EventType event_type = 1;
 }
 
 // transfer column
@@ -355,6 +368,7 @@ message ReplicationTaskInfo {
     // TODO: Remove this field when state-based replication is stable and
     // doesn't need to be disabled.
     repeated ReplicationTaskInfo task_equivalents = 20;
+    history.v1.VersionHistoryItem last_version_history_item = 21;
 }
 
 // visibility_task_data column
@@ -676,14 +690,14 @@ message NexusOperationInfo {
     // Operation name.
     string operation = 3;
 
-    // If set the state machine will remove itself from the HSM tree on completion.
-    bool delete_on_completion = 4;
+    // reserved due to removal of delete_on_completion
+    reserved 4;
 
     // Token for fetching the scheduled event.
     bytes scheduled_event_token = 5;
 
-    // Operation ID. Only set for asynchronous operations after a successful StartOperation call.
-    string operation_id = 6;
+    // Operation token. Only set for asynchronous operations after a successful StartOperation call.
+    string operation_token = 6;
 
     // Schedule-to-close timeout for this operation.
     // This is the only timeout settable by a workflow.
@@ -732,4 +746,10 @@ message NexusOperationCancellationInfo {
     temporal.api.failure.v1.Failure last_attempt_failure = 5;
     // The time when the next attempt is scheduled.
     google.protobuf.Timestamp next_attempt_schedule_time = 6;
+}
+
+// ResetChildInfo contains the state and actions to be performed on children when a parent workflow resumes after reset.
+message ResetChildInfo {
+    // If true, the parent workflow should terminate the child before starting it.
+    bool should_terminate_and_start = 1;
 }

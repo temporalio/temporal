@@ -25,7 +25,6 @@
 package tdbg_test
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -55,11 +54,10 @@ func (s *utilSuite) TestAcceptStringSliceArgsWithCommas() {
 		{
 			Name: "dostuff",
 			Action: func(c *cli.Context) error {
-				s.Equal(2, len(c.StringSlice("input")))
-				for _, inp := range c.StringSlice("input") {
-					var thing any
-					s.NoError(json.Unmarshal([]byte(inp), &thing))
-				}
+				input := c.StringSlice("input")
+				s.Equal(3, len(input))
+				expectedInput := []string{"s1", "s2", "s3"}
+				s.Equal(expectedInput, input)
 				return nil
 			},
 			Flags: []cli.Flag{
@@ -70,6 +68,6 @@ func (s *utilSuite) TestAcceptStringSliceArgsWithCommas() {
 		},
 	}
 	s.NoError(app.Run([]string{"testapp", "dostuff",
-		"--input", `{"field1": 34, "field2": false}`,
-		"--input", `{"numbers": [4,5,6]}`}))
+		"--input", `s1,s2`,
+		"--input", `s3`}))
 }

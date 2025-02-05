@@ -22,20 +22,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
+
+package chasm
 
 import (
-	tokenspb "go.temporal.io/server/api/token/v1"
+	"context"
+	"time"
 )
 
 type (
-	// TaskTokenSerializer serializes task tokens
-	TaskTokenSerializer interface {
-		Serialize(token *tokenspb.Task) ([]byte, error)
-		Deserialize(data []byte) (*tokenspb.Task, error)
-		SerializeQueryTaskToken(token *tokenspb.QueryTask) ([]byte, error)
-		DeserializeQueryTaskToken(data []byte) (*tokenspb.QueryTask, error)
-		SerializeNexusTaskToken(token *tokenspb.NexusTask) ([]byte, error)
-		DeserializeNexusTaskToken(data []byte) (*tokenspb.NexusTask, error)
+	TaskAttributes struct {
+		ScheduledTime time.Time
+		Destination   string
+	}
+
+	TaskHandler[C any, T any] interface {
+		Validate(Context, C, T) error
+		Execute(context.Context, ComponentRef, T) error
 	}
 )

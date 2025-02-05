@@ -157,6 +157,7 @@ func (c *mutationTestCase) startWFT(
 		"",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	if err != nil {
@@ -462,6 +463,7 @@ func TestGetNexusCompletion(t *testing.T) {
 				"---",
 				&taskqueuepb.TaskQueue{Name: "irrelevant"},
 				"---",
+				nil,
 				nil,
 				nil,
 				false,

@@ -79,7 +79,7 @@ func newOperationNode(t *testing.T, backend *hsmtest.NodeBackend, event *history
 	root := newRoot(t, backend)
 	token, err := hsm.GenerateEventLoadToken(event)
 	require.NoError(t, err)
-	node, err := nexusoperations.AddChild(root, fmt.Sprintf("%d", event.EventId), event, token, false)
+	node, err := nexusoperations.AddChild(root, fmt.Sprintf("%d", event.EventId), event, token)
 	require.NoError(t, err)
 	return node
 }
@@ -88,6 +88,10 @@ type root struct{}
 
 func (root) IsWorkflowExecutionRunning() bool {
 	return true
+}
+
+func (root) IsTransitionHistoryEnabled() bool {
+	return false
 }
 
 func mustNewScheduledEvent(schedTime time.Time, timeout time.Duration) *historypb.HistoryEvent {

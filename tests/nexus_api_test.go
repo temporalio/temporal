@@ -145,7 +145,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 						StartOperation: &nexuspb.StartOperationResponse{
 							Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
 								AsyncSuccess: &nexuspb.StartOperationResponse_Async{
-									OperationId: "test-id",
+									OperationToken: "test-token",
 									Links: []*nexuspb.Link{{
 										Url:  handlerNexusLink.URL.String(),
 										Type: string(handlerLink.ProtoReflect().Descriptor().FullName()),
@@ -158,7 +158,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			},
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, headers http.Header) {
 				require.NoError(t, err)
-				require.Equal(t, "test-id", res.Pending.ID)
+				require.Equal(t, "test-token", res.Pending.Token)
 				require.Len(t, res.Links, 1)
 				require.Equal(t, handlerNexusLink.URL.String(), res.Links[0].URL.String())
 				require.Equal(t, handlerNexusLink.Type, res.Links[0].Type)
@@ -186,7 +186,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				}, nil
 			},
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, headers http.Header) {
-				var operationError *nexus.UnsuccessfulOperationError
+				var operationError *nexus.OperationError
 				require.ErrorAs(t, err, &operationError)
 				require.Equal(t, nexus.OperationStateFailed, operationError.State)
 				require.Equal(t, "deliberate test failure", operationError.Cause.Error())
@@ -634,7 +634,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 				// poll response.
 				op := res.Request.Variant.(*nexuspb.Request_CancelOperation).CancelOperation
 				s.Equal("operation", op.Operation)
-				s.Equal("id", op.OperationId)
+				s.Equal("token", op.OperationToken)
 				s.Equal("value", res.Request.Header["key"])
 				return &nexuspb.Response{
 					Variant: &nexuspb.Response_CancelOperation{
@@ -700,7 +700,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 
 		go s.nexusTaskPoller(ctx, tc.endpoint.Spec.Target.GetWorker().TaskQueue, tc.handler)
 
-		handle, err := client.NewHandle("operation", "id")
+		handle, err := client.NewHandle("operation", "token")
 		require.NoError(t, err)
 
 		eventuallyTick := 500 * time.Millisecond

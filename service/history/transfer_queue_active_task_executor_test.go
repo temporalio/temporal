@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
@@ -67,6 +66,8 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
@@ -226,7 +227,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:    tasktoken.NewSerializer(),
 		metricsHandler:     s.mockShard.GetMetricsHandler(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		queueProcessors: map[tasks.Category]queues.Queue{
@@ -2065,7 +2066,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 	s.Nil(err)
 	mutableState.GetExecutionInfo().OriginalExecutionRunId = originalExecutionRunID
 
-	event, _ := addStartChildWorkflowExecutionInitiatedEvent(
+	childInitEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(
 		mutableState,
 		1111,
 		uuid.New(),
@@ -2080,6 +2081,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 		1*time.Second,
 		enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	)
+	// Set the base workflow for the reset run and simulate a reset point that is after the childInitEvent.EventId
+	mutableState.SetBaseWorkflow("baseRunID", childInitEvent.EventId+1, 123)
 
 	taskID := s.mustGenerateTaskID()
 	transferTask := &tasks.StartChildExecutionTask{
@@ -2092,11 +2095,11 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 		TargetNamespaceID:   tests.ChildNamespaceID.String(),
 		TargetWorkflowID:    childWorkflowID,
 		TaskID:              taskID,
-		InitiatedEventID:    event.GetEventId(),
+		InitiatedEventID:    childInitEvent.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
 	}
 
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, childInitEvent.GetEventId(), childInitEvent.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	// Assert that child workflow describe is called.
 	// The child describe returns a mock parent whose originalExecutionRunID points to the same as the current reset run's originalExecutionRunID
@@ -2938,6 +2941,7 @@ func (s *transferQueueActiveTaskExecutorSuite) newTaskExecutable(
 		s.mockClusterMetadata,
 		nil,
 		metrics.NoopMetricsHandler,
+		telemetry.NoopTracer,
 	)
 }
 
