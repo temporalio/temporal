@@ -510,7 +510,7 @@ func WorkerDeploymentVersionFromString(s string) (*deploymentspb.WorkerDeploymen
 	}
 	before, after, found := strings.Cut(s, WorkerDeploymentVersionIdDelimiter)
 	if !found {
-		return nil, fmt.Errorf("expected delimiter %s not found in version string %s", WorkerDeploymentVersionIdDelimiter, s)
+		return nil, fmt.Errorf("expected delimiter '%s' not found in version string '%s'", WorkerDeploymentVersionIdDelimiter, s)
 	}
 	return &deploymentspb.WorkerDeploymentVersion{
 		DeploymentName: before,

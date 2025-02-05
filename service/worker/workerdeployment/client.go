@@ -244,7 +244,7 @@ func (d *ClientImpl) DescribeVersion(
 ) (_ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
 	v, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>/<build_id>\"", version))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version))
 	}
 	deploymentName := v.GetDeploymentName()
 	buildID := v.GetBuildId()
@@ -306,6 +306,10 @@ func (d *ClientImpl) UpdateVersionMetadata(
 	//revive:disable-next-line:defer
 	defer d.record("UpdateVersionMetadata", &retErr, namespaceEntry.Name(), version, upsertEntries, removeEntries, identity)()
 	requestID := uuid.New()
+
+	if version == worker_versioning.UnversionedVersionId {
+		return nil, serviceerror.NewInvalidArgument("cannot update __unversioned__ metadata")
+	}
 
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
@@ -511,12 +515,14 @@ func (d *ClientImpl) SetRampingVersion(
 	requestID := uuid.New()
 	var versionObj *deploymentspb.WorkerDeploymentVersion
 	var err error
-	versionObj, err = worker_versioning.WorkerDeploymentVersionFromString(version)
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
-	}
-	if versionObj.GetDeploymentName() != "" && versionObj.GetDeploymentName() != deploymentName {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName))
+	if version != "" {
+		versionObj, err = worker_versioning.WorkerDeploymentVersionFromString(version)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
+		}
+		if versionObj.GetDeploymentName() != "" && versionObj.GetDeploymentName() != deploymentName {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName))
+		}
 	}
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetRampingVersionArgs{
@@ -679,6 +685,10 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 ) (_ *deploymentspb.SyncVersionStateResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SyncVersionWorkflowFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, args, identity)()
+
+	if version == worker_versioning.UnversionedVersionId {
+		return nil, serviceerror.NewInvalidArgument("cannot sync to __unversioned__ version")
+	}
 
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
