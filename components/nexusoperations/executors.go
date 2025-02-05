@@ -245,7 +245,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 			result = &nexus.ClientStartOperationResult[*commonpb.Payload]{
 				Pending: &nexus.OperationHandle[*commonpb.Payload]{
 					Operation: rawResult.Pending.Operation,
-					ID:        rawResult.Pending.ID,
+					Token:     rawResult.Pending.Token,
 				},
 				Links: rawResult.Links,
 			}
@@ -385,8 +385,10 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 					NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 						ScheduledEventId: eventID,
-						OperationId:      result.Pending.ID,
-						RequestId:        operation.RequestId,
+						OperationToken:   result.Pending.Token,
+						// TODO(bergundy): Remove this fallback after the 1.27 release.
+						OperationId: result.Pending.Token,
+						RequestId:   operation.RequestId,
 					},
 				}
 				// nolint:revive // We must mutate here even if the linter doesn't like it.
@@ -541,7 +543,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	if err != nil {
 		return fmt.Errorf("failed to get client: %w", err)
 	}
-	handle, err := client.NewHandle(args.operation, args.operationID)
+	handle, err := client.NewHandle(args.operation, args.token)
 	if err != nil {
 		return fmt.Errorf("failed to get handle for operation: %w", err)
 	}
@@ -599,9 +601,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 }
 
 type cancelArgs struct {
-	service, operation, operationID, endpointID, endpointName, requestID string
-	scheduledTime                                                        time.Time
-	scheduleToCloseTimeout                                               time.Duration
+	service, operation, token, endpointID, endpointName, requestID string
+	scheduledTime                                                  time.Time
+	scheduleToCloseTimeout                                         time.Duration
 }
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
@@ -619,7 +621,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 
 		args.service = op.Service
 		args.operation = op.Operation
-		args.operationID = op.OperationId
+		args.token = op.OperationToken
 		args.endpointID = op.EndpointId
 		args.endpointName = op.Endpoint
 		args.requestID = op.RequestId
@@ -693,10 +695,12 @@ func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *f
 		Message: "nexus operation completed unsuccessfully",
 		FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
 			NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
-				Endpoint:         operation.Endpoint,
-				Service:          operation.Service,
-				Operation:        operation.Operation,
-				OperationId:      operation.OperationId,
+				Endpoint:       operation.Endpoint,
+				Service:        operation.Service,
+				Operation:      operation.Operation,
+				OperationToken: operation.OperationToken,
+				// TODO(bergundy): This field is deprecated, remove it after the 1.27 release.
+				OperationId:      operation.OperationToken,
 				ScheduledEventId: scheduledEventID,
 			},
 		},

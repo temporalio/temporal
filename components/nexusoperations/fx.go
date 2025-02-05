@@ -146,6 +146,8 @@ func ClientProviderFactory(
 			Service:    service,
 			HTTPCaller: httpCaller,
 			Serializer: commonnexus.PayloadSerializer,
+			// TODO(bergundy): Remove this after the 1.27 release. It's here for compatibility with old server implementations.
+			UseOperationID: true,
 		})
 	}, nil
 }

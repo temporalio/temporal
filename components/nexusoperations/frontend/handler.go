@@ -203,11 +203,11 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		}
 	}
 	hr := &historyservice.CompleteNexusOperationRequest{
-		Completion:  completion,
-		State:       string(r.State),
-		OperationId: r.OperationID,
-		StartTime:   timestamppb.New(r.StartTime),
-		Links:       links,
+		Completion:     completion,
+		State:          string(r.State),
+		OperationToken: r.OperationToken,
+		StartTime:      timestamppb.New(r.StartTime),
+		Links:          links,
 	}
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:

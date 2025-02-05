@@ -141,9 +141,9 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 			for key, values := range s.Header {
 				span.SetAttributes(attribute.StringSlice("rpc.request.headers."+key, values))
 			}
-			deadline, ok := ctx.Deadline()
-			if ok {
-				span.SetAttributes(attribute.String("rpc.request.timeout", deadline.Format(time.RFC3339Nano)))
+			if deadline, ok := ctx.Deadline(); ok {
+				span.SetAttributes(attribute.String("rpc.request.deadline", deadline.Format(time.RFC3339Nano)))
+				span.SetAttributes(attribute.String("rpc.request.timeout", time.Until(deadline).String()))
 			}
 		}
 	case *stats.InPayload:
