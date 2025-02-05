@@ -30,7 +30,7 @@ import (
 
 type (
 	RegistrableTask struct {
-		name            string
+		taskType        string
 		goType          reflect.Type
 		componentGoType reflect.Type // It is not clear how this one is used.
 		handler         any
@@ -41,12 +41,12 @@ type (
 
 // NOTE: C is not Component but any.
 func NewRegistrableTask[C any, T any](
-	name string,
+	taskType string,
 	handler TaskHandler[C, T],
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	rt := &RegistrableTask{
-		name:            name,
+		taskType:        taskType,
 		goType:          reflect.TypeFor[T](),
 		componentGoType: reflect.TypeFor[C](),
 		handler:         handler,
@@ -57,6 +57,6 @@ func NewRegistrableTask[C any, T any](
 	return rt
 }
 
-func (rt RegistrableTask) Name() string {
-	return rt.name
+func (rt RegistrableTask) Type() string {
+	return rt.taskType
 }

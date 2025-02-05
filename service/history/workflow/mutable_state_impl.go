@@ -86,6 +86,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -834,6 +835,14 @@ func (ms *MutableStateImpl) UpdateResetRunID(runID string) {
 func (ms *MutableStateImpl) IsResetRun() bool {
 	originalExecutionRunID := ms.GetExecutionInfo().GetOriginalExecutionRunId()
 	return len(originalExecutionRunID) != 0 && originalExecutionRunID != ms.GetExecutionState().GetRunId()
+}
+
+func (ms *MutableStateImpl) SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo) {
+	ms.executionInfo.ChildrenInitializedPostResetPoint = children
+}
+
+func (ms *MutableStateImpl) GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo {
+	return ms.executionInfo.GetChildrenInitializedPostResetPoint()
 }
 
 func (ms *MutableStateImpl) GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
@@ -2599,13 +2608,14 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
+	updateReg update.Registry,
 	skipVersioningCheck bool,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
