@@ -37,7 +37,6 @@ message ParentExecutionInfo {
     int64 initiated_id = 4;
     temporal.server.api.clock.v1.VectorClock clock = 5;
     int64 initiated_version = 6;
-    bool is_reset_run = 7;
 }
 
 message RootExecutionInfo {
