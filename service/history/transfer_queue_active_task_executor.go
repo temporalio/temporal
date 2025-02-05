@@ -843,11 +843,10 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// But if it's FALSE then the child *may or maynot* be started (ex: we failed to record ChildExecutionStarted event previously.)
 	// Hence we need to check the child workflow ID and attempt to reconnect before proceeding to start a new instance of the child.
 	// This path is usually taken when the parent is being reset and the reset point (i.e baseWorkflowInfo.LowestCommonAncestorEventId) is after the child was initiated.
-	resetTerminateChildIfRunning := false
+	shouldTerminateAndStartChild := false
 	resetChildID := fmt.Sprintf("%s:%s", attributes.GetWorkflowType().Name, attributes.GetWorkflowId())
 	if mutableState.IsResetRun() {
 		baseWorkflowInfo := mutableState.GetBaseWorkflowInfo()
-		childWasInitialized := mutableState.GetExecutionInfo().GetChildrenInitializedPostResetPoint()[resetChildID]
 		if baseWorkflowInfo != nil && baseWorkflowInfo.LowestCommonAncestorEventId >= childInfo.InitiatedEventId { // child was started before the reset point.
 			childRunID, err := t.verifyChildWorkflow(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
 			if err != nil {
@@ -875,8 +874,11 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 				}
 				return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
 			}
-		} else if childWasInitialized { // child was recorded to have been started after the reset point.
-			resetTerminateChildIfRunning = true
+		} else {
+			// child was started after reset-point. But we need to first check if this child was recorded at the time of reset.
+			if resetChildInfo, ok := mutableState.GetExecutionInfo().GetChildrenInitializedPostResetPoint()[resetChildID]; ok {
+				shouldTerminateAndStartChild = resetChildInfo.ShouldTerminateAndStart
+			}
 		}
 		// now if there was no child found after reset then it could mean one of the following.
 		// 1. The parent never got a chance to start the child. So we should go ahead and start one (below)
@@ -905,7 +907,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedBuildId,
 		initiatedEvent.GetUserMetadata(),
 		mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(),
-		resetTerminateChildIfRunning,
+		shouldTerminateAndStartChild,
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -936,11 +938,13 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	t.logger.Debug("Child Execution started successfully",
 		tag.WorkflowID(attributes.WorkflowId), tag.WorkflowRunID(childRunID))
 
-	// if resetTerminateChildIfRunning is true, it means the child was started after the reset point we attempted to terminate it before starting a new one.
+	// if shouldTerminateAndStartChild is true, it means the child was started after the reset point and we attempted to terminate it before starting a new one.
 	// We should update the parent execution info to reflect that the child was potentially terminated and started.
-	if resetTerminateChildIfRunning {
+	if shouldTerminateAndStartChild {
 		childrenInitializedPostResetPoint := executionInfo.ChildrenInitializedPostResetPoint
-		childrenInitializedPostResetPoint[resetChildID] = false
+		childrenInitializedPostResetPoint[resetChildID] = &persistencespb.ResetChildInfo{
+			ShouldTerminateAndStart: false,
+		}
 		mutableState.SetChildrenInitializedPostResetPoint(childrenInitializedPostResetPoint)
 	}
 
