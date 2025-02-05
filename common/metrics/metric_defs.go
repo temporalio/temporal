@@ -31,6 +31,7 @@ const (
 	ServiceRoleTagName          = "service_role"
 	CacheTypeTagName            = "cache_type"
 	FailureTagName              = "failure"
+	FailureSourceTagName        = "failure_source"
 	TaskCategoryTagName         = "task_category"
 	TaskTypeTagName             = "task_type"
 	TaskPriorityTagName         = "task_priority"

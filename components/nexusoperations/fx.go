@@ -138,7 +138,14 @@ func ClientProviderFactory(
 		if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
 			httpCaller = func(r *http.Request) (*http.Response, error) {
 				r.Header.Set(NexusCallbackSourceHeader, clusterInfo.ClusterID)
-				return httpClient.Do(r)
+				resp, callErr := httpClient.Do(r)
+				if resp != nil && resp.Header != nil {
+					if failureSource := resp.Header.Get(commonnexus.FailureSourceHeaderName); failureSource != "" {
+						// Abuse the context to propagate this value back to the task executor since it cannot access response headers directly.
+						ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey{}, failureSource)
+					}
+				}
+				return resp, callErr
 			}
 		}
 		return nexus.NewHTTPClient(nexus.HTTPClientOptions{

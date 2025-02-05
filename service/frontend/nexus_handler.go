@@ -196,7 +196,7 @@ func (c *operationContext) interceptRequest(
 
 	c.cleanupFunctions = append(c.cleanupFunctions, func(respHeaders map[string]string, retErr error) {
 		if retErr != nil {
-			if source, ok := respHeaders[nexusFailureSourceHeaderName]; ok && source != failureSourceWorker {
+			if source, ok := respHeaders[commonnexus.FailureSourceHeaderName]; ok && source != commonnexus.FailureSourceWorker {
 				c.telemetryInterceptor.HandleError(
 					request,
 					"",
@@ -415,7 +415,7 @@ func (h *nexusHandler) StartOperation(
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 
-		oc.nexusContext.setFailureSource(failureSourceWorker)
+		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return nil, err
@@ -444,7 +444,7 @@ func (h *nexusHandler) StartOperation(
 		case *nexuspb.StartOperationResponse_OperationError:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
 
-			oc.nexusContext.setFailureSource(failureSourceWorker)
+			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
 			err := &nexus.OperationError{
 				State: nexus.OperationState(t.OperationError.GetOperationState()),
@@ -458,7 +458,7 @@ func (h *nexusHandler) StartOperation(
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 
-	oc.nexusContext.setFailureSource(failureSourceWorker)
+	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
@@ -556,7 +556,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 
-		oc.nexusContext.setFailureSource(failureSourceWorker)
+		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return err
@@ -567,7 +567,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 
-	oc.nexusContext.setFailureSource(failureSourceWorker)
+	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
@@ -617,7 +617,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 			return nil, err
 		}
 
-		if failureSource := response.Header.Get(nexusFailureSourceHeaderName); failureSource != "" {
+		if failureSource := response.Header.Get(commonnexus.FailureSourceHeaderName); failureSource != "" {
 			oc.nexusContext.setFailureSource(failureSource)
 		}
 
@@ -671,5 +671,5 @@ func (h *nexusHandler) convertOutcomeToNexusHandlerError(resp *matchingservice.D
 func (nc *nexusContext) setFailureSource(source string) {
 	nc.responseHeadersMutex.Lock()
 	defer nc.responseHeadersMutex.Unlock()
-	nc.responseHeaders[nexusFailureSourceHeaderName] = source
+	nc.responseHeaders[commonnexus.FailureSourceHeaderName] = source
 }

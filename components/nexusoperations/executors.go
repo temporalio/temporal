@@ -218,8 +218,9 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
-	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag)
-	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag)
+	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(callCtx))
+	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
+	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 
 	var result *nexus.ClientStartOperationResult[*commonpb.Payload]
 	if callErr == nil {
@@ -550,8 +551,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	statusCodeTag := metrics.OutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
-	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
-	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
+	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(callCtx))
+	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
+	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 
 	if callErr != nil {
 		e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
@@ -763,4 +765,16 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 			},
 		},
 	}, nil
+}
+
+func failureSourceFromContext(callCtx context.Context) string {
+	val := callCtx.Value(commonnexus.FailureSourceContextKey{})
+	if val == nil {
+		return ""
+	}
+	src, ok := val.(string)
+	if !ok {
+		return ""
+	}
+	return src
 }
