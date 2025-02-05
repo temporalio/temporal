@@ -186,7 +186,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				}, nil
 			},
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, headers http.Header) {
-				var operationError *nexus.UnsuccessfulOperationError
+				var operationError *nexus.OperationError
 				require.ErrorAs(t, err, &operationError)
 				require.Equal(t, nexus.OperationStateFailed, operationError.State)
 				require.Equal(t, "deliberate test failure", operationError.Cause.Error())

@@ -56,7 +56,7 @@ func TestRegistry_RegisterComponents_Success(t *testing.T) {
 
 	rc1, ok := r.Component("TestLibrary.Component1")
 	require.True(t, ok)
-	require.Equal(t, "Component1", rc1.Name())
+	require.Equal(t, "Component1", rc1.Type())
 
 	missingRC, ok := r.Component("TestLibrary.Component2")
 	require.False(t, ok)
@@ -65,7 +65,7 @@ func TestRegistry_RegisterComponents_Success(t *testing.T) {
 	cInstance1 := chasm.NewMockComponent(ctrl)
 	rc2, ok := r.ComponentFor(cInstance1)
 	require.True(t, ok)
-	require.Equal(t, "Component1", rc2.Name())
+	require.Equal(t, "Component1", rc2.Type())
 
 	cInstance2 := "invalid component instance"
 	rc3, ok := r.ComponentFor(cInstance2)
@@ -90,7 +90,7 @@ func TestRegistry_RegisterTasks_Success(t *testing.T) {
 
 	rt1, ok := r.Task("TestLibrary.Task1")
 	require.True(t, ok)
-	require.Equal(t, "Task1", rt1.Name())
+	require.Equal(t, "Task1", rt1.Type())
 
 	missingRT, ok := r.Task("TestLibrary.TaskMissing")
 	require.False(t, ok)
@@ -99,7 +99,7 @@ func TestRegistry_RegisterTasks_Success(t *testing.T) {
 	tInstance1 := testTask2{}
 	rt2, ok := r.TaskFor(tInstance1)
 	require.True(t, ok)
-	require.Equal(t, "Task2", rt2.Name())
+	require.Equal(t, "Task2", rt2.Type())
 
 	tInstance2 := "invalid task instance"
 	rt3, ok := r.TaskFor(tInstance2)

@@ -144,8 +144,8 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 		{
 			Description:   "Invalid deploymentName",
 			FieldName:     WorkerDeploymentFieldName,
-			Input:         "A/B",
-			ExpectedError: serviceerror.NewInvalidArgument("DeploymentName cannot contain '/'"),
+			Input:         "A.B",
+			ExpectedError: serviceerror.NewInvalidArgument("DeploymentName cannot contain '.'"),
 		},
 	}
 

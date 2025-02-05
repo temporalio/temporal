@@ -339,6 +339,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		"",
 		worker_versioning.StampFromBuildId("b2"),
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		nil,
 		false,
 	)
 	s.NoError(err)
@@ -362,6 +363,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		"",
 		worker_versioning.StampFromBuildId("b2"),
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b0"},
+		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -382,6 +384,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
 		tq,
 		"",
 		worker_versioning.StampFromBuildId("b2"),
+		nil,
 		nil,
 		false,
 	)
@@ -404,6 +407,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
 		"",
 		nil,
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -425,6 +429,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
 		"",
 		sticky,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -452,6 +457,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_StickyInvalid() {
 		"",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -472,6 +478,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 		"",
 		sticky,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -504,6 +511,7 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 		tq,
 		"",
 		worker_versioning.StampFromBuildId("b1"),
+		nil,
 		nil,
 		false,
 	)
@@ -688,6 +696,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		"",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	s.NoError(err)
@@ -737,6 +746,7 @@ func (s *mutableStateSuite) TestUnpinnedTransition() {
 		"",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	s.NoError(err)
@@ -773,6 +783,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
 		"",
 		tq,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -814,6 +825,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
 		"",
 		tq,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -979,6 +991,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		"",
 		tq,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -1275,6 +1288,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		uuid.New(),
 		&taskqueuepb.TaskQueue{Name: f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(5).RpcName()},
 		"random identity",
+		nil,
 		nil,
 		nil,
 		false,

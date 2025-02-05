@@ -27,6 +27,7 @@
 package workflow
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"time"
@@ -50,6 +51,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -469,6 +471,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 	skipVersioningCheck bool,
+	updateReg update.Registry,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -491,6 +494,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// consistent between the started event in history and the event that was sent to the SDK
 	// that resulted in the successful completion.
 	suggestContinueAsNew, historySizeBytes := m.getHistorySizeInfo()
+	if updateReg != nil {
+		suggestContinueAsNew = cmp.Or(suggestContinueAsNew, updateReg.SuggestContinueAsNew())
+	}
 
 	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, taskQueue, redirectInfo, skipVersioningCheck)
 	if err != nil {

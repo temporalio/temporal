@@ -38,20 +38,20 @@ var (
 
 type (
 	Registry struct {
-		componentByName map[string]*RegistrableComponent       // fully qualified name -> component
-		componentByType map[reflect.Type]*RegistrableComponent // component type -> component
+		componentByType   map[string]*RegistrableComponent       // fully qualified type name -> component
+		componentByGoType map[reflect.Type]*RegistrableComponent // component go type -> component
 
-		taskByName map[string]*RegistrableTask       // fully qualified name -> task
-		taskByType map[reflect.Type]*RegistrableTask // task type -> task
+		taskByType   map[string]*RegistrableTask       // fully qualified type name -> task
+		taskByGoType map[reflect.Type]*RegistrableTask // task go type -> task
 	}
 )
 
 func NewRegistry() *Registry {
 	return &Registry{
-		componentByName: make(map[string]*RegistrableComponent),
-		componentByType: make(map[reflect.Type]*RegistrableComponent),
-		taskByName:      make(map[string]*RegistrableTask),
-		taskByType:      make(map[reflect.Type]*RegistrableTask),
+		componentByType:   make(map[string]*RegistrableComponent),
+		componentByGoType: make(map[reflect.Type]*RegistrableComponent),
+		taskByType:        make(map[string]*RegistrableTask),
+		taskByGoType:      make(map[reflect.Type]*RegistrableTask),
 	}
 }
 
@@ -73,22 +73,22 @@ func (r *Registry) Register(lib Library) error {
 }
 
 func (r *Registry) component(fqn string) (*RegistrableComponent, bool) {
-	rc, ok := r.componentByName[fqn]
+	rc, ok := r.componentByType[fqn]
 	return rc, ok
 }
 
 func (r *Registry) task(fqn string) (*RegistrableTask, bool) {
-	rt, ok := r.taskByName[fqn]
+	rt, ok := r.taskByType[fqn]
 	return rt, ok
 }
 
 func (r *Registry) componentFor(componentInstance any) (*RegistrableComponent, bool) {
-	rt, ok := r.componentByType[reflect.TypeOf(componentInstance)]
+	rt, ok := r.componentByGoType[reflect.TypeOf(componentInstance)]
 	return rt, ok
 }
 
 func (r *Registry) taskFor(taskInstance any) (*RegistrableTask, bool) {
-	rt, ok := r.taskByType[reflect.TypeOf(taskInstance)]
+	rt, ok := r.taskByGoType[reflect.TypeOf(taskInstance)]
 	return rt, ok
 }
 
@@ -100,11 +100,11 @@ func (r *Registry) registerComponent(
 	libName string,
 	rc *RegistrableComponent,
 ) error {
-	if err := r.validateName(rc.name); err != nil {
+	if err := r.validateName(rc.componentType); err != nil {
 		return err
 	}
-	fqn := r.fqn(libName, rc.name)
-	if _, ok := r.componentByName[fqn]; ok {
+	fqn := r.fqn(libName, rc.componentType)
+	if _, ok := r.componentByType[fqn]; ok {
 		return fmt.Errorf("component %s is already registered", fqn)
 	}
 	// rc.goType implements Component interface; therefore, it must be a struct.
@@ -113,29 +113,29 @@ func (r *Registry) registerComponent(
 		(rc.goType.Kind() == reflect.Ptr && rc.goType.Elem().Kind() == reflect.Struct)) {
 		return fmt.Errorf("component type %s must be struct or pointer to struct", rc.goType.String())
 	}
-	if _, ok := r.componentByType[rc.goType]; ok {
+	if _, ok := r.componentByGoType[rc.goType]; ok {
 		return fmt.Errorf("component type %s is already registered", rc.goType.String())
 	}
-	r.componentByName[fqn] = rc
-	r.componentByType[rc.goType] = rc
+	r.componentByType[fqn] = rc
+	r.componentByGoType[rc.goType] = rc
 	return nil
 }
 func (r *Registry) registerTask(
 	libName string,
 	rt *RegistrableTask,
 ) error {
-	if err := r.validateName(rt.name); err != nil {
+	if err := r.validateName(rt.taskType); err != nil {
 		return err
 	}
-	fqn := r.fqn(libName, rt.name)
-	if _, ok := r.taskByName[fqn]; ok {
+	fqn := r.fqn(libName, rt.taskType)
+	if _, ok := r.taskByType[fqn]; ok {
 		return fmt.Errorf("task %s is already registered", fqn)
 	}
 	if !(rt.goType.Kind() == reflect.Struct ||
 		(rt.goType.Kind() == reflect.Ptr && rt.goType.Elem().Kind() == reflect.Struct)) {
 		return fmt.Errorf("task type %s must be struct or pointer to struct", rt.goType.String())
 	}
-	if _, ok := r.taskByType[rt.goType]; ok {
+	if _, ok := r.taskByGoType[rt.goType]; ok {
 		return fmt.Errorf("task type %s is already registered", rt.goType.String())
 	}
 	if !(rt.componentGoType.Kind() == reflect.Interface ||
@@ -145,8 +145,8 @@ func (r *Registry) registerTask(
 		return fmt.Errorf("component type %s must be and interface or struct that implements Component interface", rt.componentGoType.String())
 	}
 
-	r.taskByName[fqn] = rt
-	r.taskByType[rt.goType] = rt
+	r.taskByType[fqn] = rt
+	r.taskByGoType[rt.goType] = rt
 	return nil
 }
 

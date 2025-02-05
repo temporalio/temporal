@@ -527,7 +527,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 	return nil
 }
 
-// TODO (Shivam): Complete the implementation of this.
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
@@ -575,7 +574,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		c.firstPoll = c.partitionMgr.engine.timeSource.Now()
 	}
 	err = c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
-		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), c.firstPoll,
+		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
 		"matching service", uuid.New())
 	if err != nil {
 		var errTooMany deployment.ErrMaxTaskQueuesInDeployment

@@ -29,6 +29,7 @@ import (
 	"fmt"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/common/worker_versioning"
+
 	"testing"
 	"time"
 
@@ -485,7 +486,7 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_MultipleVersions_Multi
 }
 
 // Testing SetWorkerDeploymentRampingVersion
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_Ramping_With_Current() {
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_With_Current() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)
@@ -539,7 +540,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Ramping_With_Current() {
 	})
 }
 
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_DuplicateRamp() {
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_DuplicateRamp() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	rampingVersionVars := testvars.New(s).WithBuildIDNumber(1)
@@ -574,7 +575,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_DuplicateRamp() {
 	})
 }
 
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_Invalid_SetCurrent_To_Ramping() {
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_SetCurrent_To_Ramping() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 
@@ -603,7 +604,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Invalid_SetCurrent_To_Ramp
 	})
 }
 
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_ModifyExistingRampVersionPercentage() {
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_ModifyExistingRampVersionPercentage() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)
@@ -619,7 +620,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ModifyExistingRampVersionP
 
 }
 
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_WithCurrent_Unset_Ramp() {
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurrent_Unset_Ramp() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)
@@ -666,7 +667,6 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_WithCurrent_Unset_Ramp() {
 				RampingVersion:            "",
 				RampingVersionPercentage:  0,
 				RampingVersionChangedTime: nil,
-
 				CurrentVersion:            currentVersionVars.DeploymentVersionString(),
 				CurrentVersionChangedTime: timestamppb.Now(),
 			},
@@ -674,7 +674,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_WithCurrent_Unset_Ramp() {
 	})
 }
 
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_SetRampingAsCurrent() {
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_SetRampingAsCurrent() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)
@@ -704,7 +704,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_SetRampingAsCurrent() {
 	})
 }
 
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_NoCurrent_Unset_Ramp() {
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoCurrent_Unset_Ramp() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)
@@ -770,7 +770,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_PromoteUnversi
 }
 
 // Should see it fail because unversioned is already current
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unversioned_UnversionedCurrent() {
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversioned_UnversionedCurrent() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)
@@ -779,7 +779,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unversioned_UnversionedCur
 }
 
 // Should see that the ramping version of the task queues in the current version is unversioned
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unversioned_VersionedCurrent() {
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversioned_VersionedCurrent() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)

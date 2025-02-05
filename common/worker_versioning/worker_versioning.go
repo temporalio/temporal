@@ -60,7 +60,7 @@ const (
 	UnversionedVersionId       = "__unversioned__"
 
 	// Prefixes, Delimeters and Keys
-	WorkerDeploymentVersionIdDelimiter         = "/"
+	WorkerDeploymentVersionIdDelimiter         = "."
 	WorkerDeploymentVersionWorkflowIDPrefix    = "temporal-sys-worker-deployment-version"
 	WorkerDeploymentWorkflowIDPrefix           = "temporal-sys-worker-deployment"
 	WorkerDeploymentVersionWorkflowIDDelimeter = ":"
@@ -521,18 +521,15 @@ func WorkerDeploymentVersionFromString(s string) (*deploymentspb.WorkerDeploymen
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment workflows
 func GenerateDeploymentWorkflowID(deploymentName string) string {
-	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	escapedDeploymentName := escapeChar(deploymentName, WorkerDeploymentVersionWorkflowIDEscape, WorkerDeploymentVersionWorkflowIDDelimeter)
-	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedDeploymentName
+	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + deploymentName
 }
 
 // GenerateVersionWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment Version workflows
 func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
-	escapedVersionString := escapeChar(WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
+	versionString := WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
-	}), WorkerDeploymentVersionWorkflowIDEscape, WorkerDeploymentVersionWorkflowIDDelimeter)
-
-	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + escapedVersionString
+	})
+	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionWorkflowIDDelimeter + versionString
 }

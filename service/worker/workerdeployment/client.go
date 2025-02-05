@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -67,7 +68,6 @@ type Client interface {
 		deploymentName, buildId string,
 		taskQueueName string,
 		taskQueueType enumspb.TaskQueueType,
-		firstPoll time.Time,
 		identity string,
 		requestID string,
 	) error
@@ -117,6 +117,15 @@ type Client interface {
 		ignoreMissingTaskQueues bool,
 		conflictToken []byte,
 	) (*deploymentspb.SetRampingVersionResponse, error)
+
+	UpdateVersionMetadata(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		version string,
+		upsertEntries map[string]*commonpb.Payload,
+		removeEntries []string,
+		identity string,
+	) (*deploymentpb.VersionMetadata, error)
 
 	// Used internally by the Worker Deployment workflow in its StartWorkerDeployment Activity
 	StartWorkerDeployment(
@@ -173,7 +182,6 @@ type Client interface {
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
-
 type ErrRegister struct{ error }
 
 // ClientImpl implements Client
@@ -197,7 +205,6 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	deploymentName, buildId string,
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
-	firstPoll time.Time,
 	identity string,
 	requestID string,
 ) (retErr error) {
@@ -205,10 +212,9 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	defer d.record("RegisterTaskQueueWorker", &retErr, taskQueueName, taskQueueType, identity)()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInVersionArgs{
-		TaskQueueName:   taskQueueName,
-		TaskQueueType:   taskQueueType,
-		FirstPollerTime: timestamppb.New(firstPoll),
-		MaxTaskQueues:   int32(d.maxTaskQueuesInDeployment(namespaceEntry.Name().String())),
+		TaskQueueName: taskQueueName,
+		TaskQueueType: taskQueueType,
+		MaxTaskQueues: int32(d.maxTaskQueuesInDeployment(namespaceEntry.Name().String())),
 	})
 	if err != nil {
 		return err
@@ -290,6 +296,56 @@ func (d *ClientImpl) DescribeVersion(
 	}
 
 	return versionStateToVersionInfo(queryResponse.VersionState), nil
+}
+
+func (d *ClientImpl) UpdateVersionMetadata(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	version string,
+	upsertEntries map[string]*commonpb.Payload,
+	removeEntries []string,
+	identity string,
+) (_ *deploymentpb.VersionMetadata, retErr error) {
+	//revive:disable-next-line:defer
+	defer d.record("UpdateVersionMetadata", &retErr, namespaceEntry.Name(), version, upsertEntries, removeEntries, identity)()
+	requestID := uuid.New()
+
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
+	}
+
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.UpdateVersionMetadataArgs{
+		UpsertEntries: upsertEntries,
+		RemoveEntries: removeEntries,
+		Identity:      identity,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, versionObj.GetDeploymentName(), versionObj.GetBuildId(), &updatepb.Request{
+		Input: &updatepb.Input{Name: UpdateVersionMetadata, Args: updatePayload},
+		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+	}, identity, requestID)
+	if err != nil {
+		return nil, err
+	}
+
+	if failure := outcome.GetFailure(); failure != nil {
+		return nil, errors.New(failure.Message)
+	}
+	success := outcome.GetSuccess()
+	if success == nil {
+		return nil, serviceerror.NewInternal("outcome missing success and failure")
+	}
+
+	var res deploymentspb.UpdateVersionMetadataResponse
+	if err := sdk.PreferProtoDataConverter.FromPayloads(outcome.GetSuccess(), &res); err != nil {
+		return nil, err
+	}
+
+	return res.Metadata, nil
 }
 
 func (d *ClientImpl) DescribeWorkerDeployment(
@@ -764,17 +820,12 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 		return nil, err
 	}
 
-	memo, err := d.buildInitialVersionMemo(deploymentName, buildID)
-	if err != nil {
-		return nil, err
-	}
-
 	return d.updateWithStart(
 		ctx,
 		namespaceEntry,
 		WorkerDeploymentVersionWorkflowType,
 		workflowID,
-		memo,
+		nil,
 		input,
 		updateRequest,
 		identity,
@@ -976,23 +1027,6 @@ func (d *ClientImpl) updateWithStart(
 	return outcome, err
 }
 
-// TODO (Shivam): Verify if memo needs changes.
-func (d *ClientImpl) buildInitialVersionMemo(deploymentName, buildID string) (*commonpb.Memo, error) {
-	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.VersionWorkflowMemo{
-		DeploymentName: deploymentName,
-		BuildId:        buildID,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{
-			WorkerDeploymentMemoField: pl,
-		},
-	}, nil
-}
-
 func (d *ClientImpl) buildInitialMemo(deploymentName string) (*commonpb.Memo, error) {
 	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.WorkerDeploymentWorkflowMemo{
 		DeploymentName: deploymentName,
@@ -1058,7 +1092,6 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		}
 	}
 
-	// TODO (Shivam): Add metadata and aggregated pollers status
 	return &deploymentpb.WorkerDeploymentVersionInfo{
 		Version:            worker_versioning.WorkerDeploymentVersionToString(state.Version),
 		CreateTime:         state.CreateTime,

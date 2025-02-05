@@ -27,6 +27,7 @@ package workerdeployment
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/pborman/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"

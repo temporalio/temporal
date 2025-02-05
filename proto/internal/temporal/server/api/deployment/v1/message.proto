@@ -118,8 +118,6 @@ message VersionLocalState {
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
 message TaskQueueVersionData {
-    // Experimental. First time this task queue received a poller with this worker version.
-    google.protobuf.Timestamp first_poller_time = 1;
 }
 
 // used as Worker Deployment Version workflow input:
@@ -156,8 +154,7 @@ message WorkerDeploymentLocalState {
 message RegisterWorkerInVersionArgs {
     string task_queue_name = 1;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
-    google.protobuf.Timestamp first_poller_time = 3;
-    int32 max_task_queues = 4;
+    int32 max_task_queues = 3;
 }
 
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
@@ -193,12 +190,6 @@ message QueryDescribeVersionResponse {
 // used as Worker Deployment Version workflow query response:
 message QueryDescribeWorkerDeploymentResponse {
     WorkerDeploymentLocalState state = 1;
-}
-
-// used as Worker Deployment Version workflow memo:
-message VersionWorkflowMemo {
-    string deployment_name = 1;
-    string build_id = 2;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -240,6 +231,18 @@ message SyncUnversionedRampActivityArgs {
 // used as Worker Deployment workflow activity output:
 message SyncUnversionedRampActivityResponse {
     map<string, int64> task_queue_max_versions = 1;
+}
+
+// used as Worker Deployment Version workflow update input:
+message UpdateVersionMetadataArgs {
+    map<string, temporal.api.common.v1.Payload> upsert_entries = 1;
+    repeated string remove_entries = 2;
+    string identity = 3;
+}
+
+// used as Worker Deployment Version workflow update response:
+message UpdateVersionMetadataResponse {
+    temporal.api.deployment.v1.VersionMetadata metadata = 1;
 }
 
 // used as Worker Deployment workflow update input:

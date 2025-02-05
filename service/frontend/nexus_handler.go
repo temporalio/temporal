@@ -441,7 +441,7 @@ func (h *nexusHandler) StartOperation(
 
 			oc.nexusContext.setFailureSource(failureSourceWorker)
 
-			err := &nexus.UnsuccessfulOperationError{
+			err := &nexus.OperationError{
 				State: nexus.OperationState(t.OperationError.GetOperationState()),
 				Cause: &nexus.FailureError{
 					Failure: commonnexus.ProtoFailureToNexusFailure(t.OperationError.GetFailure()),
