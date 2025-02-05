@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/temporal"
@@ -51,6 +51,7 @@ import (
 
 func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
@@ -89,6 +90,7 @@ func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	ctrl := gomock.NewController(t)
@@ -107,8 +109,11 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     nil,
-		metricsHandler:    nil,
-		logger:            nil,
+		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
+			return 100, func() {}
+		},
+		metricsHandler: nil,
+		logger:         nil,
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
@@ -133,6 +138,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 
 func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
@@ -159,7 +165,6 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
 		require.Equal(t, namespace.Name("namespace"), params.Namespace)
 		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
-		require.Equal(t, 100, params.RPS)
 		require.Equal(t, 3, params.ListPageSize)
 		if params.NextPageToken == nil {
 			nilTokenOnce.Store(true)
@@ -191,6 +196,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 
 func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
@@ -225,6 +231,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 
 func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
@@ -250,12 +257,12 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
 	require.True(t, stderrors.As(err, &appErr))
-	require.Contains(t, appErr.Error(), "unable to execute activity: DeleteExecutionsActivity")
-	require.Contains(t, appErr.Error(), "specific_error_from_activity")
+	require.Equal(t, appErr.Error(), "specific_error_from_activity (type: Unavailable, retryable: true)")
 }
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	ctrl := gomock.NewController(t)
@@ -270,14 +277,14 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
 				},
 			},
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",
@@ -297,14 +304,14 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
 				},
 			},
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",
@@ -326,13 +333,16 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
-		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewNoopLogger(),
+		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
+			return 100, func() {}
+		},
+		metricsHandler: metrics.NoopMetricsHandler,
+		logger:         log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
 		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewNoopLogger(),
+		logger:            log.NewTestLogger(),
 	}
 
 	env.RegisterActivity(la.GetNextPageTokenActivity)
@@ -357,6 +367,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	ctrl := gomock.NewController(t)
@@ -371,14 +382,14 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
 				},
 			},
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",
@@ -398,14 +409,14 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
 				},
 			},
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",
@@ -421,13 +432,16 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
-		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewNoopLogger(),
+		deleteActivityRPS: func(callback func(int)) (v int, cancel func()) {
+			return 100, func() {}
+		},
+		metricsHandler: metrics.NoopMetricsHandler,
+		logger:         log.NewTestLogger(),
 	}
 	la := &LocalActivities{
 		visibilityManager: visibilityManager,
 		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewNoopLogger(),
+		logger:            log.NewTestLogger(),
 	}
 
 	env.RegisterActivity(la.GetNextPageTokenActivity)

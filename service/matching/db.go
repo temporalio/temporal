@@ -222,7 +222,7 @@ func (db *taskQueueDB) updateApproximateBacklogCount(
 	// Prevent under-counting
 	if db.approximateBacklogCount.Load()+delta < 0 {
 		db.logger.Info("ApproximateBacklogCounter could have under-counted.",
-			tag.WorkerBuildId(db.queue.BuildId()), tag.WorkflowNamespace(db.queue.Partition().NamespaceId()))
+			tag.WorkerBuildId(db.queue.Version().MetricsTagValue()), tag.WorkflowNamespaceID(db.queue.Partition().NamespaceId()))
 		db.approximateBacklogCount.Store(0)
 	} else {
 		db.approximateBacklogCount.Add(delta)

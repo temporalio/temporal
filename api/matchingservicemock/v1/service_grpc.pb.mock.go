@@ -145,6 +145,26 @@ func (mr *MockMatchingServiceClientMockRecorder) CancelOutstandingPoll(ctx, in a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingPoll", reflect.TypeOf((*MockMatchingServiceClient)(nil).CancelOutstandingPoll), varargs...)
 }
 
+// CheckTaskQueueUserDataPropagation mocks base method.
+func (m *MockMatchingServiceClient) CheckTaskQueueUserDataPropagation(ctx context.Context, in *matchingservice.CheckTaskQueueUserDataPropagationRequest, opts ...grpc.CallOption) (*matchingservice.CheckTaskQueueUserDataPropagationResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CheckTaskQueueUserDataPropagation", varargs...)
+	ret0, _ := ret[0].(*matchingservice.CheckTaskQueueUserDataPropagationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckTaskQueueUserDataPropagation indicates an expected call of CheckTaskQueueUserDataPropagation.
+func (mr *MockMatchingServiceClientMockRecorder) CheckTaskQueueUserDataPropagation(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueUserDataPropagation", reflect.TypeOf((*MockMatchingServiceClient)(nil).CheckTaskQueueUserDataPropagation), varargs...)
+}
+
 // CreateNexusEndpoint mocks base method.
 func (m *MockMatchingServiceClient) CreateNexusEndpoint(ctx context.Context, in *matchingservice.CreateNexusEndpointRequest, opts ...grpc.CallOption) (*matchingservice.CreateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
@@ -585,6 +605,26 @@ func (mr *MockMatchingServiceClientMockRecorder) RespondQueryTaskCompleted(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceClient)(nil).RespondQueryTaskCompleted), varargs...)
 }
 
+// SyncDeploymentUserData mocks base method.
+func (m *MockMatchingServiceClient) SyncDeploymentUserData(ctx context.Context, in *matchingservice.SyncDeploymentUserDataRequest, opts ...grpc.CallOption) (*matchingservice.SyncDeploymentUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SyncDeploymentUserData", varargs...)
+	ret0, _ := ret[0].(*matchingservice.SyncDeploymentUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncDeploymentUserData indicates an expected call of SyncDeploymentUserData.
+func (mr *MockMatchingServiceClientMockRecorder) SyncDeploymentUserData(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDeploymentUserData", reflect.TypeOf((*MockMatchingServiceClient)(nil).SyncDeploymentUserData), varargs...)
+}
+
 // UpdateNexusEndpoint mocks base method.
 func (m *MockMatchingServiceClient) UpdateNexusEndpoint(ctx context.Context, in *matchingservice.UpdateNexusEndpointRequest, opts ...grpc.CallOption) (*matchingservice.UpdateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
@@ -746,6 +786,21 @@ func (m *MockMatchingServiceServer) CancelOutstandingPoll(arg0 context.Context, 
 func (mr *MockMatchingServiceServerMockRecorder) CancelOutstandingPoll(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingPoll", reflect.TypeOf((*MockMatchingServiceServer)(nil).CancelOutstandingPoll), arg0, arg1)
+}
+
+// CheckTaskQueueUserDataPropagation mocks base method.
+func (m *MockMatchingServiceServer) CheckTaskQueueUserDataPropagation(arg0 context.Context, arg1 *matchingservice.CheckTaskQueueUserDataPropagationRequest) (*matchingservice.CheckTaskQueueUserDataPropagationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckTaskQueueUserDataPropagation", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.CheckTaskQueueUserDataPropagationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckTaskQueueUserDataPropagation indicates an expected call of CheckTaskQueueUserDataPropagation.
+func (mr *MockMatchingServiceServerMockRecorder) CheckTaskQueueUserDataPropagation(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueUserDataPropagation", reflect.TypeOf((*MockMatchingServiceServer)(nil).CheckTaskQueueUserDataPropagation), arg0, arg1)
 }
 
 // CreateNexusEndpoint mocks base method.
@@ -1076,6 +1131,21 @@ func (m *MockMatchingServiceServer) RespondQueryTaskCompleted(arg0 context.Conte
 func (mr *MockMatchingServiceServerMockRecorder) RespondQueryTaskCompleted(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceServer)(nil).RespondQueryTaskCompleted), arg0, arg1)
+}
+
+// SyncDeploymentUserData mocks base method.
+func (m *MockMatchingServiceServer) SyncDeploymentUserData(arg0 context.Context, arg1 *matchingservice.SyncDeploymentUserDataRequest) (*matchingservice.SyncDeploymentUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncDeploymentUserData", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.SyncDeploymentUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncDeploymentUserData indicates an expected call of SyncDeploymentUserData.
+func (mr *MockMatchingServiceServerMockRecorder) SyncDeploymentUserData(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDeploymentUserData", reflect.TypeOf((*MockMatchingServiceServer)(nil).SyncDeploymentUserData), arg0, arg1)
 }
 
 // UpdateNexusEndpoint mocks base method.

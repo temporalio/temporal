@@ -31,76 +31,150 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-func (wt *WorkflowTags) extractFromMatchingServiceServerRequest(req any) []tag.Tag {
-	switch r := req.(type) {
+func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []tag.Tag {
+	switch r := message.(type) {
 	case *matchingservice.AddActivityTaskRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *matchingservice.AddActivityTaskResponse:
+		return nil
 	case *matchingservice.AddWorkflowTaskRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *matchingservice.AddWorkflowTaskResponse:
+		return nil
 	case *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest:
+		return nil
+	case *matchingservice.ApplyTaskQueueUserDataReplicationEventResponse:
 		return nil
 	case *matchingservice.CancelOutstandingPollRequest:
 		return nil
+	case *matchingservice.CancelOutstandingPollResponse:
+		return nil
+	case *matchingservice.CheckTaskQueueUserDataPropagationRequest:
+		return nil
+	case *matchingservice.CheckTaskQueueUserDataPropagationResponse:
+		return nil
 	case *matchingservice.CreateNexusEndpointRequest:
+		return nil
+	case *matchingservice.CreateNexusEndpointResponse:
 		return nil
 	case *matchingservice.DeleteNexusEndpointRequest:
 		return nil
+	case *matchingservice.DeleteNexusEndpointResponse:
+		return nil
 	case *matchingservice.DescribeTaskQueueRequest:
+		return nil
+	case *matchingservice.DescribeTaskQueueResponse:
 		return nil
 	case *matchingservice.DescribeTaskQueuePartitionRequest:
 		return nil
+	case *matchingservice.DescribeTaskQueuePartitionResponse:
+		return nil
 	case *matchingservice.DispatchNexusTaskRequest:
+		return nil
+	case *matchingservice.DispatchNexusTaskResponse:
 		return nil
 	case *matchingservice.ForceLoadTaskQueuePartitionRequest:
 		return nil
+	case *matchingservice.ForceLoadTaskQueuePartitionResponse:
+		return nil
 	case *matchingservice.ForceUnloadTaskQueueRequest:
+		return nil
+	case *matchingservice.ForceUnloadTaskQueueResponse:
 		return nil
 	case *matchingservice.ForceUnloadTaskQueuePartitionRequest:
 		return nil
+	case *matchingservice.ForceUnloadTaskQueuePartitionResponse:
+		return nil
 	case *matchingservice.GetBuildIdTaskQueueMappingRequest:
+		return nil
+	case *matchingservice.GetBuildIdTaskQueueMappingResponse:
 		return nil
 	case *matchingservice.GetTaskQueueUserDataRequest:
 		return nil
+	case *matchingservice.GetTaskQueueUserDataResponse:
+		return nil
 	case *matchingservice.GetWorkerBuildIdCompatibilityRequest:
+		return nil
+	case *matchingservice.GetWorkerBuildIdCompatibilityResponse:
 		return nil
 	case *matchingservice.GetWorkerVersioningRulesRequest:
 		return nil
+	case *matchingservice.GetWorkerVersioningRulesResponse:
+		return nil
 	case *matchingservice.ListNexusEndpointsRequest:
+		return nil
+	case *matchingservice.ListNexusEndpointsResponse:
 		return nil
 	case *matchingservice.ListTaskQueuePartitionsRequest:
 		return nil
+	case *matchingservice.ListTaskQueuePartitionsResponse:
+		return nil
 	case *matchingservice.PollActivityTaskQueueRequest:
 		return nil
+	case *matchingservice.PollActivityTaskQueueResponse:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
+		}
 	case *matchingservice.PollNexusTaskQueueRequest:
+		return nil
+	case *matchingservice.PollNexusTaskQueueResponse:
 		return nil
 	case *matchingservice.PollWorkflowTaskQueueRequest:
 		return nil
+	case *matchingservice.PollWorkflowTaskQueueResponse:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
+		}
 	case *matchingservice.QueryWorkflowRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetQueryRequest().GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetQueryRequest().GetExecution().GetRunId()),
 		}
+	case *matchingservice.QueryWorkflowResponse:
+		return nil
 	case *matchingservice.ReplicateTaskQueueUserDataRequest:
+		return nil
+	case *matchingservice.ReplicateTaskQueueUserDataResponse:
 		return nil
 	case *matchingservice.RespondNexusTaskCompletedRequest:
 		return nil
+	case *matchingservice.RespondNexusTaskCompletedResponse:
+		return nil
 	case *matchingservice.RespondNexusTaskFailedRequest:
+		return nil
+	case *matchingservice.RespondNexusTaskFailedResponse:
 		return nil
 	case *matchingservice.RespondQueryTaskCompletedRequest:
 		return nil
+	case *matchingservice.RespondQueryTaskCompletedResponse:
+		return nil
+	case *matchingservice.SyncDeploymentUserDataRequest:
+		return nil
+	case *matchingservice.SyncDeploymentUserDataResponse:
+		return nil
 	case *matchingservice.UpdateNexusEndpointRequest:
+		return nil
+	case *matchingservice.UpdateNexusEndpointResponse:
 		return nil
 	case *matchingservice.UpdateTaskQueueUserDataRequest:
 		return nil
+	case *matchingservice.UpdateTaskQueueUserDataResponse:
+		return nil
 	case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest:
 		return nil
+	case *matchingservice.UpdateWorkerBuildIdCompatibilityResponse:
+		return nil
 	case *matchingservice.UpdateWorkerVersioningRulesRequest:
+		return nil
+	case *matchingservice.UpdateWorkerVersioningRulesResponse:
 		return nil
 	default:
 		return nil

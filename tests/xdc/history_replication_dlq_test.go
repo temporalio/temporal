@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -39,7 +38,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/temporalproto"
@@ -47,12 +46,12 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	enumspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/replication"
@@ -116,7 +115,7 @@ type (
 	}
 	testNamespaceReplicationTaskExecutor struct {
 		*namespaceReplicationTaskExecutorParams
-		replicationTaskExecutor namespace.ReplicationTaskExecutor
+		replicationTaskExecutor nsreplication.TaskExecutor
 	}
 	testExecutableTaskConverter struct {
 		*replicationTaskExecutorParams
@@ -135,6 +134,7 @@ func TestHistoryReplicationDLQSuite(t *testing.T) {
 		name                    string
 		enableQueueV2           bool
 		enableReplicationStream bool
+		enableTransitionHistory bool
 	}{
 		{
 			name:                    "QueueV1ReplicationStreamEnabled",
@@ -145,6 +145,12 @@ func TestHistoryReplicationDLQSuite(t *testing.T) {
 			name:                    "QueueV1ReplicationStreamDisabled",
 			enableQueueV2:           false,
 			enableReplicationStream: false,
+		},
+		{
+			name:                    "QueueV2ReplicationStreamEnabledTransitionHistoryEnabled",
+			enableQueueV2:           true,
+			enableReplicationStream: true,
+			enableTransitionHistory: true,
 		},
 		{
 			name:                    "QueueV2ReplicationStreamEnabled",
@@ -162,6 +168,7 @@ func TestHistoryReplicationDLQSuite(t *testing.T) {
 				enableReplicationStream: tc.enableReplicationStream,
 				enableQueueV2:           tc.enableQueueV2,
 			}
+			s.enableTransitionHistory = tc.enableTransitionHistory
 			suite.Run(t, s)
 		})
 	}
@@ -184,14 +191,10 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 
 	// This can't be very long, so we just use a UUID instead of a more descriptive name.
 	// We also don't escape this string in many places, so it can't contain any dashes.
-	format := strings.Replace(uuid.New(), "-", "", -1) + "_%s"
 	taskExecutorDecorator := s.getTaskExecutorDecorator()
 	s.logger = log.NewTestLogger()
 	s.setupSuite(
-		[]string{
-			fmt.Sprintf(format, "active"),
-			fmt.Sprintf(format, "standby"),
-		},
+		[]string{"active", "standby"},
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(
 				taskExecutorDecorator,
@@ -207,7 +210,7 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 		),
 		testcore.WithFxOptionsForService(primitives.WorkerService,
 			fx.Decorate(
-				func(executor namespace.ReplicationTaskExecutor) namespace.ReplicationTaskExecutor {
+				func(executor nsreplication.TaskExecutor) nsreplication.TaskExecutor {
 					return &testNamespaceReplicationTaskExecutor{
 						replicationTaskExecutor:                executor,
 						namespaceReplicationTaskExecutorParams: &s.namespaceReplicationTaskExecutors,
@@ -346,7 +349,11 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 		// Specifically, v1 executes the replication tasks in-place, instead of putting them back on a task queue, so
 		// we both don't need to wait for the merge to finish, and there would be no events on the task executor channel
 		// to wait for anyway.
-		s.waitUntilWorkflowReplicated(context.Background(), serializer, workflowID)
+		if s.enableTransitionHistory {
+			s.waitUntilWorkflowVerified(ctx, workflowID, events[len(events)-1].GetEventId())
+		} else {
+			s.waitUntilWorkflowReplicated(context.Background(), serializer, workflowID)
+		}
 	}
 
 	// Wait for the workflow to complete on the standby cluster.
@@ -377,7 +384,7 @@ func (s *historyReplicationDLQSuite) waitUntilReplicationTasksAreInDLQ(
 			firstEventID := request.ReplicationTaskInfo.FirstEventId
 			// nextEventID is exclusive.
 			nextEventID := request.ReplicationTaskInfo.NextEventId
-			if request.ReplicationTaskInfo.TaskType == enumspb.TASK_TYPE_REPLICATION_HISTORY {
+			if request.ReplicationTaskInfo.TaskType == enumsspb.TASK_TYPE_REPLICATION_HISTORY || request.ReplicationTaskInfo.TaskType == enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION {
 				// A single replication task could contain multiple events, so we need to mark all the event IDs that it
 				// spans as complete.
 				for eventID := firstEventID; eventID < nextEventID; eventID++ {
@@ -416,19 +423,63 @@ func (s *historyReplicationDLQSuite) waitUntilWorkflowReplicated(
 	for {
 		select {
 		case task := <-s.replicationTaskExecutors.executedTasks:
-			attr := task.GetHistoryTaskAttributes()
-			if attr == nil {
-				continue
+			if attr := task.GetHistoryTaskAttributes(); attr != nil {
+				if attr.WorkflowId != workflowID {
+					continue
+				}
+				events, err := serializer.DeserializeEvents(attr.Events)
+				s.NoError(err)
+				historyEvents = append(historyEvents, events...)
+
+				for _, event := range events {
+					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+						return historyEvents
+					}
+				}
 			}
-			if attr.WorkflowId != workflowID {
-				continue
-			}
-			events, err := serializer.DeserializeEvents(attr.Events)
-			s.NoError(err)
-			historyEvents = append(historyEvents, events...)
-			for _, event := range events {
-				if event.GetEventType() == enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+
+			if attr := task.GetSyncVersionedTransitionTaskAttributes(); attr != nil {
+				if attr.WorkflowId != workflowID {
+					continue
+				}
+				completed := false
+				for _, blob := range attr.VersionedTransitionArtifact.EventBatches {
+					e, err := serializer.DeserializeEvents(blob)
+					s.NoError(err)
+					historyEvents = append(historyEvents, e...)
+					for _, event := range e {
+						if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+							completed = true
+						}
+					}
+				}
+				if completed {
 					return historyEvents
+				}
+			}
+
+		case <-ctx.Done():
+			s.FailNow("timed out waiting for replication task to be processed")
+		}
+	}
+}
+
+// waitUntilWorkflowVerified waits until the workflow with the given ID has been replicated to the standby cluster.
+// It does this by waiting for the replication task executor to process the workflow completion replication event.
+func (s *historyReplicationDLQSuite) waitUntilWorkflowVerified(
+	ctx context.Context,
+	workflowID string,
+	endEventID int64,
+) {
+	for {
+		select {
+		case task := <-s.replicationTaskExecutors.executedTasks:
+			if attr := task.GetVerifyVersionedTransitionTaskAttributes(); attr != nil {
+				if attr.WorkflowId != workflowID {
+					continue
+				}
+				if attr.NextEventId == endEventID+1 {
+					return
 				}
 			}
 		case <-ctx.Done():
@@ -473,7 +524,11 @@ func (s *historyReplicationDLQSuite) testReadTasks(
 		s.NoError(err)
 		s.NotEmpty(replicationTasks)
 		task := replicationTasks[0].Payload
-		s.Equal(enumspb.TASK_TYPE_REPLICATION_HISTORY, task.GetTaskType())
+		if s.enableTransitionHistory {
+			s.Equal(enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION, task.GetTaskType())
+		} else {
+			s.Equal(enumsspb.TASK_TYPE_REPLICATION_HISTORY, task.GetTaskType())
+		}
 		s.Equal(run.GetID(), task.WorkflowId)
 		s.Equal(run.GetRunID(), task.RunId)
 	} else {
@@ -492,7 +547,7 @@ func (s *historyReplicationDLQSuite) testReadTasks(
 		s.NoError(err)
 		s.NotEmpty(replicationTasks)
 		task := replicationTasks[0]
-		s.Equal(enumspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK, task.GetTaskType())
+		s.Equal(enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK, task.GetTaskType())
 		historyTaskAttributes := task.GetHistoryTaskAttributes()
 		s.Equal(run.GetID(), historyTaskAttributes.GetWorkflowId())
 		s.Equal(run.GetRunID(), historyTaskAttributes.GetRunId())
@@ -578,6 +633,9 @@ func (f testReplicationTaskExecutor) Execute(
 	if attr := replicationTask.GetHistoryTaskAttributes(); attr != nil && attr.WorkflowId == *f.workflowIDToObserve.Load() {
 		f.executedTasks <- replicationTask
 	}
+	if attr := replicationTask.GetSyncVersionedTransitionTaskAttributes(); attr != nil && attr.WorkflowId == *f.workflowIDToObserve.Load() {
+		f.executedTasks <- replicationTask
+	}
 	return err
 }
 
@@ -587,6 +645,9 @@ func (f testReplicationTaskExecutor) execute(
 	forceApply bool,
 ) error {
 	if attr := replicationTask.GetHistoryTaskAttributes(); attr != nil && attr.WorkflowId == *f.workflowIDToFail.Load() {
+		return serviceerror.NewInvalidArgument("failed to apply replication task")
+	}
+	if attr := replicationTask.GetSyncVersionedTransitionTaskAttributes(); attr != nil && attr.WorkflowId == *f.workflowIDToFail.Load() {
 		return serviceerror.NewInvalidArgument("failed to apply replication task")
 	}
 	err := f.taskExecutor.Execute(ctx, replicationTask, forceApply)
@@ -622,6 +683,11 @@ func (t *testExecutableTask) Execute() error {
 
 func (t *testExecutableTask) execute() error {
 	if et, ok := t.TrackableExecutableTask.(*replication.ExecutableHistoryTask); ok {
+		if et.WorkflowID == *t.workflowIDToFail.Load() {
+			return serviceerror.NewInvalidArgument("failed to apply replication task")
+		}
+	}
+	if et, ok := t.TrackableExecutableTask.(*replication.ExecutableSyncVersionedTransitionTask); ok {
 		if et.WorkflowID == *t.workflowIDToFail.Load() {
 			return serviceerror.NewInvalidArgument("failed to apply replication task")
 		}

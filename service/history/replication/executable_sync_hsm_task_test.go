@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
@@ -114,10 +114,10 @@ func (s *executableSyncHSMTaskSuite) SetupTest() {
 				{EventId: 10, Version: 20},
 			},
 		},
-		StateMachineNode: &persistencepb.StateMachineNode{
-			Children: map[string]*persistencepb.StateMachineMap{
+		StateMachineNode: &persistencespb.StateMachineNode{
+			Children: map[string]*persistencespb.StateMachineMap{
 				"test": {
-					MachinesById: map[string]*persistencepb.StateMachineNode{
+					MachinesById: map[string]*persistencespb.StateMachineNode{
 						"machine1": {
 							Data: []byte("machine1 data"),
 						},
@@ -285,7 +285,7 @@ func (s *executableSyncHSMTaskSuite) TestMarkPoisonPill() {
 	err := s.task.MarkPoisonPill()
 	s.NoError(err)
 
-	s.Equal(&persistencepb.ReplicationTaskInfo{
+	s.Equal(&persistencespb.ReplicationTaskInfo{
 		NamespaceId:    s.task.NamespaceID,
 		WorkflowId:     s.task.WorkflowID,
 		RunId:          s.task.RunID,

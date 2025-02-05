@@ -25,17 +25,72 @@ package resetactivity
 import (
 	"context"
 
-	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
-	_ context.Context,
-	_ *historyservice.ResetActivityRequest,
-	_ shard.Context,
-	_ api.WorkflowConsistencyChecker,
+	ctx context.Context,
+	req *historyservice.ResetActivityRequest,
+	shardContext shard.Context,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.ResetActivityResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("PauseActivity is not supported yet")
+	request := req.GetFrontendRequest()
+	workflowKey := definition.NewWorkflowKey(
+		req.NamespaceId,
+		request.GetExecution().GetWorkflowId(),
+		request.GetExecution().GetRunId(),
+	)
+
+	err := api.GetAndUpdateWorkflowWithNew(
+		ctx,
+		nil,
+		workflowKey,
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
+			var activityIDs []string
+			switch a := request.GetActivity().(type) {
+			case *workflowservice.ResetActivityRequest_Id:
+				activityIDs = append(activityIDs, a.Id)
+			case *workflowservice.ResetActivityRequest_Type:
+				activityType := a.Type
+				for _, ai := range mutableState.GetPendingActivityInfos() {
+					if ai.ActivityType.Name == activityType {
+						activityIDs = append(activityIDs, ai.ActivityId)
+					}
+				}
+			}
+
+			if len(activityIDs) == 0 {
+				return nil, consts.ErrActivityNotFound
+			}
+
+			for _, activityId := range activityIDs {
+				if err := workflow.ResetActivity(
+					shardContext, mutableState, activityId,
+					request.ResetHeartbeat, request.KeepPaused, request.Jitter.AsDuration(),
+				); err != nil {
+					return nil, err
+				}
+			}
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: false,
+			}, nil
+		},
+		nil,
+		shardContext,
+		workflowConsistencyChecker,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &historyservice.ResetActivityResponse{}, nil
 }

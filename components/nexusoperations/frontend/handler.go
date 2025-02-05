@@ -41,6 +41,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/temporalnexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
@@ -59,6 +60,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var apiName = configs.CompleteNexusOperation
@@ -176,14 +178,48 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		)
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
+	var links []*commonpb.Link
+	for _, nexusLink := range r.Links {
+		switch nexusLink.Type {
+		case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
+			link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+			if err != nil {
+				// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
+				// so ignoring the error for now; we will revisit how to handle these errors later.
+				h.Logger.Warn(
+					fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
+					tag.Error(err),
+				)
+				continue
+			}
+			links = append(links, &commonpb.Link{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: link,
+				},
+			})
+		default:
+			// If the link data type is unsupported, just ignore it for now.
+			h.Logger.Warn(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
+		}
+	}
 	hr := &historyservice.CompleteNexusOperationRequest{
-		Completion: completion,
-		State:      string(r.State),
+		Completion:     completion,
+		State:          string(r.State),
+		OperationToken: r.OperationToken,
+		StartTime:      timestamppb.New(r.StartTime),
+		Links:          links,
 	}
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
+		failureErr, ok := r.Error.(*nexus.FailureError)
+		if !ok {
+			// This shouldn't happen as the Nexus SDK is always expected to convert Failures from the wire to
+			// FailureErrors.
+			logger.Error("result error is not a FailureError", tag.Error(err))
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
+		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
-			Failure: commonnexus.NexusFailureToProtoFailure(r.Failure),
+			Failure: commonnexus.NexusFailureToProtoFailure(failureErr.Failure),
 		}
 	case nexus.OperationStateSucceeded:
 		var result *commonpb.Payload
@@ -272,13 +308,13 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 
 	// TODO: Upgrade Nexus SDK in order to reduce HTTP exposure
 	handlerErr := &nexus.HandlerError{
-		Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
-		Failure: &failure,
+		Type:  commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
+		Cause: &nexus.FailureError{Failure: failure},
 	}
 
 	if handlerErr.Type == nexus.HandlerErrorTypeInternal && resp.StatusCode != http.StatusInternalServerError {
 		h.Logger.Warn("received unknown status code on Nexus client unexpected response error", tag.Value(resp.StatusCode))
-		handlerErr.Failure.Message = "internal error"
+		handlerErr.Cause = errors.New("internal error")
 	}
 
 	return handlerErr

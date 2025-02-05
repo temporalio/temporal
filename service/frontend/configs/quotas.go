@@ -106,10 +106,12 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PatchSchedule":                  2,
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteSchedule":                 2,
 		"/temporal.api.workflowservice.v1.WorkflowService/StopBatchOperation":             2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateActivityOptionsById":      2,
-		"/temporal.api.workflowservice.v1.WorkflowService/PauseActivityById":              2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivityById":            2,
-		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivityById":              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateActivityOptions":          2,
+		"/temporal.api.workflowservice.v1.WorkflowService/PauseActivity":                  2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivity":                2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivity":                  2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecutionOptions": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":           2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,
@@ -121,6 +123,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":              3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes":     3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation":        3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeDeployment":            3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":          3,
 
 		// P4: Progress APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      4,
@@ -167,6 +171,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":                     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               1,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": 1, // note this isn't a real method name
+		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}

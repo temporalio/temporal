@@ -74,7 +74,7 @@ type (
 		timeSource                     clock.TimeSource
 		namespaceRegistry              namespace.Registry
 		eventNotifier                  events.Notifier
-		tokenSerializer                common.TaskTokenSerializer
+		tokenSerializer                *tasktoken.Serializer
 		metricsHandler                 metrics.Handler
 		logger                         log.Logger
 		throttledLogger                log.Logger
@@ -88,7 +88,7 @@ type (
 
 func NewWorkflowTaskCompletedHandler(
 	shardContext shard.Context,
-	tokenSerializer common.TaskTokenSerializer,
+	tokenSerializer *tasktoken.Serializer,
 	eventNotifier events.Notifier,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	searchAttributesValidator *searchattribute.Validator,
@@ -214,6 +214,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
+	behavior := request.GetVersioningBehavior()
+	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && request.GetDeployment() == nil {
+		// Mutable state wasn't changed yet and doesn't have to be cleared.
+		releaseLeaseWithError = false
+		return nil, serviceerror.NewInvalidArgument("deployment must be set when versioning behavior specified")
+	}
+
 	assignedBuildId := ms.GetAssignedBuildId()
 	wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
 	if assignedBuildId != "" && !ms.IsStickyTaskQueueSet() {
@@ -230,20 +237,17 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 	var effects effect.Buffer
 	defer func() {
-		// code in this file and workflowTaskHandler is inconsistent in the way
-		// errors are returned - some functions which appear to return error
-		// actually return nil in all cases and instead set a member variable
-		// that should be observed by other collaborating code (e.g.
-		// workflowtaskHandler.workflowTaskFailedCause). That made me paranoid
-		// about the way this function exits so while we have this defer here
-		// there is _also_ code to call effects.Cancel at key points.
+		// `effects` are canceled immediately on WFT failure or persistence errors.
+		// This `defer` handles rare cases where an error is returned but the cancellation didn't happen.
 		if retError != nil {
-			handler.logger.Info("Cancel effects due to error.",
-				tag.Error(retError),
-				tag.WorkflowID(token.GetWorkflowId()),
-				tag.WorkflowRunID(token.GetRunId()),
-				tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
-			effects.Cancel(ctx)
+			cancelled := effects.Cancel(ctx)
+			if cancelled {
+				handler.logger.Info("Canceled effects due to error.",
+					tag.Error(retError),
+					tag.WorkflowID(token.GetWorkflowId()),
+					tag.WorkflowRunID(token.GetRunId()),
+					tag.WorkflowNamespaceID(namespaceEntry.ID().String()))
+			}
 		}
 	}()
 
@@ -319,6 +323,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
 		if assignedBuildId == "" || assignedBuildId == wftCompletedBuildId {
+			// TODO: clean up. this is not applicable to V3
 			// For versioned workflows, only set sticky queue if the WFT is completed by the WF's current build ID.
 			// It is possible that the WF has been redirected to another build ID since this WFT started, in that case
 			// we should not set sticky queue of the old build ID and keep the normal queue to let Matching send the
@@ -333,7 +338,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		newMutableState             workflow.MutableState
 		responseMutations           []workflowTaskResponseMutation
 	)
-	updateRegistry := weContext.UpdateRegistry(ctx, nil)
+	updateRegistry := weContext.UpdateRegistry(ctx)
 	// hasBufferedEventsOrMessages indicates if there are any buffered events
 	// or admitted updates which should generate a new workflow task.
 
@@ -480,16 +485,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}
 
-	bufferedEventShouldCreateNewTask := hasBufferedEventsOrMessages && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
-	if hasBufferedEventsOrMessages && !bufferedEventShouldCreateNewTask {
-		// Make sure tasks that should not create a new event don't get stuck in ms forever
-		ms.FlushBufferedEvents()
-	}
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
 	if ms.IsWorkflowExecutionRunning() {
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
-			bufferedEventShouldCreateNewTask ||
+			hasBufferedEventsOrMessages ||
 			activityNotStartedCancelled {
 
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
@@ -515,6 +515,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	var newWorkflowTask *workflow.WorkflowTaskInfo
+
 	// Speculative workflow task will be created after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
 		versioningStamp := request.WorkerVersionStamp
@@ -560,6 +561,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				request.Identity,
 				versioningStamp,
 				nil,
+				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
 			)
 			if err != nil {
@@ -682,6 +684,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			request.Identity,
 			versioningStamp,
 			nil,
+			workflowLease.GetContext().UpdateRegistry(ctx),
 			false,
 		)
 		if err != nil {
@@ -1048,14 +1051,4 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 		return err
 	}
 	return nil
-}
-
-// Filter function to be passed to mutable_state.HasAnyBufferedEvent
-// Returns true if the event should generate a new workflow task
-// Currently only signal events with SkipGenerateWorkflowTask=true flag set do not generate tasks
-func eventShouldGenerateNewTaskFilter(event *historypb.HistoryEvent) bool {
-	if event.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
-		return true
-	}
-	return !event.GetWorkflowExecutionSignaledEventAttributes().GetSkipGenerateWorkflowTask()
 }

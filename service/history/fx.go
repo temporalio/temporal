@@ -46,10 +46,10 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
-	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/archival"
@@ -96,7 +96,6 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
-	schedulerhsm.Module,
 	nexusoperations.Module,
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
 )
@@ -115,7 +114,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 	handler := &Handler{
 		status:                       common.DaemonStatusInitialized,
 		config:                       args.Config,
-		tokenSerializer:              common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:              tasktoken.NewSerializer(),
 		logger:                       args.Logger,
 		throttledLogger:              args.ThrottledLogger,
 		persistenceExecutionManager:  args.PersistenceExecutionManager,
@@ -278,6 +277,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.VisibilityEnableShadowReadMode,
 		serviceConfig.SecondaryVisibilityWritingMode,

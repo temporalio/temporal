@@ -40,6 +40,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	querypb "go.temporal.io/api/query/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -70,7 +71,25 @@ type (
 
 func TestFuncClustersTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(FunctionalClustersTestSuite))
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &FunctionalClustersTestSuite{}
+			s.enableTransitionHistory = tc.enableTransitionHistory
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *FunctionalClustersTestSuite) SetupSuite() {
@@ -480,11 +499,11 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	client2 := s.cluster2.FrontendClient() // standby
 
 	// Start a workflow
-	id := "functional-sticky-workflow-task-workflow-failover-test"
-	wt := "functional-sticky-workflow-task-workflow-failover-test-type"
-	tq := "functional-sticky-workflow-task-workflow-failover-test-taskqueue"
-	stq1 := "functional-sticky-workflow-task-workflow-failover-test-taskqueue-sticky1"
-	stq2 := "functional-sticky-workflow-task-workflow-failover-test-taskqueue-sticky2"
+	id := "functional-sticky-workflow-task-workflow-failover-test-" + "TransitionHistory" + strconv.FormatBool(s.enableTransitionHistory)
+	wt := id + "-type"
+	tq := id + "-taskqueue"
+	stq1 := id + "-taskqueue-sticky1"
+	stq2 := id + "-taskqueue-sticky2"
 	identity1 := "worker1"
 	identity2 := "worker2"
 
@@ -825,7 +844,43 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
+	// check terminate done
+	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+		},
+	}
+
+	s.WaitForHistory(`
+  1 v1 WorkflowExecutionStarted
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowTaskStarted
+  4 v1 WorkflowTaskCompleted
+  5 v1 ActivityTaskScheduled`,
+		func() *historypb.History {
+			historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			s.NoError(err)
+			return historyResponse.History
+		}, 1*time.Second, 100*time.Millisecond,
+	)
+
 	s.failover(namespace, s.clusterNames[1], int64(2), client1)
+
+	s.WaitForHistory(`
+  1 v1 WorkflowExecutionStarted
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowTaskStarted
+  4 v1 WorkflowTaskCompleted
+  5 v1 ActivityTaskScheduled
+  6 v2 ActivityTaskTimedOut
+  7 v2 WorkflowTaskScheduled`,
+		func() *historypb.History {
+			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			s.NoError(err)
+			return historyResponse.History
+		}, 5*time.Second, 100*time.Millisecond,
+	)
 
 	// terminate workflow at cluster 2
 	terminateReason := "terminate reason"
@@ -842,13 +897,6 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	s.NoError(err)
 
 	// check terminate done
-	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-		},
-	}
-
 	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
   2 v1 WorkflowTaskScheduled
@@ -1275,20 +1323,6 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	s.NoError(err)
 	s.False(eventSignaled)
 
-	// Send a signal without a task in cluster 1
-	_, err = client1.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.GetRunId(),
-		},
-		SignalName:               "signal without task",
-		Input:                    payloads.EncodeString("my signal input without task"),
-		Identity:                 identity,
-		SkipGenerateWorkflowTask: true,
-	})
-	s.NoError(err)
-
 	// Send a signal in cluster 1
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
@@ -1326,10 +1360,9 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
   5 v1 WorkflowExecutionSignaled
-  6 v1 WorkflowExecutionSignaled
-  7 v1 WorkflowTaskScheduled
-  8 v1 WorkflowTaskStarted
-  9 v1 WorkflowTaskCompleted`,
+  6 v1 WorkflowTaskScheduled
+  7 v1 WorkflowTaskStarted
+  8 v1 WorkflowTaskCompleted`,
 		func() *historypb.History {
 			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			if err != nil {
@@ -1338,20 +1371,6 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 			return historyResponse.History
 		}, 15*time.Second, 1*time.Second,
 	)
-
-	// Send another signal without a task in cluster 2
-	_, err = client2.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.GetRunId(),
-		},
-		SignalName:               "signal without task",
-		Input:                    payloads.EncodeString("my signal input without task"),
-		Identity:                 identity,
-		SkipGenerateWorkflowTask: true,
-	})
-	s.NoError(err)
 
 	// Send another signal in cluster 2
 	signalName2 := "my signal 2"
@@ -1381,15 +1400,13 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
   5 v1 WorkflowExecutionSignaled
-  6 v1 WorkflowExecutionSignaled
-  7 v1 WorkflowTaskScheduled
-  8 v1 WorkflowTaskStarted
-  9 v1 WorkflowTaskCompleted
- 10 v2 WorkflowExecutionSignaled
- 11 v2 WorkflowExecutionSignaled
- 12 v2 WorkflowTaskScheduled
- 13 v2 WorkflowTaskStarted
- 14 v2 WorkflowTaskCompleted`,
+  6 v1 WorkflowTaskScheduled
+  7 v1 WorkflowTaskStarted
+  8 v1 WorkflowTaskCompleted
+  9 v2 WorkflowExecutionSignaled
+ 10 v2 WorkflowTaskScheduled
+ 11 v2 WorkflowTaskStarted
+ 12 v2 WorkflowTaskCompleted`,
 		func() *historypb.History {
 			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			if err != nil {
@@ -1908,6 +1925,54 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	s.NoError(err)
 }
 
+func (s *FunctionalClustersTestSuite) getLastEvent(
+	client workflowservice.WorkflowServiceClient,
+	namespace string,
+	execution *commonpb.WorkflowExecution,
+) *historypb.HistoryEvent {
+
+	resp, err := client.GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: namespace,
+		Execution: execution,
+	})
+	s.NoError(err)
+	s.NotNil(resp.History)
+	s.NotEmpty(resp.History.Events)
+
+	return resp.History.Events[len(resp.History.Events)-1]
+}
+
+func (s *FunctionalClustersTestSuite) getNewExecutionRunIdFromLastEvent(
+	client workflowservice.WorkflowServiceClient,
+	namespace string,
+	execution *commonpb.WorkflowExecution,
+) string {
+	lastEvent := s.getLastEvent(client, namespace, execution)
+	s.NotNil(lastEvent)
+
+	if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
+		s.NotNil(attrs)
+		return attrs.GetNewExecutionRunId()
+	}
+	return ""
+}
+
+func (s *FunctionalClustersTestSuite) waitForNewRunToStart(
+	client workflowservice.WorkflowServiceClient,
+	namespace string,
+	execution *commonpb.WorkflowExecution,
+) string {
+	var newRunID string
+	s.Eventually(func() bool {
+		newRunID = s.getNewExecutionRunIdFromLastEvent(client, namespace, execution)
+		return newRunID != ""
+	}, 10*time.Second, 100*time.Millisecond)
+
+	s.NotEmpty(newRunID, "New run should have started")
+	return newRunID
+}
+
 func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	namespace := "test-cron-workflow-complete-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.FrontendClient() // active
@@ -1999,6 +2064,8 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
   5 v1 WorkflowExecutionCompleted`, events)
+
+	_ = s.waitForNewRunToStart(client1, namespace, executions[0])
 
 	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
@@ -2337,16 +2404,6 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(2, lastAttemptCount)
 }
 
-// Uncomment if you need to debug history.
-// func (s *funcClustersTestSuite) printHistory(frontendClient workflowservice.WorkflowServiceClient, namespace, workflowID, runID string) {
-// 	events := s.getHistory(frontendClient, namespace, &commonpb.WorkflowExecution{
-// 		WorkflowId: workflowID,
-// 		RunId:      runID,
-// 	})
-// 	history := &historypb.History{Events: events}
-// 	common.PrettyPrintHistory(history, s.logger)
-// }
-
 func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -2643,7 +2700,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 		Namespace:              namespace,
 		RemoteCluster:          s.clusterNames[1],
 		AllowedLaggingSeconds:  10,
-		HandoverTimeoutSeconds: 30,
+		HandoverTimeoutSeconds: 10,
 	})
 	s.NoError(err)
 	err = run5.Get(testCtx, nil)
@@ -2933,6 +2990,32 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	}
 	verifyHistory(workflowID, run1.GetRunID())
 	verifyHistory(workflowID, resp.GetRunId())
+}
+
+func (s *FunctionalClustersTestSuite) TestBlockNamespaceDeleteInPassiveCluster() {
+	namespace := "test-namespace-for-fail-over-" + common.GenerateRandomString(5)
+	client1 := s.cluster1.FrontendClient() // active
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		IsGlobalNamespace:                true,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[1], // [0] is active, [1] is passive
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
+	}
+	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
+	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
+
+	resp, err := s.cluster1.OperatorClient().DeleteNamespace(
+		testcore.NewContext(),
+		&operatorservice.DeleteNamespaceRequest{
+			Namespace: namespace,
+		})
+	s.Error(err)
+	s.Nil(resp)
+	s.Contains(err.Error(), "is passive in current cluster")
+	s.Contains(err.Error(), "make namespace active in this cluster and retry")
 }
 
 func (s *FunctionalClustersTestSuite) getHistory(client workflowservice.WorkflowServiceClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {

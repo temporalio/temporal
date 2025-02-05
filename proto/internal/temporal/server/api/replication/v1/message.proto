@@ -27,6 +27,7 @@ package temporal.server.api.replication.v1;
 option go_package = "go.temporal.io/server/api/replication/v1;repication";
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/enums/v1/task.proto";
@@ -172,6 +173,13 @@ message SyncActivityTaskAttributes {
     // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     // It monotonically increments when the activity options are changed.
     int32 stamp = 20;
+    // Flag indicating whether the activity is currently paused.
+    bool paused = 21;
+    // Retry policy for the activity. It needs to be replicated now, since the activity properties can be updated.
+    google.protobuf.Duration retry_initial_interval = 22;
+    google.protobuf.Duration retry_maximum_interval = 23;
+    int32 retry_maximum_attempts = 24;
+    double retry_backoff_coefficient = 25;
 }
 
 message HistoryTaskAttributes {

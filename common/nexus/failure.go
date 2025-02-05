@@ -23,6 +23,7 @@
 package nexus
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -33,12 +34,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
+var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
+
 // ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
-// Always returns a non-nil value.
-func ProtoFailureToNexusFailure(failure *nexuspb.Failure) *nexus.Failure {
-	return &nexus.Failure{
+func ProtoFailureToNexusFailure(failure *nexuspb.Failure) nexus.Failure {
+	return nexus.Failure{
 		Message:  failure.GetMessage(),
 		Metadata: failure.GetMetadata(),
 		Details:  failure.GetDetails(),
@@ -47,10 +50,7 @@ func ProtoFailureToNexusFailure(failure *nexuspb.Failure) *nexus.Failure {
 
 // NexusFailureToProtoFailure converts a Nexus SDK Failure to a proto Nexus Failure.
 // Always returns a non-nil value.
-func NexusFailureToProtoFailure(failure *nexus.Failure) *nexuspb.Failure {
-	if failure == nil {
-		return &nexuspb.Failure{Message: "unknown error"}
-	}
+func NexusFailureToProtoFailure(failure nexus.Failure) *nexuspb.Failure {
 	return &nexuspb.Failure{
 		Message:  failure.Message,
 		Metadata: failure.Metadata,
@@ -58,54 +58,118 @@ func NexusFailureToProtoFailure(failure *nexus.Failure) *nexuspb.Failure {
 	}
 }
 
-// APIFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure taking only the failure message to
-// avoid leaking too many details to 3rd party callers.
-// Always returns a non-nil value.
-func APIFailureToNexusFailure(failure *failurepb.Failure) *nexus.Failure {
-	return &nexus.Failure{
-		Message: failure.GetMessage(),
+// APIFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure setting the metadata "type" field to
+// the proto fullname of the temporal API Failure message.
+// Mutates the failure temporarily, unsetting the Message field to avoid duplicating the information in the serialized
+// failure. Mutating was chosen over cloning for performance reasons since this function may be called frequently.
+func APIFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, error) {
+	// Unset message so it's not serialized in the details.
+	var message string
+	message, failure.Message = failure.Message, ""
+	data, err := protojson.Marshal(failure)
+	failure.Message = message
+
+	if err != nil {
+		return nexus.Failure{}, err
 	}
+	return nexus.Failure{
+		Message: failure.GetMessage(),
+		Metadata: map[string]string{
+			"type": failureTypeString,
+		},
+		Details: data,
+	}, nil
 }
 
-func UnsuccessfulOperationErrorToTemporalFailure(err *nexus.UnsuccessfulOperationError) *failurepb.Failure {
-	failure := &failurepb.Failure{
-		Message: err.Failure.Message,
-	}
-	if err.State == nexus.OperationStateCanceled {
-		failure.FailureInfo = &failurepb.Failure_CanceledFailureInfo{
-			CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-				Details: nexusFailureMetadataToPayloads(err.Failure),
-			},
+// NexusFailureToAPIFailure converts a Nexus Failure to an API proto Failure.
+// If the failure metadata "type" field is set to the fullname of the temporal API Failure message, the failure is
+// reconstructed using protojson.Unmarshal on the failure details field.
+func NexusFailureToAPIFailure(failure nexus.Failure, retryable bool) (*failurepb.Failure, error) {
+	apiFailure := &failurepb.Failure{}
+
+	if failure.Metadata != nil && failure.Metadata["type"] == failureTypeString {
+		if err := protojson.Unmarshal(failure.Details, apiFailure); err != nil {
+			return nil, err
 		}
 	} else {
-		failure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
+		payloads, err := nexusFailureMetadataToPayloads(failure)
+		if err != nil {
+			return nil, err
+		}
+		apiFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
 			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 				// Make up a type here, it's not part of the Nexus Failure spec.
-				Type:         "NexusOperationFailure",
-				Details:      nexusFailureMetadataToPayloads(err.Failure),
-				NonRetryable: true,
+				Type:         "NexusFailure",
+				Details:      payloads,
+				NonRetryable: !retryable,
 			},
 		}
 	}
-	return failure
+	// Ensure this always gets written.
+	apiFailure.Message = failure.Message
+	return apiFailure, nil
 }
 
-func nexusFailureMetadataToPayloads(failure nexus.Failure) *commonpb.Payloads {
-	if len(failure.Metadata) == 0 && len(failure.Details) == 0 {
-		return nil
+func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
+	var nexusFailure nexus.Failure
+	failureErr, ok := opErr.Cause.(*nexus.FailureError)
+	if ok {
+		nexusFailure = failureErr.Failure
+	} else if opErr.Cause != nil {
+		nexusFailure = nexus.Failure{Message: opErr.Cause.Error()}
 	}
-	metadata := make(map[string][]byte, len(failure.Metadata))
-	for k, v := range failure.Metadata {
-		metadata[k] = []byte(v)
+
+	// Canceled must be translated into a CanceledFailure to match the SDK expectation.
+	if opErr.State == nexus.OperationStateCanceled {
+		if nexusFailure.Metadata != nil && nexusFailure.Metadata["type"] == failureTypeString {
+			temporalFailure, err := NexusFailureToAPIFailure(nexusFailure, false)
+			if err != nil {
+				return nil, err
+			}
+			if temporalFailure.GetCanceledFailureInfo() != nil {
+				// We already have a CanceledFailure, use it.
+				return temporalFailure, nil
+			}
+			// Fallback to encoding the Nexus failure into a Temporal canceled failure, we expect operations that end up
+			// as canceled to have a CanceledFailureInfo object.
+		}
+		payloads, err := nexusFailureMetadataToPayloads(nexusFailure)
+		if err != nil {
+			return nil, err
+		}
+		return &failurepb.Failure{
+			Message: nexusFailure.Message,
+			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+				CanceledFailureInfo: &failurepb.CanceledFailureInfo{
+					Details: payloads,
+				},
+			},
+		}, nil
+	}
+
+	return NexusFailureToAPIFailure(nexusFailure, false)
+}
+
+func nexusFailureMetadataToPayloads(failure nexus.Failure) (*commonpb.Payloads, error) {
+	if len(failure.Metadata) == 0 && len(failure.Details) == 0 {
+		return nil, nil
+	}
+	// Delete before serializing.
+	failure.Message = ""
+	data, err := json.Marshal(failure)
+	if err != nil {
+		return nil, err
 	}
 	return &commonpb.Payloads{
 		Payloads: []*commonpb.Payload{
 			{
-				Metadata: metadata,
-				Data:     failure.Details,
+				Metadata: map[string][]byte{
+					"encoding": []byte("json/plain"),
+				},
+				Data: data,
 			},
 		},
-	}
+	}, err
 }
 
 // ConvertGRPCError converts either a serviceerror or a gRPC status error into a Nexus HandlerError if possible.
@@ -134,59 +198,92 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 		if !exposeDetails {
 			errMessage = "bad request"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeBadRequest,
+			Cause: errors.New(errMessage),
+		}
 	case codes.Aborted, codes.Unavailable:
 		if !exposeDetails {
 			errMessage = "service unavailable"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeUnavailable,
+			Cause: errors.New(errMessage),
+		}
 	case codes.Canceled:
 		// TODO: This should have a different status code (e.g. 499 which is semi standard but not supported by nexus).
 		// The important thing is that the request is retryable, internal serves that purpose.
 		if !exposeDetails {
 			errMessage = "canceled"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeInternal,
+			Cause: errors.New(errMessage),
+		}
 	case codes.DataLoss, codes.Internal, codes.Unknown:
 		if !exposeDetails {
 			errMessage = "internal error"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeInternal,
+			Cause: errors.New(errMessage),
+		}
 	case codes.Unauthenticated:
 		if !exposeDetails {
 			errMessage = "authentication failed"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeUnauthenticated,
+			Cause: errors.New(errMessage),
+		}
 	case codes.PermissionDenied:
 		if !exposeDetails {
 			errMessage = "permission denied"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeUnauthorized,
+			Cause: errors.New(errMessage),
+		}
 	case codes.NotFound:
 		if !exposeDetails {
 			errMessage = "not found"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeNotFound,
+			Cause: errors.New(errMessage),
+		}
 	case codes.ResourceExhausted:
 		if !exposeDetails {
 			errMessage = "resource exhausted"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeResourceExhausted, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeResourceExhausted,
+			Cause: errors.New(errMessage),
+		}
 	case codes.Unimplemented:
 		if !exposeDetails {
 			errMessage = "not implemented"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotImplemented, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeNotImplemented,
+			Cause: errors.New(errMessage),
+		}
 	case codes.DeadlineExceeded:
 		if !exposeDetails {
 			errMessage = "request timeout"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, errMessage) //nolint:govet
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeUpstreamTimeout,
+			Cause: errors.New(errMessage),
+		}
 	case codes.OK:
 		return nil
 	}
 	if !exposeDetails {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeInternal,
+			Cause: errors.New("internal error"),
+		}
 	}
 	// Let the nexus SDK handle this for us (log and convert to an internal error).
 	return err

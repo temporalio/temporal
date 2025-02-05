@@ -137,7 +137,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 	resendCtx := context.Background()
 	var cancel context.CancelFunc
 	if n.rereplicationTimeout != nil {
-		resendContextTimeout := n.rereplicationTimeout(namespaceID.String())
+		resendContextTimeout := n.rereplicationTimeout(namespaceID)
 		if resendContextTimeout > 0 {
 			resendCtx, cancel = context.WithTimeout(resendCtx, resendContextTimeout)
 			defer cancel()

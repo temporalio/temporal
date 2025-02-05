@@ -56,17 +56,17 @@ const (
 	readLockExecutionQuery  = lockExecutionQueryBase
 
 	createCurrentExecutionQuery = `INSERT INTO current_executions
-(shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_time, last_write_version) VALUES
-(:shard_id, :namespace_id, :workflow_id, :run_id, :create_request_id, :state, :status, :start_time, :last_write_version)`
+(shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding) VALUES
+(:shard_id, :namespace_id, :workflow_id, :run_id, :create_request_id, :state, :status, :start_time, :last_write_version, :data, :data_encoding)`
 
 	deleteCurrentExecutionQuery = "DELETE FROM current_executions WHERE shard_id=? AND namespace_id=? AND workflow_id=? AND run_id=?"
 
 	getCurrentExecutionQuery = `SELECT
-shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_time, last_write_version
+shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding
 FROM current_executions WHERE shard_id = ? AND namespace_id = ? AND workflow_id = ?`
 
 	lockCurrentExecutionJoinExecutionsQuery = `SELECT
-ce.shard_id, ce.namespace_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.status, ce.start_time, e.last_write_version
+ce.shard_id, ce.namespace_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.status, ce.start_time, e.last_write_version, ce.data, ce.data_encoding
 FROM current_executions ce
 INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.namespace_id = ce.namespace_id AND e.workflow_id = ce.workflow_id AND e.run_id = ce.run_id
 WHERE ce.shard_id = ? AND ce.namespace_id = ? AND ce.workflow_id = ?`
@@ -79,7 +79,9 @@ create_request_id = :create_request_id,
 state = :state,
 status = :status,
 start_time = :start_time,
-last_write_version = :last_write_version
+last_write_version = :last_write_version,
+data = :data,
+data_encoding = :data_encoding
 WHERE
 shard_id = :shard_id AND
 namespace_id = :namespace_id AND

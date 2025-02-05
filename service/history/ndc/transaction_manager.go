@@ -304,7 +304,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			if _, err := r.eventsReapplier.ReapplyEvents(
 				ctx,
 				targetWorkflow.GetMutableState(),
-				targetWorkflow.GetContext().UpdateRegistry(ctx, nil),
+				targetWorkflow.GetContext().UpdateRegistry(ctx),
 				totalEvents,
 				targetWorkflow.GetMutableState().GetExecutionState().GetRunId(),
 			); err != nil {
@@ -350,6 +350,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			EventsReapplicationResetWorkflowReason,
 			totalEvents,
 			nil,
+			false, // allowResetWithPendingChildren
 		)
 		switch err.(type) {
 		case *serviceerror.InvalidArgument:

@@ -51,7 +51,7 @@ import (
 )
 
 type WorkflowFailuresTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestWorkflowFailuresTestSuite(t *testing.T) {
@@ -69,7 +69,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -89,7 +89,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
-		historyEvents = s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
+		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		})
@@ -117,7 +117,7 @@ GetHistoryLoop:
 ListClosedLoop:
 	for i := 0; i < 10; i++ {
 		resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.Namespace(),
+			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
@@ -146,7 +146,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -188,9 +188,9 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 
 		// Send signals during workflow task
 		if sendSignal {
-			s.NoError(s.SendSignal(s.Namespace(), workflowExecution, "signalC", nil, identity))
-			s.NoError(s.SendSignal(s.Namespace(), workflowExecution, "signalD", nil, identity))
-			s.NoError(s.SendSignal(s.Namespace(), workflowExecution, "signalE", nil, identity))
+			s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "signalC", nil, identity))
+			s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "signalD", nil, identity))
+			s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "signalE", nil, identity))
 			sendSignal = false
 		}
 
@@ -241,7 +241,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -266,7 +266,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 		s.NoError(err)
 	}
 
-	err = s.SendSignal(s.Namespace(), workflowExecution, "signalA", nil, identity)
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, "signalA", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// process signal
@@ -276,7 +276,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 	s.Equal(1, signalCount)
 
 	// send another signal to trigger workflow task
-	err = s.SendSignal(s.Namespace(), workflowExecution, "signalB", nil, identity)
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, "signalB", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// fail workflow task 2 more times
@@ -306,7 +306,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 	s.True(workflowComplete)
 	s.Equal(16, signalCount)
 
-	events := s.GetHistory(s.Namespace(), workflowExecution)
+	events := s.GetHistory(s.Namespace().String(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -351,7 +351,7 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.New(),
-		Namespace:          s.Namespace(),
+		Namespace:          s.Namespace().String(),
 		WorkflowId:         id,
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -380,7 +380,7 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -394,7 +394,7 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on RecordMarkerCommand.", err.Error())
 
-	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
+	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we0.GetRunId(),
 	})

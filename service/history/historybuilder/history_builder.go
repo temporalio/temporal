@@ -29,6 +29,7 @@ import (
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -36,7 +37,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
@@ -135,7 +136,7 @@ func NewImmutable(histories ...[]*historypb.HistoryEvent) *HistoryBuilder {
 	}
 }
 
-func NewImmutableForUpdateNextEventID(lastVersionHistoryItem *history.VersionHistoryItem) *HistoryBuilder {
+func NewImmutableForUpdateNextEventID(lastVersionHistoryItem *historyspb.VersionHistoryItem) *HistoryBuilder {
 	return &HistoryBuilder{
 		EventStore: EventStore{
 			state:           HistoryBuilderStateImmutable,
@@ -237,6 +238,8 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
+	deployment *deploymentpb.Deployment,
+	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowTaskCompletedEvent(
 		scheduledEventID,
@@ -246,6 +249,8 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 		workerVersionStamp,
 		sdkMetadata,
 		meteringMetadata,
+		deployment,
+		behavior,
 	)
 	event, _ = b.EventStore.add(event)
 	return event
@@ -402,6 +407,24 @@ func (b *HistoryBuilder) AddWorkflowExecutionTerminatedEvent(
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionTerminatedEvent(reason, details, identity, links)
 
+	event, _ = b.EventStore.add(event)
+	return event
+}
+
+func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
+	versioningOverride *workflowpb.VersioningOverride,
+	unsetVersioningOverride bool,
+	attachRequestID string,
+	attachCompletionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
+) *historypb.HistoryEvent {
+	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
+		versioningOverride,
+		unsetVersioningOverride,
+		attachRequestID,
+		attachCompletionCallbacks,
+		links,
+	)
 	event, _ = b.EventStore.add(event)
 	return event
 }
@@ -668,7 +691,6 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
-	skipGenerateWorkflowTask bool,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
 	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
@@ -677,7 +699,6 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 		input,
 		identity,
 		header,
-		skipGenerateWorkflowTask,
 		externalWorkflowExecution,
 		links,
 	)

@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	workflowpb "go.temporal.io/server/api/workflow/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -71,6 +71,7 @@ type (
 		TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) (*historyservice.TerminateWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(ctx context.Context, deleteRequest *historyservice.DeleteWorkflowExecutionRequest) (*historyservice.DeleteWorkflowExecutionResponse, error)
 		ResetWorkflowExecution(ctx context.Context, request *historyservice.ResetWorkflowExecutionRequest) (*historyservice.ResetWorkflowExecutionResponse, error)
+		UpdateWorkflowExecutionOptions(ctx context.Context, request *historyservice.UpdateWorkflowExecutionOptionsRequest) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error)
 		ScheduleWorkflowTask(ctx context.Context, request *historyservice.ScheduleWorkflowTaskRequest) error
 		IsActivityTaskValid(ctx context.Context, request *historyservice.IsActivityTaskValidRequest) (*historyservice.IsActivityTaskValidResponse, error)
 		IsWorkflowTaskValid(ctx context.Context, request *historyservice.IsWorkflowTaskValidRequest) (*historyservice.IsWorkflowTaskValidResponse, error)
@@ -80,7 +81,7 @@ type (
 		ReplicateHistoryEvents(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
-			baseExecutionInfo *workflowpb.BaseExecutionInfo,
+			baseExecutionInfo *workflowspb.BaseExecutionInfo,
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			historyEvents [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
@@ -108,7 +109,7 @@ type (
 		GetReplicationStatus(ctx context.Context, request *historyservice.GetReplicationStatusRequest) (*historyservice.ShardReplicationStatus, error)
 		UpdateWorkflowExecution(ctx context.Context, request *historyservice.UpdateWorkflowExecutionRequest) (*historyservice.UpdateWorkflowExecutionResponse, error)
 		PollWorkflowExecutionUpdate(ctx context.Context, request *historyservice.PollWorkflowExecutionUpdateRequest) (*historyservice.PollWorkflowExecutionUpdateResponse, error)
-		GetWorkflowExecutionHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryRequest) (*historyservice.GetWorkflowExecutionHistoryResponse, error)
+		GetWorkflowExecutionHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryRequest) (*historyservice.GetWorkflowExecutionHistoryResponseWithRaw, error)
 		GetWorkflowExecutionHistoryReverse(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryReverseRequest) (*historyservice.GetWorkflowExecutionHistoryReverseResponse, error)
 		GetWorkflowExecutionRawHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionRawHistoryRequest) (*historyservice.GetWorkflowExecutionRawHistoryResponse, error)
 		GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *historyservice.GetWorkflowExecutionRawHistoryV2Request) (*historyservice.GetWorkflowExecutionRawHistoryV2Response, error)
@@ -161,7 +162,7 @@ type (
 
 		SourceClusterName   string
 		VersionedHistory    *persistencespb.VersionedTransition
-		BaseExecutionInfo   *workflowpb.BaseExecutionInfo
+		BaseExecutionInfo   *workflowspb.BaseExecutionInfo
 		VersionHistoryItems []*historyspb.VersionHistoryItem
 
 		Events    [][]*historypb.HistoryEvent

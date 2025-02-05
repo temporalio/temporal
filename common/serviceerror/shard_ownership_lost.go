@@ -27,7 +27,7 @@ package serviceerror
 import (
 	"fmt"
 
-	"go.temporal.io/server/api/errordetails/v1"
+	errordetailsspb "go.temporal.io/server/api/errordetails/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -63,7 +63,7 @@ func (e *ShardOwnershipLost) Status() *status.Status {
 
 	st := status.New(codes.Aborted, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.ShardOwnershipLostFailure{
+		&errordetailsspb.ShardOwnershipLostFailure{
 			OwnerHost:   e.OwnerHost,
 			CurrentHost: e.CurrentHost,
 		},
@@ -71,7 +71,7 @@ func (e *ShardOwnershipLost) Status() *status.Status {
 	return st
 }
 
-func newShardOwnershipLost(st *status.Status, errDetails *errordetails.ShardOwnershipLostFailure) error {
+func newShardOwnershipLost(st *status.Status, errDetails *errordetailsspb.ShardOwnershipLostFailure) error {
 	return &ShardOwnershipLost{
 		Message:     st.Message(),
 		OwnerHost:   errDetails.GetOwnerHost(),

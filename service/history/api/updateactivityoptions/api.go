@@ -31,7 +31,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -60,13 +62,13 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
-			request.GetUpdateRequest().WorkflowId,
-			request.GetUpdateRequest().RunId,
+			request.GetUpdateRequest().GetExecution().GetWorkflowId(),
+			request.GetUpdateRequest().GetExecution().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			var err error
-			response, err = updateActivityOptions(shardContext, validator, mutableState, request)
+			response, err = processActivityOptionsRequest(validator, mutableState, request)
 			if err != nil {
 				return nil, err
 			}
@@ -87,8 +89,7 @@ func Invoke(
 	return response, err
 }
 
-func updateActivityOptions(
-	shardContext shard.Context,
+func processActivityOptionsRequest(
 	validator *api.CommandAttrValidator,
 	mutableState workflow.MutableState,
 	request *historyservice.UpdateActivityOptionsRequest,
@@ -101,19 +102,61 @@ func updateActivityOptions(
 	if mergeFrom == nil {
 		return nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
 	}
-	activityId := updateRequest.GetActivityId()
 
-	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
+	var activityIDs []string
+	switch a := updateRequest.GetActivity().(type) {
+	case *workflowservice.UpdateActivityOptionsRequest_Id:
+		activityIDs = append(activityIDs, a.Id)
+	case *workflowservice.UpdateActivityOptionsRequest_Type:
+		activityType := a.Type
+		for _, ai := range mutableState.GetPendingActivityInfos() {
+			if ai.ActivityType.Name == activityType {
+				activityIDs = append(activityIDs, ai.ActivityId)
+			}
+		}
+	}
 
-	if !activityFound {
+	if len(activityIDs) == 0 {
 		return nil, consts.ErrActivityNotFound
 	}
+
 	mask := updateRequest.GetUpdateMask()
 	if mask == nil {
 		return nil, serviceerror.NewInvalidArgument("UpdateMask is not provided")
 	}
 
 	updateFields := util.ParseFieldMask(mask)
+
+	var adjustedOptions *activitypb.ActivityOptions
+	var err error
+	for _, activityId := range activityIDs {
+		ai, activityFound := mutableState.GetActivityByActivityID(activityId)
+
+		if !activityFound {
+			return nil, consts.ErrActivityNotFound
+		}
+
+		if adjustedOptions, err = updateActivityOptions(validator, mutableState, request, ai, mergeFrom, updateFields); err != nil {
+			return nil, err
+		}
+	}
+
+	// fill the response
+	response := &historyservice.UpdateActivityOptionsResponse{
+		ActivityOptions: adjustedOptions,
+	}
+	return response, nil
+}
+
+func updateActivityOptions(
+	validator *api.CommandAttrValidator,
+	mutableState workflow.MutableState,
+	request *historyservice.UpdateActivityOptionsRequest,
+	ai *persistencespb.ActivityInfo,
+	mergeFrom *activitypb.ActivityOptions,
+	updateFields map[string]struct{},
+) (*activitypb.ActivityOptions, error) {
+
 	mergeInto := &activitypb.ActivityOptions{
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: ai.TaskQueue,
@@ -131,8 +174,7 @@ func updateActivityOptions(
 	}
 
 	// update activity options
-	err := applyActivityOptions(mergeInto, mergeFrom, updateFields)
-	if err != nil {
+	if err := applyActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
 		return nil, err
 	}
 
@@ -142,23 +184,25 @@ func updateActivityOptions(
 		return nil, err
 	}
 
-	// update activity info with new options
-	ai.TaskQueue = adjustedOptions.TaskQueue.Name
-	ai.ScheduleToCloseTimeout = adjustedOptions.ScheduleToCloseTimeout
-	ai.ScheduleToStartTimeout = adjustedOptions.ScheduleToStartTimeout
-	ai.StartToCloseTimeout = adjustedOptions.StartToCloseTimeout
-	ai.HeartbeatTimeout = adjustedOptions.HeartbeatTimeout
-	ai.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
-	ai.RetryBackoffCoefficient = adjustedOptions.RetryPolicy.BackoffCoefficient
-	ai.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
-	ai.RetryMaximumAttempts = adjustedOptions.RetryPolicy.MaximumAttempts
+	if err = mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) error {
+		// update activity info with new options
+		activityInfo.TaskQueue = adjustedOptions.TaskQueue.Name
+		activityInfo.ScheduleToCloseTimeout = adjustedOptions.ScheduleToCloseTimeout
+		activityInfo.ScheduleToStartTimeout = adjustedOptions.ScheduleToStartTimeout
+		activityInfo.StartToCloseTimeout = adjustedOptions.StartToCloseTimeout
+		activityInfo.HeartbeatTimeout = adjustedOptions.HeartbeatTimeout
+		activityInfo.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
+		activityInfo.RetryBackoffCoefficient = adjustedOptions.RetryPolicy.BackoffCoefficient
+		activityInfo.RetryInitialInterval = adjustedOptions.RetryPolicy.InitialInterval
+		activityInfo.RetryMaximumAttempts = adjustedOptions.RetryPolicy.MaximumAttempts
 
-	// move forward activity version
-	ai.Stamp++
+		// move forward activity version
+		activityInfo.Stamp++
 
-	// invalidate timers
-	ai.TimerTaskStatus = workflow.TimerTaskStatusNone
-	if err := mutableState.UpdateActivity(ai); err != nil {
+		// invalidate timers
+		activityInfo.TimerTaskStatus = workflow.TimerTaskStatusNone
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
@@ -173,18 +217,14 @@ func updateActivityOptions(
 		// 		eventually matching service will call history service (recordActivityTaskStarted)
 		// 		history service will return error based on stamp. Task will be dropped
 
-		err = mutableState.RegenerateActivityRetryTask(ai)
+		nextScheduledTime := workflow.GetNextScheduledTime(ai)
+		err = mutableState.RegenerateActivityRetryTask(ai, nextScheduledTime)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// fill the response
-	response := &historyservice.UpdateActivityOptionsResponse{
-		ActivityOptions: adjustedOptions,
-	}
-	return response, nil
-
+	return adjustedOptions, nil
 }
 
 func applyActivityOptions(

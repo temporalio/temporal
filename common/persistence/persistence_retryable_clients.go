@@ -28,7 +28,7 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 )
 
@@ -1222,8 +1222,8 @@ func (p *nexusEndpointRetryablePersistenceClient) Close() {
 func (p *nexusEndpointRetryablePersistenceClient) GetNexusEndpoint(
 	ctx context.Context,
 	request *GetNexusEndpointRequest,
-) (*persistencepb.NexusEndpointEntry, error) {
-	var response *persistencepb.NexusEndpointEntry
+) (*persistencespb.NexusEndpointEntry, error) {
+	var response *persistencespb.NexusEndpointEntry
 	op := func(ctx context.Context) error {
 		var err error
 		response, err = p.persistence.GetNexusEndpoint(ctx, request)

@@ -123,14 +123,21 @@ var (
 		"GetWorkerVersioningRules":         func() any { return &workflowservice.GetWorkerVersioningRulesResponse{} },
 		"GetWorkerTaskReachability":        func() any { return &workflowservice.GetWorkerTaskReachabilityResponse{} },
 
-		"StartBatchOperation":       func() any { return &workflowservice.StartBatchOperationResponse{} },
-		"StopBatchOperation":        func() any { return &workflowservice.StopBatchOperationResponse{} },
-		"DescribeBatchOperation":    func() any { return &workflowservice.DescribeBatchOperationResponse{} },
-		"ListBatchOperations":       func() any { return &workflowservice.ListBatchOperationsResponse{} },
-		"UpdateActivityOptionsById": func() any { return &workflowservice.UpdateActivityOptionsByIdResponse{} },
-		"PauseActivityById":         func() any { return &workflowservice.PauseActivityByIdResponse{} },
-		"UnpauseActivityById":       func() any { return &workflowservice.UnpauseActivityByIdResponse{} },
-		"ResetActivityById":         func() any { return &workflowservice.ResetActivityByIdResponse{} },
+		"StartBatchOperation":            func() any { return &workflowservice.StartBatchOperationResponse{} },
+		"StopBatchOperation":             func() any { return &workflowservice.StopBatchOperationResponse{} },
+		"DescribeBatchOperation":         func() any { return &workflowservice.DescribeBatchOperationResponse{} },
+		"ListBatchOperations":            func() any { return &workflowservice.ListBatchOperationsResponse{} },
+		"UpdateActivityOptions":          func() any { return &workflowservice.UpdateActivityOptionsResponse{} },
+		"PauseActivity":                  func() any { return &workflowservice.PauseActivityResponse{} },
+		"UnpauseActivity":                func() any { return &workflowservice.UnpauseActivityResponse{} },
+		"ResetActivity":                  func() any { return &workflowservice.ResetActivityResponse{} },
+		"UpdateWorkflowExecutionOptions": func() any { return &workflowservice.UpdateWorkflowExecutionOptionsResponse{} },
+
+		"DescribeDeployment":        func() any { return &workflowservice.DescribeDeploymentResponse{} },
+		"ListDeployments":           func() any { return &workflowservice.ListDeploymentsResponse{} },
+		"GetDeploymentReachability": func() any { return &workflowservice.GetDeploymentReachabilityResponse{} },
+		"GetCurrentDeployment":      func() any { return &workflowservice.GetCurrentDeploymentResponse{} },
+		"SetCurrentDeployment":      func() any { return &workflowservice.SetCurrentDeploymentResponse{} },
 	}
 )
 

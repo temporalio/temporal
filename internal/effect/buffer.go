@@ -49,20 +49,28 @@ func (b *Buffer) OnAfterRollback(effect func(context.Context)) {
 
 // Apply invokes the buffered effect functions in the order that they were added
 // to this Buffer.
-func (b *Buffer) Apply(ctx context.Context) {
+// It returns true if any effects were applied.
+func (b *Buffer) Apply(ctx context.Context) bool {
+	applied := false
 	b.cancels = nil
 	for _, effect := range b.effects {
 		effect(ctx)
+		applied = true
 	}
 	b.effects = nil
+	return applied
 }
 
 // Cancel invokes the buffered rollback functions in the reverse of the order
 // that they were added to this Buffer.
-func (b *Buffer) Cancel(ctx context.Context) {
+// It returns true if any effects were canceled.
+func (b *Buffer) Cancel(ctx context.Context) bool {
+	canceled := false
 	b.effects = nil
 	for i := len(b.cancels) - 1; i >= 0; i-- {
 		b.cancels[i](ctx)
+		canceled = true
 	}
 	b.cancels = nil
+	return canceled
 }

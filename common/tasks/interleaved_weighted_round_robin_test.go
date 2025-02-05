@@ -437,6 +437,11 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestDeleteInactiveChannels
 
 	s.ts.Advance(30 * time.Minute)
 
+	// Sleeping for a small duration for the current event loop to finish.
+	// doDispatchTasksWithWeight reads the current time before entering the loop. We have to wait for that loop to finish.
+	// Otherwise, the tasks added below will have old lastActiveTime. We don't have any other way to know if the loop has finished.
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
+
 	// Only add tasks to first two channels.
 	taskWG.Add(2)
 	s.scheduler.Submit(mockTask0)
@@ -505,6 +510,10 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
 
 	s.ts.Advance(30 * time.Minute)
+
+	// Sleeping for a small duration for the current event loop to finish.
+	// We read ts.Now() before the loop begins and reuse it in the loop.
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	// Only add tasks to first two channels.
 	taskWG.Add(2)

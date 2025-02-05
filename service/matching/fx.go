@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
+	"go.temporal.io/server/service/worker/deployment"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -51,6 +52,7 @@ import (
 var Module = fx.Options(
 	resource.Module,
 	dynamicconfig.Module,
+	deployment.Module,
 	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
@@ -179,6 +181,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never writes

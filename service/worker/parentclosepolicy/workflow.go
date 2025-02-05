@@ -32,7 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/taskqueue/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/converter"
@@ -220,7 +220,7 @@ func signalRemoteCluster(
 				WorkflowType: &commonpb.WorkflowType{
 					Name: processorWFTypeName,
 				},
-				TaskQueue: &taskqueue.TaskQueue{
+				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: processorTaskQueueName,
 				},
 				Input:                 nil,

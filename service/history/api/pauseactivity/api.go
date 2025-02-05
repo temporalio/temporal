@@ -25,17 +25,68 @@ package pauseactivity
 import (
 	"context"
 
-	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
-	_ context.Context,
-	_ *historyservice.PauseActivityRequest,
-	_ shard.Context,
-	_ api.WorkflowConsistencyChecker,
+	ctx context.Context,
+	request *historyservice.PauseActivityRequest,
+	shardContext shard.Context,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.PauseActivityResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("PauseActivity is not supported yet")
+	err := api.GetAndUpdateWorkflowWithNew(
+		ctx,
+		nil,
+		definition.NewWorkflowKey(
+			request.NamespaceId,
+			request.GetFrontendRequest().GetExecution().GetWorkflowId(),
+			request.GetFrontendRequest().GetExecution().GetRunId(),
+		),
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
+			frontendRequest := request.GetFrontendRequest()
+			var activityIDs []string
+			switch a := frontendRequest.GetActivity().(type) {
+			case *workflowservice.PauseActivityRequest_Id:
+				activityIDs = append(activityIDs, a.Id)
+			case *workflowservice.PauseActivityRequest_Type:
+				activityType := a.Type
+				for _, ai := range mutableState.GetPendingActivityInfos() {
+					if ai.ActivityType.Name == activityType {
+						activityIDs = append(activityIDs, ai.ActivityId)
+					}
+				}
+			}
+
+			if len(activityIDs) == 0 {
+				return nil, consts.ErrActivityNotFound
+			}
+
+			for _, activityId := range activityIDs {
+				err := workflow.PauseActivity(mutableState, activityId)
+				if err != nil {
+					return nil, err
+				}
+			}
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: false,
+			}, nil
+		},
+		nil,
+		shardContext,
+		workflowConsistencyChecker,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &historyservice.PauseActivityResponse{}, nil
 }

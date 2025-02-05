@@ -179,7 +179,7 @@ func NewNamespaceConfig(
 		},
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: activeClusterName,
-			Clusters:          p.GetOrUseDefaultClusters(activeClusterName, nil),
+			Clusters:          []string{activeClusterName},
 		},
 		FailoverVersion:             common.EmptyVersion,
 		FailoverNotificationVersion: -1,

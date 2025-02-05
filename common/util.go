@@ -342,10 +342,16 @@ func IsServiceHandlerRetryableError(err error) bool {
 		return false
 	}
 
-	switch err.(type) {
+	switch err := err.(type) {
 	case *serviceerror.Internal,
 		*serviceerror.Unavailable:
 		return true
+	case *serviceerror.MultiOperationExecution:
+		for _, opErr := range err.OperationErrors() {
+			if opErr != nil && IsServiceHandlerRetryableError(opErr) {
+				return true
+			}
+		}
 	}
 
 	return false
@@ -529,9 +535,6 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 }
 
 // CreateHistoryStartWorkflowRequest create a start workflow request for history.
-// Note: this mutates startRequest by unsetting the fields ContinuedFailure and
-// LastCompletionResult (these should only be set on workflows created by the scheduler
-// worker).
 // Assumes startRequest is valid. See frontend workflow_handler for detailed validation logic.
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
@@ -540,6 +543,12 @@ func CreateHistoryStartWorkflowRequest(
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	now time.Time,
 ) *historyservice.StartWorkflowExecutionRequest {
+	// We include the original startRequest in the forwarded request to History, but
+	// we don't want to send workflow payloads twice. We deep copy to a new struct,
+	// rather than mutate the request, to accommodate internal retries.
+	if startRequest.ContinuedFailure != nil || startRequest.LastCompletionResult != nil {
+		startRequest = CloneProto(startRequest)
+	}
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:              namespaceID,
 		StartRequest:             startRequest,
@@ -550,6 +559,7 @@ func CreateHistoryStartWorkflowRequest(
 		ContinuedFailure:         startRequest.ContinuedFailure,
 		LastCompletionResult:     startRequest.LastCompletionResult,
 		RootExecutionInfo:        rootExecutionInfo,
+		VersioningOverride:       startRequest.GetVersioningOverride(),
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil
@@ -655,41 +665,6 @@ func GetPayloadsMapSize(data map[string]*commonpb.Payloads) int {
 	}
 
 	return size
-}
-
-// OverrideWorkflowRunTimeout override the run timeout according to execution timeout
-func OverrideWorkflowRunTimeout(
-	workflowRunTimeout time.Duration,
-	workflowExecutionTimeout time.Duration,
-) time.Duration {
-
-	if workflowExecutionTimeout == 0 {
-		return workflowRunTimeout
-	} else if workflowRunTimeout == 0 {
-		return workflowExecutionTimeout
-	}
-	return min(workflowRunTimeout, workflowExecutionTimeout)
-}
-
-// OverrideWorkflowTaskTimeout override the workflow task timeout according to default timeout or max timeout
-func OverrideWorkflowTaskTimeout(
-	namespace string,
-	taskStartToCloseTimeout time.Duration,
-	workflowRunTimeout time.Duration,
-	getDefaultTimeoutFunc func(namespace string) time.Duration,
-) time.Duration {
-
-	if taskStartToCloseTimeout == 0 {
-		taskStartToCloseTimeout = getDefaultTimeoutFunc(namespace)
-	}
-
-	taskStartToCloseTimeout = min(taskStartToCloseTimeout, MaxWorkflowTaskStartToCloseTimeout)
-
-	if workflowRunTimeout == 0 {
-		return taskStartToCloseTimeout
-	}
-
-	return min(taskStartToCloseTimeout, workflowRunTimeout)
 }
 
 // CloneProto is a generic typed version of proto.Clone from proto.

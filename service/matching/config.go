@@ -47,13 +47,15 @@ type (
 		PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 		SyncMatchWaitDuration                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		TestDisableSyncMatch                 dynamicconfig.BoolPropertyFn
 		RPS                                  dynamicconfig.IntPropertyFn
 		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
 		AlignMembershipChange                dynamicconfig.DurationPropertyFn
 		ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MatchingDropNonRetryableTasks        dynamicconfig.BoolPropertyFn
+		EnableDeployments                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
+		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
 
 		// task queue configuration
 
@@ -81,6 +83,7 @@ type (
 		ReachabilityCacheClosedWFsTTL            dynamicconfig.DurationPropertyFn
 		TaskQueueLimitPerBuildId                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 		GetUserDataLongPollTimeout               dynamicconfig.DurationPropertyFn
+		GetUserDataRefresh                       dynamicconfig.DurationPropertyFn
 		BacklogNegligibleAge                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxWaitForPollerBeforeFwd                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		QueryPollerUnavailableWindow             dynamicconfig.DurationPropertyFn
@@ -102,16 +105,16 @@ type (
 		AdminNamespaceToPartitionDispatchRate          dynamicconfig.FloatPropertyFnWithNamespaceFilter
 		AdminNamespaceTaskqueueToPartitionDispatchRate dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 
-		VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-		VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-		EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		VisibilityEnableShadowReadMode    dynamicconfig.BoolPropertyFn
-		VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
-
-		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
+		VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
+		VisibilityPersistenceSlowQueryThreshold dynamicconfig.DurationPropertyFn
+		EnableReadFromSecondaryVisibility       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
+		VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
+		NexusEndpointsRefreshInterval     dynamicconfig.DurationPropertyFn
 
 		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
@@ -129,7 +132,6 @@ type (
 		BacklogNegligibleAge         func() time.Duration
 		MaxWaitForPollerBeforeFwd    func() time.Duration
 		QueryPollerUnavailableWindow func() time.Duration
-		TestDisableSyncMatch         func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
 		RangeSize                  int64
@@ -142,6 +144,8 @@ type (
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
 		GetUserDataReturnBudget    time.Duration
+		GetUserDataInitialRefresh  time.Duration
+		GetUserDataRefresh         dynamicconfig.DurationPropertyFn
 
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold func() int
@@ -208,9 +212,9 @@ func NewConfig(
 		PersistenceDynamicRateLimitingParams:     dynamicconfig.MatchingPersistenceDynamicRateLimitingParams.Get(dc),
 		PersistenceQPSBurstRatio:                 dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
 		SyncMatchWaitDuration:                    dynamicconfig.MatchingSyncMatchWaitDuration.Get(dc),
-		TestDisableSyncMatch:                     dynamicconfig.TestMatchingDisableSyncMatch.Get(dc),
-		LoadUserData:                             dynamicconfig.MatchingLoadUserData.Get(dc),
 		HistoryMaxPageSize:                       dynamicconfig.MatchingHistoryMaxPageSize.Get(dc),
+		EnableDeployments:                        dynamicconfig.EnableDeployments.Get(dc),
+		MaxTaskQueuesInDeployment:                dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
@@ -245,6 +249,7 @@ func NewConfig(
 		ReachabilityCacheClosedWFsTTL:            dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc),
 		TaskQueueLimitPerBuildId:                 dynamicconfig.TaskQueuesPerBuildIdLimit.Get(dc),
 		GetUserDataLongPollTimeout:               dynamicconfig.MatchingGetUserDataLongPollTimeout.Get(dc), // Use -10 seconds so that we send back empty response instead of timeout
+		GetUserDataRefresh:                       dynamicconfig.MatchingGetUserDataRefresh.Get(dc),
 		BacklogNegligibleAge:                     dynamicconfig.MatchingBacklogNegligibleAge.Get(dc),
 		MaxWaitForPollerBeforeFwd:                dynamicconfig.MatchingMaxWaitForPollerBeforeFwd.Get(dc),
 		QueryPollerUnavailableWindow:             dynamicconfig.QueryPollerUnavailableWindow.Get(dc),
@@ -252,18 +257,21 @@ func NewConfig(
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
 		MatchingDropNonRetryableTasks:            dynamicconfig.MatchingDropNonRetryableTasks.Get(dc),
+		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate.Get(dc),
 
-		VisibilityPersistenceMaxReadQPS:   dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
-		VisibilityPersistenceMaxWriteQPS:  dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
-		EnableReadFromSecondaryVisibility: dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
-		VisibilityEnableShadowReadMode:    dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
-		VisibilityDisableOrderByClause:    dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
-		VisibilityEnableManualPagination:  dynamicconfig.VisibilityEnableManualPagination.Get(dc),
+		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
+		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
+		VisibilityPersistenceSlowQueryThreshold: dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Get(dc),
+		EnableReadFromSecondaryVisibility:       dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
+		VisibilityEnableShadowReadMode:          dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
+		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
+		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
 
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
+		NexusEndpointsRefreshInterval:     dynamicconfig.MatchingNexusEndpointsRefreshInterval.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
@@ -297,7 +305,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 			return config.MaxWaitForPollerBeforeFwd(ns.String(), taskQueueName, taskType)
 		},
 		QueryPollerUnavailableWindow: config.QueryPollerUnavailableWindow,
-		TestDisableSyncMatch:         config.TestDisableSyncMatch,
 		LongPollExpirationInterval: func() time.Duration {
 			return config.LongPollExpirationInterval(ns.String(), taskQueueName, taskType)
 		},
@@ -307,6 +314,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
 		GetUserDataReturnBudget:    returnEmptyTaskTimeBudget,
+		GetUserDataInitialRefresh:  ioTimeout,
+		GetUserDataRefresh:         config.GetUserDataRefresh,
 		OutstandingTaskAppendsThreshold: func() int {
 			return config.OutstandingTaskAppendsThreshold(ns.String(), taskQueueName, taskType)
 		},

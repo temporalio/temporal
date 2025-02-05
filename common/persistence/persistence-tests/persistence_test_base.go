@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.opentelemetry.io/otel/trace"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -56,6 +57,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/environment"
 )
 
@@ -107,6 +109,7 @@ type (
 		ReplicationReadLevel      int64
 		DefaultTestCluster        PersistenceTestCluster
 		Logger                    log.Logger
+		TracerProvider            trace.TracerProvider
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -191,6 +194,7 @@ func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger
 	return &TestBase{
 		DefaultTestCluster: testCluster,
 		Logger:             logger,
+		TracerProvider:     telemetry.NoopTracerProvider,
 	}
 }
 
@@ -217,6 +221,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.AbstractDataStoreFactory,
 		s.Logger,
 		metrics.NoopMetricsHandler,
+		s.TracerProvider,
 	)
 	factory := client.NewFactory(
 		dataStoreFactory,

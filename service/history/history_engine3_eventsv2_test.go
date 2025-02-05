@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -162,7 +163,7 @@ func (s *engine3Suite) SetupTest() {
 		logger:             s.logger,
 		throttledLogger:    s.logger,
 		metricsHandler:     metrics.NoopMetricsHandler,
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:    tasktoken.NewSerializer(),
 		config:             s.config,
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),

@@ -33,12 +33,14 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/testing/protopack"
 )
@@ -63,86 +65,6 @@ func TestIsContextCanceledErr(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	require.True(t, IsContextCanceledErr(ctx.Err()))
-}
-
-func TestOverrideWorkflowRunTimeout_InfiniteRunTimeout_InfiniteExecutionTimeout(t *testing.T) {
-	runTimeout := time.Duration(0)
-	executionTimeout := time.Duration(0)
-	require.Equal(t, time.Duration(0), OverrideWorkflowRunTimeout(runTimeout, executionTimeout))
-}
-
-func TestOverrideWorkflowRunTimeout_FiniteRunTimeout_InfiniteExecutionTimeout(t *testing.T) {
-	runTimeout := time.Duration(10)
-	executionTimeout := time.Duration(0)
-	require.Equal(t, time.Duration(10), OverrideWorkflowRunTimeout(runTimeout, executionTimeout))
-}
-
-func TestOverrideWorkflowRunTimeout_InfiniteRunTimeout_FiniteExecutionTimeout(t *testing.T) {
-	runTimeout := time.Duration(0)
-	executionTimeout := time.Duration(10)
-	require.Equal(t, time.Duration(10), OverrideWorkflowRunTimeout(runTimeout, executionTimeout))
-}
-
-func TestOverrideWorkflowRunTimeout_FiniteRunTimeout_FiniteExecutionTimeout(t *testing.T) {
-	runTimeout := time.Duration(100)
-	executionTimeout := time.Duration(10)
-	require.Equal(t, time.Duration(10), OverrideWorkflowRunTimeout(runTimeout, executionTimeout))
-
-	runTimeout = time.Duration(10)
-	executionTimeout = time.Duration(100)
-	require.Equal(t, time.Duration(10), OverrideWorkflowRunTimeout(runTimeout, executionTimeout))
-}
-
-func TestOverrideWorkflowTaskTimeout_Infinite(t *testing.T) {
-	taskTimeout := time.Duration(0)
-	runTimeout := time.Duration(100)
-	defaultTimeout := time.Duration(20)
-	defaultTimeoutFn := dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(20), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = time.Duration(0)
-	runTimeout = time.Duration(10)
-	defaultTimeout = time.Duration(20)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(10), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = time.Duration(0)
-	runTimeout = time.Duration(0)
-	defaultTimeout = time.Duration(30)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(30), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = time.Duration(0)
-	runTimeout = time.Duration(0)
-	defaultTimeout = MaxWorkflowTaskStartToCloseTimeout + time.Duration(1)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, MaxWorkflowTaskStartToCloseTimeout, OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-}
-
-func TestOverrideWorkflowTaskTimeout_Finite(t *testing.T) {
-	taskTimeout := time.Duration(10)
-	runTimeout := MaxWorkflowTaskStartToCloseTimeout - time.Duration(1)
-	defaultTimeout := time.Duration(20)
-	defaultTimeoutFn := dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(10), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = MaxWorkflowTaskStartToCloseTimeout - time.Duration(1)
-	runTimeout = time.Duration(10)
-	defaultTimeout = time.Duration(20)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(10), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = time.Duration(10)
-	runTimeout = MaxWorkflowTaskStartToCloseTimeout + time.Duration(1)
-	defaultTimeout = time.Duration(20)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(10), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = MaxWorkflowTaskStartToCloseTimeout + time.Duration(1)
-	runTimeout = MaxWorkflowTaskStartToCloseTimeout + time.Duration(1)
-	defaultTimeout = time.Duration(20)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, MaxWorkflowTaskStartToCloseTimeout, OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
 }
 
 func TestMapShardID_ByNamespaceWorkflow_4And16(t *testing.T) {
@@ -349,7 +271,32 @@ func TestIsServiceClientTransientError_ResourceExhausted(t *testing.T) {
 			Message: "Mutable state cache is full",
 		},
 	))
+}
 
+func TestMultiOperationErrorRetries(t *testing.T) {
+	unavailableOpErr := serviceerror.NewMultiOperationExecution("err",
+		[]error{serviceerror.NewUnavailable("err")})
+	require.True(t, IsServiceHandlerRetryableError(unavailableOpErr))
+	require.True(t, IsServiceClientTransientError(unavailableOpErr))
+
+	invalidArgOpErr := serviceerror.NewMultiOperationExecution("err",
+		[]error{serviceerror.NewInvalidArgument("err")})
+	require.False(t, IsServiceHandlerRetryableError(invalidArgOpErr))
+	require.False(t, IsServiceClientTransientError(invalidArgOpErr))
+
+	nilOpErr := serviceerror.NewMultiOperationExecution("err",
+		[]error{nil})
+	require.False(t, IsServiceHandlerRetryableError(nilOpErr))
+	require.False(t, IsServiceClientTransientError(nilOpErr))
+
+	nilErrs := serviceerror.NewMultiOperationExecution("err", nil)
+	require.False(t, IsServiceHandlerRetryableError(nilErrs))
+	require.False(t, IsServiceClientTransientError(nilErrs))
+
+	nilAndUnavailableOpErr := serviceerror.NewMultiOperationExecution("err",
+		[]error{nil, serviceerror.NewUnavailable("err")})
+	require.True(t, IsServiceHandlerRetryableError(nilAndUnavailableOpErr))
+	require.True(t, IsServiceClientTransientError(nilAndUnavailableOpErr))
 }
 
 func TestDiscardUnknownProto(t *testing.T) {
@@ -561,4 +508,29 @@ func TestMergeProtoExcludingFields(t *testing.T) {
 
 	require.NotEqual(t, source.WorkflowTaskVersion, target.WorkflowTaskVersion)
 	require.Equal(t, source.WorkflowId, target.WorkflowId)
+}
+
+// Tests that CreateHistoryStartWorkflowRequest doesn't mutate the request
+// parameter when creating a history request with payloads set.
+func TestCreateHistoryStartWorkflowRequestPayloads(t *testing.T) {
+	failurePayload := &failurepb.Failure{}
+	resultPayload := payloads.EncodeString("result")
+	startRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:            uuid.New(),
+		WorkflowId:           uuid.New(),
+		ContinuedFailure:     failurePayload,
+		LastCompletionResult: resultPayload,
+	}
+	startRequestClone := CloneProto(startRequest)
+
+	histRequest := CreateHistoryStartWorkflowRequest(startRequest.Namespace, startRequest, nil, nil, time.Now())
+
+	// ensure we aren't copying the payloads into the history request twice
+	require.Equal(t, failurePayload, histRequest.ContinuedFailure)
+	require.Equal(t, resultPayload, histRequest.LastCompletionResult)
+	require.Nil(t, histRequest.StartRequest.ContinuedFailure)
+	require.Nil(t, histRequest.StartRequest.LastCompletionResult)
+
+	// ensure the original request object is unmodified
+	require.Equal(t, startRequestClone, startRequest)
 }

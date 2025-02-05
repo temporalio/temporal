@@ -40,7 +40,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -48,7 +47,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/debug"
@@ -71,8 +70,8 @@ import (
 
 type (
 	DLQSuite struct {
-		testcore.FunctionalTestBase
-		*require.Assertions
+		testcore.FunctionalTestSuite
+
 		dlq              persistence.HistoryTaskQueueManager
 		dlqTasks         chan tasks.Task
 		writer           bytes.Buffer
@@ -122,16 +121,14 @@ func TestDLQSuite(t *testing.T) {
 }
 
 func (s *DLQSuite) SetupSuite() {
-	s.setAssertions()
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.HistoryTaskDLQEnabled.Key(): true,
 	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	s.dlqTasks = make(chan tasks.Task)
 	testPrefix := "dlq-test-terminal-wfts-"
 	s.failingWorkflowIDPrefix.Store(&testPrefix)
-	s.FunctionalTestBase.SetupSuite(
-		"testdata/es_cluster.yaml",
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(
+		testcore.WithDynamicConfigOverrides(dynamicConfigOverrides),
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
 			fx.Provide(
@@ -170,12 +167,12 @@ func (s *DLQSuite) SetupSuite() {
 	)
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.worker = sdkworker.New(sdkClient, taskQueue, sdkworker.Options{})
 	s.worker.RegisterWorkflow(myWorkflow)
-	s.NoError(s.worker.Start())
+	s.Require().NoError(s.worker.Start())
 }
 
 func (s *DLQSuite) TearDownSuite() {
@@ -188,15 +185,10 @@ func myWorkflow(workflow.Context) (string, error) {
 }
 
 func (s *DLQSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
+	s.FunctionalTestSuite.SetupTest()
 
-	s.setAssertions()
 	s.deleteBlockCh = make(chan interface{})
 	close(s.deleteBlockCh)
-}
-
-func (s *DLQSuite) setAssertions() {
-	s.Assertions = require.New(s.T())
 }
 
 func (s *DLQSuite) TestReadArtificialDLQTasks() {
@@ -331,8 +323,8 @@ func (s *DLQSuite) TestPurgeRealWorkflow() {
 
 	// Run DescribeJob and validate
 	response := s.describeJob(ctx, token)
-	s.Equal(enums.DLQ_OPERATION_TYPE_PURGE, response.OperationType)
-	s.Equal(enums.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
+	s.Equal(enumsspb.DLQ_OPERATION_TYPE_PURGE, response.OperationType)
+	s.Equal(enumsspb.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
 	s.Equal(dlqMessageID, response.MaxMessageId)
 	s.Equal(dlqMessageID, response.LastProcessedMessageId)
 	s.Equal(int64(1), response.MessagesProcessed)
@@ -380,8 +372,8 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 
 	// Run DescribeJob and validate
 	response := s.describeJob(ctx, token)
-	s.Equal(enums.DLQ_OPERATION_TYPE_MERGE, response.OperationType)
-	s.Equal(enums.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
+	s.Equal(enumsspb.DLQ_OPERATION_TYPE_MERGE, response.OperationType)
+	s.Equal(enumsspb.DLQ_OPERATION_STATE_COMPLETED, response.OperationState)
 	s.Equal(dlqMessageID, response.MaxMessageId)
 	s.Equal(dlqMessageID, response.LastProcessedMessageId)
 	s.Equal(int64(numWorkflows), response.MessagesProcessed)
@@ -516,7 +508,7 @@ func (s *DLQSuite) verifyRunIsInDLQ(
 func (s *DLQSuite) executeWorkflow(ctx context.Context, workflowID string) sdkclient.WorkflowRun {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 	})
 	s.NoError(err)
 
@@ -683,7 +675,7 @@ func (s *DLQSuite) verifyNumTasks(file *os.File, expectedNumTasks int) {
 	for i, task := range dlqTasks {
 		s.Equal(int64(persistence.FirstQueueMessageID+i), task.MessageID)
 		taskInfo := task.Payload
-		s.Equal(enums.TASK_TYPE_TRANSFER_WORKFLOW_TASK, taskInfo.TaskType)
+		s.Equal(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK, taskInfo.TaskType)
 		s.Equal("test-namespace", taskInfo.NamespaceId)
 		s.Equal("test-workflow-id", taskInfo.WorkflowId)
 		s.Equal("test-run-id", taskInfo.RunId)

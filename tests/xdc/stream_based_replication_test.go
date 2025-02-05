@@ -38,7 +38,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -66,35 +65,35 @@ import (
 type (
 	streamBasedReplicationTestSuite struct {
 		xdcBaseSuite
-		controller              *gomock.Controller
-		namespaceName           string
-		namespaceID             string
-		serializer              serialization.Serializer
-		generator               test.Generator
-		once                    sync.Once
-		enableTransitionHistory bool
+		controller    *gomock.Controller
+		namespaceName string
+		namespaceID   string
+		serializer    serialization.Serializer
+		generator     test.Generator
+		once          sync.Once
 	}
 )
 
 func TestStreamBasedReplicationTestSuite(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name                    string
 		enableTransitionHistory bool
 	}{
 		{
-			name:                    "EnableTransitionHistory",
-			enableTransitionHistory: true,
-		},
-		{
 			name:                    "DisableTransitionHistory",
 			enableTransitionHistory: false,
+		},
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &streamBasedReplicationTestSuite{
-				namespaceName:           "replication-test-" + common.GenerateRandomString(5),
-				enableTransitionHistory: tc.enableTransitionHistory,
+				namespaceName: "replication-test-" + common.GenerateRandomString(5),
 			}
+			s.enableTransitionHistory = tc.enableTransitionHistory
 			suite.Run(t, s)
 		})
 	}
@@ -107,7 +106,6 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
 		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
-		dynamicconfig.EnableTransitionHistory.Key():             s.enableTransitionHistory,
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
@@ -170,7 +168,8 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 	var versions []int64
 	if s.enableTransitionHistory {
 		// Use versions for cluster1 (active) so we can update workflows
-		versions = []int64{1, 31, 21, 61, 41, 101, 91, 71, 81}
+		// Use same versions to prevent workflow tasks from being failed due to WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND
+		versions = []int64{1, 1, 1, 1, 1, 1, 1, 1, 1}
 	} else {
 		versions = []int64{2, 12, 22, 32, 2, 1, 5, 8, 9}
 	}
@@ -195,39 +194,6 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 	}
 }
 
-func (s *streamBasedReplicationTestSuite) updateNamespace(version int64) error {
-	client1 := s.cluster1.FrontendClient() // active
-	nsResp, err := client1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Namespace: s.namespaceName,
-	})
-	s.NoError(err)
-
-	for nsResp.GetFailoverVersion() < version {
-		_, err = client1.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-			Namespace: s.namespaceName,
-			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-				ActiveClusterName: s.clusterNames[1],
-			},
-		})
-		s.NoError(err)
-
-		_, err = client1.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-			Namespace: s.namespaceName,
-			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-				ActiveClusterName: s.clusterNames[0],
-			},
-		})
-		s.NoError(err)
-
-		nsResp, err = client1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-			Namespace: s.namespaceName,
-		})
-		s.NoError(err)
-	}
-
-	return nil
-}
-
 func (s *streamBasedReplicationTestSuite) importTestEvents(
 	historyClient historyservice.HistoryServiceClient,
 	namespaceName namespace.Name,
@@ -250,17 +216,11 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 	}
 	var runID string
 	for _, version := range versions {
-		if s.enableTransitionHistory {
-			err := s.updateNamespace(version)
-			s.NoError(err)
-		}
-
 		workflowID := "xdc-stream-replication-test-" + uuid.New()
 		runID = uuid.New()
 
 		var historyBatch []*historypb.History
 		s.generator = test.InitializeHistoryEventGenerator(namespaceName, namespaceId, version)
-	ImportLoop:
 		for s.generator.HasNextVertex() {
 			events := s.generator.GetNextVertices()
 
@@ -269,7 +229,7 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
 			if isCloseEvent(historyEvents.Events[len(historyEvents.Events)-1]) {
-				break ImportLoop
+				historyEvents.Events = historyEvents.Events[:len(historyEvents.Events)-1]
 			}
 			historyBatch = append(historyBatch, historyEvents)
 		}

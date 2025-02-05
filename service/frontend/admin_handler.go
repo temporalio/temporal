@@ -70,6 +70,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -79,7 +80,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/utf8validator"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
@@ -99,7 +100,7 @@ const (
 type (
 	// AdminHandler - gRPC handler interface for adminservice
 	AdminHandler struct {
-		adminservice.UnsafeAdminServiceServer
+		adminservice.UnimplementedAdminServiceServer
 
 		status int32
 
@@ -107,7 +108,7 @@ type (
 		numberOfHistoryShards      int32
 		ESClient                   esclient.Client
 		config                     *Config
-		namespaceDLQHandler        namespace.DLQMessageHandler
+		namespaceDLQHandler        nsreplication.DLQMessageHandler
 		eventSerializer            serialization.Serializer
 		visibilityMgr              manager.VisibilityManager
 		persistenceExecutionName   string
@@ -182,7 +183,7 @@ var (
 func NewAdminHandler(
 	args NewAdminHandlerArgs,
 ) *AdminHandler {
-	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
+	namespaceReplicationTaskExecutor := nsreplication.NewTaskExecutor(
 		args.ClusterMetadata.GetCurrentClusterName(),
 		args.PersistenceMetadataManager,
 		args.Logger,
@@ -207,7 +208,7 @@ func NewAdminHandler(
 		status:                common.DaemonStatusInitialized,
 		numberOfHistoryShards: args.PersistenceConfig.NumHistoryShards,
 		config:                args.Config,
-		namespaceDLQHandler: namespace.NewDLQMessageHandler(
+		namespaceDLQHandler: nsreplication.NewDLQMessageHandler(
 			namespaceReplicationTaskExecutor,
 			args.NamespaceReplicationQueue,
 			args.Logger,
@@ -1884,6 +1885,17 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 			resp, err := serverCluster.Recv()
 			if err != nil {
 				logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
+				var solErr *serviceerrors.ShardOwnershipLost
+				var suErr *serviceerror.Unavailable
+				if errors.As(err, &solErr) || errors.As(err, &suErr) {
+					ctx, cl := context.WithTimeout(context.Background(), 2*time.Second)
+					// getShard here to make sure we will talk to correct host when stream is retrying
+					_, err := adh.historyClient.DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{ShardId: serverClusterShardID.ShardID})
+					if err != nil {
+						logger.Error("failed to get shard", tag.Error(err))
+					}
+					cl()
+				}
 				return
 			}
 			switch attr := resp.GetAttributes().(type) {
@@ -2009,9 +2021,6 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse); err != nil {
-		return nil, err
-	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.PurgeDLQTasksResponse{
 		JobToken: jobTokenBytes,
@@ -2048,9 +2057,6 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse); err != nil {
-		return nil, err
-	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.MergeDLQTasksResponse{
 		JobToken: jobTokenBytes,
@@ -2060,9 +2066,6 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservice.DescribeDLQJobRequest) (*adminservice.DescribeDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
-	if err == nil {
-		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest)
-	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
@@ -2116,9 +2119,6 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice.CancelDLQJobRequest) (*adminservice.CancelDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
-	if err == nil {
-		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest)
-	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}

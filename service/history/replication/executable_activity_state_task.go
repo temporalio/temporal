@@ -106,6 +106,11 @@ func NewExecutableActivityStateTask(
 			FirstScheduledTime:         task.FirstScheduledTime,
 			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
 			Stamp:                      task.Stamp,
+			Paused:                     task.Paused,
+			RetryInitialInterval:       task.RetryInitialInterval,
+			RetryMaximumInterval:       task.RetryMaximumInterval,
+			RetryMaximumAttempts:       task.RetryMaximumAttempts,
+			RetryBackoffCoefficient:    task.RetryBackoffCoefficient,
 		},
 
 		batchable: true,
@@ -126,6 +131,11 @@ func NewExecutableActivityStateTask(
 			FirstScheduledTime:         task.FirstScheduledTime,
 			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
 			Stamp:                      task.Stamp,
+			Paused:                     task.Paused,
+			RetryInitialInterval:       task.RetryInitialInterval,
+			RetryMaximumInterval:       task.RetryMaximumInterval,
+			RetryMaximumAttempts:       task.RetryMaximumAttempts,
+			RetryBackoffCoefficient:    task.RetryBackoffCoefficient,
 		}),
 	}
 }

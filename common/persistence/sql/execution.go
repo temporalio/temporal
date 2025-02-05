@@ -33,7 +33,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -207,6 +207,8 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		Status:           newWorkflow.ExecutionState.Status,
 		LastWriteVersion: lastWriteVersion,
 		StartTime:        getStartTimeFromState(newWorkflow.ExecutionState),
+		Data:             newWorkflow.ExecutionStateBlob.Data,
+		DataEncoding:     newWorkflow.ExecutionStateBlob.EncodingType.String(),
 	}
 
 	if err := createOrUpdateCurrentExecution(ctx, tx, row, request.Mode); err != nil {
@@ -406,6 +408,8 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			row.NamespaceID = primitives.MustParseUUID(newWorkflow.NamespaceID)
 			row.RunID = primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
 			row.StartTime = getStartTimeFromState(newWorkflow.ExecutionState)
+			row.Data = newWorkflow.ExecutionStateBlob.Data
+			row.DataEncoding = newWorkflow.ExecutionStateBlob.EncodingType.String()
 
 			if !bytes.Equal(namespaceID, row.NamespaceID) {
 				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot continue as new to another namespace")
@@ -417,6 +421,8 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			row.LastWriteVersion = updateWorkflow.LastWriteVersion
 			row.RunID = runID
 			row.StartTime = getStartTimeFromState(updateWorkflow.ExecutionState)
+			row.Data = updateWorkflow.ExecutionStateBlob.Data
+			row.DataEncoding = updateWorkflow.ExecutionStateBlob.EncodingType.String()
 			// we still call update only to update the current record
 		}
 		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, runID); err != nil {
@@ -498,9 +504,11 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 
 	case p.ConflictResolveWorkflowModeUpdateCurrent:
 		executionState := resetWorkflow.ExecutionState
+		executionStateBlob := resetWorkflow.ExecutionStateBlob
 		lastWriteVersion := resetWorkflow.LastWriteVersion
 		if newWorkflow != nil {
 			executionState = newWorkflow.ExecutionState
+			executionStateBlob = newWorkflow.ExecutionStateBlob
 			lastWriteVersion = newWorkflow.LastWriteVersion
 		}
 		runID := primitives.MustParseUUID(executionState.RunId)
@@ -518,11 +526,12 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 			Status:           status,
 			LastWriteVersion: lastWriteVersion,
 			StartTime:        getStartTimeFromState(executionState),
+			Data:             executionStateBlob.Data,
+			DataEncoding:     executionStateBlob.EncodingType.String(),
 		}
 		var prevRunID primitives.UUID
 		if currentWorkflow != nil {
 			prevRunID = primitives.MustParseUUID(currentWorkflow.ExecutionState.RunId)
-
 		} else {
 			// reset workflow is current
 			prevRunID = primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId)
@@ -685,7 +694,7 @@ func (m *sqlExecutionStore) GetCurrentExecution(
 
 	return &p.InternalGetCurrentExecutionResponse{
 		RunID: row.RunID.String(),
-		ExecutionState: &persistence.WorkflowExecutionState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
 			CreateRequestId: row.CreateRequestID,
 			State:           row.State,
 			Status:          row.Status,
@@ -728,7 +737,7 @@ func (m *sqlExecutionStore) ListConcreteExecutions(
 	return nil, serviceerror.NewUnimplemented("ListConcreteExecutions is not implemented")
 }
 
-func getStartTimeFromState(state *persistence.WorkflowExecutionState) *time.Time {
+func getStartTimeFromState(state *persistencespb.WorkflowExecutionState) *time.Time {
 	if state == nil || state.StartTime == nil {
 		return nil
 	}

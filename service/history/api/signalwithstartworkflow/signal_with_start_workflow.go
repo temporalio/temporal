@@ -89,7 +89,7 @@ func startAndSignalWorkflow(
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
-	newWorkflowLease, err := api.NewWorkflowWithSignal(
+	newMutableState, err := api.NewWorkflowWithSignal(
 		shard,
 		namespaceEntry,
 		workflowID,
@@ -100,10 +100,16 @@ func startAndSignalWorkflow(
 	if err != nil {
 		return "", false, err
 	}
+
+	newWorkflowLease, err := api.NewWorkflowLeaseAndContext(nil, shard, newMutableState)
+	if err != nil {
+		return "", false, err
+	}
+
 	if err = api.ValidateSignal(
 		ctx,
 		shard,
-		newWorkflowLease.GetMutableState(),
+		newMutableState,
 		signalWithStartRequest.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
@@ -176,7 +182,7 @@ func createWorkflowMutationFunction(
 		newRunID,
 		currentExecutionState.State,
 		currentExecutionState.Status,
-		currentExecutionState.CreateRequestId,
+		currentExecutionState.RequestIds,
 		workflowIDReusePolicy,
 		workflowIDConflictPolicy,
 		currentWorkflowStartTime,
@@ -272,7 +278,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	case nil:
 		return newWorkflowLease.GetContext().GetWorkflowKey().RunID, true, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
-		if failedErr.RequestID == requestID {
+		if _, ok := failedErr.RequestIDs[requestID]; ok {
 			return failedErr.RunID, false, nil
 		}
 		return "", false, err
@@ -316,14 +322,13 @@ func signalWorkflow(
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
-		request.GetSkipGenerateWorkflowTask(),
 		request.GetLinks(),
 	); err != nil {
 		return err
 	}
 
 	// Create a transfer task to schedule a workflow task
-	if !mutableState.HasPendingWorkflowTask() && !request.GetSkipGenerateWorkflowTask() {
+	if !mutableState.HasPendingWorkflowTask() {
 
 		executionInfo := mutableState.GetExecutionInfo()
 		executionState := mutableState.GetExecutionState()

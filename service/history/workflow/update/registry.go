@@ -28,8 +28,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
+	"sync/atomic"
 
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -37,10 +37,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/utf8validator"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -99,6 +102,10 @@ type (
 
 		// FailoverVersion of a Mutable State at the time of Registry creation.
 		FailoverVersion() int64
+
+		// SuggestContinueAsNew returns true if the Registry is reaching its limit.
+		// Note that this does not apply to in-flight limits, as these are transient.
+		SuggestContinueAsNew() bool
 	}
 
 	registry struct {
@@ -109,11 +116,13 @@ type (
 		// and completed Updates are loaded. Practically it is a Mutable State.
 		store UpdateStore
 
-		instrumentation instrumentation
-		maxInFlight     func() int
-		maxTotal        func() int
-		completedCount  int
-		failoverVersion int64
+		instrumentation      instrumentation
+		maxInFlight          atomic.Int32
+		maxTotal             atomic.Int32
+		maxRegistrySizeLimit atomic.Int32
+		completedCount       int
+		failoverVersion      int64
+		onClear              []func()
 	}
 
 	Option func(*registry)
@@ -123,16 +132,45 @@ var _ Registry = (*registry)(nil)
 
 // WithInFlightLimit provides an optional limit to the number of incomplete
 // Updates that a Registry instance will allow.
-func WithInFlightLimit(f func() int) Option {
+func WithInFlightLimit(
+	ns namespace.Name,
+	dc dynamicconfig.TypedSubscribableWithNamespaceFilter[int],
+) Option {
 	return func(r *registry) {
-		r.maxInFlight = f
+		init, cancel := dc(ns.String(), func(i int) {
+			r.maxInFlight.Store(int32(i))
+		})
+		r.maxInFlight.Store(int32(init))
+		r.onClear = append(r.onClear, cancel)
+	}
+}
+
+// WithRegistrySizeLimit provides an optional limit to the total payload size of incomplete
+// Updates that a Registry instance will allow.
+func WithRegistrySizeLimit(
+	ns namespace.Name,
+	dc dynamicconfig.TypedSubscribableWithNamespaceFilter[int],
+) Option {
+	return func(r *registry) {
+		init, cancel := dc(ns.String(), func(i int) {
+			r.maxRegistrySizeLimit.Store(int32(i))
+		})
+		r.maxRegistrySizeLimit.Store(int32(init))
+		r.onClear = append(r.onClear, cancel)
 	}
 }
 
 // WithTotalLimit provides an optional limit to the total number of Updates for workflow run.
-func WithTotalLimit(f func() int) Option {
+func WithTotalLimit(
+	ns namespace.Name,
+	dc dynamicconfig.TypedSubscribableWithNamespaceFilter[int],
+) Option {
 	return func(r *registry) {
-		r.maxTotal = f
+		init, cancel := dc(ns.String(), func(i int) {
+			r.maxTotal.Store(int32(i))
+		})
+		r.maxTotal.Store(int32(init))
+		r.onClear = append(r.onClear, cancel)
 	}
 }
 
@@ -154,7 +192,7 @@ func WithMetrics(m metrics.Handler) Option {
 // trace.Tracer) to be used by Registry and its Updates.
 func WithTracerProvider(t trace.TracerProvider) Option {
 	return func(r *registry) {
-		r.instrumentation.tracer = t.Tracer(libraryName)
+		r.instrumentation.tracer = t.Tracer(telemetry.ComponentUpdateRegistry)
 	}
 }
 
@@ -166,8 +204,6 @@ func NewRegistry(
 		updates:         make(map[string]*Update),
 		store:           store,
 		instrumentation: noopInstrumentation,
-		maxInFlight:     func() int { return math.MaxInt },
-		maxTotal:        func() int { return math.MaxInt },
 		failoverVersion: store.GetCurrentVersion(),
 	}
 	for _, opt := range opts {
@@ -218,7 +254,7 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	if err := r.checkLimits(); err != nil {
 		return nil, false, err
 	}
-	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	upd := New(id, r.remover(id), r.payloadSizeLimiter(), withInstrumentation(&r.instrumentation))
 	r.updates[id] = upd
 	return upd, false, nil
 }
@@ -237,11 +273,6 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 	body, err := acptOrRejMsg.Body.UnmarshalNew()
 	if err != nil {
 		return nil, invalidArgf("unable to unmarshal request: %v", err)
-	}
-
-	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
-	if err != nil {
-		return nil, invalidArgf("unable to validate utf-8 request: %v", err)
 	}
 
 	var reqMsg *updatepb.Request
@@ -353,6 +384,10 @@ func (r *registry) Send(
 func (r *registry) Clear() {
 	r.Abort(AbortReasonRegistryCleared)
 
+	for _, f := range r.onClear {
+		f()
+	}
+
 	r.updates = nil
 	r.completedCount = 0
 }
@@ -361,33 +396,80 @@ func (r *registry) Len() int {
 	return len(r.updates)
 }
 
-// remover is called when Update gets into terminal state (completed or rejected).
+// remover is called when an Update gets into a terminal state (completed or rejected).
 func (r *registry) remover(id string) updateOpt {
 	return withCompletionCallback(
 		func() {
+			if r.updates == nil {
+				return
+			}
+
+			// A rejected update is *not* counted as a completed update
+			// as that would negatively impact the registry's rate limit.
+			if upd := r.updates[id]; upd != nil && upd.acceptedEventID != common.EmptyEventID {
+				r.completedCount++
+			}
+
+			// The update was either discarded or persisted; no need to keep it here anymore.
 			delete(r.updates, id)
-			r.completedCount++
 		},
 	)
 }
 
 func (r *registry) checkLimits() error {
-	if len(r.updates) >= r.maxInFlight() {
-		r.instrumentation.countRateLimited()
-		return &serviceerror.ResourceExhausted{
-			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
-		}
+	if err := r.checkInflightLimit(); err != nil {
+		return err
 	}
 	return r.checkTotalLimit()
 }
 
+func (r *registry) checkInflightLimit() error {
+	maxInFlight := int(r.maxInFlight.Load())
+	if maxInFlight == 0 {
+		// limit is disabled
+		return nil
+	}
+	if len(r.updates) >= maxInFlight {
+		r.instrumentation.countRateLimited()
+		return &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", maxInFlight),
+		}
+	}
+	return nil
+}
+
+func (r *registry) payloadSizeLimiter() updateOpt {
+	return withLimitChecker(
+		func(req *updatepb.Request) error {
+			maxRegistrySize := int(r.maxRegistrySizeLimit.Load())
+			if maxRegistrySize == 0 {
+				// limit is disabled
+				return nil
+			}
+			registrySize := r.GetSize()
+			payloadBytes := req.Size()
+			if registrySize+payloadBytes >= maxRegistrySize {
+				r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes)
+				// TODO: return serviceerror.ResourceExhausted
+			}
+			return nil
+		},
+	)
+}
+
 func (r *registry) checkTotalLimit() error {
-	if len(r.updates)+r.completedCount >= r.maxTotal() {
+	maxTotal := int(r.maxTotal.Load())
+	if maxTotal == 0 {
+		// limit is disabled
+		return nil
+	}
+	if len(r.updates)+r.completedCount >= maxTotal {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
-			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
+			fmt.Sprintf("The limit on the total number of distinct updates in this workflow has been reached (%v). "+
+				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process", maxTotal),
 		)
 	}
 	return nil
@@ -432,4 +514,9 @@ func (r *registry) GetSize() int {
 
 func (r *registry) FailoverVersion() int64 {
 	return r.failoverVersion
+}
+
+func (r *registry) SuggestContinueAsNew() bool {
+	// TODO: implement me
+	return false
 }

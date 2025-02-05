@@ -28,25 +28,55 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
+	BuildIdSearchAttributePrefixPinned      = "pinned"
 	buildIdSearchAttributePrefixAssigned    = "assigned"
 	buildIdSearchAttributePrefixVersioned   = "versioned"
 	buildIdSearchAttributePrefixUnversioned = "unversioned"
 	BuildIdSearchAttributeDelimiter         = ":"
+	BuildIdSearchAttributeEscape            = "|"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
+
+// EscapeChar is a helper which escapes the BuildIdSearchAttributeDelimiter character
+// in the input string
+func escapeChar(s string) string {
+	s = strings.Replace(s, BuildIdSearchAttributeEscape, BuildIdSearchAttributeEscape+BuildIdSearchAttributeEscape, -1)
+	s = strings.Replace(s, BuildIdSearchAttributeDelimiter, BuildIdSearchAttributeEscape+BuildIdSearchAttributeDelimiter, -1)
+	return s
+}
+
+// PinnedBuildIdSearchAttribute returns the search attribute value for the currently assigned pinned build ID in the form
+// 'pinned:<deployment_series_name>:<deployment_build_id>'. Each workflow execution will have at most one member of the
+// BuildIds KeywordList in this format. If the workflow becomes unpinned or unversioned, this entry will be removed from
+// that list.
+func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment) string {
+	return fmt.Sprintf("%s%s%s%s%s",
+		BuildIdSearchAttributePrefixPinned,
+		BuildIdSearchAttributeDelimiter,
+		escapeChar(deployment.GetSeriesName()),
+		BuildIdSearchAttributeDelimiter,
+		escapeChar(deployment.GetBuildId()),
+	)
+}
 
 // AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID
 func AssignedBuildIdSearchAttribute(buildId string) string {
@@ -128,12 +158,45 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 	return ""
 }
 
+// DeploymentFromCapabilities returns the deployment if it is using versioning V3, otherwise nil.
+func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities) *deploymentpb.Deployment {
+	if capabilities.GetUseVersioning() && capabilities.GetDeploymentSeriesName() != "" && capabilities.GetBuildId() != "" {
+		return &deploymentpb.Deployment{
+			SeriesName: capabilities.GetDeploymentSeriesName(),
+			BuildId:    capabilities.GetBuildId(),
+		}
+	}
+	return nil
+}
+
+// DeploymentToString is intended to be used for logs and metrics only. Theoretically, it can map
+// different deployments to the string.
+// DO NOT USE IN SERVER LOGIC.
+func DeploymentToString(deployment *deploymentpb.Deployment) string {
+	if deployment == nil {
+		return "UNVERSIONED"
+	}
+	return deployment.GetSeriesName() + ":" + deployment.GetBuildId()
+}
+
 // MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:
 // - inheritedBuildId: build ID inherited from a past/previous wf execution (for Child WF or CaN)
 // - assignedBuildId: the build ID to which the WF is currently assigned (i.e. mutable state's AssginedBuildId)
 // - stamp: the latest versioning stamp of the execution (only needed for old versioning)
 // - hasCompletedWorkflowTask: if the wf has completed any WFT
-func MakeDirectiveForWorkflowTask(inheritedBuildId string, assignedBuildId string, stamp *commonpb.WorkerVersionStamp, hasCompletedWorkflowTask bool) *taskqueuespb.TaskVersionDirective {
+// - behavior: workflow's effective behavior
+// - deployment: workflow's effective deployment
+func MakeDirectiveForWorkflowTask(
+	inheritedBuildId string,
+	assignedBuildId string,
+	stamp *commonpb.WorkerVersionStamp,
+	hasCompletedWorkflowTask bool,
+	behavior enumspb.VersioningBehavior,
+	deployment *deploymentpb.Deployment,
+) *taskqueuespb.TaskVersionDirective {
+	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return &taskqueuespb.TaskVersionDirective{Behavior: behavior, Deployment: deployment}
+	}
 	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {
 		// TODO: old versioning only [cleanup-old-wv]
 		return MakeBuildIdDirective(id)
@@ -157,15 +220,104 @@ func MakeBuildIdDirective(buildId string) *taskqueuespb.TaskVersionDirective {
 }
 
 func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.WorkerVersionStamp {
+	if cap.GetUseVersioning() && cap.GetDeploymentSeriesName() != "" {
+		// Versioning 3, do not return stamp.
+		return nil
+	}
 	// TODO: remove `cap.BuildId != ""` condition after old versioning cleanup. this condition is used to differentiate
 	// between old and new versioning in Record*TaskStart calls. [cleanup-old-wv]
 	// we don't want to add stamp for task started events in old versioning
-	if cap != nil && cap.BuildId != "" {
+	if cap.GetBuildId() != "" {
 		return &commonpb.WorkerVersionStamp{UseVersioning: cap.UseVersioning, BuildId: cap.BuildId}
 	}
 	return nil
 }
 
-func StampForBuildId(buildId string) *commonpb.WorkerVersionStamp {
+func StampFromBuildId(buildId string) *commonpb.WorkerVersionStamp {
 	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
+}
+
+// ValidateDeployment returns error if the deployment is nil or it has empty build ID or deployment
+// name.
+func ValidateDeployment(deployment *deploymentpb.Deployment) error {
+	if deployment == nil {
+		return serviceerror.NewInvalidArgument("deployment cannot be nil")
+	}
+	if deployment.GetSeriesName() == "" {
+		return serviceerror.NewInvalidArgument("deployment series name cannot be empty")
+	}
+	if deployment.GetBuildId() == "" {
+		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
+	}
+	return nil
+}
+
+func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
+	if override == nil {
+		return nil
+	}
+	switch override.GetBehavior() {
+	case enumspb.VERSIONING_BEHAVIOR_PINNED:
+		if override.GetDeployment() != nil {
+			return ValidateDeployment(override.GetDeployment())
+		} else {
+			return serviceerror.NewInvalidArgument("must provide deployment if behavior is 'PINNED'")
+		}
+	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
+		if override.GetDeployment() != nil {
+			return serviceerror.NewInvalidArgument("only provide deployment if behavior is 'PINNED'")
+		}
+	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
+		return serviceerror.NewInvalidArgument("override behavior is required")
+	default:
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("override behavior %s not recognized", override.GetBehavior()))
+	}
+	return nil
+}
+
+func FindCurrentDeployment(deployments *persistencespb.DeploymentData) *deploymentpb.Deployment {
+	var currentDeployment *deploymentpb.Deployment
+	var maxCurrentTime time.Time
+	for _, d := range deployments.GetDeployments() {
+		if d.Data.LastBecameCurrentTime != nil {
+			if t := d.Data.LastBecameCurrentTime.AsTime(); t.After(maxCurrentTime) {
+				currentDeployment, maxCurrentTime = d.GetDeployment(), t
+			}
+		}
+	}
+	return currentDeployment
+}
+
+func ValidateTaskVersionDirective(
+	directive *taskqueuespb.TaskVersionDirective,
+	wfBehavior enumspb.VersioningBehavior,
+	wfDeployment *deploymentpb.Deployment,
+	scheduledDeployment *deploymentpb.Deployment,
+) error {
+	// Effective behavior and deployment of the workflow when History scheduled the WFT.
+	directiveBehavior := directive.GetBehavior()
+	if directiveBehavior != wfBehavior &&
+		// Verisoning 3 pre-release (v1.26, Dec 2024) is not populating request.VersionDirective so
+		// we skip this check until v1.28 if directiveBehavior is unspecified.
+		// TODO (shahab): remove this line after v1.27 is released.
+		directiveBehavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		// This must be a task scheduled before the workflow changes behavior. Matching can drop it.
+		return serviceerrors.NewObsoleteMatchingTask(fmt.Sprintf(
+			"task was scheduled when workflow had versioning behavior %s, now it has versioning behavior %s.",
+			directiveBehavior, wfBehavior))
+	}
+
+	directiveDeployment := directive.GetDeployment()
+	if directiveDeployment == nil {
+		// TODO: remove this once the ScheduledDeployment field is removed from proto
+		directiveDeployment = scheduledDeployment
+	}
+	if !directiveDeployment.Equal(wfDeployment) {
+		// This must be a task scheduled before the workflow transitions to the current
+		// deployment. Matching can drop it.
+		return serviceerrors.NewObsoleteMatchingTask(fmt.Sprintf(
+			"task was scheduled when workflow was on build %s, now it is on build %s.",
+			directiveDeployment.GetBuildId(), wfDeployment.GetBuildId()))
+	}
+	return nil
 }

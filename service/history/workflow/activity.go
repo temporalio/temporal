@@ -26,20 +26,23 @@ package workflow
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func GetActivityState(ai *persistence.ActivityInfo) enumspb.PendingActivityState {
+func GetActivityState(ai *persistencespb.ActivityInfo) enumspb.PendingActivityState {
 	if ai.CancelRequested {
 		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
 	}
@@ -73,12 +76,12 @@ func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
 }
 
 func UpdateActivityInfoForRetries(
-	ai *persistence.ActivityInfo,
+	ai *persistencespb.ActivityInfo,
 	version int64,
 	attempt int32,
 	failure *failurepb.Failure,
 	nextScheduledTime *timestamppb.Timestamp,
-) *persistence.ActivityInfo {
+) *persistencespb.ActivityInfo {
 	ai.Attempt = attempt
 	ai.Version = version
 	ai.ScheduledTime = nextScheduledTime
@@ -92,26 +95,17 @@ func UpdateActivityInfoForRetries(
 	return ai
 }
 
-func ActivityState(ai *persistence.ActivityInfo) enumspb.PendingActivityState {
-	if ai.CancelRequested {
-		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
-	}
-	if ai.StartedEventId != common.EmptyEventID {
-		return enumspb.PENDING_ACTIVITY_STATE_STARTED
-	}
-	return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-}
-
 func GetPendingActivityInfo(
 	ctx context.Context, // only used as a passthrough to GetActivityType
 	shardContext shard.Context,
 	mutableState MutableState,
-	ai *persistence.ActivityInfo,
+	ai *persistencespb.ActivityInfo,
 ) (*workflowpb.PendingActivityInfo, error) {
 	now := shardContext.GetTimeSource().Now().UTC()
 
 	p := &workflowpb.PendingActivityInfo{
-		ActivityId: ai.ActivityId,
+		ActivityId:     ai.ActivityId,
+		LastDeployment: ai.LastStartedDeployment,
 	}
 	if ai.GetUseWorkflowBuildIdInfo() != nil {
 		p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
@@ -121,7 +115,7 @@ func GetPendingActivityInfo(
 		}
 	}
 
-	p.State = ActivityState(ai)
+	p.State = GetActivityState(ai)
 
 	p.LastAttemptCompleteTime = ai.LastAttemptCompleteTime
 	if !ai.HasRetryPolicy {
@@ -145,6 +139,7 @@ func GetPendingActivityInfo(
 		}
 	}
 	p.Attempt = max(p.Attempt, 1)
+	p.Paused = ai.Paused
 
 	if ai.LastHeartbeatUpdateTime != nil && !ai.LastHeartbeatUpdateTime.AsTime().IsZero() {
 		p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
@@ -168,4 +163,250 @@ func GetPendingActivityInfo(
 	}
 
 	return p, nil
+}
+
+func GetNextScheduledTime(ai *persistencespb.ActivityInfo) time.Time {
+	// there are two possible cases:
+	// * this is the first time activity was scheduled
+	//  * in this case we should use current schedule time
+	// * this is a retry
+	//  * next scheduled time will be calculated, based on the retry policy and last time when activity was completed
+
+	nextScheduledTime := ai.ScheduledTime.AsTime()
+	if ai.Attempt > 1 {
+		// calculate new schedule time
+		interval := ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, ai.Attempt)
+
+		if ai.RetryMaximumInterval.AsDuration() != 0 && (interval <= 0 || interval > ai.RetryMaximumInterval.AsDuration()) {
+			interval = ai.RetryMaximumInterval.AsDuration()
+		}
+
+		if interval > 0 {
+			nextScheduledTime = ai.LastAttemptCompleteTime.AsTime().Add(interval)
+		}
+	}
+	return nextScheduledTime
+}
+
+func PauseActivity(mutableState MutableState, activityId string) error {
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowCompleted
+	}
+
+	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
+
+	if !activityFound {
+		return consts.ErrActivityNotFound
+	}
+
+	if ai.Paused {
+		// do nothing
+		return nil
+	}
+
+	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ MutableState) error {
+		// note - we are not increasing the stamp of the activity if it is running.
+		// this is because if activity is actually running we should let it finish
+		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			activityInfo.Stamp++
+		}
+		activityInfo.Paused = true
+		return nil
+	})
+}
+
+func ResetActivity(
+	shardContext shard.Context,
+	mutableState MutableState,
+	activityId string,
+	resetHeartbeats bool,
+	keepPaused bool,
+	jitter time.Duration,
+) error {
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowCompleted
+	}
+	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
+
+	if !activityFound {
+		return consts.ErrActivityNotFound
+	}
+
+	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+		// reset the number of attempts
+		ai.Attempt = 1
+
+		if resetHeartbeats {
+			activityInfo.LastHeartbeatDetails = nil
+			activityInfo.LastHeartbeatUpdateTime = nil
+		}
+
+		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
+		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_STARTED || (ai.Paused && keepPaused) {
+			return nil
+		}
+
+		ai.Stamp++
+		if ai.Paused && !keepPaused {
+			ai.Paused = false
+		}
+
+		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
+		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			scheduleTime := shardContext.GetTimeSource().Now().UTC()
+			if jitter != 0 {
+				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
+				scheduleTime = scheduleTime.Add(randomOffset)
+			}
+			if err := ms.RegenerateActivityRetryTask(ai, scheduleTime); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+func UnpauseActivity(
+	shardContext shard.Context,
+	mutableState MutableState,
+	ai *persistencespb.ActivityInfo,
+	resetAttempts bool,
+	resetHeartbeat bool,
+	jitter time.Duration,
+) error {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+		activityInfo.Paused = false
+		activityInfo.Stamp++
+
+		if resetAttempts {
+			activityInfo.Attempt = 1
+		}
+		if resetHeartbeat {
+			activityInfo.LastHeartbeatDetails = nil
+			activityInfo.LastHeartbeatUpdateTime = nil
+		}
+
+		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
+		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			scheduleTime := shardContext.GetTimeSource().Now().UTC()
+			if jitter != 0 {
+				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
+				scheduleTime = scheduleTime.Add(randomOffset)
+			}
+			if err := ms.RegenerateActivityRetryTask(ai, scheduleTime); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func UnpauseActivityWithResume(
+	shardContext shard.Context,
+	mutableState MutableState,
+	ai *persistencespb.ActivityInfo,
+	scheduleNewRun bool,
+	jitter time.Duration,
+) (*historyservice.UnpauseActivityResponse, error) {
+
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+		activityInfo.Stamp++
+		activityInfo.Paused = false
+
+		// regenerate the retry task if needed
+		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms, shardContext); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return &historyservice.UnpauseActivityResponse{}, nil
+}
+
+func UnpauseActivityWithReset(
+	shardContext shard.Context,
+	mutableState MutableState,
+	ai *persistencespb.ActivityInfo,
+	scheduleNewRun bool,
+	resetHeartbeats bool,
+	jitter time.Duration,
+) (*historyservice.UnpauseActivityResponse, error) {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+		activityInfo.Paused = false
+		activityInfo.Stamp++
+
+		// reset the number of attempts
+		activityInfo.Attempt = 1
+
+		if needRegenerateRetryTask(activityInfo, scheduleNewRun) {
+			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms, shardContext); err != nil {
+				return err
+			}
+		}
+
+		if resetHeartbeats {
+			activityInfo.LastHeartbeatDetails = nil
+			activityInfo.LastHeartbeatUpdateTime = nil
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return &historyservice.UnpauseActivityResponse{}, nil
+}
+
+func regenerateActivityRetryTask(
+	activityInfo *persistencespb.ActivityInfo,
+	scheduleNewRun bool,
+	jitter time.Duration,
+	ms MutableState,
+	shardContext shard.Context) error {
+	scheduleTime := activityInfo.ScheduledTime.AsTime()
+	if scheduleNewRun {
+		scheduleTime = shardContext.GetTimeSource().Now().UTC()
+		if jitter != 0 {
+			randomOffset := time.Duration(rand.Int63n(int64(jitter)))
+			scheduleTime = scheduleTime.Add(randomOffset)
+		}
+	}
+	return ms.RegenerateActivityRetryTask(activityInfo, scheduleTime)
+}
+
+func needRegenerateRetryTask(ai *persistencespb.ActivityInfo, scheduleNewRun bool) bool {
+	// if activity is Paused - we don't need to do anything
+	if ai.Paused {
+		return false
+	}
+
+	if scheduleNewRun {
+		// we need to always regenerate the retry task if scheduleNewRun flag is provided
+		// but for a different reasons.
+		// if activity is waiting to start - to prevent old retry from executing
+		// if activity is running - to prevent the current running activity from finishing
+		return true
+	}
+
+	if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+		// activity is waiting to start, scheduleNewRun flag is NOT provided
+		// in this case we still need to increase the Stamp
+		// this is because we reset the number of attempts, and this will prevent old retry from executing
+		// we also need to start the activity immediately - no reason to wait
+		// we still need to increase the stamp in case the number of attempts doesn't change
+		return true
+	}
+
+	// activity is running, scheduleNewRun flag is NOT provided
+	// in this case we don't need to do anything
+	return false
 }

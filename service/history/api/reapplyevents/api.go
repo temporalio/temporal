@@ -53,7 +53,7 @@ func Invoke(
 	workflowResetter ndc.WorkflowResetter,
 	eventsReapplier ndc.EventsReapplier,
 ) error {
-	if shard.GetConfig().SkipReapplicationByNamespaceID(namespaceUUID.String()) {
+	if shard.GetConfig().SkipReapplicationByNamespaceID(namespaceUUID) {
 		return nil
 	}
 
@@ -161,6 +161,7 @@ func Invoke(
 					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
 					nil,
+					false, // allowResetWithPendingChildren
 				)
 				switch err.(type) {
 				case *serviceerror.InvalidArgument:
@@ -180,7 +181,7 @@ func Invoke(
 			reappliedEvents, err := eventsReapplier.ReapplyEvents(
 				ctx,
 				mutableState,
-				context.UpdateRegistry(ctx, nil),
+				context.UpdateRegistry(ctx),
 				toReapplyEvents,
 				runID,
 			)

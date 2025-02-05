@@ -144,6 +144,11 @@ func Invoke(
 		baseWorkflowLease.GetReleaseFn(),
 	)
 
+	namespaceEntry, err := api.GetActiveNamespace(shard, namespaceID)
+	if err != nil {
+		return nil, err
+	}
+	allowResetWithPendingChildren := shard.GetConfig().AllowResetWithPendingChildren(namespaceEntry.Name().String())
 	if err := ndc.NewWorkflowResetter(
 		shard,
 		workflowConsistencyChecker.GetWorkflowCache(),
@@ -169,6 +174,7 @@ func Invoke(
 		request.GetReason(),
 		nil,
 		GetResetReapplyExcludeTypes(request.GetResetReapplyExcludeTypes(), request.GetResetReapplyType()),
+		allowResetWithPendingChildren,
 	); err != nil {
 		return nil, err
 	}

@@ -30,9 +30,12 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 const (
@@ -59,6 +62,10 @@ const (
 	BatchTypeDelete = "delete"
 	// BatchTypeReset is batch type for resetting workflows
 	BatchTypeReset = "reset"
+	// BatchTypeUpdateOptions is batch type for updating the options of workflow executions
+	BatchTypeUpdateOptions = "update_options"
+	// BatchTypePauseActivities is batch type for unpausing activities
+	BatchTypeUnpauseActivities = "unpause_activities"
 )
 
 var (
@@ -101,6 +108,20 @@ type (
 		ResetReapplyType enumspb.ResetReapplyType
 	}
 
+	// UpdateOptionsParams is the parameters for updating workflow execution options
+	UpdateOptionsParams struct {
+		WorkflowExecutionOptions *workflowpb.WorkflowExecutionOptions
+		UpdateMask               *fieldmaskpb.FieldMask
+	}
+
+	UnpauseActivitiesParams struct {
+		ActivityType   string
+		MatchAll       bool
+		ResetAttempts  bool
+		ResetHeartbeat bool
+		Jitter         time.Duration
+	}
+
 	// BatchParams is the parameters for batch operation workflow
 	BatchParams struct {
 		// Target namespace to execute batch operation
@@ -125,6 +146,11 @@ type (
 		DeleteParams DeleteParams
 		// ResetParams is params only for BatchTypeReset
 		ResetParams ResetParams
+		// UpdateOptionsParams is params only for BatchTypeUpdateOptions
+		UpdateOptionsParams UpdateOptionsParams
+		// UnpauseActivitiesParams is params only for BatchTypeUnpauseActivities
+		UnpauseActivitiesParams UnpauseActivitiesParams
+
 		// RPS sets the requests-per-second limit for the batch.
 		// The default (and max) is defined by `worker.BatcherRPS` in the dynamic config.
 		RPS float64
@@ -235,7 +261,20 @@ func validateParams(params BatchParams) error {
 			return fmt.Errorf("must provide signal name")
 		}
 		return nil
+	case BatchTypeUpdateOptions:
+		if params.UpdateOptionsParams.WorkflowExecutionOptions == nil {
+			return fmt.Errorf("must provide UpdateOptions")
+		}
+		if params.UpdateOptionsParams.UpdateMask == nil {
+			return fmt.Errorf("must provide UpdateMask")
+		}
+		return worker_versioning.ValidateVersioningOverride(params.UpdateOptionsParams.WorkflowExecutionOptions.VersioningOverride)
 	case BatchTypeCancel, BatchTypeTerminate, BatchTypeDelete, BatchTypeReset:
+		return nil
+	case BatchTypeUnpauseActivities:
+		if params.UnpauseActivitiesParams.ActivityType == "" && !params.UnpauseActivitiesParams.MatchAll {
+			return fmt.Errorf("must provide ActivityType or MatchAll")
+		}
 		return nil
 	default:
 		return fmt.Errorf("not supported batch type: %v", params.BatchType)

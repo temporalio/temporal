@@ -30,6 +30,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/activity/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -104,6 +105,9 @@ message StartWorkflowExecutionRequest {
     temporal.server.api.workflow.v1.RootExecutionInfo root_execution_info = 11;
     // inherited build ID from parent/previous execution
     string inherited_build_id = 12;
+    // If set, takes precedence over the Versioning Behavior sent by the SDK on Workflow Task completion.
+    // To unset the override after the workflow is running, use UpdateWorkflowExecutionOptions.
+    temporal.api.workflow.v1.VersioningOverride versioning_override = 13;
 }
 
 message StartWorkflowExecutionResponse {
@@ -155,6 +159,7 @@ message GetMutableStateResponse {
     string assigned_build_id = 22;
     string inherited_build_id = 23;
     repeated temporal.server.api.persistence.v1.VersionedTransition transition_history = 24;
+    temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 25;
 }
 
 message PollMutableStateRequest {
@@ -238,6 +243,11 @@ message RecordWorkflowTaskStartedRequest {
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 6;
     temporal.server.api.clock.v1.VectorClock clock = 7;
     temporal.server.api.taskqueue.v1.BuildIdRedirectInfo build_id_redirect_info = 8;
+    // The deployment passed by History when the task was scheduled.
+    // Deprecated. use `version_directive.deployment`.
+    temporal.api.deployment.v1.Deployment scheduled_deployment = 9;
+    // Versioning directive that was sent by history when scheduling the task.
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -277,6 +287,12 @@ message RecordActivityTaskStartedRequest {
 
     // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     int32 stamp = 9;
+    // The deployment passed by History when the task was scheduled.
+    // Deprecated. use `version_directive.deployment`.
+    temporal.api.deployment.v1.Deployment scheduled_deployment = 10;
+    reserved 11;
+    // Versioning directive that was sent by history when scheduling the task.
+    temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 12;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -338,6 +354,8 @@ message RecordActivityTaskHeartbeatRequest {
 
 message RecordActivityTaskHeartbeatResponse {
     bool cancel_requested = 1;
+
+    bool activity_paused = 2;
 }
 
 message RespondActivityTaskCompletedRequest {
@@ -544,6 +562,7 @@ message DescribeWorkflowExecutionResponse {
     temporal.api.workflow.v1.PendingWorkflowTaskInfo pending_workflow_task = 5;
     repeated temporal.api.workflow.v1.CallbackInfo callbacks = 6;
     repeated temporal.api.workflow.v1.PendingNexusOperationInfo pending_nexus_operations = 7;
+    temporal.api.workflow.v1.WorkflowExecutionExtendedInfo workflow_extended_info = 8;
 }
 
 message ReplicateEventsV2Request {
@@ -613,6 +632,14 @@ message SyncActivityRequest {
     google.protobuf.Timestamp last_attempt_complete_time = 19;
     // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     int32 stamp = 20;
+    // Indicates if the activity is paused.
+    bool paused = 21;
+
+    // Retry policy for the activity.
+    google.protobuf.Duration retry_initial_interval = 22;
+    google.protobuf.Duration retry_maximum_interval = 23;
+    int32 retry_maximum_attempts = 24;
+    double retry_backoff_coefficient = 25;
 }
 
 message SyncActivitiesRequest {
@@ -647,6 +674,14 @@ message ActivitySyncInfo {
     google.protobuf.Timestamp last_attempt_complete_time = 19;
     // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     int32 stamp = 20;
+    // Indicates if the activity is paused.
+    bool paused = 21;
+    // Retry policy for the activity. It needs to be replicated now, since the activity properties can be updated.
+    google.protobuf.Duration retry_initial_interval = 22;
+    google.protobuf.Duration retry_maximum_interval = 23;
+    int32 retry_maximum_attempts = 24;
+    double retry_backoff_coefficient = 25;
+
 }
 
 message SyncActivityResponse {
@@ -946,6 +981,11 @@ message GetWorkflowExecutionHistoryResponse {
     temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse response = 1;
 }
 
+// This message must be wire compatible with GetWorkflowExecutionHistoryResponse.
+message GetWorkflowExecutionHistoryResponseWithRaw {
+    temporal.server.api.history.v1.GetWorkflowExecutionHistoryResponse response = 1;
+}
+
 message GetWorkflowExecutionHistoryReverseRequest {
     option (routing).workflow_id = "request.execution.workflow_id";
 
@@ -1089,6 +1129,12 @@ message CompleteNexusOperationRequest {
         // Operation failure, only set if state != successful.
         temporal.api.nexus.v1.Failure failure = 4;
     }
+    // Operation token - used when the completion is received before the started response.
+    string operation_token = 5;
+    // Time the operation was started. Used when completion is received before the started response.
+    google.protobuf.Timestamp start_time = 6;
+    // Links to be attached to a fabricated start event if completion is received before started response.
+    repeated temporal.api.common.v1.Link links = 7;
 }
 
 message CompleteNexusOperationResponse {
@@ -1153,12 +1199,12 @@ message SyncWorkflowStateResponse {
 // (-- api-linter: core::0134::request-mask-required=disabled
 // (-- api-linter: core::0134::request-resource-required=disabled
 message UpdateActivityOptionsRequest {
-    option (routing).workflow_id = "update_request.workflow_id";
+    option (routing).workflow_id = "update_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.UpdateActivityOptionsByIdRequest update_request = 2;
+    temporal.api.workflowservice.v1.UpdateActivityOptionsRequest update_request = 2;
 }
 
 message UpdateActivityOptionsResponse {
@@ -1167,37 +1213,51 @@ message UpdateActivityOptionsResponse {
 }
 
 message PauseActivityRequest {
-    option (routing).workflow_id = "frontend_request.workflow_id";
+    option (routing).workflow_id = "frontend_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.PauseActivityByIdRequest frontend_request = 2;
+    temporal.api.workflowservice.v1.PauseActivityRequest frontend_request = 2;
 }
 
 message PauseActivityResponse {
 }
 
 message UnpauseActivityRequest {
-    option (routing).workflow_id = "frontend_request.workflow_id";
+    option (routing).workflow_id = "frontend_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.UnpauseActivityByIdRequest frontend_request = 2;
+    temporal.api.workflowservice.v1.UnpauseActivityRequest frontend_request = 2;
 }
 
 message UnpauseActivityResponse {
 }
 
 message ResetActivityRequest {
-    option (routing).workflow_id = "frontend_request.workflow_id";
+    option (routing).workflow_id = "frontend_request.execution.workflow_id";
 
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
 
-    temporal.api.workflowservice.v1.ResetActivityByIdRequest frontend_request = 2;
+    temporal.api.workflowservice.v1.ResetActivityRequest frontend_request = 2;
 }
 
 message ResetActivityResponse {
+}
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+// (-- api-linter: core::0134::request-resource-required=disabled
+message UpdateWorkflowExecutionOptionsRequest {
+    option (routing).workflow_id = "update_request.workflow_execution.workflow_id";
+
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.UpdateWorkflowExecutionOptionsRequest update_request = 2;
+}
+
+message UpdateWorkflowExecutionOptionsResponse {
+    // Workflow Execution options after update.
+    temporal.api.workflow.v1.WorkflowExecutionOptions workflow_execution_options = 1;
 }
