@@ -74,7 +74,7 @@ const (
 	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
 	WorkerDeploymentVersionWorkflowIDEscape      = "|"
 	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDDelimeter) + len(WorkerDeploymentVersionWorkflowIDPrefix) // todo (Shivam): Do we need 2 * len(WorkerDeploymentVersionWorkflowIDDelimeter)?
-	WorkerDeploymentFieldName                    = "DeploymentName"
+	WorkerDeploymentFieldName                    = "WorkerDeployment"
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
 
 	// Application error names for rejected updates
@@ -120,7 +120,7 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain '/'", fieldName))
 	}
 
-	// buildID cannot start with "__" // TODO (Carly): Do we still want this requirement?
+	// buildID cannot start with "__"
 	if fieldName == WorkerDeploymentBuildIDFieldName && strings.HasPrefix(field, "__") {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot start with '__'", fieldName))
 	}
