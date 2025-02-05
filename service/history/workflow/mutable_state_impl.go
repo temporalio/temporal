@@ -4533,6 +4533,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 			Behavior:      override.GetBehavior(),
 			PinnedVersion: override.GetPinnedVersion(),
 		}
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		if d := override.GetDeployment(); d != nil { // if the old Deployment field was populated instead of PinnedVersion
 			// We read from both old and new fields but write in the new fields only.
 			ms.GetExecutionInfo().VersioningInfo.VersioningOverride.PinnedVersion = worker_versioning.WorkerDeploymentVersionToString(

@@ -81,7 +81,7 @@ func (s *WorkerDeploymentSuite) pollFromDeployment(ctx context.Context, tv *test
 	})
 }
 
-func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_Only() {
+func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 	tv := testvars.New(s)
@@ -91,18 +91,6 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_Only() {
 	secondVersion := tv.WithBuildIDNumber(2)
 
 	go s.pollFromDeployment(ctx, firstVersion)
-	//s.EventuallyWithT(func(t *assert.CollectT) {
-	//	a := assert.New(t)
-	//
-	//	resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-	//		Namespace: s.Namespace().String(),
-	//		Query:     "WorkflowId STARTS_WITH 'temporal-sys-worker-deployment'",
-	//	})
-	//	a.NoError(err)
-	//	a.Equal(1, len(resp.GetExecutions()))
-	//
-	//}, time.Second*10, time.Millisecond*1000)
-
 	go s.pollFromDeployment(ctx, secondVersion)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -705,56 +693,6 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_SetRamping
 // todo: this test won't work right now until we have current version set to "__unversioned__" by default.
 // check validateSetWorkerDeploymentRampingVersion for more details.
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoCurrent_Unset_Ramp() {
-}
-
-// Tests testing set current version
-func (s *WorkerDeploymentSuite) TestSetWorkerCurrentVersion_MissingTaskQueuesInNewVersion() {
-	//ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	//defer cancel()
-	//tv1 := testvars.New(s).WithBuildIDNumber(1).WithTaskQueue("task_queue_1")
-	//tv2 := testvars.New(s).WithBuildIDNumber(2).WithTaskQueue("task_queue_2")
-	//
-	//// Start deployment workflow 1 and wait for the deployment version to exist
-	//go s.pollFromDeployment(ctx, tv1)
-	//s.EventuallyWithT(func(t *assert.CollectT) {
-	//	a := assert.New(t)
-	//	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-	//		Namespace: s.Namespace().String(),
-	//		Version: &deploymentpb.WorkerDeploymentVersion{
-	//			DeploymentName: tv1.DeploymentSeries(),
-	//			BuildId:        tv1.BuildID(),
-	//		},
-	//	})
-	//	a.NoError(err)
-	//	a.Equal(tv1.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
-	//	a.Equal(tv1.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
-	//}, time.Second*5, time.Millisecond*200)
-	//
-	//// Start deployment workflow 2 and wait for the deployment version to exist
-	//go s.pollFromDeployment(ctx, tv2)
-	//s.EventuallyWithT(func(t *assert.CollectT) {
-	//	a := assert.New(t)
-	//	resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-	//		Namespace: s.Namespace().String(),
-	//		Version: &deploymentpb.WorkerDeploymentVersion{
-	//			DeploymentName: tv2.DeploymentSeries(),
-	//			BuildId:        tv2.BuildID(),
-	//		},
-	//	})
-	//	a.NoError(err)
-	//	a.Equal(tv2.DeploymentSeries(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetDeploymentName())
-	//	a.Equal(tv2.BuildID(), resp.GetWorkerDeploymentVersionInfo().GetVersion().GetBuildId())
-	//}, time.Second*5, time.Millisecond*200)
-	//
-	//// Set version 1 to be current
-	//s.setCurrentVersion(ctx, tv1, "", false)
-	//
-	//// Use the Delete API to delete version1 from the deployment, which shall remove the
-	//// version from the task-queue
-	//
-	//// Set version 2 to be current
-	//// this should error out since "task-queue_1" is unversioned now!
-	//s.setCurrentVersion(ctx, tv2, tv1.BuildID(), false)
 }
 
 // todo: add validations for VersionSummaries

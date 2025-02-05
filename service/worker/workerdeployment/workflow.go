@@ -74,8 +74,6 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
 	}
 
-	var pendingUpdates int
-
 	err := workflow.SetQueryHandler(ctx, QueryDescribeDeployment, func() (*deploymentspb.QueryDescribeWorkerDeploymentResponse, error) {
 		return &deploymentspb.QueryDescribeWorkerDeploymentResponse{
 			State: d.State,
@@ -131,7 +129,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	}
 
 	// Wait until we can continue as new or are cancelled.
-	err = workflow.Await(ctx, func() bool { return workflow.GetInfo(ctx).GetContinueAsNewSuggested() && pendingUpdates == 0 })
+	err = workflow.Await(ctx, func() bool { return workflow.GetInfo(ctx).GetContinueAsNewSuggested() && d.pendingUpdates == 0 })
 	if err != nil {
 		return err
 	}
@@ -160,6 +158,7 @@ func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampin
 	return nil
 }
 
+//revive:disable-next-line:cognitive-complexity
 func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *deploymentspb.SetRampingVersionArgs) (*deploymentspb.SetRampingVersionResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
@@ -298,10 +297,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 	d.State.Versions = slices.DeleteFunc(d.State.Versions, func(v string) bool { return v == args.Version })
 
 	// update memo
-	if err = d.updateMemo(ctx); err != nil {
-		return err
-	}
-	return nil
+	return d.updateMemo(ctx)
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
