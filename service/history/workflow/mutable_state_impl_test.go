@@ -2557,8 +2557,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingActivityInfos(), 2)
 				for _, ai := range ms.GetPendingActivityInfos() {
@@ -2586,8 +2585,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingTimerInfos(), 2)
 				for _, ti := range ms.GetPendingTimerInfos() {
@@ -2614,8 +2612,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingChildExecutionInfos(), 2)
 				for _, ci := range ms.GetPendingChildExecutionInfos() {
@@ -2642,8 +2639,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingRequestCancelExternalInfos(), 2)
 				for _, ci := range ms.GetPendingRequestCancelExternalInfos() {
@@ -2675,8 +2671,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingSignalExternalInfos(), 2)
 				for _, ci := range ms.GetPendingSignalExternalInfos() {
@@ -2696,9 +2691,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().SignalRequestIdsLastUpdateVersionedTransition)
 			},
 		},
@@ -2717,9 +2710,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				s.Len(ms.GetExecutionInfo().UpdateInfos, 1)
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().UpdateInfos[updateID].LastUpdateVersionedTransition)
 			},
@@ -2745,9 +2736,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition)
 			},
 		},
@@ -2764,9 +2753,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().VisibilityLastUpdateVersionedTransition)
 			},
 		},
@@ -2784,9 +2771,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionState().LastUpdateVersionedTransition)
 			},
 		},
@@ -2799,9 +2784,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				err = ms.HSM().Walk(func(n *hsm.Node) error {
 					if n.Parent == nil {
 						// skip root which is entire mutable state
@@ -2822,9 +2805,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				err = ms.HSM().Walk(func(n *hsm.Node) error {
 					if n.Parent == nil {
 						// skip root which is entire mutable state
@@ -3684,10 +3665,10 @@ func (s *mutableStateSuite) TestVersionedTransitionInDB() {
 	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
 	s.NoError(err)
 
-	s.True(proto.Equal(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1], ms.versionedTransitionInDB))
+	s.True(proto.Equal(ms.CurrentVersionedTransition(), ms.versionedTransitionInDB))
 
 	s.NoError(ms.cleanupTransaction())
-	s.True(proto.Equal(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1], ms.versionedTransitionInDB))
+	s.True(proto.Equal(ms.CurrentVersionedTransition(), ms.versionedTransitionInDB))
 
 	ms.executionInfo.TransitionHistory = nil
 	s.NoError(ms.cleanupTransaction())
@@ -3703,7 +3684,7 @@ func (s *mutableStateSuite) TestVersionedTransitionInDB() {
 
 	ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(ms.executionInfo.TransitionHistory, s.namespaceEntry.FailoverVersion())
 	s.NoError(ms.cleanupTransaction())
-	s.True(proto.Equal(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1], ms.versionedTransitionInDB))
+	s.True(proto.Equal(ms.CurrentVersionedTransition(), ms.versionedTransitionInDB))
 }
 
 func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
@@ -3834,8 +3815,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 			mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
 			s.NoError(err)
 
-			transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-			currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+			currentVersionedTransition := mutableState.CurrentVersionedTransition()
 			newVersionedTranstion := common.CloneProto(currentVersionedTransition)
 			newVersionedTranstion.TransitionCount += 1
 
@@ -3883,8 +3863,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_CapIfLargerThanL
 		},
 	}
 
-	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+	currentVersionedTransition := mutableState.CurrentVersionedTransition()
 	newVersionedTranstion := common.CloneProto(currentVersionedTransition)
 	newVersionedTranstion.TransitionCount += 1
 	signalMap := mutableState.GetPendingSignalExternalInfos()
@@ -3935,8 +3914,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEm
 		},
 	}
 
-	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+	currentVersionedTransition := mutableState.CurrentVersionedTransition()
 	newVersionedTranstion := common.CloneProto(currentVersionedTransition)
 	newVersionedTranstion.TransitionCount += 1
 
@@ -4425,7 +4403,7 @@ func (s *mutableStateSuite) TestApplyMutation() {
 	s.NoError(err)
 
 	transitionHistory := targetMS.executionInfo.TransitionHistory
-	failoverVersion := transitionHistory[len(transitionHistory)-1].NamespaceFailoverVersion
+	failoverVersion := transitionhistory.LastVersionedTransition(transitionHistory).NamespaceFailoverVersion
 	targetMS.executionInfo.TransitionHistory = UpdatedTransitionHistory(transitionHistory, failoverVersion)
 
 	// set updateXXX so LastUpdateVersionedTransition will be updated
@@ -4445,7 +4423,7 @@ func (s *mutableStateSuite) TestApplyMutation() {
 
 	tombstonesToAdd := []*persistencespb.StateMachineTombstoneBatch{
 		{
-			VersionedTransition: targetMS.currentVersionedTransition(),
+			VersionedTransition: targetMS.CurrentVersionedTransition(),
 			StateMachineTombstones: []*persistencespb.StateMachineTombstone{
 				{
 					StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{

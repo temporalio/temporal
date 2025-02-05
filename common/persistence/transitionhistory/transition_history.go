@@ -48,3 +48,13 @@ func CopyVersionedTransition(
 	}
 	return common.CloneProto(transition)
 }
+
+func LastVersionedTransition(
+	transitions []*persistencespb.VersionedTransition,
+) *persistencespb.VersionedTransition {
+	if len(transitions) == 0 {
+		// transition history is not enabled
+		return nil
+	}
+	return transitions[len(transitions)-1]
+}

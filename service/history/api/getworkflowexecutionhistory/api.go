@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/api"
@@ -107,12 +108,7 @@ func Invoke(
 			return nil, "", 0, 0, false, nil, nil, err
 		}
 
-		var lastVersionedTransition *persistencespb.VersionedTransition
-		transitionHistory := response.GetTransitionHistory()
-		if transitionHistory != nil {
-			lastVersionedTransition = transitionHistory[len(transitionHistory)-1]
-		}
-
+		lastVersionedTransition := transitionhistory.LastVersionedTransition(response.GetTransitionHistory())
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
 			response.GetLastFirstEventId(),

@@ -847,7 +847,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 ) error {
 	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
 		// this make sure current version >= last write version
-		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+		lastVersionedTransition := ms.CurrentVersionedTransition()
 		ms.currentVersion = lastVersionedTransition.NamespaceFailoverVersion
 	} else {
 		versionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
@@ -895,13 +895,13 @@ func (ms *MutableStateImpl) NextTransitionCount() int64 {
 		return 0
 	}
 
-	hist := ms.executionInfo.TransitionHistory
-	if len(hist) == 0 {
+	currentVersionedTransition := ms.CurrentVersionedTransition()
+	if currentVersionedTransition == nil {
 		// it is possible that this is the first transition and
 		// transition history has not been updated yet.
 		return 1
 	}
-	return hist[len(hist)-1].TransitionCount + 1
+	return currentVersionedTransition.TransitionCount + 1
 }
 
 func (ms *MutableStateImpl) GetStartVersion() (int64, error) {
@@ -938,7 +938,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 
 func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
 	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
-		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+		lastVersionedTransition := ms.CurrentVersionedTransition()
 		return lastVersionedTransition.NamespaceFailoverVersion, nil
 	}
 
@@ -5813,8 +5813,7 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 		return
 	}
 
-	transitionHistory := ms.executionInfo.TransitionHistory
-	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+	currentVersionedTransition := ms.CurrentVersionedTransition()
 	for activityId := range ms.activityInfosUserDataUpdated {
 		ms.updateActivityInfos[activityId].LastUpdateVersionedTransition = currentVersionedTransition
 	}
@@ -5861,7 +5860,7 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 	if len(ms.executionInfo.TransitionHistory) != 0 {
 		if CompareVersionedTransition(
 			ms.versionedTransitionInDB,
-			ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
+			ms.CurrentVersionedTransition(),
 		) != 0 {
 			// versioned transition updated in the transaction
 			return
@@ -5877,7 +5876,7 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 	// We are in unknown versioned transition state, clear the transition history.
 	if len(ms.executionInfo.TransitionHistory) != 0 {
 		ms.executionInfo.PreviousTransitionHistory = ms.executionInfo.TransitionHistory
-		ms.executionInfo.LastTransitionHistoryBreakPoint = transitionhistory.CopyVersionedTransition(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1])
+		ms.executionInfo.LastTransitionHistoryBreakPoint = transitionhistory.CopyVersionedTransition(ms.CurrentVersionedTransition())
 	}
 
 	ms.executionInfo.TransitionHistory = nil
@@ -6019,8 +6018,7 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 	// This requires tracking the lastUpdateVersionedTransition for each signalRequestedID,
 	// which is not supported by today's DB schema.
 	// TODO: we don't delete updateInfo and StateMachine today. Track them here when we do.
-	transitionHistory := ms.executionInfo.TransitionHistory
-	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+	currentVersionedTransition := ms.CurrentVersionedTransition()
 
 	tombstoneBatch := &persistencespb.StateMachineTombstoneBatch{
 		VersionedTransition:    currentVersionedTransition,
@@ -6130,16 +6128,16 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					nextEventID = common.EmptyEventID
 					lastVersionHistoryItem = versionhistory.CopyVersionHistoryItem(item)
 				}
-				transitionHistory := ms.executionInfo.TransitionHistory
-				if len(transitionHistory) > 0 && CompareVersionedTransition(
+				currentVersionedTransition := ms.CurrentVersionedTransition()
+				if currentVersionedTransition != nil && CompareVersionedTransition(
 					ms.versionedTransitionInDB,
-					ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
+					currentVersionedTransition,
 				) != 0 {
 					syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
 						WorkflowKey:            workflowKey,
 						VisibilityTimestamp:    now,
 						Priority:               enumsspb.TASK_PRIORITY_HIGH,
-						VersionedTransition:    transitionHistory[len(transitionHistory)-1],
+						VersionedTransition:    currentVersionedTransition,
 						FirstEventID:           firstEventID,
 						FirstEventVersion:      firstEventVersion,
 						NextEventID:            nextEventID,
@@ -6204,7 +6202,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.stateInDB = ms.executionState.State
 	ms.nextEventIDInDB = ms.GetNextEventID()
 	if len(ms.executionInfo.TransitionHistory) != 0 {
-		ms.versionedTransitionInDB = ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+		ms.versionedTransitionInDB = ms.CurrentVersionedTransition()
 	} else {
 		ms.versionedTransitionInDB = nil
 	}
@@ -6870,20 +6868,15 @@ func (ms *MutableStateImpl) RefreshExpirationTimeoutTask(ctx context.Context) er
 	return RefreshTasksForWorkflowStart(ctx, ms, ms.taskGenerator, EmptyVersionedTransition)
 }
 
-func (ms *MutableStateImpl) currentVersionedTransition() *persistencespb.VersionedTransition {
-	if len(ms.executionInfo.TransitionHistory) == 0 {
-		// transition history is not enabled
-		return nil
-	}
-	transitionHistory := ms.executionInfo.TransitionHistory
-	return transitionHistory[len(transitionHistory)-1]
+func (ms *MutableStateImpl) CurrentVersionedTransition() *persistencespb.VersionedTransition {
+	return transitionhistory.LastVersionedTransition(ms.executionInfo.TransitionHistory)
 }
 
 func (ms *MutableStateImpl) ApplyMutation(
 	mutation *persistencespb.WorkflowMutableStateMutation,
 ) error {
 	prevExecutionInfoSize := ms.executionInfo.Size()
-	currentVersionedTransition := ms.currentVersionedTransition()
+	currentVersionedTransition := ms.CurrentVersionedTransition()
 
 	ms.applySignalRequestedIds(mutation.SignalRequestedIds, mutation.ExecutionInfo)
 	err := ms.applyTombstones(mutation.SubStateMachineTombstoneBatches, currentVersionedTransition)
@@ -7367,7 +7360,7 @@ func (ms *MutableStateImpl) InitTransitionHistory() {
 
 func (ms *MutableStateImpl) initVersionedTransitionInDB() {
 	if len(ms.executionInfo.TransitionHistory) != 0 {
-		ms.versionedTransitionInDB = ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+		ms.versionedTransitionInDB = ms.CurrentVersionedTransition()
 	}
 }
 

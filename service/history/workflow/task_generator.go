@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -758,15 +759,15 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 			Priority:    enumsspb.TASK_PRIORITY_LOW,
 		}}
 		if r.mutableState.IsTransitionHistoryEnabled() {
-			transitionHistory := executionInfo.TransitionHistory
-			if len(transitionHistory) == 0 {
+			versionedTransition := transitionhistory.LastVersionedTransition(executionInfo.TransitionHistory)
+			if versionedTransition == nil {
 				// TODO: Handle the case where state-based replication is re-enabled.
 				return nil, 0, serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
 			}
 			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 				WorkflowKey:         workflowKey,
 				Priority:            enumsspb.TASK_PRIORITY_LOW,
-				VersionedTransition: transitionHistory[len(transitionHistory)-1],
+				VersionedTransition: versionedTransition,
 				FirstEventID:        executionInfo.LastFirstEventId,
 				FirstEventVersion:   lastItem.Version,
 				NextEventID:         lastItem.GetEventId() + 1,
@@ -802,15 +803,15 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 	}
 
 	if r.mutableState.IsTransitionHistoryEnabled() {
-		transitionHistory := executionInfo.TransitionHistory
-		if len(transitionHistory) == 0 {
+		versionedTransition := transitionhistory.LastVersionedTransition(executionInfo.TransitionHistory)
+		if versionedTransition == nil {
 			// TODO: Handle the case where state-based replication is re-enabled.
 			return nil, 0, serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
 		}
 		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 			WorkflowKey:         workflowKey,
 			Priority:            enumsspb.TASK_PRIORITY_LOW,
-			VersionedTransition: transitionHistory[len(transitionHistory)-1],
+			VersionedTransition: versionedTransition,
 			FirstEventID:        executionInfo.LastFirstEventId,
 			FirstEventVersion:   lastItem.GetVersion(),
 			NextEventID:         lastItem.GetEventId() + 1,
@@ -879,11 +880,7 @@ func generateSubStateMachineTask(
 	}
 	machineLastUpdateVersionedTransition := node.InternalRepr().GetLastUpdateVersionedTransition()
 
-	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-	var currentVersionedTransition *persistencespb.VersionedTransition
-	if len(transitionHistory) > 0 {
-		currentVersionedTransition = transitionHistory[len(transitionHistory)-1]
-	}
+	currentVersionedTransition := mutableState.CurrentVersionedTransition()
 	ref := &persistencespb.StateMachineRef{
 		Path:                                 ppath,
 		MutableStateVersionedTransition:      currentVersionedTransition,

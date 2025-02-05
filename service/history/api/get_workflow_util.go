@@ -102,37 +102,36 @@ func GetOrPollMutableState(
 		}
 		request.VersionHistoryItem = lastVersionHistoryItem
 	}
+
 	transitionHistory := response.GetTransitionHistory()
-	if len(transitionHistory) != 0 {
-		if request.VersionedTransition != nil {
-			if workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
-				logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match. Request: %v, current: %v",
-					request.VersionedTransition,
-					transitionHistory[len(transitionHistory)-1]),
-					tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
-					tag.WorkflowID(workflowKey.GetWorkflowID()),
-					tag.WorkflowRunID(workflowKey.GetRunID()))
-				return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
-			}
-		}
-	} else {
-		// Use the latest event id + event version as the branch identifier. This pair is unique across clusters.
-		// We return the full version histories. Callers need to fetch the last version history item from current branch
-		// and use the last version history item in following calls.
-		if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
-			logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
-			if err != nil {
-				return nil, err
-			}
-			logger.Warn("Request history branch and current history branch don't match",
-				tag.Value(logItem),
-				tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
-				tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()),
+	if len(transitionHistory) != 0 && request.VersionedTransition != nil {
+		if workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
+			logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match. Request: %v, current: %v",
+				request.VersionedTransition,
+				transitionhistory.LastVersionedTransition(transitionHistory)),
 				tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
 				tag.WorkflowID(workflowKey.GetWorkflowID()),
 				tag.WorkflowRunID(workflowKey.GetRunID()))
 			return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 		}
+	}
+
+	// Use the latest event id + event version as the branch identifier. This pair is unique across clusters.
+	// We return the full version histories. Callers need to fetch the last version history item from current branch
+	// and use the last version history item in following calls.
+	if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
+		logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, err
+		}
+		logger.Warn("Request history branch and current history branch don't match",
+			tag.Value(logItem),
+			tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
+			tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()),
+			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+			tag.WorkflowID(workflowKey.GetWorkflowID()),
+			tag.WorkflowRunID(workflowKey.GetRunID()))
+		return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 	}
 
 	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking.
@@ -168,17 +167,18 @@ func GetOrPollMutableState(
 		}
 
 		transitionHistory := response.GetTransitionHistory()
-		if len(transitionHistory) != 0 {
-			if request.VersionedTransition != nil && workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
+		if len(transitionHistory) != 0 && request.VersionedTransition != nil {
+			if workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
 				logger.Warn(fmt.Sprintf("Request versioned transition and transition history prior to polling the mutable state. Request: %v, current: %v",
 					request.VersionedTransition,
-					transitionHistory[len(transitionHistory)-1]),
+					transitionhistory.LastVersionedTransition(transitionHistory)),
 					tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
 					tag.WorkflowID(workflowKey.GetWorkflowID()),
 					tag.WorkflowRunID(workflowKey.GetRunID()))
 				return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 			}
-		} else if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
+		}
+		if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
 			logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 			if err != nil {
 				return nil, err
@@ -231,17 +231,18 @@ func GetOrPollMutableState(
 					continue
 				}
 				transitionHistory := response.GetTransitionHistory()
-				if len(transitionHistory) != 0 {
-					if request.VersionedTransition != nil && workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
+				if len(transitionHistory) != 0 && request.VersionedTransition != nil {
+					if workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
 						logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match after polling the mutable state. Request: %v, current: %v",
 							request.VersionedTransition,
-							transitionHistory[len(transitionHistory)-1]),
+							transitionhistory.LastVersionedTransition(transitionHistory)),
 							tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
 							tag.WorkflowID(workflowKey.GetWorkflowID()),
 							tag.WorkflowRunID(workflowKey.GetRunID()))
 						return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
 					}
-				} else if !versionhistory.ContainsVersionHistoryItem(eventVersionHistory, request.VersionHistoryItem) {
+				}
+				if !versionhistory.ContainsVersionHistoryItem(eventVersionHistory, request.VersionHistoryItem) {
 					logger.Warn("Request history branch and current history branch don't match after polling the mutable state",
 						tag.Value(notifiedEventVersionItem),
 						tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
@@ -317,11 +318,8 @@ func GetMutableStateWithConsistencyCheck(
 		nil,
 		func(mutableState workflow.MutableState) bool {
 			transitionHistory := mutableState.GetExecutionInfo().GetTransitionHistory()
-			if len(transitionHistory) != 0 {
-				if versionedTransition != nil && workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition) != nil {
-					return false
-				}
-				return true
+			if len(transitionHistory) != 0 && versionedTransition != nil {
+				return workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition) == nil
 			}
 
 			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())

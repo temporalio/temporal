@@ -297,12 +297,12 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			if err != nil {
 				return err
 			}
-			sourceLastWriteVersion := sourceTransitionHistory[len(sourceTransitionHistory)-1].NamespaceFailoverVersion
+			sourceLastWriteVersion := transitionhistory.LastVersionedTransition(sourceTransitionHistory).NamespaceFailoverVersion
 
 			if localLastWriteVersion > sourceLastWriteVersion {
 				// local is newer, try backfill events
 				releaseFn(nil)
-				return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, sourceTransitionHistory[len(sourceTransitionHistory)-1])
+				return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 			}
 			if localLastWriteVersion < sourceLastWriteVersion ||
 				localLastHistoryItem.GetEventId() <= sourceLastHistoryItem.EventId {
@@ -312,7 +312,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		}
 
 		sourceTransitionHistory := executionInfo.TransitionHistory
-		err = workflow.TransitionHistoryStalenessCheck(localTransitionHistory, sourceTransitionHistory[len(sourceTransitionHistory)-1])
+		err = workflow.TransitionHistoryStalenessCheck(localTransitionHistory, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		switch {
 		case err == nil:
 			// verify tasks
@@ -324,7 +324,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			return r.applyMutation(ctx, namespaceID, wid, rid, wfCtx, ms, releaseFn, versionedTransition, sourceClusterName)
 		case errors.Is(err, consts.ErrStaleReference):
 			releaseFn(nil)
-			return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, sourceTransitionHistory[len(sourceTransitionHistory)-1])
+			return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		default:
 			return err
 		}
@@ -364,7 +364,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 
 	// make sure mutation range is extension of local range
 	if workflow.TransitionHistoryStalenessCheck(localTransitionHistory, mutation.ExclusiveStartVersionedTransition) != nil ||
-		workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localTransitionHistory[len(localTransitionHistory)-1]) != nil {
+		workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, transitionhistory.LastVersionedTransition(localTransitionHistory)) != nil {
 		return serviceerrors.NewSyncState(
 			fmt.Sprintf("Failed to apply mutation due to version check failed. local transition history: %v, source transition history: %v", localTransitionHistory, sourceTransitionHistory),
 			namespaceID.String(),
@@ -456,7 +456,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	if len(localMutableState.GetExecutionInfo().TransitionHistory) != 0 {
 		localTransitionHistory = transitionhistory.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
 		sourceTransitionHistory := snapshot.ExecutionInfo.TransitionHistory
-		err := workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localTransitionHistory[len(localTransitionHistory)-1])
+		err := workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, transitionhistory.LastVersionedTransition(localTransitionHistory))
 		switch {
 		case err == nil:
 			// no branch switch
@@ -466,7 +466,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 				namespaceID.String(),
 				workflowID,
 				runID,
-				localTransitionHistory[len(localTransitionHistory)-1],
+				transitionhistory.LastVersionedTransition(localTransitionHistory),
 				localMutableState.GetExecutionInfo().VersionHistories,
 			)
 		case errors.Is(err, consts.ErrStaleReference):
