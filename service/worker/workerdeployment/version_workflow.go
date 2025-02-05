@@ -28,9 +28,6 @@ import (
 	"fmt"
 	"time"
 
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/common/worker_versioning"
-
 	"github.com/pborman/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -41,6 +38,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -293,16 +291,16 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 		Version:       state.GetVersion(),
 		ForgetVersion: true,
 	}
-	for tqName, byType := range state.TaskQueueFamilies {
-		for tqType, oldData := range byType.TaskQueues {
 
+	for tqName, byType := range state.TaskQueueFamilies {
+		for tqType, _ := range byType.TaskQueues {
 			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 				Name: tqName,
 				Type: enumspb.TaskQueueType(tqType),
-				Data: oldData,
 			})
 		}
 	}
+
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
 	if err != nil {
@@ -330,18 +328,22 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 
 // doesVersionHaveActivePollers returns true if the version has active pollers.
 func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Context) (bool, error) {
-	var tqs []*taskqueuepb.TaskQueue
-	for tqName := range d.VersionState.TaskQueueFamilies {
-		tqs = append(tqs, &taskqueuepb.TaskQueue{
-			Name: tqName,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL, // TODO (Carly): could this be sticky?
-		})
+
+	// describe all task queues in the deployment, if any have pollers, then cannot delete
+
+	tqNameToTypes := make(map[string]*deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes)
+	for tqName, tqFamilyData := range d.VersionState.TaskQueueFamilies {
+		var tqTypes []enumspb.TaskQueueType
+		for tqType, _ := range tqFamilyData.TaskQueues {
+			tqTypes = append(tqTypes, enumspb.TaskQueueType(tqType))
+		}
+		tqNameToTypes[tqName] = &deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes{Types: tqTypes}
 	}
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	checkPollersReq := &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs{
-		TaskQueues:              tqs,
+	checkPollersReq := &deploymentspb.CheckTaskQueuesHavePollersActivityArgs{
+		TaskQueuesAndTypes:      tqNameToTypes,
 		WorkerDeploymentVersion: d.VersionState.Version,
 	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var hasPollers bool
 	err := workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
 	if err != nil {
@@ -390,7 +392,6 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		CurrentSinceTime:  d.VersionState.CurrentSinceTime,
 		RampingSinceTime:  d.VersionState.RampingSinceTime,
 		RampPercentage:    d.VersionState.RampPercentage,
-		FirstPollerTime:   args.FirstPollerTime,
 	}
 
 	// sync to user data
@@ -442,9 +443,9 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{}
 	}
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
-		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.DeploymentVersionData)
+		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueVersionData)
 	}
-	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = data
+	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{FirstPollerTime: args.FirstPollerTime}
 
 	return nil
 }
@@ -482,33 +483,24 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// TODO (Shivam): __unversioned__
 
-	// only versions with WORKFLOW_VERSIONING_MODE_VERSIONING_BEHAVIORS can be set as current or ramping
-	// if args.RampPercentage > 0 || args.CurrentSinceTime != nil {
-	// 	if state.WorkflowVersioningMode != enumspb.WORKFLOW_VERSIONING_MODE_VERSIONING_BEHAVIORS {
-	// 		// non-retryable error since we don't want to retry syncing state for this version
-	// 		return nil, temporal.NewNonRetryableApplicationError("Deployment version cannot be set as current or ramping", "Invalid version mode", nil)
-	// 	}
-	// }
-
 	// sync to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version: state.GetVersion(),
 	}
 	for tqName, byType := range state.TaskQueueFamilies {
-		for tqType, oldData := range byType.TaskQueues {
-			newData := &deploymentspb.DeploymentVersionData{
-				Version:           oldData.Version,
+		for tqType, _ := range byType.TaskQueues {
+			data := &deploymentspb.DeploymentVersionData{
+				Version:           d.VersionState.Version,
 				RoutingUpdateTime: args.RoutingUpdateTime,
 				CurrentSinceTime:  args.CurrentSinceTime,
 				RampingSinceTime:  args.RampingSinceTime,
 				RampPercentage:    args.RampPercentage,
-				FirstPollerTime:   oldData.FirstPollerTime,
 			}
 
 			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 				Name: tqName,
 				Type: enumspb.TaskQueueType(tqType),
-				Data: newData,
+				Data: data,
 			})
 		}
 	}
