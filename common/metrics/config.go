@@ -85,7 +85,7 @@ type (
 		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
 		// (instead of milliseconds).
 		// This config only takes effect when using opentelemetry framework.
-		RecordTimerInSeconds bool `yaml:"timerInSeconds"`
+		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
 	}
 
 	// StatsdConfig contains the config items for statsd metrics reporter
