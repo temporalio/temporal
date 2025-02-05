@@ -432,10 +432,12 @@ func buildPendingNexusOperationInfo(
 	}
 
 	return &workflowpb.PendingNexusOperationInfo{
-		Endpoint:                op.Endpoint,
-		Service:                 op.Service,
-		Operation:               op.Operation,
-		OperationId:             op.OperationId,
+		Endpoint:  op.Endpoint,
+		Service:   op.Service,
+		Operation: op.Operation,
+		// TODO(bergundy): Remove this fallback after the 1.27 release.
+		OperationId:             op.OperationToken,
+		OperationToken:          op.OperationToken,
 		ScheduledEventId:        scheduledEventID,
 		ScheduleToCloseTimeout:  op.ScheduleToCloseTimeout,
 		ScheduledTime:           op.ScheduledTime,

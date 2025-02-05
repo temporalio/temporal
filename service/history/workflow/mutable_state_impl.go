@@ -87,6 +87,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -354,9 +355,10 @@ func NewMutableState(
 	s.executionState = &persistencespb.WorkflowExecutionState{
 		RunId: runID,
 
-		State:     enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		StartTime: timestamppb.New(startTime),
+		State:      enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		Status:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		StartTime:  timestamppb.New(startTime),
+		RequestIds: make(map[string]*persistencespb.RequestIDInfo),
 	}
 	s.approximateSize += s.executionState.Size()
 
@@ -632,10 +634,12 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
-			StartTime: ms.executionState.GetStartTime().AsTime(),
-			Links:     []nexus.Link{startLink},
-		})
+		return nexus.NewOperationCompletionUnsuccessful(
+			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
+			nexus.OperationCompletionUnsuccessfulOptions{
+				StartTime: ms.executionState.GetStartTime().AsTime(),
+				Links:     []nexus.Link{startLink},
+			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		f, err := commonnexus.APIFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation canceled",
@@ -648,10 +652,15 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(nexus.NewCanceledOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
-			StartTime: ms.executionState.GetStartTime().AsTime(),
-			Links:     []nexus.Link{startLink},
-		})
+		return nexus.NewOperationCompletionUnsuccessful(
+			&nexus.OperationError{
+				State: nexus.OperationStateCanceled,
+				Cause: &nexus.FailureError{Failure: f},
+			},
+			nexus.OperationCompletionUnsuccessfulOptions{
+				StartTime: ms.executionState.GetStartTime().AsTime(),
+				Links:     []nexus.Link{startLink},
+			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		f, err := commonnexus.APIFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation terminated",
@@ -662,10 +671,12 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
-			StartTime: ms.executionState.GetStartTime().AsTime(),
-			Links:     []nexus.Link{startLink},
-		})
+		return nexus.NewOperationCompletionUnsuccessful(
+			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
+			nexus.OperationCompletionUnsuccessfulOptions{
+				StartTime: ms.executionState.GetStartTime().AsTime(),
+				Links:     []nexus.Link{startLink},
+			})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		f, err := commonnexus.APIFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation exceeded internal timeout",
@@ -679,10 +690,15 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 		if err != nil {
 			return nil, err
 		}
-		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
-			StartTime: ms.executionState.GetStartTime().AsTime(),
-			Links:     []nexus.Link{startLink},
-		})
+		return nexus.NewOperationCompletionUnsuccessful(
+			&nexus.OperationError{
+				State: nexus.OperationStateFailed,
+				Cause: &nexus.FailureError{Failure: f},
+			},
+			nexus.OperationCompletionUnsuccessfulOptions{
+				StartTime: ms.executionState.GetStartTime().AsTime(),
+				Links:     []nexus.Link{startLink},
+			})
 	}
 	return nil, serviceerror.NewInternal(fmt.Sprintf("invalid workflow execution status: %v", ce.GetEventType()))
 }
@@ -820,6 +836,14 @@ func (ms *MutableStateImpl) UpdateResetRunID(runID string) {
 func (ms *MutableStateImpl) IsResetRun() bool {
 	originalExecutionRunID := ms.GetExecutionInfo().GetOriginalExecutionRunId()
 	return len(originalExecutionRunID) != 0 && originalExecutionRunID != ms.GetExecutionState().GetRunId()
+}
+
+func (ms *MutableStateImpl) SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo) {
+	ms.executionInfo.ChildrenInitializedPostResetPoint = children
+}
+
+func (ms *MutableStateImpl) GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo {
+	return ms.executionInfo.GetChildrenInitializedPostResetPoint()
 }
 
 func (ms *MutableStateImpl) GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
@@ -2091,6 +2115,18 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 	ms.approximateSize -= len(requestID)
 }
 
+func (ms *MutableStateImpl) attachRequestID(requestID string, eventType enumspb.EventType) {
+	ms.approximateSize -= ms.executionState.Size()
+	if ms.executionState.RequestIds == nil {
+		ms.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
+	}
+	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
+		EventType: eventType,
+	}
+	ms.approximateSize += ms.executionState.Size()
+	ms.executionStateUpdated = true
+}
+
 func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	execution *commonpb.WorkflowExecution,
@@ -2318,8 +2354,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	}
 
 	ms.approximateSize -= ms.executionInfo.Size()
+	ms.approximateSize -= ms.executionState.Size()
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	ms.executionState.CreateRequestId = requestID
+	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
+		EventType: startEvent.EventType,
+	}
+
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	ms.executionInfo.TaskQueue = event.TaskQueue.GetName()
 	ms.executionInfo.WorkflowTypeName = event.WorkflowType.GetName()
@@ -2450,6 +2491,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.MostRecentWorkerVersionStamp = event.SourceVersionStamp
 
 	ms.approximateSize += ms.executionInfo.Size()
+	ms.approximateSize += ms.executionState.Size()
 
 	ms.writeEventToCache(startEvent)
 	return nil
@@ -2460,6 +2502,14 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 	completionCallbaks []*commonpb.Callback,
 ) error {
 	coll := callbacks.MachineCollection(ms.HSM())
+	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	if len(completionCallbaks)+coll.Size() > maxCallbacksPerWorkflow {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
+			maxCallbacksPerWorkflow,
+			coll.Size(),
+		))
+	}
 	for idx, cb := range completionCallbaks {
 		persistenceCB := &persistencespb.Callback{}
 		switch variant := cb.Variant.(type) {
@@ -2559,13 +2609,14 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
+	updateReg update.Registry,
 	skipVersioningCheck bool,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck)
+	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck, updateReg)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
@@ -4406,11 +4457,20 @@ func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.
 func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	versioningOverride *workflowpb.VersioningOverride,
 	unsetVersioningOverride bool,
+	attachRequestID string,
+	attachCompletionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
 	}
-	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride, unsetVersioningOverride)
+	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(
+		versioningOverride,
+		unsetVersioningOverride,
+		attachRequestID,
+		attachCompletionCallbacks,
+		links,
+	)
 	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
 		return nil, err
 	}
@@ -4425,7 +4485,18 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	} else if attributes.GetVersioningOverride() != nil {
 		err = ms.updateVersioningOverride(attributes.GetVersioningOverride())
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if attributes.GetAttachedRequestId() != "" {
+		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType)
+	}
+	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
+		if err := ms.addCompletionCallbacks(event, attributes.GetAttachedCompletionCallbacks()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (ms *MutableStateImpl) updateVersioningOverride(

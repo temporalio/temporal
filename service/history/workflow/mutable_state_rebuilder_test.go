@@ -128,6 +128,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	root, err := hsm.NewRoot(reg, StateMachineType, s.mockMutableState, make(map[string]*persistencespb.StateMachineMap), s.mockMutableState)
 	s.NoError(err)
 	s.mockMutableState.EXPECT().HSM().Return(root).AnyTimes()
+	s.mockMutableState.EXPECT().IsTransitionHistoryEnabled().Return(false).AnyTimes()
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata

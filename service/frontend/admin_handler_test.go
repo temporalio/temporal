@@ -1099,7 +1099,7 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 		return nil, serviceerror.NewUnavailable("random error")
 	})
 
-	s.mockHistoryClient.EXPECT().GetShard(gomock.Any(), &historyservice.GetShardRequest{ShardId: serverClusterShardID.ShardID}).Return(&historyservice.GetShardResponse{}, nil)
+	s.mockHistoryClient.EXPECT().DescribeHistoryHost(gomock.Any(), &historyservice.DescribeHistoryHostRequest{ShardId: serverClusterShardID.ShardID}).Return(&historyservice.DescribeHistoryHostResponse{}, nil)
 	serverCluster.EXPECT().Recv().DoAndReturn(func() (*historyservice.StreamWorkflowReplicationMessagesResponse, error) {
 		waitGroupStart.Done()
 		waitGroupStart.Wait()

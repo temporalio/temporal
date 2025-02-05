@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
+
 package chasm
 
 import (
@@ -29,12 +31,14 @@ import (
 	"time"
 )
 
-type TaskAttributes struct {
-	ScheduledTime time.Time
-	Destination   string
-}
+type (
+	TaskAttributes struct {
+		ScheduledTime time.Time
+		Destination   string
+	}
 
-type TaskHandler[C any, T any] interface {
-	Validate(Context, C, T) error
-	Execute(context.Context, ComponentRef, T) error
-}
+	TaskHandler[C any, T any] interface {
+		Validate(Context, C, T) error
+		Execute(context.Context, ComponentRef, T) error
+	}
+)

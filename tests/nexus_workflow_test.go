@@ -86,9 +86,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 			if service != "service" {
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, `expected service to equal "service"`)
 			}
-			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
-		OnCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
+		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 			return nil
 		},
 	}
@@ -514,8 +514,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackUrl = options.CallbackURL
 			return &nexus.HandlerStartOperationResultAsync{
-				OperationID: "test",
-				Links:       []nexus.Link{handlerNexusLink},
+				OperationToken: "test",
+				Links:          []nexus.Link{handlerNexusLink},
 			}, nil
 		},
 	}
@@ -856,7 +856,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 
 	start := res.Request.Variant.(*nexuspb.Request_StartOperation).StartOperation
 	s.Equal(op.Name(), start.Operation)
-	start.CallbackHeader[nexus.HeaderOperationID] = completionWFID
+	start.CallbackHeader[nexus.HeaderOperationToken] = completionWFID
 	completionWFStartReq.CompletionCallbacks = []*commonpb.Callback{
 		{
 			Variant: &commonpb.Callback_Nexus_{
@@ -917,7 +917,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 	})
 	s.Len(pollResp.History.Events[startedEventIdx].Links, 1)
 	startedEvent := pollResp.History.Events[startedEventIdx].GetNexusOperationStartedEventAttributes()
-	s.Equal(completionWFID, startedEvent.OperationId)
+	s.Equal(completionWFID, startedEvent.OperationToken)
 	l := pollResp.History.Events[startedEventIdx].Links[0].GetWorkflowEvent()
 	protorequire.ProtoEqual(s.T(), startLink, l)
 	s.Greater(startedEventIdx, 0)
@@ -936,7 +936,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 				StartOperation: &nexuspb.StartOperationResponse{
 					Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
 						AsyncSuccess: &nexuspb.StartOperationResponse_Async{
-							OperationId: completionWFID,
+							OperationToken: completionWFID,
 						},
 					},
 				},
@@ -982,7 +982,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackUrl = options.CallbackURL
-			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 	}
 	listenAddr := nexustest.AllocListenAddress()
@@ -1251,7 +1251,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth()
 				StartOperation: &nexuspb.StartOperationResponse{
 					Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
 						AsyncSuccess: &nexuspb.StartOperationResponse_Async{
-							OperationId: "test-id",
+							OperationToken: "test-token",
 						},
 					},
 				},
@@ -1392,9 +1392,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
-			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
-		OnCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
+		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 			cancelSentCh <- struct{}{}
 			return nil
 		},
@@ -1512,7 +1512,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackUrl = options.CallbackURL
-			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 	}
 	listenAddr := nexustest.AllocListenAddress()
@@ -1796,7 +1796,7 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 		case "fail-handler-bad-request":
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "bad request")
 		case "fail-operation":
-			return nil, nexus.NewFailedOperationError(errors.New("some error"))
+			return nil, nexus.NewOperationFailedError("some error")
 		case "fail-operation-app-error":
 			return nil, temporal.NewNonRetryableApplicationError("app error", "TestError", nil, "details")
 		}
@@ -1823,20 +1823,22 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 		{
 			outcome: "fail-handler-internal",
 			checkPendingError: func(t *testing.T, pendingErr error) {
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, pendingErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				var appErr *temporal.ApplicationError
-				require.ErrorAs(t, pendingErr, &appErr)
-				require.Equal(t, "handler error (INTERNAL): intentional internal error", appErr.Message())
-				require.ErrorAs(t, appErr.Unwrap(), &appErr)
+				require.ErrorAs(t, handlerErr.Cause, &appErr)
 				require.Equal(t, "intentional internal error", appErr.Message())
 			},
 		},
 		{
 			outcome: "fail-handler-app-error",
 			checkPendingError: func(t *testing.T, pendingErr error) {
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, pendingErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				var appErr *temporal.ApplicationError
-				require.ErrorAs(t, pendingErr, &appErr)
-				require.Equal(t, "handler error (INTERNAL): app error", appErr.Message())
-				require.ErrorAs(t, appErr.Unwrap(), &appErr)
+				require.ErrorAs(t, handlerErr.Cause, &appErr)
 				require.Equal(t, "app error", appErr.Message())
 				require.Equal(t, "TestError", appErr.Type())
 				var details string
@@ -1849,10 +1851,11 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 			checkWorkflowError: func(t *testing.T, wfErr error) {
 				var opErr *temporal.NexusOperationError
 				require.ErrorAs(t, wfErr, &opErr)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, opErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
 				var appErr *temporal.ApplicationError
-				require.ErrorAs(t, opErr, &appErr)
-				require.Equal(t, "handler error (BAD_REQUEST): bad request", appErr.Message())
-				require.ErrorAs(t, appErr.Unwrap(), &appErr)
+				require.ErrorAs(t, handlerErr.Cause, &appErr)
 				require.Equal(t, "bad request", appErr.Message())
 
 			},
@@ -2128,11 +2131,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	}, callerWF)
 	s.NoError(err)
 
+	var handlerErr *nexus.HandlerError
+	s.ErrorAs(run.Get(ctx, nil), &handlerErr)
+	s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
 	var appErr *temporal.ApplicationError
-	s.ErrorAs(run.Get(ctx, nil), &appErr)
-	s.Equal("handler error (BAD_REQUEST): fail me", appErr.Message())
-	s.ErrorAs(appErr.Unwrap(), &appErr)
-	s.Equal("fail me", appErr.Message())
+	s.ErrorAs(handlerErr.Cause, &appErr)
+	s.Equal(appErr.Message(), "fail me")
 	var failure nexus.Failure
 	s.NoError(appErr.Details(&failure))
 	s.Equal(map[string]string{"key": "val"}, failure.Metadata)

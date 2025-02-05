@@ -99,6 +99,10 @@ type (
 
 		// FailoverVersion of a Mutable State at the time of Registry creation.
 		FailoverVersion() int64
+
+		// SuggestContinueAsNew returns true if the Registry is reaching its limit.
+		// Note that this does not apply to in-flight limits, as these are transient.
+		SuggestContinueAsNew() bool
 	}
 
 	registry struct {
@@ -484,4 +488,9 @@ func (r *registry) GetSize() int {
 
 func (r *registry) FailoverVersion() int64 {
 	return r.failoverVersion
+}
+
+func (r *registry) SuggestContinueAsNew() bool {
+	// TODO: implement me
+	return false
 }

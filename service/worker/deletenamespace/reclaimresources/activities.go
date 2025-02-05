@@ -26,12 +26,13 @@ package reclaimresources
 
 import (
 	"context"
+	"time"
 
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -42,15 +43,16 @@ import (
 type (
 	Activities struct {
 		visibilityManager manager.VisibilityManager
-		metricsHandler    metrics.Handler
 		logger            log.Logger
 	}
 
 	LocalActivities struct {
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
-		metricsHandler    metrics.Handler
-		logger            log.Logger
+
+		namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
+
+		logger log.Logger
 	}
 )
 
@@ -67,12 +69,15 @@ func NewActivities(
 func NewLocalActivities(
 	visibilityManager manager.VisibilityManager,
 	metadataManager persistence.MetadataManager,
+	namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn,
 	logger log.Logger,
 ) *LocalActivities {
 	return &LocalActivities{
 		visibilityManager: visibilityManager,
 		metadataManager:   metadataManager,
 		logger:            logger,
+
+		namespaceCacheRefreshInterval: namespaceCacheRefreshInterval,
 	}
 }
 
@@ -175,4 +180,8 @@ func (a *LocalActivities) DeleteNamespaceActivity(ctx context.Context, nsID name
 
 	logger.Info("Namespace is deleted.")
 	return nil
+}
+
+func (a *LocalActivities) GetNamespaceCacheRefreshInterval(_ context.Context) (time.Duration, error) {
+	return a.namespaceCacheRefreshInterval(), nil
 }
