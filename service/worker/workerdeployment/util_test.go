@@ -115,13 +115,13 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 			Description:   "Empty Field",
 			FieldName:     WorkerDeploymentFieldName,
 			Input:         "",
-			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeployment cannot be empty"),
+			ExpectedError: serviceerror.NewInvalidArgument("DeploymentName cannot be empty"),
 		},
 		{
 			Description:   "Large Field",
 			FieldName:     WorkerDeploymentFieldName,
 			Input:         strings.Repeat("s", 1000),
-			ExpectedError: serviceerror.NewInvalidArgument("size of WorkerDeployment larger than the maximum allowed"),
+			ExpectedError: serviceerror.NewInvalidArgument("size of DeploymentName larger than the maximum allowed"),
 		},
 		{
 			Description:   "Valid field",
@@ -145,7 +145,7 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 			Description:   "Invalid deploymentName",
 			FieldName:     WorkerDeploymentFieldName,
 			Input:         "A/B",
-			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeployment cannot contain '/'"),
+			ExpectedError: serviceerror.NewInvalidArgument("DeploymentName cannot contain '/'"),
 		},
 	}
 
