@@ -104,6 +104,13 @@ type Client interface {
 		version string,
 	) error
 
+	DeleteWorkerDeployment(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName string,
+		identity string,
+	) error
+
 	SetRampingVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -321,6 +328,7 @@ func (d *ClientImpl) UpdateVersionMetadata(
 		return nil, err
 	}
 
+	// todo (Shivam): change this to update.
 	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, versionObj.GetDeploymentName(), versionObj.GetBuildId(), &updatepb.Request{
 		Input: &updatepb.Input{Name: UpdateVersionMetadata, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
@@ -372,6 +380,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		},
 	}
 
+	// todo (Shivam): Querying completed/done workflows should not work.
 	res, err := d.historyClient.QueryWorkflow(ctx, req)
 	if err != nil {
 		return nil, nil, err
@@ -404,6 +413,7 @@ func (d *ClientImpl) ListWorkerDeployments(
 		pageSize = d.visibilityMaxPageSize(namespaceEntry.Name().String())
 	}
 
+	// todo (Shivam): closed workflows should be filtered out.
 	persistenceResp, err := d.visibilityManager.ListWorkflowExecutions(
 		ctx,
 		&manager.ListWorkflowExecutionsRequestV2{
@@ -461,6 +471,7 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, err
 	}
 
+	// todo (Shivam): change this to update.
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
 		namespaceEntry,
@@ -529,6 +540,8 @@ func (d *ClientImpl) SetRampingVersion(
 	if err != nil {
 		return nil, err
 	}
+
+	// todo (Shivam): change this to update.
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
 		namespaceEntry,
@@ -578,7 +591,6 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	deploymentName := v.GetDeploymentName()
 	buildId := v.GetBuildId()
 
-	// if version.drained and !version.has_pollers, delete
 	//revive:disable-next-line:defer
 	defer d.record("DeleteWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, buildId)()
 	requestID := uuid.New()
@@ -595,6 +607,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 		return err
 	}
 
+	// todo (Shivam): change this to update + make delete-version idempotent.
 	outcome, err := d.updateWithStartWorkerDeployment(
 		ctx,
 		namespaceEntry,
@@ -618,6 +631,57 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	if success == nil {
 		return serviceerror.NewInternal("outcome missing success and failure")
 	}
+	return nil
+}
+
+func (d *ClientImpl) DeleteWorkerDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName string,
+	identity string,
+) (retErr error) {
+	//revive:disable-next-line:defer
+	defer d.record("DeleteWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
+
+	// validating params
+	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	if err != nil {
+		return err
+	}
+
+	requestID := uuid.New()
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteDeploymentArgs{
+		Identity: identity,
+	})
+	if err != nil {
+		return err
+	}
+
+	// todo (Shivam): change this to update.
+	outcome, err := d.updateWithStartWorkerDeployment(
+		ctx,
+		namespaceEntry,
+		deploymentName,
+		&updatepb.Request{
+			Input: &updatepb.Input{Name: DeleteDeployment, Args: updatePayload},
+			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+		},
+		identity,
+		requestID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if failure := outcome.GetFailure(); failure != nil {
+		return serviceerror.NewInternal(failure.Message)
+	}
+
+	success := outcome.GetSuccess()
+	if success == nil {
+		return serviceerror.NewInternal("outcome missing success and failure")
+	}
+
 	return nil
 }
 
@@ -1162,12 +1226,12 @@ func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEn
 	// Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion (newVersion is either the new ramping version or the new current version)
 	prevCurrentVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersion)
 	if err != nil {
-		return false, err
+		return false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Version %s not found in deployment with error: %v", prevCurrentVersion, err))
 	}
 
 	newVersionInfo, err := d.DescribeVersion(ctx, namespaceEntry, newVersion)
 	if err != nil {
-		return false, err
+		return false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Version %s not found in deployment with error: %v", newVersion, err))
 	}
 
 	missingTaskQueues, err := d.checkForMissingTaskQueues(prevCurrentVersionInfo, newVersionInfo)
