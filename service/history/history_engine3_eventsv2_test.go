@@ -186,33 +186,42 @@ func (s *engine3Suite) TearDownTest() {
 }
 
 func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
-	fakeHistory := []*historypb.HistoryEvent{
-		{
-			EventId:   int64(1),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		},
-		{
-			EventId:   int64(2),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-					SearchAttributes: &commonpb.SearchAttributes{
-						IndexedFields: map[string]*commonpb.Payload{
-							"CustomKeywordField":    payload.EncodeString("random-keyword"),
-							"TemporalChangeVersion": payload.EncodeString("random-data"),
+	fakeHistory := historypb.History{
+		Events: []*historypb.HistoryEvent{
+			{
+				EventId:   int64(1),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+			{
+				EventId:   int64(2),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						SearchAttributes: &commonpb.SearchAttributes{
+							IndexedFields: map[string]*commonpb.Payload{
+								"CustomKeywordField":    payload.EncodeString("random-keyword"),
+								"TemporalChangeVersion": payload.EncodeString("random-data"),
+							},
 						},
 					},
 				},
 			},
-		},
-		{
-			EventId:   int64(3),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			{
+				EventId:   int64(3),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			},
 		},
 	}
+	historyBlob, err := fakeHistory.Marshal()
+	s.NoError(err)
 
-	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: fakeHistory,
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{
+			{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         historyBlob,
+			},
+		},
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
@@ -223,8 +232,8 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
-	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	//s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
+	//s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
@@ -266,7 +275,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		},
 	}
 
-	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
@@ -283,7 +292,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	expectedResponse.BranchToken, _ = ms.GetCurrentBranchToken()
-	expectedResponse.History = &historypb.History{Events: fakeHistory}
+	expectedResponse.History = [][]byte{historyBlob}
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)

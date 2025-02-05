@@ -350,7 +350,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 }
 
 // RecordWorkflowTaskStarted - Record Workflow Task started.
-func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponse, retError error) {
+func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 

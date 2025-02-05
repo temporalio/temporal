@@ -41,6 +41,9 @@ color "Modify history service server interface..."
 sed -i.bak -e \
     's/GetWorkflowExecutionHistory(context\.Context, \*GetWorkflowExecutionHistoryRequest) (\*GetWorkflowExecutionHistoryResponse, error)/GetWorkflowExecutionHistory(context.Context, *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponseWithRaw, error)/g' \
     "$new"/temporal/server/api/historyservice/v1/service_grpc.pb.go && rm "$new"/temporal/server/api/historyservice/v1/service_grpc.pb.go.bak
+sed -i.bak -e \
+    's/RecordWorkflowTaskStarted(context\.Context, \*RecordWorkflowTaskStartedRequest) (\*RecordWorkflowTaskStartedResponse, error)/RecordWorkflowTaskStarted(context.Context, *RecordWorkflowTaskStartedRequest) (*RecordWorkflowTaskStartedResponseWithRawHistory, error)/g' \
+    "$new"/temporal/server/api/historyservice/v1/service_grpc.pb.go && rm "$new"/temporal/server/api/historyservice/v1/service_grpc.pb.go.bak
 
 color "Moving proto files into place..."
 old=$api.old

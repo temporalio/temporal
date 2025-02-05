@@ -914,6 +914,11 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
+	err = api.ProcessOutgoingSearchAttributes(wh.namespaceRegistry, wh.saProvider, wh.saMapperProvider, matchingResp.History.Events, namespaceID, wh.visibilityMgr)
+	if err != nil {
+		return nil, err
+	}
+
 	return &workflowservice.PollWorkflowTaskQueueResponse{
 		TaskToken:                  matchingResp.TaskToken,
 		WorkflowExecution:          matchingResp.WorkflowExecution,

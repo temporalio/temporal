@@ -272,6 +272,28 @@ message RecordWorkflowTaskStartedResponse {
     bytes next_page_token = 19;
 }
 
+message RecordWorkflowTaskStartedResponseWithRawHistory {
+    temporal.api.common.v1.WorkflowType workflow_type = 1;
+    int64 previous_started_event_id = 2;
+    int64 scheduled_event_id = 3;
+    int64 started_event_id = 4;
+    int64 next_event_id = 5;
+    int32 attempt = 6;
+    bool sticky_execution_enabled = 7;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 8;
+    temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
+    reserved 10;
+    bytes branch_token = 11;
+    google.protobuf.Timestamp scheduled_time = 12;
+    google.protobuf.Timestamp started_time = 13;
+    map<string, temporal.api.query.v1.WorkflowQuery> queries = 14;
+    temporal.server.api.clock.v1.VectorClock clock = 15;
+    repeated temporal.api.protocol.v1.Message messages = 16;
+    int64 version = 17;
+    repeated bytes history = 18;
+    bytes next_page_token = 19;
+}
+
 message RecordActivityTaskStartedRequest {
     option (routing).workflow_id = "workflow_execution.workflow_id";
 

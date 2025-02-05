@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -61,9 +60,8 @@ func Invoke(
 	shardContext shard.Context,
 	config *configs.Config,
 	eventNotifier events.Notifier,
-	persistenceVisibilityMgr manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -73,7 +71,7 @@ func Invoke(
 	requestID := req.GetRequestId()
 
 	var workflowKey definition.WorkflowKey
-	var resp *historyservice.RecordWorkflowTaskStartedResponse
+	var resp *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -117,7 +115,7 @@ func Invoke(
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = CreateRecordWorkflowTaskStartedResponse(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
+					resp, err = CreateRecordWorkflowTaskStartedResponseWithRaw(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
 					if err != nil {
 						return nil, err
 					}
@@ -229,7 +227,7 @@ func Invoke(
 				),
 			).Record(workflowScheduleToStartLatency)
 
-			resp, err = CreateRecordWorkflowTaskStartedResponse(
+			resp, err = CreateRecordWorkflowTaskStartedResponseWithRaw(
 				ctx,
 				mutableState,
 				updateRegistry,
@@ -260,7 +258,6 @@ func Invoke(
 		maxHistoryPageSize,
 		workflowConsistencyChecker,
 		eventNotifier,
-		persistenceVisibilityMgr,
 		resp,
 	)
 	if err != nil {
@@ -276,8 +273,7 @@ func setHistoryForRecordWfTaskStartedResp(
 	maximumPageSize int32,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
-	persistenceVisibilityMgr manager.VisibilityManager,
-	response *historyservice.RecordWorkflowTaskStartedResponse,
+	response *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory,
 ) (retError error) {
 
 	firstEventID := common.FirstEventID
@@ -304,7 +300,7 @@ func setHistoryForRecordWfTaskStartedResp(
 		}
 	}()
 
-	history, persistenceToken, err := api.GetHistory(
+	history, persistenceToken, err := api.GetRawHistory(
 		ctx,
 		shardContext,
 		namespace.ID(workflowKey.GetNamespaceID()),
@@ -315,7 +311,6 @@ func setHistoryForRecordWfTaskStartedResp(
 		nil,
 		response.GetTransientWorkflowTask(),
 		response.GetBranchToken(),
-		persistenceVisibilityMgr,
 	)
 	if err != nil {
 		return err
@@ -335,8 +330,11 @@ func setHistoryForRecordWfTaskStartedResp(
 			return err
 		}
 	}
-
-	response.History = history
+	historyBlobs := make([][]byte, len(history))
+	for i, blob := range history {
+		historyBlobs[i] = blob.Data
+	}
+	response.History = historyBlobs
 	response.NextPageToken = continuation
 	return nil
 }
@@ -350,6 +348,72 @@ func CreateRecordWorkflowTaskStartedResponse(
 	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 	response := &historyservice.RecordWorkflowTaskStartedResponse{}
+	response.WorkflowType = ms.GetWorkflowType()
+	executionInfo := ms.GetExecutionInfo()
+	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
+		response.PreviousStartedEventId = executionInfo.LastCompletedWorkflowTaskStartedEventId
+	}
+
+	// Starting workflowTask could result in different scheduledEventID if workflowTask was transient and new events came in
+	// before it was started.
+	response.ScheduledEventId = workflowTask.ScheduledEventID
+	response.StartedEventId = workflowTask.StartedEventID
+	response.StickyExecutionEnabled = ms.IsStickyTaskQueueSet()
+	response.NextEventId = ms.GetNextEventID()
+	response.Attempt = workflowTask.Attempt
+	response.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
+		Name: executionInfo.TaskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	response.ScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
+	response.StartedTime = timestamppb.New(workflowTask.StartedTime)
+	response.Version = workflowTask.Version
+
+	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
+	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)
+
+	currentBranchToken, err := ms.GetCurrentBranchToken()
+	if err != nil {
+		return nil, err
+	}
+	response.BranchToken = currentBranchToken
+
+	qr := ms.GetQueryRegistry()
+	bufferedQueryIDs := qr.GetBufferedIDs()
+	if len(bufferedQueryIDs) > 0 {
+		response.Queries = make(map[string]*querypb.WorkflowQuery, len(bufferedQueryIDs))
+		for _, bufferedQueryID := range bufferedQueryIDs {
+			input, err := qr.GetQueryInput(bufferedQueryID)
+			if err != nil {
+				continue
+			}
+			response.Queries[bufferedQueryID] = input
+		}
+	}
+
+	// If there are updates in the registry which were already sent to worker but still
+	// are not processed and not rejected by server, it means that WT that was used to
+	// deliver those updates failed, got timed out, or got lost.
+	// Resend these updates if this is not a heartbeat WT (includeAlreadySent = !wtHeartbeat).
+	// Heartbeat WT delivers only new updates that come while this WT was running (similar to queries and buffered events).
+	response.Messages = updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID)
+
+	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
+		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")
+	}
+
+	return response, nil
+}
+
+func CreateRecordWorkflowTaskStartedResponseWithRaw(
+	ctx context.Context,
+	ms workflow.MutableState,
+	updateRegistry update.Registry,
+	workflowTask *workflow.WorkflowTaskInfo,
+	identity string,
+	wtHeartbeat bool,
+) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
+	response := &historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
 	response.WorkflowType = ms.GetWorkflowType()
 	executionInfo := ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {

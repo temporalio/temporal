@@ -249,38 +249,47 @@ func (s *engine2Suite) TearDownSubTest() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
-	fakeHistory := []*historypb.HistoryEvent{
-		{
-			EventId:   int64(1),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		},
-		{
-			EventId:   int64(2),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-					SearchAttributes: &commonpb.SearchAttributes{
-						IndexedFields: map[string]*commonpb.Payload{
-							"CustomKeywordField":    payload.EncodeString("random-keyword"),
-							"TemporalChangeVersion": payload.EncodeString("random-data"),
+	fakeHistory := historypb.History{
+		Events: []*historypb.HistoryEvent{
+			{
+				EventId:   int64(1),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+			{
+				EventId:   int64(2),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						SearchAttributes: &commonpb.SearchAttributes{
+							IndexedFields: map[string]*commonpb.Payload{
+								"CustomKeywordField":    payload.EncodeString("random-keyword"),
+								"TemporalChangeVersion": payload.EncodeString("random-data"),
+							},
 						},
 					},
 				},
 			},
-		},
-		{
-			EventId:   int64(3),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			{
+				EventId:   int64(3),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			},
 		},
 	}
+	historyBlob, err := fakeHistory.Marshal()
+	s.NoError(err)
 
-	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: fakeHistory,
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{
+			{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         historyBlob,
+			},
+		},
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
-	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	//s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
+	//s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
@@ -322,7 +331,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		},
 	}
 
-	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
@@ -342,7 +351,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	currentBranchTokken, err := ms.GetCurrentBranchToken()
 	s.NoError(err)
 	expectedResponse.BranchToken = currentBranchTokken
-	expectedResponse.History = &historypb.History{Events: fakeHistory}
+	expectedResponse.History = [][]byte{historyBlob}
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &request)
@@ -564,38 +573,47 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
-	fakeHistory := []*historypb.HistoryEvent{
-		{
-			EventId:   int64(1),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		},
-		{
-			EventId:   int64(2),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-					SearchAttributes: &commonpb.SearchAttributes{
-						IndexedFields: map[string]*commonpb.Payload{
-							"CustomKeywordField":    payload.EncodeString("random-keyword"),
-							"TemporalChangeVersion": payload.EncodeString("random-data"),
+	fakeHistory := historypb.History{
+		Events: []*historypb.HistoryEvent{
+			{
+				EventId:   int64(1),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+			{
+				EventId:   int64(2),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						SearchAttributes: &commonpb.SearchAttributes{
+							IndexedFields: map[string]*commonpb.Payload{
+								"CustomKeywordField":    payload.EncodeString("random-keyword"),
+								"TemporalChangeVersion": payload.EncodeString("random-data"),
+							},
 						},
 					},
 				},
 			},
-		},
-		{
-			EventId:   int64(3),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			{
+				EventId:   int64(3),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			},
 		},
 	}
+	historyBlob, err := fakeHistory.Marshal()
+	s.NoError(err)
 
-	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: fakeHistory,
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{
+			{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         historyBlob,
+			},
+		},
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
-	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	//s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
+	//s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
 		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
 
