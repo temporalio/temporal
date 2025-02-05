@@ -1478,7 +1478,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedBuildId string,
 	userMetadata *sdkpb.UserMetadata,
 	inheritedOverride *workflowpb.VersioningOverride,
-	terminateChildIfRunning bool,
+	shouldTerminateAndStartChild bool,
 ) (string, *clockspb.VectorClock, error) {
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                targetNamespace.String(),
@@ -1501,10 +1501,6 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		UserMetadata:          userMetadata,
 		VersioningOverride:    inheritedOverride,
 	}
-	if terminateChildIfRunning {
-		startRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
-		startRequest.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
-	}
 
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
@@ -1526,6 +1522,12 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 
 	request.SourceVersionStamp = sourceVersionStamp
 	request.InheritedBuildId = inheritedBuildId
+
+	if shouldTerminateAndStartChild {
+		request.StartRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+		request.StartRequest.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+		request.ChildWorkflowOnly = true
+	}
 
 	response, err := t.historyRawClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
