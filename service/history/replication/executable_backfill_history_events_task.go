@@ -187,7 +187,6 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 				)
 				return err
 			}
-			// return original task processing error
 			return nil
 		}
 		return e.Execute()
