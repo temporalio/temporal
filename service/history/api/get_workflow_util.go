@@ -169,7 +169,7 @@ func GetOrPollMutableState(
 		transitionHistory := response.GetTransitionHistory()
 		if len(transitionHistory) != 0 && request.VersionedTransition != nil {
 			if workflow.TransitionHistoryStalenessCheck(transitionHistory, request.VersionedTransition) != nil {
-				logger.Warn(fmt.Sprintf("Request versioned transition and transition history prior to polling the mutable state. Request: %v, current: %v",
+				logger.Warn(fmt.Sprintf("Request versioned transition and transition history don't match prior to polling the mutable state. Request: %v, current: %v",
 					request.VersionedTransition,
 					transitionhistory.LastVersionedTransition(transitionHistory)),
 					tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
