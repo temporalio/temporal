@@ -913,10 +913,11 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 			tag.Error(err))
 		return nil, err
 	}
-
-	err = api.ProcessOutgoingSearchAttributes(wh.namespaceRegistry, wh.saProvider, wh.saMapperProvider, matchingResp.History.Events, namespaceID, wh.visibilityMgr)
-	if err != nil {
-		return nil, err
+	if matchingResp.History != nil {
+		err = api.ProcessOutgoingSearchAttributes(wh.namespaceRegistry, wh.saProvider, wh.saMapperProvider, matchingResp.History.Events, namespaceID, wh.visibilityMgr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &workflowservice.PollWorkflowTaskQueueResponse{
