@@ -364,9 +364,9 @@ var TransitionStarted = hsm.NewTransition(
 		op.recordAttempt(event.Time)
 		if event.Attributes.OperationToken != "" {
 			op.OperationToken = event.Attributes.OperationToken
-		} else if event.Attributes.OperationId != "" {
+		} else if event.Attributes.OperationId != "" { //nolint:staticcheck // SA1019 this field might be set in older histories.
 			// TODO(bergundy): Remove this fallback after the 1.27 release.
-			op.OperationToken = event.Attributes.OperationId
+			op.OperationToken = event.Attributes.OperationId //nolint:staticcheck // SA1019 this field might be set in older histories.
 		}
 
 		// If cancelation is requested already, schedule sending the cancelation request.
