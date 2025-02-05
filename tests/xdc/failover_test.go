@@ -313,6 +313,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 			RunId:      rid,
 		},
 	}
+	// TODO (alex): this shouldn't be WaitForHistory anymore (just EqualHistory)
 	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
   2 v1 WorkflowTaskScheduled
@@ -325,7 +326,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 				return nil
 			}
 			return historyResponse.History
-		}, 15*time.Second, 1*time.Second,
+		}, replicationWaitTime, replicationCheckInterval,
 	)
 
 	// Make sure query is still working after failover
@@ -397,7 +398,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 				return nil
 			}
 			return historyResponse.History
-		}, 15*time.Second, 1*time.Second,
+		}, replicationWaitTime, replicationCheckInterval,
 	)
 }
 
@@ -782,7 +783,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 				return nil
 			}
 			return historyResponse.History
-		}, 15*time.Second, 1*time.Second,
+		}, replicationWaitTime, replicationCheckInterval,
 	)
 }
 
@@ -1151,6 +1152,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 			WorkflowId: id,
 		},
 	}
+	// TODO (alex): this shouldn't be WaitForHistory anymore (just EqualHistory)
 	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
   2 v1 WorkflowTaskScheduled
@@ -1166,7 +1168,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 				return nil
 			}
 			return historyResponse.History
-		}, 15*time.Second, 1*time.Second,
+		}, replicationWaitTime, replicationCheckInterval,
 	)
 
 	// Send another signal in cluster 2
@@ -1210,8 +1212,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 				return nil
 			}
 			return historyResponse.History
-		}, 15*time.Second, 1*time.Second,
-	)
+		}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
@@ -1400,7 +1401,7 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 	s.failover(namespace, 0, s.clusterNames[1], 2)
 
 	// Update the namespace in cluster 2 to be a single cluster namespace
-	s.updateNamespaceClusters(namespace, 1, s.clusterNames[1:])
+	s.updateNamespaceClusters(namespace, 1, s.clusterNames[1:], []*testcore.TestCluster{s.cluster2})
 
 	// Send a signal to cluster 2, namespace contains one cluster
 	signalName := "my signal"
@@ -1426,7 +1427,7 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 	s.NoError(err)
 
 	// Update the namespace in cluster 2 to be a multi cluster namespace
-	s.updateNamespaceClusters(namespace, 1, s.clusterNames)
+	s.updateNamespaceClusters(namespace, 1, s.clusterNames, []*testcore.TestCluster{s.cluster1, s.cluster2})
 
 	// No error is expected with multi cluster namespace.
 	_, err = client2.DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -2202,7 +2203,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	s.NoError(err)
 
 	// update ns to have 2 clusters
-	s.updateNamespaceClusters(namespace, 0, s.clusterNames)
+	s.updateNamespaceClusters(namespace, 0, s.clusterNames, []*testcore.TestCluster{s.cluster1, s.cluster2})
 
 	// namespace update completed, now resume wf6 (bufferedEvent workflow)
 	close(sigSendDoneChan)
@@ -2358,7 +2359,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	s.NoError(err)
 
 	// Update ns to have 2 clusters
-	s.updateNamespaceClusters(namespace, 0, s.clusterNames)
+	s.updateNamespaceClusters(namespace, 0, s.clusterNames, []*testcore.TestCluster{s.cluster1, s.cluster2})
 
 	// Start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
@@ -2465,7 +2466,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	s.NoError(err)
 
 	// Update ns to have 2 clusters
-	s.updateNamespaceClusters(namespace, 0, s.clusterNames)
+	s.updateNamespaceClusters(namespace, 0, s.clusterNames, []*testcore.TestCluster{s.cluster1, s.cluster2})
 
 	// Start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{

@@ -58,7 +58,10 @@ import (
 const (
 	namespaceCacheWaitTime      = 2 * testcore.NamespaceCacheRefreshInterval
 	namespaceCacheCheckInterval = testcore.NamespaceCacheRefreshInterval / 2
-	testTimeout                 = 30 * time.Second
+	replicationWaitTime         = 15 * time.Second
+	replicationCheckInterval    = 500 * time.Millisecond
+
+	testTimeout = 30 * time.Second
 )
 
 type (
@@ -296,7 +299,7 @@ func createNamespace(
 					}
 				}
 			}
-		}, 15*time.Second, 500*time.Millisecond)
+		}, replicationWaitTime, replicationCheckInterval)
 	}
 
 	return ns
@@ -361,7 +364,7 @@ func updateNamespaceConfig(
 					}
 				}
 			}
-		}, 15*time.Second, 500*time.Millisecond)
+		}, replicationWaitTime, replicationCheckInterval)
 	}
 }
 
@@ -377,6 +380,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	ns string,
 	inClusterIndex int,
 	clusterNames []string,
+	clusters []*testcore.TestCluster,
 ) {
 
 	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusterNames))
@@ -386,22 +390,43 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 		}
 	}
 
-	_, err := s.clusterAt(inClusterIndex).FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
+	_, err := clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: ns,
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			Clusters: replicationConfigs,
 		}})
 	s.NoError(err)
 
+	var isGlobalNamespace bool
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range s.clusterAt(inClusterIndex).Host().FrontendNamespaceRegistries() {
+		for _, r := range clusters[inClusterIndex].Host().FrontendNamespaceRegistries() {
 			resp, err := r.GetNamespace(namespace.Name(ns))
 			assert.NoError(t, err)
 			if assert.NotNil(t, resp) {
 				assert.Equal(t, clusterNames, resp.ClusterNames())
+				isGlobalNamespace = resp.IsGlobalNamespace()
 			}
 		}
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
+
+	if len(clusters) > 1 && isGlobalNamespace {
+		// If namespace is global and config has more than 1 cluster, it should be replicated to these other clusters.
+		// Check other clusters too.
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			for ci, c := range clusters {
+				if ci == inClusterIndex {
+					continue
+				}
+				for _, r := range c.Host().FrontendNamespaceRegistries() {
+					resp, err := r.GetNamespace(namespace.Name(ns))
+					assert.NoError(t, err)
+					if assert.NotNil(t, resp) {
+						assert.Equal(t, clusterNames, resp.ClusterNames())
+					}
+				}
+			}
+		}, replicationWaitTime, replicationCheckInterval)
+	}
 }
 
 func (s *xdcBaseSuite) promoteNamespace(
@@ -458,7 +483,7 @@ func (s *xdcBaseSuite) failover(
 				}
 			}
 		}
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *xdcBaseSuite) mustToPayload(v any) *commonpb.Payload {

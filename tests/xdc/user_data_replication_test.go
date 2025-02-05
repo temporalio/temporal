@@ -145,7 +145,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 			return false
 		}
 		return len(response.GetResponse().GetMajorVersionSets()) == 1
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 
 	// make another change to test that merging works
 
@@ -168,7 +168,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 			return false
 		}
 		return len(response.GetResponse().GetMajorVersionSets()) == 2
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassiveV2() {
@@ -227,7 +227,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 			return false
 		}
 		return len(response.GetResponse().GetAssignmentRules()) == 1
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 
 	// make another change to test that merging works
 
@@ -270,7 +270,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		}
 		return len(response.GetResponse().GetAssignmentRules()) == 1 &&
 			len(response.GetResponse().GetCompatibleRedirectRules()) == 1
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
@@ -293,7 +293,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 		})
 		assert.NoError(t, err)
 		assert.Len(t, response.GetMajorVersionSets(), 1)
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand() {
@@ -354,7 +354,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	}
 
 	// update namespace to cross clusters
-	s.updateNamespaceClusters(namespace, 0, s.clusterNames)
+	s.updateNamespaceClusters(namespace, 0, s.clusterNames, []*testcore.TestCluster{s.cluster1, s.cluster2})
 
 	// we should see one new namespace task in the replication queue
 	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
@@ -550,7 +550,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 			return false
 		}
 		return len(response.GetMajorVersionSets()) == 2 && response.MajorVersionSets[1].BuildIds[0] == "v3"
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 
 	_, err = standbyFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: namespace,
