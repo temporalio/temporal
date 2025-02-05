@@ -328,6 +328,7 @@ func (d *ClientImpl) UpdateVersionMetadata(
 		return nil, err
 	}
 
+	// todo (Shivam): change this to update.
 	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, versionObj.GetDeploymentName(), versionObj.GetBuildId(), &updatepb.Request{
 		Input: &updatepb.Input{Name: UpdateVersionMetadata, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
