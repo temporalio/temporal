@@ -658,6 +658,80 @@ func (this *CheckWorkerDeploymentUserDataPropagationRequest) Equal(that interfac
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type SyncUnversionedRampActivityArgs to the protobuf v3 wire format
+func (val *SyncUnversionedRampActivityArgs) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncUnversionedRampActivityArgs from the protobuf v3 wire format
+func (val *SyncUnversionedRampActivityArgs) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncUnversionedRampActivityArgs) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncUnversionedRampActivityArgs values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncUnversionedRampActivityArgs) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncUnversionedRampActivityArgs
+	switch t := that.(type) {
+	case *SyncUnversionedRampActivityArgs:
+		that1 = t
+	case SyncUnversionedRampActivityArgs:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type SyncUnversionedRampActivityResponse to the protobuf v3 wire format
+func (val *SyncUnversionedRampActivityResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncUnversionedRampActivityResponse from the protobuf v3 wire format
+func (val *SyncUnversionedRampActivityResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncUnversionedRampActivityResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncUnversionedRampActivityResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncUnversionedRampActivityResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncUnversionedRampActivityResponse
+	switch t := that.(type) {
+	case *SyncUnversionedRampActivityResponse:
+		that1 = t
+	case SyncUnversionedRampActivityResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type SetCurrentVersionArgs to the protobuf v3 wire format
 func (val *SetCurrentVersionArgs) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

@@ -120,6 +120,7 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	activities := &Activities{
 		namespace:        ns,
 		deploymentClient: s.activityDeps.WorkerDeploymentClient,
+		matchingClient:   s.activityDeps.MatchingClient,
 	}
 	registry.RegisterActivity(activities)
 

@@ -57,7 +57,7 @@ const (
 	BuildIdSearchAttributeEscape            = "|"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
-	UnversionedBuildId         = "__unversioned__"
+	UnversionedVersionId       = "__unversioned__"
 
 	// Prefixes, Delimeters and Keys
 	WorkerDeploymentVersionIdDelimiter         = "/"

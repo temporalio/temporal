@@ -231,6 +231,17 @@ message CheckWorkerDeploymentUserDataPropagationRequest {
     map<string, int64> task_queue_max_versions = 1;
 }
 
+// used as Worker Deployment workflow activity input:
+message SyncUnversionedRampActivityArgs {
+    string current_version = 1;
+    SyncVersionStateUpdateArgs update_args = 2;
+}
+
+// used as Worker Deployment workflow activity output:
+message SyncUnversionedRampActivityResponse {
+    map<string, int64> task_queue_max_versions = 1;
+}
+
 // used as Worker Deployment workflow update input:
 message SetCurrentVersionArgs {
     string identity = 1;
