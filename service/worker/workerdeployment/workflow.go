@@ -25,6 +25,7 @@
 package workerdeployment
 
 import (
+	"fmt"
 	"slices"
 	"time"
 
@@ -196,7 +197,20 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			rampingSinceTime = d.State.RoutingConfig.RampingVersionChangedTime
 			rampingVersionUpdateTime = d.State.RoutingConfig.RampingVersionChangedTime
 		} else {
-			rampingSinceTime = routingUpdateTime // version ramping for the first time
+			// version ramping for the first time
+
+			currentVersion := d.State.RoutingConfig.CurrentVersion
+			if !args.IgnoreMissingTaskQueues && currentVersion != "" {
+				isMissingTaskQueues, err := d.isVersionMissingTaskQueues(ctx, currentVersion, newRampingVersion)
+				if err != nil {
+					d.logger.Info("Error verifying poller presence in version", "error", err)
+					return nil, err
+				}
+				if isMissingTaskQueues {
+					return nil, serviceerror.NewFailedPrecondition("New ramping version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after this operation")
+				}
+			}
+			rampingSinceTime = routingUpdateTime
 			rampingVersionUpdateTime = routingUpdateTime
 		}
 
@@ -241,7 +255,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
 	if !slices.Contains(d.State.Versions, args.Version) {
-		return serviceerror.NewNotFound("version not found in deployment")
+		return serviceerror.NewNotFound(fmt.Sprintf("version %s not found in deployment", args.Version))
 	}
 	return nil
 }
@@ -306,6 +320,17 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	prevCurrentVersion := d.State.RoutingConfig.CurrentVersion
 	newCurrentVersion := args.Version
 	updateTime := timestamppb.New(workflow.Now(ctx))
+
+	if !args.IgnoreMissingTaskQueues && prevCurrentVersion != "" {
+		isMissingTaskQueues, err := d.isVersionMissingTaskQueues(ctx, prevCurrentVersion, newCurrentVersion)
+		if err != nil {
+			d.logger.Info("Error verifying poller presence in version", "error", err)
+			return nil, err
+		}
+		if isMissingTaskQueues {
+			return nil, serviceerror.NewFailedPrecondition("New current version does not have all the task queues from the previous current version and some missing task queues are active and would become unversioned after this operation")
+		}
+	}
 
 	// tell new current that it's current
 	currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
@@ -377,6 +402,7 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	if d.State.Versions == nil {
 		d.State.Versions = make([]string, 0)
 	}
+
 	d.State.Versions = append(d.State.Versions, version)
 	return nil
 }
@@ -391,6 +417,16 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 		RequestId:      d.newUUID(ctx),
 	}).Get(ctx, &res)
 	return res.VersionState, err
+}
+
+func (d *WorkflowRunner) isVersionMissingTaskQueues(ctx workflow.Context, prevCurrentVersion string, newCurrentVersion string) (bool, error) {
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var res deploymentspb.IsVersionMissingTaskQueuesResult
+	err := workflow.ExecuteActivity(activityCtx, d.a.IsVersionMissingTaskQueues, &deploymentspb.IsVersionMissingTaskQueuesArgs{
+		PrevCurrentVersion: prevCurrentVersion,
+		NewCurrentVersion:  newCurrentVersion,
+	}).Get(ctx, &res)
+	return res.IsMissingTaskQueues, err
 }
 
 func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {

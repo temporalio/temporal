@@ -806,35 +806,35 @@ func (this *DeleteVersionActivityArgs) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type CheckTaskQueuesHaveNoPollersActivityArgs to the protobuf v3 wire format
-func (val *CheckTaskQueuesHaveNoPollersActivityArgs) Marshal() ([]byte, error) {
+// Marshal an object of type CheckTaskQueuesHavePollersActivityArgs to the protobuf v3 wire format
+func (val *CheckTaskQueuesHavePollersActivityArgs) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type CheckTaskQueuesHaveNoPollersActivityArgs from the protobuf v3 wire format
-func (val *CheckTaskQueuesHaveNoPollersActivityArgs) Unmarshal(buf []byte) error {
+// Unmarshal an object of type CheckTaskQueuesHavePollersActivityArgs from the protobuf v3 wire format
+func (val *CheckTaskQueuesHavePollersActivityArgs) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *CheckTaskQueuesHaveNoPollersActivityArgs) Size() int {
+func (val *CheckTaskQueuesHavePollersActivityArgs) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two CheckTaskQueuesHaveNoPollersActivityArgs values are equivalent by recursively
+// Equal returns whether two CheckTaskQueuesHavePollersActivityArgs values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *CheckTaskQueuesHaveNoPollersActivityArgs) Equal(that interface{}) bool {
+func (this *CheckTaskQueuesHavePollersActivityArgs) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *CheckTaskQueuesHaveNoPollersActivityArgs
+	var that1 *CheckTaskQueuesHavePollersActivityArgs
 	switch t := that.(type) {
-	case *CheckTaskQueuesHaveNoPollersActivityArgs:
+	case *CheckTaskQueuesHavePollersActivityArgs:
 		that1 = t
-	case CheckTaskQueuesHaveNoPollersActivityArgs:
+	case CheckTaskQueuesHavePollersActivityArgs:
 		that1 = &t
 	default:
 		return false
@@ -1020,6 +1020,80 @@ func (this *SyncVersionStateActivityResult) Equal(that interface{}) bool {
 	case *SyncVersionStateActivityResult:
 		that1 = t
 	case SyncVersionStateActivityResult:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type IsVersionMissingTaskQueuesArgs to the protobuf v3 wire format
+func (val *IsVersionMissingTaskQueuesArgs) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type IsVersionMissingTaskQueuesArgs from the protobuf v3 wire format
+func (val *IsVersionMissingTaskQueuesArgs) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *IsVersionMissingTaskQueuesArgs) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two IsVersionMissingTaskQueuesArgs values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *IsVersionMissingTaskQueuesArgs) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *IsVersionMissingTaskQueuesArgs
+	switch t := that.(type) {
+	case *IsVersionMissingTaskQueuesArgs:
+		that1 = t
+	case IsVersionMissingTaskQueuesArgs:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type IsVersionMissingTaskQueuesResult to the protobuf v3 wire format
+func (val *IsVersionMissingTaskQueuesResult) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type IsVersionMissingTaskQueuesResult from the protobuf v3 wire format
+func (val *IsVersionMissingTaskQueuesResult) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *IsVersionMissingTaskQueuesResult) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two IsVersionMissingTaskQueuesResult values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *IsVersionMissingTaskQueuesResult) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *IsVersionMissingTaskQueuesResult
+	switch t := that.(type) {
+	case *IsVersionMissingTaskQueuesResult:
+		that1 = t
+	case IsVersionMissingTaskQueuesResult:
 		that1 = &t
 	default:
 		return false

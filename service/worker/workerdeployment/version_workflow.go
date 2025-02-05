@@ -26,7 +26,6 @@ package workerdeployment
 
 import (
 	"fmt"
-	"go.temporal.io/server/common/worker_versioning"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -76,10 +76,12 @@ func VersionWorkflow(ctx workflow.Context, versionWorkflowArgs *deploymentspb.Wo
 		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": versionWorkflowArgs.NamespaceName}),
 		lock:    workflow.NewMutex(ctx),
 	}
+
 	return versionWorkflowRunner.run(ctx)
 }
 
 func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
+
 	// Fetch signal channels
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	forceCAN := false
@@ -93,8 +95,11 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	selector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		var newInfo *deploymentpb.VersionDrainageInfo
 		c.Receive(ctx, &newInfo)
+		if d.VersionState.GetDrainageInfo() == nil {
+			d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
+		}
 		d.VersionState.DrainageInfo.LastCheckedTime = newInfo.LastCheckedTime
-		if d.VersionState.DrainageInfo.Status != newInfo.Status {
+		if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
 			d.VersionState.DrainageInfo.Status = newInfo.Status
 			d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
 		}
@@ -109,8 +114,11 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 }
 
 func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
-	if d.VersionState == nil {
-		d.VersionState = &deploymentspb.VersionLocalState{}
+	if d.GetVersionState().Version == nil {
+		return fmt.Errorf("version cannot be nil on start")
+	}
+	if d.VersionState.GetCreateTime() == nil {
+		d.VersionState.CreateTime = timestamppb.New(workflow.Now(ctx))
 	}
 
 	// if we were draining and just continued-as-new, restart drainage child wf
@@ -224,6 +232,8 @@ func (d *VersionWorkflowRunner) validateDeleteVersion() error {
 }
 
 func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error {
+	// TODO (Shivam): add `skip_drainage` flag
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -244,29 +254,37 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 	}
 
 	state := d.GetVersionState()
-
-	// describe all task queues in the deployment, if any have pollers, then cannot delete
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	tqNameToTypes := make(map[string]*deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs_TaskQueueTypes)
-	for tqName, tqFamilyData := range state.TaskQueueFamilies {
-		var tqTypes []enumspb.TaskQueueType
-		for tqType, _ := range tqFamilyData.TaskQueues {
-			tqTypes = append(tqTypes, enumspb.TaskQueueType(tqType))
-		}
-		tqNameToTypes[tqName] = &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs_TaskQueueTypes{Types: tqTypes}
+
+	// Manual deletion of versions is only possible when:
+	// 1. The version is not current or ramping
+	// 2. The version is drained. (check skipped when `skip-drainage=true` )
+	// 3. The version has no active pollers.
+
+	// 1. Check if the version is not current or ramping.
+	if state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil {
+		// activity won't retry on this error since version not eligible for deletion
+		return serviceerror.NewFailedPrecondition(errVersionIsCurrentOrRamping)
 	}
-	checkPollersReq := &deploymentspb.CheckTaskQueuesHaveNoPollersActivityArgs{
-		TaskQueuesAndTypes: tqNameToTypes,
-		BuildId:            d.VersionState.Version.BuildId,
+
+	// 2. Check if the version is drained.
+	if state.GetDrainageInfo() == nil || state.GetDrainageInfo().Status != enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+		// activity won't retry on this error since version not eligible for deletion
+		return serviceerror.NewFailedPrecondition(errVersionNotDrained)
 	}
-	var hasPollers bool
-	err = workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
+
+	// 3. Check if the version has any active pollers.
+	hasPollers, err := d.doesVersionHaveActivePollers(ctx)
+	if hasPollers {
+		// activity won't retry on this error since version not eligible for deletion
+		return serviceerror.NewFailedPrecondition(errVersionHasPollers)
+	}
 	if err != nil {
+		// some other error allowing activity retries
 		return err
 	}
-	if hasPollers {
-		return serviceerror.NewFailedPrecondition("cannot delete, task queues in this version still have pollers")
-	}
+
+	d.logger.Info("Version is eligible for deletion")
 
 	// sync version removal to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
@@ -306,6 +324,32 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 
 	d.done = true
 	return nil
+}
+
+// doesVersionHaveActivePollers returns true if the version has active pollers.
+func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Context) (bool, error) {
+
+	// describe all task queues in the deployment, if any have pollers, then cannot delete
+
+	tqNameToTypes := make(map[string]*deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes)
+	for tqName, tqFamilyData := range d.VersionState.TaskQueueFamilies {
+		var tqTypes []enumspb.TaskQueueType
+		for tqType, _ := range tqFamilyData.TaskQueues {
+			tqTypes = append(tqTypes, enumspb.TaskQueueType(tqType))
+		}
+		tqNameToTypes[tqName] = &deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes{Types: tqTypes}
+	}
+	checkPollersReq := &deploymentspb.CheckTaskQueuesHavePollersActivityArgs{
+		TaskQueuesAndTypes:      tqNameToTypes,
+		WorkerDeploymentVersion: d.VersionState.Version,
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var hasPollers bool
+	err := workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
+	if err != nil {
+		return false, err
+	}
+	return hasPollers, nil
 }
 
 func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInVersionArgs) error {
@@ -493,7 +537,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// stopped accepting new workflows --> start drainage child wf
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
-		state.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
 		d.startDrainage(ctx, true)
 	}
 
