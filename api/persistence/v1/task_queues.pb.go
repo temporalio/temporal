@@ -492,10 +492,10 @@ type DeploymentData struct {
 	//
 	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/task_queues.proto.
 	Deployments []*DeploymentData_DeploymentDataItem `protobuf:"bytes,1,rep,name=deployments,proto3" json:"deployments,omitempty"`
-	// Set of deployment versions that this task queue belongs to.
-	// Current Version is defined implicitly as the version with `is_current==true` and the most
+	// Set of worker deployment versions that this task queue belongs to.
+	// Current Version is defined implicitly as the version with `current_since_time!=nil` and the most
 	// recent `routing_update_time`.
-	// Ramping Version is defined implicitly as the version with `ramp_percentage>0` and the most
+	// Ramping Version is defined implicitly as the version with `ramping_since_time!=nil` and the most
 	// recent `routing_update_time`.
 	// The Ramping Version receives a share of unversioned/unpinned tasks according to its
 	// `ramp_percentage`. If there is no Ramping Version, all the unversioned/unpinned tasks are

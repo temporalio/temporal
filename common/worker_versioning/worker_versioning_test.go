@@ -86,26 +86,26 @@ func TestCalculateTaskQueueVersioningInfo(t *testing.T) {
 				Versions: []*deploymentspb.DeploymentVersionData{
 					{Version: v1, CurrentSinceTime: t1, RoutingUpdateTime: t1},
 					{Version: v2, CurrentSinceTime: t2, RoutingUpdateTime: t2},
-					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2},
+					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2, RampingSinceTime: t2},
 					{Version: v3, RampPercentage: 20, RoutingUpdateTime: t3, RampingSinceTime: t1},
 				},
 			},
 		},
-		{name: "ramp without current", wantRamping: &deploymentspb.DeploymentVersionData{Version: v3, RoutingUpdateTime: t3, RampPercentage: 20},
+		{name: "ramp without current", wantRamping: &deploymentspb.DeploymentVersionData{Version: v3, RoutingUpdateTime: t3, RampPercentage: 20, RampingSinceTime: t3},
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2},
-					{Version: v3, RampPercentage: 20, RoutingUpdateTime: t3},
+					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t2, RampingSinceTime: t2},
+					{Version: v3, RampPercentage: 20, RoutingUpdateTime: t3, RampingSinceTime: t3},
 				},
 			},
 		},
 		{name: "ramp to unversioned",
-			wantRamping: &deploymentspb.DeploymentVersionData{Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "foo"}, RoutingUpdateTime: t2, RampPercentage: 20},
+			wantRamping: &deploymentspb.DeploymentVersionData{Version: nil, RoutingUpdateTime: t2, RampPercentage: 20, RampingSinceTime: t2},
 			data: &persistencespb.DeploymentData{
 				Versions: []*deploymentspb.DeploymentVersionData{
-					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t1},
+					{Version: v1, RampPercentage: 50, RoutingUpdateTime: t1, RampingSinceTime: t1},
 					// Passing only deployment name without version
-					{Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "foo"}, RampPercentage: 20, RoutingUpdateTime: t2},
+					{Version: nil, RampPercentage: 20, RoutingUpdateTime: t2, RampingSinceTime: t2},
 				},
 			},
 		},
