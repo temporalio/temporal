@@ -40,46 +40,69 @@ type HTTPClientTraceProvider interface {
 	NewTrace(attempt int32, logger log.Logger) *httptrace.ClientTrace
 }
 
-var HTTPTraceConfig = dynamicconfig.NewGlobalTypedSetting(
+// HTTPTraceConfig is the dynamic config for controlling Nexus HTTP request tracing behavior.
+// The default is nil and the conversion function does not do any actual conversion because this should be wrapped by
+// a dynamicconfig.NewGlobalCachedTypedValue with the actual conversion function so that it is cached.
+var HTTPTraceConfig = dynamicconfig.NewGlobalTypedSettingWithConverter(
 	"system.nexusHTTPTraceConfig",
-	HTTPClientTraceConfig{
-		Enabled:    false,
-		MinAttempt: 2,
-		MaxAttempt: 4,
-		Hooks:      []string{"GetConn", "GotConn", "ConnectStart", "ConnectDone", "DNSStart", "DNSDone", "TLSHandshakeStart", "TLSHandshakeDone", "WroteRequest", "GotFirstResponseByte"},
-	},
-	`Configuration options for controlling additional logging for Nexus HTTP requests. Fields: Enabled, MinAttempt, MaxAttempt, Hooks. See HTTPClientTraceConfig comments for more detail.`,
+	func(a any) (any, error) { return a, nil },
+	nil,
+	`Configuration options for controlling additional tracing for Nexus HTTP requests. Fields: Enabled, MinAttempt, MaxAttempt, Hooks. See HTTPClientTraceConfig comments for more detail.`,
 )
 
 type HTTPClientTraceConfig struct {
-	// Enabled controls whether any additional logging will be emitted. Default false.
+	// Enabled controls whether any additional tracing will be invoked. Default false.
 	Enabled bool
-	// MinAttempt is the first operation attempt to include additional logging. Default 2. Setting to 0 or 1 will add logging to all requests and may be expensive.
+	// MinAttempt is the first operation attempt to include additional tracing. Default 2. Setting to 0 or 1 will add tracing to all requests and may be expensive.
 	MinAttempt int32
-	// MaxAttempt is the maximum operation attempt to include additional logging. Default 4. Setting to 0 means no maximum.
+	// MaxAttempt is the maximum operation attempt to include additional tracing. Default 2. Setting to 0 means no maximum.
 	MaxAttempt int32
-	// Hooks is the list of method names to invoke with extra logging. See httptrace.ClientTrace for more detail.
+	// Hooks is the list of method names to invoke with extra tracing. See httptrace.ClientTrace for more detail.
 	// Defaults to all implemented hooks: GetConn, GotConn, ConnectStart, ConnectDone, DNSStart, DNSDone, TLSHandshakeStart, TLSHandshakeDone, WroteRequest, GotFirstResponseByte.
 	Hooks []string
 }
 
+var defaultHTTPClientTraceConfig = HTTPClientTraceConfig{
+	Enabled:    false,
+	MinAttempt: 2,
+	MaxAttempt: 2,
+	// Set to nil here because of dynamic config conversion limitations.
+	Hooks: []string(nil),
+}
+
+var defaultHTTPClientTraceHooks = []string{"GetConn", "GotConn", "ConnectStart", "ConnectDone", "DNSStart", "DNSDone", "TLSHandshakeStart", "TLSHandshakeDone", "WroteRequest", "GotFirstResponseByte"}
+
+func convertHTTPClientTraceConfig(in any) (HTTPClientTraceConfig, error) {
+	cfg, err := dynamicconfig.ConvertStructure(defaultHTTPClientTraceConfig)(in)
+	if err != nil {
+		cfg = defaultHTTPClientTraceConfig
+	}
+	if len(cfg.Hooks) == 0 {
+		cfg.Hooks = defaultHTTPClientTraceHooks
+	}
+	return cfg, nil
+}
+
 type LoggedHTTPClientTraceProvider struct {
-	Config dynamicconfig.TypedPropertyFn[HTTPClientTraceConfig]
+	Config *dynamicconfig.GlobalCachedTypedValue[HTTPClientTraceConfig]
 }
 
 func NewLoggedHTTPClientTraceProvider(dc *dynamicconfig.Collection) HTTPClientTraceProvider {
 	return &LoggedHTTPClientTraceProvider{
-		Config: HTTPTraceConfig.Get(dc),
+		Config: dynamicconfig.NewGlobalCachedTypedValue(dc, HTTPTraceConfig, convertHTTPClientTraceConfig),
 	}
 }
 
-//nolint:revive // cognitive complexity 30 (> 25 max) but is just adding a function for each method in the list.
+//nolint:revive // cognitive complexity (> 25 max) but is just adding a logging function for each method in the list.
 func (p *LoggedHTTPClientTraceProvider) NewTrace(attempt int32, logger log.Logger) *httptrace.ClientTrace {
-	config := p.Config()
+	config := p.Config.Get()
 	if !config.Enabled {
 		return nil
 	}
-	if attempt < config.MinAttempt || attempt > config.MaxAttempt {
+	if attempt < config.MinAttempt {
+		return nil
+	}
+	if config.MaxAttempt > 0 && attempt > config.MaxAttempt {
 		return nil
 	}
 
@@ -141,7 +164,6 @@ func (p *LoggedHTTPClientTraceProvider) NewTrace(attempt int32, logger log.Logge
 			clientTrace.TLSHandshakeDone = func(state tls.ConnectionState, err error) {
 				logger.Info("finished TLS handshake for Nexus request",
 					tag.Timestamp(time.Now().UTC()),
-					// TODO: consider other state info
 					tag.NewBoolTag("handshake-complete", state.HandshakeComplete),
 					tag.Error(err))
 			}
