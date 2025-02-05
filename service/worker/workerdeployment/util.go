@@ -122,12 +122,12 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
 	}
 
-	// deploymentName cannot have "/"
+	// deploymentName cannot have "."
 	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiter) {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiter))
 	}
 
-	// buildID cannot start with "__"
+	// buildID or deployment name cannot start with "__"
 	if strings.HasPrefix(field, "__") {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot start with '__'", fieldName))
 	}
