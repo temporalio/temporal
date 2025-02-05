@@ -74,11 +74,14 @@ type (
 		PerUnitHistogramBoundaries map[string][]float64 `yaml:"perUnitHistogramBoundaries"`
 
 		// Following configs are added for backwards compatibility when switching from tally to opentelemetry
-		// Both configs should be set to true when using opentelemetry framework to have the same behavior as tally.
+		// All configs should be set to true when using opentelemetry framework to have the same behavior as tally.
 
-		// WithoutUnits controls if metric unit should be added to the metric name as a suffix.
+		// WithoutUnitSuffix controls the additional of unit suffixes to metric names.
 		// This config only takes effect when using opentelemetry framework.
-		WithoutUnits bool `yaml:"withoutUnits"`
+		WithoutUnitSuffix bool `yaml:"withoutUnitSuffix"`
+		// WithoutCounterSuffix controls the additional of _total suffixes to counter metric names.
+		// This config only takes effect when using opentelemetry framework.
+		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
 		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
 		// (instead of milliseconds).
 		// This config only takes effect when using opentelemetry framework.
