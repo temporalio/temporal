@@ -362,7 +362,12 @@ var TransitionStarted = hsm.NewTransition(
 	enumsspb.NEXUS_OPERATION_STATE_STARTED,
 	func(op Operation, event EventStarted) (hsm.TransitionOutput, error) {
 		op.recordAttempt(event.Time)
-		op.OperationId = event.Attributes.OperationId
+		if event.Attributes.OperationToken != "" {
+			op.OperationToken = event.Attributes.OperationToken
+		} else if event.Attributes.OperationId != "" {
+			// TODO(bergundy): Remove this fallback after the 1.27 release.
+			op.OperationToken = event.Attributes.OperationId
+		}
 
 		// If cancelation is requested already, schedule sending the cancelation request.
 		child, err := op.CancelationNode(event.Node)

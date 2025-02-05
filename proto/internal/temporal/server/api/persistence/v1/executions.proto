@@ -696,8 +696,8 @@ message NexusOperationInfo {
     // Token for fetching the scheduled event.
     bytes scheduled_event_token = 5;
 
-    // Operation ID. Only set for asynchronous operations after a successful StartOperation call.
-    string operation_id = 6;
+    // Operation token. Only set for asynchronous operations after a successful StartOperation call.
+    string operation_token = 6;
 
     // Schedule-to-close timeout for this operation.
     // This is the only timeout settable by a workflow.

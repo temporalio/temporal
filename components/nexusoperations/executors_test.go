@@ -73,20 +73,6 @@ func mustToPayload(t *testing.T, input any) *commonpb.Payload {
 	return payload
 }
 
-type handler struct {
-	nexus.UnimplementedHandler
-	OnStartOperation  func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
-	OnCancelOperation func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error
-}
-
-func (h handler) StartOperation(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-	return h.OnStartOperation(ctx, service, operation, input, options)
-}
-
-func (h handler) CancelOperation(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
-	return h.OnCancelOperation(ctx, service, operation, operationID, options)
-}
-
 func TestProcessInvocationTask(t *testing.T) {
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  "handler-ns",
@@ -150,8 +136,8 @@ func TestProcessInvocationTask(t *testing.T) {
 				options nexus.StartOperationOptions,
 			) (nexus.HandlerStartOperationResult[any], error) {
 				return &nexus.HandlerStartOperationResultAsync{
-					OperationID: "op-id",
-					Links:       []nexus.Link{handlerNexusLink},
+					OperationToken: "op-token",
+					Links:          []nexus.Link{handlerNexusLink},
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
@@ -161,7 +147,8 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, events[0].EventType)
 				protorequire.ProtoEqual(t, &historypb.NexusOperationStartedEventAttributes{
 					ScheduledEventId: 1,
-					OperationId:      "op-id",
+					OperationToken:   "op-token",
+					OperationId:      "op-token",
 					RequestId:        op.RequestId,
 				}, events[0].GetNexusOperationStartedEventAttributes())
 				require.Len(t, events[0].Links, 1)
@@ -326,7 +313,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				time.Sleep(time.Millisecond * 100)
-				return &nexus.HandlerStartOperationResultAsync{OperationID: "op-id"}, nil
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
@@ -343,7 +330,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
-				return &nexus.HandlerStartOperationResultAsync{OperationID: "op-id"}, nil
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
@@ -407,8 +394,8 @@ func TestProcessInvocationTask(t *testing.T) {
 				options nexus.StartOperationOptions,
 			) (nexus.HandlerStartOperationResult[any], error) {
 				return &nexus.HandlerStartOperationResultAsync{
-					OperationID: "op-id",
-					Links:       []nexus.Link{handlerNexusLink},
+					OperationToken: "op-token",
+					Links:          []nexus.Link{handlerNexusLink},
 				}, nil
 			},
 			expectedMetricOutcome: "pending",
@@ -425,7 +412,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
 			listenAddr := nexustest.AllocListenAddress()
-			h := handler{}
+			h := nexustest.Handler{}
 			h.OnStartOperation = func(
 				ctx context.Context,
 				service, operation string,
@@ -629,7 +616,7 @@ func TestProcessCancelationTask(t *testing.T) {
 	cases := []struct {
 		name                  string
 		endpointNotFound      bool
-		onCancelOperation     func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error
+		onCancelOperation     func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op nexusoperations.Cancelation)
 		requestTimeout        time.Duration
@@ -640,7 +627,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			name:            "failure",
 			requestTimeout:  time.Hour,
 			destinationDown: false,
-			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				// Check non retryable internal error.
 				return &nexus.HandlerError{
 					Type:          nexus.HandlerErrorTypeInternal,
@@ -659,7 +646,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			name:            "success",
 			requestTimeout:  time.Hour,
 			destinationDown: false,
-			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				return nil
 			},
 			expectedMetricOutcome: "successful",
@@ -672,7 +659,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			name:            "transient error",
 			requestTimeout:  time.Hour,
 			destinationDown: true,
-			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
 			expectedMetricOutcome: "handler-error:INTERNAL",
@@ -686,7 +673,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			name:            "invocation timeout",
 			requestTimeout:  10 * time.Millisecond,
 			destinationDown: true,
-			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return nil
 			},
@@ -694,7 +681,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation/op-id/cancel\": context deadline exceeded", c.LastAttemptFailure.Message)
+				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation/cancel\": context deadline exceeded", c.LastAttemptFailure.Message)
 			},
 		},
 		{
@@ -729,7 +716,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
 			listenAddr := nexustest.AllocListenAddress()
-			h := handler{}
+			h := nexustest.Handler{}
 			h.OnCancelOperation = tc.onCancelOperation
 			nexustest.NewNexusServer(t, listenAddr, h)
 
@@ -741,7 +728,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 				Time: time.Now(),
 				Attributes: &historypb.NexusOperationStartedEventAttributes{
-					OperationId: "op-id",
+					OperationToken: "op-token",
 				},
 				Node: node,
 			})
@@ -846,7 +833,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 		Time: time.Now(),
 		Attributes: &historypb.NexusOperationStartedEventAttributes{
-			OperationId: "op-id",
+			OperationToken: "op-token",
 		},
 		Node: node,
 	})
@@ -905,7 +892,7 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 		Time: time.Now(),
 		Attributes: &historypb.NexusOperationStartedEventAttributes{
-			OperationId: "op-id",
+			OperationToken: "op-token",
 		},
 		Node: node,
 	})
