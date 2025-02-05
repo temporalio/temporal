@@ -255,15 +255,13 @@ func TestFindOrCreate(t *testing.T) {
 
 	t.Run("enforce in-flight update limit", func(t *testing.T) {
 		var (
-			updateLimitFn func(int)
-			reg           = update.NewRegistry(
+			limit = 1
+			reg   = update.NewRegistry(
 				emptyUpdateStore,
-				update.WithInFlightLimit("<ns>",
-					func(ns string, callback func(int)) (int, func()) {
-						require.Equal(t, ns, "<ns>")
-						updateLimitFn = callback
-						return 1, nil
-					}))
+				update.WithInFlightLimit(
+					func() int { return limit },
+				),
+			)
 			evStore = mockEventStore{Controller: effect.Immediate(context.Background())}
 		)
 
@@ -304,7 +302,7 @@ func TestFindOrCreate(t *testing.T) {
 			require.ErrorAs(t, err, &resExh)
 			require.Equal(t, 1, reg.Len())
 
-			updateLimitFn(2)
+			limit += 1
 
 			_, existed, err = reg.FindOrCreate(context.Background(), tv2.UpdateID())
 			require.NoError(t, err, "update #2 should have beeen created after limit increase")
@@ -322,7 +320,7 @@ func TestFindOrCreate(t *testing.T) {
 		})
 
 		t.Run("disable limit by setting it to zero", func(t *testing.T) {
-			updateLimitFn(0)
+			limit = 0
 
 			_, _, err = reg.FindOrCreate(context.Background(), tv4.UpdateID())
 			require.NoError(t, err, "update #4 should have been created")
@@ -332,7 +330,7 @@ func TestFindOrCreate(t *testing.T) {
 	})
 
 	t.Run("enforce total update limit", func(t *testing.T) {
-		var updateLimitFn func(int)
+		var limit = 1
 
 		newRegistryWithSingleInflightUpdate := func() (update.Registry, mockEventStore, *update.Update) {
 			t.Helper()
@@ -340,12 +338,9 @@ func TestFindOrCreate(t *testing.T) {
 			reg := update.NewRegistry(
 				emptyUpdateStore,
 				update.WithTotalLimit(
-					"<ns>",
-					func(ns string, callback func(int)) (int, func()) {
-						require.Equal(t, ns, "<ns>")
-						updateLimitFn = callback
-						return 1, nil
-					}))
+					func() int { return limit },
+				),
+			)
 
 			// create an in-flight update #1
 			upd1, existed, err := reg.FindOrCreate(context.Background(), tv1.UpdateID())
@@ -404,7 +399,7 @@ func TestFindOrCreate(t *testing.T) {
 
 		t.Run("increasing limit allows new updated to be created", func(t *testing.T) {
 			reg, _, _ := newRegistryWithSingleInflightUpdate()
-			updateLimitFn(2)
+			limit = 2
 
 			_, existed, err := reg.FindOrCreate(context.Background(), tv2.UpdateID())
 			require.NoError(t, err)
@@ -415,14 +410,12 @@ func TestFindOrCreate(t *testing.T) {
 
 	t.Run("check max registry size limit", func(t *testing.T) {
 		var (
-			reg = update.NewRegistry(
+			limit = 1
+			reg   = update.NewRegistry(
 				emptyUpdateStore,
 				update.WithRegistrySizeLimit(
-					"<ns>",
-					func(ns string, callback func(int)) (int, func()) {
-						require.Equal(t, ns, "<ns>")
-						return 1, nil
-					}),
+					func() int { return limit },
+				),
 			)
 			evStore = mockEventStore{Controller: effect.Immediate(context.Background())}
 		)
@@ -669,34 +662,17 @@ func TestAbort(t *testing.T) {
 func TestClear(t *testing.T) {
 	tv := testvars.New(t)
 
-	var closed []string
-	reg := update.NewRegistry(
-		&mockUpdateStore{
-			VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
-				visitor(
-					tv.UpdateID(),
-					&persistencespb.UpdateInfo{
-						Value: &persistencespb.UpdateInfo_Admission{
-							Admission: &persistencespb.UpdateAdmissionInfo{},
-						},
-					})
-			},
+	reg := update.NewRegistry(&mockUpdateStore{
+		VisitUpdatesFunc: func(visitor func(updID string, updInfo *persistencespb.UpdateInfo)) {
+			visitor(
+				tv.UpdateID(),
+				&persistencespb.UpdateInfo{
+					Value: &persistencespb.UpdateInfo_Admission{
+						Admission: &persistencespb.UpdateAdmissionInfo{},
+					},
+				})
 		},
-		update.WithTotalLimit("<ns>", func(_ string, _ func(int)) (int, func()) {
-			return 0, func() {
-				closed = append(closed, "total")
-			}
-		}),
-		update.WithRegistrySizeLimit("<ns>", func(_ string, _ func(int)) (int, func()) {
-			return 0, func() {
-				closed = append(closed, "size")
-			}
-		}),
-		update.WithInFlightLimit("<ns>", func(_ string, _ func(int)) (int, func()) {
-			return 0, func() {
-				closed = append(closed, "inflight")
-			}
-		}))
+	})
 
 	upd := reg.Find(context.Background(), tv.UpdateID())
 	require.NotNil(t, upd)
@@ -713,10 +689,7 @@ func TestClear(t *testing.T) {
 	reg.Clear()
 	wg.Wait()
 
-	require.Equal(t, reg.Len(), 0,
-		"registry should be cleared")
-	require.Equal(t, closed, []string{"total", "size", "inflight"},
-		"all dynamic config subscribers should be closed")
+	require.Equal(t, reg.Len(), 0, "registry should be cleared")
 }
 
 func TestFailoverVersion(t *testing.T) {
@@ -825,10 +798,7 @@ func TestTryResurrect(t *testing.T) {
 		reg := update.NewRegistry(
 			emptyUpdateStore,
 			update.WithInFlightLimit(
-				"<ns>",
-				func(_ string, callback func(int)) (int, func()) {
-					return 1, func() {}
-				},
+				func() int { return 1 },
 			),
 		)
 		msg := &protocolpb.Message{Body: MarshalAny(t, &updatepb.Acceptance{
@@ -844,10 +814,7 @@ func TestTryResurrect(t *testing.T) {
 		reg := update.NewRegistry(
 			emptyUpdateStore,
 			update.WithTotalLimit(
-				"<ns>",
-				func(_ string, _ func(int)) (int, func()) {
-					return 1, func() {}
-				},
+				func() int { return 1 },
 			),
 		)
 

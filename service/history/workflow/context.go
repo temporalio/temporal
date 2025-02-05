@@ -167,8 +167,6 @@ type (
 		lock           locks.PrioritySemaphore
 		MutableState   MutableState
 		updateRegistry update.Registry
-
-		onClose []func()
 	}
 )
 
@@ -987,15 +985,28 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 	}
 
 	if c.updateRegistry == nil {
-		ns := c.MutableState.GetNamespaceEntry().Name()
+		nsIDStr := c.MutableState.GetNamespaceEntry().ID().String()
+
 		c.updateRegistry = update.NewRegistry(
 			c.MutableState,
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
-			update.WithInFlightLimit(ns, c.config.WorkflowExecutionMaxInFlightUpdates),
-			update.WithRegistrySizeLimit(ns, c.config.WorkflowExecutionMaxInFlightUpdatePayloads),
-			update.WithTotalLimit(ns, c.config.WorkflowExecutionMaxTotalUpdates),
+			update.WithInFlightLimit(
+				func() int {
+					return c.config.WorkflowExecutionMaxInFlightUpdates(nsIDStr)
+				},
+			),
+			update.WithRegistrySizeLimit(
+				func() int {
+					return c.config.WorkflowExecutionMaxInFlightUpdatePayloads(nsIDStr)
+				},
+			),
+			update.WithTotalLimit(
+				func() int {
+					return c.config.WorkflowExecutionMaxTotalUpdates(nsIDStr)
+				},
+			),
 		)
 	}
 	return c.updateRegistry

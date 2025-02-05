@@ -367,9 +367,9 @@ type Config struct {
 	ArchivalBackendMaxRPS                               dynamicconfig.FloatPropertyFn
 	ArchivalQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 
-	WorkflowExecutionMaxInFlightUpdates        dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
-	WorkflowExecutionMaxInFlightUpdatePayloads dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
-	WorkflowExecutionMaxTotalUpdates           dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
+	WorkflowExecutionMaxInFlightUpdates        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxInFlightUpdatePayloads dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxTotalUpdates           dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -683,9 +683,9 @@ func NewConfig(
 		ArchivalQueueMaxReaderCount:                         dynamicconfig.ArchivalQueueMaxReaderCount.Get(dc),
 
 		// workflow update related
-		WorkflowExecutionMaxInFlightUpdates:        dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Subscribe(dc),
-		WorkflowExecutionMaxInFlightUpdatePayloads: dynamicconfig.WorkflowExecutionMaxInFlightUpdatePayloads.Subscribe(dc),
-		WorkflowExecutionMaxTotalUpdates:           dynamicconfig.WorkflowExecutionMaxTotalUpdates.Subscribe(dc),
+		WorkflowExecutionMaxInFlightUpdates:        dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
+		WorkflowExecutionMaxInFlightUpdatePayloads: dynamicconfig.WorkflowExecutionMaxInFlightUpdatePayloads.Get(dc),
+		WorkflowExecutionMaxTotalUpdates:           dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
 
 		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
