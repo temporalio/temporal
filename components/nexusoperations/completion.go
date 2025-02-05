@@ -71,7 +71,7 @@ func handleUnsuccessfulOperationError(
 	if err != nil {
 		return err
 	}
-	failure, err := commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError)
+	failure, err := commonnexus.OperationErrorToTemporalFailure(opFailedError)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func handleUnsuccessfulOperationError(
 func fabricateStartedEventIfMissing(
 	node *hsm.Node,
 	requestID string,
-	operationID string,
+	operationToken string,
 	startTime *timestamppb.Timestamp,
 	links []*commonpb.Link,
 ) error {
@@ -132,14 +132,16 @@ func fabricateStartedEventIfMissing(
 			return err
 		}
 
-		operation.OperationId = operationID
+		operation.OperationToken = operationToken
 
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
 			e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 					ScheduledEventId: eventID,
-					OperationId:      operationID,
-					RequestId:        requestID,
+					OperationToken:   operationToken,
+					// TODO(bergundy): Remove this fallback after the 1.27 release.
+					OperationId: operationToken,
+					RequestId:   requestID,
 				},
 			}
 			e.Links = links
@@ -165,7 +167,7 @@ func CompletionHandler(
 	env hsm.Environment,
 	ref hsm.Ref,
 	requestID string,
-	operationID string,
+	operationToken string,
 	startTime *timestamppb.Timestamp,
 	links []*commonpb.Link,
 	result *commonpb.Payload,
@@ -178,7 +180,7 @@ func CompletionHandler(
 		if err := node.CheckRunning(); err != nil {
 			return serviceerror.NewNotFound("operation not found")
 		}
-		if err := fabricateStartedEventIfMissing(node, requestID, operationID, startTime, links); err != nil {
+		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
 			return err
 		}
 		operation, err := hsm.MachineData[Operation](node)
@@ -205,7 +207,7 @@ func CompletionHandler(
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
 		// Try again without a run ID in case the original run was reset.
 		ref.WorkflowKey.RunID = ""
-		return CompletionHandler(ctx, env, ref, requestID, operationID, startTime, links, result, opFailedError)
+		return CompletionHandler(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
 	}
 	return err
 }
