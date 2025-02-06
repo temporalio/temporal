@@ -108,12 +108,14 @@ message StartWorkflowExecutionRequest {
     // If set, takes precedence over the Versioning Behavior sent by the SDK on Workflow Task completion.
     // To unset the override after the workflow is running, use UpdateWorkflowExecutionOptions.
     temporal.api.workflow.v1.VersioningOverride versioning_override = 13;
+    // If set, we verify the parent-child relationship before applying ID conflict policy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+    bool child_workflow_only = 14;
 }
 
 message StartWorkflowExecutionResponse {
     string run_id = 1;
     temporal.server.api.clock.v1.VectorClock clock = 2;
-    // Set if request_eager_execution is set on the start request 
+    // Set if request_eager_execution is set on the start request
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse eager_workflow_task = 3;
     bool started = 4;
 }
