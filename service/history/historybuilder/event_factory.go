@@ -99,6 +99,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		attributes.ParentWorkflowExecution = parentInfo.Execution
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 		attributes.ParentInitiatedEventVersion = parentInfo.InitiatedVersion
+		attributes.ParentPinnedWorkerDeploymentVersion = parentInfo.PinnedWorkerDeploymentVersion
 	}
 
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
@@ -158,6 +159,7 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
+	deploymentName string,
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
@@ -175,6 +177,7 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 			WorkerVersion:           workerVersionStamp,
 			SdkMetadata:             sdkMetadata,
 			MeteringMetadata:        meteringMetadata,
+			WorkerDeploymentName:    deploymentName,
 			WorkerDeploymentVersion: dv,
 			VersioningBehavior:      behavior,
 		},
