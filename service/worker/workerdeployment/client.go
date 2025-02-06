@@ -281,27 +281,25 @@ func (d *ClientImpl) DescribeVersion(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 			},
-			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
+			Query:                &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 
 	res, err := d.historyClient.QueryWorkflow(ctx, req)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			return nil, serviceerror.NewNotFound("Worker Deployment Version not found")
-		}
 		return nil, err
+	}
+
+	// on closed workflows, the response is empty.
+	if res.GetResponse().GetQueryResult() == nil {
+		return nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 	}
 
 	var queryResponse deploymentspb.QueryDescribeVersionResponse
 	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
 		return nil, err
-	}
-
-	if queryResponse.GetVersionState().Closed {
-		return nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 	}
 
 	return versionStateToVersionInfo(queryResponse.VersionState), nil
@@ -381,14 +379,18 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: deploymentWorkflowID,
 			},
-			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
+			Query:                &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 
-	// todo (Shivam): Querying completed/done workflows should not work.
 	res, err := d.historyClient.QueryWorkflow(ctx, req)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if res.GetResponse().GetQueryResult() == nil {
+		return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
 	}
 
 	var queryResponse deploymentspb.QueryDescribeWorkerDeploymentResponse
@@ -399,10 +401,6 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 			return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
 		}
 		return nil, nil, err
-	}
-
-	if queryResponse.GetState().Closed {
-		return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
 	}
 
 	dInfo, err := d.deploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)

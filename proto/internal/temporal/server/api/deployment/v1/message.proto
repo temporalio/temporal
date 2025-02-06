@@ -115,7 +115,6 @@ message VersionLocalState {
         map<int32, TaskQueueVersionData> task_queues = 1;
     }
 
-    bool closed = 11;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -150,7 +149,6 @@ message WorkerDeploymentLocalState {
     // TODO (Shivam) - Removal of registered versions based on the above conditions.
     repeated string versions = 3;
     bytes conflict_token = 4;
-    bool closed = 5;
 }
 
 // used as Worker Deployment Version workflow update input:
