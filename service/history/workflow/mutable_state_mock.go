@@ -2863,6 +2863,20 @@ func (mr *MockMutableStateMockRecorder) IsStickyTaskQueueSet() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStickyTaskQueueSet", reflect.TypeOf((*MockMutableState)(nil).IsStickyTaskQueueSet))
 }
 
+// IsSubStateMachineDeleted mocks base method.
+func (m *MockMutableState) IsSubStateMachineDeleted() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsSubStateMachineDeleted")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsSubStateMachineDeleted indicates an expected call of IsSubStateMachineDeleted.
+func (mr *MockMutableStateMockRecorder) IsSubStateMachineDeleted() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSubStateMachineDeleted", reflect.TypeOf((*MockMutableState)(nil).IsSubStateMachineDeleted))
+}
+
 // IsTransientWorkflowTask mocks base method.
 func (m *MockMutableState) IsTransientWorkflowTask() bool {
 	m.ctrl.T.Helper()

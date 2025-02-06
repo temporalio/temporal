@@ -463,5 +463,6 @@ type (
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
 
 		DeleteSubStateMachine(path *persistencespb.StateMachinePath) error
+		IsSubStateMachineDeleted() bool
 	}
 )

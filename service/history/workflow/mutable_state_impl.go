@@ -239,14 +239,15 @@ type (
 		workflowTaskManager *workflowTaskStateMachine
 		QueryRegistry       QueryRegistry
 
-		shard            shard.Context
-		clusterMetadata  cluster.Metadata
-		eventsCache      events.Cache
-		config           *configs.Config
-		timeSource       clock.TimeSource
-		logger           log.Logger
-		metricsHandler   metrics.Handler
-		stateMachineNode *hsm.Node
+		shard                  shard.Context
+		clusterMetadata        cluster.Metadata
+		eventsCache            events.Cache
+		config                 *configs.Config
+		timeSource             clock.TimeSource
+		logger                 log.Logger
+		metricsHandler         metrics.Handler
+		stateMachineNode       *hsm.Node
+		subStateMachineDeleted bool
 
 		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
 		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
@@ -4336,9 +4337,9 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAdmittedEvent(request *upd
 }
 
 func (ms *MutableStateImpl) DeleteSubStateMachine(path *persistencespb.StateMachinePath) error {
-	incomingPath := []hsm.Key{}
-	for _, p := range path.Path {
-		incomingPath = append(incomingPath, hsm.Key{Type: p.Type, ID: p.Id})
+	incomingPath := make([]hsm.Key, len(path.Path))
+	for i, p := range path.Path {
+		incomingPath[i] = hsm.Key{Type: p.Type, ID: p.Id}
 	}
 
 	root := ms.HSM()
@@ -4347,15 +4348,15 @@ func (ms *MutableStateImpl) DeleteSubStateMachine(path *persistencespb.StateMach
 		if !errors.Is(err, hsm.ErrStateMachineNotFound) {
 			return err
 		}
-		ms.logError(
-			fmt.Sprintf("unable to find path: %v in subStateMachine", incomingPath),
-			tag.ErrorTypeInvalidMutableStateAction,
-		)
-		// log data inconsistency instead of returning an error
-		ms.logDataInconsistency()
+		// node is already deleted.
 		return nil
 	}
-	return root.DeleteChild(node.Key)
+	err = node.Parent.DeleteChild(node.Key)
+	if err != nil {
+		return err
+	}
+	ms.subStateMachineDeleted = true
+	return nil
 }
 
 // ApplyWorkflowExecutionUpdateAdmittedEvent applies a WorkflowExecutionUpdateAdmittedEvent to mutable state.
@@ -7554,4 +7555,8 @@ func (ms *MutableStateImpl) AddReapplyCandidateEvent(event *historypb.HistoryEve
 
 func (ms *MutableStateImpl) GetReapplyCandidateEvents() []*historypb.HistoryEvent {
 	return ms.reapplyEventsCandidate
+}
+
+func (ms *MutableStateImpl) IsSubStateMachineDeleted() bool {
+	return ms.subStateMachineDeleted
 }
