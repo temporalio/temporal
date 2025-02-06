@@ -89,7 +89,7 @@ type (
 		fxApps []*fx.App
 
 		// This is used to wait for namespace registries to have noticed a change in some xdc tests.
-		frontendNamespaceRegistries []namespace.Registry
+		namespaceRegistries []namespace.Registry
 		// Address for SDK to connect to, using membership grpc resolver.
 		frontendMembershipAddress string
 
@@ -315,8 +315,8 @@ func (c *TemporalImpl) DcClient() *dynamicconfig.MemoryClient {
 	return c.dcClient
 }
 
-func (c *TemporalImpl) FrontendNamespaceRegistries() []namespace.Registry {
-	return c.frontendNamespaceRegistries
+func (c *TemporalImpl) NamespaceRegistries() []namespace.Registry {
+	return c.namespaceRegistries
 }
 
 func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
@@ -395,7 +395,7 @@ func (c *TemporalImpl) startFrontend() {
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		c.frontendNamespaceRegistries = append(c.frontendNamespaceRegistries, namespaceRegistry)
+		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start frontend service", tag.Error(err))
@@ -420,6 +420,7 @@ func (c *TemporalImpl) startHistory() {
 	serviceName := primitives.HistoryService
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
+		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Supply(
@@ -461,12 +462,15 @@ func (c *TemporalImpl) startHistory() {
 			replication.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
+			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
 		if err != nil {
 			logger.Fatal("unable to construct history service", tag.Error(err))
 		}
 		c.fxApps = append(c.fxApps, app)
+		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
+
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start history service", tag.Error(err))
 		}
@@ -477,6 +481,7 @@ func (c *TemporalImpl) startMatching() {
 	serviceName := primitives.MatchingService
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
+		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Supply(
@@ -512,12 +517,14 @@ func (c *TemporalImpl) startMatching() {
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
+			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
 		if err != nil {
 			logger.Fatal("unable to start matching service", tag.Error(err))
 		}
 		c.fxApps = append(c.fxApps, app)
+		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start matching service", tag.Error(err))
 		}
@@ -539,6 +546,7 @@ func (c *TemporalImpl) startWorker() {
 	}
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
+		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Supply(
@@ -576,6 +584,7 @@ func (c *TemporalImpl) startWorker() {
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
+			fx.Populate(&namespaceRegistry),
 		)
 		err := app.Err()
 		if err != nil {
@@ -583,6 +592,7 @@ func (c *TemporalImpl) startWorker() {
 		}
 
 		c.fxApps = append(c.fxApps, app)
+		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start worker service", tag.Error(err))
 		}

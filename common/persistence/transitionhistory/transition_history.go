@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,19 +20,41 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package xdc
+package transitionhistory
 
 import (
-	"time"
-
-	"go.temporal.io/server/tests/testcore"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 )
 
-const (
-	numOfRetry        = 100
-	waitTimeInMs      = 400
-	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
-	// TODO (alex): remove 5s buffer. Refresh interval is 1s now.
-	cacheRefreshInterval = testcore.NamespaceCacheRefreshInterval + 5*time.Second
-	testTimeout          = 30 * time.Second
-)
+func CopyVersionedTransitions(
+	transitions []*persistencespb.VersionedTransition,
+) []*persistencespb.VersionedTransition {
+	if transitions == nil {
+		return nil
+	}
+	copied := make([]*persistencespb.VersionedTransition, len(transitions))
+	for i, t := range transitions {
+		copied[i] = CopyVersionedTransition(t)
+	}
+	return copied
+}
+
+func CopyVersionedTransition(
+	transition *persistencespb.VersionedTransition,
+) *persistencespb.VersionedTransition {
+	if transition == nil {
+		return nil
+	}
+	return common.CloneProto(transition)
+}
+
+func LastVersionedTransition(
+	transitions []*persistencespb.VersionedTransition,
+) *persistencespb.VersionedTransition {
+	if len(transitions) == 0 {
+		// transition history is not enabled
+		return nil
+	}
+	return transitions[len(transitions)-1]
+}

@@ -211,7 +211,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	worker1.Stop()
 
 	// failover to standby cluster
-	s.failover(ns, s.clusterNames[1], int64(2), s.cluster1.FrontendClient())
+	s.failover(ns, 0, s.clusterNames[1], 2)
 
 	// get standby client
 	standbyClient, err := sdkclient.Dial(sdkclient.Options{

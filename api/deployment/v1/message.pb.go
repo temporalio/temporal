@@ -2417,10 +2417,9 @@ type AddVersionToWorkerDeploymentRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	DeploymentName string `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	// <deployment_name>/<build_id> or possibly just <version_id> in the future
-	UpdateArgs *AddVersionUpdateArgs `protobuf:"bytes,2,opt,name=update_args,json=updateArgs,proto3" json:"update_args,omitempty"`
-	RequestId  string                `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	DeploymentName string                `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
+	UpdateArgs     *AddVersionUpdateArgs `protobuf:"bytes,2,opt,name=update_args,json=updateArgs,proto3" json:"update_args,omitempty"`
+	RequestId      string                `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 }
 
 func (x *AddVersionToWorkerDeploymentRequest) Reset() {

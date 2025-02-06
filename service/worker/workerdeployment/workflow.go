@@ -26,7 +26,6 @@ package workerdeployment
 
 import (
 	"bytes"
-	"fmt"
 	"slices"
 
 	"github.com/pborman/uuid"
@@ -187,6 +186,11 @@ func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampin
 	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
+	}
+	if args.Version != "" && args.Version != worker_versioning.UnversionedVersionId &&
+		!slices.ContainsFunc(d.State.Versions, func(v *deploymentspb.WorkerDeploymentVersionSummary) bool { return v.Version == args.Version }) {
+		d.logger.Info("version not found in deployment")
+		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
 
 	return nil
@@ -361,6 +365,11 @@ func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersio
 	if d.State.RoutingConfig.CurrentVersion == args.Version {
 		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
+	if args.Version != worker_versioning.UnversionedVersionId &&
+		!slices.ContainsFunc(d.State.Versions, func(v *deploymentspb.WorkerDeploymentVersionSummary) bool { return v.Version == args.Version }) {
+		d.logger.Info("version not found in deployment")
+		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
+	}
 	return nil
 }
 
@@ -477,7 +486,6 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(args *deploymentsp
 	return nil
 }
 
-// todo: make this update take an args struct
 func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
 	d.pendingUpdates++
 	defer func() {
@@ -514,10 +522,9 @@ func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 		return 0
 	})
 	for _, v := range d.State.Versions {
-		fmt.Printf("CARLY: TRYING TO DELETE VERSION %s\n\n\n", v.Version)
 		// this might hang on the lock
 		err := d.handleDeleteVersion(ctx, &deploymentspb.DeleteVersionArgs{
-			Identity: fmt.Sprintf("try-delete-for-add-version-%s", v.Version),
+			Identity: "try-delete-for-add-version",
 			Version:  v.Version,
 		})
 		if err == nil {
