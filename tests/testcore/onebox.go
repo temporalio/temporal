@@ -152,9 +152,8 @@ type (
 
 	// WorkerConfig is the config for the worker service
 	WorkerConfig struct {
-		EnableReplicator bool
-		NumWorkers       int
-		DisableWorker    bool // overrides NumWorkers
+		NumWorkers    int
+		DisableWorker bool // overrides NumWorkers
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -540,9 +539,6 @@ func (c *TemporalImpl) startWorker() {
 		MasterClusterName:        c.clusterMetadataConfig.MasterClusterName,
 		CurrentClusterName:       c.clusterMetadataConfig.CurrentClusterName,
 		ClusterInformation:       maps.Clone(c.clusterMetadataConfig.ClusterInformation),
-	}
-	if c.workerConfig.EnableReplicator {
-		clusterConfigCopy.EnableGlobalNamespace = true
 	}
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {

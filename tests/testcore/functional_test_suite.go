@@ -29,6 +29,7 @@ import (
 )
 
 type (
+	// TODO (alex): merge this with FunctionalTestBase.
 	FunctionalTestSuite struct {
 		FunctionalTestBase
 
