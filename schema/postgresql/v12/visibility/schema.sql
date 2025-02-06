@@ -44,9 +44,9 @@ CREATE TABLE executions_visibility (
   TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'TemporalNamespaceDivision')               STORED,
   BuildIds                      JSONB         GENERATED ALWAYS AS (search_attributes->'BuildIds')                                 STORED,
   TemporalPauseInfo             JSONB         GENERATED ALWAYS AS (search_attributes->'TemporalPauseInfo')                        STORED,
-  TemporalWorkerDeploymentVersion    JSONB    GENERATED ALWAYS AS (search_attributes->>'TemporalWorkerDeploymentVersion')          STORED,
-  TemporalWorkflowVersioningBehavior JSONB    GENERATED ALWAYS AS (search_attributes->>'TemporalWorkflowVersioningBehavior')       STORED,
-  TemporalWorkerDeployment           JSONB    GENERATED ALWAYS AS (search_attributes->>'TemporalWorkerDeployment')                 STORED,
+  TemporalWorkerDeploymentVersion    VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalWorkerDeploymentVersion')          STORED,
+  TemporalWorkflowVersioningBehavior VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalWorkflowVersioningBehavior')       STORED,
+  TemporalWorkerDeployment           VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>'TemporalWorkerDeployment')                 STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool01')::boolean)        STORED,
