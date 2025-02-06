@@ -219,6 +219,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 
 	// Set a new second version and set it as the current version
 	go s.pollFromDeployment(ctx, secondVersion)
+	s.ensureCreateVersionInDeployment(secondVersion)
 	s.setCurrentVersion(ctx, secondVersion, firstVersion.DeploymentVersionString(), true, "")
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
