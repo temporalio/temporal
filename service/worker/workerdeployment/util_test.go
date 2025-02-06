@@ -113,19 +113,19 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 	}{
 		{
 			Description:   "Empty Field",
-			FieldName:     WorkerDeploymentFieldName,
+			FieldName:     WorkerDeploymentNameFieldName,
 			Input:         "",
-			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeployment cannot be empty"),
+			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeploymentName cannot be empty"),
 		},
 		{
 			Description:   "Large Field",
-			FieldName:     WorkerDeploymentFieldName,
+			FieldName:     WorkerDeploymentNameFieldName,
 			Input:         strings.Repeat("s", 1000),
-			ExpectedError: serviceerror.NewInvalidArgument("size of WorkerDeployment larger than the maximum allowed"),
+			ExpectedError: serviceerror.NewInvalidArgument("size of WorkerDeploymentName larger than the maximum allowed"),
 		},
 		{
 			Description:   "Valid field",
-			FieldName:     WorkerDeploymentFieldName,
+			FieldName:     WorkerDeploymentNameFieldName,
 			Input:         "A",
 			ExpectedError: nil,
 		},
@@ -136,6 +136,12 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 			ExpectedError: serviceerror.NewInvalidArgument("BuildID cannot start with '__'"),
 		},
 		{
+			Description:   "Invalid buildID",
+			FieldName:     WorkerDeploymentNameFieldName,
+			Input:         "__my_dep",
+			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeploymentName cannot start with '__'"),
+		},
+		{
 			Description:   "Valid buildID",
 			FieldName:     WorkerDeploymentBuildIDFieldName,
 			Input:         "valid_build__id",
@@ -143,9 +149,15 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 		},
 		{
 			Description:   "Invalid deploymentName",
-			FieldName:     WorkerDeploymentFieldName,
+			FieldName:     WorkerDeploymentNameFieldName,
 			Input:         "A/B",
-			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeployment cannot contain '/'"),
+			ExpectedError: nil,
+		},
+		{
+			Description:   "Invalid deploymentName",
+			FieldName:     WorkerDeploymentNameFieldName,
+			Input:         "A.B",
+			ExpectedError: serviceerror.NewInvalidArgument("worker deployment name cannot contain '.'"),
 		},
 	}
 

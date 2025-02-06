@@ -193,13 +193,14 @@ type ErrRegister struct{ error }
 
 // ClientImpl implements Client
 type ClientImpl struct {
-	logger                    log.Logger
-	historyClient             historyservice.HistoryServiceClient
-	visibilityManager         manager.VisibilityManager
-	matchingClient            resource.MatchingClient
-	maxIDLengthLimit          dynamicconfig.IntPropertyFn
-	visibilityMaxPageSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	maxTaskQueuesInDeployment dynamicconfig.IntPropertyFnWithNamespaceFilter
+	logger                           log.Logger
+	historyClient                    historyservice.HistoryServiceClient
+	visibilityManager                manager.VisibilityManager
+	matchingClient                   resource.MatchingClient
+	maxIDLengthLimit                 dynamicconfig.IntPropertyFn
+	visibilityMaxPageSize            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	maxTaskQueuesInDeploymentVersion dynamicconfig.IntPropertyFnWithNamespaceFilter
+	maxDeployments                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 var _ Client = (*ClientImpl)(nil)
@@ -221,7 +222,7 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInVersionArgs{
 		TaskQueueName: taskQueueName,
 		TaskQueueType: taskQueueType,
-		MaxTaskQueues: int32(d.maxTaskQueuesInDeployment(namespaceEntry.Name().String())),
+		MaxTaskQueues: int32(d.maxTaskQueuesInDeploymentVersion(namespaceEntry.Name().String())),
 	})
 	if err != nil {
 		return err
@@ -264,7 +265,7 @@ func (d *ClientImpl) DescribeVersion(
 	defer d.record("DescribeVersion", &retErr, deploymentName, buildID)()
 
 	// validate deployment name
-	err = validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +373,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	defer d.record("DescribeWorkerDeployment", &retErr, deploymentName)()
 
 	// validating params
-	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -485,7 +486,7 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName))
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +563,7 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -651,7 +652,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 		return err
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return err
 	}
@@ -695,7 +696,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 	defer d.record("DeleteWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
 
 	// validating params
-	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return err
 	}
@@ -708,7 +709,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 		return err
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return err
 	}
@@ -752,6 +753,15 @@ func (d *ClientImpl) StartWorkerDeployment(
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("StartWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
+
+	// TODO (Carly): either max page size or default page size is 1000, so if there are > 1000 this would not catch it
+	deps, _, err := d.ListWorkerDeployments(ctx, namespaceEntry, 0, nil)
+	if err != nil {
+		return err
+	}
+	if len(deps) >= d.maxDeployments(namespaceEntry.Name().String()) {
+		return serviceerror.NewFailedPrecondition("maximum deployments in namespace, delete manually to continue deploying.")
+	}
 
 	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
@@ -966,7 +976,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	identity string,
 	requestID string,
 ) (*updatepb.Outcome, error) {
-	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -1050,6 +1060,8 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyExistsType {
 		// pretend this is a success
 		return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
+	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("failed to add version %v to worker deployment %v with error %v", args.Version, deploymentName, failure.Message))
 	}
