@@ -26,13 +26,6 @@ import (
 	"net/http"
 )
 
-const (
-	// The Failure-Source header is used to indicate from where the Nexus failure originated.
-	nexusFailureSourceHeaderName = "Temporal-Nexus-Failure-Source"
-	// failureSourceWorker indicates the failure originated from outside the server (e.g. bad request or on the Nexus worker).
-	failureSourceWorker = "worker"
-)
-
 // nexusHTTPResponseWriter is a wrapper for http.ResponseWriter that appends headers set on a nexusContext
 // before writing any response.
 type nexusHTTPResponseWriter struct {

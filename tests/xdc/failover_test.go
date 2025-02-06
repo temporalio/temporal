@@ -90,7 +90,7 @@ func TestFuncClustersTestSuite(t *testing.T) {
 }
 
 func (s *FunctionalClustersTestSuite) SetupSuite() {
-	s.setupSuite([]string{"integ_active", "integ_standby"})
+	s.setupSuite()
 }
 
 func (s *FunctionalClustersTestSuite) SetupTest() {
@@ -2486,6 +2486,8 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)
 	s.NoError(err)
+
+	s.waitForClusterSynced()
 
 	// Verify all wf in ns is now available in cluster2
 	client2, _ := s.newClientAndWorker(s.cluster2.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker2")

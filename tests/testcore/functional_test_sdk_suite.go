@@ -41,6 +41,7 @@ import (
 )
 
 type (
+	// TODO (alex): merge this with FunctionalTestBase.
 	FunctionalTestSdkSuite struct {
 		FunctionalTestBase
 
@@ -50,6 +51,7 @@ type (
 	}
 )
 
+// TODO (alex): move this to test_data_converter.go where it is actually used.
 var (
 	ErrEncodingIsNotSet       = errors.New("payload encoding metadata is not set")
 	ErrEncodingIsNotSupported = errors.New("payload encoding is not supported")
@@ -81,7 +83,7 @@ func (s *FunctionalTestSdkSuite) SetupSuite() {
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 
-	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/client_cluster.yaml", WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/es_cluster.yaml", WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *FunctionalTestSdkSuite) SetupTest() {

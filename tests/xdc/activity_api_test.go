@@ -65,7 +65,7 @@ func (s *ActivityApiStateReplicationSuite) SetupSuite() {
 	}
 	s.dynamicConfigOverrides[dynamicconfig.ActivityAPIsEnabled.Key()] = true
 
-	s.setupSuite([]string{"active", "standby"})
+	s.setupSuite()
 }
 
 func (s *ActivityApiStateReplicationSuite) SetupTest() {

@@ -428,6 +428,8 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
 		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
 		currentWorkflowStartTime,
+		s.request.ParentExecutionInfo,
+		s.request.ChildWorkflowOnly,
 	)
 
 	switch {

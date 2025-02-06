@@ -38,6 +38,7 @@ import (
 
 const (
 	WorkflowName = "temporal-sys-delete-executions-workflow"
+	StatsQuery   = "stats"
 )
 
 type (
@@ -46,16 +47,33 @@ type (
 		NamespaceID namespace.ID
 		Config      DeleteExecutionsConfig
 
+		// Number of Workflow Executions to delete. Used in statistics computation.
+		// If not specified, then statistics are partially computed.
+		TotalExecutionsCount int
+
 		// To carry over progress results with ContinueAsNew.
 		PreviousSuccessCount int
 		PreviousErrorCount   int
 		ContinueAsNewCount   int
 		NextPageToken        []byte
+		// Time when the first run (in a chain of CANs) of DeleteExecutionsWorkflow has started.
+		FirstRunStartTime time.Time
 	}
 
 	DeleteExecutionsResult struct {
 		SuccessCount int
 		ErrorCount   int
+	}
+
+	DeleteExecutionsStats struct {
+		DeleteExecutionsResult
+		ContinueAsNewCount       int
+		TotalExecutionsCount     int
+		RemainingExecutionsCount int
+		AverageRPS               int
+		StartTime                time.Time
+		ApproximateTimeLeft      time.Duration
+		ApproximateEndTime       time.Time
 	}
 )
 
@@ -78,12 +96,15 @@ var (
 	}
 )
 
-func validateParams(params *DeleteExecutionsParams) error {
+func validateParams(ctx workflow.Context, params *DeleteExecutionsParams) error {
 	if params.NamespaceID.IsEmpty() {
 		return errors.NewInvalidArgument("namespace ID is required", nil)
 	}
 	if params.Namespace.IsEmpty() {
 		return errors.NewInvalidArgument("namespace is required", nil)
+	}
+	if params.FirstRunStartTime.IsZero() {
+		params.FirstRunStartTime = workflow.Now(ctx).UTC()
 	}
 	params.Config.ApplyDefaults()
 	return nil
@@ -102,10 +123,34 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		ErrorCount:   params.PreviousErrorCount,
 	}
 
-	if err := validateParams(&params); err != nil {
+	if err := validateParams(ctx, &params); err != nil {
 		return result, err
 	}
 	logger.Info("Effective config.", tag.Value(params.Config.String()))
+
+	if err := workflow.SetQueryHandler(ctx, StatsQuery, func() (DeleteExecutionsStats, error) {
+		now := workflow.Now(ctx).UTC()
+		des := DeleteExecutionsStats{
+			DeleteExecutionsResult: result,
+			ContinueAsNewCount:     params.ContinueAsNewCount,
+			TotalExecutionsCount:   params.TotalExecutionsCount,
+			StartTime:              params.FirstRunStartTime,
+		}
+		if params.TotalExecutionsCount > 0 {
+			des.RemainingExecutionsCount = params.TotalExecutionsCount - (result.SuccessCount + result.ErrorCount)
+		}
+		secondsSinceStart := int(now.Sub(params.FirstRunStartTime).Seconds())
+		if secondsSinceStart > 0 {
+			des.AverageRPS = (result.SuccessCount + result.ErrorCount) / secondsSinceStart
+		}
+		if des.AverageRPS > 0 {
+			des.ApproximateTimeLeft = time.Duration(des.RemainingExecutionsCount/des.AverageRPS) * time.Second
+		}
+		des.ApproximateEndTime = now.Add(des.ApproximateTimeLeft)
+		return des, nil
+	}); err != nil {
+		return result, err
+	}
 
 	var a *Activities
 	var la *LocalActivities

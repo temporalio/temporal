@@ -112,15 +112,14 @@ type (
 		updates map[string]*Update
 		// A store from which Registry is constructed with NewRegistry function,
 		// and completed Updates are loaded. Practically it is a Mutable State.
-		store UpdateStore
-
-		instrumentation instrumentation
+		store           UpdateStore
 		completedCount  int
 		failoverVersion int64
+		instrumentation instrumentation
 
-		maxInFlight                           func() int
 		maxTotal                              func() int
-		maxRegistrySizeLimit                  func() int
+		maxInFlightUpdateCount                func() int
+		maxInFlightUpdateSize                 func() int
 		maxTotalSuggestContinueAsNew          func() int
 		maxTotalSuggestContinueAsNewThreshold func() float64
 	}
@@ -134,15 +133,15 @@ var _ Registry = (*registry)(nil)
 // Updates that a Registry instance will allow.
 func WithInFlightLimit(f func() int) Option {
 	return func(r *registry) {
-		r.maxInFlight = f
+		r.maxInFlightUpdateCount = f
 	}
 }
 
-// WithRegistrySizeLimit provides an optional limit to the total payload size of incomplete
+// WithInFlightSizeLimit provides an optional limit to the total payload size of incomplete
 // Updates that a Registry instance will allow.
-func WithRegistrySizeLimit(f func() int) Option {
+func WithInFlightSizeLimit(f func() int) Option {
 	return func(r *registry) {
-		r.maxRegistrySizeLimit = f
+		r.maxInFlightUpdateSize = f
 	}
 }
 
@@ -191,11 +190,11 @@ func NewRegistry(
 		updates:                               make(map[string]*Update),
 		store:                                 store,
 		instrumentation:                       noopInstrumentation,
-		maxRegistrySizeLimit:                  func() int { return 0 },     // ie disabled
-		maxInFlight:                           func() int { return 0 },     // ie disabled
-		maxTotal:                              func() int { return 0 },     // ie disabled
-		maxTotalSuggestContinueAsNewThreshold: func() float64 { return 0 }, // ie disabled
 		failoverVersion:                       store.GetCurrentVersion(),
+		maxTotal:                              func() int { return 0 },     // ie disabled
+		maxInFlightUpdateSize:                 func() int { return 0 },     // ie disabled
+		maxInFlightUpdateCount:                func() int { return 0 },     // ie disabled
+		maxTotalSuggestContinueAsNewThreshold: func() float64 { return 0 }, // ie disabled
 	}
 	r.maxTotalSuggestContinueAsNew = func() int {
 		return int(math.Ceil(float64(r.maxTotal()) * r.maxTotalSuggestContinueAsNewThreshold()))
@@ -407,14 +406,14 @@ func (r *registry) remover(id string) updateOpt {
 }
 
 func (r *registry) checkLimits() error {
-	if err := r.checkInflightLimit(); err != nil {
+	if err := r.checkInFlightLimit(); err != nil {
 		return err
 	}
 	return r.checkTotalLimit()
 }
 
-func (r *registry) checkInflightLimit() error {
-	maxInFlight := r.maxInFlight()
+func (r *registry) checkInFlightLimit() error {
+	maxInFlight := r.maxInFlightUpdateCount()
 	if maxInFlight == 0 {
 		// limit is disabled
 		return nil
@@ -433,16 +432,20 @@ func (r *registry) checkInflightLimit() error {
 func (r *registry) payloadSizeLimiter() updateOpt {
 	return withLimitChecker(
 		func(req *updatepb.Request) error {
-			maxRegistrySize := r.maxRegistrySizeLimit()
-			if maxRegistrySize == 0 {
+			maxInFlightUpdateSize := r.maxInFlightUpdateSize()
+			if maxInFlightUpdateSize == 0 {
 				// limit is disabled
 				return nil
 			}
 			registrySize := r.GetSize()
 			payloadBytes := req.Size()
-			if registrySize+payloadBytes >= maxRegistrySize {
+			if registrySize+payloadBytes >= maxInFlightUpdateSize {
 				r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes)
-				// TODO: return serviceerror.ResourceExhausted
+				return &serviceerror.ResourceExhausted{
+					Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+					Message: fmt.Sprintf("limit on total payload size of in-flight updates has been reached (%v bytes)", maxInFlightUpdateSize),
+				}
 			}
 			return nil
 		},
