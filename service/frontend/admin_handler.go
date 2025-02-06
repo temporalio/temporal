@@ -1890,7 +1890,7 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 				if errors.As(err, &solErr) || errors.As(err, &suErr) {
 					ctx, cl := context.WithTimeout(context.Background(), 2*time.Second)
 					// getShard here to make sure we will talk to correct host when stream is retrying
-					_, err := adh.historyClient.GetShard(ctx, &historyservice.GetShardRequest{ShardId: serverClusterShardID.ShardID})
+					_, err := adh.historyClient.DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{ShardId: serverClusterShardID.ShardID})
 					if err != nil {
 						logger.Error("failed to get shard", tag.Error(err))
 					}

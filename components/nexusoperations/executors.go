@@ -227,7 +227,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 			result = &nexus.ClientStartOperationResult[*commonpb.Payload]{
 				Pending: &nexus.OperationHandle[*commonpb.Payload]{
 					Operation: rawResult.Pending.Operation,
-					ID:        rawResult.Pending.ID,
+					Token:     rawResult.Pending.Token,
 				},
 				Links: rawResult.Links,
 			}
@@ -367,8 +367,10 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 				e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 					NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 						ScheduledEventId: eventID,
-						OperationId:      result.Pending.ID,
-						RequestId:        operation.RequestId,
+						OperationToken:   result.Pending.Token,
+						// TODO(bergundy): Remove this fallback after the 1.27 release.
+						OperationId: result.Pending.Token,
+						RequestId:   operation.RequestId,
 					},
 				}
 				// nolint:revive // We must mutate here even if the linter doesn't like it.
@@ -389,12 +391,12 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
 	var handlerErr *nexus.HandlerError
-	var opFailedErr *nexus.UnsuccessfulOperationError
+	var opFailedErr *nexus.OperationError
 
 	if errors.As(callErr, &opFailedErr) {
 		return handleUnsuccessfulOperationError(node, operation, opFailedErr)
 	} else if errors.As(callErr, &handlerErr) {
-		if !isRetryableHandlerError(handlerErr.Type) {
+		if !handlerErr.Retryable() {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 			// Although Failure is nullable, Nexus SDK is expected to always populate this field
 			return handleNonRetryableStartOperationError(node, operation, handlerErr)
@@ -523,7 +525,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	if err != nil {
 		return fmt.Errorf("failed to get client: %w", err)
 	}
-	handle, err := client.NewHandle(args.operation, args.operationID)
+	handle, err := client.NewHandle(args.operation, args.token)
 	if err != nil {
 		return fmt.Errorf("failed to get handle for operation: %w", err)
 	}
@@ -565,9 +567,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 }
 
 type cancelArgs struct {
-	service, operation, operationID, endpointID, endpointName string
-	scheduledTime                                             time.Time
-	scheduleToCloseTimeout                                    time.Duration
+	service, operation, token, endpointID, endpointName string
+	scheduledTime                                       time.Time
+	scheduleToCloseTimeout                              time.Duration
 }
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
@@ -585,7 +587,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 
 		args.service = op.Service
 		args.operation = op.Operation
-		args.operationID = op.OperationId
+		args.token = op.OperationToken
 		args.endpointID = op.EndpointId
 		args.endpointName = op.Endpoint
 		args.scheduledTime = op.ScheduledTime.AsTime()
@@ -600,7 +602,7 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
 				var handlerErr *nexus.HandlerError
-				isRetryable := !errors.Is(callErr, ErrOperationTimeoutBelowMin) && (!errors.As(callErr, &handlerErr) || isRetryableHandlerError(handlerErr.Type))
+				isRetryable := !errors.Is(callErr, ErrOperationTimeoutBelowMin) && (!errors.As(callErr, &handlerErr) || handlerErr.Retryable())
 				failure, err := callErrToFailure(callErr, isRetryable)
 				if err != nil {
 					return hsm.TransitionOutput{}, err
@@ -658,10 +660,12 @@ func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *f
 		Message: "nexus operation completed unsuccessfully",
 		FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
 			NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
-				Endpoint:         operation.Endpoint,
-				Service:          operation.Service,
-				Operation:        operation.Operation,
-				OperationId:      operation.OperationId,
+				Endpoint:       operation.Endpoint,
+				Service:        operation.Service,
+				Operation:      operation.Operation,
+				OperationToken: operation.OperationToken,
+				// TODO(bergundy): This field is deprecated, remove it after the 1.27 release.
+				OperationId:      operation.OperationToken,
 				ScheduledEventId: scheduledEventID,
 			},
 		},
@@ -671,7 +675,7 @@ func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *f
 
 func startCallOutcomeTag(callCtx context.Context, result *nexus.ClientStartOperationResult[*nexus.LazyValue], callErr error) string {
 	var handlerError *nexus.HandlerError
-	var opFailedError *nexus.UnsuccessfulOperationError
+	var opFailedError *nexus.OperationError
 
 	if callErr != nil {
 		if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
@@ -710,34 +714,14 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 	return "successful"
 }
 
-func isRetryableHandlerError(eType nexus.HandlerErrorType) bool {
-	switch eType {
-	case nexus.HandlerErrorTypeResourceExhausted,
-		nexus.HandlerErrorTypeInternal,
-		nexus.HandlerErrorTypeUnavailable,
-		nexus.HandlerErrorTypeUpstreamTimeout:
-		return true
-	case nexus.HandlerErrorTypeBadRequest,
-		nexus.HandlerErrorTypeUnauthenticated,
-		nexus.HandlerErrorTypeUnauthorized,
-		nexus.HandlerErrorTypeNotFound,
-		nexus.HandlerErrorTypeNotImplemented:
-		return false
-	default:
-		// Default to retryable in case other error types are added in the future.
-		// It's better to retry than unexpectedly fail.
-		return true
-	}
-}
-
 func isDestinationDown(err error) bool {
 	var handlerError *nexus.HandlerError
-	var opFailedErr *nexus.UnsuccessfulOperationError
+	var opFailedErr *nexus.OperationError
 	if errors.As(err, &opFailedErr) {
 		return false
 	}
 	if errors.As(err, &handlerError) {
-		return isRetryableHandlerError(handlerError.Type)
+		return handlerError.Retryable()
 	}
 	if errors.Is(err, ErrResponseBodyTooLarge) {
 		return false
@@ -753,21 +737,12 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 	if errors.As(callErr, &handlerErr) {
 		failure := &failurepb.Failure{
 			Message: handlerErr.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					Type:         "NexusHandlerError",
-					NonRetryable: !retryable,
+			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+					Type: string(handlerErr.Type),
 				},
 			},
-			// TODO: Replace with the FailureInfo below once there are more SDKs that support NexusHandlerFailureInfo in
-			// the wild.
-			// FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
-			// 	NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-			// 		Type: string(handlerErr.Type),
-			// 	},
-			// },
 		}
-
 		var failureError *nexus.FailureError
 		if errors.As(handlerErr.Cause, &failureError) {
 			var err error

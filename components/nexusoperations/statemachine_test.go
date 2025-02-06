@@ -291,7 +291,7 @@ func TestCompleteFromAttempt(t *testing.T) {
 					Node: node,
 					Time: time.Now(),
 					Attributes: &historypb.NexusOperationStartedEventAttributes{
-						OperationId: "op-id",
+						OperationToken: "op-token",
 					},
 				})
 			},
@@ -299,7 +299,7 @@ func TestCompleteFromAttempt(t *testing.T) {
 				require.Equal(t, int32(1), op.Attempt)
 				require.NotNil(t, op.LastAttemptCompleteTime)
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
-				require.Equal(t, "op-id", op.OperationId)
+				require.Equal(t, "op-token", op.OperationToken)
 			},
 		},
 	}
@@ -359,7 +359,7 @@ func TestCompleteExternally(t *testing.T) {
 						Node: node,
 						Time: time.Now(),
 						Attributes: &historypb.NexusOperationStartedEventAttributes{
-							OperationId: "op-id",
+							OperationToken: "op-token",
 						},
 					})
 				}))
@@ -449,7 +449,7 @@ func TestCancel(t *testing.T) {
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 		Time: time.Now(),
 		Attributes: &historypb.NexusOperationStartedEventAttributes{
-			OperationId: "op-id",
+			OperationToken: "op-token",
 		},
 		Node: root,
 	})
@@ -473,7 +473,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 			Time: time.Now(),
 			Node: root,
 			Attributes: &historypb.NexusOperationStartedEventAttributes{
-				OperationId: "test-operation-id",
+				OperationToken: "test-operation-token",
 			},
 		})
 	}))
@@ -600,7 +600,7 @@ func TestCancelationBeforeStarted(t *testing.T) {
 			Time: time.Now(),
 			Node: root,
 			Attributes: &historypb.NexusOperationStartedEventAttributes{
-				OperationId: "test",
+				OperationToken: "test",
 			},
 		})
 	}))

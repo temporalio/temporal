@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/proto"
 )
@@ -176,13 +177,14 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 	if err, ok := err.(*p.CurrentWorkflowConditionFailedError); ok {
 		err.Msg = ""
 	}
-	s.Equal(&p.CurrentWorkflowConditionFailedError{
+	s.DeepEqual(&p.CurrentWorkflowConditionFailedError{
 		Msg:              "",
-		RequestID:        newSnapshot.ExecutionState.CreateRequestId,
+		RequestIDs:       newSnapshot.ExecutionState.RequestIds,
 		RunID:            newSnapshot.ExecutionState.RunId,
 		State:            newSnapshot.ExecutionState.State,
 		Status:           newSnapshot.ExecutionState.Status,
 		LastWriteVersion: lastWriteVersion,
+		StartTime:        timestamp.TimeValuePtr(newSnapshot.ExecutionState.StartTime),
 	}, err)
 
 	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
@@ -258,13 +260,14 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 	if err, ok := err.(*p.CurrentWorkflowConditionFailedError); ok {
 		err.Msg = ""
 	}
-	s.Equal(&p.CurrentWorkflowConditionFailedError{
+	s.DeepEqual(&p.CurrentWorkflowConditionFailedError{
 		Msg:              "",
-		RequestID:        prevSnapshot.ExecutionState.CreateRequestId,
+		RequestIDs:       prevSnapshot.ExecutionState.RequestIds,
 		RunID:            prevSnapshot.ExecutionState.RunId,
 		State:            prevSnapshot.ExecutionState.State,
 		Status:           prevSnapshot.ExecutionState.Status,
 		LastWriteVersion: prevLastWriteVersion,
+		StartTime:        timestamp.TimeValuePtr(prevSnapshot.ExecutionState.StartTime),
 	}, err)
 
 	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
