@@ -997,7 +997,7 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 					return c.config.WorkflowExecutionMaxInFlightUpdates(nsName)
 				},
 			),
-			update.WithRegistrySizeLimit(
+			update.WithInFlightSizeLimit(
 				func() int {
 					return c.config.WorkflowExecutionMaxInFlightUpdatePayloads(nsName)
 				},
