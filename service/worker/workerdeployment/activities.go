@@ -82,7 +82,7 @@ func (a *Activities) SyncUnversionedRamp(
 	}
 	var taskQueueSyncs []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData
 	for _, tqInfo := range currVersionInfo.GetTaskQueueInfos() {
-		// TODO: group by TQs by name and make only one sync req per name
+		// TODO (Carly): group by TQs by name and make only one sync req per name
 		taskQueueSyncs = append(taskQueueSyncs, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 			Name:  tqInfo.GetName(),
 			Types: []enumspb.TaskQueueType{tqInfo.GetType()},
