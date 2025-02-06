@@ -1007,6 +1007,11 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 					return c.config.WorkflowExecutionMaxTotalUpdates(nsName)
 				},
 			),
+			update.WithTotalLimitSuggestCAN(
+				func() float64 {
+					return c.config.WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold(nsName)
+				},
+			),
 		)
 	}
 	return c.updateRegistry

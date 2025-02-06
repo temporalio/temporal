@@ -4875,6 +4875,55 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarrie
   4 WorkflowTaskCompleted`, s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
 }
 
+func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_Suggestion() {
+	// setup CAN suggestion to be at 2nd Update
+	cleanup1 := s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 3)
+	defer cleanup1()
+	cleanup2 := s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold, 0.5)
+	defer cleanup2()
+
+	// start workflow
+	tv := testvars.New(s.T())
+	s.startWorkflow(tv)
+	_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	s.NoError(err)
+
+	// send Update #1 - no CAN suggested
+	tv1 := tv.WithUpdateIDNumber(1)
+	updateResultCh := s.sendUpdateNoError(tv1)
+	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv1,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.EqualHistoryEvents(`
+			  1 WorkflowExecutionStarted
+			  2 WorkflowTaskScheduled
+			  3 WorkflowTaskStarted {"SuggestContinueAsNew": false}
+  			  4 WorkflowTaskCompleted
+			  5 WorkflowTaskScheduled
+			  6 WorkflowTaskStarted {"SuggestContinueAsNew": false}`, task.History.Events)
+
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Messages: s.UpdateAcceptCompleteMessages(tv1, task.Messages[0]),
+			}, nil
+		})
+	s.NoError(err)
+	<-updateResultCh
+
+	// send Update #2 - CAN suggested
+	tv2 := tv.WithUpdateIDNumber(2)
+	updateResultCh = s.sendUpdateNoError(tv2)
+	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv2,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.EqualHistoryEventsSuffix(`
+			  WorkflowTaskStarted {"SuggestContinueAsNew": true}`, task.History.Events)
+
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Messages: s.UpdateAcceptCompleteMessages(tv2, task.Messages[0]),
+			}, nil
+		})
+	s.NoError(err)
+	<-updateResultCh
+}
+
 func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 	type multiopsResponseErr struct {
 		response *workflowservice.ExecuteMultiOperationResponse

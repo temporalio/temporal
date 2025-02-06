@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 
 	"go.opentelemetry.io/otel/trace"
@@ -113,12 +114,15 @@ type (
 		// and completed Updates are loaded. Practically it is a Mutable State.
 		store UpdateStore
 
-		instrumentation      instrumentation
-		maxInFlight          func() int
-		maxTotal             func() int
-		maxRegistrySizeLimit func() int
-		completedCount       int
-		failoverVersion      int64
+		instrumentation instrumentation
+		completedCount  int
+		failoverVersion int64
+
+		maxInFlight                           func() int
+		maxTotal                              func() int
+		maxRegistrySizeLimit                  func() int
+		maxTotalSuggestContinueAsNew          func() int
+		maxTotalSuggestContinueAsNewThreshold func() float64
 	}
 
 	Option func(*registry)
@@ -149,6 +153,14 @@ func WithTotalLimit(f func() int) Option {
 	}
 }
 
+// WithTotalLimitSuggestCAN provides an optional threshold for suggesting ContinueAsNew
+// when the total number of Updates reaches a certain percentage of the total limit.
+func WithTotalLimitSuggestCAN(f func() float64) Option {
+	return func(r *registry) {
+		r.maxTotalSuggestContinueAsNewThreshold = f
+	}
+}
+
 // WithLogger sets the log.Logger to be used by Registry and its Updates.
 func WithLogger(l log.Logger) Option {
 	return func(r *registry) {
@@ -176,13 +188,17 @@ func NewRegistry(
 	opts ...Option,
 ) Registry {
 	r := &registry{
-		updates:              make(map[string]*Update),
-		store:                store,
-		instrumentation:      noopInstrumentation,
-		maxRegistrySizeLimit: func() int { return 0 }, // ie disabled
-		maxInFlight:          func() int { return 0 }, // ie disabled
-		maxTotal:             func() int { return 0 }, // ie disabled
-		failoverVersion:      store.GetCurrentVersion(),
+		updates:                               make(map[string]*Update),
+		store:                                 store,
+		instrumentation:                       noopInstrumentation,
+		maxRegistrySizeLimit:                  func() int { return 0 },     // ie disabled
+		maxInFlight:                           func() int { return 0 },     // ie disabled
+		maxTotal:                              func() int { return 0 },     // ie disabled
+		maxTotalSuggestContinueAsNewThreshold: func() float64 { return 0 }, // ie disabled
+		failoverVersion:                       store.GetCurrentVersion(),
+	}
+	r.maxTotalSuggestContinueAsNew = func() int {
+		return int(math.Ceil(float64(r.maxTotal()) * r.maxTotalSuggestContinueAsNewThreshold()))
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -403,7 +419,7 @@ func (r *registry) checkInflightLimit() error {
 		// limit is disabled
 		return nil
 	}
-	if len(r.updates) >= maxInFlight {
+	if r.inFlightCount() >= maxInFlight {
 		r.instrumentation.countRateLimited()
 		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
@@ -491,6 +507,18 @@ func (r *registry) FailoverVersion() int64 {
 }
 
 func (r *registry) SuggestContinueAsNew() bool {
-	// TODO: implement me
+	suggestContinueAsNewThreshold := r.maxTotalSuggestContinueAsNew()
+	if suggestContinueAsNewThreshold == 0 {
+		// suggestion is disabled
+		return false
+	}
+	if r.inFlightCount()+r.completedCount >= suggestContinueAsNewThreshold {
+		r.instrumentation.countContinueAsNewSuggestions()
+		return true
+	}
 	return false
+}
+
+func (r *registry) inFlightCount() int {
+	return len(r.updates)
 }
