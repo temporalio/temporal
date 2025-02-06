@@ -89,7 +89,7 @@ func TestResolveDuplicateWorkflowStart(t *testing.T) {
 			WorkflowID:  "workflowID",
 			RunID:       "oldRunID",
 		}
-		_, err := resolveDuplicateWorkflowStart(mockShard, tc.currentWorkflowStart, workflowKey, namespaceEntry, "newRunID")
+		_, err := resolveDuplicateWorkflowStart(mockShard, tc.currentWorkflowStart, workflowKey, namespaceEntry, "newRunID", nil, false)
 
 		if tc.expectError {
 			assert.Error(t, err)

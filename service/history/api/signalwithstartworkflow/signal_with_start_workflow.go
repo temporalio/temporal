@@ -186,6 +186,8 @@ func createWorkflowMutationFunction(
 		workflowIDReusePolicy,
 		workflowIDConflictPolicy,
 		currentWorkflowStartTime,
+		nil,
+		false,
 	)
 	return workflowMutationFunc, err
 }
