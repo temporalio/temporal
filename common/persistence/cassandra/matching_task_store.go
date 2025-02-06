@@ -550,6 +550,11 @@ func (d *MatchingTaskStore) UpdateTaskQueueUserData(
 
 	previous := make(map[string]any)
 	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, previous)
+	for _, update := range request.Updates {
+		if update.Applied != nil {
+			*update.Applied = applied
+		}
+	}
 	if err != nil {
 		return gocql.ConvertError("UpdateTaskQueueUserData", err)
 	}

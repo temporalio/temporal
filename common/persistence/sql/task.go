@@ -489,6 +489,7 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 				DataEncoding:  update.UserData.EncodingType.String(),
 				Version:       update.Version,
 			})
+			// note these are in a transaction: if one fails the others will be rolled back
 			if m.Db.IsDupEntryError(err) {
 				err = &persistence.ConditionFailedError{Msg: err.Error()}
 			}
@@ -521,6 +522,12 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 		}
 		return nil
 	})
+	// only set Applied if the whole transaction succeeded
+	for _, update := range request.Updates {
+		if update.Applied != nil {
+			*update.Applied = err == nil
+		}
+	}
 	return err
 }
 

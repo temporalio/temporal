@@ -76,9 +76,9 @@ func NewBatcher[T, R any](fn func([]T) R, opts BatcherOptions, timeSource clock.
 }
 
 // Add adds an item to the stream and returns when it has been processed, or if the context is
-// canceled or times out. It returns two values: the value that the batch processor returned,
-// and a context error. Even if Add returns a context error, the item may still be processed in
-// the future!
+// canceled or times out. It returns two values: the value that the batch processor returned
+// for the whole batch that the item ended up in, and a context error. Even if Add returns a
+// context error, the item may still be processed in the future!
 func (b *Batcher[T, R]) Add(ctx context.Context, t T) (R, error) {
 	resp := make(chan R)
 	pair := batchPair[T, R]{resp: resp, item: t}
@@ -168,7 +168,7 @@ func (b *Batcher[T, R]) loop(runningC *chan struct{}) {
 		// process batch
 		r := b.fn(items)
 
-		// send responses
+		// send the single response to all items in the batch
 		for _, resp := range resps {
 			resp <- r
 		}
