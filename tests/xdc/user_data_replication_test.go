@@ -30,11 +30,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	replicationpb "go.temporal.io/api/replication/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -145,7 +145,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 			return false
 		}
 		return len(response.GetResponse().GetMajorVersionSets()) == 1
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 
 	// make another change to test that merging works
 
@@ -168,7 +168,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 			return false
 		}
 		return len(response.GetResponse().GetMajorVersionSets()) == 2
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassiveV2() {
@@ -227,7 +227,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 			return false
 		}
 		return len(response.GetResponse().GetAssignmentRules()) == 1
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 
 	// make another change to test that merging works
 
@@ -270,51 +270,34 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		}
 		return len(response.GetResponse().GetAssignmentRules()) == 1 &&
 			len(response.GetResponse().GetCompatibleRedirectRules()) == 1
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
-	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
+	namespace := s.createGlobalNamespace()
 	taskQueue := "versioned"
 	activeFrontendClient := s.cluster1.FrontendClient()
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        namespace,
-		IsGlobalNamespace:                true,
-		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
-	}
-	_, err := activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
-	s.NoError(err)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
-
 	standbyFrontendClient := s.cluster2.FrontendClient()
 
-	s.Eventually(func() bool {
-		_, err = standbyFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-			Namespace: namespace,
-			TaskQueue: taskQueue,
-			Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.1"},
-		})
-		return err == nil
-	}, 15*time.Second, 500*time.Millisecond)
+	_, err := standbyFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.1"},
+	})
+	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		response, err := activeFrontendClient.GetWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.GetWorkerBuildIdCompatibilityRequest{
 			Namespace: namespace,
 			TaskQueue: taskQueue,
 		})
-		if err != nil {
-			return false
-		}
-		return len(response.GetMajorVersionSets()) == 1
-	}, 15*time.Second, 500*time.Millisecond)
+		assert.NoError(t, err)
+		assert.Len(t, response.GetMajorVersionSets(), 1)
+	}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand() {
 	ctx := testcore.NewContext()
-	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.FrontendClient()
 	adminClient := s.cluster1.AdminClient()
 	numTaskQueues := 10
@@ -327,21 +310,9 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.NoError(err)
 	lastMessageId := replicationResponse.GetMessages().GetLastRetrievedMessageId()
 
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:         namespace,
-		IsGlobalNamespace: true,
-		Clusters: []*replicationpb.ClusterReplicationConfig{
-			&replicationpb.ClusterReplicationConfig{ClusterName: s.clusterNames[0]},
-		},
-		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
-	}
-	_, err = activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
-	s.NoError(err)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
+	namespace := s.createNamespaceInCluster0(true)
 	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	expectedReplicatedTaskQueues := make(map[string]struct{}, numTaskQueues)
 	for i := 0; i < numTaskQueues; i++ {
@@ -383,14 +354,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	}
 
 	// update namespace to cross clusters
-	_, err = activeFrontendClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace,
-		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-			Clusters: s.clusterReplicationConfig(),
-		},
-	})
-	s.NoError(err)
-	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
+	s.updateNamespaceClusters(namespace, 0, s.clusterNames, []*testcore.TestCluster{s.cluster1, s.cluster2})
 
 	// we should see one new namespace task in the replication queue
 	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
@@ -439,7 +403,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.Equal(expectedReplicatedTaskQueues, seenTaskQueues)
 
 	// failover and check on the other side
-	s.failover(namespace, s.clusterNames[1], int64(2), activeFrontendClient)
+	s.failover(namespace, 0, s.clusterNames[1], 2)
 
 	activeFrontendClient = s.cluster2.FrontendClient()
 	for i := 0; i < numTaskQueues; i++ {
@@ -468,7 +432,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.T().SkipNow() // flaky test
 	ctx := testcore.NewContext()
-	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.FrontendClient()
 	activeAdminClient := s.cluster1.AdminClient()
 	standbyAdminClient := s.cluster2.AdminClient()
@@ -490,19 +453,9 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.NoError(err)
 	lastMessageIdStandby := replicationResponse.GetMessages().GetLastRetrievedMessageId()
 
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        namespace,
-		IsGlobalNamespace:                true,
-		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
-	}
-	_, err = activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
-	s.NoError(err)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
+	namespace := s.createGlobalNamespace()
 	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	for i := 0; i < 3; i++ {
 		buildId := fmt.Sprintf("v%d", i)
@@ -597,7 +550,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 			return false
 		}
 		return len(response.GetMajorVersionSets()) == 2 && response.MajorVersionSets[1].BuildIds[0] == "v3"
-	}, 15*time.Second, 500*time.Millisecond)
+	}, replicationWaitTime, replicationCheckInterval)
 
 	_, err = standbyFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: namespace,
