@@ -959,6 +959,19 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		}
 	}, time.Second*5, time.Millisecond*200)
 
+	// ListDeployments should have the closed/deleted Worker Deployment
+	listResp, err := s.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.Nil(err)
+	found := false
+	for _, dInfo := range listResp.GetWorkerDeployments() {
+		if tv1.DeploymentSeries() == dInfo.GetName() {
+			found = true
+		}
+	}
+	s.True(found)
+
 	// Deleting the worker deployment should succeed since there are no associated versions left
 	_, err = s.FrontendClient().DeleteWorkerDeployment(ctx, &workflowservice.DeleteWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -967,7 +980,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	})
 	s.Nil(err)
 
-	// Describe Deployment Workflow's execution status and expect it's status to be closed. DescribeWorkerDeployment can't be used
+	// Describe Deployment Workflow's execution status and expect its status to be closed. DescribeWorkerDeployment can't be used
 	// this verification since it's possible to query closed workflows.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
@@ -980,6 +993,15 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		a.NoError(err)
 		a.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
 	}, time.Second*5, time.Millisecond*200)
+
+	// ListDeployments should not show the closed/deleted Worker Deployment
+	listResp, err = s.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.Nil(err)
+	for _, dInfo := range listResp.GetWorkerDeployments() {
+		s.NotEqual(tv1.DeploymentSeries(), dInfo.GetName())
+	}
 }
 
 func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_Idempotent() {
