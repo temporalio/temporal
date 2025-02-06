@@ -38,6 +38,7 @@ import (
 
 const (
 	WorkflowName = "temporal-sys-delete-executions-workflow"
+	StatsQuery   = "stats"
 )
 
 type (
@@ -45,6 +46,11 @@ type (
 		Namespace   namespace.Name
 		NamespaceID namespace.ID
 		Config      DeleteExecutionsConfig
+
+		// Number of Workflow Executions to delete.
+		TotalExecutionsCount int
+		// Time when the first run (in a chain of CANs) of DeleteExecutionsWorkflow started.
+		StartTime time.Time
 
 		// To carry over progress results with ContinueAsNew.
 		PreviousSuccessCount int
@@ -56,6 +62,17 @@ type (
 	DeleteExecutionsResult struct {
 		SuccessCount int
 		ErrorCount   int
+	}
+
+	DeleteExecutionsStats struct {
+		DeleteExecutionsResult
+		ContinueAsNewCount       int
+		TotalExecutionsCount     int
+		RemainingExecutionsCount int
+		AverageRPS               int
+		StartTime                time.Time
+		ApproximateTimeLeft      time.Duration
+		ApproximateEndTime       time.Time
 	}
 )
 
@@ -106,6 +123,27 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		return result, err
 	}
 	logger.Info("Effective config.", tag.Value(params.Config.String()))
+
+	if err := workflow.SetQueryHandler(ctx, StatsQuery, func() (DeleteExecutionsStats, error) {
+		now := workflow.Now(ctx).UTC()
+		des := DeleteExecutionsStats{
+			DeleteExecutionsResult:   result,
+			ContinueAsNewCount:       params.ContinueAsNewCount,
+			TotalExecutionsCount:     params.TotalExecutionsCount,
+			RemainingExecutionsCount: params.TotalExecutionsCount - (result.SuccessCount + result.ErrorCount),
+			StartTime:                params.StartTime,
+		}
+		if now.After(params.StartTime) {
+			des.AverageRPS = (result.SuccessCount + result.ErrorCount) / int(now.Sub(params.StartTime).Seconds())
+		}
+		if des.AverageRPS > 0 {
+			des.ApproximateTimeLeft = time.Duration(des.RemainingExecutionsCount/des.AverageRPS) * time.Second
+		}
+		des.ApproximateEndTime = now.Add(des.ApproximateTimeLeft)
+		return des, nil
+	}); err != nil {
+		return result, err
+	}
 
 	var a *Activities
 	var la *LocalActivities

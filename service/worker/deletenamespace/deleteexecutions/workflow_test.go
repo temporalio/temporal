@@ -26,9 +26,11 @@ package deleteexecutions
 
 import (
 	"context"
+	"encoding/json"
 	stderrors "errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -462,4 +464,73 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, 4, result.ErrorCount)
 	require.Equal(t, 0, result.SuccessCount)
+}
+
+func Test_DeleteExecutionsWorkflow_QueryStats(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	env := testSuite.NewTestWorkflowEnvironment()
+	startTime := env.Now().UTC()
+
+	var a *Activities
+	var la *LocalActivities
+
+	pageNumber := 0
+	env.OnActivity(la.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
+		pageNumber++
+
+		if pageNumber == 4 { // Emulate 100 pages of executions.
+			return nil, nil
+		}
+		return []byte{3, 22, 83}, nil
+	}).Times(4)
+
+	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
+		return DeleteExecutionsActivityResult{
+			ErrorCount:   10,
+			SuccessCount: 220,
+		}, nil
+	}).Times(4).After(5 * time.Second)
+
+	queryStatsFn := func() {
+		ev, err := env.QueryWorkflow("stats")
+		require.NoError(t, err)
+		var des DeleteExecutionsStats
+		err = ev.Get(&des)
+		require.NoError(t, err)
+
+		desJson, err := json.Marshal(des)
+		require.NoError(t, err)
+		testSuite.GetLogger().Info("Current stats.", "pageNumber", pageNumber, "DeleteExecutionsStats", string(desJson))
+
+		require.Equal(t, 10*(pageNumber-1), des.DeleteExecutionsResult.ErrorCount)
+		require.Equal(t, 220*(pageNumber-1), des.DeleteExecutionsResult.SuccessCount)
+		require.Equal(t, (10+220)*4, des.TotalExecutionsCount)
+		require.Equal(t, (10+220)*(4-(pageNumber-1)), des.RemainingExecutionsCount)
+		require.Equal(t, (10+220)/5, des.AverageRPS) // 5 seconds for every activity run.
+		require.Equal(t, startTime, des.StartTime)
+		require.Equal(t, (10+220)*(4-(pageNumber-1))/((10+220)/5), int(des.ApproximateTimeLeft.Seconds()))                                 // Remaining executions / average RPS.
+		require.Equal(t, env.Now().UTC().Add(time.Duration((10+220)*(4-(pageNumber-1))/((10+220)/5))*time.Second), des.ApproximateEndTime) // now + time left.
+	}
+
+	env.RegisterDelayedCallback(queryStatsFn, 5100*time.Millisecond)
+	env.RegisterDelayedCallback(queryStatsFn, 10100*time.Millisecond)
+	env.RegisterDelayedCallback(queryStatsFn, 15100*time.Millisecond)
+
+	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+		Config: DeleteExecutionsConfig{
+			ConcurrentDeleteExecutionsActivities: 1, // To linearize the execution of activities.
+		},
+		TotalExecutionsCount: (10 + 220) * 4,
+		StartTime:            startTime,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	var result DeleteExecutionsResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.Equal(t, 10*4, result.ErrorCount)
+	require.Equal(t, 220*4, result.SuccessCount)
 }
