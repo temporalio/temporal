@@ -515,6 +515,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	s.tryDeleteVersion(ctx, tv1, true)
 
 	// Describe Worker Deployment should give not found
+	// describe deployment version gives not found error
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		_, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
