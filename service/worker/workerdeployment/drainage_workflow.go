@@ -39,15 +39,6 @@ const (
 	defaultVisibilityGrace   = 3 * time.Minute
 )
 
-var (
-	backoffTimes = []time.Duration{
-		30 * time.Second,
-		1 * time.Minute,
-		2 * time.Minute,
-		4 * time.Minute,
-	}
-)
-
 func DrainageWorkflowWithDC(dc *dynamicconfig.Collection, ns string) func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
 	return func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -81,7 +72,6 @@ func DrainageWorkflowWithDC(dc *dynamicconfig.Collection, ns string) func(ctx wo
 			_ = workflow.Sleep(ctx, grace)
 		}
 
-		i := 0
 		for {
 			if done {
 				return nil
@@ -104,33 +94,22 @@ func DrainageWorkflowWithDC(dc *dynamicconfig.Collection, ns string) func(ctx wo
 			if info.Status == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
 				return nil
 			}
-			refresh, err := getRefreshInterval(ctx, dc, ns, i)
+			refresh, err := getRefreshInterval(ctx, dc, ns)
 			if err != nil {
 				return err
 			}
 			_ = workflow.Sleep(ctx, refresh)
-			i++
 		}
 	}
 }
 
-func getRefreshInterval(ctx workflow.Context, dc *dynamicconfig.Collection, ns string, i int) (time.Duration, error) {
+func getRefreshInterval(ctx workflow.Context, dc *dynamicconfig.Collection, ns string) (time.Duration, error) {
 	get := func(ctx workflow.Context) interface{} {
 		return dynamicconfig.VersionDrainageStatusRefreshInterval.Get(dc)(ns)
 	}
 	var refresh time.Duration
 	if err := workflow.MutableSideEffect(ctx, "getDrainageRefreshInterval", get, durationEq).Get(&refresh); err != nil {
 		return defaultVisibilityRefresh, err
-	}
-	// On the first few refreshes, ramp up to a longer constant backoff.
-	// If the dynamic config's refresh interval is shorter than the hard-coded
-	// ramping intervals, use dynamic config instead, because that means
-	// the customer wants to know drainage status sooner.
-	if i < len(backoffTimes) {
-		defaultRampingBackoff := backoffTimes[i]
-		if defaultRampingBackoff < refresh {
-			return defaultRampingBackoff, nil
-		}
 	}
 	return refresh, nil
 }
