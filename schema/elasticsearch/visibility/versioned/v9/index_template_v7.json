@@ -101,6 +101,9 @@
       },
       "TemporalWorkflowVersioningBehavior": {
         "type": "keyword"
+      },
+      "TemporalWorkerDeployment": {
+        "type": "keyword"
       }
     }
   },

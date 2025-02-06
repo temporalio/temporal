@@ -47,6 +47,7 @@ CREATE TABLE executions_visibility (
   TemporalPauseInfo            JSON          GENERATED ALWAYS AS (search_attributes->"$.TemporalPauseInfo"),
   TemporalWorkerDeploymentVersion    JSON    GENERATED ALWAYS AS (search_attributes->"$.TemporalWorkerDeploymentVersion"),
   TemporalWorkflowVersioningBehavior JSON    GENERATED ALWAYS AS (search_attributes->"$.TemporalWorkflowVersioningBehavior"),
+  TemporalWorkerDeployment           JSON    GENERATED ALWAYS AS (search_attributes->"$.TemporalWorkerDeployment"),
 
   PRIMARY KEY (namespace_id, run_id)
 );
@@ -73,6 +74,7 @@ CREATE INDEX by_build_ids                     ON executions_visibility (namespac
 CREATE INDEX by_temporal_pause_info           ON executions_visibility (namespace_id, (CAST(TemporalPauseInfo AS CHAR(255) ARRAY)),    (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_worker_deployment_version ON executions_visibility (namespace_id, (CAST(TemporalWorkerDeploymentVersion AS CHAR(255) ARRAY)), (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_workflow_versioning_behavior ON executions_visibility (namespace_id, (CAST(TemporalWorkflowVersioningBehavior AS CHAR(255) ARRAY)), (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
+CREATE INDEX by_temporal_worker_deployment    ON executions_visibility (namespace_id, (CAST(TemporalWorkerDeployment AS CHAR(255) ARRAY)), (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_batcher_user                  ON executions_visibility (namespace_id, BatcherUser,                (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_scheduled_start_time ON executions_visibility (namespace_id, TemporalScheduledStartTime, (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);
 CREATE INDEX by_temporal_scheduled_by_id      ON executions_visibility (namespace_id, TemporalScheduledById,      (COALESCE(close_time, CAST('9999-12-31 23:59:59' AS DATETIME))) DESC, start_time DESC, run_id);

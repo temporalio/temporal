@@ -100,18 +100,22 @@ const (
 	// used by the workflow. Used for Worker Versioning
 	BuildIds = "BuildIds"
 
-	// TemporalWorkerDeploymentVersion stores the current Deployment Version associated
-	// with the execution. It is updated at workflow task completion when the SDK says
-	// what Deployment Version completed the workflow task. It can have a value for
+	// TemporalWorkerDeploymentVersion stores the current Worker Deployment Version
+	// associated with the execution. It is updated at workflow task completion when
+	// the SDK says what Version completed the workflow task. It can have a value for
 	// unversioned workflows, if they are processed by an unversioned deployment.
-	// The identifier for a Deployment Version is <deployment_name>/<build_id>
-	// which is also displayed in the UI. deployment_name cannot contain `/`.
 	TemporalWorkerDeploymentVersion = "TemporalWorkerDeploymentVersion"
 
 	// TemporalWorkflowVersioningBehavior stores the current Versioning Behavior of the
 	// execution. It is updated at workflow task completion when the server gets the
 	// behavior (`auto_upgrade` or `pinned`) from the SDK. Empty for unversioned workflows.
 	TemporalWorkflowVersioningBehavior = "TemporalWorkflowVersioningBehavior"
+
+	// TemporalWorkerDeployment stores the current Worker Deployment associated with
+	// the execution. It is updated at workflow task completion when the SDK says what
+	// Worker Deployment completed the workflow task. It can have a value for
+	// unversioned workflows, if they are processed by an unversioned deployment.
+	TemporalWorkerDeployment = "TemporalWorkerDeployment"
 )
 
 var (
@@ -149,6 +153,7 @@ var (
 		TemporalPauseInfo:                  enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		TemporalWorkerDeploymentVersion:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalWorkflowVersioningBehavior: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalWorkerDeployment:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

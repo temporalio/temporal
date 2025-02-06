@@ -36,6 +36,9 @@ new_mapping='
     },
     "TemporalWorkflowVersioningBehavior": {
       "type": "keyword"
+    },
+    "TemporalWorkerDeployment": {
+      "type": "keyword"
     }
   }
 }

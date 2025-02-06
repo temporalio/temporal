@@ -1,7 +1,7 @@
 {
   "CurrVersion": "1.8",
   "MinCompatibleVersion": "0.1",
-  "Description": "add TemporalWorkerDeploymentVersion and TemporalWorkflowVersioningBehavior columns",
+  "Description": "add TemporalWorkerDeploymentVersion, TemporalWorkerDeployment, and TemporalWorkflowVersioningBehavior columns",
   "SchemaUpdateCqlFiles": [
     "add_deployment_search_attributes.sql"
   ]
