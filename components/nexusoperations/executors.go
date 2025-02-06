@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"text/template"
 	"time"
 
@@ -154,7 +155,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	callbackURL := builder.String()
 
 	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
-	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &commonnexus.FailureSourceContextValue{})
+	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 
 	client, err := e.ClientProvider(
 		ctx,
@@ -520,6 +521,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		return err
 	}
 
+	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
+	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &atomic.Value{})
+
 	client, err := e.ClientProvider(
 		ctx,
 		ref.WorkflowKey.NamespaceID,
@@ -554,7 +558,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	statusCodeTag := metrics.OutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
-	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(callCtx))
+	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(ctx))
 	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 
@@ -770,14 +774,22 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 	}, nil
 }
 
-func failureSourceFromContext(callCtx context.Context) string {
-	val := callCtx.Value(commonnexus.FailureSourceContextKey)
-	if val == nil {
+func failureSourceFromContext(ctx context.Context) string {
+	ctxVal := ctx.Value(commonnexus.FailureSourceContextKey)
+	if ctxVal == nil {
 		return ""
 	}
-	src, ok := val.(*commonnexus.FailureSourceContextValue)
+	val, ok := ctxVal.(*atomic.Value)
 	if !ok {
 		return ""
 	}
-	return src.Source
+	src := val.Load()
+	if src == nil {
+		return ""
+	}
+	source, ok := src.(string)
+	if !ok {
+		return ""
+	}
+	return source
 }

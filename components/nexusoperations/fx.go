@@ -26,6 +26,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
@@ -173,7 +174,7 @@ func setFailureSourceOnContext(ctx context.Context, response *http.Response) {
 		return
 	}
 
-	if src, ok := failureSourceContext.(*commonnexus.FailureSourceContextValue); ok {
-		src.Source = failureSourceHeader
+	if val, ok := failureSourceContext.(*atomic.Value); ok {
+		val.Store(failureSourceHeader)
 	}
 }
