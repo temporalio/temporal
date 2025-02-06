@@ -67,16 +67,12 @@ const (
 type (
 	xdcBaseSuite struct {
 		// TODO (alex): use FunctionalTestSuite
+		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
 		protorequire.ProtoAssertions
 		historyrequire.HistoryRequire
-		// TODO (alex): name should be a cluster property.
-		clusterNames []string
-		suite.Suite
-
-		testClusterFactory testcore.TestClusterFactory
 
 		// TODO (alex): replace cluster1 and cluster2 with a slice of clusters.
 		cluster1               *testcore.TestCluster
@@ -93,22 +89,21 @@ type (
 
 // TODO (alex): this should be gone.
 func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplicationConfig {
-	config := make([]*replicationpb.ClusterReplicationConfig, len(s.clusterNames))
-	for i, clusterName := range s.clusterNames {
+	config := make([]*replicationpb.ClusterReplicationConfig, 2)
+	for i, cluster := range []*testcore.TestCluster{s.cluster1, s.cluster2} {
 		config[i] = &replicationpb.ClusterReplicationConfig{
-			ClusterName: clusterName,
+			ClusterName: cluster.ClusterName(),
 		}
 	}
 	return config
 }
 
 func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
-	s.testClusterFactory = testcore.NewTestClusterFactory()
 
 	params := testcore.ApplyTestClusterOptions(opts)
 
 	suffix := common.GenerateRandomString(5)
-	s.clusterNames = []string{
+	clusterNames := []string{
 		"active_" + suffix,
 		"standby_" + suffix,
 	}
@@ -137,12 +132,12 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	for i, config := range clusterConfigs {
 		config.DynamicConfigOverrides = s.dynamicConfigOverrides
-		clusterConfigs[i].ClusterMetadata.MasterClusterName = s.clusterNames[i]
-		clusterConfigs[i].ClusterMetadata.CurrentClusterName = s.clusterNames[i]
+		clusterConfigs[i].ClusterMetadata.MasterClusterName = clusterNames[i]
+		clusterConfigs[i].ClusterMetadata.CurrentClusterName = clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.EnableGlobalNamespace = true
-		clusterConfigs[i].Persistence.DBName = "func_tests_" + s.clusterNames[i]
+		clusterConfigs[i].Persistence.DBName = "func_tests_" + clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
-			s.clusterNames[i]: cluster.ClusterInformation{
+			clusterNames[i]: cluster.ClusterInformation{
 				Enabled:                true,
 				InitialFailoverVersion: int64(i + 1),
 				// RPCAddress and HTTPAddress will be filled in
@@ -152,10 +147,11 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 		clusterConfigs[i].EnableMetricsCapture = true
 	}
 
-	s.cluster1, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
+	testClusterFactory := testcore.NewTestClusterFactory()
+	s.cluster1, err = testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterNames[0])))
 	s.Require().NoError(err)
 
-	s.cluster2, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
+	s.cluster2, err = testClusterFactory.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterNames[1])))
 	s.Require().NoError(err)
 
 	s.startTime = time.Now()
@@ -224,8 +220,8 @@ func (s *xdcBaseSuite) tearDownSuite() {
 }
 
 func (s *xdcBaseSuite) waitForClusterSynced() {
-	waitForClusterConnected(s.Assertions, s.logger, s.cluster1, s.clusterNames[0], s.clusterNames[1], s.startTime)
-	waitForClusterConnected(s.Assertions, s.logger, s.cluster2, s.clusterNames[1], s.clusterNames[0], s.startTime)
+	waitForClusterConnected(s.Assertions, s.logger, s.cluster1, s.cluster1.ClusterName(), s.cluster2.ClusterName(), s.startTime)
+	waitForClusterConnected(s.Assertions, s.logger, s.cluster2, s.cluster1.ClusterName(), s.cluster2.ClusterName(), s.startTime)
 }
 
 func (s *xdcBaseSuite) setupTest() {
@@ -240,28 +236,26 @@ func (s *xdcBaseSuite) setupTest() {
 }
 
 func (s *xdcBaseSuite) createGlobalNamespace() string {
-	return createNamespace(s.Assertions, true, s.clusterNames, []*testcore.TestCluster{s.cluster1, s.cluster2})
+	return s.createNamespace(true, []*testcore.TestCluster{s.cluster1, s.cluster2})
 }
 
+// TODO (alex): rename this to createLocalNamespace, and everywhere where it is called with isGlobal == true, add call to promoteNamespace.
 func (s *xdcBaseSuite) createNamespaceInCluster0(isGlobal bool) string {
-	return createNamespace(s.Assertions, isGlobal, s.clusterNames[0:1], []*testcore.TestCluster{s.cluster1})
+	return s.createNamespace(isGlobal, []*testcore.TestCluster{s.cluster1})
 }
 
-// TODO (alex): merge this and above functions when all xdc tests share same base struct
-func createNamespace(
-	s *require.Assertions,
+func (s *xdcBaseSuite) createNamespace(
 	isGlobal bool,
-	clusterNames []string, // TODO (alex): name should be cluster property
 	clusters []*testcore.TestCluster,
 ) string {
 	ctx := testcore.NewContext()
 	ns := "test-namespace-" + uuid.NewString()
 	var replicationConfigs []*replicationpb.ClusterReplicationConfig
 	if isGlobal {
-		replicationConfigs = make([]*replicationpb.ClusterReplicationConfig, len(clusterNames))
-		for i, clusterName := range clusterNames {
+		replicationConfigs = make([]*replicationpb.ClusterReplicationConfig, len(clusters))
+		for i, cluster := range clusters {
 			replicationConfigs[i] = &replicationpb.ClusterReplicationConfig{
-				ClusterName: clusterName,
+				ClusterName: cluster.ClusterName(),
 			}
 		}
 	}
@@ -270,7 +264,7 @@ func createNamespace(
 		Namespace:                        ns,
 		IsGlobalNamespace:                isGlobal,
 		Clusters:                         replicationConfigs,
-		ActiveClusterName:                clusterNames[0], // cluster 0 is always active.
+		ActiveClusterName:                clusters[0].ClusterName(), // cluster 0 is always active.
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
 	// namespace is always created in cluster 0.
@@ -297,6 +291,10 @@ func createNamespace(
 					assert.NoError(t, err)
 					if assert.NotNil(t, resp) {
 						assert.Equal(t, isGlobal, resp.IsGlobalNamespace())
+						var clusterNames []string
+						for _, cl := range clusters {
+							clusterNames = append(clusterNames, cl.ClusterName())
+						}
 						assert.Equal(t, clusterNames, resp.ClusterNames())
 					}
 				}
@@ -383,14 +381,13 @@ func (s *xdcBaseSuite) clusterAt(i int) *testcore.TestCluster {
 func (s *xdcBaseSuite) updateNamespaceClusters(
 	ns string,
 	inClusterIndex int,
-	clusterNames []string,
 	clusters []*testcore.TestCluster,
 ) {
 
-	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusterNames))
-	for i, clusterName := range clusterNames {
+	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusters))
+	for i, cluster := range clusters {
 		replicationConfigs[i] = &replicationpb.ClusterReplicationConfig{
-			ClusterName: clusterName,
+			ClusterName: cluster.ClusterName(),
 		}
 	}
 
@@ -400,6 +397,11 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 			Clusters: replicationConfigs,
 		}})
 	s.NoError(err)
+
+	var clusterNames []string
+	for _, cl := range clusters {
+		clusterNames = append(clusterNames, cl.ClusterName())
+	}
 
 	var isGlobalNamespace bool
 	s.EventuallyWithT(func(t *assert.CollectT) {
