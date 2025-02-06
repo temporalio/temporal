@@ -30,6 +30,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -334,6 +335,16 @@ func setHistoryForRecordWfTaskStartedResp(
 	historyBlobs := make([][]byte, len(rawHistory))
 	for i, blob := range rawHistory {
 		historyBlobs[i] = blob.Data
+	}
+	// If there are no events in the history, frontend will not be able to deserialize the raw bytes response to History object.
+	// In that case, create an empty history object and set it in the response.
+	if len(historyBlobs) == 0 {
+		history := historypb.History{}
+		blob, err := history.Marshal()
+		if err != nil {
+			return err
+		}
+		historyBlobs = append(historyBlobs, blob)
 	}
 	response.History = historyBlobs
 	response.NextPageToken = continuation
