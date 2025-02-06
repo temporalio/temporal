@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -37,6 +38,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -892,8 +894,6 @@ func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Contex
 	s.Equal(expectedPercentage, tqDesc.GetVersioningInfo().GetRampingVersionPercentage())
 }
 
-// DeleteWorkerDeployment
-
 func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
 
@@ -967,19 +967,26 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	})
 	s.Nil(err)
 
-	// Describe Deployment Workflow's execution status and expect it's status to be closed. DescribeWorkerDeployment can't be used
-	// this verification since it's possible to query closed workflows.
+	// Describe Worker Deployment should give not found
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: worker_versioning.GenerateDeploymentWorkflowID(tv1.DeploymentSeries()),
-			},
+		_, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv1.DeploymentSeries(),
 		})
-		a.NoError(err)
-		a.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
+		a.Error(err)
+		var nfe *serviceerror.NotFound
+		a.True(errors.As(err, &nfe))
 	}, time.Second*5, time.Millisecond*200)
+
+	// ListDeployments should not show the closed/deleted Worker Deployment
+	listResp, err := s.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.Nil(err)
+	for _, dInfo := range listResp.GetWorkerDeployments() {
+		s.NotEqual(tv1.DeploymentSeries(), dInfo.GetName())
+	}
 }
 
 func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_Idempotent() {

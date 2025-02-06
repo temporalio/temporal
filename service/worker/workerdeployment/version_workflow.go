@@ -252,15 +252,13 @@ func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
 	return nil
 }
 
-func (d *VersionWorkflowRunner) validateDeleteVersion() error {
+func (d *VersionWorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
 	// We can't call DescribeTaskQueue here because that would be an Activity call / non-deterministic.
 	// Once we have PollersStatus on the version, we can check it here.
 	return nil
 }
 
-func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error {
-	// TODO (Shivam): add `skip_drainage` flag
-
+func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -295,9 +293,11 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 	}
 
 	// 2. Check if the version is drained.
-	if state.GetDrainageInfo() == nil || state.GetDrainageInfo().Status != enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
-		// activity won't retry on this error since version not eligible for deletion
-		return serviceerror.NewFailedPrecondition(errVersionNotDrained)
+	if !args.SkipDrainage {
+		if state.GetDrainageInfo() == nil || state.GetDrainageInfo().Status != enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+			// activity won't retry on this error since version not eligible for deletion
+			return serviceerror.NewFailedPrecondition(errVersionNotDrained)
+		}
 	}
 
 	// 3. Check if the version has any active pollers.
@@ -471,8 +471,11 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	// add version to worker-deployment workflow
 	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
 		DeploymentName: d.VersionState.Version.GetDeploymentName(),
-		Version:        worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
-		RequestId:      d.newUUID(ctx),
+		UpdateArgs: &deploymentspb.AddVersionUpdateArgs{
+			Version:    worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
+			CreateTime: d.VersionState.CreateTime,
+		},
+		RequestId: d.newUUID(ctx),
 	}).Get(ctx, nil)
 	return err
 }
@@ -576,6 +579,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			// TODO: compensate
 			return nil, err
 		}
+		d.VersionState.DrainageInfo = nil
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
