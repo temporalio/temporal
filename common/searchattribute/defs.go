@@ -106,16 +106,16 @@ const (
 	// unversioned workflows, if they are processed by an unversioned deployment.
 	TemporalWorkerDeploymentVersion = "TemporalWorkerDeploymentVersion"
 
-	// TemporalWorkflowVersioningBehavior stores the current Versioning Behavior of the
-	// execution. It is updated at workflow task completion when the server gets the
-	// behavior (`auto_upgrade` or `pinned`) from the SDK. Empty for unversioned workflows.
-	TemporalWorkflowVersioningBehavior = "TemporalWorkflowVersioningBehavior"
-
 	// TemporalWorkerDeployment stores the current Worker Deployment associated with
 	// the execution. It is updated at workflow task completion when the SDK says what
 	// Worker Deployment completed the workflow task. It can have a value for
 	// unversioned workflows, if they are processed by an unversioned deployment.
 	TemporalWorkerDeployment = "TemporalWorkerDeployment"
+
+	// TemporalWorkflowVersioningBehavior stores the current Versioning Behavior of the
+	// execution. It is updated at workflow task completion when the server gets the
+	// behavior (`auto_upgrade` or `pinned`) from the SDK. Empty for unversioned workflows.
+	TemporalWorkflowVersioningBehavior = "TemporalWorkflowVersioningBehavior"
 )
 
 var (
