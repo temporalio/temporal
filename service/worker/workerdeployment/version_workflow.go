@@ -576,6 +576,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			// TODO: compensate
 			return nil, err
 		}
+		d.VersionState.DrainageInfo = nil
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
