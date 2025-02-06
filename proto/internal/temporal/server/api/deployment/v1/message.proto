@@ -114,7 +114,6 @@ message VersionLocalState {
         // Key: Task Queue Type
         map<int32, TaskQueueVersionData> task_queues = 1;
     }
-
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.

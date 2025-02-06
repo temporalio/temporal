@@ -73,6 +73,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
 	}
+
 	err := workflow.SetQueryHandler(ctx, QueryDescribeDeployment, func() (*deploymentspb.QueryDescribeWorkerDeploymentResponse, error) {
 		return &deploymentspb.QueryDescribeWorkerDeploymentResponse{
 			State: d.State,
