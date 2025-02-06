@@ -734,6 +734,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		workflowTask.StartedEventID = startedEvent.GetEventId()
 	}
 
+	deploymentName := request.GetDeploymentOptions().GetDeploymentName()
+	if deploymentName == "" {
+		deploymentName = request.GetDeployment().GetSeriesName()
+	}
+
 	// Now write the completed event
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
 		workflowTask.ScheduledEventID,
@@ -743,6 +748,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.WorkerVersionStamp,
 		request.SdkMetadata,
 		request.MeteringMetadata,
+		deploymentName,
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		worker_versioning.DeploymentOrVersion(request.Deployment, worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions)),
 		request.VersioningBehavior,
@@ -1108,6 +1114,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
+	m.ms.executionInfo.WorkerDeploymentName = attrs.GetWorkerDeploymentName()
 
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := attrs.GetDeployment()
@@ -1146,23 +1153,21 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	wfDeploymentBefore := m.ms.GetEffectiveDeployment()
 	wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
 
-	// Change behavior based on the completed wft.
-	if wfBehaviorBefore != wftBehavior {
-		if versioningInfo == nil {
-			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
-			m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
-		}
-		versioningInfo.Behavior = wftBehavior
-	}
-	// Change deployment based on completed wft.
+	// Change deployment and behavior based on completed wft.
 	if wftBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		if versioningInfo != nil {
+			versioningInfo.Behavior = wftBehavior
 			// Deployment Version is not set for unversioned workers.
 			versioningInfo.Version = ""
 			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 			versioningInfo.Deployment = nil
 		}
 	} else {
+		if versioningInfo == nil {
+			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+			m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
+		}
+		versioningInfo.Behavior = wftBehavior
 		// Only populating the new field.
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil

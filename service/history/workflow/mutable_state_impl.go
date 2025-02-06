@@ -2188,7 +2188,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
 	var inheritedBuildId string
-	if command.InheritBuildId {
+	if command.InheritBuildId && previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		// Do not set inheritedBuildId for v3 wfs
 		inheritedBuildId = previousExecutionInfo.AssignedBuildId
 		if inheritedBuildId == "" {
 			// TODO: this is only needed for old versioning. get rid of StartWorkflowExecutionRequest.SourceVersionStamp
@@ -2407,6 +2408,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.ParentInitiatedVersion = common.EmptyVersion
 	}
 
+	if event.ParentPinnedWorkerDeploymentVersion != "" {
+		ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
+			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Version:  event.ParentPinnedWorkerDeploymentVersion,
+		}
+	}
+
 	if event.RootWorkflowExecution != nil {
 		ms.executionInfo.RootWorkflowId = event.RootWorkflowExecution.GetWorkflowId()
 		ms.executionInfo.RootRunId = event.RootWorkflowExecution.GetRunId()
@@ -2464,8 +2472,19 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	}
 
 	if event.GetVersioningOverride() != nil {
-		ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{VersioningOverride: event.GetVersioningOverride()}
+		if ms.executionInfo.VersioningInfo == nil {
+			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		}
+		ms.executionInfo.VersioningInfo.VersioningOverride = event.GetVersioningOverride()
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+		if d := event.GetVersioningOverride().GetDeployment(); d != nil { // if the old Deployment field was populated instead of PinnedVersion
+			// We read from both old and new fields but write in the new fields only.
+			ms.executionInfo.VersioningInfo.VersioningOverride.PinnedVersion = worker_versioning.WorkerDeploymentVersionToString(
+				worker_versioning.DeploymentVersionFromDeployment(d))
+			ms.executionInfo.VersioningInfo.VersioningOverride.Deployment = nil
+		}
 	}
+
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
 		ms.executionInfo.InheritedBuildId = inheritedBuildId
 		if err := ms.UpdateBuildIdAssignment(inheritedBuildId); err != nil {
