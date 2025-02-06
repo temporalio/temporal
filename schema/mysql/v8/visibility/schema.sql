@@ -45,9 +45,9 @@ CREATE TABLE executions_visibility (
   TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>"$.TemporalNamespaceDivision"),
   BuildIds                      JSON          GENERATED ALWAYS AS (search_attributes->"$.BuildIds"),
   TemporalPauseInfo            JSON          GENERATED ALWAYS AS (search_attributes->"$.TemporalPauseInfo"),
-  TemporalWorkerDeploymentVersion    VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->"$.TemporalWorkerDeploymentVersion"),
-  TemporalWorkflowVersioningBehavior VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->"$.TemporalWorkflowVersioningBehavior"),
-  TemporalWorkerDeployment           VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->"$.TemporalWorkerDeployment"),
+  TemporalWorkerDeploymentVersion    VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalWorkerDeploymentVersion"),
+  TemporalWorkflowVersioningBehavior VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalWorkflowVersioningBehavior"),
+  TemporalWorkerDeployment           VARCHAR(255)    GENERATED ALWAYS AS (search_attributes->>"$.TemporalWorkerDeployment"),
 
   PRIMARY KEY (namespace_id, run_id)
 );
