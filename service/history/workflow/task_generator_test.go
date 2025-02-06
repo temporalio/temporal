@@ -25,6 +25,7 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -49,6 +50,7 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -77,6 +79,28 @@ type testParams struct {
 	ExpectArchiveExecutionTask                      bool
 	ExpectDeleteHistoryEventTask                    bool
 	ExpectedArchiveExecutionTaskVisibilityTimestamp time.Time
+}
+
+type backend struct{}
+
+func (b *backend) GetCurrentVersion() int64 {
+	return 1
+}
+
+func (b *backend) NextTransitionCount() int64 {
+	return 3
+}
+
+func (b *backend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
+	return nil
+}
+
+func (b *backend) GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
+	panic("unimplemented - not used in test")
+}
+
+func (b *backend) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
+	panic("unimplemented - not used in test")
 }
 
 func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
@@ -915,13 +939,17 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_WithTrimming(t *tes
 				require.NoError(t, RegisterStateMachine(reg))
 				require.NoError(t, callbacks.RegisterStateMachine(reg))
 
-				root, err := hsm.NewRoot(reg, StateMachineType, nil, map[string]*persistencespb.StateMachineMap{}, ms)
+				def1 := hsmtest.NewDefinition("type1")
+				err := reg.RegisterMachine(def1)
 				require.NoError(t, err)
 
-				err = root.DeleteChild(hsm.Key{
-					Type: callbacks.StateMachineType,
-					ID:   "test-callback",
-				})
+				root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+				require.NoError(t, err)
+
+				node1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "node1"}, hsmtest.NewData(hsmtest.State1))
+				require.NoError(t, err)
+
+				err = root.DeleteChild(node1.Key)
 				require.NoError(t, err)
 
 				ms.EXPECT().HSM().Return(root).AnyTimes()
