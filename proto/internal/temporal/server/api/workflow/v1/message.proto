@@ -38,8 +38,9 @@ message ParentExecutionInfo {
     temporal.server.api.clock.v1.VectorClock clock = 5;
     int64 initiated_version = 6;
     // When present, child workflow starts as Pinned to this Worker Deployment Version.
-    // Set only if the parent execution is Pinned to a Worker Deployment Version, and the child
-    // workflow is starting on a Task Queue belonging to the same Worker Deployment Version.
+    // Set only if the parent execution is effectively Pinned to a Worker Deployment Version when it
+    // first starts the child workflow, and the child workflow is starting on a Task Queue belonging
+    // to the same Worker Deployment Version.
     // Not set in the subsequent execution if the child workflow continues-as-new.
     string pinned_worker_deployment_version = 7;
 }
