@@ -238,6 +238,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
+	deploymentName string,
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
@@ -249,6 +250,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 		workerVersionStamp,
 		sdkMetadata,
 		meteringMetadata,
+		deploymentName,
 		deployment,
 		behavior,
 	)
