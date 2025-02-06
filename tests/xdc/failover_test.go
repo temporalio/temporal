@@ -90,7 +90,7 @@ func TestFuncClustersTestSuite(t *testing.T) {
 }
 
 func (s *FunctionalClustersTestSuite) SetupSuite() {
-	s.setupSuite([]string{"integ_active", "integ_standby"})
+	s.setupSuite()
 }
 
 func (s *FunctionalClustersTestSuite) SetupTest() {

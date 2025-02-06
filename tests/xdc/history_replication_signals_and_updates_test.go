@@ -133,7 +133,6 @@ func (s *hrsuTestSuite) SetupSuite() {
 	}
 	s.logger = log.NewTestLogger()
 	s.setupSuite(
-		[]string{"cluster1", "cluster2"},
 		testcore.WithFxOptionsForService(primitives.WorkerService,
 			fx.Decorate(
 				func(executor nsreplication.TaskExecutor) nsreplication.TaskExecutor {
