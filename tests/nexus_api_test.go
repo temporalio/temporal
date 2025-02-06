@@ -212,6 +212,26 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, nexus.HandlerErrorRetryBehaviorUnspecified, handlerErr.RetryBehavior)
+				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
+				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
+			},
+		},
+		{
+			outcome:  "handler_error_non_retryable",
+			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				return nil, &nexuspb.HandlerError{
+					ErrorType:     string(nexus.HandlerErrorTypeInternal),
+					Failure:       &nexuspb.Failure{Message: "deliberate internal failure"},
+					RetryBehavior: nexuspb.HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE,
+				}
+			},
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, headers http.Header) {
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, nexus.HandlerErrorRetryBehaviorNonRetryable, handlerErr.RetryBehavior)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},

@@ -36,6 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporalnexus"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -744,11 +745,19 @@ func isDestinationDown(err error) bool {
 func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
 	var handlerErr *nexus.HandlerError
 	if errors.As(callErr, &handlerErr) {
+		var retryBehavior nexuspb.HandlerErrorRetryBehavior
+		switch handlerErr.RetryBehavior {
+		case nexus.HandlerErrorRetryBehaviorRetryable:
+			retryBehavior = nexuspb.HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE
+		case nexus.HandlerErrorRetryBehaviorNonRetryable:
+			retryBehavior = nexuspb.HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE
+		}
 		failure := &failurepb.Failure{
 			Message: handlerErr.Error(),
 			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
 				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-					Type: string(handlerErr.Type),
+					Type:          string(handlerErr.Type),
+					RetryBehavior: retryBehavior,
 				},
 			},
 		}
