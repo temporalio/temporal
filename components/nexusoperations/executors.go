@@ -744,11 +744,20 @@ func isDestinationDown(err error) bool {
 func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
 	var handlerErr *nexus.HandlerError
 	if errors.As(callErr, &handlerErr) {
+		var retryBehavior enumspb.NexusHandlerErrorRetryBehavior
+		// nolint:exhaustive // unspecified is the default
+		switch handlerErr.RetryBehavior {
+		case nexus.HandlerErrorRetryBehaviorRetryable:
+			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE
+		case nexus.HandlerErrorRetryBehaviorNonRetryable:
+			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE
+		}
 		failure := &failurepb.Failure{
 			Message: handlerErr.Error(),
 			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
 				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-					Type: string(handlerErr.Type),
+					Type:          string(handlerErr.Type),
+					RetryBehavior: retryBehavior,
 				},
 			},
 		}
