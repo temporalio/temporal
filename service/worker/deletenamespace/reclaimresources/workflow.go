@@ -251,9 +251,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params Re
 	if executionsCount == 0 {
 		return result, nil
 	}
-
 	params.DeleteExecutionsParams.TotalExecutionsCount = int(executionsCount)
-	params.DeleteExecutionsParams.StartTime = workflow.Now(ctx).UTC()
 
 	ctx2 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
 	ctx2 = workflow.WithWorkflowID(ctx2, fmt.Sprintf("%s/%s", deleteexecutions.WorkflowName, params.Namespace))

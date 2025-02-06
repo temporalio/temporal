@@ -524,7 +524,7 @@ func Test_DeleteExecutionsWorkflow_QueryStats(t *testing.T) {
 			ConcurrentDeleteExecutionsActivities: 1, // To linearize the execution of activities.
 		},
 		TotalExecutionsCount: (10 + 220) * 4,
-		StartTime:            startTime,
+		FirstRunStartTime:    startTime,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())

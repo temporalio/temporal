@@ -47,16 +47,17 @@ type (
 		NamespaceID namespace.ID
 		Config      DeleteExecutionsConfig
 
-		// Number of Workflow Executions to delete.
+		// Number of Workflow Executions to delete. Used in statistics computation.
+		// If not specified, then statistics are partially computed.
 		TotalExecutionsCount int
-		// Time when the first run (in a chain of CANs) of DeleteExecutionsWorkflow started.
-		StartTime time.Time
 
 		// To carry over progress results with ContinueAsNew.
 		PreviousSuccessCount int
 		PreviousErrorCount   int
 		ContinueAsNewCount   int
 		NextPageToken        []byte
+		// Time when the first run (in a chain of CANs) of DeleteExecutionsWorkflow has started.
+		FirstRunStartTime time.Time
 	}
 
 	DeleteExecutionsResult struct {
@@ -95,12 +96,15 @@ var (
 	}
 )
 
-func validateParams(params *DeleteExecutionsParams) error {
+func validateParams(ctx workflow.Context, params *DeleteExecutionsParams) error {
 	if params.NamespaceID.IsEmpty() {
 		return errors.NewInvalidArgument("namespace ID is required", nil)
 	}
 	if params.Namespace.IsEmpty() {
 		return errors.NewInvalidArgument("namespace is required", nil)
+	}
+	if params.FirstRunStartTime.IsZero() {
+		params.FirstRunStartTime = workflow.Now(ctx).UTC()
 	}
 	params.Config.ApplyDefaults()
 	return nil
@@ -119,7 +123,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		ErrorCount:   params.PreviousErrorCount,
 	}
 
-	if err := validateParams(&params); err != nil {
+	if err := validateParams(ctx, &params); err != nil {
 		return result, err
 	}
 	logger.Info("Effective config.", tag.Value(params.Config.String()))
@@ -127,14 +131,16 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	if err := workflow.SetQueryHandler(ctx, StatsQuery, func() (DeleteExecutionsStats, error) {
 		now := workflow.Now(ctx).UTC()
 		des := DeleteExecutionsStats{
-			DeleteExecutionsResult:   result,
-			ContinueAsNewCount:       params.ContinueAsNewCount,
-			TotalExecutionsCount:     params.TotalExecutionsCount,
-			RemainingExecutionsCount: params.TotalExecutionsCount - (result.SuccessCount + result.ErrorCount),
-			StartTime:                params.StartTime,
+			DeleteExecutionsResult: result,
+			ContinueAsNewCount:     params.ContinueAsNewCount,
+			TotalExecutionsCount:   params.TotalExecutionsCount,
+			StartTime:              params.FirstRunStartTime,
 		}
-		if now.After(params.StartTime) {
-			des.AverageRPS = (result.SuccessCount + result.ErrorCount) / int(now.Sub(params.StartTime).Seconds())
+		if params.TotalExecutionsCount > 0 {
+			des.RemainingExecutionsCount = params.TotalExecutionsCount - (result.SuccessCount + result.ErrorCount)
+		}
+		if now.After(params.FirstRunStartTime) {
+			des.AverageRPS = (result.SuccessCount + result.ErrorCount) / int(now.Sub(params.FirstRunStartTime).Seconds())
 		}
 		if des.AverageRPS > 0 {
 			des.ApproximateTimeLeft = time.Duration(des.RemainingExecutionsCount/des.AverageRPS) * time.Second
