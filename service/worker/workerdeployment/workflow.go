@@ -41,7 +41,7 @@ import (
 )
 
 const (
-	defaultMaxVersions = 5 // TODO: Delete this after merging with limits PR
+	defaultMaxVersions = 100 // TODO: Delete this after merging with limits PR
 )
 
 type (

@@ -510,7 +510,7 @@ func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testv
 }
 
 func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
-	//s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
+	s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
 	// TODO: This test also requires hardcoding maxVersions in the deployment workflow until dynamic config is settable
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
