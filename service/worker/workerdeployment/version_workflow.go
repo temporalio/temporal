@@ -62,7 +62,7 @@ var (
 	defaultActivityOptions = workflow.ActivityOptions{
 		StartToCloseTimeout: 1 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 1 * time.Second,
+			InitialInterval: 100 * time.Millisecond,
 			MaximumInterval: 60 * time.Second,
 		},
 	}
@@ -383,7 +383,7 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 
 func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInVersionArgs) error {
 	if _, ok := d.VersionState.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
-		return temporal.NewApplicationError("task queue already exists in deployment", errNoChangeType)
+		return temporal.NewApplicationError("task queue already exists in deployment version", errNoChangeType)
 	}
 	if len(d.VersionState.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
 		return temporal.NewApplicationError(
@@ -413,6 +413,21 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		d.logger.Error("Update canceled before deployment workflow started")
 		return err
 	}
+
+	// Add the task queue to the local state first. This is the safest because in case the rest of
+	// registration flow takes some time, DescribeVersion will return this TQ and other places such
+	// as SyncUnversionedRamp will have the most up-to-date version list sooner. Note that
+	// registration, once started, has to complete, all activities are indefinitely retried.
+	if d.VersionState.TaskQueueFamilies == nil {
+		d.VersionState.TaskQueueFamilies = make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
+	}
+	if d.VersionState.TaskQueueFamilies[args.TaskQueueName] == nil {
+		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{}
+	}
+	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
+		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueVersionData)
+	}
+	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{}
 
 	// initial data
 	data := &deploymentspb.DeploymentVersionData{
@@ -454,29 +469,12 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	// add version to worker-deployment workflow
-	activityCtx = workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
 		DeploymentName: d.VersionState.Version.GetDeploymentName(),
 		Version:        worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
 		RequestId:      d.newUUID(ctx),
 	}).Get(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	// if successful, add the task queue to the local state
-	if d.VersionState.TaskQueueFamilies == nil {
-		d.VersionState.TaskQueueFamilies = make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
-	}
-	if d.VersionState.TaskQueueFamilies[args.TaskQueueName] == nil {
-		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{}
-	}
-	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
-		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueVersionData)
-	}
-	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{}
-
-	return nil
+	return err
 }
 
 // If routing update time has changed then we want to let the update through.
