@@ -57,7 +57,7 @@ const (
 	userDataClosed
 )
 
-const maxFastUserDataFetches = 5
+const maxFastUserDataFetches = 10
 
 type (
 	userDataManager interface {
