@@ -533,8 +533,6 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	s.waitForNoPollers(ctx, tvs[1])
 	s.waitForNoPollers(ctx, tvs[2])
 
-	fmt.Println("CARLY: AFTER DRAINAGE")
-
 	// try to add a version again, and it succeeds, after deleting the second version but not the third (both are eligible)
 	// TODO: This fails if I try to add tvMax again...
 	s.startVersionWorkflow(ctx, testvars.New(s).WithBuildIDNumber(1111))
