@@ -43,6 +43,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -461,6 +462,19 @@ func (t *resetTest) sendUpdateAndProcessWFT(tv *testvars.TestVars, poller *testc
 	t.NoError(err)
 }
 
+func (t *resetTest) sendStartWorkflowRequestWithOptions(
+	tv *testvars.TestVars,
+	optsFn ...func(request *workflowservice.StartWorkflowExecutionRequest),
+) *workflowservice.StartWorkflowExecutionResponse {
+	request := t.startWorkflowRequest(tv)
+	for _, fn := range optsFn {
+		fn(request)
+	}
+	resp, err := t.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	t.NoError(err)
+	return resp
+}
+
 func (s *ResetWorkflowTestSuite) sendUpdateNoErrorWaitPolicyAccepted(tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
 	s.T().Helper()
 	return s.sendUpdateNoErrorInternal(tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
@@ -540,7 +554,7 @@ func (t *resetTest) reset(eventId int64) string {
 func (t *resetTest) run() {
 	t.totalSignals = 2
 	t.totalUpdates = 2
-	t.WorkflowUpdateBaseSuite.startWorkflow(t.tv)
+	runID := t.WorkflowUpdateBaseSuite.startWorkflow(t.tv)
 
 	poller := &testcore.TaskPoller{
 		Client:              t.FrontendClient(),
@@ -563,6 +577,18 @@ func (t *resetTest) run() {
   4 WorkflowTaskCompleted
 `, t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution()))
 
+	// Trying to start workflow with same WorkflowID will attach the RequestID to the existing workflow.
+	onConflictOptions := &workflowpb.OnConflictOptions{AttachRequestId: true}
+	resp := t.sendStartWorkflowRequestWithOptions(
+		t.tv,
+		func(request *workflowservice.StartWorkflowExecutionRequest) {
+			request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			request.OnConflictOptions = onConflictOptions
+		},
+	)
+	t.Equal(runID, resp.RunId)
+	t.False(resp.Started)
+
 	for i := 1; i <= t.totalSignals; i++ {
 		t.sendSignalAndProcessWFT(poller)
 	}
@@ -572,97 +598,131 @@ func (t *resetTest) run() {
 	t.True(t.commandsCompleted)
 	t.True(t.messagesCompleted)
 
+	events := t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution())
 	t.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
-  5 WorkflowExecutionSignaled
-  6 WorkflowTaskScheduled
-  7 WorkflowTaskStarted
-  8 WorkflowTaskCompleted
-  9 WorkflowExecutionSignaled
- 10 WorkflowTaskScheduled
- 11 WorkflowTaskStarted
- 12 WorkflowTaskCompleted
- 13 WorkflowTaskScheduled
- 14 WorkflowTaskStarted
- 15 WorkflowTaskCompleted
- 16 WorkflowExecutionUpdateAccepted
- 17 WorkflowTaskScheduled
- 18 WorkflowTaskStarted
- 19 WorkflowTaskCompleted
- 20 WorkflowExecutionUpdateAccepted
- 21 WorkflowExecutionCompleted
-`, t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution()))
+  5 WorkflowExecutionOptionsUpdated
+  6 WorkflowExecutionSignaled
+  7 WorkflowTaskScheduled
+  8 WorkflowTaskStarted
+  9 WorkflowTaskCompleted
+ 10 WorkflowExecutionSignaled
+ 11 WorkflowTaskScheduled
+ 12 WorkflowTaskStarted
+ 13 WorkflowTaskCompleted
+ 14 WorkflowTaskScheduled
+ 15 WorkflowTaskStarted
+ 16 WorkflowTaskCompleted
+ 17 WorkflowExecutionUpdateAccepted
+ 18 WorkflowTaskScheduled
+ 19 WorkflowTaskStarted
+ 20 WorkflowTaskCompleted
+ 21 WorkflowExecutionUpdateAccepted
+ 22 WorkflowExecutionCompleted
+`, events)
+
+	// Find the RequestID from the second start workflow request that's attached to the running workflow.
+	attachedRequestID := ""
+	for _, ev := range events {
+		if ev.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+			attachedRequestID = ev.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetAttachedRequestId()
+			break
+		}
+	}
+	t.NotEmpty(attachedRequestID)
 
 	resetToEventId := int64(4)
 	newRunId := t.reset(resetToEventId)
 	t.tv = t.tv.WithRunID(newRunId)
-	events := t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution())
+	events = t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution())
 
 	resetReapplyExcludeTypes := resetworkflow.GetResetReapplyExcludeTypes(t.reapplyExcludeTypes, t.reapplyType)
 	_, noSignals := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
 	_, noUpdates := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
 
+	expectedHistory := ""
 	signals := !noSignals
 	updates := !noUpdates
 	if !signals && !updates {
-		t.EqualHistoryEvents(`
+		expectedHistory = `
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
-  5 WorkflowTaskScheduled
-`, events)
+  5 WorkflowExecutionOptionsUpdated // this event is always reapplied
+  6 WorkflowTaskScheduled`
 	} else if !signals && updates {
-		t.EqualHistoryEvents(`
+		expectedHistory = `
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
-  5 WorkflowExecutionUpdateAdmitted
+  5 WorkflowExecutionOptionsUpdated // this event is always reapplied
   6 WorkflowExecutionUpdateAdmitted
-  7 WorkflowTaskScheduled
-`, events)
-	} else if signals && !updates {
-		t.EqualHistoryEvents(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowExecutionSignaled
-  6 WorkflowExecutionSignaled
-  7 WorkflowTaskScheduled
-`, events)
-	} else {
-		t.EqualHistoryEvents(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowExecutionSignaled
-  6 WorkflowExecutionSignaled
   7 WorkflowExecutionUpdateAdmitted
+  8 WorkflowTaskScheduled`
+	} else if signals && !updates {
+		expectedHistory = `
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionOptionsUpdated // this event is always reapplied
+  6 WorkflowExecutionSignaled
+  7 WorkflowExecutionSignaled
+  8 WorkflowTaskScheduled`
+	} else {
+		expectedHistory = `
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionOptionsUpdated // this event is always reapplied
+  6 WorkflowExecutionSignaled
+  7 WorkflowExecutionSignaled
   8 WorkflowExecutionUpdateAdmitted
-  9 WorkflowTaskScheduled
-`, events)
+  9 WorkflowExecutionUpdateAdmitted
+ 10 WorkflowTaskScheduled`
+	}
+	t.EqualHistoryEvents(expectedHistory, events)
+
+	if signals && updates {
 		resetToEventId := int64(4)
-		newRunId := t.reset(resetToEventId)
+		newRunId = t.reset(resetToEventId)
 		t.tv = t.tv.WithRunID(newRunId)
 		events = t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution())
-		t.EqualHistoryEvents(`
+		expectedHistory = `
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
-  5 WorkflowExecutionSignaled
+  5 WorkflowExecutionOptionsUpdated
   6 WorkflowExecutionSignaled
-  7 WorkflowExecutionUpdateAdmitted
+  7 WorkflowExecutionSignaled
   8 WorkflowExecutionUpdateAdmitted
-  9 WorkflowTaskScheduled
-`, events)
+  9 WorkflowExecutionUpdateAdmitted
+ 10 WorkflowTaskScheduled`
+		t.EqualHistoryEvents(expectedHistory, events)
 	}
+
+	// Send another start workflow with the same RequestID that got attached to verify it's deduped.
+	resp = t.sendStartWorkflowRequestWithOptions(
+		t.tv,
+		func(request *workflowservice.StartWorkflowExecutionRequest) {
+			request.RequestId = attachedRequestID
+			request.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			request.OnConflictOptions = onConflictOptions
+		},
+	)
+	t.Equal(newRunId, resp.RunId)
+	t.False(resp.Started)
+
+	// History events must be the same.
+	events = t.GetHistory(t.Namespace().String(), t.tv.WorkflowExecution())
+	t.EqualHistoryEvents(expectedHistory, events)
 }
 
 func (s *ResetWorkflowTestSuite) TestBufferedSignalIsReappliedOnReset() {
