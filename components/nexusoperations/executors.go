@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"text/template"
 	"time"
 
@@ -153,6 +154,9 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 	callbackURL := builder.String()
 
+	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
+	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &atomic.Value{})
+
 	client, err := e.ClientProvider(
 		ctx,
 		ref.WorkflowKey.GetNamespaceID(),
@@ -218,8 +222,9 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
-	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag)
-	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag)
+	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(ctx))
+	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
+	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 
 	var result *nexus.ClientStartOperationResult[*commonpb.Payload]
 	if callErr == nil {
@@ -516,6 +521,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		return err
 	}
 
+	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
+	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &atomic.Value{})
+
 	client, err := e.ClientProvider(
 		ctx,
 		ref.WorkflowKey.NamespaceID,
@@ -550,8 +558,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	statusCodeTag := metrics.OutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
-	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
-	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
+	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(ctx))
+	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
+	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 
 	if callErr != nil {
 		e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
@@ -763,4 +772,24 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 			},
 		},
 	}, nil
+}
+
+func failureSourceFromContext(ctx context.Context) string {
+	ctxVal := ctx.Value(commonnexus.FailureSourceContextKey)
+	if ctxVal == nil {
+		return ""
+	}
+	val, ok := ctxVal.(*atomic.Value)
+	if !ok {
+		return ""
+	}
+	src := val.Load()
+	if src == nil {
+		return ""
+	}
+	source, ok := src.(string)
+	if !ok {
+		return ""
+	}
+	return source
 }

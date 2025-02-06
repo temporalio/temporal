@@ -1817,11 +1817,13 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 
 	cases := []struct {
 		outcome            string
+		metricsOutcome     string
 		checkPendingError  func(t *testing.T, pendingErr error)
 		checkWorkflowError func(t *testing.T, wfErr error)
 	}{
 		{
-			outcome: "fail-handler-internal",
+			outcome:        "fail-handler-internal",
+			metricsOutcome: "handler-error:INTERNAL",
 			checkPendingError: func(t *testing.T, pendingErr error) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, pendingErr, &handlerErr)
@@ -1832,7 +1834,8 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 			},
 		},
 		{
-			outcome: "fail-handler-app-error",
+			outcome:        "fail-handler-app-error",
+			metricsOutcome: "handler-error:INTERNAL",
 			checkPendingError: func(t *testing.T, pendingErr error) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, pendingErr, &handlerErr)
@@ -1847,7 +1850,8 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 			},
 		},
 		{
-			outcome: "fail-handler-bad-request",
+			outcome:        "fail-handler-bad-request",
+			metricsOutcome: "handler-error:BAD_REQUEST",
 			checkWorkflowError: func(t *testing.T, wfErr error) {
 				var opErr *temporal.NexusOperationError
 				require.ErrorAs(t, wfErr, &opErr)
@@ -1857,11 +1861,11 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 				var appErr *temporal.ApplicationError
 				require.ErrorAs(t, handlerErr.Cause, &appErr)
 				require.Equal(t, "bad request", appErr.Message())
-
 			},
 		},
 		{
-			outcome: "fail-operation",
+			outcome:        "fail-operation",
+			metricsOutcome: "operation-unsuccessful:failed",
 			checkWorkflowError: func(t *testing.T, wfErr error) {
 				var opErr *temporal.NexusOperationError
 				require.ErrorAs(t, wfErr, &opErr)
@@ -1871,7 +1875,8 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 			},
 		},
 		{
-			outcome: "fail-operation-app-error",
+			outcome:        "fail-operation-app-error",
+			metricsOutcome: "operation-unsuccessful:failed",
 			checkWorkflowError: func(t *testing.T, wfErr error) {
 				var opErr *temporal.NexusOperationError
 				require.ErrorAs(t, wfErr, &opErr)
@@ -1888,6 +1893,7 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 
 	for _, tc := range cases {
 		s.T().Run(tc.outcome, func(t *testing.T) {
+			capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 			run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 				TaskQueue: taskQueue,
 			}, callerWF, tc.outcome)
@@ -1909,12 +1915,17 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 					assert.NotNil(t, f)
 
 				}, 10*time.Second, 100*time.Millisecond)
+				s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 				tc.checkPendingError(t, converter.FailureToError(f))
-				return
+			} else {
+				wfErr := run.Get(ctx, nil)
+				s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+				tc.checkWorkflowError(t, wfErr)
 			}
 
-			wfErr := run.Get(ctx, nil)
-			tc.checkWorkflowError(t, wfErr)
+			snap := capture.Snapshot()
+			require.Len(t, snap["nexus_outbound_requests"], 1)
+			require.Subset(t, snap["nexus_outbound_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartOperation", "failure_source": "worker", "outcome": tc.metricsOutcome})
 		})
 
 	}
@@ -2062,13 +2073,19 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration() {
 
 	for _, tc := range cases {
 		s.T().Run(tc.outcome+"-"+tc.action, func(t *testing.T) {
+			capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 			run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 				TaskQueue: taskQueue,
 			}, callerWF, tc.outcome, tc.action)
 			s.NoError(err)
 
 			wfErr := run.Get(ctx, nil)
+			s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 			tc.checkWorkflowError(t, wfErr)
+
+			snap := capture.Snapshot()
+			require.GreaterOrEqual(t, len(snap["nexus_outbound_requests"]), 1)
+			require.Subset(t, snap["nexus_outbound_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartOperation", "failure_source": "_unknown_", "outcome": "pending"})
 		})
 
 	}
@@ -2126,13 +2143,16 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	s.NoError(w.Start())
 	s.T().Cleanup(w.Stop)
 
+	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
 	}, callerWF)
 	s.NoError(err)
+	wfErr := run.Get(ctx, nil)
+	s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
 	var handlerErr *nexus.HandlerError
-	s.ErrorAs(run.Get(ctx, nil), &handlerErr)
+	s.ErrorAs(wfErr, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
 	var appErr *temporal.ApplicationError
 	s.ErrorAs(handlerErr.Cause, &appErr)
@@ -2143,6 +2163,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	var details string
 	s.NoError(json.Unmarshal(failure.Details, &details))
 	s.Equal("details", details)
+
+	snap := capture.Snapshot()
+	s.Len(snap["nexus_outbound_requests"], 1)
+	// Confirming that requests which do not go through our frontend are not tagged with `failure_source`
+	s.Subset(snap["nexus_outbound_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartOperation", "failure_source": "_unknown_", "outcome": "handler-error:BAD_REQUEST"})
 }
 
 func (s *NexusWorkflowTestSuite) sendNexusCompletionRequest(

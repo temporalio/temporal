@@ -37,6 +37,17 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
+const (
+	// FailureSourceHeaderName is the header used to indicate from where the Nexus failure originated.
+	FailureSourceHeaderName = "Temporal-Nexus-Failure-Source"
+	// FailureSourceWorker indicates the failure originated from outside the server (e.g. bad request or on the Nexus worker).
+	FailureSourceWorker = "worker"
+)
+
+type failureSourceContextKeyType struct{}
+
+var FailureSourceContextKey = failureSourceContextKeyType{}
+
 var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
 
 // ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
