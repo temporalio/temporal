@@ -46,7 +46,7 @@ func TestWorkerDeploymentSuite(t *testing.T) {
 func (s *WorkerDeploymentSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
-	s.env.RegisterWorkflow(WorkflowWithDC(nil))
+	s.env.RegisterWorkflow(Workflow)
 }
 
 func (s *WorkerDeploymentSuite) TearDownTest() {
