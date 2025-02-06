@@ -34,59 +34,75 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func DrainageWorkflowWithDurations(visibilityGracePeriod, refreshInterval time.Duration) func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
-	return func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
-		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-		var a *DrainageActivities
+const (
+	defaultVisibilityRefresh = 5 * time.Minute
+	defaultVisibilityGrace   = 3 * time.Minute
+)
 
-		// listen for done signal sent by parent if started accepting new executions or continued-as-new
-		done := false
-		workflow.Go(ctx, func(ctx workflow.Context) {
-			terminateChan := workflow.GetSignalChannel(ctx, TerminateDrainageSignal)
-			terminateChan.Receive(ctx, nil)
-			done = true
-		})
+func DrainageWorkflow(
+	ctx workflow.Context,
+	unsafeRefreshIntervalGetter func() any,
+	unsafeVisibilityGracePeriodGetter func() any,
+	version *deploymentspb.WorkerDeploymentVersion,
+	first bool,
+) error {
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var a *DrainageActivities
 
-		// Set status = DRAINING and then sleep for visibilityGracePeriod (to let recently-started workflows arrive in visibility)
-		if first { // skip if resuming after the parent continued-as-new
-			parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
-			now := timestamppb.Now()
-			drainingInfo := &deploymentpb.VersionDrainageInfo{
-				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
-				LastChangedTime: now,
-				LastCheckedTime: now,
-			}
-			err := workflow.SignalExternalWorkflow(ctx, parentWf.ID, parentWf.RunID, SyncDrainageSignalName, drainingInfo).Get(ctx, nil)
-			if err != nil {
-				return err
-			}
-			_ = workflow.Sleep(ctx, visibilityGracePeriod)
+	// listen for done signal sent by parent if started accepting new executions or continued-as-new
+	done := false
+	workflow.Go(ctx, func(ctx workflow.Context) {
+		terminateChan := workflow.GetSignalChannel(ctx, TerminateDrainageSignal)
+		terminateChan.Receive(ctx, nil)
+		done = true
+	})
+
+	// Set status = DRAINING and then sleep for visibilityGracePeriod (to let recently-started workflows arrive in visibility)
+	if first { // skip if resuming after the parent continued-as-new
+		parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
+		now := timestamppb.Now()
+		drainingInfo := &deploymentpb.VersionDrainageInfo{
+			Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+			LastChangedTime: now,
+			LastCheckedTime: now,
+		}
+		err := workflow.SignalExternalWorkflow(ctx, parentWf.ID, parentWf.RunID, SyncDrainageSignalName, drainingInfo).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
+		grace, err := getSafeDurationConfig(ctx, "getVisibilityGracePeriod", unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
+		if err != nil {
+			return err
+		}
+		_ = workflow.Sleep(ctx, grace)
+	}
+
+	for {
+		if done {
+			return nil
+		}
+		var info *deploymentpb.VersionDrainageInfo
+		err := workflow.ExecuteActivity(
+			activityCtx,
+			a.GetVersionDrainageStatus,
+			version,
+		).Get(ctx, &info)
+		if err != nil {
+			return err
 		}
 
-		for {
-			if done {
-				return nil
-			}
-			var info *deploymentpb.VersionDrainageInfo
-			err := workflow.ExecuteActivity(
-				activityCtx,
-				a.GetVersionDrainageStatus,
-				version,
-			).Get(ctx, &info)
-			if err != nil {
-				return err
-			}
-
-			parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
-			err = workflow.SignalExternalWorkflow(ctx, parentWf.ID, parentWf.RunID, SyncDrainageSignalName, info).Get(ctx, nil)
-			if err != nil {
-				return err
-			}
-
-			if info.Status == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
-				return nil
-			}
-			_ = workflow.Sleep(ctx, refreshInterval)
+		parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
+		err = workflow.SignalExternalWorkflow(ctx, parentWf.ID, parentWf.RunID, SyncDrainageSignalName, info).Get(ctx, nil)
+		if err != nil {
+			return err
 		}
+		if info.Status == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+			return nil
+		}
+		refresh, err := getSafeDurationConfig(ctx, "getDrainageRefreshInterval", unsafeRefreshIntervalGetter, defaultVisibilityRefresh)
+		if err != nil {
+			return err
+		}
+		_ = workflow.Sleep(ctx, refresh)
 	}
 }

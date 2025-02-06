@@ -1770,7 +1770,7 @@ func (s *Versioning3Suite) Name() string {
 		fullName[len(fullName)-21:],
 		farm.Fingerprint32([]byte(fullName)),
 	)
-	return strings.Replace(short, "/", "|", -1)
+	return strings.Replace(short, ".", "|", -1)
 }
 
 // pollWftAndHandle can be used in sync and async mode. For async mode pass the async channel. It

@@ -53,12 +53,3 @@ func (s *WorkerDeploymentSuite) TearDownTest() {
 	s.controller.Finish()
 	s.env.AssertExpectations(s.T())
 }
-
-/*
-func (d *WorkerDeploymentSuite) TestStartWorkerDeploymentWorkflow() {}
-
-
-
-
-
-*/

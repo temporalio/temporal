@@ -1505,16 +1505,16 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
 		WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 
-			// Use the same request ID to dedupe StartWorkflowExecution calls
-			RequestId:             childRequestID,
-			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
-			RetryPolicy:           attributes.RetryPolicy,
-			CronSchedule:          attributes.CronSchedule,
-			Memo:                  attributes.Memo,
-			SearchAttributes:      attributes.SearchAttributes,
-			UserMetadata:          userMetadata,
-			VersioningOverride:    parentPinnedOverride,
-		}
+		// Use the same request ID to dedupe StartWorkflowExecution calls
+		RequestId:             childRequestID,
+		WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
+		RetryPolicy:           attributes.RetryPolicy,
+		CronSchedule:          attributes.CronSchedule,
+		Memo:                  attributes.Memo,
+		SearchAttributes:      attributes.SearchAttributes,
+		UserMetadata:          userMetadata,
+		VersioningOverride:    parentPinnedOverride,
+	}
 
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,

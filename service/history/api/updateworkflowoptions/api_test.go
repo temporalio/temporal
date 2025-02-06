@@ -44,13 +44,13 @@ var (
 	pinnedOverrideOptionsA = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-			PinnedVersion: "X/A",
+			PinnedVersion: "X.A",
 		},
 	}
 	pinnedOverrideOptionsB = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-			PinnedVersion: "X/B",
+			PinnedVersion: "X.B",
 		},
 	}
 )
