@@ -128,6 +128,7 @@ message GetMutableStateRequest {
     int64 expected_next_event_id = 3;
     bytes current_branch_token = 4;
     temporal.server.api.history.v1.VersionHistoryItem version_history_item = 5;
+    temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 6;
 }
 
 message GetMutableStateResponse {

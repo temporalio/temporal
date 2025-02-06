@@ -459,5 +459,7 @@ type (
 
 		AddReapplyCandidateEvent(event *historypb.HistoryEvent)
 		GetReapplyCandidateEvents() []*historypb.HistoryEvent
+
+		CurrentVersionedTransition() *persistencespb.VersionedTransition
 	}
 )

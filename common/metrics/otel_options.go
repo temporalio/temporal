@@ -38,9 +38,10 @@ type (
 	optionSet[T any] interface {
 		addOption(option metric.InstrumentOption) T
 	}
-	counterOptions   []metric.Int64CounterOption
-	gaugeOptions     []metric.Float64ObservableGaugeOption
-	histogramOptions []metric.Int64HistogramOption
+	counterOptions          []metric.Int64CounterOption
+	gaugeOptions            []metric.Float64ObservableGaugeOption
+	float64HistogramOptions []metric.Float64HistogramOption
+	int64HistogramOptions   []metric.Int64HistogramOption
 )
 
 func addOptions[T optionSet[T]](omp *otelMetricsHandler, opts T, metricName string) T {
@@ -68,6 +69,10 @@ func (opts gaugeOptions) addOption(option metric.InstrumentOption) gaugeOptions 
 	return append(opts, option)
 }
 
-func (opts histogramOptions) addOption(option metric.InstrumentOption) histogramOptions {
+func (opts float64HistogramOptions) addOption(option metric.InstrumentOption) float64HistogramOptions {
+	return append(opts, option)
+}
+
+func (opts int64HistogramOptions) addOption(option metric.InstrumentOption) int64HistogramOptions {
 	return append(opts, option)
 }

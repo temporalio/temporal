@@ -1718,6 +1718,20 @@ func (mr *MockMutableStateMockRecorder) CurrentTaskQueue() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentTaskQueue", reflect.TypeOf((*MockMutableState)(nil).CurrentTaskQueue))
 }
 
+// CurrentVersionedTransition mocks base method.
+func (m *MockMutableState) CurrentVersionedTransition() *persistence.VersionedTransition {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CurrentVersionedTransition")
+	ret0, _ := ret[0].(*persistence.VersionedTransition)
+	return ret0
+}
+
+// CurrentVersionedTransition indicates an expected call of CurrentVersionedTransition.
+func (mr *MockMutableStateMockRecorder) CurrentVersionedTransition() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentVersionedTransition", reflect.TypeOf((*MockMutableState)(nil).CurrentVersionedTransition))
+}
+
 // DeleteSignalRequested mocks base method.
 func (m *MockMutableState) DeleteSignalRequested(requestID string) {
 	m.ctrl.T.Helper()

@@ -37,6 +37,8 @@ message TaskAlreadyStartedFailure {
 message CurrentBranchChangedFailure {
     bytes current_branch_token = 1;
     bytes request_branch_token = 2;
+    temporal.server.api.persistence.v1.VersionedTransition current_versioned_transition = 3;
+    temporal.server.api.persistence.v1.VersionedTransition request_versioned_transition = 4;
 }
 
 message ShardOwnershipLostFailure {

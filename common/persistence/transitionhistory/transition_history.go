@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,15 +20,41 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package metrics
+package transitionhistory
 
-type MetricUnit string
-
-// MetricUnit supported values
-// Values are pulled from https://pkg.go.dev/golang.org/x/exp/event#Unit
-const (
-	Dimensionless = "1"
-	Milliseconds  = "ms"
-	Bytes         = "By"
-	Seconds       = "s"
+import (
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 )
+
+func CopyVersionedTransitions(
+	transitions []*persistencespb.VersionedTransition,
+) []*persistencespb.VersionedTransition {
+	if transitions == nil {
+		return nil
+	}
+	copied := make([]*persistencespb.VersionedTransition, len(transitions))
+	for i, t := range transitions {
+		copied[i] = CopyVersionedTransition(t)
+	}
+	return copied
+}
+
+func CopyVersionedTransition(
+	transition *persistencespb.VersionedTransition,
+) *persistencespb.VersionedTransition {
+	if transition == nil {
+		return nil
+	}
+	return common.CloneProto(transition)
+}
+
+func LastVersionedTransition(
+	transitions []*persistencespb.VersionedTransition,
+) *persistencespb.VersionedTransition {
+	if len(transitions) == 0 {
+		// transition history is not enabled
+		return nil
+	}
+	return transitions[len(transitions)-1]
+}
