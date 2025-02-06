@@ -176,11 +176,34 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 		name         string
 		cfg          *Config
 		expectedType interface{}
+		cfgValidator func(*Config) bool
 	}{
 		{
 			name:         "nil config",
 			cfg:          nil,
 			expectedType: &noopMetricsHandler{},
+			cfgValidator: func(c *Config) bool { return true },
+		},
+		{
+			name:         "nil prometheus config",
+			cfg:          &Config{Prometheus: nil},
+			expectedType: &noopMetricsHandler{},
+			cfgValidator: func(c *Config) bool { return true },
+		},
+		{
+			name: "no framework set",
+			cfg: &Config{
+				Prometheus: &PrometheusConfig{
+					Framework:     "",
+					ListenAddress: "localhost:0",
+				},
+			},
+			expectedType: &otelMetricsHandler{},
+			cfgValidator: func(c *Config) bool {
+				return c.ClientConfig.WithoutUnitSuffix &&
+					c.ClientConfig.WithoutCounterSuffix &&
+					c.ClientConfig.RecordTimerInSeconds
+			},
 		},
 		{
 			name: "tally",
@@ -190,17 +213,30 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 					ListenAddress: "localhost:0",
 				},
 			},
-			expectedType: &tallyMetricsHandler{},
+			expectedType: &otelMetricsHandler{},
+			cfgValidator: func(c *Config) bool {
+				return c.ClientConfig.WithoutUnitSuffix &&
+					c.ClientConfig.WithoutCounterSuffix &&
+					c.ClientConfig.RecordTimerInSeconds
+			},
 		},
 		{
 			name: "opentelemetry",
 			cfg: &Config{
+				ClientConfig: ClientConfig{
+					WithoutUnitSuffix: true,
+				},
 				Prometheus: &PrometheusConfig{
 					Framework:     FrameworkOpentelemetry,
 					ListenAddress: "localhost:0",
 				},
 			},
 			expectedType: &otelMetricsHandler{},
+			cfgValidator: func(c *Config) bool {
+				return c.ClientConfig.WithoutUnitSuffix &&
+					!c.ClientConfig.WithoutCounterSuffix &&
+					!c.ClientConfig.RecordTimerInSeconds
+			},
 		},
 	} {
 		c := c
@@ -213,6 +249,7 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 				handler.Stop(logger)
 			})
 			assert.IsType(t, c.expectedType, handler)
+			assert.True(t, c.cfgValidator(c.cfg))
 		})
 	}
 
