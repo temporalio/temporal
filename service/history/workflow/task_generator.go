@@ -304,26 +304,7 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	for _, op := range opLog {
 		switch transitionOp := op.(type) {
 		case hsm.DeleteOperation:
-			execInfo := r.mutableState.GetExecutionInfo()
-			trimmedTimers := make([]*persistencespb.StateMachineTimerGroup, 0, len(execInfo.StateMachineTimers))
-
-			for _, group := range execInfo.StateMachineTimers {
-				trimmedInfos := make([]*persistencespb.StateMachineTaskInfo, 0, len(group.Infos))
-				for _, info := range group.GetInfos() {
-					if !isPathAffectedByDelete(transitionOp.Path(), info.GetRef().GetPath()) {
-						trimmedInfos = append(trimmedInfos, info)
-					}
-				}
-				if len(trimmedInfos) > 0 {
-					trimmedTimers = append(trimmedTimers, &persistencespb.StateMachineTimerGroup{
-						Infos:     trimmedInfos,
-						Deadline:  group.Deadline,
-						Scheduled: group.Scheduled,
-					})
-				}
-			}
-			execInfo.StateMachineTimers = trimmedTimers
-
+			deleteStateMachineTimersByPath(r.mutableState.GetExecutionInfo(), transitionOp.Path())
 		case hsm.TransitionOperation:
 			node, err := tree.Child(transitionOp.Path())
 			if err != nil {
@@ -944,6 +925,27 @@ func generateSubStateMachineTask(
 	}
 
 	return nil
+}
+
+func deleteStateMachineTimersByPath(execInfo *persistencespb.WorkflowExecutionInfo, path []hsm.Key) {
+	trimmedTimers := make([]*persistencespb.StateMachineTimerGroup, 0, len(execInfo.StateMachineTimers))
+
+	for _, group := range execInfo.StateMachineTimers {
+		trimmedInfos := make([]*persistencespb.StateMachineTaskInfo, 0, len(group.Infos))
+		for _, info := range group.GetInfos() {
+			if !isPathAffectedByDelete(path, info.GetRef().GetPath()) {
+				trimmedInfos = append(trimmedInfos, info)
+			}
+		}
+		if len(trimmedInfos) > 0 {
+			trimmedTimers = append(trimmedTimers, &persistencespb.StateMachineTimerGroup{
+				Infos:     trimmedInfos,
+				Deadline:  group.Deadline,
+				Scheduled: group.Scheduled,
+			})
+		}
+	}
+	execInfo.StateMachineTimers = trimmedTimers
 }
 
 func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.StateMachineKey) bool {
