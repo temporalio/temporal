@@ -162,7 +162,7 @@ func sortAncestors(ans []*persistencespb.HistoryBranchRange) {
 func ValidateBatch(
 	batch []*historyspb.StrippedHistoryEvent,
 	branchToken []byte,
-	token *historyPagingToken,
+	lastEventID int64,
 	logger log.Logger,
 ) error {
 	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
@@ -176,7 +176,7 @@ func ValidateBatch(
 			tag.WorkflowNextEventID(lastEvent.GetEventId()),
 			tag.LastEventVersion(lastEvent.GetVersion()),
 			tag.Counter(eventCount),
-			tag.TokenLastEventID(token.LastEventID),
+			tag.TokenLastEventID(lastEventID),
 		}
 	}
 	firstEvent = batch[0]
@@ -188,11 +188,10 @@ func ValidateBatch(
 		logger.Error(dataLossMsg, dataLossTags(errWrongVersion)...)
 		return serviceerror.NewDataLoss(errWrongVersion)
 	}
-	if firstEvent.GetEventId() != token.LastEventID+1 {
+	if firstEvent.GetEventId() != lastEventID+1 {
 		logger.Error(dataLossMsg, dataLossTags(errNonContiguousEventID)...)
 		return serviceerror.NewDataLoss(errNonContiguousEventID)
 	}
-	token.LastEventID = lastEvent.GetEventId()
 	return nil
 }
 
