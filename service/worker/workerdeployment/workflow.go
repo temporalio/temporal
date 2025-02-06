@@ -346,6 +346,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		DeploymentName: d.DeploymentName,
 		Version:        args.Version,
 		RequestId:      uuid.New(),
+		SkipDrainage:   args.SkipDrainage,
 	}).Get(ctx, &res)
 	if err != nil {
 		return err

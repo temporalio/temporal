@@ -364,7 +364,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 	s.Nil(err)
 
 	// deleting this version should fail since the version is current
-	s.tryDeleteVersion(ctx, tv1, false)
+	s.tryDeleteVersion(ctx, tv1, false, false)
 
 }
 
@@ -387,7 +387,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 	s.Nil(err)
 
 	// deleting this version should fail since the version is ramping
-	s.tryDeleteVersion(ctx, tv1, false)
+	s.tryDeleteVersion(ctx, tv1, false, false)
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_NotDrained() {
@@ -399,7 +399,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NotDrained() {
 	s.startVersionWorkflow(ctx, tv1)
 
 	// Version is not "drained" so delete should fail
-	s.tryDeleteVersion(ctx, tv1, false)
+	s.tryDeleteVersion(ctx, tv1, false, false)
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
@@ -460,7 +460,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 	s.Nil(err)
 
 	// Version will bypass "drained" check but delete should still fail since we have active pollers.
-	s.tryDeleteVersion(ctx, tv1, false)
+	s.tryDeleteVersion(ctx, tv1, false, false)
 }
 
 func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, tv *testvars.TestVars) {
@@ -573,7 +573,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	s.waitForNoPollers(ctx, tv1)
 
 	// delete succeeds
-	s.tryDeleteVersion(ctx, tv1, true)
+	s.tryDeleteVersion(ctx, tv1, true, false)
 
 	// deployment version does not exist in the deployment list
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -591,7 +591,50 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	}, time.Second*5, time.Millisecond*200)
 
 	// idempotency check: deleting the same version again should succeed
-	s.tryDeleteVersion(ctx, tv1, true)
+	s.tryDeleteVersion(ctx, tv1, true, false)
+}
+
+func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
+	s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	s.startVersionWorkflow(ctx, tv1)
+
+	// Wait for pollers going away
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     tv1.TaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, resp.Pollers)
+	}, 10*time.Second, time.Second)
+
+	// skipDrainage=true will make delete succeed
+	s.tryDeleteVersion(ctx, tv1, true, true)
+
+	// deployment version does not exist in the deployment list
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv1.DeploymentSeries(),
+		})
+		a.NoError(err)
+		if resp != nil {
+			for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+				a.NotEqual(tv1.DeploymentVersionString(), vs.Version)
+			}
+		}
+	}, time.Second*5, time.Millisecond*200)
+
+	// idempotency check: deleting the same version again should succeed
+	s.tryDeleteVersion(ctx, tv1, true, true)
 
 	// Describe Worker Deployment should give not found
 	// describe deployment version gives not found error
@@ -795,10 +838,12 @@ func (s *DeploymentVersionSuite) tryDeleteVersion(
 	ctx context.Context,
 	tv *testvars.TestVars,
 	expectSuccess bool,
+	skipDrainage bool,
 ) {
 	_, err := s.FrontendClient().DeleteWorkerDeploymentVersion(ctx, &workflowservice.DeleteWorkerDeploymentVersionRequest{
-		Namespace: s.Namespace().String(),
-		Version:   tv.DeploymentVersionString(),
+		Namespace:    s.Namespace().String(),
+		Version:      tv.DeploymentVersionString(),
+		SkipDrainage: skipDrainage,
 	})
 	if expectSuccess {
 		s.Nil(err)

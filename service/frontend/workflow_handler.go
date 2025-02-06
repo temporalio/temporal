@@ -3557,7 +3557,7 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 		return nil, err
 	}
 
-	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request.Version)
+	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, request.Version, request.SkipDrainage, request.Identity)
 	if err != nil {
 		return nil, err
 	}

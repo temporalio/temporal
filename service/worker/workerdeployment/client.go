@@ -102,6 +102,8 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		version string,
+		skipDrainage bool,
+		identity string,
 	) error
 
 	DeleteWorkerDeployment(
@@ -157,6 +159,7 @@ type Client interface {
 		deploymentName, version string,
 		identity string,
 		requestID string,
+		skipDrainage bool,
 	) error
 
 	// Used internally by the Worker Deployment Version workflow in its AddVersionToWorkerDeployment Activity
@@ -618,6 +621,8 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	version string,
+	skipDrainage bool,
+	identity string,
 ) (retErr error) {
 	v, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
@@ -629,7 +634,10 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	//revive:disable-next-line:defer
 	defer d.record("DeleteWorkerDeploymentVersion", &retErr, namespaceEntry.Name(), deploymentName, buildId)()
 	requestID := uuid.New()
-	identity := requestID
+
+	if identity == "" {
+		identity = requestID
+	}
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
 		Identity: identity,
@@ -637,6 +645,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 			DeploymentName: deploymentName,
 			BuildId:        buildId,
 		}),
+		SkipDrainage: skipDrainage,
 	})
 	if err != nil {
 		return err
@@ -849,9 +858,10 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	deploymentName, version string,
 	identity string,
 	requestID string,
+	skipDrainage bool,
 ) (retErr error) {
 	//revive:disable-next-line:defer
-	defer d.record("DeleteVersionFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, identity)()
+	defer d.record("DeleteVersionFromWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, version, identity, skipDrainage)()
 
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
@@ -859,12 +869,21 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	}
 
 	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
+		Identity:     identity,
+		Version:      version,
+		SkipDrainage: skipDrainage,
+	})
+	if err != nil {
+		return err
+	}
+
 	outcome, err := d.update(
 		ctx,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
-			Input: &updatepb.Input{Name: DeleteVersion, Args: nil},
+			Input: &updatepb.Input{Name: DeleteVersion, Args: updatePayload},
 			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 		},
 	)
