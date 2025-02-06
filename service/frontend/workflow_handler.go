@@ -761,18 +761,16 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, err
 	}
 
-	if !wh.config.SendRawWorkflowHistory(request.Namespace) {
+	if response.Response.History != nil {
 		isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 		if isCloseEventOnly {
 			if len(response.Response.History.GetEvents()) > 0 {
 				response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
 			}
 		}
-		if response.Response.History != nil {
-			err = api.ProcessOutgoingSearchAttributes(wh.namespaceRegistry, wh.saProvider, wh.saMapperProvider, response.Response.History.Events, namespaceID, wh.visibilityMgr)
-			if err != nil {
-				return nil, err
-			}
+		err = api.ProcessOutgoingSearchAttributes(wh.namespaceRegistry, wh.saProvider, wh.saMapperProvider, response.Response.History.Events, namespaceID, wh.visibilityMgr)
+		if err != nil {
+			return nil, err
 		}
 		err = fixFollowEvents(ctx, wh.versionChecker, isCloseEventOnly, response.Response.History)
 		if err != nil {

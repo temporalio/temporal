@@ -336,8 +336,8 @@ func setHistoryForRecordWfTaskStartedResp(
 	for i, blob := range rawHistory {
 		historyBlobs[i] = blob.Data
 	}
-	// If there are no events in the history, frontend will not be able to deserialize the raw bytes response to History object.
-	// In that case, create an empty history object and set it in the response.
+	// If we return an empty slice in RecordWorkflowTaskStartedResponseWithRawHistory, History field in deserialized
+	// RecordWorkflowTaskStartedResponse will be nil. This is for avoiding that.
 	if len(historyBlobs) == 0 {
 		history := historypb.History{}
 		blob, err := history.Marshal()
