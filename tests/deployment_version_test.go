@@ -138,6 +138,19 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 		})
 		a.NoError(err)
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+
+		newResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+
+		var versionSummaryNames []string
+		for _, versionSummary := range newResp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			versionSummaryNames = append(versionSummaryNames, versionSummary.GetVersion())
+		}
+		a.Contains(versionSummaryNames, tv.DeploymentVersionString())
+
 	}, time.Second*5, time.Millisecond*200)
 }
 
@@ -494,6 +507,9 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 			}
 		}
 	}, time.Second*5, time.Millisecond*200)
+
+	// idempotency check: deleting the same version again should succeed
+	s.tryDeleteVersion(ctx, tv1, true)
 }
 
 // VersionMissingTaskQueues
