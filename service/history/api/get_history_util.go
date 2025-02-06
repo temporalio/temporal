@@ -77,7 +77,7 @@ func GetRawHistory(
 	}
 
 	allEvents := make([]*historyspb.StrippedHistoryEvent, 0)
-	var lastEventID int64
+	lastEventID := firstEventID - 1
 	for _, blob := range rawHistory {
 		events, err := shard.GetPayloadSerializer().DeserializeStrippedEvents(blob)
 		if err != nil {

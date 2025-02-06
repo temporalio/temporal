@@ -5629,18 +5629,22 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
-	historyBlob1, err := s.mockShard.GetPayloadSerializer().SerializeEvent(
-		&historypb.HistoryEvent{
-			EventId:   int64(3),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+	historyBlob1, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
+		[]*historypb.HistoryEvent{
+			{
+				EventId:   int64(3),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			},
 		},
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
-	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvent(
-		&historypb.HistoryEvent{
-			EventId:   int64(4),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
+	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
+		[]*historypb.HistoryEvent{
+			{
+				EventId:   int64(4),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
+			},
 		},
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
