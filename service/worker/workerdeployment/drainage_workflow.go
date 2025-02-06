@@ -25,16 +25,15 @@
 package workerdeployment
 
 import (
-	"time"
-
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func DrainageWorkflowWithDurations(visibilityGracePeriod, refreshInterval time.Duration) func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
+func DrainageWorkflowWithDC(dc *dynamicconfig.Collection, ns string) func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
 	return func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		var a *DrainageActivities
@@ -60,7 +59,7 @@ func DrainageWorkflowWithDurations(visibilityGracePeriod, refreshInterval time.D
 			if err != nil {
 				return err
 			}
-			_ = workflow.Sleep(ctx, visibilityGracePeriod)
+			_ = workflow.Sleep(ctx, dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(dc)(ns)) // todo (carly): make this MutableSideEffect
 		}
 
 		for {
@@ -86,7 +85,7 @@ func DrainageWorkflowWithDurations(visibilityGracePeriod, refreshInterval time.D
 			if info.Status == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
 				return nil
 			}
-			_ = workflow.Sleep(ctx, refreshInterval)
+			_ = workflow.Sleep(ctx, dynamicconfig.VersionDrainageStatusRefreshInterval.Get(dc)(ns)) // todo (carly): make this MutableSideEffect
 		}
 	}
 }

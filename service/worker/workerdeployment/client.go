@@ -190,13 +190,14 @@ type ErrRegister struct{ error }
 
 // ClientImpl implements Client
 type ClientImpl struct {
-	logger                    log.Logger
-	historyClient             historyservice.HistoryServiceClient
-	visibilityManager         manager.VisibilityManager
-	matchingClient            resource.MatchingClient
-	maxIDLengthLimit          dynamicconfig.IntPropertyFn
-	visibilityMaxPageSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	maxTaskQueuesInDeployment dynamicconfig.IntPropertyFnWithNamespaceFilter
+	logger                           log.Logger
+	historyClient                    historyservice.HistoryServiceClient
+	visibilityManager                manager.VisibilityManager
+	matchingClient                   resource.MatchingClient
+	maxIDLengthLimit                 dynamicconfig.IntPropertyFn
+	visibilityMaxPageSize            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	maxTaskQueuesInDeploymentVersion dynamicconfig.IntPropertyFnWithNamespaceFilter
+	maxDeployments                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 var _ Client = (*ClientImpl)(nil)
@@ -218,7 +219,7 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInVersionArgs{
 		TaskQueueName: taskQueueName,
 		TaskQueueType: taskQueueType,
-		MaxTaskQueues: int32(d.maxTaskQueuesInDeployment(namespaceEntry.Name().String())),
+		MaxTaskQueues: int32(d.maxTaskQueuesInDeploymentVersion(namespaceEntry.Name().String())),
 	})
 	if err != nil {
 		return err
@@ -724,6 +725,15 @@ func (d *ClientImpl) StartWorkerDeployment(
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("StartWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
+
+	// TODO (Carly): either max page size or default page size is 1000, so if there are > 1000 this would not catch it
+	deps, _, err := d.ListWorkerDeployments(ctx, namespaceEntry, 0, nil)
+	if err != nil {
+		return err
+	}
+	if len(deps) >= d.maxDeployments(namespaceEntry.Name().String()) {
+		return serviceerror.NewFailedPrecondition("maximum deployments in namespace, adjust scavenger speed or delete manually to continue deploying.")
+	}
 
 	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 

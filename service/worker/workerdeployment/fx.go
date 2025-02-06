@@ -40,9 +40,8 @@ import (
 
 type (
 	workerComponent struct {
-		activityDeps                        activityDeps
-		drainageStatusVisibilityGracePeriod dynamicconfig.DurationPropertyFnWithNamespaceFilter
-		drainageStatusRefreshInterval       dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		activityDeps  activityDeps
+		dynamicConfig *dynamicconfig.Collection
 	}
 
 	activityDeps struct {
@@ -73,13 +72,14 @@ func ClientProvider(
 	dc *dynamicconfig.Collection,
 ) Client {
 	return &ClientImpl{
-		logger:                    logger,
-		historyClient:             historyClient,
-		visibilityManager:         visibilityManager,
-		matchingClient:            matchingClient,
-		maxIDLengthLimit:          dynamicconfig.MaxIDLengthLimit.Get(dc),
-		visibilityMaxPageSize:     dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
-		maxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
+		logger:                           logger,
+		historyClient:                    historyClient,
+		visibilityManager:                visibilityManager,
+		matchingClient:                   matchingClient,
+		maxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
+		visibilityMaxPageSize:            dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
+		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
 	}
 }
 
@@ -89,9 +89,8 @@ func NewResult(
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			activityDeps:                        params,
-			drainageStatusVisibilityGracePeriod: dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(dc),
-			drainageStatusRefreshInterval:       dynamicconfig.VersionDrainageStatusRefreshInterval.Get(dc),
+			activityDeps:  params,
+			dynamicConfig: dc,
 		},
 	}
 }
@@ -104,9 +103,9 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(VersionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
-	registry.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
+	registry.RegisterWorkflowWithOptions(WorkflowWithDC(s.dynamicConfig), workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 	registry.RegisterWorkflowWithOptions(
-		DrainageWorkflowWithDurations(s.drainageStatusVisibilityGracePeriod(ns.Name().String()), s.drainageStatusRefreshInterval(ns.Name().String())),
+		DrainageWorkflowWithDC(s.dynamicConfig, ns.Name().String()),
 		workflow.RegisterOptions{Name: WorkerDeploymentDrainageWorkflowType},
 	)
 

@@ -28,6 +28,8 @@ import (
 	"bytes"
 	"slices"
 
+	"go.temporal.io/server/common/dynamicconfig"
+
 	"github.com/pborman/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
@@ -51,19 +53,23 @@ type (
 		pendingUpdates int
 		conflictToken  []byte
 		done           bool
+		dc             *dynamicconfig.Collection
 	}
 )
 
-func Workflow(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
-	workflowRunner := &WorkflowRunner{
-		WorkerDeploymentWorkflowArgs: args,
+func WorkflowWithDC(dc *dynamicconfig.Collection) func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+	return func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+		workflowRunner := &WorkflowRunner{
+			WorkerDeploymentWorkflowArgs: args,
 
-		a:       nil,
-		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
-		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
-		lock:    workflow.NewMutex(ctx),
+			a:       nil,
+			logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
+			metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
+			lock:    workflow.NewMutex(ctx),
+			dc:      dc,
+		}
+		return workflowRunner.run(ctx)
 	}
-	return workflowRunner.run(ctx)
 }
 
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
@@ -154,7 +160,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// Note, if update requests come in faster than they
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
-	return workflow.NewContinueAsNewError(ctx, Workflow, d.WorkerDeploymentWorkflowArgs)
+	return workflow.NewContinueAsNewError(ctx, WorkflowWithDC(d.dc), d.WorkerDeploymentWorkflowArgs)
 }
 
 func (d *WorkflowRunner) validateDeleteDeployment() error {
