@@ -70,7 +70,7 @@ func DrainageWorkflow(
 		if err != nil {
 			return err
 		}
-		grace, err := getDurationConfig(ctx, "getVisibilityGracePeriod", unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
+		grace, err := getSafeDurationConfig(ctx, "getVisibilityGracePeriod", unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
 		if err != nil {
 			return err
 		}
@@ -99,7 +99,7 @@ func DrainageWorkflow(
 		if info.Status == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
 			return nil
 		}
-		refresh, err := getDurationConfig(ctx, "getDrainageRefreshInterval", unsafeRefreshIntervalGetter, defaultVisibilityRefresh)
+		refresh, err := getSafeDurationConfig(ctx, "getDrainageRefreshInterval", unsafeRefreshIntervalGetter, defaultVisibilityRefresh)
 		if err != nil {
 			return err
 		}

@@ -145,9 +145,9 @@ func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploy
 	return &workerDeploymentWorkflowMemo
 }
 
-func getDurationConfig(ctx workflow.Context, id string, getter func() any, defaultValue time.Duration) (time.Duration, error) {
+func getSafeDurationConfig(ctx workflow.Context, id string, unsafeGetter func() any, defaultValue time.Duration) (time.Duration, error) {
 	get := func(_ workflow.Context) interface{} {
-		return getter()
+		return unsafeGetter()
 	}
 	var value time.Duration
 	if err := workflow.MutableSideEffect(ctx, id, get, durationEq).Get(&value); err != nil {

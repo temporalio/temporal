@@ -760,7 +760,7 @@ func (d *ClientImpl) StartWorkerDeployment(
 		return err
 	}
 	if len(deps) >= d.maxDeployments(namespaceEntry.Name().String()) {
-		return serviceerror.NewFailedPrecondition("maximum deployments in namespace, adjust scavenger speed or delete manually to continue deploying.")
+		return serviceerror.NewFailedPrecondition("maximum deployments in namespace, delete manually to continue deploying.")
 	}
 
 	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)

@@ -148,7 +148,7 @@ func (s *WorkerDeploymentSuite) startVersionWorkflow(ctx context.Context, tv *te
 }
 
 func (s *WorkerDeploymentSuite) TestDeploymentLimits() {
-	// TODO: check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
+	// TODO (carly): check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxDeployments, 2)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, 1)
