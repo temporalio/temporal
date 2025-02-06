@@ -32,8 +32,6 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
-
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"

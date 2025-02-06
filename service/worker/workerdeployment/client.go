@@ -288,6 +288,10 @@ func (d *ClientImpl) DescribeVersion(
 
 	res, err := d.historyClient.QueryWorkflow(ctx, req)
 	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return nil, serviceerror.NewNotFound("Worker Deployment Version not found")
+		}
 		return nil, err
 	}
 
