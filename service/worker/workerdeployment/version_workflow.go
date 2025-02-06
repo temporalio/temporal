@@ -252,15 +252,13 @@ func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
 	return nil
 }
 
-func (d *VersionWorkflowRunner) validateDeleteVersion() error {
+func (d *VersionWorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
 	// We can't call DescribeTaskQueue here because that would be an Activity call / non-deterministic.
 	// Once we have PollersStatus on the version, we can check it here.
 	return nil
 }
 
-func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error {
-	// TODO (Shivam): add `skip_drainage` flag
-
+func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -295,9 +293,11 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 	}
 
 	// 2. Check if the version is drained.
-	if state.GetDrainageInfo() == nil || state.GetDrainageInfo().Status != enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
-		// activity won't retry on this error since version not eligible for deletion
-		return serviceerror.NewFailedPrecondition(errVersionNotDrained)
+	if !args.SkipDrainage {
+		if state.GetDrainageInfo() == nil || state.GetDrainageInfo().Status != enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+			// activity won't retry on this error since version not eligible for deletion
+			return serviceerror.NewFailedPrecondition(errVersionNotDrained)
+		}
 	}
 
 	// 3. Check if the version has any active pollers.

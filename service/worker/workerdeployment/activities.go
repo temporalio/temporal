@@ -172,6 +172,7 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 		args.Version,
 		identity,
 		args.RequestId,
+		args.SkipDrainage,
 	)
 	if err != nil {
 		return err

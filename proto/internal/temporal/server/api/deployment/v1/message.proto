@@ -263,6 +263,7 @@ message SetCurrentVersionResponse {
 message DeleteVersionArgs {
     string identity = 1;
     string version = 2;
+    bool skip_drainage = 3;
 }
 
 // used as Worker Deployment Activity input:
@@ -271,6 +272,7 @@ message DeleteVersionActivityArgs {
     string deployment_name = 2;
     string version = 3;
     string request_id = 4;
+    bool skip_drainage = 5;
 }
 
 // used as Worker Deployment Activity input:
