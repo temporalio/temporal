@@ -1825,13 +1825,14 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 	namespaceId := namespace.ID(request.NamespaceId)
-	var conflicting bool
+	var applied, conflicting bool
 	persistenceErr, ctxErr := e.getUserDataBatcher(namespaceId).Add(ctx, &userDataUpdate{
 		taskQueue: request.GetTaskQueue(),
 		update: persistence.SingleTaskQueueUserDataUpdate{
 			UserData:        request.UserData,
 			BuildIdsAdded:   request.BuildIdsAdded,
 			BuildIdsRemoved: request.BuildIdsRemoved,
+			Applied:         &applied,
 			Conflicting:     &conflicting,
 		},
 	})
@@ -1839,7 +1840,8 @@ func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, reques
 		// Return context errors as-is.
 		return nil, ctxErr
 	}
-	if persistenceErr != nil {
+	// If applied is true, this one succeeded even though others in the batch failed.
+	if persistenceErr != nil && !applied {
 		if persistence.IsConflictErr(persistenceErr) {
 			if conflicting {
 				// This specific update was the conflicting one. Use InvalidArgument so the

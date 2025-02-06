@@ -537,6 +537,9 @@ type (
 		UserData        *persistencespb.VersionedTaskQueueUserData
 		BuildIdsAdded   []string
 		BuildIdsRemoved []string
+		// If Applied is non-nil, and this single update succeeds (while others may have
+		// failed), then it will be set to true.
+		Applied *bool
 		// If Conflicting is non-nil, and this single update fails due to a version conflict,
 		// then it will be set to true. Conflicting updates should not be retried.
 		// Note that even if Conflicting is not set to true, the update may still be
@@ -1165,10 +1168,13 @@ type (
 		// This data would only exist if a user uses APIs that generate it, such as the worker versioning related APIs.
 		// The caller should be prepared to gracefully handle the "NotFound" service error.
 		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
-		// UpdateTaskQueueUserData updates the user data for a given task queue.
+		// UpdateTaskQueueUserData updates the user data for a set of task queues in one namespace.
 		// The request takes the _current_ known version along with the data to update.
 		// The caller should +1 increment the cached version number if this call succeeds.
-		// Fails with ConditionFailedError if the user data was updated concurrently.
+		// For efficiency, the store should attempt to perform these updates in as few
+		// transactions as possible.
+		// Returns an error if any individual update fails. The Applied/Conflicting fields of
+		// the individual updates may provide more information in that case.
 		UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error
 		ListTaskQueueUserDataEntries(ctx context.Context, request *ListTaskQueueUserDataEntriesRequest) (*ListTaskQueueUserDataEntriesResponse, error)
 		GetTaskQueuesByBuildId(ctx context.Context, request *GetTaskQueuesByBuildIdRequest) ([]string, error)

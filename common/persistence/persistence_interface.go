@@ -298,6 +298,7 @@ type (
 		// Used to build an index of build_id to task_queues
 		BuildIdsAdded   []string `json:",omitempty"`
 		BuildIdsRemoved []string `json:",omitempty"`
+		Applied         *bool
 		Conflicting     *bool
 	}
 
