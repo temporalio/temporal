@@ -100,9 +100,10 @@ type (
 		tasksDispatchedInIntervals *taskTracker
 		// deploymentWorkflowStarted keeps track if we have already registered the task queue worker
 		// in the deployment.
-		deploymentLock          sync.Mutex // TODO (Shivam): Rename after the pre-release versioning API's are removed.
-		deploymentRegistered    bool       // TODO (Shivam): Rename after the pre-release versioning API's are removed.
-		deploymentRegisterError error      // last "too many ..." error we got when registering // TODO (Shivam): Rename after the pre-release versioning API's are removed.
+		deploymentLock              sync.Mutex // TODO (Shivam): Rename after the pre-release versioning API's are removed.
+		deploymentRegistered        bool       // TODO (Shivam): Rename after the pre-release versioning API's are removed.
+		deploymentVersionRegistered bool       // TODO (Shivam): Rename after the pre-release versioning API's are removed.
+		deploymentRegisterError     error      // last "too many ..." error we got when registering // TODO (Shivam): Rename after the pre-release versioning API's are removed.
 
 		firstPoll time.Time
 	}
@@ -544,8 +545,8 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	c.deploymentLock.Lock()
 	defer c.deploymentLock.Unlock()
 
-	if c.deploymentRegistered {
-		// deployment already registered
+	if c.deploymentVersionRegistered {
+		// deployment version already registered
 		return nil
 	}
 
@@ -560,7 +561,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	}
 
 	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-	if hasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
+	if findDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) != -1 {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.
@@ -600,7 +601,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		}
 	}
 
-	c.deploymentRegistered = true
+	c.deploymentVersionRegistered = true
 	return nil
 }
 

@@ -325,7 +325,9 @@ message SyncDeploymentUserDataRequest {
     string task_queue = 2;
     // Note: this is the task queue type being modified, but this field should not be used for
     // routing, the user data is owned by the WORKFLOW task queue.
+    // Deprecated. Use `task_queue_types`.
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    repeated temporal.api.enums.v1.TaskQueueType task_queue_types = 8;
 
     // This is the deployment being modified.
     // Deprecated.

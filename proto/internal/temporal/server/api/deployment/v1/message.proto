@@ -207,7 +207,7 @@ message SyncDeploymentVersionUserDataRequest {
 
     message SyncUserData {
         string name = 1;
-        temporal.api.enums.v1.TaskQueueType type = 2;
+        repeated temporal.api.enums.v1.TaskQueueType types = 2;
         DeploymentVersionData data = 3;
     }
 }
