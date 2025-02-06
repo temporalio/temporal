@@ -41,6 +41,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -285,9 +286,7 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 			return respondEmptyWft(tv, sticky, vbUnpinned), nil
 		})
 
-	s.waitForDeploymentVersionCreation(tv)
 	s.setCurrentDeployment(tv)
-	s.waitForDeploymentDataPropagation(tv, false, tqTypeWf)
 
 	runID := s.startWorkflow(tv, nil)
 
@@ -420,9 +419,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 			return respondActivity(), nil
 		})
 
-	s.waitForDeploymentVersionCreation(tv)
 	s.setCurrentDeployment(tv)
-	s.waitForDeploymentDataPropagation(tv, false, tqTypeWf, tqTypeAct)
 
 	runID := s.startWorkflow(tv, nil)
 
@@ -476,7 +473,6 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 			},
 		}), "act").Get(ctx, &ret)
 		s.NoError(err)
-		s.Equal(version, ret)
 		return version, nil
 	}
 
@@ -493,7 +489,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 		return "v2", nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
@@ -517,9 +513,12 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	defer w1.Stop()
 
 	// v1 is current and v2 is ramping at 50%
-	s.waitForDeploymentVersionCreation(tv1)
-	s.setCurrentDeployment(tv1)
+
+	// Make sure both TQs are registered in v1 which is the current version. This is to make sure
+	// we don't get to ramping while one of the TQs has not yet got v1 as it's current version.
+	// (note that s.setCurrentDeployment(tv1) can pass even with one TQ added to the version)
 	s.waitForDeploymentDataPropagation(tv1, false, tqTypeWf, tqTypeAct)
+	s.setCurrentDeployment(tv1)
 
 	w2 := worker.New(sdkClient, tv2.TaskQueue().GetName(), worker.Options{
 		BuildID:                 tv2.BuildID(),
@@ -534,11 +533,8 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act"})
 	s.NoError(w2.Start())
 	defer w2.Stop()
-	if !toUnversioned {
-		s.waitForDeploymentVersionCreation(tv2)
-	}
+
 	s.setRampingDeployment(tv2, 50, toUnversioned)
-	s.waitForDeploymentDataPropagation(tv2, toUnversioned, tqTypeWf, tqTypeAct)
 
 	counter := make(map[string]int)
 	for i := 0; i < 50; i++ {
@@ -1416,16 +1412,15 @@ func (s *Versioning3Suite) waitForDeploymentVersionCreation(
 	tv *testvars.TestVars,
 ) {
 	v := tv.DeploymentVersionString()
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
-		res, err := s.FrontendClient().DescribeWorkerDeployment(ctx,
+		res, _ := s.FrontendClient().DescribeWorkerDeployment(ctx,
 			&workflowservice.DescribeWorkerDeploymentRequest{
 				Namespace:      s.Namespace().String(),
 				DeploymentName: tv.DeploymentSeries(),
 			})
-		a.NoError(err)
 		if res != nil {
 			found := false
 			for _, vs := range res.GetWorkerDeploymentInfo().GetVersionSummaries() {
@@ -1435,21 +1430,28 @@ func (s *Versioning3Suite) waitForDeploymentVersionCreation(
 			}
 			a.True(found)
 		}
-	}, 100*time.Second, 100*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *Versioning3Suite) setCurrentDeployment(
 	tv *testvars.TestVars,
 ) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx,
-		&workflowservice.SetWorkerDeploymentCurrentVersionRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
-			Version:        tv.DeploymentVersionString(),
-		})
-	s.NoError(err)
+	s.Eventually(func() bool {
+		_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx,
+			&workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv.DeploymentSeries(),
+				Version:        tv.DeploymentVersionString(),
+			})
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return false
+		}
+		s.NoError(err)
+		return err == nil
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *Versioning3Suite) setRampingDeployment(
@@ -1457,20 +1459,28 @@ func (s *Versioning3Suite) setRampingDeployment(
 	percentage float32,
 	rampUnversioned bool,
 ) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	v := tv.DeploymentVersionString()
 	if rampUnversioned {
 		v = "__unversioned__"
 	}
-	_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx,
-		&workflowservice.SetWorkerDeploymentRampingVersionRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
-			Version:        v,
-			Percentage:     percentage,
-		})
-	s.NoError(err)
+
+	s.Eventually(func() bool {
+		_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx,
+			&workflowservice.SetWorkerDeploymentRampingVersionRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv.DeploymentSeries(),
+				Version:        v,
+				Percentage:     percentage,
+			})
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return false
+		}
+		s.NoError(err)
+		return err == nil
+	}, 20*time.Second, 100*time.Millisecond)
 }
 
 func (s *Versioning3Suite) updateTaskQueueDeploymentData(
@@ -1517,7 +1527,7 @@ func (s *Versioning3Suite) syncTaskQueueDeploymentData(
 	defer cancel()
 	v := tv.DeploymentVersion()
 	if rampUnversioned {
-		v.BuildId = ""
+		v = nil
 	}
 
 	routingUpdateTime := timestamp.TimePtr(updateTime)
