@@ -29,6 +29,7 @@ import (
 	"context"
 	"sync"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -81,10 +82,11 @@ func (a *Activities) SyncUnversionedRamp(
 	}
 	var taskQueueSyncs []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData
 	for _, tqInfo := range currVersionInfo.GetTaskQueueInfos() {
+		// TODO (Carly): group by TQs by name and make only one sync req per name
 		taskQueueSyncs = append(taskQueueSyncs, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-			Name: tqInfo.GetName(),
-			Type: tqInfo.GetType(),
-			Data: data,
+			Name:  tqInfo.GetName(),
+			Types: []enumspb.TaskQueueType{tqInfo.GetType()},
+			Data:  data,
 		})
 	}
 
@@ -94,17 +96,17 @@ func (a *Activities) SyncUnversionedRamp(
 	maxVersionByTQName := make(map[string]int64)
 	for _, e := range taskQueueSyncs {
 		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
-			logger.Info("syncing unversioned ramp to task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type)
+			logger.Info("syncing unversioned ramp to task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types)
 			var res *matchingservice.SyncDeploymentUserDataResponse
 			var err error
 			res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-				NamespaceId:   a.namespace.ID().String(),
-				TaskQueue:     syncData.Name,
-				TaskQueueType: syncData.Type,
-				Operation:     &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{UpdateVersionData: syncData.Data},
+				NamespaceId:    a.namespace.ID().String(),
+				TaskQueue:      syncData.Name,
+				TaskQueueTypes: syncData.Types,
+				Operation:      &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{UpdateVersionData: syncData.Data},
 			})
 			if err != nil {
-				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
+				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types, "error", err)
 			} else {
 				lock.Lock()
 				maxVersionByTQName[syncData.Name] = max(maxVersionByTQName[syncData.Name], res.Version)
