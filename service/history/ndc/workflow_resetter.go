@@ -933,6 +933,21 @@ func reapplyEvents(
 				return reappliedEvents, err
 			}
 			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+			if isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+			if _, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+				attr.GetVersioningOverride(),
+				attr.GetUnsetVersioningOverride(),
+				attr.GetAttachedRequestId(),
+				attr.GetAttachedCompletionCallbacks(),
+				event.Links,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 			if isReset || isDuplicate(event) {
 				continue
