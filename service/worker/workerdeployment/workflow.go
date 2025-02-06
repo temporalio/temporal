@@ -26,6 +26,7 @@ package workerdeployment
 
 import (
 	"bytes"
+	"fmt"
 	"slices"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -483,7 +484,26 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) er
 			return temporal.NewApplicationError("deployment version already registered", errVersionAlreadyExistsType)
 		}
 	}
+	return nil
+}
 
+func (d *WorkflowRunner) checkMaxVersions(ctx workflow.Context) error {
+	getMaxVersionsInDeployment := func(ctx workflow.Context) interface{} {
+		return dynamicconfig.MatchingMaxVersionsInDeployment.Get(d.dc)(d.a.namespace.Name().String())
+	}
+	intEq := func(a, b interface{}) bool {
+		aInt, _ := a.(int)
+		bInt, _ := b.(int)
+		return aInt == bInt
+	}
+	var maxVersions int
+	if err := workflow.MutableSideEffect(ctx, "getMaxVersions", getMaxVersionsInDeployment, intEq).Get(&maxVersions); err != nil {
+		d.logger.Error("error decoding max versions: ", err)
+		return err
+	}
+	if len(d.State.Versions) >= maxVersions {
+		return serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot add version, already at max versions %d", maxVersions))
+	}
 	return nil
 }
 
@@ -492,6 +512,10 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	defer func() {
 		d.pendingUpdates--
 	}()
+
+	if err := d.checkMaxVersions(ctx); err != nil {
+		return err
+	}
 
 	// Add version to local state
 	if d.State.Versions == nil {

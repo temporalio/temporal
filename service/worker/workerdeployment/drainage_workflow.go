@@ -31,6 +31,21 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"time"
+)
+
+const (
+	defaultVisibilityRefresh = 5 * time.Minute
+	defaultVisibilityGrace   = 3 * time.Minute
+)
+
+var (
+	backoffTimes = []time.Duration{
+		30 * time.Second,
+		1 * time.Minute,
+		2 * time.Minute,
+		4 * time.Minute,
+	}
 )
 
 func DrainageWorkflowWithDC(dc *dynamicconfig.Collection, ns string) func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
@@ -59,9 +74,14 @@ func DrainageWorkflowWithDC(dc *dynamicconfig.Collection, ns string) func(ctx wo
 			if err != nil {
 				return err
 			}
-			_ = workflow.Sleep(ctx, dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(dc)(ns)) // todo (carly): make this MutableSideEffect
+			grace, err := getVisibilityGracePeriod(ctx, dc, ns)
+			if err != nil {
+				return err
+			}
+			_ = workflow.Sleep(ctx, grace)
 		}
 
+		i := 0
 		for {
 			if done {
 				return nil
@@ -81,11 +101,59 @@ func DrainageWorkflowWithDC(dc *dynamicconfig.Collection, ns string) func(ctx wo
 			if err != nil {
 				return err
 			}
-
 			if info.Status == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
 				return nil
 			}
-			_ = workflow.Sleep(ctx, dynamicconfig.VersionDrainageStatusRefreshInterval.Get(dc)(ns)) // todo (carly): make this MutableSideEffect
+			refresh, err := getRefreshInterval(ctx, dc, ns, i)
+			if err != nil {
+				return err
+			}
+			_ = workflow.Sleep(ctx, refresh)
+			i++
 		}
 	}
+}
+
+func getRefreshInterval(ctx workflow.Context, dc *dynamicconfig.Collection, ns string, i int) (time.Duration, error) {
+	get := func(ctx workflow.Context) interface{} {
+		return dynamicconfig.VersionDrainageStatusRefreshInterval.Get(dc)(ns)
+	}
+	var refresh time.Duration
+	if err := workflow.MutableSideEffect(ctx, "getDrainageRefreshInterval", get, durationEq).Get(&refresh); err != nil {
+		return defaultVisibilityRefresh, err
+	}
+	// On the first few refreshes, ramp up to a longer constant backoff.
+	// If the dynamic config's refresh interval is shorter than the hard-coded
+	// ramping intervals, use dynamic config instead, because that means
+	// the customer wants to know drainage status sooner.
+	if i < len(backoffTimes) {
+		defaultRampingBackoff := backoffTimes[i]
+		if defaultRampingBackoff < refresh {
+			return defaultRampingBackoff, nil
+		}
+	}
+	return refresh, nil
+}
+
+func getVisibilityGracePeriod(ctx workflow.Context, dc *dynamicconfig.Collection, ns string) (time.Duration, error) {
+	get := func(ctx workflow.Context) interface{} {
+		return dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(dc)(ns)
+	}
+	var gracePeriod time.Duration
+	if err := workflow.MutableSideEffect(ctx, "getVisibilityGracePeriod", get, durationEq).Get(&gracePeriod); err != nil {
+		return defaultVisibilityGrace, err
+	}
+	return gracePeriod, nil
+}
+
+func durationEq(a, b interface{}) bool {
+	aDur, ok := a.(time.Duration)
+	if !ok {
+		return false
+	}
+	bDur, ok := b.(time.Duration)
+	if !ok {
+		return false
+	}
+	return aDur == bDur
 }
