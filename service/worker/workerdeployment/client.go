@@ -1212,8 +1212,8 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namesp
 
 	workerDeploymentInfo.RoutingConfig = state.RoutingConfig
 
-	for _, version := range state.Versions {
-		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, version)
+	for _, v := range state.Versions {
+		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, v.Version)
 		if err != nil {
 			return nil, err
 		}
