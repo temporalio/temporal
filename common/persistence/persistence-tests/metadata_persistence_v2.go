@@ -1324,8 +1324,6 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 	const pageSize = 1
 	pageCount := 0
 	outputNamespaces := make(map[string]*p.GetNamespaceResponse)
-	lastPageEmpty := false
-
 	for {
 		resp, err := m.ListNamespaces(pageSize, token)
 		m.NoError(err)
@@ -1336,20 +1334,17 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 			// so we can test == easily
 			namespace.NotificationVersion = 0
 		}
-		pageCount++
+		// Some persistence backends return an unavoidable empty final page.
+		if len(resp.Namespaces) > 0 {
+			pageCount++
+		}
 		if len(token) == 0 {
-			lastPageEmpty = len(resp.Namespaces) == 0
 			break
 		}
 	}
 
-	// There should be 2 non-empty pages. Some persistence backends return an unavoidable empty final page.
-	if lastPageEmpty {
-		m.Equal(pageCount, 3)
-	} else {
-		m.Equal(pageCount, 2)
-	}
-
+	// There should be 2 non-empty pages.
+	m.Equal(pageCount, 2)
 	m.Equal(len(inputNamespaces), len(outputNamespaces))
 	for _, namespace := range inputNamespaces {
 		m.DeepEqual(namespace, outputNamespaces[namespace.Namespace.Info.Id])
@@ -1418,51 +1413,45 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 	var token []byte
 	var listNamespacesPageSize2 []*p.GetNamespaceResponse
 	pageCount := 0
-	lastPageEmpty := false
 	for {
 		resp, err := m.ListNamespaces(2, token)
 		m.NoError(err)
 		token = resp.NextPageToken
 		listNamespacesPageSize2 = append(listNamespacesPageSize2, resp.Namespaces...)
-		pageCount++
+		// Some persistence backends return an unavoidable empty final page.
+		if len(resp.Namespaces) > 0 {
+			pageCount++
+		}
 		if len(token) == 0 {
-			lastPageEmpty = len(resp.Namespaces) == 0
 			break
 		}
 	}
 
-	// There should be 1 non-empty page. Some persistence backends return an unavoidable empty final page.
-	if lastPageEmpty {
-		m.Equal(2, pageCount)
-	} else {
-		m.Equal(1, pageCount)
-	}
+	// There should be 1 non-empty page.
+	m.Equal(1, pageCount)
 	m.Len(listNamespacesPageSize2, 2)
 	for _, namespace := range listNamespacesPageSize2 {
 		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
 	}
 
 	pageCount = 0
-	lastPageEmpty = false
 	var listNamespacesPageSize1 []*p.GetNamespaceResponse
 	for {
 		resp, err := m.ListNamespaces(1, token)
 		m.NoError(err)
 		token = resp.NextPageToken
 		listNamespacesPageSize1 = append(listNamespacesPageSize1, resp.Namespaces...)
-		pageCount++
+		// Some persistence backends return an unavoidable empty final page.
+		if len(resp.Namespaces) > 0 {
+			pageCount++
+		}
 		if len(token) == 0 {
-			lastPageEmpty = len(resp.Namespaces) == 0
 			break
 		}
 	}
 
-	// There should be 2 non-empty pages. Some persistence backends return an unavoidable empty final page.
-	if lastPageEmpty {
-		m.Equal(3, pageCount)
-	} else {
-		m.Equal(2, pageCount)
-	}
+	// There should be 2 non-empty pages.
+	m.Equal(2, pageCount)
 	m.Len(listNamespacesPageSize1, 2)
 	for _, namespace := range listNamespacesPageSize1 {
 		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
