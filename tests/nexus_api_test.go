@@ -224,7 +224,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				return nil, &nexuspb.HandlerError{
 					ErrorType:     string(nexus.HandlerErrorTypeInternal),
 					Failure:       &nexuspb.Failure{Message: "deliberate internal failure"},
-					RetryBehavior: nexuspb.HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE,
+					RetryBehavior: enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE,
 				}
 			},
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, headers http.Header) {
