@@ -880,7 +880,9 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// In all these cases it's ok to proceed to start a new instance of child (below) and accept the result of that operation.
 	} else {
 		// child was started after reset-point (or the parent is not in reset run). We need to first check if this child was recorded at the time of reset.
-		if resetChildInfo, ok := mutableState.GetExecutionInfo().GetChildrenInitializedPostResetPoint()[resetChildID]; ok {
+		allowResetWithPendingChildren := t.shardContext.GetConfig().AllowResetWithPendingChildren(parentNamespaceName.String()) // feature flag to allow reset when there are pending children
+		allowResetWithPendingChildren = true
+		if resetChildInfo, ok := mutableState.GetExecutionInfo().GetChildrenInitializedPostResetPoint()[resetChildID]; ok && allowResetWithPendingChildren {
 			shouldTerminateAndStartChild = resetChildInfo.ShouldTerminateAndStart
 		}
 	}
