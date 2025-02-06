@@ -390,6 +390,10 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 
 	res, err := d.historyClient.QueryWorkflow(ctx, req)
 	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
+		}
 		return nil, nil, err
 	}
 
