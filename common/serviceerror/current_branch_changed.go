@@ -26,6 +26,7 @@ package serviceerror
 
 import (
 	errordetailsspb "go.temporal.io/server/api/errordetails/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -33,20 +34,25 @@ import (
 type (
 	// CurrentBranchChanged represents current branch changed error.
 	CurrentBranchChanged struct {
-		Message            string
-		CurrentBranchToken []byte
-		RequestBranchToken []byte
-		st                 *status.Status
+		Message                    string
+		CurrentBranchToken         []byte
+		RequestBranchToken         []byte
+		CurrentVersionedTransition *persistencespb.VersionedTransition
+		RequestVersionedTransition *persistencespb.VersionedTransition
+		st                         *status.Status
 	}
 )
 
 // NewCurrentBranchChanged returns new CurrentBranchChanged error.
 // TODO: Update CurrentBranchChanged with event id and event version. Do not use branch token bytes as branch identity.
-func NewCurrentBranchChanged(currentBranchToken, requestBranchToken []byte) error {
+func NewCurrentBranchChanged(currentBranchToken, requestBranchToken []byte,
+	currentVersionedTransition, requestVersionedTransition *persistencespb.VersionedTransition) error {
 	return &CurrentBranchChanged{
-		Message:            "Current branch token and request branch token doesn't match.",
-		CurrentBranchToken: currentBranchToken,
-		RequestBranchToken: requestBranchToken,
+		Message:                    "Current branch token and request branch token doesn't match.",
+		CurrentBranchToken:         currentBranchToken,
+		RequestBranchToken:         requestBranchToken,
+		CurrentVersionedTransition: currentVersionedTransition,
+		RequestVersionedTransition: requestVersionedTransition,
 	}
 }
 
@@ -63,8 +69,10 @@ func (e *CurrentBranchChanged) Status() *status.Status {
 	st := status.New(codes.InvalidArgument, e.Message)
 	st, _ = st.WithDetails(
 		&errordetailsspb.CurrentBranchChangedFailure{
-			CurrentBranchToken: e.CurrentBranchToken,
-			RequestBranchToken: e.RequestBranchToken,
+			CurrentBranchToken:         e.CurrentBranchToken,
+			RequestBranchToken:         e.RequestBranchToken,
+			CurrentVersionedTransition: e.CurrentVersionedTransition,
+			RequestVersionedTransition: e.RequestVersionedTransition,
 		},
 	)
 	return st
@@ -72,9 +80,11 @@ func (e *CurrentBranchChanged) Status() *status.Status {
 
 func newCurrentBranchChanged(st *status.Status, errDetails *errordetailsspb.CurrentBranchChangedFailure) error {
 	return &CurrentBranchChanged{
-		Message:            st.Message(),
-		CurrentBranchToken: errDetails.GetCurrentBranchToken(),
-		RequestBranchToken: errDetails.GetRequestBranchToken(),
-		st:                 st,
+		Message:                    st.Message(),
+		CurrentBranchToken:         errDetails.GetCurrentBranchToken(),
+		RequestBranchToken:         errDetails.GetRequestBranchToken(),
+		CurrentVersionedTransition: errDetails.GetCurrentVersionedTransition(),
+		RequestVersionedTransition: errDetails.GetRequestVersionedTransition(),
+		st:                         st,
 	}
 }
