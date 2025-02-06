@@ -123,8 +123,8 @@ func GetRawHistory(
 			return nil, nil, err
 		}
 
-		for _, event := range transientWorkflowTaskInfo.HistorySuffix {
-			blob, err := shard.GetPayloadSerializer().SerializeEvent(event, enumspb.ENCODING_TYPE_PROTO3)
+		if len(transientWorkflowTaskInfo.HistorySuffix) > 0 {
+			blob, err := shard.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.HistorySuffix, enumspb.ENCODING_TYPE_PROTO3)
 			if err != nil {
 				return nil, nil, err
 			}
