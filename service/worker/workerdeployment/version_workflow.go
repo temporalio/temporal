@@ -469,7 +469,6 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	// add version to worker-deployment workflow
-	activityCtx = workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
 		DeploymentName: d.VersionState.Version.GetDeploymentName(),
 		UpdateArgs: &deploymentspb.AddVersionUpdateArgs{
@@ -478,22 +477,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		},
 		RequestId: d.newUUID(ctx),
 	}).Get(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	// if successful, add the task queue to the local state
-	if d.VersionState.TaskQueueFamilies == nil {
-		d.VersionState.TaskQueueFamilies = make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
-	}
-	if d.VersionState.TaskQueueFamilies[args.TaskQueueName] == nil {
-		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{}
-	}
-	if d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
-		d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueVersionData)
-	}
-	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{}
-	return nil
+	return err
 }
 
 // If routing update time has changed then we want to let the update through.
