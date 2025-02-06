@@ -1681,6 +1681,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			req.TaskQueueTypes = append(req.TaskQueueTypes, req.TaskQueueType)
 		}
 
+		changed := false
 		for _, t := range req.TaskQueueTypes {
 			if data.PerType[int32(t)] == nil {
 				data.PerType[int32(t)] = &persistencespb.TaskQueueTypeUserData{}
@@ -1703,11 +1704,13 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 							Data:       req.Data,
 						})
 				}
+				changed = true
 			} else if vd := req.GetUpdateVersionData(); vd != nil {
 				if vd.GetVersion() == nil { // unversioned ramp
 					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
-						return nil, false, errUserDataUnmodified
+						continue
 					}
+					changed = true
 					// only update if the timestamp is more recent
 					if vd.GetRampingSinceTime() == nil { // unset
 						deploymentData.UnversionedRampData = nil
@@ -1717,21 +1720,24 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				} else if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
 					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
-						return nil, false, errUserDataUnmodified
+						continue
 					}
+					changed = true
 					// only update if the timestamp is more recent
 					deploymentData.Versions[idx] = vd
 				} else {
+					changed = true
 					deploymentData.Versions = append(deploymentData.Versions, vd)
 				}
 			} else if v := req.GetForgetVersion(); v != nil {
 				if idx := findDeploymentVersion(deploymentData, v); idx >= 0 {
+					changed = true
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
 				}
-			} else {
-				// No-op
-				return nil, false, errUserDataUnmodified
 			}
+		}
+		if !changed {
+			return nil, false, errUserDataUnmodified
 		}
 
 		data.Clock = now

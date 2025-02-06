@@ -497,6 +497,8 @@ func (d *ClientImpl) SetCurrentVersion(
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		res.PreviousVersion = version
 		return &res, nil
+	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
+		return nil, serviceerror.NewNotFound(errVersionNotFound)
 	} else if failure != nil {
 		// TODO: is there an easy way to recover the original type here?
 		return nil, serviceerror.NewInternal(failure.Message)
@@ -574,6 +576,8 @@ func (d *ClientImpl) SetRampingVersion(
 		res.PreviousVersion = version
 		res.PreviousPercentage = percentage
 		return &res, nil
+	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
+		return nil, serviceerror.NewNotFound(errVersionNotFound)
 	} else if failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyCurrentType {
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("Ramping version %v is already current", version))
 	} else if failure != nil {
@@ -1308,9 +1312,9 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 		DescRequest: &workflowservice.DescribeTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue.Name,
-				Kind: enumspb.TaskQueueKind(enumspb.TASK_QUEUE_KIND_NORMAL),
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			TaskQueueType: enumspb.TaskQueueType(taskQueue.Type),
+			TaskQueueType: taskQueue.Type,
 		},
 	})
 	if err != nil {
@@ -1324,22 +1328,23 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 	}
 
 	// Check if task queue has backlogged tasks or add-rate > 0
-	response, err = d.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+	req := &matchingservice.DescribeTaskQueueRequest{
 		NamespaceId: namespaceEntry.ID().String(),
 		DescRequest: &workflowservice.DescribeTaskQueueRequest{
 			ApiMode: enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue.Name,
-				Kind: enumspb.TaskQueueKind(enumspb.TASK_QUEUE_KIND_NORMAL),
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
-			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TaskQueueType(taskQueue.Type)},
+			TaskQueueTypes: []enumspb.TaskQueueType{taskQueue.Type},
 			Versions: &taskqueuepb.TaskQueueVersionSelection{
 				BuildIds: []string{prevCurrentVersionInfo.GetVersion()}, // pretending the version string is a build id
 			},
-			TaskQueueType: enumspb.TaskQueueType(taskQueue.Type), // since request doesn't pass through frontend, this field is not automatically populated
+			TaskQueueType: taskQueue.Type, // since request doesn't pass through frontend, this field is not automatically populated
 			ReportStats:   true,
 		},
-	})
+	}
+	response, err = d.matchingClient.DescribeTaskQueue(ctx, req)
 	if err != nil {
 		d.logger.Error("error fetching AddRate for task-queue", tag.Error(err))
 		return false, err
@@ -1347,7 +1352,7 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 
 	typesInfo := response.GetDescResponse().GetVersionsInfo()[prevCurrentVersionInfo.GetVersion()].GetTypesInfo()
 	if typesInfo != nil {
-		typeStats := typesInfo[int32(enumspb.TaskQueueType(taskQueue.Type))]
+		typeStats := typesInfo[int32(taskQueue.Type)]
 		if typeStats != nil && typeStats.GetStats() != nil &&
 			(typeStats.GetStats().GetTasksAddRate() != 0 || typeStats.GetStats().GetApproximateBacklogCount() != 0) {
 			return true, nil
