@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http/httptrace"
 	"strings"
 	"sync/atomic"
 	"text/template"
@@ -67,6 +68,7 @@ type TaskExecutorOptions struct {
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
 	ClientProvider         ClientProvider
 	EndpointRegistry       commonnexus.EndpointRegistry
+	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
 }
 
 func RegisterExecutor(
@@ -200,6 +202,22 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
+
+	if e.HTTPTraceProvider != nil {
+		traceLogger := log.With(e.Logger,
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.RequestID(args.requestID),
+			tag.Operation(args.operation),
+			tag.Endpoint(args.endpointName),
+			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
+			tag.WorkflowRunID(ref.WorkflowKey.RunID),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.Attempt(task.Attempt),
+		)
+		if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
+			callCtx = httptrace.WithClientTrace(callCtx, trace)
+		}
+	}
 
 	startTime := time.Now()
 	var rawResult *nexus.ClientStartOperationResult[*nexus.LazyValue]
@@ -546,6 +564,22 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
+	if e.HTTPTraceProvider != nil {
+		traceLogger := log.With(e.Logger,
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.RequestID(args.requestID),
+			tag.Operation(args.operation),
+			tag.Endpoint(args.endpointName),
+			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
+			tag.WorkflowRunID(ref.WorkflowKey.RunID),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.Attempt(task.Attempt),
+		)
+		if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
+			callCtx = httptrace.WithClientTrace(callCtx, trace)
+		}
+	}
+
 	var callErr error
 	startTime := time.Now()
 	if callTimeout < e.Config.MinOperationTimeout(ns.Name().String()) {
@@ -576,9 +610,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 }
 
 type cancelArgs struct {
-	service, operation, token, endpointID, endpointName string
-	scheduledTime                                       time.Time
-	scheduleToCloseTimeout                              time.Duration
+	service, operation, token, endpointID, endpointName, requestID string
+	scheduledTime                                                  time.Time
+	scheduleToCloseTimeout                                         time.Duration
 }
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
@@ -599,6 +633,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 		args.token = op.OperationToken
 		args.endpointID = op.EndpointId
 		args.endpointName = op.Endpoint
+		args.requestID = op.RequestId
 		args.scheduledTime = op.ScheduledTime.AsTime()
 		args.scheduleToCloseTimeout = op.ScheduleToCloseTimeout.AsDuration()
 		return nil
