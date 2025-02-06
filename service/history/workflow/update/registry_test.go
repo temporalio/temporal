@@ -408,26 +408,76 @@ func TestFindOrCreate(t *testing.T) {
 		})
 	})
 
-	t.Run("check max registry size limit", func(t *testing.T) {
+	t.Run("enforce inflight update size limit", func(t *testing.T) {
 		var (
-			limit = 1
-			reg   = update.NewRegistry(
+			updateSize = 300
+			reg        = update.NewRegistry(
 				emptyUpdateStore,
-				update.WithRegistrySizeLimit(
-					func() int { return limit },
+				update.WithInFlightSizeLimit(
+					func() int { return updateSize },
 				),
 			)
 			evStore = mockEventStore{Controller: effect.Immediate(context.Background())}
 		)
 
-		t.Run("does not crash", func(t *testing.T) {
-			upd, _, err := reg.FindOrCreate(context.Background(), tv1.UpdateID())
-			require.NoError(t, err)
-			err = admit(t, evStore, upd)
-			require.NoError(t, err)
+		// create an in-flight updates
+		upd1, existed, err := reg.FindOrCreate(context.Background(), tv1.UpdateID())
+		require.NoError(t, err)
+		require.False(t, existed)
+
+		upd2, existed, err := reg.FindOrCreate(context.Background(), tv2.UpdateID())
+		require.NoError(t, err)
+		require.False(t, existed)
+
+		upd3, existed, err := reg.FindOrCreate(context.Background(), tv3.UpdateID())
+		require.NoError(t, err)
+		require.False(t, existed)
+
+		upd4, existed, err := reg.FindOrCreate(context.Background(), tv4.UpdateID())
+		require.NoError(t, err)
+		require.False(t, existed)
+
+		t.Run("admitting update #1 is allowed", func(t *testing.T) {
+			mustAdmit(t, evStore, upd1)
 		})
 
-		// TODO: once implemented, ensure that update is removed from registry
+		t.Run("rejecting update #1 allows update #2 to be admitted", func(t *testing.T) {
+			err = admit(t, evStore, upd2)
+			var resExh *serviceerror.ResourceExhausted
+			require.ErrorAs(t, err, &resExh, "admitting update #2 should be denied")
+
+			assertRejectUpdateInRegistry(t, reg, evStore, upd1)
+
+			_, existed, err = reg.FindOrCreate(context.Background(), tv2.UpdateID())
+			require.NoError(t, err, "update #2 should have been admitted")
+			require.False(t, existed)
+		})
+
+		t.Run("increasing limit allows update #3 to be admitted", func(t *testing.T) {
+			updateSize = 1
+
+			// at first, it's denied
+			err = admit(t, evStore, upd3)
+			var resExh *serviceerror.ResourceExhausted
+			require.ErrorAs(t, err, &resExh, "admitting update #3 should be denied")
+
+			updateSize = 1024
+
+			mustAdmit(t, evStore, upd3)
+		})
+
+		t.Run("disabling limit allows update #4 to be admitted", func(t *testing.T) {
+			updateSize = 1
+
+			// at first, it's denied
+			err = admit(t, evStore, upd4)
+			var resExh *serviceerror.ResourceExhausted
+			require.ErrorAs(t, err, &resExh, "admitting update #4 should be denied")
+
+			updateSize = 0
+
+			mustAdmit(t, evStore, upd4)
+		})
 	})
 }
 
