@@ -626,7 +626,6 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 
 	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
-	// todo (Shivam):  make delete-version idempotent.
 	outcome, err := d.update(
 		ctx,
 		namespaceEntry,
@@ -641,6 +640,9 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
+		if failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
+			return nil
+		}
 		return serviceerror.NewInternal(failure.Message)
 	}
 
@@ -690,6 +692,10 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 		},
 	)
 	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return nil
+		}
 		return err
 	}
 
@@ -890,7 +896,7 @@ func (d *ClientImpl) update(
 		// successful but un-completed responses.
 		res, err := d.historyClient.UpdateWorkflowExecution(ctx, updateReq)
 		if err != nil {
-			return serviceerror.NewInternal("failed to update workflow with error: " + err.Error())
+			return err
 		}
 
 		if res.GetResponse() == nil {
