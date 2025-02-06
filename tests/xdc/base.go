@@ -102,14 +102,15 @@ func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplic
 	return config
 }
 
-func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.TestClusterOption) {
+func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 
 	params := testcore.ApplyTestClusterOptions(opts)
 
-	s.clusterNames = clusterNames
-	for idx, clusterName := range s.clusterNames {
-		s.clusterNames[idx] = clusterName + "_" + common.GenerateRandomString(5)
+	suffix := common.GenerateRandomString(5)
+	s.clusterNames = []string{
+		"active_" + suffix,
+		"standby_" + suffix,
 	}
 
 	if s.logger == nil {
@@ -139,7 +140,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.TestCl
 		clusterConfigs[i].ClusterMetadata.MasterClusterName = s.clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.CurrentClusterName = s.clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.EnableGlobalNamespace = true
-		clusterConfigs[i].Persistence.DBName = "func_" + s.clusterNames[i]
+		clusterConfigs[i].Persistence.DBName = "func_tests_" + s.clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
 			s.clusterNames[i]: cluster.ClusterInformation{
 				Enabled:                true,

@@ -194,7 +194,6 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 	taskExecutorDecorator := s.getTaskExecutorDecorator()
 	s.logger = log.NewTestLogger()
 	s.setupSuite(
-		[]string{"active", "standby"},
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(
 				taskExecutorDecorator,

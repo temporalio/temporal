@@ -93,7 +93,7 @@ func (s *NexusRequestForwardingSuite) SetupSuite() {
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
 		callbacks.AllowedAddresses.Key():                                               []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
-	s.setupSuite([]string{"nexus_request_forwarding_active", "nexus_request_forwarding_standby"})
+	s.setupSuite()
 }
 
 func (s *NexusRequestForwardingSuite) SetupTest() {
