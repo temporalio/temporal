@@ -320,12 +320,14 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context) error 
 	}
 
 	for tqName, byType := range state.TaskQueueFamilies {
+		var types []enumspb.TaskQueueType
 		for tqType := range byType.TaskQueues {
-			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-				Name: tqName,
-				Type: enumspb.TaskQueueType(tqType),
-			})
+			types = append(types, enumspb.TaskQueueType(tqType))
 		}
+		syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+			Name:  tqName,
+			Types: types,
+		})
 	}
 
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
@@ -428,9 +430,9 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		Version: d.VersionState.Version,
 		Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 			{
-				Name: args.TaskQueueName,
-				Type: args.TaskQueueType,
-				Data: data,
+				Name:  args.TaskQueueName,
+				Types: []enumspb.TaskQueueType{args.TaskQueueType},
+				Data:  data,
 			},
 		},
 	}).Get(ctx, &syncRes)
@@ -515,21 +517,23 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		Version: state.GetVersion(),
 	}
 	for tqName, byType := range state.TaskQueueFamilies {
-		for tqType := range byType.TaskQueues {
-			data := &deploymentspb.DeploymentVersionData{
-				Version:           d.VersionState.Version,
-				RoutingUpdateTime: args.RoutingUpdateTime,
-				CurrentSinceTime:  args.CurrentSinceTime,
-				RampingSinceTime:  args.RampingSinceTime,
-				RampPercentage:    args.RampPercentage,
-			}
-
-			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-				Name: tqName,
-				Type: enumspb.TaskQueueType(tqType),
-				Data: data,
-			})
+		data := &deploymentspb.DeploymentVersionData{
+			Version:           d.VersionState.Version,
+			RoutingUpdateTime: args.RoutingUpdateTime,
+			CurrentSinceTime:  args.CurrentSinceTime,
+			RampingSinceTime:  args.RampingSinceTime,
+			RampPercentage:    args.RampPercentage,
 		}
+		var types []enumspb.TaskQueueType
+		for tqType := range byType.TaskQueues {
+			types = append(types, enumspb.TaskQueueType(tqType))
+		}
+
+		syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+			Name:  tqName,
+			Types: types,
+			Data:  data,
+		})
 	}
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
