@@ -311,7 +311,6 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
 	if !slices.Contains(d.State.Versions, args.Version) {
-		d.logger.Info("version not found in deployment", "version", args.Version)
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
 	return nil
