@@ -825,6 +825,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		nextEventID,
 		branchToken,
 		nil,
+		false, // allowResetWithPendingChildren
 		map[string]*persistencespb.ResetChildInfo{},
 	)
 	s.NoError(err)
