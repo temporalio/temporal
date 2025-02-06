@@ -27,6 +27,7 @@ package workerdeployment
 import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -103,9 +104,27 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(VersionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
-	registry.RegisterWorkflowWithOptions(WorkflowWithDC(s.dynamicConfig), workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
+
+	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+		maxVersionsGetter := func() int {
+			return dynamicconfig.MatchingMaxVersionsInDeployment.Get(s.dynamicConfig)(ns.Name().String())
+		}
+		return Workflow(ctx, maxVersionsGetter, args)
+	}
+	registry.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
+
+	drainageWorkflow := func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
+		refreshIntervalGetter := func() any {
+			return dynamicconfig.VersionDrainageStatusRefreshInterval.Get(s.dynamicConfig)(ns.Name().String())
+		}
+		visibilityGracePeriodGetter := func() any {
+			return dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(s.dynamicConfig)(ns.Name().String())
+		}
+		return DrainageWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, version, first)
+	}
+
 	registry.RegisterWorkflowWithOptions(
-		DrainageWorkflowWithDC(s.dynamicConfig, ns.Name().String()),
+		drainageWorkflow,
 		workflow.RegisterOptions{Name: WorkerDeploymentDrainageWorkflowType},
 	)
 

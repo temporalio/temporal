@@ -27,13 +27,16 @@ package workerdeployment
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
@@ -56,7 +59,12 @@ func (a *VersionActivities) StartWorkerDeploymentWorkflow(
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting worker-deployment workflow", "deploymentName", input.DeploymentName)
 	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.deploymentClient.StartWorkerDeployment(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
+	err := a.deploymentClient.StartWorkerDeployment(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
+	var precond *serviceerror.FailedPrecondition
+	if errors.As(err, &precond) {
+		return temporal.NewNonRetryableApplicationError("failed to create deployment", errTooManyDeployments, err)
+	}
+	return err
 }
 
 func (a *VersionActivities) SyncDeploymentVersionUserData(
@@ -181,5 +189,10 @@ func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, in
 	logger := activity.GetLogger(ctx)
 	logger.Info("adding version to worker-deployment", "deploymentName", input.DeploymentName, "version", input.UpdateArgs.Version)
 	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.deploymentClient.AddVersionToWorkerDeployment(ctx, a.namespace, input.DeploymentName, input.UpdateArgs, identity, input.RequestId)
+	resp, err := a.deploymentClient.AddVersionToWorkerDeployment(ctx, a.namespace, input.DeploymentName, input.UpdateArgs, identity, input.RequestId)
+	var precond *serviceerror.FailedPrecondition
+	if errors.As(err, &precond) {
+		return nil, temporal.NewNonRetryableApplicationError("failed to add version to deployment", errTooManyVersions, err)
+	}
+	return resp, err
 }

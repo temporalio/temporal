@@ -411,7 +411,9 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
 	if err != nil {
 		d.logger.Error("Update canceled before deployment workflow started")
-		return err
+		// TODO: This is likely due to too many deployments, but make sure we exculed other possible errors here and send a proper error message all the time.
+		// TODO: mention the limit in here or make sure matching does in the error returned to the poller
+		return temporal.NewApplicationError("failed to create deployment version, likely you are exceeding the limit of allowed deployments in a namespace", errTooManyDeployments)
 	}
 
 	// Add the task queue to the local state first. This is the safest because in case the rest of
@@ -438,8 +440,22 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		RampPercentage:    d.VersionState.RampPercentage,
 	}
 
-	// sync to user data
+	// First try to add version to worker-deployment workflow so it rejects in case we hit the limit
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
+		DeploymentName: d.VersionState.Version.GetDeploymentName(),
+		UpdateArgs: &deploymentspb.AddVersionUpdateArgs{
+			Version:    worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
+			CreateTime: d.VersionState.CreateTime,
+		},
+		RequestId: d.newUUID(ctx),
+	}).Get(ctx, nil)
+	if err != nil {
+		// TODO: make sure the error message that goes to the user is informative and has the limit mentioned
+		return temporal.NewApplicationError("too many versions in this deployment", errTooManyVersions)
+	}
+
+	// sync to user data
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version: d.VersionState.Version,
@@ -468,16 +484,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		}
 	}
 
-	// add version to worker-deployment workflow
-	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
-		DeploymentName: d.VersionState.Version.GetDeploymentName(),
-		UpdateArgs: &deploymentspb.AddVersionUpdateArgs{
-			Version:    worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
-			CreateTime: d.VersionState.CreateTime,
-		},
-		RequestId: d.newUUID(ctx),
-	}).Get(ctx, nil)
-	return err
+	return nil
 }
 
 // If routing update time has changed then we want to let the update through.

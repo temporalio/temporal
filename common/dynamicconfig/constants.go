@@ -1251,7 +1251,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	)
 	MatchingMaxTaskQueuesInDeploymentVersion = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeploymentVersion",
-		1000,
+		100,
 		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registered in a single worker deployment version`,
 	)
 

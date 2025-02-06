@@ -265,7 +265,7 @@ func (d *ClientImpl) DescribeVersion(
 	defer d.record("DescribeVersion", &retErr, deploymentName, buildID)()
 
 	// validate deployment name
-	err = validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +373,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	defer d.record("DescribeWorkerDeployment", &retErr, deploymentName)()
 
 	// validating params
-	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -486,7 +486,7 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string '%s' does not match deployment name '%s'", version, deploymentName))
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -563,7 +563,7 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -652,7 +652,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 		return err
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return err
 	}
@@ -696,7 +696,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 	defer d.record("DeleteWorkerDeployment", &retErr, namespaceEntry.Name(), deploymentName, identity)()
 
 	// validating params
-	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return err
 	}
@@ -709,7 +709,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 		return err
 	}
 
-	err = validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err = validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return err
 	}
@@ -976,7 +976,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	identity string,
 	requestID string,
 ) (*updatepb.Outcome, error) {
-	err := validateVersionWfParams(WorkerDeploymentFieldName, deploymentName, d.maxIDLengthLimit())
+	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -1060,6 +1060,8 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyExistsType {
 		// pretend this is a success
 		return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
+	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+		return nil, serviceerror.NewFailedPrecondition(failure.Message)
 	} else if failure != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("failed to add version %v to worker deployment %v with error %v", args.Version, deploymentName, failure.Message))
 	}

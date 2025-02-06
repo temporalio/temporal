@@ -29,8 +29,6 @@ import (
 	"fmt"
 	"slices"
 
-	"go.temporal.io/server/common/dynamicconfig"
-
 	"github.com/pborman/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
@@ -44,37 +42,37 @@ import (
 )
 
 const (
-	defaultMaxVersions = 100 // TODO: Delete this after merging with limits PR
+	// The actual limit is set in dynamic configs, this is only used in case we cannot read the DC.
+	defaultMaxVersions = 100
 )
 
 type (
 	// WorkflowRunner holds the local state while running a deployment-series workflow
 	WorkflowRunner struct {
 		*deploymentspb.WorkerDeploymentWorkflowArgs
-		a              *Activities
-		logger         sdklog.Logger
-		metrics        sdkclient.MetricsHandler
-		lock           workflow.Mutex
-		pendingUpdates int
-		conflictToken  []byte
-		done           bool
-		dc             *dynamicconfig.Collection
+		a                *Activities
+		logger           sdklog.Logger
+		metrics          sdkclient.MetricsHandler
+		lock             workflow.Mutex
+		pendingUpdates   int
+		conflictToken    []byte
+		done             bool
+		unsafeMaxVersion func() int
 	}
 )
 
-func WorkflowWithDC(dc *dynamicconfig.Collection) func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
-	return func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
-		workflowRunner := &WorkflowRunner{
-			WorkerDeploymentWorkflowArgs: args,
+func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+	workflowRunner := &WorkflowRunner{
+		WorkerDeploymentWorkflowArgs: args,
 
-			a:       nil,
-			logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
-			metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
-			lock:    workflow.NewMutex(ctx),
-			dc:      dc,
-		}
-		return workflowRunner.run(ctx)
+		a:                nil,
+		logger:           sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
+		metrics:          workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
+		lock:             workflow.NewMutex(ctx),
+		unsafeMaxVersion: unsafeMaxVersion,
 	}
+
+	return workflowRunner.run(ctx)
 }
 
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
@@ -165,7 +163,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// Note, if update requests come in faster than they
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
-	return workflow.NewContinueAsNewError(ctx, WorkflowWithDC(d.dc), d.WorkerDeploymentWorkflowArgs)
+	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflowType, d.WorkerDeploymentWorkflowArgs)
 }
 
 func (d *WorkflowRunner) validateDeleteDeployment() error {
@@ -493,24 +491,19 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(args *deploymentsp
 	return nil
 }
 
-func (d *WorkflowRunner) checkMaxVersions(ctx workflow.Context) error {
+func (d *WorkflowRunner) getMaxVersions(ctx workflow.Context) int {
 	getMaxVersionsInDeployment := func(ctx workflow.Context) interface{} {
-		return dynamicconfig.MatchingMaxVersionsInDeployment.Get(d.dc)(d.a.namespace.Name().String())
+		return d.unsafeMaxVersion()
 	}
 	intEq := func(a, b interface{}) bool {
-		aInt, _ := a.(int)
-		bInt, _ := b.(int)
-		return aInt == bInt
+		return a == b
 	}
 	var maxVersions int
 	if err := workflow.MutableSideEffect(ctx, "getMaxVersions", getMaxVersionsInDeployment, intEq).Get(&maxVersions); err != nil {
-		d.logger.Error("error decoding max versions: ", err)
-		return err
+		// This should not happen really. but just in case.
+		return defaultMaxVersions
 	}
-	if len(d.State.Versions) >= maxVersions {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot add version, already at max versions %d", maxVersions))
-	}
-	return nil
+	return maxVersions
 }
 
 func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
@@ -519,8 +512,10 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 		d.pendingUpdates--
 	}()
 
-	if err := d.checkMaxVersions(ctx); err != nil {
-		return err
+	maxVersions := d.getMaxVersions(ctx)
+
+	if len(d.State.Versions) >= maxVersions {
+		return temporal.NewApplicationError(fmt.Sprintf("cannot add version, already at max versions %d", maxVersions), errTooManyVersions)
 	}
 
 	// Add version to local state

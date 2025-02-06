@@ -27,14 +27,17 @@ package workerdeployment
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 const (
@@ -75,11 +78,13 @@ const (
 	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
 	WorkerDeploymentVersionWorkflowIDEscape      = "|"
 	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDDelimeter) + len(WorkerDeploymentVersionWorkflowIDPrefix) // todo (Shivam): Do we need 2 * len(WorkerDeploymentVersionWorkflowIDDelimeter)?
-	WorkerDeploymentFieldName                    = "WorkerDeployment"
+	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
 
 	// Application error names for rejected updates
 	errNoChangeType               = "errNoChange"
+	errTooManyVersions            = "errTooManyVersions"
+	errTooManyDeployments         = "errTooManyDeployments"
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
@@ -118,12 +123,12 @@ func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit in
 	}
 
 	// deploymentName cannot have "/"
-	if fieldName == WorkerDeploymentFieldName && strings.Contains(field, "/") {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain '/'", fieldName))
+	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, worker_versioning.WorkerDeploymentVersionIdDelimiter) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("worker deployment name cannot contain '%s'", worker_versioning.WorkerDeploymentVersionIdDelimiter))
 	}
 
 	// buildID cannot start with "__"
-	if fieldName == WorkerDeploymentBuildIDFieldName && strings.HasPrefix(field, "__") {
+	if strings.HasPrefix(field, "__") {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot start with '__'", fieldName))
 	}
 
@@ -138,4 +143,19 @@ func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) *deploymentspb.WorkerDeploy
 		return nil
 	}
 	return &workerDeploymentWorkflowMemo
+}
+
+func getDurationConfig(ctx workflow.Context, id string, getter func() any, defaultValue time.Duration) (time.Duration, error) {
+	get := func(_ workflow.Context) interface{} {
+		return getter()
+	}
+	var value time.Duration
+	if err := workflow.MutableSideEffect(ctx, id, get, durationEq).Get(&value); err != nil {
+		return defaultValue, err
+	}
+	return value, nil
+}
+
+func durationEq(a, b any) bool {
+	return a == b
 }

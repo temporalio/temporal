@@ -89,6 +89,16 @@ func (s *WorkerDeploymentSuite) pollFromDeployment(ctx context.Context, tv *test
 	})
 }
 
+func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(ctx context.Context, tv *testvars.TestVars) {
+	_, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         s.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          "random",
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+	s.Error(err)
+}
+
 func (s *WorkerDeploymentSuite) ensureCreateVersion(ctx context.Context, tv *testvars.TestVars) {
 	s.Eventually(func() bool {
 		respV, _ := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -135,6 +145,37 @@ func (s *WorkerDeploymentSuite) startVersionWorkflow(ctx context.Context, tv *te
 		a.NoError(err)
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
 	}, time.Second*5, time.Millisecond*200)
+}
+
+func (s *WorkerDeploymentSuite) TestDeploymentLimits() {
+	// TODO: check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxDeployments, 2)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+
+	tv := testvars.New(s)
+
+	// First deployment version should be fine
+	go s.pollFromDeployment(ctx, tv)
+	s.ensureCreateVersionInDeployment(tv)
+
+	// pollers of second version in the same deployment should be rejected
+	s.pollFromDeploymentExpectFail(ctx, tv.WithBuildIDNumber(2))
+
+	// But first version of another deployment fine
+	tv2 := tv.WithDeploymentSeriesNumber(2)
+	go s.pollFromDeployment(ctx, tv2)
+	s.ensureCreateVersionInDeployment(tv2)
+
+	// pollers of the second TQ in the same deployment version should be rejected
+	s.pollFromDeploymentExpectFail(ctx, tv.WithTaskQueueNumber(2))
+
+	// pollers of the third deployment version should be rejected
+	s.pollFromDeploymentExpectFail(ctx, tv.WithDeploymentSeriesNumber(3))
 }
 
 func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions() {
