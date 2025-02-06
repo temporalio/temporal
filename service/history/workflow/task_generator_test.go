@@ -389,6 +389,9 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 			{NamespaceFailoverVersion: 3, TransitionCount: 3},
 		},
 	}).AnyTimes()
+	mutableState.EXPECT().CurrentVersionedTransition().Return(&persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 3, TransitionCount: 3,
+	}).AnyTimes()
 	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 
 	cfg := &configs.Config{}

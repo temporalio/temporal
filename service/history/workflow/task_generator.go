@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -766,7 +767,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 				WorkflowKey:         workflowKey,
 				Priority:            enumsspb.TASK_PRIORITY_LOW,
-				VersionedTransition: transitionHistory[len(transitionHistory)-1],
+				VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
 				FirstEventID:        executionInfo.LastFirstEventId,
 				FirstEventVersion:   lastItem.Version,
 				NextEventID:         lastItem.GetEventId() + 1,
@@ -810,7 +811,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 			WorkflowKey:         workflowKey,
 			Priority:            enumsspb.TASK_PRIORITY_LOW,
-			VersionedTransition: transitionHistory[len(transitionHistory)-1],
+			VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
 			FirstEventID:        executionInfo.LastFirstEventId,
 			FirstEventVersion:   lastItem.GetVersion(),
 			NextEventID:         lastItem.GetEventId() + 1,
@@ -879,11 +880,7 @@ func generateSubStateMachineTask(
 	}
 	machineLastUpdateVersionedTransition := node.InternalRepr().GetLastUpdateVersionedTransition()
 
-	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-	var currentVersionedTransition *persistencespb.VersionedTransition
-	if len(transitionHistory) > 0 {
-		currentVersionedTransition = transitionHistory[len(transitionHistory)-1]
-	}
+	currentVersionedTransition := mutableState.CurrentVersionedTransition()
 	ref := &persistencespb.StateMachineRef{
 		Path:                                 ppath,
 		MutableStateVersionedTransition:      currentVersionedTransition,

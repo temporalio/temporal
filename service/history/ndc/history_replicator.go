@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -309,7 +310,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 
 	transitionHistory := mutableState.GetExecutionInfo().GetTransitionHistory()
 	if len(transitionHistory) != 0 {
-		if workflow.CompareVersionedTransition(versionedTransition, transitionHistory[len(transitionHistory)-1]) > 0 {
+		if workflow.CompareVersionedTransition(versionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
 			return serviceerrors.NewSyncState(
 				mutableStateMissingMessage,
 				task.getNamespaceID().String(),

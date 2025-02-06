@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -153,13 +154,13 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	}
 
 	// case 2: verify task has newer VersionedTransition, need to sync state
-	if workflow.CompareVersionedTransition(e.ReplicationTask().VersionedTransition, transitionHistory[len(transitionHistory)-1]) > 0 {
+	if workflow.CompareVersionedTransition(e.ReplicationTask().VersionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
 		return serviceerrors.NewSyncState(
 			"mutable state not up to date",
 			e.NamespaceID,
 			e.WorkflowID,
 			e.RunID,
-			transitionHistory[len(transitionHistory)-1],
+			transitionhistory.LastVersionedTransition(transitionHistory),
 			ms.GetExecutionInfo().VersionHistories,
 		)
 	}
