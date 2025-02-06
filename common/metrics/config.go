@@ -72,6 +72,20 @@ type (
 		// - "milliseconds"
 		// - "bytes"
 		PerUnitHistogramBoundaries map[string][]float64 `yaml:"perUnitHistogramBoundaries"`
+
+		// Following configs are added for backwards compatibility when switching from tally to opentelemetry
+		// All configs should be set to true when using opentelemetry framework to have the same behavior as tally.
+
+		// WithoutUnitSuffix controls the additional of unit suffixes to metric names.
+		// This config only takes effect when using opentelemetry framework.
+		WithoutUnitSuffix bool `yaml:"withoutUnitSuffix"`
+		// WithoutCounterSuffix controls the additional of _total suffixes to counter metric names.
+		// This config only takes effect when using opentelemetry framework.
+		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
+		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
+		// (instead of milliseconds).
+		// This config only takes effect when using opentelemetry framework.
+		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
 	}
 
 	// StatsdConfig contains the config items for statsd metrics reporter
@@ -388,6 +402,12 @@ func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
 	if bucket, ok := clientConfig.PerUnitHistogramBoundaries[UnitNameBytes]; ok {
 		buckets[Bytes] = bucket
 	}
+
+	bucketInSeconds := make([]float64, len(buckets[Milliseconds]))
+	for idx, boundary := range buckets[Milliseconds] {
+		bucketInSeconds[idx] = boundary / float64(time.Second/time.Millisecond)
+	}
+	buckets[Seconds] = bucketInSeconds
 
 	clientConfig.PerUnitHistogramBoundaries = buckets
 }
