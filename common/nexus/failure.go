@@ -48,6 +48,10 @@ type failureSourceContextKeyType struct{}
 
 var FailureSourceContextKey = failureSourceContextKeyType{}
 
+type FailureSourceContextValue struct {
+	Source string
+}
+
 var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
 
 // ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.

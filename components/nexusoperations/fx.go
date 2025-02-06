@@ -139,12 +139,7 @@ func ClientProviderFactory(
 			httpCaller = func(r *http.Request) (*http.Response, error) {
 				r.Header.Set(NexusCallbackSourceHeader, clusterInfo.ClusterID)
 				resp, callErr := httpClient.Do(r)
-				if resp != nil && resp.Header != nil {
-					if failureSource := resp.Header.Get(commonnexus.FailureSourceHeaderName); failureSource != "" {
-						// Abuse the context to propagate this value back to the task executor since it cannot access response headers directly.
-						ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, failureSource)
-					}
-				}
+				setFailureSourceOnContext(ctx, resp)
 				return resp, callErr
 			}
 		}
@@ -161,4 +156,24 @@ func ClientProviderFactory(
 
 func CallbackTokenGeneratorProvider() *commonnexus.CallbackTokenGenerator {
 	return commonnexus.NewCallbackTokenGenerator()
+}
+
+func setFailureSourceOnContext(ctx context.Context, response *http.Response) {
+	if response == nil || response.Header == nil {
+		return
+	}
+
+	failureSourceHeader := response.Header.Get(commonnexus.FailureSourceHeaderName)
+	if failureSourceHeader == "" {
+		return
+	}
+
+	failureSourceContext := ctx.Value(commonnexus.FailureSourceContextKey)
+	if failureSourceContext == nil {
+		return
+	}
+
+	if src, ok := failureSourceContext.(*commonnexus.FailureSourceContextValue); ok {
+		src.Source = failureSourceHeader
+	}
 }

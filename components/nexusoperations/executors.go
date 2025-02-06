@@ -153,6 +153,9 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 	callbackURL := builder.String()
 
+	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
+	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &commonnexus.FailureSourceContextValue{})
+
 	client, err := e.ClientProvider(
 		ctx,
 		ref.WorkflowKey.GetNamespaceID(),
@@ -218,7 +221,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
-	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(callCtx))
+	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(ctx))
 	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 
@@ -772,9 +775,9 @@ func failureSourceFromContext(callCtx context.Context) string {
 	if val == nil {
 		return ""
 	}
-	src, ok := val.(string)
+	src, ok := val.(*commonnexus.FailureSourceContextValue)
 	if !ok {
 		return ""
 	}
-	return src
+	return src.Source
 }
