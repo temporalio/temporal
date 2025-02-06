@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -308,20 +309,21 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 	}
 
 	transitionHistory := mutableState.GetExecutionInfo().GetTransitionHistory()
-	if workflow.CompareVersionedTransition(versionedTransition, transitionHistory[len(transitionHistory)-1]) > 0 {
-		return serviceerrors.NewSyncState(
-			mutableStateMissingMessage,
-			task.getNamespaceID().String(),
-			task.getWorkflowID(),
-			task.getRunID(),
-			task.getVersionedTransition(),
-			mutableState.GetExecutionInfo().VersionHistories,
-		)
-	}
-
-	err := workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition)
-	if err == nil {
-		return nil
+	if len(transitionHistory) != 0 {
+		if workflow.CompareVersionedTransition(versionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
+			return serviceerrors.NewSyncState(
+				mutableStateMissingMessage,
+				task.getNamespaceID().String(),
+				task.getWorkflowID(),
+				task.getRunID(),
+				task.getVersionedTransition(),
+				mutableState.GetExecutionInfo().VersionHistories,
+			)
+		}
+		err := workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition)
+		if err == nil {
+			return nil
+		}
 	}
 
 	mutableState, prepareHistoryBranchOut, err := r.mutableStateMapper.GetOrCreateHistoryBranch(ctx, wfContext, mutableState, task)

@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -153,13 +154,13 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	}
 
 	// case 2: verify task has newer VersionedTransition, need to sync state
-	if workflow.CompareVersionedTransition(e.ReplicationTask().VersionedTransition, transitionHistory[len(transitionHistory)-1]) > 0 {
+	if workflow.CompareVersionedTransition(e.ReplicationTask().VersionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
 		return serviceerrors.NewSyncState(
 			"mutable state not up to date",
 			e.NamespaceID,
 			e.WorkflowID,
 			e.RunID,
-			transitionHistory[len(transitionHistory)-1],
+			transitionhistory.LastVersionedTransition(transitionHistory),
 			ms.GetExecutionInfo().VersionHistories,
 		)
 	}
@@ -248,6 +249,13 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 }
 
 func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
+	e.Logger.Error("VerifyVersionedTransition replication task encountered error",
+		tag.WorkflowNamespaceID(e.NamespaceID),
+		tag.WorkflowID(e.WorkflowID),
+		tag.WorkflowRunID(e.RunID),
+		tag.TaskID(e.ExecutableTask.TaskID()),
+		tag.Error(err),
+	)
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
@@ -273,19 +281,12 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 					tag.TaskID(e.ExecutableTask.TaskID()),
 					tag.Error(syncStateErr),
 				)
+				return err
 			}
-			// return original task processing error
-			return err
+			return nil
 		}
 		return e.Execute()
 	default:
-		e.Logger.Error("VerifyVersionedTransition replication task encountered error",
-			tag.WorkflowNamespaceID(e.NamespaceID),
-			tag.WorkflowID(e.WorkflowID),
-			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
-			tag.Error(err),
-		)
 		return err
 	}
 }

@@ -29,6 +29,7 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/sqlquery"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -132,19 +133,19 @@ func (m *MutableStateMatchEvaluator) evaluateComparison(expr *sqlparser.Comparis
 
 	switch colNameStr {
 	case workflowTypeNameColName:
-		val, err := extractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return false, err
 		}
 		return m.compareWorkflowType(val, expr.Operator)
 	case workflowIDColName:
-		val, err := extractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return false, err
 		}
 		return m.compareWorkflowID(val, expr.Operator)
 	case workflowExecutionStatusColName:
-		val, err := extractStringValue(valStr)
+		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return false, err
 		}
@@ -169,11 +170,11 @@ func (m *MutableStateMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (b
 
 	switch colNameStr {
 	case workflowStartTimeColName:
-		fromValue, err := convertToTime(sqlparser.String(expr.From))
+		fromValue, err := sqlquery.ConvertToTime(sqlparser.String(expr.From))
 		if err != nil {
 			return false, err
 		}
-		toValue, err := convertToTime(sqlparser.String(expr.To))
+		toValue, err := sqlquery.ConvertToTime(sqlparser.String(expr.To))
 		if err != nil {
 			return false, err
 		}
@@ -239,7 +240,7 @@ func (m *MutableStateMatchEvaluator) compareWorkflowStatus(status string, operat
 }
 
 func (m *MutableStateMatchEvaluator) compareStartTime(val string, operation string) (bool, error) {
-	expectedTime, err := convertToTime(val)
+	expectedTime, err := sqlquery.ConvertToTime(val)
 	if err != nil {
 		return false, err
 	}

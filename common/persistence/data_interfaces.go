@@ -122,8 +122,11 @@ type (
 
 	// CurrentWorkflowConditionFailedError represents a failed conditional update for current workflow record
 	CurrentWorkflowConditionFailedError struct {
-		Msg              string
-		RequestID        string
+		Msg string
+		// RequestIDs contains all request IDs associated with the workflow execution, ie., contain the
+		// request ID that started the workflow execution as well as the request IDs that were attached
+		// to the workflow execution when it was running.
+		RequestIDs       map[string]*persistencespb.RequestIDInfo
 		RunID            string
 		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus
@@ -523,13 +526,23 @@ type (
 		UserData *persistencespb.VersionedTaskQueueUserData
 	}
 
-	// UpdateTaskQueueUserDataRequest is the input type for the UpdateTaskQueueUserData API
+	// UpdateTaskQueueUserDataRequest is the input type for the UpdateTaskQueueUserData API.
+	// This updates user data for multiple task queues in one namespace.
 	UpdateTaskQueueUserDataRequest struct {
-		NamespaceID     string
-		TaskQueue       string
+		NamespaceID string
+		Updates     map[string]*SingleTaskQueueUserDataUpdate // key is task queue name
+	}
+
+	SingleTaskQueueUserDataUpdate struct {
 		UserData        *persistencespb.VersionedTaskQueueUserData
 		BuildIdsAdded   []string
 		BuildIdsRemoved []string
+		// If Conflicting is non-nil, and this single update fails due to a version conflict,
+		// then it will be set to true. Conflicting updates should not be retried.
+		// Note that even if Conflicting is not set to true, the update may still be
+		// conflicting, because persistence implementations may only be able to identify the
+		// first conflict in a set.
+		Conflicting *bool
 	}
 
 	ListTaskQueueUserDataEntriesRequest struct {

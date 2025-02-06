@@ -225,17 +225,16 @@ func TestRetry(t *testing.T) {
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, op.State())
 	require.NotNil(t, op.LastAttemptFailure)
 
-	// Also verify that the last attempt failure is cleared on success.
 	require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionSucceeded.Apply(op, nexusoperations.EventSucceeded{
-			Node:             node,
-			Time:             time.Now(),
-			CompletionSource: nexusoperations.CompletionSourceResponse,
+			Node: node,
+			Time: time.Now(),
 		})
 	}))
 	op, err = hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
-	require.Nil(t, op.LastAttemptFailure)
+	// Also verify that the last attempt failure is not cleared on success.
+	require.NotNil(t, op.LastAttemptFailure)
 }
 
 func TestCompleteFromAttempt(t *testing.T) {
@@ -248,14 +247,11 @@ func TestCompleteFromAttempt(t *testing.T) {
 			name: "succeeded",
 			transition: func(node *hsm.Node, op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 				return nexusoperations.TransitionSucceeded.Apply(op, nexusoperations.EventSucceeded{
-					Node:             node,
-					Time:             time.Now(),
-					CompletionSource: nexusoperations.CompletionSourceResponse,
+					Node: node,
+					Time: time.Now(),
 				})
 			},
 			assertState: func(t *testing.T, op nexusoperations.Operation) {
-				require.Equal(t, int32(1), op.Attempt)
-				require.NotNil(t, op.LastAttemptCompleteTime)
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SUCCEEDED, op.State())
 			},
 		},
@@ -270,12 +266,9 @@ func TestCompleteFromAttempt(t *testing.T) {
 							Message: "test",
 						},
 					},
-					CompletionSource: nexusoperations.CompletionSourceResponse,
 				})
 			},
 			assertState: func(t *testing.T, op nexusoperations.Operation) {
-				require.Equal(t, int32(1), op.Attempt)
-				require.NotNil(t, op.LastAttemptCompleteTime)
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 			},
 		},
@@ -283,14 +276,11 @@ func TestCompleteFromAttempt(t *testing.T) {
 			name: "canceled",
 			transition: func(node *hsm.Node, op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 				return nexusoperations.TransitionCanceled.Apply(op, nexusoperations.EventCanceled{
-					Time:             time.Now(),
-					Node:             node,
-					CompletionSource: nexusoperations.CompletionSourceResponse,
+					Time: time.Now(),
+					Node: node,
 				})
 			},
 			assertState: func(t *testing.T, op nexusoperations.Operation) {
-				require.Equal(t, int32(1), op.Attempt)
-				require.NotNil(t, op.LastAttemptCompleteTime)
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_CANCELED, op.State())
 			},
 		},
@@ -301,7 +291,7 @@ func TestCompleteFromAttempt(t *testing.T) {
 					Node: node,
 					Time: time.Now(),
 					Attributes: &historypb.NexusOperationStartedEventAttributes{
-						OperationId: "op-id",
+						OperationToken: "op-token",
 					},
 				})
 			},
@@ -309,7 +299,7 @@ func TestCompleteFromAttempt(t *testing.T) {
 				require.Equal(t, int32(1), op.Attempt)
 				require.NotNil(t, op.LastAttemptCompleteTime)
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
-				require.Equal(t, "op-id", op.OperationId)
+				require.Equal(t, "op-token", op.OperationToken)
 			},
 		},
 	}
@@ -369,7 +359,7 @@ func TestCompleteExternally(t *testing.T) {
 						Node: node,
 						Time: time.Now(),
 						Attributes: &historypb.NexusOperationStartedEventAttributes{
-							OperationId: "op-id",
+							OperationToken: "op-token",
 						},
 					})
 				}))
@@ -386,8 +376,7 @@ func TestCompleteExternally(t *testing.T) {
 			name: "succeeded",
 			transition: func(node *hsm.Node, op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 				return nexusoperations.TransitionSucceeded.Apply(op, nexusoperations.EventSucceeded{
-					Node:             node,
-					CompletionSource: nexusoperations.CompletionSourceCallback,
+					Node: node,
 				})
 			},
 			assertState: func(t *testing.T, op nexusoperations.Operation) {
@@ -398,8 +387,7 @@ func TestCompleteExternally(t *testing.T) {
 			name: "failed",
 			transition: func(node *hsm.Node, op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 				return nexusoperations.TransitionFailed.Apply(op, nexusoperations.EventFailed{
-					Node:             node,
-					CompletionSource: nexusoperations.CompletionSourceCallback,
+					Node: node,
 				})
 			},
 			assertState: func(t *testing.T, op nexusoperations.Operation) {
@@ -410,8 +398,7 @@ func TestCompleteExternally(t *testing.T) {
 			name: "canceled",
 			transition: func(node *hsm.Node, op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 				return nexusoperations.TransitionCanceled.Apply(op, nexusoperations.EventCanceled{
-					Node:             node,
-					CompletionSource: nexusoperations.CompletionSourceCallback,
+					Node: node,
 				})
 			},
 			assertState: func(t *testing.T, op nexusoperations.Operation) {
@@ -462,7 +449,7 @@ func TestCancel(t *testing.T) {
 	_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 		Time: time.Now(),
 		Attributes: &historypb.NexusOperationStartedEventAttributes{
-			OperationId: "op-id",
+			OperationToken: "op-token",
 		},
 		Node: root,
 	})
@@ -486,7 +473,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 			Time: time.Now(),
 			Node: root,
 			Attributes: &historypb.NexusOperationStartedEventAttributes{
-				OperationId: "test-operation-id",
+				OperationToken: "test-operation-token",
 			},
 		})
 	}))
@@ -613,7 +600,7 @@ func TestCancelationBeforeStarted(t *testing.T) {
 			Time: time.Now(),
 			Node: root,
 			Attributes: &historypb.NexusOperationStartedEventAttributes{
-				OperationId: "test",
+				OperationToken: "test",
 			},
 		})
 	}))

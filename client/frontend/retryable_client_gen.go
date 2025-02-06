@@ -530,15 +530,15 @@ func (c *retryableClient) PatchSchedule(
 	return resp, err
 }
 
-func (c *retryableClient) PauseActivityById(
+func (c *retryableClient) PauseActivity(
 	ctx context.Context,
-	request *workflowservice.PauseActivityByIdRequest,
+	request *workflowservice.PauseActivityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.PauseActivityByIdResponse, error) {
-	var resp *workflowservice.PauseActivityByIdResponse
+) (*workflowservice.PauseActivityResponse, error) {
+	var resp *workflowservice.PauseActivityResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.PauseActivityById(ctx, request, opts...)
+		resp, err = c.client.PauseActivity(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -680,15 +680,15 @@ func (c *retryableClient) RequestCancelWorkflowExecution(
 	return resp, err
 }
 
-func (c *retryableClient) ResetActivityById(
+func (c *retryableClient) ResetActivity(
 	ctx context.Context,
-	request *workflowservice.ResetActivityByIdRequest,
+	request *workflowservice.ResetActivityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ResetActivityByIdResponse, error) {
-	var resp *workflowservice.ResetActivityByIdResponse
+) (*workflowservice.ResetActivityResponse, error) {
+	var resp *workflowservice.ResetActivityResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.ResetActivityById(ctx, request, opts...)
+		resp, err = c.client.ResetActivity(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -1025,30 +1025,30 @@ func (c *retryableClient) TerminateWorkflowExecution(
 	return resp, err
 }
 
-func (c *retryableClient) UnpauseActivityById(
+func (c *retryableClient) UnpauseActivity(
 	ctx context.Context,
-	request *workflowservice.UnpauseActivityByIdRequest,
+	request *workflowservice.UnpauseActivityRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UnpauseActivityByIdResponse, error) {
-	var resp *workflowservice.UnpauseActivityByIdResponse
+) (*workflowservice.UnpauseActivityResponse, error) {
+	var resp *workflowservice.UnpauseActivityResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.UnpauseActivityById(ctx, request, opts...)
+		resp, err = c.client.UnpauseActivity(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
 
-func (c *retryableClient) UpdateActivityOptionsById(
+func (c *retryableClient) UpdateActivityOptions(
 	ctx context.Context,
-	request *workflowservice.UpdateActivityOptionsByIdRequest,
+	request *workflowservice.UpdateActivityOptionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateActivityOptionsByIdResponse, error) {
-	var resp *workflowservice.UpdateActivityOptionsByIdResponse
+) (*workflowservice.UpdateActivityOptionsResponse, error) {
+	var resp *workflowservice.UpdateActivityOptionsResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.UpdateActivityOptionsById(ctx, request, opts...)
+		resp, err = c.client.UpdateActivityOptions(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

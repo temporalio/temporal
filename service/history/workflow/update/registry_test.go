@@ -839,6 +839,72 @@ func TestTryResurrect(t *testing.T) {
 	})
 }
 
+func TestSuggestContinueAsNew(t *testing.T) {
+	var (
+		tv         = testvars.New(t)
+		limit      = 4
+		suggestCAN = 0.5
+		reg        = update.NewRegistry(
+			emptyUpdateStore,
+			update.WithTotalLimit(func() int {
+				return limit
+			}),
+			update.WithTotalLimitSuggestCAN(func() float64 {
+				return suggestCAN
+			}))
+	)
+
+	t.Run("do not suggest Continue-As-New for empty registry", func(t *testing.T) {
+		require.False(t, reg.SuggestContinueAsNew())
+	})
+
+	t.Run("do not suggest Continue-As-New before limit is reached", func(t *testing.T) {
+		_, existed, err := reg.FindOrCreate(context.Background(), tv.WithUpdateIDNumber(1).UpdateID())
+		require.NoError(t, err)
+		require.False(t, existed)
+		require.Equal(t, 1, reg.Len()) // ie 25% of the limit, ie below the suggestion threshold of 2
+
+		require.False(t, reg.SuggestContinueAsNew())
+	})
+
+	t.Run("suggest Continue-As-New when limit is reached", func(t *testing.T) {
+		_, existed, err := reg.FindOrCreate(context.Background(), tv.WithUpdateIDNumber(2).UpdateID())
+		require.NoError(t, err)
+		require.False(t, existed)
+		require.Equal(t, 2, reg.Len()) // ie 50% of the limit, ie at the suggestion threshold of 2
+
+		require.True(t, reg.SuggestContinueAsNew())
+
+		_, existed, err = reg.FindOrCreate(context.Background(), tv.WithUpdateIDNumber(3).UpdateID())
+		require.NoError(t, err)
+		require.False(t, existed)
+		require.Equal(t, 3, reg.Len()) // ie 75% of the limit, ie above the suggestion threshold of 2
+
+		require.True(t, reg.SuggestContinueAsNew())
+	})
+
+	t.Run("do not suggest Continue-As-New after limit is increased", func(t *testing.T) {
+		limit = 10
+		require.False(t, reg.SuggestContinueAsNew())
+	})
+
+	t.Run("disable suggestion by setting threshold to zero", func(t *testing.T) {
+		limit = 1 // lower total limit
+		require.True(t, reg.SuggestContinueAsNew())
+
+		suggestCAN = 0 // disable CAN suggestion
+		require.False(t, reg.SuggestContinueAsNew())
+	})
+
+	t.Run("disable suggestion by setting total limit to zero", func(t *testing.T) {
+		suggestCAN = 1 // enable CAN suggestion
+		require.True(t, reg.SuggestContinueAsNew())
+
+		limit = 0 // disable total limit
+		require.False(t, reg.SuggestContinueAsNew())
+	})
+}
+
 func assertRejectUpdateInRegistry(
 	t *testing.T,
 	reg update.Registry,

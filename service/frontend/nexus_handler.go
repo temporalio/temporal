@@ -431,9 +431,14 @@ func (h *nexusHandler) StartOperation(
 
 		case *nexuspb.StartOperationResponse_AsyncSuccess:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("async_success"))
+
+			token := t.AsyncSuccess.GetOperationToken()
+			if token == "" {
+				token = t.AsyncSuccess.GetOperationId()
+			}
 			return &nexus.HandlerStartOperationResultAsync{
-				OperationID: t.AsyncSuccess.GetOperationId(),
-				Links:       parseLinks(t.AsyncSuccess.GetLinks(), oc.logger),
+				OperationToken: token,
+				Links:          parseLinks(t.AsyncSuccess.GetLinks(), oc.logger),
 			}, nil
 
 		case *nexuspb.StartOperationResponse_OperationError:
@@ -441,7 +446,7 @@ func (h *nexusHandler) StartOperation(
 
 			oc.nexusContext.setFailureSource(failureSourceWorker)
 
-			err := &nexus.UnsuccessfulOperationError{
+			err := &nexus.OperationError{
 				State: nexus.OperationState(t.OperationError.GetOperationState()),
 				Cause: &nexus.FailureError{
 					Failure: commonnexus.ProtoFailureToNexusFailure(t.OperationError.GetFailure()),
@@ -504,10 +509,10 @@ func (h *nexusHandler) forwardStartOperation(
 		return &nexus.HandlerStartOperationResultSync[any]{Value: resp.Successful.Reader}, nil
 	}
 	// If Nexus client did not return an error, one of Successful or Pending will always be set.
-	return &nexus.HandlerStartOperationResultAsync{OperationID: resp.Pending.ID}, nil
+	return &nexus.HandlerStartOperationResultAsync{OperationToken: resp.Pending.Token}, nil
 }
 
-func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, id string, options nexus.CancelOperationOptions) (retErr error) {
+func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) (retErr error) {
 	oc, err := h.getOperationContext(ctx, "CancelNexusOperation")
 	if err != nil {
 		return err
@@ -519,16 +524,18 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		ScheduledTime: timestamppb.New(oc.requestStartTime),
 		Variant: &nexuspb.Request_CancelOperation{
 			CancelOperation: &nexuspb.CancelOperationRequest{
-				Service:     service,
-				Operation:   operation,
-				OperationId: id,
+				Service:        service,
+				Operation:      operation,
+				OperationToken: token,
+				// TODO(bergundy): Remove this fallback after the 1.27 release.
+				OperationId: token,
 			},
 		},
 	})
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
 		var notActiveErr *serviceerror.NamespaceNotActive
 		if errors.As(err, &notActiveErr) {
-			return h.forwardCancelOperation(ctx, service, operation, id, options, oc)
+			return h.forwardCancelOperation(ctx, service, operation, token, options, oc)
 		}
 		return err
 	}

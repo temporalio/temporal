@@ -400,6 +400,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		consts.IdentityHistoryService,
 		nil,
 		nil,
+		nil,
 		true,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
@@ -824,6 +825,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		nextEventID,
 		branchToken,
 		nil,
+		map[string]*persistencespb.ResetChildInfo{},
 	)
 	s.NoError(err)
 	s.Equal(newRunID, nextRunID)
@@ -1101,7 +1103,16 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 			},
 		},
 	}
-	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6, event7, event8, event9}
+	event10 := &historypb.HistoryEvent{
+		EventId:   110,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+			WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+				AttachedRequestId: "test attached request id",
+			},
+		},
+	}
+	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6, event7, event8, event9, event10}
 
 	testcases := []struct {
 		name    string
@@ -1122,6 +1133,15 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 	for _, tc := range testcases {
 		for _, event := range events {
 			switch event.GetEventType() { // nolint:exhaustive
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+				attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+				ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+					attr.GetVersioningOverride(),
+					attr.GetUnsetVersioningOverride(),
+					attr.GetAttachedRequestId(),
+					attr.GetAttachedCompletionCallbacks(),
+					event.Links,
+				).Return(&historypb.HistoryEvent{}, nil)
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				attr := event.GetWorkflowExecutionSignaledEventAttributes()
 				ms.EXPECT().AddWorkflowExecutionSignaled(
@@ -1466,6 +1486,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		workflowTaskSchedule.RequestID,
 		workflowTaskSchedule.TaskQueue,
 		consts.IdentityHistoryService,
+		nil,
 		nil,
 		nil,
 		true,

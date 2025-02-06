@@ -72,6 +72,20 @@ type (
 		// - "milliseconds"
 		// - "bytes"
 		PerUnitHistogramBoundaries map[string][]float64 `yaml:"perUnitHistogramBoundaries"`
+
+		// Following configs are added for backwards compatibility when switching from tally to opentelemetry
+		// All configs should be set to true when using opentelemetry framework to have the same behavior as tally.
+
+		// WithoutUnitSuffix controls the additional of unit suffixes to metric names.
+		// This config only takes effect when explicitly using "opentelemetry" as the framework.
+		WithoutUnitSuffix bool `yaml:"withoutUnitSuffix"`
+		// WithoutCounterSuffix controls the additional of _total suffixes to counter metric names.
+		// This config only takes effect when explicitly using "opentelemetry" as the framework.
+		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
+		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
+		// (instead of milliseconds).
+		// This config only takes effect when explicitly using "opentelemetry" as the framework.
+		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
 	}
 
 	// StatsdConfig contains the config items for statsd metrics reporter
@@ -99,6 +113,11 @@ type (
 
 	// PrometheusConfig is a new format for config for prometheus metrics.
 	PrometheusConfig struct {
+		// Deprecated. The underlying framework will always be OpenTelemetry.
+		// However, if the framework is not explicitly set to "opentelemetry", the
+		// behavior will be the same as tally for backward compatibility.
+		// More specifically: WithoutUnitSuffix, WithoutCounterSuffix, and RecordTimerInSeconds
+		// in ClientConfig will be set to true.
 		// Metric framework: Tally/OpenTelemetry
 		Framework string `yaml:"framework"`
 		// Address for prometheus to serve metrics from.
@@ -389,6 +408,12 @@ func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
 		buckets[Bytes] = bucket
 	}
 
+	bucketInSeconds := make([]float64, len(buckets[Milliseconds]))
+	for idx, boundary := range buckets[Milliseconds] {
+		bucketInSeconds[idx] = boundary / float64(time.Second/time.Millisecond)
+	}
+	buckets[Seconds] = bucketInSeconds
+
 	clientConfig.PerUnitHistogramBoundaries = buckets
 }
 
@@ -455,25 +480,24 @@ func newPrometheusScope(
 
 // MetricsHandlerFromConfig is used at startup to construct a MetricsHandler
 func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
-	if c == nil {
+	if c == nil || c.Prometheus == nil {
 		return NoopMetricsHandler, nil
 	}
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 
-	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
-		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
-		if err != nil {
-			logger.Fatal(err.Error())
-		}
-
-		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+	if c.Prometheus.Framework != FrameworkOpentelemetry {
+		c.ClientConfig.WithoutUnitSuffix = true
+		c.ClientConfig.WithoutCounterSuffix = true
+		c.ClientConfig.RecordTimerInSeconds = true
 	}
 
-	return NewTallyMetricsHandler(
-		c.ClientConfig,
-		NewScope(logger, c),
-	), nil
+	otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
+	if err != nil {
+		logger.Fatal(err.Error())
+	}
+
+	return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
 }
 
 func configExcludeTags(cfg ClientConfig) map[string]map[string]struct{} {

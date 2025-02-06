@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -182,7 +183,7 @@ type (
 		AddFirstWorkflowTaskScheduled(parentClock *clockspb.VectorClock, event *historypb.HistoryEvent, bypassTaskGeneration bool) (int64, error)
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
 		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *timestamppb.Timestamp, workflowTaskType enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo, bool) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
+		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo, update.Registry, bool) (*historypb.HistoryEvent, *WorkflowTaskInfo, error)
 		AddWorkflowTaskTimedOutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, namespace.Name, namespace.ID, string, string) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionSignaled(int64, namespace.Name, namespace.ID, string, string, string) (*historypb.HistoryEvent, error)
@@ -221,7 +222,13 @@ type (
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool, links []*commonpb.Link) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflowpb.VersioningOverride, unsetVersioningOverride bool) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionOptionsUpdatedEvent(
+			versioningOverride *workflowpb.VersioningOverride,
+			unsetVersioningOverride bool,
+			attachRequestID string,
+			attachCompletionCallbacks []*commonpb.Callback,
+			links []*commonpb.Link,
+		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
@@ -234,6 +241,8 @@ type (
 		UpdateResetRunID(runID string)
 		// IsResetRun returns true if this run is result of a reset operation.
 		IsResetRun() bool
+		SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo)
+		GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo
 
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
@@ -450,6 +459,8 @@ type (
 
 		AddReapplyCandidateEvent(event *historypb.HistoryEvent)
 		GetReapplyCandidateEvents() []*historypb.HistoryEvent
+
+		CurrentVersionedTransition() *persistencespb.VersionedTransition
 
 		DeleteSubStateMachine(path *persistencespb.StateMachinePath) error
 	}

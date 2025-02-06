@@ -26,6 +26,7 @@ package telemetry
 
 import (
 	"context"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
@@ -134,27 +135,20 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 	c.wrapped.HandleRPC(ctx, stat)
 
 	switch s := stat.(type) {
+	case *stats.InHeader:
+		if c.isDebug {
+			span := trace.SpanFromContext(ctx)
+			for key, values := range s.Header {
+				span.SetAttributes(attribute.StringSlice("rpc.request.headers."+key, values))
+			}
+			if deadline, ok := ctx.Deadline(); ok {
+				span.SetAttributes(attribute.String("rpc.request.deadline", deadline.Format(time.RFC3339Nano)))
+				span.SetAttributes(attribute.String("rpc.request.timeout", time.Until(deadline).String()))
+			}
+		}
 	case *stats.InPayload:
 		span := trace.SpanFromContext(ctx)
-
-		methodName, ok := ctx.Value(methodNameKey{}).(string)
-		if !ok {
-			methodName = "unknown"
-		}
-
-		// annotate span with workflow tags (same ones the Temporal SDKs use)
-		for _, logTag := range c.tags.Extract(s.Payload, methodName) {
-			var k string
-			switch logTag.Key() {
-			case tag.WorkflowIDKey:
-				k = WorkflowIDKey
-			case tag.WorkflowRunIDKey:
-				k = WorkflowRunIDKey
-			default:
-				continue
-			}
-			span.SetAttributes(attribute.Key(k).String(logTag.Value().(string)))
-		}
+		c.annotateTags(ctx, span, s.Payload)
 
 		// annotate with gRPC request payload
 		if c.isDebug {
@@ -165,11 +159,19 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 			span.SetAttributes(attribute.Key("rpc.request.payload").String(string(payload)))
 			span.SetAttributes(attribute.Key("rpc.request.type").String(msgType))
 		}
-	case *stats.OutPayload:
-		// annotate with gRPC response payload
+	case *stats.OutHeader:
 		if c.isDebug {
 			span := trace.SpanFromContext(ctx)
+			for key, values := range s.Header {
+				span.SetAttributes(attribute.StringSlice("rpc.response.headers."+key, values))
+			}
+		}
+	case *stats.OutPayload:
+		span := trace.SpanFromContext(ctx)
+		c.annotateTags(ctx, span, s.Payload)
 
+		// annotate with gRPC response payload
+		if c.isDebug {
 			//revive:disable-next-line:unchecked-type-assertion
 			respMsg := s.Payload.(proto.Message)
 			payload, _ := protojson.Marshal(respMsg)
@@ -177,6 +179,31 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 			span.SetAttributes(attribute.Key("rpc.response.payload").String(string(payload)))
 			span.SetAttributes(attribute.Key("rpc.response.type").String(msgType))
 		}
+	}
+}
+
+func (c *customServerStatsHandler) annotateTags(
+	ctx context.Context,
+	span trace.Span,
+	payload any,
+) {
+	methodName, ok := ctx.Value(methodNameKey{}).(string)
+	if !ok {
+		methodName = "unknown"
+	}
+
+	// annotate span with workflow tags (same ones the Temporal SDKs use)
+	for _, logTag := range c.tags.Extract(payload, methodName) {
+		var k string
+		switch logTag.Key() {
+		case tag.WorkflowIDKey:
+			k = WorkflowIDKey
+		case tag.WorkflowRunIDKey:
+			k = WorkflowRunIDKey
+		default:
+			continue
+		}
+		span.SetAttributes(attribute.Key(k).String(logTag.Value().(string)))
 	}
 }
 

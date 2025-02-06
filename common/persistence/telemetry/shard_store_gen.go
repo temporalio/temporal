@@ -33,6 +33,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -65,11 +66,19 @@ func newTelemetryMetadataStore(
 
 // CreateNamespace wraps MetadataStore.CreateNamespace.
 func (d telemetryMetadataStore) CreateNamespace(ctx context.Context, request *_sourcePersistence.InternalCreateNamespaceRequest) (cp1 *_sourcePersistence.CreateNamespaceResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/CreateNamespace")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.MetadataStore/CreateNamespace",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("MetadataStore"),
+			attribute.Key("persistence.method").String("CreateNamespace"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("CreateNamespace"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	cp1, err = d.MetadataStore.CreateNamespace(ctx, request)
 	if err != nil {
@@ -99,11 +108,19 @@ func (d telemetryMetadataStore) CreateNamespace(ctx context.Context, request *_s
 
 // DeleteNamespace wraps MetadataStore.DeleteNamespace.
 func (d telemetryMetadataStore) DeleteNamespace(ctx context.Context, request *_sourcePersistence.DeleteNamespaceRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/DeleteNamespace")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.MetadataStore/DeleteNamespace",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("MetadataStore"),
+			attribute.Key("persistence.method").String("DeleteNamespace"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteNamespace"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.MetadataStore.DeleteNamespace(ctx, request)
 	if err != nil {
@@ -126,11 +143,19 @@ func (d telemetryMetadataStore) DeleteNamespace(ctx context.Context, request *_s
 
 // DeleteNamespaceByName wraps MetadataStore.DeleteNamespaceByName.
 func (d telemetryMetadataStore) DeleteNamespaceByName(ctx context.Context, request *_sourcePersistence.DeleteNamespaceByNameRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/DeleteNamespaceByName")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.MetadataStore/DeleteNamespaceByName",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("MetadataStore"),
+			attribute.Key("persistence.method").String("DeleteNamespaceByName"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteNamespaceByName"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.MetadataStore.DeleteNamespaceByName(ctx, request)
 	if err != nil {
@@ -153,11 +178,19 @@ func (d telemetryMetadataStore) DeleteNamespaceByName(ctx context.Context, reque
 
 // GetMetadata wraps MetadataStore.GetMetadata.
 func (d telemetryMetadataStore) GetMetadata(ctx context.Context) (gp1 *_sourcePersistence.GetMetadataResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/GetMetadata")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.MetadataStore/GetMetadata",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("MetadataStore"),
+			attribute.Key("persistence.method").String("GetMetadata"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetMetadata"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	gp1, err = d.MetadataStore.GetMetadata(ctx)
 	if err != nil {
@@ -180,11 +213,19 @@ func (d telemetryMetadataStore) GetMetadata(ctx context.Context) (gp1 *_sourcePe
 
 // GetNamespace wraps MetadataStore.GetNamespace.
 func (d telemetryMetadataStore) GetNamespace(ctx context.Context, request *_sourcePersistence.GetNamespaceRequest) (ip1 *_sourcePersistence.InternalGetNamespaceResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/GetNamespace")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.MetadataStore/GetNamespace",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("MetadataStore"),
+			attribute.Key("persistence.method").String("GetNamespace"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetNamespace"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.MetadataStore.GetNamespace(ctx, request)
 	if err != nil {
@@ -214,11 +255,19 @@ func (d telemetryMetadataStore) GetNamespace(ctx context.Context, request *_sour
 
 // ListNamespaces wraps MetadataStore.ListNamespaces.
 func (d telemetryMetadataStore) ListNamespaces(ctx context.Context, request *_sourcePersistence.InternalListNamespacesRequest) (ip1 *_sourcePersistence.InternalListNamespacesResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/ListNamespaces")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.MetadataStore/ListNamespaces",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("MetadataStore"),
+			attribute.Key("persistence.method").String("ListNamespaces"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ListNamespaces"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.MetadataStore.ListNamespaces(ctx, request)
 	if err != nil {
@@ -248,11 +297,19 @@ func (d telemetryMetadataStore) ListNamespaces(ctx context.Context, request *_so
 
 // RenameNamespace wraps MetadataStore.RenameNamespace.
 func (d telemetryMetadataStore) RenameNamespace(ctx context.Context, request *_sourcePersistence.InternalRenameNamespaceRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/RenameNamespace")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.MetadataStore/RenameNamespace",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("MetadataStore"),
+			attribute.Key("persistence.method").String("RenameNamespace"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("RenameNamespace"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.MetadataStore.RenameNamespace(ctx, request)
 	if err != nil {
@@ -275,11 +332,19 @@ func (d telemetryMetadataStore) RenameNamespace(ctx context.Context, request *_s
 
 // UpdateNamespace wraps MetadataStore.UpdateNamespace.
 func (d telemetryMetadataStore) UpdateNamespace(ctx context.Context, request *_sourcePersistence.InternalUpdateNamespaceRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.MetadataStore/UpdateNamespace")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.MetadataStore/UpdateNamespace",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("MetadataStore"),
+			attribute.Key("persistence.method").String("UpdateNamespace"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("MetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("UpdateNamespace"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.MetadataStore.UpdateNamespace(ctx, request)
 	if err != nil {

@@ -22,19 +22,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package xdc
+package chasm
 
 import (
+	"context"
 	"time"
-
-	"go.temporal.io/server/tests/testcore"
 )
 
-const (
-	numOfRetry        = 100
-	waitTimeInMs      = 400
-	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
-	// TODO (alex): remove 5s buffer. Refresh interval is 1s now.
-	cacheRefreshInterval = testcore.NamespaceCacheRefreshInterval + 5*time.Second
-	testTimeout          = 30 * time.Second
-)
+type Context interface {
+	// Context is not bound to any component,
+	// so all methods needs to take in component as a parameter
+
+	// NOTE: component created in the current transaction won't have a ref
+	// this is a Ref to the component state at the start of the transition
+	Ref(Component) (ComponentRef, bool)
+	Now(Component) time.Time
+
+	// Intent() OperationIntent
+	// ComponentOptions(Component) []ComponentOption
+
+	getContext() context.Context
+}
+
+type MutableContext interface {
+	Context
+
+	AddTask(Component, TaskAttributes, any) error
+
+	// Add more methods here for other storage commands/primitives.
+	// e.g. HistoryEvent
+
+	// Get a Ref for the component
+	// This ref to the component state at the end of the transition
+	// Same as Ref(Component) method in Context,
+	// this only works for components that already exists at the start of the transition
+	//
+	// If we provide this method, then the method on the engine doesn't need to
+	// return a Ref
+	// NewRef(Component) (ComponentRef, bool)
+}

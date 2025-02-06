@@ -823,6 +823,7 @@ var (
 	WorkflowExecutionUpdateRequestRateLimited            = NewCounterDef("workflow_update_request_rate_limited")
 	WorkflowExecutionUpdateTooMany                       = NewCounterDef("workflow_update_request_too_many")
 	WorkflowExecutionUpdateAborted                       = NewCounterDef("workflow_update_aborted")
+	WorkflowExecutionUpdateContinueAsNewSuggestions      = NewCounterDef("workflow_update_continue_as_new_suggestions")
 	WorkflowExecutionUpdateSentToWorker                  = NewCounterDef("workflow_update_sent_to_worker")
 	WorkflowExecutionUpdateSentToWorkerAgain             = NewCounterDef("workflow_update_sent_to_worker_again")
 	WorkflowExecutionUpdateWaitStageAccepted             = NewCounterDef("workflow_update_wait_stage_accepted")
@@ -1219,4 +1220,10 @@ var (
 	MemoryStackGauge     = NewGaugeDef("memory_stack")
 	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
 	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
+	NumGCGauge           = NewGaugeDef("memory_num_gc_last",
+		WithDescription("Last runtime.MemStats.NumGC"),
+	)
+	GcPauseNsTotal = NewGaugeDef("memory_pause_total_ns_last",
+		WithDescription("Last runtime.MemStats.PauseTotalNs"),
+	)
 )

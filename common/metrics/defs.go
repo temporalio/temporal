@@ -46,7 +46,7 @@ type (
 func NewTimerDef(name string, opts ...Option) timerDefinition {
 	// This line cannot be combined with others!
 	// This ensures the stack trace has information of the caller.
-	def := newMetricDefinition(name, append(opts, WithUnit(Milliseconds))...)
+	def := newMetricDefinition(name, opts...)
 	globalRegistry.register(def)
 	return timerDefinition{def}
 }
