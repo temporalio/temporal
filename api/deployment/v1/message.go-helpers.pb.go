@@ -288,6 +288,43 @@ func (this *WorkerDeploymentLocalState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type WorkerDeploymentVersionSummary to the protobuf v3 wire format
+func (val *WorkerDeploymentVersionSummary) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type WorkerDeploymentVersionSummary from the protobuf v3 wire format
+func (val *WorkerDeploymentVersionSummary) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *WorkerDeploymentVersionSummary) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two WorkerDeploymentVersionSummary values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *WorkerDeploymentVersionSummary) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *WorkerDeploymentVersionSummary
+	switch t := that.(type) {
+	case *WorkerDeploymentVersionSummary:
+		that1 = t
+	case WorkerDeploymentVersionSummary:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type RegisterWorkerInVersionArgs to the protobuf v3 wire format
 func (val *RegisterWorkerInVersionArgs) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -391,6 +428,117 @@ func (this *SyncVersionStateResponse) Equal(that interface{}) bool {
 	case *SyncVersionStateResponse:
 		that1 = t
 	case SyncVersionStateResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AddVersionUpdateArgs to the protobuf v3 wire format
+func (val *AddVersionUpdateArgs) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AddVersionUpdateArgs from the protobuf v3 wire format
+func (val *AddVersionUpdateArgs) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AddVersionUpdateArgs) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AddVersionUpdateArgs values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AddVersionUpdateArgs) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AddVersionUpdateArgs
+	switch t := that.(type) {
+	case *AddVersionUpdateArgs:
+		that1 = t
+	case AddVersionUpdateArgs:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type SyncDrainageInfoSignalArgs to the protobuf v3 wire format
+func (val *SyncDrainageInfoSignalArgs) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncDrainageInfoSignalArgs from the protobuf v3 wire format
+func (val *SyncDrainageInfoSignalArgs) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncDrainageInfoSignalArgs) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncDrainageInfoSignalArgs values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncDrainageInfoSignalArgs) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncDrainageInfoSignalArgs
+	switch t := that.(type) {
+	case *SyncDrainageInfoSignalArgs:
+		that1 = t
+	case SyncDrainageInfoSignalArgs:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type SyncDrainageStatusSignalArgs to the protobuf v3 wire format
+func (val *SyncDrainageStatusSignalArgs) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncDrainageStatusSignalArgs from the protobuf v3 wire format
+func (val *SyncDrainageStatusSignalArgs) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncDrainageStatusSignalArgs) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncDrainageStatusSignalArgs values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncDrainageStatusSignalArgs) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncDrainageStatusSignalArgs
+	switch t := that.(type) {
+	case *SyncDrainageStatusSignalArgs:
+		that1 = t
+	case SyncDrainageStatusSignalArgs:
 		that1 = &t
 	default:
 		return false

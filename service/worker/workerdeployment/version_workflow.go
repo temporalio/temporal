@@ -471,8 +471,11 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	// add version to worker-deployment workflow
 	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
 		DeploymentName: d.VersionState.Version.GetDeploymentName(),
-		Version:        worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
-		RequestId:      d.newUUID(ctx),
+		UpdateArgs: &deploymentspb.AddVersionUpdateArgs{
+			Version:    worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
+			CreateTime: d.VersionState.CreateTime,
+		},
+		RequestId: d.newUUID(ctx),
 	}).Get(ctx, nil)
 	return err
 }
