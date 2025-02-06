@@ -139,8 +139,9 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		if params.TotalExecutionsCount > 0 {
 			des.RemainingExecutionsCount = params.TotalExecutionsCount - (result.SuccessCount + result.ErrorCount)
 		}
-		if now.After(params.FirstRunStartTime) {
-			des.AverageRPS = (result.SuccessCount + result.ErrorCount) / int(now.Sub(params.FirstRunStartTime).Seconds())
+		secondsSinceStart := int(now.Sub(params.FirstRunStartTime).Seconds())
+		if secondsSinceStart > 0 {
+			des.AverageRPS = (result.SuccessCount + result.ErrorCount) / secondsSinceStart
 		}
 		if des.AverageRPS > 0 {
 			des.ApproximateTimeLeft = time.Duration(des.RemainingExecutionsCount/des.AverageRPS) * time.Second
