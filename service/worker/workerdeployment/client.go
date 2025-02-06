@@ -1191,6 +1191,12 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		}
 	}
 
+	// never return empty drainage info
+	drainageInfo := state.GetDrainageInfo()
+	if drainageInfo.GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED {
+		drainageInfo = nil
+	}
+
 	return &deploymentpb.WorkerDeploymentVersionInfo{
 		Version:            worker_versioning.WorkerDeploymentVersionToString(state.Version),
 		CreateTime:         state.CreateTime,
@@ -1199,7 +1205,7 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 		RampingSinceTime:   state.RampingSinceTime,
 		RampPercentage:     state.RampPercentage,
 		TaskQueueInfos:     taskQueues,
-		DrainageInfo:       state.DrainageInfo,
+		DrainageInfo:       drainageInfo,
 		Metadata:           state.Metadata,
 	}
 }
