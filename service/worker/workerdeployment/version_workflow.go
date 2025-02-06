@@ -90,6 +90,7 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	selector := workflow.NewSelector(ctx)
 	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		// Process Signal
+		c.Receive(ctx, nil)
 		forceCAN = true
 	})
 	selector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {

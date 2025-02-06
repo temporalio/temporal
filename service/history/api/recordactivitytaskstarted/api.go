@@ -252,7 +252,7 @@ func recordActivityTaskStarted(
 	return response, false, nil
 }
 
-// TODO: move this method to a better place
+// TODO (Shahab): move this method to a better place
 // TODO: cache this result (especially if the answer is true)
 func getDeploymentVersionForWorkflowId(
 	ctx context.Context,

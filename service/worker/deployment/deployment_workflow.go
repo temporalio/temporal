@@ -289,9 +289,6 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 
 	// apply changes to "current"
 	if set := args.SetCurrent; set != nil {
-
-		d.logger.Info("Syncing from set-current")
-
 		if set.LastBecameCurrentTime == nil {
 			d.State.IsCurrent = false
 		} else {

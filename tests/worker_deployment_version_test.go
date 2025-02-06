@@ -174,6 +174,57 @@ func (s *DeploymentVersionSuite) startVersionWorkflowExpectFailAddVersion(ctx co
 	}, time.Second*5, time.Millisecond*200)
 }
 
+func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// Start a version workflow
+	s.startVersionWorkflow(ctx, tv)
+
+	// Set the version as current
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        tv.DeploymentVersionString(),
+	})
+	s.NoError(err)
+
+	// ForceCAN
+	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: versionWorkflowID,
+	}
+
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, nil, tv.ClientIdentity())
+	s.NoError(err)
+
+	// verifying we see our registered workers in the version deployment even after a CAN
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		if !a.NoError(err) {
+			return
+		}
+		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+
+		if !a.Equal(1, len(resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos())) {
+			return
+		}
+
+		// verify that the version state is intact even after a CAN
+		a.Equal(tv.TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
+		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
+		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetRoutingChangedTime())
+		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
+		a.Nil(resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo())
+	}, time.Second*10, time.Millisecond*1000)
+}
+
 func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
