@@ -114,6 +114,13 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 }
 
 func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
+	if d.VersionState == nil {
+		d.VersionState = &deploymentspb.VersionLocalState{}
+	}
+	defer func() {
+		d.VersionState.Closed = true
+	}()
+
 	if d.GetVersionState().Version == nil {
 		return fmt.Errorf("version cannot be nil on start")
 	}

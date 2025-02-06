@@ -289,7 +289,7 @@ func (d *ClientImpl) DescribeVersion(
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
-			return nil, serviceerror.NewNotFound("Deployment Version not found")
+			return nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 		}
 		return nil, err
 	}
@@ -298,6 +298,10 @@ func (d *ClientImpl) DescribeVersion(
 	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
 		return nil, err
+	}
+
+	if queryResponse.GetVersionState().Closed {
+		return nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 	}
 
 	return versionStateToVersionInfo(queryResponse.VersionState), nil
@@ -390,8 +394,17 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 	var queryResponse deploymentspb.QueryDescribeWorkerDeploymentResponse
 	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
+		}
 		return nil, nil, err
 	}
+
+	if queryResponse.GetState().Closed {
+		return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
+	}
+
 	dInfo, err := d.deploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)
 	if err != nil {
 		return nil, nil, err

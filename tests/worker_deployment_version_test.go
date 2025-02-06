@@ -26,10 +26,13 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/assert"
@@ -510,6 +513,18 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 
 	// idempotency check: deleting the same version again should succeed
 	s.tryDeleteVersion(ctx, tv1, true)
+
+	// Describe Worker Deployment should give not found
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		_, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv1.DeploymentVersionString(),
+		})
+		a.Error(err)
+		var nfe *serviceerror.NotFound
+		a.True(errors.As(err, &nfe))
+	}, time.Second*5, time.Millisecond*200)
 }
 
 // VersionMissingTaskQueues
