@@ -40,6 +40,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const (
+	defaultMaxVersions = 100 // TODO: Delete this after merging with limits PR
+)
+
 type (
 	// WorkflowRunner holds the local state while running a deployment-series workflow
 	WorkflowRunner struct {
@@ -183,7 +187,8 @@ func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampin
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
 	}
-	if args.Version != "" && args.Version != worker_versioning.UnversionedVersionId && !slices.Contains(d.State.Versions, args.Version) {
+	if args.Version != "" && args.Version != worker_versioning.UnversionedVersionId &&
+		!slices.ContainsFunc(d.State.Versions, func(v *deploymentspb.WorkerDeploymentVersionSummary) bool { return v.Version == args.Version }) {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
@@ -314,7 +319,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 }
 
 func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
-	if !slices.Contains(d.State.Versions, args.Version) {
+	if !slices.ContainsFunc(d.State.Versions, func(v *deploymentspb.WorkerDeploymentVersionSummary) bool { return v.Version == args.Version }) {
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
 	return nil
@@ -348,7 +353,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 	}
 
 	// update local state
-	d.State.Versions = slices.DeleteFunc(d.State.Versions, func(v string) bool { return v == args.Version })
+	d.State.Versions = slices.DeleteFunc(d.State.Versions, func(v *deploymentspb.WorkerDeploymentVersionSummary) bool { return v.Version == args.Version })
 
 	// update memo
 	return d.updateMemo(ctx)
@@ -361,11 +366,11 @@ func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersio
 	if d.State.RoutingConfig.CurrentVersion == args.Version {
 		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
-	if args.Version != worker_versioning.UnversionedVersionId && !slices.Contains(d.State.Versions, args.Version) {
+	if args.Version != worker_versioning.UnversionedVersionId &&
+		!slices.ContainsFunc(d.State.Versions, func(v *deploymentspb.WorkerDeploymentVersionSummary) bool { return v.Version == args.Version }) {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
-
 	return nil
 }
 
@@ -468,13 +473,13 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 }
 
-func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) error {
+func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(args *deploymentspb.AddVersionUpdateArgs) error {
 	if d.State.Versions == nil {
 		return nil
 	}
 
 	for _, v := range d.State.Versions {
-		if v == version {
+		if v.Version == args.Version {
 			return temporal.NewApplicationError("deployment version already registered", errVersionAlreadyExistsType)
 		}
 	}
@@ -482,19 +487,52 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) er
 	return nil
 }
 
-func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, version string) error {
+func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
 	d.pendingUpdates++
 	defer func() {
 		d.pendingUpdates--
 	}()
-
+	if len(d.State.Versions) >= defaultMaxVersions {
+		err := d.tryDeleteVersion(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	// Add version to local state
 	if d.State.Versions == nil {
-		d.State.Versions = make([]string, 0)
+		d.State.Versions = make([]*deploymentspb.WorkerDeploymentVersionSummary, 0)
 	}
 
-	d.State.Versions = append(d.State.Versions, version)
+	d.State.Versions = append(d.State.Versions, &deploymentspb.WorkerDeploymentVersionSummary{
+		Version:    args.Version,
+		CreateTime: args.CreateTime,
+	})
 	return nil
+}
+
+func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
+	slices.SortFunc(d.State.Versions, func(a, b *deploymentspb.WorkerDeploymentVersionSummary) int {
+		// sorts in ascending order.
+		// cmp(a, b) should return a negative number when a < b, a positive number when a > b,
+		// and zero when a == b or a and b are incomparable in the sense of a strict weak ordering.
+		if a.GetCreateTime().AsTime().After(b.GetCreateTime().AsTime()) {
+			return 1
+		} else if a.GetCreateTime().AsTime().Before(b.GetCreateTime().AsTime()) {
+			return -1
+		}
+		return 0
+	})
+	for _, v := range d.State.Versions {
+		// this might hang on the lock
+		err := d.handleDeleteVersion(ctx, &deploymentspb.DeleteVersionArgs{
+			Identity: "try-delete-for-add-version",
+			Version:  v.Version,
+		})
+		if err == nil {
+			return nil
+		}
+	}
+	return serviceerror.NewFailedPrecondition("could not add version: too many versions in deployment and none are eligible for deletion")
 }
 
 func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) (*deploymentspb.VersionLocalState, error) {

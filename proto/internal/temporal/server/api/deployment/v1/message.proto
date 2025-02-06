@@ -27,6 +27,7 @@ package temporal.server.api.deployment.v1;
 option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/enums/v1/deployment.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
@@ -146,8 +147,14 @@ message WorkerDeploymentLocalState {
     // - It has no active pollers (see WorkerDeploymentVersionInfo.pollers_status) 
     // - It is drained (see WorkerDeploymentVersionInfo.drainage_status)
     // TODO (Shivam) - Removal of registered versions based on the above conditions.
-    repeated string versions = 3;
+    repeated WorkerDeploymentVersionSummary versions = 3;
     bytes conflict_token = 4;
+}
+
+message WorkerDeploymentVersionSummary {
+    string version = 1;
+    google.protobuf.Timestamp create_time = 2;
+    temporal.api.enums.v1.VersionDrainageStatus drainage_status = 3;
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -181,6 +188,24 @@ message SyncVersionStateUpdateArgs {
 message SyncVersionStateResponse {
     VersionLocalState version_state = 1;
 }
+
+// Sent from Version workflow to Worker Deployment workflow
+message AddVersionUpdateArgs {
+    string version = 1;
+    google.protobuf.Timestamp create_time = 2;
+}
+
+// Sent from Drainage child workflow to Version parent
+message SyncDrainageInfoSignalArgs {
+    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 1;
+}
+
+// Sent from Version workflow to Worker Deployment workflow
+message SyncDrainageStatusSignalArgs {
+    string version = 1;
+    temporal.api.enums.v1.VersionDrainageStatus drainage_status = 2;
+}
+
 
 // used as Worker Deployment Version workflow query response:
 message QueryDescribeVersionResponse {
@@ -350,8 +375,7 @@ message WorkerDeploymentSummary {
 // Used as Worker Deployment Version workflow activity input:
 message AddVersionToWorkerDeploymentRequest {
     string deployment_name = 1;
-    // <deployment_name>/<build_id> or possibly just <version_id> in the future
-    string version = 2;
+    AddVersionUpdateArgs update_args = 2;
     string request_id = 3;
 }
 

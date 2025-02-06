@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -37,6 +38,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -53,6 +55,7 @@ const (
 	maxConcurrentBatchOperations             = 3
 	testVersionDrainageRefreshInterval       = 3 * time.Second
 	testVersionDrainageVisibilityGracePeriod = 3 * time.Second
+	testMaxVersionsInDeployment              = 5
 )
 
 type (
@@ -151,6 +154,23 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 		}
 		a.Contains(versionSummaryNames, tv.DeploymentVersionString())
 
+	}, time.Second*5, time.Millisecond*200)
+}
+
+func (s *DeploymentVersionSuite) startVersionWorkflowExpectFailAddVersion(ctx context.Context, tv *testvars.TestVars) {
+	go s.pollFromDeployment(ctx, tv)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		newResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		var versionSummaryNames []string
+		for _, versionSummary := range newResp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			versionSummaryNames = append(versionSummaryNames, versionSummary.GetVersion())
+		}
+		a.NotContains(versionSummaryNames, tv.DeploymentVersionString())
 	}, time.Second*5, time.Millisecond*200)
 }
 
@@ -443,18 +463,8 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 	s.tryDeleteVersion(ctx, tv1, false, false)
 }
 
-func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
-	s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	tv1 := testvars.New(s).WithBuildIDNumber(1)
-
-	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, tv1)
-
-	// Signal the first version to be drained. Only do this in tests.
-	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
+func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, tv *testvars.TestVars) {
+	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: versionWorkflowID,
 	}
@@ -475,20 +485,92 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 			},
 		},
 	}
-
-	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv.ClientIdentity())
 	s.Nil(err)
 
-	// Wait for pollers going away
+	// wait for drained
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+	}, 10*time.Second, time.Second)
+}
+
+func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testvars.TestVars) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     s.Namespace().String(),
-			TaskQueue:     tv1.TaskQueue(),
+			TaskQueue:     tv.TaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		})
 		assert.NoError(t, err)
 		assert.Empty(t, resp.Pollers)
 	}, 10*time.Second, time.Second)
+}
+
+func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
+	s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
+	// TODO: This test also requires hardcoding maxVersions in the deployment workflow until dynamic config is settable
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	tvs := make([]*testvars.TestVars, testMaxVersionsInDeployment)
+
+	// max out the versions
+	for i := 0; i < testMaxVersionsInDeployment; i++ {
+		tvs[i] = testvars.New(s).WithBuildIDNumber(i).WithTaskQueue(fmt.Sprintf("%d", i))
+		s.startVersionWorkflow(ctx, tvs[i])
+	}
+	tvMax := testvars.New(s).WithBuildIDNumber(9999)
+
+	// try to add a version and it fails
+	s.startVersionWorkflowExpectFailAddVersion(ctx, tvMax)
+
+	// signal the second and third wfs to be drained (testing that we don't delete the first version just due to create time oldest)
+	s.signalAndWaitForDrained(ctx, tvs[1])
+	s.signalAndWaitForDrained(ctx, tvs[2])
+	// Wait for pollers going away
+	s.waitForNoPollers(ctx, tvs[1])
+	s.waitForNoPollers(ctx, tvs[2])
+
+	// try to add a version again, and it succeeds, after deleting the second version but not the third (both are eligible)
+	// TODO: This fails if I try to add tvMax again...
+	s.startVersionWorkflow(ctx, testvars.New(s).WithBuildIDNumber(1111))
+
+	// second deployment version does not exist in the deployment list, third version does
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tvMax.DeploymentSeries(),
+		})
+		a.NoError(err)
+		var versions []string
+		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			versions = append(versions, vs.Version)
+		}
+		a.NotContains(versions, tvs[1].DeploymentVersionString())
+		a.Contains(versions, tvs[2].DeploymentVersionString())
+	}, time.Second*5, time.Millisecond*200)
+}
+
+func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
+	s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	s.startVersionWorkflow(ctx, tv1)
+
+	// Signal the first version to be drained. Only do this in tests.
+	s.signalAndWaitForDrained(ctx, tv1)
+
+	// Wait for pollers going away
+	s.waitForNoPollers(ctx, tv1)
 
 	// delete succeeds
 	s.tryDeleteVersion(ctx, tv1, true, false)
@@ -553,6 +635,19 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 
 	// idempotency check: deleting the same version again should succeed
 	s.tryDeleteVersion(ctx, tv1, true, true)
+
+	// Describe Worker Deployment should give not found
+	// describe deployment version gives not found error
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		_, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv1.DeploymentVersionString(),
+		})
+		a.Error(err)
+		var nfe *serviceerror.NotFound
+		a.True(errors.As(err, &nfe))
+	}, time.Second*5, time.Millisecond*200)
 }
 
 // VersionMissingTaskQueues

@@ -1386,26 +1386,20 @@ func (s *Versioning3Suite) TestSyncDeploymentUserData_Update() {
 	}}, data)
 
 	// Ramp unversioned
-	uv := tv2.DeploymentVersion()
-	uv.BuildId = ""
 	s.syncTaskQueueDeploymentData(tv2, false, 90, true, t2, tqTypeAct)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
 	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
 		{Version: tv2.DeploymentVersion(), CurrentSinceTime: timestamp.TimePtr(t2), RoutingUpdateTime: timestamp.TimePtr(t2)},
-		{Version: uv, CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t2), RampPercentage: 90, RoutingUpdateTime: timestamp.TimePtr(t2)},
-	}}, data)
+	},
+		UnversionedRampData: &deploymentspb.DeploymentVersionData{RampingSinceTime: timestamp.TimePtr(t2), RampPercentage: 90, RoutingUpdateTime: timestamp.TimePtr(t2)},
+	}, data)
 
 	// Forget v2
 	s.forgetTaskQueueDeploymentVersion(tv2, tqTypeAct, false)
 	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencespb.DeploymentData{Versions: []*deploymentspb.DeploymentVersionData{
-		{Version: uv, CurrentSinceTime: nil, RampingSinceTime: timestamp.TimePtr(t2), RampPercentage: 90, RoutingUpdateTime: timestamp.TimePtr(t2)},
-	}}, data)
-
-	// Forget unversioned ramp
-	s.forgetTaskQueueDeploymentVersion(tv2, tqTypeAct, true)
-	data = s.getTaskQueueDeploymentData(tv, tqTypeAct)
-	s.ProtoEqual(&persistencespb.DeploymentData{}, data)
+	s.ProtoEqual(&persistencespb.DeploymentData{
+		UnversionedRampData: &deploymentspb.DeploymentVersionData{RampingSinceTime: timestamp.TimePtr(t2), RampPercentage: 90, RoutingUpdateTime: timestamp.TimePtr(t2)},
+	}, data)
 }
 
 func (s *Versioning3Suite) waitForDeploymentVersionCreation(

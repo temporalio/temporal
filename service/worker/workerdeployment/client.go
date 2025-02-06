@@ -167,7 +167,7 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName string,
-		version string,
+		args *deploymentspb.AddVersionUpdateArgs,
 		identity string,
 		requestID string,
 	) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error)
@@ -284,7 +284,8 @@ func (d *ClientImpl) DescribeVersion(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 			},
-			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
+			Query:                &querypb.WorkflowQuery{QueryType: QueryDescribeVersion},
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 
@@ -292,9 +293,14 @@ func (d *ClientImpl) DescribeVersion(
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
-			return nil, serviceerror.NewNotFound("Deployment Version not found")
+			return nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 		}
 		return nil, err
+	}
+
+	// on closed workflows, the response is empty.
+	if res.GetResponse().GetQueryResult() == nil {
+		return nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 	}
 
 	var queryResponse deploymentspb.QueryDescribeVersionResponse
@@ -380,21 +386,34 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: deploymentWorkflowID,
 			},
-			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
+			Query:                &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 
-	// todo (Shivam): Querying completed/done workflows should not work.
 	res, err := d.historyClient.QueryWorkflow(ctx, req)
 	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
+		}
 		return nil, nil, err
+	}
+
+	if res.GetResponse().GetQueryResult() == nil {
+		return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
 	}
 
 	var queryResponse deploymentspb.QueryDescribeWorkerDeploymentResponse
 	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return nil, nil, serviceerror.NewNotFound("Worker Deployment not found")
+		}
 		return nil, nil, err
 	}
+
 	dInfo, err := d.deploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)
 	if err != nil {
 		return nil, nil, err
@@ -997,11 +1016,11 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
-	version string,
+	args *deploymentspb.AddVersionUpdateArgs,
 	identity string,
 	requestID string,
 ) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(version)
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return nil, err
 	}
@@ -1032,13 +1051,12 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 		// pretend this is a success
 		return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
 	} else if failure != nil {
-		// TODO: is there an easy way to recover the original type here?
-		return nil, serviceerror.NewInternal(fmt.Sprintf("failed to add version %v to worker deployment %v with error %v", version, deploymentName, failure.Message))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("failed to add version %v to worker deployment %v with error %v", args.Version, deploymentName, failure.Message))
 	}
 
 	success := outcome.GetSuccess()
 	if success == nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("outcome missing success and failure while adding version %v to worker deployment %v", version, deploymentName))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("outcome missing success and failure while adding version %v to worker deployment %v", args.Version, deploymentName))
 	}
 
 	return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
@@ -1235,8 +1253,8 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namesp
 
 	workerDeploymentInfo.RoutingConfig = state.RoutingConfig
 
-	for _, version := range state.Versions {
-		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, version)
+	for _, v := range state.Versions {
+		versionInfo, err := d.DescribeVersion(ctx, namespaceEntry, v.Version)
 		if err != nil {
 			return nil, err
 		}
