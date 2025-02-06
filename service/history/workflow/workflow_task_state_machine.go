@@ -736,6 +736,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 
 	deploymentName := request.GetDeploymentOptions().GetDeploymentName()
 	if deploymentName == "" {
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		deploymentName = request.GetDeployment().GetSeriesName()
 	}
 

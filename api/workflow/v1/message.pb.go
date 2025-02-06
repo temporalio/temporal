@@ -57,8 +57,9 @@ type ParentExecutionInfo struct {
 	Clock            *v11.VectorClock      `protobuf:"bytes,5,opt,name=clock,proto3" json:"clock,omitempty"`
 	InitiatedVersion int64                 `protobuf:"varint,6,opt,name=initiated_version,json=initiatedVersion,proto3" json:"initiated_version,omitempty"`
 	// When present, child workflow starts as Pinned to this Worker Deployment Version.
-	// Set only if the parent execution is Pinned to a Worker Deployment Version, and the child
-	// workflow is starting on a Task Queue belonging to the same Worker Deployment Version.
+	// Set only if the parent execution is effectively Pinned to a Worker Deployment Version when it
+	// first starts the child workflow, and the child workflow is starting on a Task Queue belonging
+	// to the same Worker Deployment Version.
 	// Not set in the subsequent execution if the child workflow continues-as-new.
 	PinnedWorkerDeploymentVersion string `protobuf:"bytes,7,opt,name=pinned_worker_deployment_version,json=pinnedWorkerDeploymentVersion,proto3" json:"pinned_worker_deployment_version,omitempty"`
 }
