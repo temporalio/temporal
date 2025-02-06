@@ -555,6 +555,7 @@ func NewMutableStateInChain(
 
 	// carry over necessary fields from current mutable state
 	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
+	newMutableState.executionInfo.ChildrenInitializedPostResetPoint = currentMutableState.GetExecutionInfo().ChildrenInitializedPostResetPoint
 
 	// Copy completion callbacks to new run.
 	oldCallbacks := callbacks.MachineCollection(currentMutableState.HSM())
