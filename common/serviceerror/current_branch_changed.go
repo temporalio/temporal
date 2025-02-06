@@ -48,7 +48,7 @@ type (
 func NewCurrentBranchChanged(currentBranchToken, requestBranchToken []byte,
 	currentVersionedTransition, requestVersionedTransition *persistencespb.VersionedTransition) error {
 	return &CurrentBranchChanged{
-		Message:                    "Current branch token and request branch token doesn't match.",
+		Message:                    "Current and request branch tokens, or current and request versioned transitions, don't match.",
 		CurrentBranchToken:         currentBranchToken,
 		RequestBranchToken:         requestBranchToken,
 		CurrentVersionedTransition: currentVersionedTransition,
