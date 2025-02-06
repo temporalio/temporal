@@ -2487,6 +2487,8 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	err = sysWfRun.Get(testCtx, nil)
 	s.NoError(err)
 
+	s.waitForClusterSynced()
+
 	// Verify all wf in ns is now available in cluster2
 	client2, _ := s.newClientAndWorker(s.cluster2.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker2")
 	verifyHistory := func(wfID string, runID string) {
