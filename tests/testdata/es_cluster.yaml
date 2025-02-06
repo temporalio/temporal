@@ -2,8 +2,6 @@ clusterno: 0
 historyconfig:
   numhistoryshards: 4
   numhistoryhosts: 1
-workerconfig:
-  enablereplicator: true
 esconfig:
   version: "${ES_VERSION}"
   url:

@@ -138,6 +138,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.TestCl
 		config.DynamicConfigOverrides = s.dynamicConfigOverrides
 		clusterConfigs[i].ClusterMetadata.MasterClusterName = s.clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.CurrentClusterName = s.clusterNames[i]
+		clusterConfigs[i].ClusterMetadata.EnableGlobalNamespace = true
 		clusterConfigs[i].Persistence.DBName = "func_" + s.clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
 			s.clusterNames[i]: cluster.ClusterInformation{

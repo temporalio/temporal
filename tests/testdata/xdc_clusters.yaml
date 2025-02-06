@@ -1,8 +1,6 @@
 - clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
-  workerconfig:
-    enablereplicator: true
   clusterno: 0
   historyconfig:
     numhistoryshards: 1
@@ -18,8 +16,6 @@
 - clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
-  workerconfig:
-    enablereplicator: true
   clusterno: 1
   historyconfig:
     numhistoryshards: 1
