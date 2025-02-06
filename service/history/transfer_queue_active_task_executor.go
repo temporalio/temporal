@@ -845,46 +845,44 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// This path is usually taken when the parent is being reset and the reset point (i.e baseWorkflowInfo.LowestCommonAncestorEventId) is after the child was initiated.
 	shouldTerminateAndStartChild := false
 	resetChildID := fmt.Sprintf("%s:%s", attributes.GetWorkflowType().Name, attributes.GetWorkflowId())
-	if mutableState.IsResetRun() {
-		baseWorkflowInfo := mutableState.GetBaseWorkflowInfo()
-		if baseWorkflowInfo != nil && baseWorkflowInfo.LowestCommonAncestorEventId >= childInfo.InitiatedEventId { // child was started before the reset point.
-			childRunID, err := t.verifyChildWorkflow(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
+	baseWorkflowInfo := mutableState.GetBaseWorkflowInfo()
+	if mutableState.IsResetRun() && baseWorkflowInfo != nil && baseWorkflowInfo.LowestCommonAncestorEventId >= childInfo.InitiatedEventId { // child was started before the reset point.
+		childRunID, err := t.verifyChildWorkflow(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
+		if err != nil {
+			return err
+		}
+		if childRunID != "" {
+			childExecution := &commonpb.WorkflowExecution{
+				WorkflowId: childInfo.StartedWorkflowId,
+				RunId:      childRunID,
+			}
+			childClock := childInfo.Clock
+			// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
+			err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
 			if err != nil {
 				return err
 			}
-			if childRunID != "" {
-				childExecution := &commonpb.WorkflowExecution{
-					WorkflowId: childInfo.StartedWorkflowId,
-					RunId:      childRunID,
-				}
-				childClock := childInfo.Clock
-				// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
-				err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
-				if err != nil {
-					return err
-				}
-				// NOTE: do not access anything related mutable state after this lock release
-				// release the context lock since we no longer need mutable state and
-				// the rest of logic is making RPC call, which takes time.
-				release(nil)
+			// NOTE: do not access anything related mutable state after this lock release
+			// release the context lock since we no longer need mutable state and
+			// the rest of logic is making RPC call, which takes time.
+			release(nil)
 
-				parentClock, err := t.shardContext.NewVectorClock()
-				if err != nil {
-					return err
-				}
-				return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
+			parentClock, err := t.shardContext.NewVectorClock()
+			if err != nil {
+				return err
 			}
-		} else {
-			// child was started after reset-point. But we need to first check if this child was recorded at the time of reset.
-			if resetChildInfo, ok := mutableState.GetExecutionInfo().GetChildrenInitializedPostResetPoint()[resetChildID]; ok {
-				shouldTerminateAndStartChild = resetChildInfo.ShouldTerminateAndStart
-			}
+			return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
 		}
 		// now if there was no child found after reset then it could mean one of the following.
 		// 1. The parent never got a chance to start the child. So we should go ahead and start one (below)
 		// 2. The child was started, but may be terminated from someone external or timedout.
 		// 3. There was a running workflow that is not related to the current run.
 		// In all these cases it's ok to proceed to start a new instance of child (below) and accept the result of that operation.
+	} else {
+		// child was started after reset-point (or the parent is not in reset run). We need to first check if this child was recorded at the time of reset.
+		if resetChildInfo, ok := mutableState.GetExecutionInfo().GetChildrenInitializedPostResetPoint()[resetChildID]; ok {
+			shouldTerminateAndStartChild = resetChildInfo.ShouldTerminateAndStart
+		}
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
