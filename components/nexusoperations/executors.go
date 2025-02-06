@@ -745,6 +745,7 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 	var handlerErr *nexus.HandlerError
 	if errors.As(callErr, &handlerErr) {
 		var retryBehavior enumspb.NexusHandlerErrorRetryBehavior
+		// nolint:exhaustive // unspecified is the default
 		switch handlerErr.RetryBehavior {
 		case nexus.HandlerErrorRetryBehaviorRetryable:
 			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE
