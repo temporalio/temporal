@@ -526,13 +526,23 @@ type (
 		UserData *persistencespb.VersionedTaskQueueUserData
 	}
 
-	// UpdateTaskQueueUserDataRequest is the input type for the UpdateTaskQueueUserData API
+	// UpdateTaskQueueUserDataRequest is the input type for the UpdateTaskQueueUserData API.
+	// This updates user data for multiple task queues in one namespace.
 	UpdateTaskQueueUserDataRequest struct {
-		NamespaceID     string
-		TaskQueue       string
+		NamespaceID string
+		Updates     map[string]*SingleTaskQueueUserDataUpdate // key is task queue name
+	}
+
+	SingleTaskQueueUserDataUpdate struct {
 		UserData        *persistencespb.VersionedTaskQueueUserData
 		BuildIdsAdded   []string
 		BuildIdsRemoved []string
+		// If Conflicting is non-nil, and this single update fails due to a version conflict,
+		// then it will be set to true. Conflicting updates should not be retried.
+		// Note that even if Conflicting is not set to true, the update may still be
+		// conflicting, because persistence implementations may only be able to identify the
+		// first conflict in a set.
+		Conflicting *bool
 	}
 
 	ListTaskQueueUserDataEntriesRequest struct {
