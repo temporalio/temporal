@@ -107,7 +107,7 @@ func initPrometheusListener(
 	config *PrometheusConfig,
 	reg *prometheus.Registry,
 	logger log.Logger,
-	onError func(e error),
+	onListenerError func(error),
 ) *http.Server {
 	handlerPath := config.HandlerPath
 	if handlerPath == "" {
@@ -124,8 +124,8 @@ func initPrometheusListener(
 
 	go func() {
 		err := server.ListenAndServe()
-		if onError != nil {
-			onError(err)
+		if onListenerError != nil {
+			onListenerError(err)
 		} else if err != http.ErrServerClosed {
 			logger.Fatal("Failed to initialize prometheus listener.", tag.Address(config.ListenAddress))
 		}
