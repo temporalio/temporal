@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -37,6 +38,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -510,6 +512,19 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 
 	// idempotency check: deleting the same version again should succeed
 	s.tryDeleteVersion(ctx, tv1, true)
+
+	// Describe Worker Deployment should give not found
+	// describe deployment version gives not found error
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		_, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv1.DeploymentVersionString(),
+		})
+		a.Error(err)
+		var nfe *serviceerror.NotFound
+		a.True(errors.As(err, &nfe))
+	}, time.Second*5, time.Millisecond*200)
 }
 
 // VersionMissingTaskQueues
