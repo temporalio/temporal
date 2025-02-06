@@ -183,6 +183,10 @@ func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampin
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
 	}
+	if args.Version != "" && args.Version != worker_versioning.UnversionedVersionId && !slices.Contains(d.State.Versions, args.Version) {
+		d.logger.Info("version not found in deployment")
+		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
+	}
 
 	return nil
 }
@@ -356,6 +360,11 @@ func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersio
 	if d.State.RoutingConfig.CurrentVersion == args.Version {
 		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
+	if args.Version != worker_versioning.UnversionedVersionId && !slices.Contains(d.State.Versions, args.Version) {
+		d.logger.Info("version not found in deployment")
+		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
+	}
+
 	return nil
 }
 
