@@ -326,7 +326,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrent_NoDeploymentVersion() {
 	tv := testvars.New(s)
 
 	// Setting version as current version should error since there is no created deployment version
-	s.setCurrentVersion(ctx, tv, "", true, "failed to update workflow with error: workflow not found for ID")
+	s.setCurrentVersion(ctx, tv, "", true, "workflow not found for ID")
 }
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Idempotent() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
@@ -952,6 +952,22 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		})
 		a.NoError(err)
 		a.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
+	}, time.Second*5, time.Millisecond*200)
+}
+
+func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_Idempotent() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		_, err := s.FrontendClient().DeleteWorkerDeployment(ctx, &workflowservice.DeleteWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv1.DeploymentSeries(),
+			Identity:       tv1.ClientIdentity(),
+		})
+		a.NoError(err)
 	}, time.Second*5, time.Millisecond*200)
 }
 

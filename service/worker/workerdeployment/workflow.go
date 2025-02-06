@@ -26,7 +26,6 @@ package workerdeployment
 
 import (
 	"bytes"
-	"fmt"
 	"slices"
 
 	"github.com/pborman/uuid"
@@ -312,7 +311,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
 	if !slices.Contains(d.State.Versions, args.Version) {
-		return serviceerror.NewNotFound(fmt.Sprintf("version %s not found in deployment", args.Version))
+		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
 	return nil
 }
