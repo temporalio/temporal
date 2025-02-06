@@ -306,12 +306,5 @@ func findOperationNode(root *hsm.Node, event *historypb.HistoryEvent) (*hsm.Node
 }
 
 func maybeDeleteNode(node *hsm.Node) error {
-	ms, err := hsm.MachineData[interface{ IsTransitionHistoryEnabled() bool }](node.Parent)
-	if err != nil {
-		return err
-	}
-	if !ms.IsTransitionHistoryEnabled() {
-		return node.Parent.DeleteChild(node.Key)
-	}
-	return nil
+	return node.Parent.DeleteChild(node.Key)
 }
