@@ -26,6 +26,7 @@ package workerdeployment
 
 import (
 	"bytes"
+	"fmt"
 	"slices"
 
 	"github.com/pborman/uuid"
@@ -41,7 +42,7 @@ import (
 )
 
 const (
-	defaultMaxVersions = 100 // TODO: Delete this after merging with limits PR
+	defaultMaxVersions = 5 // TODO: Delete this after merging with limits PR
 )
 
 type (
@@ -462,13 +463,13 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 }
 
-func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) error {
+func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(args *deploymentspb.AddVersionUpdateArgs) error {
 	if d.State.Versions == nil {
 		return nil
 	}
 
 	for _, v := range d.State.Versions {
-		if v.Version == version {
+		if v.Version == args.Version {
 			return temporal.NewApplicationError("deployment version already registered", errVersionAlreadyExistsType)
 		}
 	}
@@ -476,33 +477,8 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(version string) er
 	return nil
 }
 
-func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
-	slices.SortFunc(d.State.Versions, func(a, b *deploymentspb.WorkerDeploymentVersionSummary) int {
-		// sorts in ascending order.
-		// cmp(a, b) should return a negative number when a < b, a positive number when a > b,
-		// and zero when a == b or a and b are incomparable in the sense of a strict weak ordering.
-		if a.GetCreateTime().AsTime().After(b.GetCreateTime().AsTime()) {
-			return 1
-		} else if a.GetCreateTime().AsTime().Before(b.GetCreateTime().AsTime()) {
-			return -1
-		}
-		return 0
-	})
-	for _, v := range d.State.Versions {
-		// this might hang on the lock
-		err := d.handleDeleteVersion(ctx, &deploymentspb.DeleteVersionArgs{
-			Identity: "todo",
-			Version:  v.Version,
-		})
-		if err == nil {
-			return nil
-		}
-	}
-	return serviceerror.NewFailedPrecondition("could not add version: too many versions in deployment and none are eligible for deletion")
-}
-
 // todo: make this update take an args struct
-func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, version string) error {
+func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
 	d.pendingUpdates++
 	defer func() {
 		d.pendingUpdates--
@@ -519,10 +495,36 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	}
 
 	d.State.Versions = append(d.State.Versions, &deploymentspb.WorkerDeploymentVersionSummary{
-		Version:    version,
-		CreateTime: timestamppb.New(workflow.Now(ctx)), // todo: get this from the version args so it matches the version's create time
+		Version:    args.Version,
+		CreateTime: args.CreateTime,
 	})
 	return nil
+}
+
+func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
+	slices.SortFunc(d.State.Versions, func(a, b *deploymentspb.WorkerDeploymentVersionSummary) int {
+		// sorts in ascending order.
+		// cmp(a, b) should return a negative number when a < b, a positive number when a > b,
+		// and zero when a == b or a and b are incomparable in the sense of a strict weak ordering.
+		if a.GetCreateTime().AsTime().After(b.GetCreateTime().AsTime()) {
+			return 1
+		} else if a.GetCreateTime().AsTime().Before(b.GetCreateTime().AsTime()) {
+			return -1
+		}
+		return 0
+	})
+	for _, v := range d.State.Versions {
+		fmt.Printf("CARLY: TRYING TO DELETE VERSION %s\n\n\n", v.Version)
+		// this might hang on the lock
+		err := d.handleDeleteVersion(ctx, &deploymentspb.DeleteVersionArgs{
+			Identity: fmt.Sprintf("try-delete-for-add-version-%s", v.Version),
+			Version:  v.Version,
+		})
+		if err == nil {
+			return nil
+		}
+	}
+	return serviceerror.NewFailedPrecondition("could not add version: too many versions in deployment and none are eligible for deletion")
 }
 
 func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) (*deploymentspb.VersionLocalState, error) {

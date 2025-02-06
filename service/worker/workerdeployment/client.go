@@ -164,7 +164,7 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName string,
-		version string,
+		args *deploymentspb.AddVersionUpdateArgs,
 		identity string,
 		requestID string,
 	) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error)
@@ -974,11 +974,11 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
-	version string,
+	args *deploymentspb.AddVersionUpdateArgs,
 	identity string,
 	requestID string,
 ) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(version)
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return nil, err
 	}
@@ -1009,13 +1009,12 @@ func (d *ClientImpl) AddVersionToWorkerDeployment(
 		// pretend this is a success
 		return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil
 	} else if failure != nil {
-		// TODO: is there an easy way to recover the original type here?
-		return nil, serviceerror.NewInternal(fmt.Sprintf("failed to add version %v to worker deployment %v with error %v", version, deploymentName, failure.Message))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("failed to add version %v to worker deployment %v with error %v", args.Version, deploymentName, failure.Message))
 	}
 
 	success := outcome.GetSuccess()
 	if success == nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("outcome missing success and failure while adding version %v to worker deployment %v", version, deploymentName))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("outcome missing success and failure while adding version %v to worker deployment %v", args.Version, deploymentName))
 	}
 
 	return &deploymentspb.AddVersionToWorkerDeploymentResponse{}, nil

@@ -107,6 +107,17 @@ func (s *WorkerDeploymentSuite) startVersionWorkflow(ctx context.Context, tv *te
 		})
 		a.NoError(err)
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+
+		resp2, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		var versions []string
+		for _, vs := range resp2.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			versions = append(versions, vs.Version)
+		}
+		a.Contains(versions, tv.DeploymentVersionString())
 	}, time.Second*5, time.Millisecond*200)
 }
 

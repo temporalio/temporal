@@ -189,6 +189,24 @@ message SyncVersionStateResponse {
     VersionLocalState version_state = 1;
 }
 
+// Sent from Version workflow to Worker Deployment workflow
+message AddVersionUpdateArgs {
+    string version = 1;
+    google.protobuf.Timestamp create_time = 2;
+}
+
+// Sent from Drainage child workflow to Version parent
+message SyncDrainageInfoSignalArgs {
+    temporal.api.deployment.v1.VersionDrainageInfo drainage_info = 1;
+}
+
+// Sent from Version workflow to Worker Deployment workflow
+message SyncDrainageStatusSignalArgs {
+    string version = 1;
+    temporal.api.enums.v1.VersionDrainageStatus drainage_status = 2;
+}
+
+
 // used as Worker Deployment Version workflow query response:
 message QueryDescribeVersionResponse {
     VersionLocalState version_state = 1;
@@ -356,7 +374,7 @@ message WorkerDeploymentSummary {
 message AddVersionToWorkerDeploymentRequest {
     string deployment_name = 1;
     // <deployment_name>/<build_id> or possibly just <version_id> in the future
-    string version = 2;
+    AddVersionUpdateArgs update_args = 2;
     string request_id = 3;
 }
 
