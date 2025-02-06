@@ -84,7 +84,6 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		c.Receive(ctx, nil)
 		forceCAN = true
-		fmt.Println("forceCAN received")
 	})
 
 	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
@@ -182,8 +181,6 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.done {
 		return nil
 	}
-
-	fmt.Println("continuing as new")
 
 	// Continue as new when there are no pending updates and history size is greater than requestsBeforeContinueAsNew.
 	// Note, if update requests come in faster than they
