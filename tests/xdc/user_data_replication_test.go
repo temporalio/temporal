@@ -95,7 +95,7 @@ func (s *UserDataReplicationTestSuite) SetupSuite() {
 		// Ensure the scavenger can immediately delete build ids that are not in use.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 	}
-	s.setupSuite([]string{"task_queue_repl_active", "task_queue_repl_standby"})
+	s.setupSuite()
 }
 
 func (s *UserDataReplicationTestSuite) SetupTest() {

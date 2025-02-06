@@ -110,10 +110,6 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
 	s.setupSuite(
-		[]string{
-			"active",
-			"standby",
-		},
 		testcore.WithFxOptionsForService(primitives.AllServices,
 			fx.Decorate(
 				func() config.DCRedirectionPolicy {
