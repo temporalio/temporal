@@ -57,6 +57,7 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -69,6 +70,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
@@ -109,9 +111,9 @@ type (
 		forwardedFrom             string
 	}
 
-	namespaceUpdateLocks struct {
-		updateLock      sync.Mutex
-		replicationLock sync.Mutex
+	userDataUpdate struct {
+		taskQueue string
+		update    persistence.SingleTaskQueueUserDataUpdate
 	}
 
 	gaugeMetrics struct {
@@ -166,10 +168,10 @@ type (
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
-		// Disables concurrent task queue user data updates and replication requests (due to a cassandra limitation)
-		namespaceUpdateLockMap map[string]*namespaceUpdateLocks
-		// Serializes access to the per namespace lock map
-		namespaceUpdateLockMapLock sync.Mutex
+		// Lock to serialize replication queue updates.
+		replicationLock sync.Mutex
+		// Serialize and batch user data updates by namespace.
+		userDataUpdateBatchers collection.SyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]]
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
 	}
@@ -188,6 +190,14 @@ var (
 
 	// The routing key for the single partition used to route Nexus endpoints CRUD RPCs to.
 	nexusEndpointsTablePartitionRoutingKey = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey()
+
+	// Options for batching user data updates.
+	userDataBatcherOptions = stream_batcher.BatcherOptions{
+		MaxItems: 100,
+		MinDelay: 100 * time.Millisecond,
+		MaxDelay: 500 * time.Millisecond,
+		IdleTime: time.Minute,
+	}
 )
 
 var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed implemented
@@ -247,7 +257,7 @@ func NewEngine(
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
+		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -1671,6 +1681,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			req.TaskQueueTypes = append(req.TaskQueueTypes, req.TaskQueueType)
 		}
 
+		changed := false
 		for _, t := range req.TaskQueueTypes {
 			if data.PerType[int32(t)] == nil {
 				data.PerType[int32(t)] = &persistencespb.TaskQueueTypeUserData{}
@@ -1693,11 +1704,13 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 							Data:       req.Data,
 						})
 				}
+				changed = true
 			} else if vd := req.GetUpdateVersionData(); vd != nil {
 				if vd.GetVersion() == nil { // unversioned ramp
 					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
-						return nil, false, errUserDataUnmodified
+						continue
 					}
+					changed = true
 					// only update if the timestamp is more recent
 					if vd.GetRampingSinceTime() == nil { // unset
 						deploymentData.UnversionedRampData = nil
@@ -1707,21 +1720,24 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				} else if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
 					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
-						return nil, false, errUserDataUnmodified
+						continue
 					}
+					changed = true
 					// only update if the timestamp is more recent
 					deploymentData.Versions[idx] = vd
 				} else {
+					changed = true
 					deploymentData.Versions = append(deploymentData.Versions, vd)
 				}
 			} else if v := req.GetForgetVersion(); v != nil {
 				if idx := findDeploymentVersion(deploymentData, v); idx >= 0 {
+					changed = true
 					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
 				}
-			} else {
-				// No-op
-				return nil, false, errUserDataUnmodified
 			}
+		}
+		if !changed {
+			return nil, false, errUserDataUnmodified
 		}
 
 		data.Clock = now
@@ -1865,18 +1881,35 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
-	locks := e.getNamespaceUpdateLocks(request.GetNamespaceId())
-	locks.updateLock.Lock()
-	defer locks.updateLock.Unlock()
-
-	err := e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-		NamespaceID:     request.GetNamespaceId(),
-		TaskQueue:       request.GetTaskQueue(),
-		UserData:        request.GetUserData(),
-		BuildIdsAdded:   request.BuildIdsAdded,
-		BuildIdsRemoved: request.BuildIdsRemoved,
+	namespaceId := namespace.ID(request.NamespaceId)
+	var conflicting bool
+	persistenceErr, ctxErr := e.getUserDataBatcher(namespaceId).Add(ctx, &userDataUpdate{
+		taskQueue: request.GetTaskQueue(),
+		update: persistence.SingleTaskQueueUserDataUpdate{
+			UserData:        request.UserData,
+			BuildIdsAdded:   request.BuildIdsAdded,
+			BuildIdsRemoved: request.BuildIdsRemoved,
+			Conflicting:     &conflicting,
+		},
 	})
-	return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
+	if ctxErr != nil {
+		// Return context errors as-is.
+		return nil, ctxErr
+	}
+	if persistenceErr != nil {
+		if persistence.IsConflictErr(persistenceErr) {
+			if conflicting {
+				// This specific update was the conflicting one. Use InvalidArgument so the
+				// caller does not retry.
+				return nil, serviceerror.NewInvalidArgument(persistenceErr.Error())
+			}
+			// This update may or may not be conflicting. Use Unavailable to allow retries.
+			return nil, serviceerror.NewUnavailable(persistenceErr.Error())
+		}
+		// Other errors from persistence get returned as-is.
+		return nil, persistenceErr
+	}
+	return &matchingservice.UpdateTaskQueueUserDataResponse{}, nil
 }
 
 func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
@@ -1884,9 +1917,8 @@ func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, req
 		return &matchingservice.ReplicateTaskQueueUserDataResponse{}, nil
 	}
 
-	locks := e.getNamespaceUpdateLocks(request.GetNamespaceId())
-	locks.replicationLock.Lock()
-	defer locks.replicationLock.Unlock()
+	e.replicationLock.Lock()
+	defer e.replicationLock.Unlock()
 
 	err := e.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
@@ -2197,15 +2229,37 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
 
-func (e *matchingEngineImpl) getNamespaceUpdateLocks(namespaceId string) *namespaceUpdateLocks {
-	e.namespaceUpdateLockMapLock.Lock()
-	defer e.namespaceUpdateLockMapLock.Unlock()
-	locks, found := e.namespaceUpdateLockMap[namespaceId]
-	if !found {
-		locks = &namespaceUpdateLocks{}
-		e.namespaceUpdateLockMap[namespaceId] = locks
+func (e *matchingEngineImpl) getUserDataBatcher(namespaceId namespace.ID) *stream_batcher.Batcher[*userDataUpdate, error] {
+	// Note that values are never removed from this map. The batcher's goroutine will exit
+	// after the idle time, though, which gets most of the desired resource savings.
+	if batcher, ok := e.userDataUpdateBatchers.Get(namespaceId); ok {
+		return batcher
 	}
-	return locks
+	fn := func(batch []*userDataUpdate) error {
+		return e.applyUserDataUpdateBatch(namespaceId, batch)
+	}
+	newBatcher := stream_batcher.NewBatcher[*userDataUpdate, error](fn, userDataBatcherOptions, e.timeSource)
+	batcher, _ := e.userDataUpdateBatchers.GetOrSet(namespaceId, newBatcher)
+	return batcher
+}
+
+func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, batch []*userDataUpdate) error {
+	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
+	// TODO: should use namespace name here
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespaceId.String()))
+	defer cancel()
+
+	// convert to map
+	updatesMap := make(map[string]*persistence.SingleTaskQueueUserDataUpdate)
+	for _, update := range batch {
+		updatesMap[update.taskQueue] = &update.update
+	}
+
+	// now apply the batch of updates
+	return e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+		NamespaceID: namespaceId.String(),
+		Updates:     updatesMap,
+	})
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
