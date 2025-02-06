@@ -377,8 +377,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: deploymentWorkflowID,
 			},
-			Query:                &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
-			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
+			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
 		},
 	}
 
