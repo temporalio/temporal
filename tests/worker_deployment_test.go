@@ -164,6 +164,44 @@ func (s *WorkerDeploymentSuite) startVersionWorkflow(ctx context.Context, tv *te
 	}, time.Second*5, time.Millisecond*200)
 }
 
+func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// Start a version workflow
+	s.startVersionWorkflow(ctx, tv)
+	s.ensureCreateDeployment(tv)
+
+	// Set the version as current
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        tv.DeploymentVersionString(),
+	})
+	s.NoError(err)
+
+	// ForceCAN
+	workflowID := worker_versioning.GenerateDeploymentWorkflowID(tv.DeploymentSeries())
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+	}
+
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, nil, tv.ClientIdentity())
+	s.NoError(err)
+
+	// Verify if the state is intact even after a CAN
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+	}, time.Second*10, time.Millisecond*1000)
+}
+
 func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 	// TODO (carly): check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
 

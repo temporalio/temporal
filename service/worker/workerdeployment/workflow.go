@@ -57,6 +57,7 @@ type (
 		pendingUpdates   int
 		conflictToken    []byte
 		done             bool
+		signalsCompleted bool
 		unsafeMaxVersion func() int
 	}
 )
@@ -73,6 +74,25 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 	}
 
 	return workflowRunner.run(ctx)
+}
+
+func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
+	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
+	forceCAN := false
+
+	selector := workflow.NewSelector(ctx)
+	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+		c.Receive(ctx, nil)
+		forceCAN = true
+		fmt.Println("forceCAN received")
+	})
+
+	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
+		selector.Select(ctx)
+	}
+
+	// Done processing signals before CAN
+	d.signalsCompleted = true
 }
 
 func (d *WorkflowRunner) run(ctx workflow.Context) error {
@@ -147,9 +167,13 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	); err != nil {
 		return err
 	}
+
+	// Listen to signals in a different goroutine to make business logic clearer
+	workflow.Go(ctx, d.listenToSignals)
+
 	// Wait until we can continue as new or are cancelled.
 	err = workflow.Await(ctx, func() bool {
-		return (workflow.GetInfo(ctx).GetContinueAsNewSuggested() && d.pendingUpdates == 0) || d.done
+		return (d.signalsCompleted && d.pendingUpdates == 0) || d.done
 	})
 	if err != nil {
 		return err
@@ -158,6 +182,8 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	if d.done {
 		return nil
 	}
+
+	fmt.Println("continuing as new")
 
 	// Continue as new when there are no pending updates and history size is greater than requestsBeforeContinueAsNew.
 	// Note, if update requests come in faster than they
