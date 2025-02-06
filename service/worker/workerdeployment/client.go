@@ -377,7 +377,8 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: deploymentWorkflowID,
 			},
-			Query: &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
+			Query:                &querypb.WorkflowQuery{QueryType: QueryDescribeDeployment},
+			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
 
@@ -896,7 +897,7 @@ func (d *ClientImpl) update(
 		// successful but un-completed responses.
 		res, err := d.historyClient.UpdateWorkflowExecution(ctx, updateReq)
 		if err != nil {
-			return err
+			return serviceerror.NewInternal("failed to update workflow with error: " + err.Error())
 		}
 
 		if res.GetResponse() == nil {
