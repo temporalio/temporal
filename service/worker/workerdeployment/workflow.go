@@ -515,7 +515,10 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 	maxVersions := d.getMaxVersions(ctx)
 
 	if len(d.State.Versions) >= maxVersions {
-		return temporal.NewApplicationError(fmt.Sprintf("cannot add version, already at max versions %d", maxVersions), errTooManyVersions)
+		err := d.tryDeleteVersion(ctx)
+		if err != nil {
+			return temporal.NewApplicationError(fmt.Sprintf("cannot add version, already at max versions %d", maxVersions), errTooManyVersions)
+		}
 	}
 
 	// Add version to local state

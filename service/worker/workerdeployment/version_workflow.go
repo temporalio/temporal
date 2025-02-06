@@ -411,8 +411,8 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
 	if err != nil {
 		d.logger.Error("Update canceled before deployment workflow started")
-		// TODO: This is likely due to too many deployments, but make sure we exculed other possible errors here and send a proper error message all the time.
-		// TODO: mention the limit in here or make sure matching does in the error returned to the poller
+		// TODO (Carly): This is likely due to too many deployments, but make sure we excluded other possible errors here and send a proper error message all the time.
+		// TODO (Carly): mention the limit in here or make sure matching does in the error returned to the poller
 		return temporal.NewApplicationError("failed to create deployment version, likely you are exceeding the limit of allowed deployments in a namespace", errTooManyDeployments)
 	}
 
@@ -451,7 +451,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		RequestId: d.newUUID(ctx),
 	}).Get(ctx, nil)
 	if err != nil {
-		// TODO: make sure the error message that goes to the user is informative and has the limit mentioned
+		// TODO (carly): make sure the error message that goes to the user is informative and has the limit mentioned
 		return temporal.NewApplicationError("too many versions in this deployment", errTooManyVersions)
 	}
 
