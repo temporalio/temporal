@@ -132,7 +132,9 @@ func initPrometheusListener(
 		if fatalOnListenerError {
 			logger.Fatal(msg)
 		} else {
-			logger.Error(msg)
+			// For backward compatibility, we log as Warn instead of Error/Fatal
+			// to match the behavior of tally framework.
+			logger.Warn(msg)
 		}
 	}()
 
