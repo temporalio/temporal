@@ -78,12 +78,21 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 
 func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
+	syncVersionSummaryChannel := workflow.GetSignalChannel(ctx, SyncVersionSummarySignal)
 	forceCAN := false
 
 	selector := workflow.NewSelector(ctx)
 	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		c.Receive(ctx, nil)
 		forceCAN = true
+	})
+	selector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
+		var summary *deploymentspb.WorkerDeploymentVersionSummary
+		c.Receive(ctx, &summary)
+		if _, ok := d.State.Versions[summary.GetVersion()]; !ok {
+			d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
+		}
+		d.State.Versions[summary.GetVersion()] = summary
 	})
 
 	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
@@ -100,6 +109,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
 		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
+	}
+	if d.State.Versions == nil {
+		d.State.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionSummary)
 	}
 
 	err := workflow.SetQueryHandler(ctx, QueryDescribeDeployment, func() (*deploymentspb.QueryDescribeWorkerDeploymentResponse, error) {
@@ -215,8 +227,8 @@ func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampin
 		d.logger.Info("version can't be set to ramping since it is already current")
 		return temporal.NewApplicationError("version can't be set to ramping since it is already current", errVersionAlreadyCurrentType)
 	}
-	if args.Version != "" && args.Version != worker_versioning.UnversionedVersionId &&
-		!slices.ContainsFunc(d.State.Versions, func(v *deploymentspb.WorkerDeploymentVersionSummary) bool { return v.Version == args.Version }) {
+
+	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != "" && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
@@ -347,7 +359,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 }
 
 func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
-	if !slices.ContainsFunc(d.State.Versions, func(v *deploymentspb.WorkerDeploymentVersionSummary) bool { return v.Version == args.Version }) {
+	if _, ok := d.State.Versions[args.Version]; !ok {
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
 	return nil
@@ -381,7 +393,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 	}
 
 	// update local state
-	d.State.Versions = slices.DeleteFunc(d.State.Versions, func(v *deploymentspb.WorkerDeploymentVersionSummary) bool { return v.Version == args.Version })
+	delete(d.State.Versions, args.Version)
 
 	// update memo
 	return d.updateMemo(ctx)
@@ -394,8 +406,7 @@ func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersio
 	if d.State.RoutingConfig.CurrentVersion == args.Version {
 		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
-	if args.Version != worker_versioning.UnversionedVersionId &&
-		!slices.ContainsFunc(d.State.Versions, func(v *deploymentspb.WorkerDeploymentVersionSummary) bool { return v.Version == args.Version }) {
+	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
@@ -544,20 +555,20 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 		}
 	}
 
-	// Add version to local state
-	if d.State.Versions == nil {
-		d.State.Versions = make([]*deploymentspb.WorkerDeploymentVersionSummary, 0)
-	}
-
-	d.State.Versions = append(d.State.Versions, &deploymentspb.WorkerDeploymentVersionSummary{
+	d.State.Versions[args.Version] = &deploymentspb.WorkerDeploymentVersionSummary{
 		Version:    args.Version,
 		CreateTime: args.CreateTime,
-	})
+	}
 	return nil
 }
 
 func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
-	slices.SortFunc(d.State.Versions, func(a, b *deploymentspb.WorkerDeploymentVersionSummary) int {
+	var sortedSummaries []*deploymentspb.WorkerDeploymentVersionSummary
+	for _, s := range d.State.Versions {
+		sortedSummaries = append(sortedSummaries, s)
+	}
+
+	slices.SortFunc(sortedSummaries, func(a, b *deploymentspb.WorkerDeploymentVersionSummary) int {
 		// sorts in ascending order.
 		// cmp(a, b) should return a negative number when a < b, a positive number when a > b,
 		// and zero when a == b or a and b are incomparable in the sense of a strict weak ordering.
@@ -568,7 +579,7 @@ func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 		}
 		return 0
 	})
-	for _, v := range d.State.Versions {
+	for _, v := range sortedSummaries {
 		// this might hang on the lock
 		err := d.handleDeleteVersion(ctx, &deploymentspb.DeleteVersionArgs{
 			Identity: "try-delete-for-add-version",
