@@ -5594,10 +5594,12 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	s.NoError(err)
 
 	branchToken := []byte{1, 2, 3}
+	persistenceToken := []byte("some random persistence token")
 	nextPageToken, err := api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-		RunId:        we.GetRunId(),
-		FirstEventId: common.FirstEventID,
-		NextEventId:  5,
+		RunId:            we.GetRunId(),
+		FirstEventId:     common.FirstEventID,
+		NextEventId:      5,
+		PersistenceToken: persistenceToken,
 		TransientWorkflowTask: &historyspb.TransientWorkflowTaskInfo{
 			HistorySuffix: []*historypb.HistoryEvent{
 				{
@@ -5648,11 +5650,12 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	)
 	s.NoError(err)
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken: branchToken,
-		MinEventID:  1,
-		MaxEventID:  5,
-		PageSize:    10,
-		ShardID:     1,
+		BranchToken:   branchToken,
+		MinEventID:    1,
+		MaxEventID:    5,
+		PageSize:      10,
+		NextPageToken: persistenceToken,
+		ShardID:       1,
 	}).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{historyBlob1, historyBlob2},
 		NextPageToken:     []byte{},

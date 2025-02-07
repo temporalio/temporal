@@ -88,9 +88,7 @@ func GetRawHistory(
 			return nil, nil, err
 		}
 		allEvents = append(allEvents, events...)
-		if len(events) > 0 {
-			lastEventID = events[len(events)-1].GetEventId()
-		}
+		lastEventID = events[len(events)-1].GetEventId()
 	}
 	if err = persistence.VerifyHistoryIsComplete(
 		allEvents,

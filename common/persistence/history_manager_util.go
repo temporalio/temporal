@@ -188,6 +188,8 @@ func ValidateBatch(
 		logger.Error(dataLossMsg, dataLossTags(errWrongVersion)...)
 		return serviceerror.NewDataLoss(errWrongVersion)
 	}
+	// If it is the first batch in the response, we cannot check the first event id here. That information is in the historyPagingToken.
+	// TODO: PPV refactor to move this check to ExecutionManager so that we can include that check as well.
 	if lastEventID != 0 && firstEvent.GetEventId() != lastEventID+1 {
 		logger.Error(dataLossMsg, dataLossTags(errNonContiguousEventID)...)
 		return serviceerror.NewDataLoss(errNonContiguousEventID)
