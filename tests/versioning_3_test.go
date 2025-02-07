@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
@@ -185,6 +186,7 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 	s.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
+			s.verifyVersioningSAs(tv, vbPinned)
 			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
 		})
 
@@ -199,6 +201,7 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 
 	<-wftCompleted
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
+	s.verifyVersioningSAs(tv, vbPinned, tv)
 	if sticky {
 		s.verifyWorkflowStickyQueue(tv.WithRunID(runID))
 	}
@@ -425,6 +428,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 
 	<-wftCompleted
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
+	s.verifyVersioningSAs(tv, vbUnpinned, tv)
 	if sticky {
 		s.verifyWorkflowStickyQueue(tv.WithRunID(runID))
 	}
@@ -1666,8 +1670,17 @@ func respondWftWithActivities(
 		Commands:                   commands,
 		StickyAttributes:           stickyAttr,
 		ForceCreateNewWorkflowTask: false,
-		Deployment:                 tvWf.Deployment(),
 		VersioningBehavior:         behavior,
+		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+			BuildId:              tvWf.BuildID(),
+			DeploymentName:       tvWf.DeploymentSeries(),
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+		},
+		// TODO (shahab): remove stamp once build ID is added to wftc event
+		WorkerVersionStamp: &commonpb.WorkerVersionStamp{
+			BuildId:       tvWf.BuildID(),
+			UseVersioning: true,
+		},
 	}
 }
 
@@ -1695,33 +1708,12 @@ func respondCompleteWorkflow(
 			},
 		},
 		ForceCreateNewWorkflowTask: false,
-		Deployment:                 tv.Deployment(),
 		VersioningBehavior:         behavior,
-	}
-}
-
-func respondScheduleNexusOperation(
-	tv *testvars.TestVars,
-	behavior enumspb.VersioningBehavior,
-	endpointName string,
-) *workflowservice.RespondWorkflowTaskCompletedRequest {
-	return &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-						Endpoint:  endpointName,
-						Service:   tv.Service(),
-						Operation: tv.Operation(),
-						Input:     tv.Any().Payload(),
-					},
-				},
-			},
+		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+			BuildId:              tv.BuildID(),
+			DeploymentName:       tv.DeploymentSeries(),
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
-		ForceCreateNewWorkflowTask: false,
-		Deployment:                 tv.Deployment(),
-		VersioningBehavior:         behavior,
 	}
 }
 
@@ -2087,4 +2079,42 @@ func (s *Versioning3Suite) validateBacklogCount(
 		a := assert.New(t)
 		a.Equal(expectedCount, typeInfo.Stats.GetApproximateBacklogCount())
 	}, 6*time.Second, 100*time.Millisecond)
+}
+
+func (s *Versioning3Suite) verifyVersioningSAs(
+	tv *testvars.TestVars,
+	behavior enumspb.VersioningBehavior,
+	usedBuilds ...*testvars.TestVars,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		query := fmt.Sprintf("WorkflowId = '%s' AND TemporalWorkerDeployment = '%s' AND TemporalWorkerDeploymentVersion= '%s' AND TemporalWorkflowVersioningBehavior = '%s'",
+			tv.WorkflowID(), tv.DeploymentSeries(), tv.DeploymentVersionString(), behavior.String())
+		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     query,
+		})
+		a := assert.New(t)
+		a.Nil(err)
+		if a.NotEmpty(resp.GetExecutions()) {
+			w := resp.GetExecutions()[0]
+			payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
+			a.True(ok)
+			searchAttrAny, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+			a.NoError(err)
+			var searchAttr []string
+			if searchAttrAny != nil {
+				searchAttr = searchAttrAny.([]string)
+			}
+			if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
+				a.Contains(searchAttr, "pinned:"+tv.DeploymentVersionString())
+			}
+			for _, b := range usedBuilds {
+				a.Contains(searchAttr, "versioned:"+b.BuildID())
+			}
+			fmt.Println(resp.GetExecutions()[0])
+		}
+	}, 5*time.Second, 50*time.Millisecond)
 }

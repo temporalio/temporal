@@ -89,7 +89,7 @@ func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment, version s
 		return fmt.Sprintf("%s%s%s",
 			BuildIdSearchAttributePrefixPinned,
 			BuildIdSearchAttributeDelimiter,
-			escapeChar(version, BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
+			version,
 		)
 	} else if deployment != nil {
 		return fmt.Sprintf("%s%s%s%s%s",
