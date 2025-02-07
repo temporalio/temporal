@@ -2945,39 +2945,6 @@ func (ms *MutableStateImpl) getPinnedVersion() string {
 	return ms.executionInfo.GetVersioningInfo().GetVersion()
 }
 
-// getVersionedBuildId returns the override build id if it exists or the regular build id.
-// Works for Worker Deployments and Deployments.
-func (ms *MutableStateImpl) getVersionedBuildId() string {
-	versioningInfo := ms.executionInfo.GetVersioningInfo()
-	if override := versioningInfo.GetVersioningOverride(); override != nil {
-		if versioningInfo.GetVersion() != "" { // worker deployments
-			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-				v, _ := worker_versioning.WorkerDeploymentVersionFromString(override.GetPinnedVersion())
-				return v.GetBuildId()
-			}
-			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
-				return versioningInfo.GetVersion()
-			}
-		} else { // deployments
-			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-				//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-				return override.GetDeployment().GetBuildId()
-			}
-			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
-				//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-				return versioningInfo.GetDeployment().GetBuildId()
-			}
-		}
-	}
-	if versioningInfo.GetVersion() != "" { // worker deployments
-		v, _ := worker_versioning.WorkerDeploymentVersionFromString(versioningInfo.GetVersion())
-		return v.GetBuildId()
-	} else { // deployments
-		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-		return versioningInfo.GetDeployment().GetBuildId()
-	}
-}
-
 // Takes a list of loaded build IDs from a search attribute and adds a new build ID to it. Also makes sure that the
 // resulting SA list begins with either "unversioned" or "assigned:<bld>" based on workflow's Build ID assignment status.
 // Returns a potentially modified list.
@@ -3008,10 +2975,8 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 	}
 
 	// get the build id entry (all versions of versioning)
-	if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+	if stamp != nil {
 		buildId = worker_versioning.VersionStampToBuildIdSearchAttribute(stamp)
-	} else { // versioning behaviors
-		buildId = worker_versioning.VersionedBuildIdSearchAttribute(ms.getVersionedBuildId())
 	}
 
 	// add all previous values except for unversioned, assigned, or pinned (there can only be one, and we just added it)
@@ -3027,7 +2992,7 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 	}
 
 	// add buildId to the list only if it wasn't there before
-	if !foundBuildId {
+	if !foundBuildId && buildId != "" {
 		newValues = append(newValues, buildId)
 	}
 	return newValues
