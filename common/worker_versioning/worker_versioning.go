@@ -75,10 +75,15 @@ func escapeChar(s, escape, delimiter string) string {
 	return s
 }
 
-// PinnedBuildIdSearchAttribute returns the search attribute value for the currently assigned pinned build ID in the form
-// 'pinned:<deployment_series_name>:<deployment_build_id>'. Each workflow execution will have at most one member of the
-// BuildIds KeywordList in this format. If the workflow becomes unpinned or unversioned, this entry will be removed from
-// that list.
+// PinnedBuildIdSearchAttribute creates the pinned search attribute for the BuildIds list, used as a visibility optimization.
+// For pinned workflows using WorkerDeployment APIs (ms.GetEffectiveVersioningBehavior() == PINNED &&
+// ms.executionInfo.VersioningInfo.Version != ""), this will be `pinned:<version>`. The version used
+// will be the override version if set, or the versioningInfo.Version.
+//
+// If deprecated Deployment-based APIs are in use and the workflow is pinned, `pinned:<deployment_series_name>:<deployment_build_id>`
+// will. The values used will be the override deployment_series and build_id if set, or versioningInfo.Deployment.
+//
+// If the workflow becomes unpinned or unversioned, this entry will be removed from that list.
 func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment, version string) string {
 	if version != "" {
 		return fmt.Sprintf("%s%s%s%s%s",

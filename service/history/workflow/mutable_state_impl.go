@@ -2849,15 +2849,15 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 	return ms.updateBuildIdsAndDeploymentSearchAttributes(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
 }
 
-// Sets TemporalWorkerDeployment to `ms.executionInfo.WorkerDeploymentName` if present.
-// Sets TemporalWorkerDeploymentVersion to `ms.executionInfo.VersioningInfo.Version` if present.
-// Sets TemporalWorkflowVersioningBehavior to `ms.executionInfo.VersioningInfo.Behavior` if specified.
+// Sets TemporalWorkerDeployment to the override DeploymentName or`ms.executionInfo.WorkerDeploymentName` if present.
+// Sets TemporalWorkerDeploymentVersion to the override PinnedVersion or `ms.executionInfo.VersioningInfo.Version` if present.
+// Sets TemporalWorkflowVersioningBehavior to the override Behavior or `ms.executionInfo.VersioningInfo.Behavior` if specified.
 //
 // For pinned workflows using WorkerDeployment APIs (ms.GetEffectiveVersioningBehavior() == PINNED &&
 // ms.executionInfo.VersioningInfo.Version != ""), this will append a tag formed as `pinned:<version>`
 // to the BuildIds search attribute, if it does not already exist there. The version used will be the
 // effective version of the workflow (aka, the override version if override is set).
-// I
+//
 // If deprecated Deployment-based APIs are in use and the workflow is pinned, `pinned:<deployment_series_name>:<deployment_build_id>`
 // will be appended to the BuilIds list if it is not already present. The deployment will be
 // the effective deployment of the workflow (aka the override deployment_series and build_id if set).
