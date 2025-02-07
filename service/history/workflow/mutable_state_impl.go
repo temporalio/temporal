@@ -2515,7 +2515,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		// TODO: [cleanup-old-wv]
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
-		if _, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, limit); err != nil {
+		if _, err := ms.addBuildIdAndDeploymentInfoToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, limit); err != nil {
 			return err
 		}
 	}
@@ -2846,17 +2846,26 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 	// because build ID is changed, we clear sticky queue so to make sure the next wf task does not go to old version.
 	ms.ClearStickyTaskQueue()
 	limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
-	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
+	return ms.updateBuildIdsAndDeploymentSearchAttributes(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
 }
 
-// For pinned workflows (ms.GetEffectiveVersioningBehavior() == PINNED), this will append a tag formed as
-// pinned:<deployment_series_name>:<deployment_build_id> to the BuildIds search attribute,
-// if it does not already exist there. The deployment will be execution_info.deployment, or the override deployment if
-// a pinned override is set.
-// For all other workflows (ms.GetEffectiveVersioningBehavior() != PINNED), this will append a tag based on the
-// workflow's versioning status.
-func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) error {
-	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
+// Sets TemporalWorkerDeployment to `ms.executionInfo.WorkerDeploymentName` if present.
+// Sets TemporalWorkerDeploymentVersion to `ms.executionInfo.VersioningInfo.Version` if present.
+// Sets TemporalWorkflowVersioningBehavior to `ms.executionInfo.VersioningInfo.Behavior` if specified.
+//
+// For pinned workflows using WorkerDeployment APIs (ms.GetEffectiveVersioningBehavior() == PINNED &&
+// ms.executionInfo.VersioningInfo.Version != ""), this will append a tag formed as `pinned:<version>`
+// to the BuildIds search attribute, if it does not already exist there. The version used will be the
+// effective version of the workflow (aka, the override version if override is set).
+// I
+// If deprecated Deployment-based APIs are in use and the workflow is pinned, `pinned:<deployment_series_name>:<deployment_build_id>`
+// will be appended to the BuilIds list if it is not already present. The deployment will be
+// the effective deployment of the workflow (aka the override deployment_series and build_id if set).
+//
+// For all other workflows (ms.GetEffectiveVersioningBehavior() != PINNED), this will append a tag  to BuildIds
+// based on the workflow's versioning status.
+func (ms *MutableStateImpl) updateBuildIdsAndDeploymentSearchAttributes(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) error {
+	changed, err := ms.addBuildIdAndDeploymentInfoToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
 	if err != nil {
 		return err
 	}
@@ -2888,6 +2897,29 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 		return nil, serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
 	}
 	return searchAttributeValues, nil
+}
+
+func (ms *MutableStateImpl) loadSearchAttributeString(saName string) (string, error) {
+	searchAttributes := ms.executionInfo.SearchAttributes
+	if searchAttributes == nil {
+		return "", nil
+	}
+	saPayload, found := searchAttributes[saName]
+	if !found {
+		return "", nil
+	}
+	decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD, false)
+	if err != nil {
+		return "", err
+	}
+	if decoded == "" {
+		return "", nil
+	}
+	val, ok := decoded.(string)
+	if !ok {
+		return "", serviceerror.NewInternal(fmt.Sprintf("invalid search attribute value stored for %s", saName))
+	}
+	return val, nil
 }
 
 // getPinnedDeployment returns nil if the workflow is not pinned. If there is a pinned override,
@@ -2976,16 +3008,90 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 	return nil
 }
 
-func (ms *MutableStateImpl) addBuildIdToSearchAttributesWithNoVisibilityTask(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) (bool, error) {
+// Note: If the encoding for one of these strings fails, none of them would get saved. But we really
+// don't expect any of the strings to be unencodable, so I think the all-or-nothing method is worth it
+// so that we can merge the SearchAttributes map only once instead of three times.
+func (ms *MutableStateImpl) saveDeploymentSearchAttributes(deployment, version, behavior string, maxSearchAttributeValueSize int) error {
+	saPayloads := make(map[string]*commonpb.Payload)
+	deploymentPayload, err := searchattribute.EncodeValue(deployment, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	if err != nil {
+		return err
+	}
+	if len(deploymentPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
+		saPayloads[searchattribute.TemporalWorkerDeployment] = deploymentPayload
+	}
+	versionPayload, err := searchattribute.EncodeValue(version, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	if err != nil {
+		return err
+	}
+	if len(versionPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
+		saPayloads[searchattribute.TemporalWorkerDeploymentVersion] = versionPayload
+	}
+	behaviorPayload, err := searchattribute.EncodeValue(behavior, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	if err != nil {
+		return err
+	}
+	if len(behaviorPayload.GetData()) <= maxSearchAttributeValueSize { // we know the string won't really be over, but still check
+		saPayloads[searchattribute.TemporalWorkflowVersioningBehavior] = behaviorPayload
+	}
+	ms.updateSearchAttributes(saPayloads)
+	return nil
+}
+
+func (ms *MutableStateImpl) addBuildIdAndDeploymentInfoToSearchAttributesWithNoVisibilityTask(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) (bool, error) {
+	// get all the existing SAs
 	existingBuildIds, err := ms.loadBuildIds()
 	if err != nil {
 		return false, err
 	}
+	existingDeployment, err := ms.loadSearchAttributeString(searchattribute.TemporalWorkerDeployment)
+	if err != nil {
+		return false, err
+	}
+	existingVersion, err := ms.loadSearchAttributeString(searchattribute.TemporalWorkerDeploymentVersion)
+	if err != nil {
+		return false, err
+	}
+	existingBehavior, err := ms.loadSearchAttributeString(searchattribute.TemporalWorkflowVersioningBehavior)
+	if err != nil {
+		return false, err
+	}
+
+	// modify them
 	modifiedBuildIds := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, stamp)
-	if slices.Equal(existingBuildIds, modifiedBuildIds) {
+	modifiedDeployment := ms.GetEffectiveDeployment().GetSeriesName()
+	modifiedVersion := ms.GetEffectiveWorkerDeploymentVersion()
+	modifiedBehavior := ms.GetEffectiveVersioningBehavior().String()
+	if modifiedBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED.String() {
+		modifiedBehavior = ""
+	}
+
+	// check equality
+	if slices.Equal(existingBuildIds, modifiedBuildIds) &&
+		existingDeployment == modifiedDeployment &&
+		existingVersion == modifiedVersion &&
+		existingBehavior == modifiedBehavior {
 		return false, nil
 	}
-	return true, ms.saveBuildIds(modifiedBuildIds, maxSearchAttributeValueSize)
+
+	// save build ids if changed
+	if !slices.Equal(existingBuildIds, modifiedBuildIds) {
+		err = ms.saveBuildIds(modifiedBuildIds, maxSearchAttributeValueSize)
+		if err != nil {
+			return false, err // if err != nil, nothing will be written
+		}
+	}
+
+	// save deployment search attributes if changed
+	if !(existingDeployment == modifiedDeployment &&
+		existingVersion == modifiedVersion &&
+		existingBehavior == modifiedBehavior) {
+		err = ms.saveDeploymentSearchAttributes(modifiedDeployment, modifiedVersion, modifiedBehavior, maxSearchAttributeValueSize)
+		if err != nil {
+			return false, err // if err != nil, nothing will be written
+		}
+	}
+	return true, nil
 }
 
 // TODO: we will release the restriction when reset API allow those pending
@@ -4615,7 +4721,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
 		// search attribute based on the execution_info.deployment and/or override deployment if one exists.
 		limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
-		if err := ms.updateBuildIdsSearchAttribute(nil, limit); err != nil {
+		if err := ms.updateBuildIdsAndDeploymentSearchAttributes(nil, limit); err != nil {
 			return err
 		}
 	}
@@ -7505,6 +7611,21 @@ func (ms *MutableStateImpl) initVersionedTransitionInDB() {
 // Note: Deployment objects are immutable, never change their fields.
 func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 	return GetEffectiveDeployment(ms.GetExecutionInfo().GetVersioningInfo())
+}
+
+// GetEffectiveWorkerDeploymentVersion returns the effective deployment in the following order:
+//  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
+//     new deployment
+//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  3. Deployment: this is returned when there is no transition and no override (the most
+//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
+//     completion. Exception: if Deployment is set but the workflow's effective behavior is
+//     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
+//
+// Note: Deployment objects are immutable, never change their fields.
+func (ms *MutableStateImpl) GetEffectiveWorkerDeploymentVersion() string {
+	return GetEffectiveWorkerDeploymentVersion(ms.GetExecutionInfo().GetVersioningInfo())
 }
 
 func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
