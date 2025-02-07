@@ -86,7 +86,7 @@ func escapeChar(s, escape, delimiter string) string {
 // If the workflow becomes unpinned or unversioned, this entry will be removed from that list.
 func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment, version string) string {
 	if version != "" {
-		return fmt.Sprintf("%s%s%s%s%s",
+		return fmt.Sprintf("%s%s%s",
 			BuildIdSearchAttributePrefixPinned,
 			BuildIdSearchAttributeDelimiter,
 			escapeChar(version, BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
