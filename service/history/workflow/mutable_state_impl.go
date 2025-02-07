@@ -239,14 +239,15 @@ type (
 		workflowTaskManager *workflowTaskStateMachine
 		QueryRegistry       QueryRegistry
 
-		shard            shard.Context
-		clusterMetadata  cluster.Metadata
-		eventsCache      events.Cache
-		config           *configs.Config
-		timeSource       clock.TimeSource
-		logger           log.Logger
-		metricsHandler   metrics.Handler
-		stateMachineNode *hsm.Node
+		shard                  shard.Context
+		clusterMetadata        cluster.Metadata
+		eventsCache            events.Cache
+		config                 *configs.Config
+		timeSource             clock.TimeSource
+		logger                 log.Logger
+		metricsHandler         metrics.Handler
+		stateMachineNode       *hsm.Node
+		subStateMachineDeleted bool
 
 		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
 		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
@@ -4357,6 +4358,29 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAdmittedEvent(request *upd
 	return event, nil
 }
 
+func (ms *MutableStateImpl) DeleteSubStateMachine(path *persistencespb.StateMachinePath) error {
+	incomingPath := make([]hsm.Key, len(path.Path))
+	for i, p := range path.Path {
+		incomingPath[i] = hsm.Key{Type: p.Type, ID: p.Id}
+	}
+
+	root := ms.HSM()
+	node, err := root.Child(incomingPath)
+	if err != nil {
+		if !errors.Is(err, hsm.ErrStateMachineNotFound) {
+			return err
+		}
+		// node is already deleted.
+		return nil
+	}
+	err = node.Parent.DeleteChild(node.Key)
+	if err != nil {
+		return err
+	}
+	ms.subStateMachineDeleted = true
+	return nil
+}
+
 // ApplyWorkflowExecutionUpdateAdmittedEvent applies a WorkflowExecutionUpdateAdmittedEvent to mutable state.
 func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error {
 	attrs := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
@@ -6326,6 +6350,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.timerInfosUserDataUpdated = make(map[string]struct{})
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})
 	ms.reapplyEventsCandidate = nil
+	ms.subStateMachineDeleted = false
 
 	ms.stateInDB = ms.executionState.State
 	ms.nextEventIDInDB = ms.GetNextEventID()
@@ -7387,16 +7412,9 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 }
 
 func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*persistencespb.StateMachineMap) error {
+	// check if there is node been deleted
 	currentHSM := ms.HSM()
-
-	// we don't care about the root here which is the entire mutable state
-	incomingHSM, err := hsm.NewRoot(
-		ms.shard.StateMachineRegistry(),
-		StateMachineType,
-		ms,
-		incoming,
-		ms,
-	)
+	incomingHSM, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType, ms, incoming, ms)
 	if err != nil {
 		return err
 	}
@@ -7406,22 +7424,19 @@ func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*pers
 			// skip root which is the entire mutable state
 			return nil
 		}
-
 		incomingNodePath := incomingNode.Path()
-		currentNode, err := currentHSM.Child(incomingNodePath)
-		if err != nil {
-			// 1. Already done history resend if needed before,
-			// and node creation today always associated with an event
-			// 2. Node deletion is not supported right now.
-			// Based on 1 and 2, node should always be found here.
-			return err
+		_, err := currentHSM.Child(incomingNodePath)
+		if err != nil && errors.Is(err, hsm.ErrStateMachineNotFound) {
+			ms.subStateMachineDeleted = true
+			return nil
 		}
-
-		return currentNode.Sync(incomingNode)
+		return err
 	}); err != nil {
 		return err
 	}
 
+	ms.executionInfo.SubStateMachinesByType = incoming
+	ms.mustInitHSM()
 	return nil
 }
 
@@ -7453,6 +7468,8 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 				if _, ok := ms.pendingSignalInfoIDs[tombstone.GetSignalExternalInitiatedEventId()]; ok {
 					err = ms.DeletePendingSignal(tombstone.GetSignalExternalInitiatedEventId())
 				}
+			case *persistencespb.StateMachineTombstone_StateMachinePath:
+				err = ms.DeleteSubStateMachine(tombstone.GetStateMachinePath())
 			default:
 				// TODO: updateID and stateMachinePath
 				err = serviceerror.NewInternal("unknown tombstone type")
@@ -7608,4 +7625,8 @@ func (ms *MutableStateImpl) AddReapplyCandidateEvent(event *historypb.HistoryEve
 
 func (ms *MutableStateImpl) GetReapplyCandidateEvents() []*historypb.HistoryEvent {
 	return ms.reapplyEventsCandidate
+}
+
+func (ms *MutableStateImpl) IsSubStateMachineDeleted() bool {
+	return ms.subStateMachineDeleted
 }

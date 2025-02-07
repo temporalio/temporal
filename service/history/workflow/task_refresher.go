@@ -655,9 +655,7 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 		return err
 	}
 
-	if len(nodesToRefresh) != 0 {
-		// TODO: after hsm node tombstone is tracked in mutable state,
-		// also trigger trim when there are new tombstones after minVersionedTransition
+	if len(nodesToRefresh) != 0 || mutableState.IsSubStateMachineDeleted() {
 		if err := TrimStateMachineTimers(mutableState, minVersionedTransition); err != nil {
 			return err
 		}
