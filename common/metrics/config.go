@@ -486,13 +486,15 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 
+	fatalOnListenerError := true
 	if c.Prometheus.Framework != FrameworkOpentelemetry {
 		c.ClientConfig.WithoutUnitSuffix = true
 		c.ClientConfig.WithoutCounterSuffix = true
 		c.ClientConfig.RecordTimerInSeconds = true
+		fatalOnListenerError = false
 	}
 
-	otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
+	otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
