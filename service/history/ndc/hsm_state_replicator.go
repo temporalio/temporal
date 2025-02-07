@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -119,8 +120,11 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 	}
 
 	synced, err := r.syncHSMNode(mutableState, request)
-	if err != nil || !synced {
+	if err != nil {
 		return err
+	}
+	if !synced {
+		return replication.ErrDuplicatedReplicationRequest
 	}
 
 	state, _ := mutableState.GetWorkflowStateStatus()

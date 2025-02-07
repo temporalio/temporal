@@ -24,6 +24,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -249,6 +250,10 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 }
 
 func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
+	if errors.Is(err, ErrDuplicatedReplicationRequest) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	e.Logger.Error("VerifyVersionedTransition replication task encountered error",
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),

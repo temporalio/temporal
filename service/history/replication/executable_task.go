@@ -76,7 +76,8 @@ var (
 			WithMaximumInterval(5 * time.Second).
 			WithMaximumAttempts(80).
 			WithExpirationInterval(10 * time.Minute)
-	ErrResendAttemptExceeded = serviceerror.NewInternal("resend history attempts exceeded")
+	ErrResendAttemptExceeded        = serviceerror.NewInternal("resend history attempts exceeded")
+	ErrDuplicatedReplicationRequest = errors.New("duplicated replication task")
 )
 
 type (
@@ -125,6 +126,7 @@ type (
 			endEventVersion int64,
 			newRunId string,
 		) error
+		MarkTaskDuplicated()
 	}
 	ExecutableTaskImpl struct {
 		ProcessToolBox
@@ -144,6 +146,7 @@ type (
 		attempt                int32
 		namespace              atomic.Value
 		markPoisonPillAttempts int
+		isDuplicated           bool
 	}
 )
 
@@ -296,6 +299,10 @@ func (e *ExecutableTaskImpl) TerminalState() bool {
 
 func (e *ExecutableTaskImpl) Attempt() int {
 	return int(atomic.LoadInt32(&e.attempt))
+}
+
+func (e *ExecutableTaskImpl) MarkTaskDuplicated() {
+	e.isDuplicated = true
 }
 
 func (e *ExecutableTaskImpl) emitFinishMetrics(
@@ -698,10 +705,10 @@ func (e *ExecutableTaskImpl) SyncState(
 		return false, err
 	}
 	err = engine.ReplicateVersionedTransition(ctx, resp.VersionedTransitionArtifact, e.SourceClusterName())
-	if err != nil {
-		return false, err
+	if err == nil || errors.Is(err, ErrDuplicatedReplicationRequest) {
+		return true, nil
 	}
-	return true, nil
+	return false, err
 }
 
 func (e *ExecutableTaskImpl) DeleteWorkflow(

@@ -24,6 +24,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -129,6 +130,10 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 }
 
 func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
+	if errors.Is(err, ErrDuplicatedReplicationRequest) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	e.Logger.Error("SyncVersionedTransition replication task encountered error",
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),

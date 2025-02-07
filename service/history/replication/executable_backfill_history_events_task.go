@@ -24,6 +24,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	historypb "go.temporal.io/api/history/v1"
@@ -151,6 +152,10 @@ func (e *ExecutableBackfillHistoryEventsTask) Execute() error {
 }
 
 func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
+	if errors.Is(err, ErrDuplicatedReplicationRequest) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	e.Logger.Error("BackFillHistoryEvent replication task encountered error",
 		tag.WorkflowNamespaceID(e.NamespaceID),
 		tag.WorkflowID(e.WorkflowID),

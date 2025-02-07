@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -117,7 +118,7 @@ func NewTaskProcessorManager(
 				events [][]*historypb.HistoryEvent,
 				versionHistory []*historyspb.VersionHistoryItem,
 			) error {
-				return engine.ReplicateHistoryEvents(
+				err := engine.ReplicateHistoryEvents(
 					ctx,
 					definition.WorkflowKey{
 						NamespaceID: namespaceId.String(),
@@ -130,6 +131,10 @@ func NewTaskProcessorManager(
 					nil,
 					"",
 				)
+				if errors.Is(err, ErrDuplicatedReplicationRequest) {
+					return nil
+				}
+				return err
 			},
 			shard.GetPayloadSerializer(),
 			shard.GetConfig().StandbyTaskReReplicationContextTimeout,

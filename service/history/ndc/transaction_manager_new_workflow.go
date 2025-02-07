@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -87,9 +88,12 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 		namespaceID,
 		workflowID,
 	)
-	if err != nil || currentRunID == targetRunID {
+	if err != nil {
 		// error out or workflow already created
 		return err
+	}
+	if currentRunID == targetRunID {
+		return replication.ErrDuplicatedReplicationRequest
 	}
 
 	if currentRunID == "" {

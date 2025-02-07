@@ -61,6 +61,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/historybuilder"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -308,14 +309,14 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 				localLastHistoryItem.GetEventId() <= sourceLastHistoryItem.EventId {
 				return r.applySnapshot(ctx, namespaceID, wid, rid, wfCtx, releaseFn, ms, versionedTransition, sourceClusterName)
 			}
-			return nil
+			return replication.ErrDuplicatedReplicationRequest
 		}
 
 		sourceTransitionHistory := executionInfo.TransitionHistory
 		err = workflow.TransitionHistoryStalenessCheck(localTransitionHistory, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		switch {
 		case err == nil:
-			// verify tasks
+			return replication.ErrDuplicatedReplicationRequest
 		case errors.Is(err, consts.ErrStaleState):
 			// local is stale, try to apply mutable state update
 			if snapshot != nil {
@@ -331,7 +332,6 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	default:
 		return err
 	}
-	return nil
 }
 
 func (r *WorkflowStateReplicatorImpl) applyMutation(

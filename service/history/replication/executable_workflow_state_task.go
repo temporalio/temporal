@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -140,6 +141,10 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 }
 
 func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
+	if errors.Is(err, ErrDuplicatedReplicationRequest) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil

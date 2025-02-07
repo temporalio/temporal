@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -251,7 +252,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 		anyEventApplied = anyEventApplied || applied
 	}
 	if !anyEventApplied {
-		return nil
+		return replication.ErrDuplicatedReplicationRequest
 	}
 
 	// passive logic need to explicitly call create timer

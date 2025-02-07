@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -186,6 +187,10 @@ func (e *ExecutableHistoryTask) Execute() error {
 }
 
 func (e *ExecutableHistoryTask) HandleErr(err error) error {
+	if errors.Is(err, ErrDuplicatedReplicationRequest) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil

@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -1542,10 +1543,10 @@ func (h *Handler) ReplicateWorkflowState(
 	}
 
 	err = engine.ReplicateWorkflowState(ctx, request)
-	if err != nil {
-		return nil, err
+	if err == nil || errors.Is(err, replication.ErrDuplicatedReplicationRequest) {
+		return &historyservice.ReplicateWorkflowStateResponse{}, nil
 	}
-	return &historyservice.ReplicateWorkflowStateResponse{}, nil
+	return nil, err
 }
 
 // SyncShardStatus is called by processor to sync history shard information from another cluster

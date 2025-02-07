@@ -28,6 +28,7 @@ package eventhandler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	historypb "go.temporal.io/api/history/v1"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -274,6 +276,9 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 			nil,
 			"",
 		)
+		if errors.Is(err, replication.ErrDuplicatedReplicationRequest) {
+			return nil
+		}
 		if err != nil {
 			r.logger.Error("failed to replicate events",
 				tag.WorkflowNamespaceID(namespaceID.String()),

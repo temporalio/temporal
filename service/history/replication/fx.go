@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"strconv"
 
@@ -305,7 +306,7 @@ func ndcHistoryResenderProvider(
 			if err != nil {
 				return err
 			}
-			return engine.ReplicateHistoryEvents(
+			err = engine.ReplicateHistoryEvents(
 				ctx,
 				definition.WorkflowKey{
 					NamespaceID: namespaceId.String(),
@@ -318,6 +319,10 @@ func ndcHistoryResenderProvider(
 				nil,
 				"",
 			)
+			if errors.Is(err, ErrDuplicatedReplicationRequest) {
+				return nil
+			}
+			return err
 		},
 		serializer,
 		config.StandbyTaskReReplicationContextTimeout,

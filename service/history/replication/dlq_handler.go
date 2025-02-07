@@ -28,6 +28,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -135,7 +136,7 @@ func newDLQHandler(
 				if err != nil {
 					return err
 				}
-				return engine.ReplicateHistoryEvents(
+				err = engine.ReplicateHistoryEvents(
 					ctx,
 					definition.WorkflowKey{
 						NamespaceID: namespaceId.String(),
@@ -148,6 +149,10 @@ func newDLQHandler(
 					nil,
 					"",
 				)
+				if errors.Is(err, ErrDuplicatedReplicationRequest) {
+					return nil
+				}
+				return err
 
 			},
 			shard.GetPayloadSerializer(),
