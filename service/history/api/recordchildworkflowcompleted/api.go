@@ -27,6 +27,7 @@ package recordchildworkflowcompleted
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -62,11 +63,12 @@ func Invoke(
 
 	// If the parent is reset, we need to follow a possible chain of resets to deliver the completion event to the correct parent.
 	redirectCount := 0
+	isForwarded := false
 	for {
-		resetRunID, err := recordChildWorkflowCompleted(ctx, request, shardContext, workflowConsistencyChecker)
+		resetRunID, err := recordChildWorkflowCompleted(ctx, request, shardContext, workflowConsistencyChecker, isForwarded)
 		if errors.Is(err, consts.ErrWorkflowCompleted) {
 			// if the parent was reset, forward the request to the new run pointed by resetRunID
-			// Note: An alternative solution is to load the current run here ane compare the originalRunIDs of the current run and the closed parent.
+			// Note: An alternative solution is to load the current run here and compare the originalRunIDs of the current run and the closed parent.
 			// If they match, then deliver it to the current run. We should consider this optimization if we notice that reset chain is longer than 1-2 hops.
 			if resetRunID != "" {
 				if redirectCount >= maxResetRedirectCount {
@@ -74,6 +76,7 @@ func Invoke(
 				}
 				redirectCount++
 				request.ParentExecution.RunId = resetRunID
+				isForwarded = true
 				continue
 			}
 		}
@@ -91,6 +94,7 @@ func recordChildWorkflowCompleted(
 	request *historyservice.RecordChildExecutionCompletedRequest,
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	isForwarded bool,
 ) (string, error) {
 	resetRunID := ""
 	parentInitiatedID := request.ParentInitiatedId
@@ -151,6 +155,28 @@ func recordChildWorkflowCompleted(
 			if ci.GetStartedWorkflowId() != childExecution.GetWorkflowId() {
 				// this can only happen when we don't have the initiated version
 				return nil, consts.ErrChildExecutionNotFound
+			}
+
+			childrenInitializedAfterResetPoint := mutableState.GetExecutionInfo().GetChildrenInitializedPostResetPoint()
+			if len(childrenInitializedAfterResetPoint) > 0 {
+				// This parent was reset and it also has some children that potentially were restarted.
+				initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, parentInitiatedID)
+				if err != nil {
+					return nil, consts.ErrChildExecutionNotFound
+				}
+				initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+				childID := fmt.Sprintf("%s:%s", initiatedAttr.GetWorkflowType().Name, initiatedAttr.GetWorkflowId())
+				_, ok := mutableState.GetExecutionInfo().GetChildrenInitializedPostResetPoint()[childID]
+				if ok {
+					// The child sending this request was restarted. Do not accept any forwarded completion events because the restarted child will directly send its completion event to this parent.
+					// Sometimes the old child will race to complete before being restarted and it also happens to have the same initialized event ID. In such cases the result will come as forwarded request which we ignore here.
+					if isForwarded {
+						return nil, consts.ErrChildExecutionNotFound
+					}
+					// The results are from the child that this parent initiated. We should stop tracking the child and process the result now.
+					delete(childrenInitializedAfterResetPoint, childID)
+					mutableState.SetChildrenInitializedPostResetPoint(childrenInitializedAfterResetPoint)
+				}
 			}
 
 			completionEvent := request.CompletionEvent
