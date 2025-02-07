@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/worker/deployment"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -81,6 +82,7 @@ func NewHandler(
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
 	deploymentStoreClient deployment.DeploymentStoreClient,
+	workerDeploymentClient workerdeployment.Client,
 	hostInfoProvider membership.HostInfoProvider,
 	matchingServiceResolver membership.ServiceResolver,
 	metricsHandler metrics.Handler,
@@ -101,6 +103,7 @@ func NewHandler(
 			historyClient,
 			matchingRawClient, // Use non retry client inside matching
 			deploymentStoreClient,
+			workerDeploymentClient,
 			config,
 			logger,
 			throttledLogger,

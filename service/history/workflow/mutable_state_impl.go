@@ -2209,7 +2209,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
 	var inheritedBuildId string
-	if command.InheritBuildId {
+	if command.InheritBuildId && previousExecutionState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		// Do not set inheritedBuildId for v3 wfs
 		inheritedBuildId = previousExecutionInfo.AssignedBuildId
 		if inheritedBuildId == "" {
 			// TODO: this is only needed for old versioning. get rid of StartWorkflowExecutionRequest.SourceVersionStamp
@@ -2428,6 +2429,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.ParentInitiatedVersion = common.EmptyVersion
 	}
 
+	if event.ParentPinnedWorkerDeploymentVersion != "" {
+		ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
+			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Version:  event.ParentPinnedWorkerDeploymentVersion,
+		}
+	}
+
 	if event.RootWorkflowExecution != nil {
 		ms.executionInfo.RootWorkflowId = event.RootWorkflowExecution.GetWorkflowId()
 		ms.executionInfo.RootRunId = event.RootWorkflowExecution.GetRunId()
@@ -2485,8 +2493,19 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	}
 
 	if event.GetVersioningOverride() != nil {
-		ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{VersioningOverride: event.GetVersioningOverride()}
+		if ms.executionInfo.VersioningInfo == nil {
+			ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		}
+		ms.executionInfo.VersioningInfo.VersioningOverride = event.GetVersioningOverride()
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+		if d := event.GetVersioningOverride().GetDeployment(); d != nil { // if the old Deployment field was populated instead of PinnedVersion
+			// We read from both old and new fields but write in the new fields only.
+			ms.executionInfo.VersioningInfo.VersioningOverride.PinnedVersion = worker_versioning.WorkerDeploymentVersionToString(
+				worker_versioning.DeploymentVersionFromDeployment(d))
+			ms.executionInfo.VersioningInfo.VersioningOverride.Deployment = nil
+		}
 	}
+
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
 		ms.executionInfo.InheritedBuildId = inheritedBuildId
 		if err := ms.UpdateBuildIdAssignment(inheritedBuildId); err != nil {
@@ -3239,7 +3258,9 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		}
 	}
 
-	ai.LastStartedDeployment = deployment
+	if deployment != nil {
+		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment))
+	}
 
 	if !ai.HasRetryPolicy {
 		event := ms.hBuilder.AddActivityTaskStartedEvent(
@@ -4520,14 +4541,27 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 }
 
 func (ms *MutableStateImpl) updateVersioningOverride(
-	versioningOverride *workflowpb.VersioningOverride,
+	override *workflowpb.VersioningOverride,
 ) error {
 	previousEffectiveDeployment := ms.GetEffectiveDeployment()
 	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
-	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
-		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+	if override != nil {
+		if ms.GetExecutionInfo().GetVersioningInfo() == nil {
+			ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		}
+		ms.GetExecutionInfo().VersioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+			Behavior:      override.GetBehavior(),
+			PinnedVersion: override.GetPinnedVersion(),
+		}
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+		if d := override.GetDeployment(); d != nil { // if the old Deployment field was populated instead of PinnedVersion
+			// We read from both old and new fields but write in the new fields only.
+			ms.GetExecutionInfo().VersioningInfo.VersioningOverride.PinnedVersion = worker_versioning.WorkerDeploymentVersionToString(
+				worker_versioning.DeploymentVersionFromDeployment(d))
+		}
+	} else if ms.GetExecutionInfo().GetVersioningInfo() != nil {
+		ms.GetExecutionInfo().VersioningInfo.VersioningOverride = nil
 	}
-	ms.GetExecutionInfo().VersioningInfo.VersioningOverride = versioningOverride
 
 	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
 		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
@@ -4555,6 +4589,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		// and it will start the same transition in the workflow. So removing the transition would not make a difference
 		// and would in fact add some extra work for the server.
 		ms.executionInfo.GetVersioningInfo().DeploymentTransition = nil
+		ms.executionInfo.GetVersioningInfo().VersionTransition = nil
 
 		// If effective deployment or behavior change, we need to reschedule any pending tasks, because History will reject
 		// the task's start request if the task is being started by a poller that is not from the workflow's effective
@@ -7458,7 +7493,7 @@ func (ms *MutableStateImpl) initVersionedTransitionInDB() {
 }
 
 // GetEffectiveDeployment returns the effective deployment in the following order:
-//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a
+//  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
 //     new deployment
 //  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
 //     at wf start time, or later via UpdateWorkflowExecutionOptions.
@@ -7473,6 +7508,13 @@ func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 }
 
 func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
+	vi := ms.GetExecutionInfo().GetVersioningInfo()
+	if t := vi.GetVersionTransition(); t != nil {
+		v, _ := worker_versioning.WorkerDeploymentVersionFromString(t.GetVersion())
+		return &workflowpb.DeploymentTransition{
+			Deployment: worker_versioning.DeploymentFromDeploymentVersion(v),
+		}
+	}
 	return ms.GetExecutionInfo().GetVersioningInfo().GetDeploymentTransition()
 }
 
@@ -7507,8 +7549,11 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 		ms.GetExecutionInfo().VersioningInfo = versioningInfo
 	}
 
-	versioningInfo.DeploymentTransition = &workflowpb.DeploymentTransition{
-		Deployment: deployment,
+	// Only store transition in VersionTransition but read from both VersionTransition and DeploymentVersionTransition.
+	//nolint:staticcheck // SA1019 deprecated DeploymentTransition will clean up later
+	versioningInfo.DeploymentTransition = nil
+	versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
+		Version: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment)),
 	}
 
 	// Because deployment is changed, we clear sticky queue to make sure the next wf task does not

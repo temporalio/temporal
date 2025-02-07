@@ -460,6 +460,18 @@ to account for the delay in updating the build id field in visibility. Not yet s
 at least 2 minutes between changing the current deployment and calling GetDeployment, so that newly started workflow executions using the
 recently-current deployment can arrive in visibility.`,
 	)
+	VersionDrainageStatusVisibilityGracePeriod = NewNamespaceDurationSetting(
+		"matching.wv.VersionDrainageStatusVisibilityGracePeriod",
+		3*time.Minute,
+		`VersionDrainageStatusVisibilityGracePeriod is the time period for which non-current / non-ramping worker deployment versions 
+are still considered active to account for the delay in updating the build id field in visibility.`,
+	)
+	VersionDrainageStatusRefreshInterval = NewNamespaceDurationSetting(
+		"matching.wv.VersionDrainageStatusRefreshInterval",
+		3*time.Minute,
+		`VersionDrainageStatusRefreshInterval is the interval at which each draining deployment version refreshes its
+Drainage Status by querying visibility for open pinned workflows using that version.`,
+	)
 	ReachabilityTaskQueueScanLimit = NewGlobalIntSetting(
 		"limit.reachabilityTaskQueueScan",
 		20,
@@ -824,11 +836,19 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
+	// [cleanup-wv-pre-release]
 	EnableDeployments = NewNamespaceBoolSetting(
 		"system.enableDeployments",
 		false,
-		`EnableDeployments enables deployments (versioning v3) in all services,
+		`EnableDeployments enables deployments (deprecated versioning v3 pre-release) in all services,
 including deployment-related RPCs in the frontend, deployment entity workflows in the worker,
+and deployment interaction in matching and history.`,
+	)
+	EnableDeploymentVersions = NewNamespaceBoolSetting(
+		"system.enableDeploymentVersions",
+		false,
+		`EnableDeploymentVersions enables deployment versions (versioning v3) in all services,
+including deployment-related RPCs in the frontend, deployment version entity workflows in the worker,
 and deployment interaction in matching and history.`,
 	)
 	EnableNexus = NewGlobalBoolSetting(
@@ -1218,6 +1238,21 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.maxTaskQueuesInDeployment",
 		1000,
 		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registed in a single deployment`,
+	)
+	MatchingMaxDeployments = NewNamespaceIntSetting(
+		"matching.maxDeployments",
+		100,
+		`MatchingMaxDeployments represents the maximum number of worker deployments that can be registered in a single namespace`,
+	)
+	MatchingMaxVersionsInDeployment = NewNamespaceIntSetting(
+		"matching.maxVersionsInDeployment",
+		100,
+		`MatchingMaxVersionsInDeployment represents the maximum number of versions that can be registered in a single worker deployment`,
+	)
+	MatchingMaxTaskQueuesInDeploymentVersion = NewNamespaceIntSetting(
+		"matching.maxTaskQueuesInDeploymentVersion",
+		100,
+		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registered in a single worker deployment version`,
 	)
 
 	// keys for history
@@ -1941,7 +1976,7 @@ archivalQueueProcessor`,
 	)
 	WorkflowExecutionMaxInFlightUpdatePayloads = NewNamespaceIntSetting(
 		"history.maxInFlightUpdatePayloads",
-		10*1024*1024,
+		20*1024*1024,
 		`WorkflowExecutionMaxInFlightUpdatePayloads is the max total payload size (in bytes) of in-flight updates (admitted but not yet completed) for any given workflow execution. Set to zero to disable.`,
 	)
 	WorkflowExecutionMaxTotalUpdates = NewNamespaceIntSetting(

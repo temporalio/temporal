@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http/httptrace"
 	"strings"
 	"sync/atomic"
 	"text/template"
@@ -67,6 +68,7 @@ type TaskExecutorOptions struct {
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
 	ClientProvider         ClientProvider
 	EndpointRegistry       commonnexus.EndpointRegistry
+	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
 }
 
 func RegisterExecutor(
@@ -200,6 +202,22 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
+
+	if e.HTTPTraceProvider != nil {
+		traceLogger := log.With(e.Logger,
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.RequestID(args.requestID),
+			tag.Operation(args.operation),
+			tag.Endpoint(args.endpointName),
+			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
+			tag.WorkflowRunID(ref.WorkflowKey.RunID),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.Attempt(task.Attempt),
+		)
+		if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
+			callCtx = httptrace.WithClientTrace(callCtx, trace)
+		}
+	}
 
 	startTime := time.Now()
 	var rawResult *nexus.ClientStartOperationResult[*nexus.LazyValue]
@@ -546,6 +564,22 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
+	if e.HTTPTraceProvider != nil {
+		traceLogger := log.With(e.Logger,
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.RequestID(args.requestID),
+			tag.Operation(args.operation),
+			tag.Endpoint(args.endpointName),
+			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
+			tag.WorkflowRunID(ref.WorkflowKey.RunID),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.Attempt(task.Attempt),
+		)
+		if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
+			callCtx = httptrace.WithClientTrace(callCtx, trace)
+		}
+	}
+
 	var callErr error
 	startTime := time.Now()
 	if callTimeout < e.Config.MinOperationTimeout(ns.Name().String()) {
@@ -576,9 +610,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 }
 
 type cancelArgs struct {
-	service, operation, token, endpointID, endpointName string
-	scheduledTime                                       time.Time
-	scheduleToCloseTimeout                              time.Duration
+	service, operation, token, endpointID, endpointName, requestID string
+	scheduledTime                                                  time.Time
+	scheduleToCloseTimeout                                         time.Duration
 }
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
@@ -599,6 +633,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 		args.token = op.OperationToken
 		args.endpointID = op.EndpointId
 		args.endpointName = op.Endpoint
+		args.requestID = op.RequestId
 		args.scheduledTime = op.ScheduledTime.AsTime()
 		args.scheduleToCloseTimeout = op.ScheduleToCloseTimeout.AsDuration()
 		return nil
@@ -744,11 +779,20 @@ func isDestinationDown(err error) bool {
 func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
 	var handlerErr *nexus.HandlerError
 	if errors.As(callErr, &handlerErr) {
+		var retryBehavior enumspb.NexusHandlerErrorRetryBehavior
+		// nolint:exhaustive // unspecified is the default
+		switch handlerErr.RetryBehavior {
+		case nexus.HandlerErrorRetryBehaviorRetryable:
+			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE
+		case nexus.HandlerErrorRetryBehaviorNonRetryable:
+			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE
+		}
 		failure := &failurepb.Failure{
 			Message: handlerErr.Error(),
 			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
 				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-					Type: string(handlerErr.Type),
+					Type:          string(handlerErr.Type),
+					RetryBehavior: retryBehavior,
 				},
 			},
 		}

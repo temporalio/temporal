@@ -25,31 +25,32 @@
 package workerdeployment
 
 import (
-	"testing"
+	"context"
 
-	"github.com/stretchr/testify/suite"
-	"go.temporal.io/sdk/testsuite"
-	"go.uber.org/mock/gomock"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	"go.temporal.io/sdk/activity"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type WorkerDeploymentSuite struct {
-	suite.Suite
-	testsuite.WorkflowTestSuite
-	controller *gomock.Controller
-	env        *testsuite.TestWorkflowEnvironment
-}
+type (
+	DrainageActivities struct {
+		namespace        *namespace.Namespace
+		deploymentClient Client
+	}
+)
 
-func TestWorkerDeploymentSuite(t *testing.T) {
-	suite.Run(t, new(WorkerDeploymentSuite))
-}
-
-func (s *WorkerDeploymentSuite) SetupTest() {
-	s.controller = gomock.NewController(s.T())
-	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
-	s.env.RegisterWorkflow(Workflow)
-}
-
-func (s *WorkerDeploymentSuite) TearDownTest() {
-	s.controller.Finish()
-	s.env.AssertExpectations(s.T())
+func (a *DrainageActivities) GetVersionDrainageStatus(ctx context.Context, version *deploymentspb.WorkerDeploymentVersion) (*deploymentpb.VersionDrainageInfo, error) {
+	logger := activity.GetLogger(ctx)
+	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, version.DeploymentName, version.BuildId)
+	if err != nil {
+		logger.Error("error counting workflows for drainage status", "error", err)
+		return nil, err
+	}
+	return &deploymentpb.VersionDrainageInfo{
+		Status:          response,
+		LastChangedTime: nil, // ignored; whether Status changed will be evaluated by the receiver
+		LastCheckedTime: timestamppb.Now(),
+	}, nil
 }

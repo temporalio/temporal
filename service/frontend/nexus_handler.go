@@ -644,11 +644,20 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 }
 
 func (h *nexusHandler) convertOutcomeToNexusHandlerError(resp *matchingservice.DispatchNexusTaskResponse_HandlerError) *nexus.HandlerError {
+	var retryBehavior nexus.HandlerErrorRetryBehavior
+	// nolint:exhaustive // unspecified is the default
+	switch resp.HandlerError.RetryBehavior {
+	case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE:
+		retryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
+	case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE:
+		retryBehavior = nexus.HandlerErrorRetryBehaviorNonRetryable
+	}
 	handlerError := &nexus.HandlerError{
 		Type: nexus.HandlerErrorType(resp.HandlerError.GetErrorType()),
 		Cause: &nexus.FailureError{
 			Failure: commonnexus.ProtoFailureToNexusFailure(resp.HandlerError.GetFailure()),
 		},
+		RetryBehavior: retryBehavior,
 	}
 
 	switch handlerError.Type {

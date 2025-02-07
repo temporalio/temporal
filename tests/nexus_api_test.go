@@ -109,6 +109,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 	handlerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	type testcase struct {
+		name      string
 		outcome   string
 		endpoint  *nexuspb.Endpoint
 		timeout   time.Duration
@@ -118,6 +119,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 
 	testCases := []testcase{
 		{
+			name:     "sync_success",
 			outcome:  "sync_success",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
 			handler:  nexusEchoHandler,
@@ -127,6 +129,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			},
 		},
 		{
+			name:     "async_success",
 			outcome:  "async_success",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
@@ -165,6 +168,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			},
 		},
 		{
+			name:     "operation_error",
 			outcome:  "operation_error",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
@@ -200,6 +204,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			},
 		},
 		{
+			name:     "handler_error",
 			outcome:  "handler_error",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
 			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
@@ -212,11 +217,33 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, nexus.HandlerErrorRetryBehaviorUnspecified, handlerErr.RetryBehavior)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},
 		},
 		{
+			name:     "handler_error_non_retryable",
+			outcome:  "handler_error",
+			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
+			handler: func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+				return nil, &nexuspb.HandlerError{
+					ErrorType:     string(nexus.HandlerErrorTypeInternal),
+					Failure:       &nexuspb.Failure{Message: "deliberate internal failure"},
+					RetryBehavior: enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE,
+				}
+			},
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, headers http.Header) {
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, nexus.HandlerErrorRetryBehaviorNonRetryable, handlerErr.RetryBehavior)
+				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
+				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
+			},
+		},
+		{
+			name:     "handler_timeout",
 			outcome:  "handler_timeout",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-service"), testcore.RandomizeStr("task-queue")),
 			timeout:  1 * time.Second,
@@ -300,7 +327,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 	}
 
 	for _, tc := range testCases {
-		s.T().Run(tc.outcome, func(t *testing.T) {
+		s.T().Run(tc.name, func(t *testing.T) {
 			t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
 				testFn(t, tc, getDispatchByNsAndTqURL(s.HttpAPIAddress(), s.Namespace().String(), tc.endpoint.Spec.Target.GetWorker().TaskQueue))
 			})

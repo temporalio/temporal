@@ -235,7 +235,10 @@ func MakeDirectiveForWorkflowTask(ms workflow.MutableState) *taskqueuespb.TaskVe
 
 func MakeDirectiveForActivityTask(mutableState workflow.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {
 	if behavior := mutableState.GetEffectiveVersioningBehavior(); behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return &taskqueuespb.TaskVersionDirective{Behavior: behavior, Deployment: mutableState.GetEffectiveDeployment()}
+		d := mutableState.GetEffectiveDeployment()
+		return &taskqueuespb.TaskVersionDirective{Behavior: behavior,
+			DeploymentVersion: worker_versioning.DeploymentVersionFromDeployment(d),
+		}
 	}
 	if !activityInfo.UseCompatibleVersion && activityInfo.GetUseWorkflowBuildIdInfo() == nil {
 		return worker_versioning.MakeUseAssignmentRulesDirective()

@@ -113,28 +113,58 @@ func (d *deploymentWorkflowClientSuite) TestValidateVersionWfParams() {
 	}{
 		{
 			Description:   "Empty Field",
-			FieldName:     WorkerDeploymentFieldName,
+			FieldName:     WorkerDeploymentNameFieldName,
 			Input:         "",
-			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeployment cannot be empty"),
+			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeploymentName cannot be empty"),
 		},
 		{
 			Description:   "Large Field",
-			FieldName:     WorkerDeploymentFieldName,
+			FieldName:     WorkerDeploymentNameFieldName,
 			Input:         strings.Repeat("s", 1000),
-			ExpectedError: serviceerror.NewInvalidArgument("size of WorkerDeployment larger than the maximum allowed"),
+			ExpectedError: serviceerror.NewInvalidArgument("size of WorkerDeploymentName larger than the maximum allowed"),
 		},
 		{
 			Description:   "Valid field",
-			FieldName:     WorkerDeploymentFieldName,
+			FieldName:     WorkerDeploymentNameFieldName,
 			Input:         "A",
 			ExpectedError: nil,
+		},
+		{
+			Description:   "Invalid buildID",
+			FieldName:     WorkerDeploymentBuildIDFieldName,
+			Input:         "__unversioned__",
+			ExpectedError: serviceerror.NewInvalidArgument("BuildID cannot start with '__'"),
+		},
+		{
+			Description:   "Invalid buildID",
+			FieldName:     WorkerDeploymentNameFieldName,
+			Input:         "__my_dep",
+			ExpectedError: serviceerror.NewInvalidArgument("WorkerDeploymentName cannot start with '__'"),
+		},
+		{
+			Description:   "Valid buildID",
+			FieldName:     WorkerDeploymentBuildIDFieldName,
+			Input:         "valid_build__id",
+			ExpectedError: nil,
+		},
+		{
+			Description:   "Invalid deploymentName",
+			FieldName:     WorkerDeploymentNameFieldName,
+			Input:         "A/B",
+			ExpectedError: nil,
+		},
+		{
+			Description:   "Invalid deploymentName",
+			FieldName:     WorkerDeploymentNameFieldName,
+			Input:         "A.B",
+			ExpectedError: serviceerror.NewInvalidArgument("worker deployment name cannot contain '.'"),
 		},
 	}
 
 	for _, test := range testCases {
 		fieldName := test.FieldName
 		field := test.Input
-		err := ValidateVersionWfParams(fieldName, field, testMaxIDLengthLimit)
+		err := validateVersionWfParams(fieldName, field, testMaxIDLengthLimit)
 
 		if test.ExpectedError == nil {
 			d.NoError(err)

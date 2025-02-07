@@ -36,6 +36,8 @@ frontend.workerVersioningDataAPIs:
   - value: true
 frontend.workerVersioningWorkflowAPIs:
   - value: true
+system.enableDeployments:
+  - value: true
 system.enableNexus:
   - value: true
 component.nexusoperations.callback.endpoint.template:
