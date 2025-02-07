@@ -28,6 +28,7 @@ import (
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -36,10 +37,16 @@ import (
 // AddNextStateMachineTimerTask generates a state machine timer task if the first deadline doesn't have a task scheduled
 // yet.
 func AddNextStateMachineTimerTask(ms MutableState) {
-	timers := ms.GetExecutionInfo().StateMachineTimers
+	// filter out empty timer groups
+	timers := util.FilterSlice(ms.GetExecutionInfo().StateMachineTimers, func(timerGroup *persistencespb.StateMachineTimerGroup) bool {
+		return len(timerGroup.Infos) > 0
+	})
+	ms.GetExecutionInfo().StateMachineTimers = timers
+
 	if len(timers) == 0 {
 		return
 	}
+
 	timerGroup := timers[0]
 	// We already have a timer for this deadline.
 	if timerGroup.Scheduled {
@@ -122,7 +129,9 @@ func TrimStateMachineTimers(
 
 			trimmedTaskInfos = append(trimmedTaskInfos, taskInfo)
 		}
-		if len(trimmedTaskInfos) > 0 {
+		if len(trimmedTaskInfos) > 0 || timerGroup.Scheduled {
+			// We still want to keep the timer group if it has been scheduled even if it has no task info.
+			// This will prevent us from scheduling a new timer task for the same group.
 			trimmedStateMachineTimers = append(trimmedStateMachineTimers, &persistencespb.StateMachineTimerGroup{
 				Infos:     trimmedTaskInfos,
 				Deadline:  timerGroup.Deadline,

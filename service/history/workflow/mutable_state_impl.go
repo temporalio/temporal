@@ -6314,6 +6314,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.timerInfosUserDataUpdated = make(map[string]struct{})
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})
 	ms.reapplyEventsCandidate = nil
+	ms.subStateMachineDeleted = false
 
 	ms.stateInDB = ms.executionState.State
 	ms.nextEventIDInDB = ms.GetNextEventID()
@@ -7375,6 +7376,29 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 }
 
 func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*persistencespb.StateMachineMap) error {
+	// check if there is node been deleted
+	currentHSM := ms.HSM()
+	incomingHSM, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType, ms, incoming, ms)
+	if err != nil {
+		return err
+	}
+
+	if err := incomingHSM.Walk(func(incomingNode *hsm.Node) error {
+		if incomingNode.Parent == nil {
+			// skip root which is the entire mutable state
+			return nil
+		}
+		incomingNodePath := incomingNode.Path()
+		_, err := currentHSM.Child(incomingNodePath)
+		if err != nil && errors.Is(err, hsm.ErrStateMachineNotFound) {
+			ms.subStateMachineDeleted = true
+			return nil
+		}
+		return err
+	}); err != nil {
+		return err
+	}
+
 	ms.executionInfo.SubStateMachinesByType = incoming
 	ms.mustInitHSM()
 	return nil
