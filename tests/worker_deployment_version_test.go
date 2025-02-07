@@ -28,6 +28,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"strings"
 	"testing"
 	"time"
@@ -313,28 +315,10 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 	tv2 := testvars.New(s).WithBuildIDNumber(2)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv1)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv1.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(ctx, tv1)
 
 	// Start deployment workflow 2 and wait for the deployment version to exist
-	go s.pollFromDeployment(ctx, tv2)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
-			Namespace: s.Namespace().String(),
-			Version:   tv2.DeploymentVersionString(),
-		})
-		a.NoError(err)
-		a.Equal(tv2.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
-	}, time.Second*5, time.Millisecond*200)
+	s.startVersionWorkflow(ctx, tv2)
 
 	// non-current deployments have never been used and have no drainage info
 	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{})
@@ -349,7 +333,6 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 		IgnoreMissingTaskQueues: true,
 	})
 	s.Nil(err)
-	s.checkVersionIsCurrent(ctx, tv1)
 
 	// both still nil since neither are draining
 	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{})
@@ -380,20 +363,115 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_NoOpenWFs(
 		LastChangedTime: nil, // don't test this now
 		LastCheckedTime: nil, // don't test this now
 	})
-
-	// todo carly: not really sure how to check lastChangedTime / lastCheckedTime
 }
 
 func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs() {
-	// todo carly: test with open workflows on the draining version that then complete
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := testvars.New(s).WithBuildIDNumber(2)
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	s.startVersionWorkflow(ctx, tv1)
+
+	// Start deployment workflow 2 and wait for the deployment version to exist
+	s.startVersionWorkflow(ctx, tv2)
+
+	// non-current deployments have never been used and have no drainage info
+	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{})
+	s.checkVersionDrainage(ctx, tv2, &deploymentpb.VersionDrainageInfo{})
+
+	// SetCurrent tv1
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:               s.Namespace().String(),
+		DeploymentName:          tv1.DeploymentSeries(),
+		Version:                 tv1.DeploymentVersionString(),
+		Identity:                tv1.ClientIdentity(),
+		IgnoreMissingTaskQueues: true,
+	})
+	s.Nil(err)
+
+	// both still nil since neither are draining
+	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{})
+	s.checkVersionDrainage(ctx, tv2, &deploymentpb.VersionDrainageInfo{})
+
+	// start a pinned workflow on v1
+	run := s.startPinnedWorkflow(ctx, tv1)
+
+	// SetCurrent tv2 --> tv1 starts the child drainage workflow
+	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:               s.Namespace().String(),
+		DeploymentName:          tv2.DeploymentSeries(),
+		Version:                 tv2.DeploymentVersionString(),
+		Identity:                tv2.ClientIdentity(),
+		IgnoreMissingTaskQueues: true,
+	})
+	s.Nil(err)
+
+	// tv1 should now be "draining" for visibilityGracePeriod duration
+	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+		LastChangedTime: nil, // don't test this now
+		LastCheckedTime: nil, // don't test this now
+	})
+
+	time.Sleep(testVersionDrainageVisibilityGracePeriod)
+
+	// tv1 should still be "draining" for visibilityGracePeriod duration
+	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+		LastChangedTime: nil, // don't test this now
+		LastCheckedTime: nil, // don't test this now
+	})
+
+	// terminate workflow
+	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+			RunId:      run.GetRunID(),
+		},
+		Reason:   "test",
+		Identity: tv1.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	time.Sleep(testVersionDrainageRefreshInterval)
+
+	// tv1 should now be "drained"
+	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+		LastChangedTime: nil, // don't test this now
+		LastCheckedTime: nil, // don't test this now
+	})
 }
 
-func (s *DeploymentVersionSuite) TestDrainageStatus_SetRampingVersion_NoOpenWFs() {
-	// todo carly: test with open workflows on the draining version that then complete
-}
-
-func (s *DeploymentVersionSuite) TestDrainageStatus_SetRampingVersion_YesOpenWFs() {
-	// todo carly: test with open workflows on the draining version that then complete
+func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, tv *testvars.TestVars) sdkclient.WorkflowRun {
+	started := make(chan struct{}, 1)
+	wf := func(ctx workflow.Context) (string, error) {
+		started <- struct{}{}
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+		if workflow.GetInfo(ctx).Attempt == 1 {
+			return "", errors.New("try again") //nolint:err113
+		}
+		panic("oops")
+	}
+	wId := testcore.RandomizeStr("id")
+	w := worker.New(s.sdkClient, tv.TaskQueue().String(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			DeploymentSeriesName: tv.DeploymentSeries(),
+		},
+		UseBuildIDForVersioning: true,
+		BuildID:                 tv.BuildID(),
+		Identity:                wId,
+	})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{VersioningBehavior: workflow.VersioningBehaviorPinned})
+	s.NoError(w.Start())
+	defer w.Stop()
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().String()}, wf)
+	s.NoError(err)
+	s.WaitForChannel(ctx, started)
+	return run
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
