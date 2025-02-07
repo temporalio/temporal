@@ -57,7 +57,7 @@ func NewOpenTelemetryProvider(
 	logger log.Logger,
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
-	onListenerError func(e error),
+	fatalOnListenerError bool,
 ) (*openTelemetryProviderImpl, error) {
 	reg := prometheus.NewRegistry()
 	exporterOpts := []exporters.Option{exporters.WithRegisterer(reg)}
@@ -92,7 +92,7 @@ func NewOpenTelemetryProvider(
 		sdkmetrics.WithReader(exporter),
 		sdkmetrics.WithView(views...),
 	)
-	metricServer := initPrometheusListener(prometheusConfig, reg, logger, onListenerError)
+	metricServer := initPrometheusListener(prometheusConfig, reg, logger, fatalOnListenerError)
 	meter := provider.Meter("temporal")
 	reporter := &openTelemetryProviderImpl{
 		meter:  meter,
@@ -107,7 +107,7 @@ func initPrometheusListener(
 	config *PrometheusConfig,
 	reg *prometheus.Registry,
 	logger log.Logger,
-	onListenerError func(error),
+	fatalOnListenerError bool,
 ) *http.Server {
 	handlerPath := config.HandlerPath
 	if handlerPath == "" {
@@ -127,10 +127,12 @@ func initPrometheusListener(
 		if err == http.ErrServerClosed {
 			return
 		}
-		if onListenerError != nil {
-			onListenerError(err)
+		msg := "Failed to initialize prometheus listener."
+		logger := log.With(logger, tag.Error(err), tag.Address(config.ListenAddress))
+		if fatalOnListenerError {
+			logger.Fatal(msg)
 		} else {
-			logger.Fatal("Failed to initialize prometheus listener.", tag.Address(config.ListenAddress))
+			logger.Error(msg)
 		}
 	}()
 
