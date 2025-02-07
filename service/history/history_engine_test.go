@@ -5594,12 +5594,10 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	s.NoError(err)
 
 	branchToken := []byte{1, 2, 3}
-	persistenceToken := []byte("some random persistence token")
 	nextPageToken, err := api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-		RunId:            we.GetRunId(),
-		FirstEventId:     common.FirstEventID,
-		NextEventId:      5,
-		PersistenceToken: persistenceToken,
+		RunId:        we.GetRunId(),
+		FirstEventId: common.FirstEventID,
+		NextEventId:  5,
 		TransientWorkflowTask: &historyspb.TransientWorkflowTaskInfo{
 			HistorySuffix: []*historypb.HistoryEvent{
 				{
@@ -5650,12 +5648,11 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	)
 	s.NoError(err)
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    1,
-		MaxEventID:    5,
-		PageSize:      10,
-		NextPageToken: persistenceToken,
-		ShardID:       1,
+		BranchToken: branchToken,
+		MinEventID:  1,
+		MaxEventID:  5,
+		PageSize:    10,
+		ShardID:     1,
 	}).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{historyBlob1, historyBlob2},
 		NextPageToken:     []byte{},
@@ -5667,13 +5664,11 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	s.NoError(err)
 	s.False(resp.Response.Archived)
 	s.Empty(resp.Response.History)
-	s.Len(resp.Response.RawHistory, 4)
-	event, err := s.mockShard.GetPayloadSerializer().DeserializeEvent(resp.Response.RawHistory[2])
+	s.Len(resp.Response.RawHistory, 3)
+	historyEvents, err := s.mockShard.GetPayloadSerializer().DeserializeEvents(resp.Response.RawHistory[2])
 	s.NoError(err)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, event.EventType)
-	event, err = s.mockShard.GetPayloadSerializer().DeserializeEvent(resp.Response.RawHistory[3])
-	s.NoError(err)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, event.EventType)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, historyEvents[0].EventType)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, historyEvents[1].EventType)
 }
 
 func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkflowID() {

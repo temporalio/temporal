@@ -188,7 +188,7 @@ func ValidateBatch(
 		logger.Error(dataLossMsg, dataLossTags(errWrongVersion)...)
 		return serviceerror.NewDataLoss(errWrongVersion)
 	}
-	if firstEvent.GetEventId() != lastEventID+1 {
+	if lastEventID != 0 && firstEvent.GetEventId() != lastEventID+1 {
 		logger.Error(dataLossMsg, dataLossTags(errNonContiguousEventID)...)
 		return serviceerror.NewDataLoss(errNonContiguousEventID)
 	}
