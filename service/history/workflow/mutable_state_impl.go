@@ -2849,9 +2849,9 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 	return ms.updateBuildIdsAndDeploymentSearchAttributes(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
 }
 
-// Sets TemporalWorkerDeployment to the override DeploymentName or`ms.executionInfo.WorkerDeploymentName` if present.
-// Sets TemporalWorkerDeploymentVersion to the override PinnedVersion or `ms.executionInfo.VersioningInfo.Version` if present.
-// Sets TemporalWorkflowVersioningBehavior to the override Behavior or `ms.executionInfo.VersioningInfo.Behavior` if specified.
+// Sets TemporalWorkerDeployment to the override DeploymentName if present, or`ms.executionInfo.WorkerDeploymentName`.
+// Sets TemporalWorkerDeploymentVersion to the override PinnedVersion if present, or `ms.executionInfo.VersioningInfo.Version`.
+// Sets TemporalWorkflowVersioningBehavior to the override Behavior if present, or `ms.executionInfo.VersioningInfo.Behavior` if specified.
 //
 // For pinned workflows using WorkerDeployment APIs (ms.GetEffectiveVersioningBehavior() == PINNED &&
 // ms.executionInfo.VersioningInfo.Version != ""), this will append a tag formed as `pinned:<version>`
@@ -7632,23 +7632,22 @@ func (ms *MutableStateImpl) GetWorkerDeploymentSA() string {
 
 func (ms *MutableStateImpl) GetWorkerDeploymentVersionSA() string {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	if versioningInfo == nil {
-		return ""
-	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
+	if override := versioningInfo.GetVersioningOverride(); override != nil &&
 		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		return override.GetPinnedVersion()
-	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return versioningInfo.GetVersion()
 	}
-	return ""
+	return versioningInfo.GetVersion()
 }
 
 func (ms *MutableStateImpl) GetWorkflowVersioningBehaviorSA() string {
-	s := ms.GetEffectiveVersioningBehavior().String()
-	if s == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED.String() {
-		s = ""
+	s := ms.GetExecutionInfo().GetVersioningInfo().GetBehavior()
+	if override := ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); override != nil {
+		s = override.GetBehavior()
 	}
-	return s
+	if s == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return ""
+	}
+	return s.String()
 }
 
 func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
