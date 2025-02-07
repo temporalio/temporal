@@ -124,9 +124,12 @@ func initPrometheusListener(
 
 	go func() {
 		err := server.ListenAndServe()
+		if err == http.ErrServerClosed {
+			return
+		}
 		if onListenerError != nil {
 			onListenerError(err)
-		} else if err != http.ErrServerClosed {
+		} else {
 			logger.Fatal("Failed to initialize prometheus listener.", tag.Address(config.ListenAddress))
 		}
 	}()
