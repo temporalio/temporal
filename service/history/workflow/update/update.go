@@ -273,8 +273,9 @@ func (u *Update) abort(
 	reason AbortReason,
 	effects effect.Controller,
 ) {
-	const terminalStates = stateSet(stateCompleted | stateProvisionallyAborted | stateAborted)
-	if u.state.Matches(terminalStates) {
+	abortFailure, abortErr := reason.FailureError(u.state)
+	if abortFailure == nil && abortErr == nil {
+		// If both failure and err are nil, then it means that Update in this state can't be aborted.
 		return
 	}
 
@@ -285,7 +286,6 @@ func (u *Update) abort(
 		if !u.state.Matches(stateSet(stateProvisionallyAborted | stateProvisionallyCompletedAfterAccepted)) {
 			return
 		}
-		abortFailure, abortErr := reason.FailureError(prevState)
 		var abortOutcome *updatepb.Outcome
 		if abortFailure != nil {
 			abortOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: abortFailure}}
