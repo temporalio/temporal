@@ -157,7 +157,7 @@ func recordChildWorkflowCompleted(
 				return nil, consts.ErrChildExecutionNotFound
 			}
 
-			childrenInitializedAfterResetPoint := mutableState.GetExecutionInfo().GetChildrenInitializedPostResetPoint()
+			childrenInitializedAfterResetPoint := mutableState.GetChildrenInitializedPostResetPoint()
 			if len(childrenInitializedAfterResetPoint) > 0 {
 				// This parent was reset and it also has some children that potentially were restarted.
 				initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, parentInitiatedID)
@@ -166,7 +166,7 @@ func recordChildWorkflowCompleted(
 				}
 				initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 				childID := fmt.Sprintf("%s:%s", initiatedAttr.GetWorkflowType().Name, initiatedAttr.GetWorkflowId())
-				_, ok := mutableState.GetExecutionInfo().GetChildrenInitializedPostResetPoint()[childID]
+				_, ok := childrenInitializedAfterResetPoint[childID]
 				if ok {
 					// The child sending this request was restarted. Do not accept any forwarded completion events because the restarted child will directly send its completion event to this parent.
 					// Sometimes the old child will race to complete before being restarted and it also happens to have the same initialized event ID. In such cases the result will come as forwarded request which we ignore here.
