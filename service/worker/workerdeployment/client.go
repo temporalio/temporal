@@ -1303,7 +1303,7 @@ func (d *ClientImpl) GetVersionDrainageStatus(
 
 func makeDeploymentQuery(version string) string {
 	var statusFilter string
-	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(nil, version))
+	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(version))
 	statusFilter = "= 'Running'"
 	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
 }

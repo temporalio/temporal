@@ -2969,7 +2969,7 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 
 	// get the most up-to-date pinned entry put it at the front (v3 reachability and v3.1 drainage)
 	if behavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(nil, ms.GetWorkerDeploymentVersionSA()))
+		newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(ms.GetWorkerDeploymentVersionSA()))
 	}
 
 	// get the build id entry (all versions of versioning)
