@@ -162,7 +162,7 @@ func sortAncestors(ans []*persistencespb.HistoryBranchRange) {
 func ValidateBatch(
 	batch []*historyspb.StrippedHistoryEvent,
 	branchToken []byte,
-	token *historyPagingToken,
+	lastEventID int64,
 	logger log.Logger,
 ) error {
 	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
@@ -176,7 +176,7 @@ func ValidateBatch(
 			tag.WorkflowNextEventID(lastEvent.GetEventId()),
 			tag.LastEventVersion(lastEvent.GetVersion()),
 			tag.Counter(eventCount),
-			tag.TokenLastEventID(token.LastEventID),
+			tag.TokenLastEventID(lastEventID),
 		}
 	}
 	firstEvent = batch[0]
@@ -188,11 +188,12 @@ func ValidateBatch(
 		logger.Error(dataLossMsg, dataLossTags(errWrongVersion)...)
 		return serviceerror.NewDataLoss(errWrongVersion)
 	}
-	if firstEvent.GetEventId() != token.LastEventID+1 {
+	// If it is the first batch in the response, we cannot check the first event id here. That information is in the historyPagingToken.
+	// TODO: PPV refactor to move this check to ExecutionManager so that we can include that check as well.
+	if lastEventID != 0 && firstEvent.GetEventId() != lastEventID+1 {
 		logger.Error(dataLossMsg, dataLossTags(errNonContiguousEventID)...)
 		return serviceerror.NewDataLoss(errNonContiguousEventID)
 	}
-	token.LastEventID = lastEvent.GetEventId()
 	return nil
 }
 

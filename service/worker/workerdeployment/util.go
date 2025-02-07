@@ -44,7 +44,7 @@ const (
 	// Workflow types
 	WorkerDeploymentVersionWorkflowType  = "temporal-sys-worker-deployment-version-workflow"
 	WorkerDeploymentWorkflowType         = "temporal-sys-worker-deployment-workflow"
-	WorkerDeploymentDrainageWorkflowType = "temporal-sys-worker-deployment-drainage-workflow"
+	WorkerDeploymentDrainageWorkflowType = "temporal-sys-worker-deployment-version-drainage-workflow"
 
 	// Namespace division
 	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
@@ -60,24 +60,22 @@ const (
 	DeleteDeployment             = "delete-deployment"                // for WorkerDeployment wfs
 
 	// Signals
-	ForceCANSignalName      = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
-	SyncDrainageSignalName  = "sync-drainage-status"
-	TerminateDrainageSignal = "terminate-drainage"
+	ForceCANSignalName       = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
+	SyncDrainageSignalName   = "sync-drainage-status"
+	TerminateDrainageSignal  = "terminate-drainage"
+	SyncVersionSummarySignal = "sync-version-summary"
 
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
 	QueryDescribeDeployment = "describe-deployment" // for Worker Deployment wf
 
 	// Memos
-	WorkerDeploymentVersionMemoField = "WorkerDeploymentVersionMemo" // for Worker Deployment Version wf
-	WorkerDeploymentMemoField        = "WorkerDeploymentMemo"        // for Worker Deployment wf
+	WorkerDeploymentMemoField = "WorkerDeploymentMemo" // for Worker Deployment wf
 
 	// Prefixes, Delimeters and Keys
 	WorkerDeploymentVersionWorkflowIDPrefix      = "temporal-sys-worker-deployment-version"
-	WorkerDeploymentWorkflowIDPrefix             = "temporal-sys-worker-deployment"
 	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
-	WorkerDeploymentVersionWorkflowIDEscape      = "|"
-	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDDelimeter) + len(WorkerDeploymentVersionWorkflowIDPrefix) // todo (Shivam): Do we need 2 * len(WorkerDeploymentVersionWorkflowIDDelimeter)?
+	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDDelimeter) + len(WorkerDeploymentVersionWorkflowIDPrefix)
 	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
 

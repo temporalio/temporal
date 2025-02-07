@@ -103,6 +103,7 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
 			d.VersionState.DrainageInfo.Status = newInfo.Status
 			d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
+			d.syncSummary(ctx)
 		}
 	})
 
@@ -209,7 +210,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	d.logger.Debug("Version doing continue-as-new")
 	nextArgs := d.WorkerDeploymentVersionWorkflowArgs
 	nextArgs.VersionState = d.VersionState
-	return workflow.NewContinueAsNewError(ctx, VersionWorkflow, nextArgs)
+	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentVersionWorkflowType, nextArgs)
 }
 
 func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context, args *deploymentspb.UpdateVersionMetadataArgs) (*deploymentspb.UpdateVersionMetadataResponse, error) {
@@ -235,7 +236,9 @@ func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, first bool) 
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	})
-	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, d.VersionState.Version, first)
+	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, &deploymentspb.DrainageWorkflowArgs{
+		Version: d.VersionState.Version,
+	})
 	d.drainageWorkflowFuture = &fut
 }
 
@@ -614,4 +617,19 @@ func (d *VersionWorkflowRunner) newUUID(ctx workflow.Context) string {
 		return uuid.New()
 	}).Get(&val)
 	return val
+}
+
+// Sync version summary with the WorkerDeployment workflow.
+func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
+	err := workflow.SignalExternalWorkflow(ctx,
+		worker_versioning.GenerateDeploymentWorkflowID(d.VersionState.Version.DeploymentName),
+		"",
+		SyncVersionSummarySignal,
+		&deploymentspb.WorkerDeploymentVersionSummary{
+			Version:        worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
+			CreateTime:     d.VersionState.CreateTime,
+			DrainageStatus: d.VersionState.DrainageInfo.GetStatus(),
+		},
+	).Get(ctx, nil)
+	d.logger.Error("could not sync version summary to deployment workflow", "error", err)
 }

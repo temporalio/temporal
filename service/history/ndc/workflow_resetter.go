@@ -188,6 +188,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				baseRebuildLastEventID+1,
 				baseNextEventID,
 				resetReapplyExcludeTypes,
+				allowResetWithPendingChildren,
 			)
 			if err != nil {
 				return err
@@ -215,6 +216,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				baseRebuildLastEventID+1,
 				baseNextEventID,
 				resetReapplyExcludeTypes,
+				allowResetWithPendingChildren,
 			)
 			return err
 		}
@@ -647,6 +649,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	baseRebuildNextEventID int64,
 	baseNextEventID int64,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	allowResetWithPendingChildren bool,
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -670,6 +673,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		baseNextEventID,
 		baseBranchToken,
 		resetReapplyExcludeTypes,
+		allowResetWithPendingChildren,
 		childrenInitializedAfterReset,
 	)
 	switch err.(type) {
@@ -736,6 +740,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			nextWorkflowNextEventID,
 			nextWorkflowBranchToken,
 			resetReapplyExcludeTypes,
+			allowResetWithPendingChildren,
 			childrenInitializedAfterReset,
 		)
 		switch err.(type) {
@@ -762,6 +767,7 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 	nextEventID int64,
 	branchToken []byte,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	allowResetWithPendingChildren bool,
 	childrenInitializedAfterReset map[string]*persistencespb.ResetChildInfo,
 ) (string, error) {
 
@@ -789,17 +795,19 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 			return "", err
 		}
 		// track the child workflows initiated after reset-point
-		for _, event := range lastEvents {
-			if event.GetEventType() == enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED {
-				attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-				// TODO: there is a possibility the childIDs constructed this way may not be unique. But the probability of that is very low.
-				// Need to figure out a better way to track these child workflows.
-				childID := fmt.Sprintf("%s:%s", attr.GetWorkflowType().Name, attr.GetWorkflowId())
-				childrenInitializedAfterReset[childID] = &persistencespb.ResetChildInfo{
-					ShouldTerminateAndStart: true,
-				}
-				if len(childrenInitializedAfterReset) > maxChildrenInResetMutableState {
-					return "", errWorkflowResetterMaxChildren
+		if allowResetWithPendingChildren {
+			for _, event := range lastEvents {
+				if event.GetEventType() == enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED {
+					attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+					// TODO: there is a possibility the childIDs constructed this way may not be unique. But the probability of that is very low.
+					// Need to figure out a better way to track these child workflows.
+					childID := fmt.Sprintf("%s:%s", attr.GetWorkflowType().Name, attr.GetWorkflowId())
+					childrenInitializedAfterReset[childID] = &persistencespb.ResetChildInfo{
+						ShouldTerminateAndStart: true,
+					}
+					if len(childrenInitializedAfterReset) > maxChildrenInResetMutableState {
+						return "", errWorkflowResetterMaxChildren
+					}
 				}
 			}
 		}
