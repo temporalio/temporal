@@ -238,23 +238,6 @@ func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioni
 	return nil
 }
 
-// GetEffectiveWorkerDeploymentVersion returns the effective version in the same order as deployment but instead version.
-func GetEffectiveWorkerDeploymentVersion(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) string {
-	if versioningInfo == nil {
-		return ""
-	} else if transition := versioningInfo.GetVersionTransition(); transition != nil {
-		return transition.GetVersion()
-	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
-		return worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(transition.GetDeployment()))
-	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
-		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		return override.GetPinnedVersion()
-	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return versioningInfo.GetVersion()
-	}
-	return ""
-}
-
 // GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 // order:
 //  1. VersioningOverride.Behavior: this is returned when user has set a behavior override

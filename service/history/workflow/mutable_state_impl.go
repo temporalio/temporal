@@ -3059,12 +3059,9 @@ func (ms *MutableStateImpl) addBuildIdAndDeploymentInfoToSearchAttributesWithNoV
 
 	// modify them
 	modifiedBuildIds := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, stamp)
-	modifiedDeployment := ms.GetEffectiveDeployment().GetSeriesName()
-	modifiedVersion := ms.GetEffectiveWorkerDeploymentVersion()
-	modifiedBehavior := ms.GetEffectiveVersioningBehavior().String()
-	if modifiedBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED.String() {
-		modifiedBehavior = ""
-	}
+	modifiedDeployment := ms.GetWorkerDeploymentSA()
+	modifiedVersion := ms.GetWorkerDeploymentVersionSA()
+	modifiedBehavior := ms.GetWorkflowVersioningBehaviorSA()
 
 	// check equality
 	if slices.Equal(existingBuildIds, modifiedBuildIds) &&
@@ -7613,19 +7610,34 @@ func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 	return GetEffectiveDeployment(ms.GetExecutionInfo().GetVersioningInfo())
 }
 
-// GetEffectiveWorkerDeploymentVersion returns the effective deployment in the following order:
-//  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
-//     new deployment
-//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
-//     at wf start time, or later via UpdateWorkflowExecutionOptions.
-//  3. Deployment: this is returned when there is no transition and no override (the most
-//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
-//     completion. Exception: if Deployment is set but the workflow's effective behavior is
-//     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
-//
-// Note: Deployment objects are immutable, never change their fields.
-func (ms *MutableStateImpl) GetEffectiveWorkerDeploymentVersion() string {
-	return GetEffectiveWorkerDeploymentVersion(ms.GetExecutionInfo().GetVersioningInfo())
+func (ms *MutableStateImpl) GetWorkerDeploymentSA() string {
+	if override := ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); override != nil &&
+		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		v, _ := worker_versioning.WorkerDeploymentVersionFromString(override.GetPinnedVersion())
+		return v.GetDeploymentName()
+	}
+	return ms.GetExecutionInfo().GetWorkerDeploymentName()
+}
+
+func (ms *MutableStateImpl) GetWorkerDeploymentVersionSA() string {
+	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
+	if versioningInfo == nil {
+		return ""
+	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
+		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		return override.GetPinnedVersion()
+	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return versioningInfo.GetVersion()
+	}
+	return ""
+}
+
+func (ms *MutableStateImpl) GetWorkflowVersioningBehaviorSA() string {
+	s := ms.GetEffectiveVersioningBehavior().String()
+	if s == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED.String() {
+		s = ""
+	}
+	return s
 }
 
 func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
