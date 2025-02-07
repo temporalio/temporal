@@ -221,7 +221,7 @@ func (s *xdcBaseSuite) tearDownSuite() {
 
 func (s *xdcBaseSuite) waitForClusterSynced() {
 	waitForClusterConnected(s.Assertions, s.logger, s.cluster1, s.cluster1.ClusterName(), s.cluster2.ClusterName(), s.startTime)
-	waitForClusterConnected(s.Assertions, s.logger, s.cluster2, s.cluster1.ClusterName(), s.cluster2.ClusterName(), s.startTime)
+	waitForClusterConnected(s.Assertions, s.logger, s.cluster2, s.cluster2.ClusterName(), s.cluster1.ClusterName(), s.startTime)
 }
 
 func (s *xdcBaseSuite) setupTest() {
