@@ -30,6 +30,9 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
@@ -304,6 +307,16 @@ func (n *Node) setValue(v any, ft fieldType) error {
 	return nil
 }
 
+// deduceFieldType returns fieldTypeData if v's type implements proto.Message and fieldTypeComponent otherwise.
+func deduceFieldType(v any) fieldType {
+	fieldT := reflect.TypeOf(v)
+	if fieldT.AssignableTo(protoMessageT) {
+		return fieldTypeData
+	}
+	// TODO: what's about ComponentPointer?
+	return fieldTypeComponent
+}
+
 func validateValueType(v any) error {
 	return validateType(reflect.TypeOf(v))
 }
@@ -342,6 +355,183 @@ func (n *Node) setSerializedNode(
 		n.children[childName] = childNode
 	}
 	childNode.setSerializedNode(nodePath[1:], serializedNode)
+}
+
+// serialize sets or updates serializedValue field of the node n with serialized value.
+func (n *Node) serialize() error {
+	switch n.serializedValue.GetMetadata().GetAttributes().(type) {
+	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
+		return n.serializeComponentNode()
+	case *persistencespb.ChasmNodeMetadata_DataAttributes:
+		return n.serializeDataNode()
+	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
+		panic("not implemented")
+	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
+		panic("not implemented")
+	default:
+		return serviceerror.NewInternal("unknown node type")
+	}
+}
+
+func (n *Node) serializeComponentNode() error {
+	nodeValueT := reflect.TypeOf(n.value)
+	nodeValueV := reflect.ValueOf(n.value)
+
+	protoMessageFound := false
+	// TODO: consider using walker pattern to unify walking over reflected fields.
+	for i := 0; i < nodeValueT.Elem().NumField(); i++ {
+		fieldV := nodeValueV.Elem().Field(i)
+		fieldT := fieldV.Type()
+		if !fieldT.AssignableTo(protoMessageT) {
+			continue
+		}
+
+		if fieldV.IsNil() {
+			continue
+		}
+
+		if protoMessageFound {
+			return serviceerror.NewInternal("only one proto field allowed in component")
+		}
+		protoMessageFound = true
+
+		blob, err := serialization.ProtoEncodeBlob(fieldV.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return err
+		}
+
+		rc, ok := n.registry.componentFor(n.value)
+		if !ok {
+			return serviceerror.NewInternal(fmt.Sprintf("component type %s is not registered", nodeValueT.String()))
+		}
+
+		n.serializedValue.Data = blob
+		n.serializedValue.GetMetadata().GetComponentAttributes().Type = rc.Type()
+
+		if n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+			n.serializedValue.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
+		}
+		n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount = n.backend.NextTransitionCount()
+		n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition().NamespaceFailoverVersion = n.backend.GetCurrentVersion()
+	}
+	return nil
+}
+
+// Sync the entire tree recursively starting from node n from the underlining component value:
+//   - Create:
+//   - if child node is nil but subcomponent is not empty, a new node with subcomponent value is created.
+//   - Delete:
+//   - if subcomponent is empty, the corresponding child is removed from the tree,
+//   - if subcomponent is no longer in a component, the corresponding child is removed from the tree,
+//   - when a child is removed, all its children are removed too.
+//
+// Returns slice of paths to removed nodes.
+func (n *Node) syncSubComponents() ([]string, error) {
+	if n.parent != nil {
+		return nil, serviceerror.NewInternal("syncSubComponents must be called on root node")
+	}
+
+	var removedPaths []string
+	err := n.syncSubComponentsInternal(&removedPaths, nil)
+	return removedPaths, err
+}
+
+func (n *Node) syncSubComponentsInternal(
+	removedPaths *[]string,
+	nodePath []string,
+) error {
+	nodeValueT := reflect.TypeOf(n.value)
+	nodeValueV := reflect.ValueOf(n.value)
+
+	childrenToKeep := make(map[string]struct{})
+	for i := 0; i < nodeValueT.Elem().NumField(); i++ {
+		fieldV := nodeValueV.Elem().Field(i)
+		fieldT := fieldV.Type()
+
+		if fieldT == UnimplementedComponentT {
+			continue
+		}
+
+		if fieldT.Kind() == reflect.Ptr {
+			continue
+		}
+
+		fieldN := fieldName(nodeValueT.Elem().Field(i))
+
+		switch genericTypePrefix(fieldT) {
+		case chasmFieldTypePrefix:
+			internalV := fieldV.FieldByName(internalFieldName)
+			//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
+			internal := internalV.Interface().(fieldInternal)
+			if internal.IsEmpty() {
+				continue
+			}
+			if internal.node == nil {
+				// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
+				childNode := newNode(n.nodeBase, n, fieldN)
+				if err := childNode.setValue(internal.value, deduceFieldType(internal.value)); err != nil {
+					return err
+				}
+				n.children[fieldN] = childNode
+				internal.node = childNode
+				// TODO: this line can be remove if Internal becomes a *fieldInternal.
+				internalV.Set(reflect.ValueOf(internal))
+			}
+			if err := internal.node.syncSubComponentsInternal(removedPaths, append(nodePath, fieldN)); err != nil {
+				return err
+			}
+
+			childrenToKeep[fieldN] = struct{}{}
+		case chasmCollectionTypePrefix:
+			childrenToKeep[fieldN] = struct{}{}
+			// TODO: need to go over every item in collection and update children for it.
+			panic("not implemented")
+		}
+	}
+
+	err := n.deleteChildren(removedPaths, childrenToKeep, nodePath)
+	return err
+}
+
+func (n *Node) deleteChildren(removedPaths *[]string, childrenToKeep map[string]struct{}, currentPath []string) error {
+	for childName, childNode := range n.children {
+		if _, childToKeep := childrenToKeep[childName]; !childToKeep {
+			if err := childNode.deleteChildren(removedPaths, nil, append(currentPath, childName)); err != nil {
+				return err
+			}
+			path, err := n.pathEncoder.Encode(childNode, append(currentPath, childName))
+			if err != nil {
+				return err
+			}
+			*removedPaths = append(*removedPaths, path)
+			// If parent is about to be removed, it must not have any children.
+			// TODO: softassert: len(childNode.children)==0
+			delete(n.children, childName)
+		}
+	}
+	return nil
+}
+
+func (n *Node) serializeDataNode() error {
+	protoValue, ok := n.value.(proto.Message)
+	if !ok {
+		return serviceerror.NewInternal("only support proto.Message as chasm data")
+	}
+
+	blob, err := serialization.ProtoEncodeBlob(protoValue, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return err
+	}
+
+	n.serializedValue.Data = blob
+
+	if n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition() == nil {
+		n.serializedValue.GetMetadata().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{}
+	}
+	n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount = n.backend.NextTransitionCount()
+	n.serializedValue.GetMetadata().GetLastUpdateVersionedTransition().NamespaceFailoverVersion = n.backend.GetCurrentVersion()
+
+	return nil
 }
 
 // deserialize initializes the node's value from its serializedNode.
@@ -748,6 +938,7 @@ func newNode(
 	nodeName string,
 ) *Node {
 	return &Node{
+		dirty:    false,
 		nodeBase: base,
 		parent:   parent,
 		children: make(map[string]*Node),

@@ -138,6 +138,45 @@ func (s *nodeSuite) TestSetValue_TypeComponent() {
 	s.Nil(node.serializedNode.GetData(), "node serializedNode must not have data before serialize is called")
 }
 
+func (s *nodeSuite) TestSerializeNode_ComponentAttributes() {
+	node := s.testComponentTree()
+
+	s.Len(node.children, 2)
+	s.NotNil(node.children["SubComponent1"].value)
+	s.Len(node.children["SubComponent1"].children, 2)
+	s.NotNil(node.children["SubComponent1"].children["SubComponent11"].value)
+	s.Empty(node.children["SubComponent1"].children["SubComponent11"].children)
+
+	// Serialize root component.
+	s.NotNil(node.serializedValue.GetMetadata().GetComponentAttributes())
+	s.Nil(node.serializedValue.GetData())
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(1) // for LastUpdatesVersionedTransition for TestComponent
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(1)
+	err := node.serialize()
+	s.NoError(err)
+	s.NotNil(node.serializedValue)
+	s.NotNil(node.serializedValue.GetData(), "node serialized value must have data after serialize is called")
+	s.Equal("test_component", node.serializedValue.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
+
+	// Serialize subcomponents (there are 2 subcomponents).
+	sc1Node := node.children["SubComponent1"]
+	s.NotNil(sc1Node.serializedValue.GetMetadata().GetComponentAttributes())
+	s.Nil(sc1Node.serializedValue.GetData())
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(2) // for LastUpdatesVersionedTransition of TestSubComponent1
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(2)
+	for _, childNode := range node.children {
+		err = childNode.serialize()
+		s.NoError(err)
+	}
+	s.NotNil(sc1Node.serializedValue.GetData(), "child node serialized value must have data after serialize is called")
+	s.Equal("test_sub_component_1", sc1Node.serializedValue.GetMetadata().GetComponentAttributes().GetType(), "node serialized value must have type set")
+
+	// Check SubData too.
+	sd1Node := node.children["SubData1"]
+	s.NoError(err)
+	s.NotNil(sd1Node.serializedValue.GetData(), "child node serialized value must have data after serialize is called")
+}
+
 func (s *nodeSuite) TestSetValue_TypeData() {
 	component := &protoMessageType{
 		ActivityId: "22",
@@ -153,6 +192,62 @@ func (s *nodeSuite) TestSetValue_TypeData() {
 	s.Equal(component, node.value)
 	s.NotNil(node.serializedNode.GetMetadata().GetDataAttributes(), "node serializedNode must have attributes created")
 	s.Nil(node.serializedNode.GetData(), "node serializedNode must not have data before serialize is called")
+}
+func (s *nodeSuite) TestSerializeNode_DataAttributes() {
+	component := &protoMessageType{
+		ActivityId: "22",
+	}
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	node := newNode(s.nodeBase(), nil, "")
+	err := node.setValue(component, fieldTypeData)
+	s.NoError(err)
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1)
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+	err = node.serialize()
+	s.NoError(err)
+	s.NotNil(node.serializedValue.GetData(), "child node serialized value must have data after serialize is called")
+	s.Equal([]byte{0x42, 0x2, 0x32, 0x32}, node.serializedValue.GetData().GetData())
+}
+
+func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
+	node := s.testComponentTree()
+
+	component := node.value.(*TestComponent)
+
+	// Set very leaf node to empty.
+	component.SubComponent1.Internal.value.(*TestSubComponent1).SubComponent11 = NewEmptyField[*TestSubComponent11]()
+	s.NotNil(node.children["SubComponent1"].children["SubComponent11"])
+
+	rps, err := node.syncSubComponents()
+	s.NoError(err)
+
+	s.Len(rps, 1)
+	s.Equal("SubComponent1/SubComponent11", rps[0])
+	s.Nil(node.children["SubComponent1"].children["SubComponent11"])
+}
+
+func (s *nodeSuite) TestSyncSubComponents_DeleteMiddleNode() {
+	node := s.testComponentTree()
+
+	component := node.value.(*TestComponent)
+
+	// Set subcomponent at middle node to nil.
+	component.SubComponent1 = NewEmptyField[*TestSubComponent1]()
+	s.NotNil(node.children["SubComponent1"])
+
+	rps, err := node.syncSubComponents()
+	s.NoError(err)
+
+	s.Len(rps, 3)
+	s.Contains(rps, "SubComponent1/SubComponent11")
+	s.Contains(rps, "SubComponent1/SubData11")
+	s.Contains(rps, "SubComponent1")
+
+	s.Nil(node.children["SubComponent1"])
 }
 
 func (s *nodeSuite) TestDeserializeNode_EmptyPersistence() {
@@ -225,6 +320,38 @@ func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
 	s.NotNil(tc.SubData1.Internal.node.value)
 	s.IsType(&protoMessageType{}, tc.SubData1.Internal.node.value)
 	s.Equal("sub-data1", tc.SubData1.Internal.node.value.(*protoMessageType).ActivityId)
+}
+
+func (s *nodeSuite) TestGenerateSerializedNodes() {
+	s.T().Skip("This test is used to generate serialized nodes for other tests.")
+
+	serializedNodes := map[string]*persistencespb.ChasmNode{}
+
+	node := s.testComponentTree()
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(1) // for LastUpdatesVersionedTransition for TestComponent
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(1)
+	err := node.serialize()
+	s.NoError(err)
+	serializedNodes[""] = node.serializedValue
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(2) // for LastUpdatesVersionedTransition of TestSubComponent1
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(2)
+	for childName, childNode := range node.children {
+		err = childNode.serialize()
+		s.NoError(err)
+		serializedNodes[childName] = childNode.serializedValue
+	}
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(2)).Times(2) // for LastUpdatesVersionedTransition of TestSubComponent1
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(2)).Times(2)
+	for childName, childNode := range node.children["SubComponent1"].children {
+		err = childNode.serialize()
+		s.NoError(err)
+		serializedNodes["SubComponent1/"+childName] = childNode.serializedValue
+	}
+
+	generateMapInit(serializedNodes, "serializedNodes")
 }
 
 func (s *nodeSuite) TestNodeSnapshot() {
@@ -610,4 +737,32 @@ func (s *nodeSuite) nodeBase() *nodeBase {
 		backend:     s.nodeBackend,
 		pathEncoder: s.nodePathEncoder,
 	}
+}
+
+// Helper method to create a test tree for TestComponent.
+func (s *nodeSuite) testComponentTree() *Node {
+	var nilSerializedNodes map[string]*persistencespb.ChasmNode
+	// Create an empty tree.
+	node, err := NewTree(nilSerializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.Nil(node.value)
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition of the root component.
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+	// Get an empty top level component from the empty tree.
+	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	s.NoError(err)
+	s.NotNil(node.value)
+
+	// Create subcommponents by assigning fileds to TestComponent instance.
+	setTestComponentFields(node.value.(*TestComponent))
+
+	// Syno tree with subcomponents of TestComponent.
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(4) // for InitialVersionedTransition of children.
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(4)
+	rps, err := node.syncSubComponents()
+	s.NoError(err)
+	s.Empty(rps)
+
+	return node
 }
