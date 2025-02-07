@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -43,7 +44,7 @@ type (
 
 func (a *DrainageActivities) GetVersionDrainageStatus(ctx context.Context, version *deploymentspb.WorkerDeploymentVersion) (*deploymentpb.VersionDrainageInfo, error) {
 	logger := activity.GetLogger(ctx)
-	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, version.DeploymentName, version.BuildId)
+	response, err := a.deploymentClient.GetVersionDrainageStatus(ctx, a.namespace, worker_versioning.WorkerDeploymentVersionToString(version))
 	if err != nil {
 		logger.Error("error counting workflows for drainage status", "error", err)
 		return nil, err

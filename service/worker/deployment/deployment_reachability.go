@@ -102,7 +102,7 @@ func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(&deploymentpb.Deployment{
 		SeriesName: seriesName,
 		BuildId:    buildID,
-	}))
+	}, ""))
 	if open {
 		statusFilter = "= 'Running'"
 	} else {
