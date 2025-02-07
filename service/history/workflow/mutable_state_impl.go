@@ -7683,7 +7683,10 @@ func (ms *MutableStateImpl) GetWorkerDeploymentVersionSA() string {
 }
 
 func (ms *MutableStateImpl) GetWorkflowVersioningBehaviorSA() string {
-	b := ms.GetEffectiveVersioningBehavior()
+	b := ms.executionInfo.GetVersioningInfo().GetBehavior()
+	if override := ms.executionInfo.GetVersioningInfo().GetVersioningOverride(); override != nil {
+		b = override.GetBehavior()
+	}
 	if b == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		return ""
 	}
