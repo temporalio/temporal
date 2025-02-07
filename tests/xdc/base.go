@@ -254,10 +254,9 @@ func (s *xdcBaseSuite) createNamespace(
 	var clusterNames []string
 	if isGlobal {
 		replicationConfigs = make([]*replicationpb.ClusterReplicationConfig, len(clusters))
+		clusterNames = make([]string, len(clusters))
 		for ci, c := range clusters {
-			replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{
-				ClusterName: c.ClusterName(),
-			}
+			replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{ClusterName: c.ClusterName()}
 			clusterNames[ci] = c.ClusterName()
 		}
 	}
@@ -385,9 +384,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusters))
 	clusterNames := make([]string, len(clusters))
 	for ci, c := range clusters {
-		replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{
-			ClusterName: c.ClusterName(),
-		}
+		replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{ClusterName: c.ClusterName()}
 		clusterNames[ci] = c.ClusterName()
 	}
 
