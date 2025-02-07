@@ -54,6 +54,7 @@ import (
 )
 
 var ErrOperationTimeoutBelowMin = errors.New("remaining operation timeout is less than required minimum")
+var ErrInvalidOperationToken = errors.New("invalid operation token")
 
 // ClientProvider provides a nexus client for a given endpoint.
 type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error)
@@ -247,12 +248,17 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	var result *nexus.ClientStartOperationResult[*commonpb.Payload]
 	if callErr == nil {
 		if rawResult.Pending != nil {
-			result = &nexus.ClientStartOperationResult[*commonpb.Payload]{
-				Pending: &nexus.OperationHandle[*commonpb.Payload]{
-					Operation: rawResult.Pending.Operation,
-					Token:     rawResult.Pending.Token,
-				},
-				Links: rawResult.Links,
+			tokenLimit := e.Config.MaxOperationTokenLength(ns.Name().String())
+			if len(rawResult.Pending.Token) > tokenLimit {
+				callErr = fmt.Errorf("%w: length exceeds allowed limit (%d/%d)", ErrInvalidOperationToken, len(rawResult.Pending.Token), tokenLimit)
+			} else {
+				result = &nexus.ClientStartOperationResult[*commonpb.Payload]{
+					Pending: &nexus.OperationHandle[*commonpb.Payload]{
+						Operation: rawResult.Pending.Operation,
+						Token:     rawResult.Pending.Token,
+					},
+					Links: rawResult.Links,
+				}
 			}
 		} else {
 			var payload *commonpb.Payload
@@ -428,6 +434,10 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
+		return handleNonRetryableStartOperationError(node, operation, callErr)
+	} else if errors.Is(callErr, ErrInvalidOperationToken) {
+		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
+		// operation if the response's operation token is too large.
 		return handleNonRetryableStartOperationError(node, operation, callErr)
 	} else if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
 		// Operation timeout is not retryable
@@ -768,6 +778,9 @@ func isDestinationDown(err error) bool {
 		return handlerError.Retryable()
 	}
 	if errors.Is(err, ErrResponseBodyTooLarge) {
+		return false
+	}
+	if errors.Is(err, ErrInvalidOperationToken) {
 		return false
 	}
 	if errors.Is(err, ErrOperationTimeoutBelowMin) {

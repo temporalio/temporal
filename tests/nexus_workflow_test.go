@@ -1130,7 +1130,22 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		s.Equal(1, len(snap["nexus_completion_request_preprocess_errors"]))
 	})
 
-	s.Run("InvalidToken", func() {
+	s.Run("OperationTokenTooLong", func() {
+		publicCallbackUrl := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace().String())
+		completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccessfulOptions{
+			Serializer:     commonnexus.PayloadSerializer,
+			OperationToken: strings.Repeat("long", 2000),
+		})
+		s.NoError(err)
+
+		res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, "")
+		s.Equal(http.StatusBadRequest, res.StatusCode)
+		s.Equal(0, len(snap["nexus_completion_request_preprocess_errors"]))
+		s.Equal(1, len(snap["nexus_completion_requests"]))
+		s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "error_bad_request"})
+	})
+
+	s.Run("InvalidCallbackToken", func() {
 		publicCallbackUrl := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace().String())
 		res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, "")
 		s.Equal(http.StatusBadRequest, res.StatusCode)

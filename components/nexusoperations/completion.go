@@ -126,40 +126,32 @@ func fabricateStartedEventIfMissing(
 		return err
 	}
 
-	if TransitionStarted.Possible(operation) {
-		eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
-		if err != nil {
-			return err
-		}
+	// The operation was already started, ignore.
+	if !TransitionStarted.Possible(operation) {
+		return nil
+	}
 
-		operation.OperationToken = operationToken
-
-		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
-			e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-					ScheduledEventId: eventID,
-					OperationToken:   operationToken,
-					// TODO(bergundy): Remove this fallback after the 1.27 release.
-					OperationId: operationToken,
-					RequestId:   requestID,
-				},
-			}
-			e.Links = links
-			if startTime != nil {
-				e.EventTime = startTime
-			}
-		})
-
-		_, err = TransitionStarted.Apply(operation, EventStarted{
-			Time:       event.EventTime.AsTime(),
-			Node:       node,
-			Attributes: event.GetNexusOperationStartedEventAttributes(),
-		})
-
+	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+	if err != nil {
 		return err
 	}
 
-	return nil
+	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+				ScheduledEventId: eventID,
+				OperationToken:   operationToken,
+				// TODO(bergundy): Remove this fallback after the 1.27 release.
+				OperationId: operationToken,
+				RequestId:   requestID,
+			},
+		}
+		e.Links = links
+		if startTime != nil {
+			e.EventTime = startTime
+		}
+	})
+	return StartedEventDefinition{}.Apply(node.Parent, event)
 }
 
 func CompletionHandler(

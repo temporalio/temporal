@@ -850,6 +850,38 @@ func (s *NexusApiTestSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTokenM
 	s.ErrorContains(err, "Operation requested with a token from a different namespace.")
 }
 
+func (s *NexusApiTestSuite) TestNexus_RespondNexusTaskCompleted_ValidateOperationTokenLength() {
+	ctx := testcore.NewContext()
+
+	tt := tokenspb.NexusTask{
+		NamespaceId: s.NamespaceID().String(),
+		TaskQueue:   "test",
+		TaskId:      uuid.NewString(),
+	}
+	ttBytes, err := tt.Marshal()
+	s.NoError(err)
+
+	_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		Namespace: s.Namespace().String(),
+		Identity:  uuid.NewString(),
+		TaskToken: ttBytes,
+		Response: &nexuspb.Response{
+			Variant: &nexuspb.Response_StartOperation{
+				StartOperation: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
+						AsyncSuccess: &nexuspb.StartOperationResponse_Async{
+							OperationToken: strings.Repeat("long", 2000),
+						},
+					},
+				},
+			},
+		},
+	})
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.Equal("operation token length exceeds allowed limit (8000/4096)", invalidArgumentErr.Message)
+}
+
 func (s *NexusApiTestSuite) TestNexus_RespondNexusTaskMethods_ValidateFailureDetailsJSON() {
 	ctx := testcore.NewContext()
 

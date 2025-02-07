@@ -74,6 +74,7 @@ const (
 
 type Config struct {
 	Enabled                       dynamicconfig.BoolPropertyFn
+	MaxOperationTokenLength       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PayloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ForwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
@@ -149,6 +150,10 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 			return h.forwardCompleteOperation(ctx, r, rCtx)
 		}
 		return err
+	}
+	tokenLimit := h.Config.MaxOperationTokenLength(ns.Name().String())
+	if len(r.OperationToken) > tokenLimit {
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
 	}
 
 	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
