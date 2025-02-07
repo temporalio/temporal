@@ -187,7 +187,8 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMetadataManager(),
 		s.mockResource.GetHistoryClient(),
 		s.mockResource.GetMatchingClient(),
-		nil, // TODO (Shivam): test deploymentStoreClient here if desired
+		nil,
+		nil,
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetPayloadSerializer(),
 		s.mockResource.GetNamespaceRegistry(),

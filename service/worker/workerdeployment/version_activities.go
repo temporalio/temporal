@@ -27,13 +27,21 @@ package workerdeployment
 import (
 	"cmp"
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/worker_versioning"
 )
 
 type (
@@ -49,15 +57,20 @@ func (a *VersionActivities) StartWorkerDeploymentWorkflow(
 	input *deploymentspb.StartWorkerDeploymentRequest,
 ) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("starting deployment workflow", "deploymentName", input.DeploymentName)
-	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.deploymentClient.Start(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
+	logger.Info("starting worker-deployment workflow", "deploymentName", input.DeploymentName)
+	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	err := a.deploymentClient.StartWorkerDeployment(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
+	var precond *serviceerror.FailedPrecondition
+	if errors.As(err, &precond) {
+		return temporal.NewNonRetryableApplicationError("failed to create deployment", errTooManyDeployments, err)
+	}
+	return err
 }
 
-func (a *VersionActivities) SyncWorkerDeploymentUserData(
+func (a *VersionActivities) SyncDeploymentVersionUserData(
 	ctx context.Context,
-	input *deploymentspb.SyncWorkerDeploymentUserDataRequest,
-) (*deploymentspb.SyncWorkerDeploymentUserDataResponse, error) {
+	input *deploymentspb.SyncDeploymentVersionUserDataRequest,
+) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
 	logger := activity.GetLogger(ctx)
 
 	errs := make(chan error)
@@ -66,17 +79,34 @@ func (a *VersionActivities) SyncWorkerDeploymentUserData(
 	maxVersionByName := make(map[string]int64)
 
 	for _, e := range input.Sync {
-		go func(syncData *deploymentspb.SyncWorkerDeploymentUserDataRequest_SyncUserData) {
-			logger.Info("syncing task queue userdata for deployment", "taskQueue", syncData.Name, "type", syncData.Type)
-			res, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-				NamespaceId:   a.namespace.ID().String(),
-				TaskQueue:     syncData.Name,
-				TaskQueueType: syncData.Type,
-				// Deployment:    input.Deployment,
-				// Data:          syncData.Data,
-			})
+		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
+			logger.Info("syncing task queue userdata for deployment version", "taskQueue", syncData.Name, "types", syncData.Types)
+
+			var res *matchingservice.SyncDeploymentUserDataResponse
+			var err error
+
+			if input.ForgetVersion {
+				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+					NamespaceId:    a.namespace.ID().String(),
+					TaskQueue:      syncData.Name,
+					TaskQueueTypes: syncData.Types,
+					Operation: &matchingservice.SyncDeploymentUserDataRequest_ForgetVersion{
+						ForgetVersion: input.Version,
+					},
+				})
+			} else {
+				res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+					NamespaceId:    a.namespace.ID().String(),
+					TaskQueue:      syncData.Name,
+					TaskQueueTypes: syncData.Types,
+					Operation: &matchingservice.SyncDeploymentUserDataRequest_UpdateVersionData{
+						UpdateVersionData: syncData.Data,
+					},
+				})
+			}
+
 			if err != nil {
-				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "type", syncData.Type, "error", err)
+				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types, "error", err)
 			} else {
 				lock.Lock()
 				maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
@@ -93,7 +123,7 @@ func (a *VersionActivities) SyncWorkerDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentspb.SyncWorkerDeploymentUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
+	return &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
 }
 
 func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context.Context, input *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
@@ -121,4 +151,48 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 		err = cmp.Or(err, <-errs)
 	}
 	return err
+}
+
+// CheckIfTaskQueuesHavePollers returns true if any of the given task queues has any pollers
+func (a *VersionActivities) CheckIfTaskQueuesHavePollers(ctx context.Context, args *deploymentspb.CheckTaskQueuesHavePollersActivityArgs) (bool, error) {
+	for tqName, tqTypes := range args.TaskQueuesAndTypes {
+		res, err := a.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+			NamespaceId: a.namespace.ID().String(),
+			DescRequest: &workflowservice.DescribeTaskQueueRequest{
+				Namespace:      a.namespace.Name().String(),
+				TaskQueue:      &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+				Versions:       &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{worker_versioning.WorkerDeploymentVersionToString(args.WorkerDeploymentVersion)}},
+				ReportPollers:  true,
+				TaskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				TaskQueueTypes: tqTypes.Types,
+			},
+		})
+		if err != nil {
+			return false, fmt.Errorf("error describing task queue with name %s: %s", tqName, err)
+		}
+		typesInfo := res.GetDescResponse().GetVersionsInfo()[worker_versioning.WorkerDeploymentVersionToString(args.WorkerDeploymentVersion)].GetTypesInfo()
+		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetPollers()) > 0 {
+			return true, nil
+		}
+		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].GetPollers()) > 0 {
+			return true, nil
+		}
+		if len(typesInfo[int32(enumspb.TASK_QUEUE_TYPE_NEXUS)].GetPollers()) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (a *VersionActivities) AddVersionToWorkerDeployment(ctx context.Context, input *deploymentspb.AddVersionToWorkerDeploymentRequest) (*deploymentspb.AddVersionToWorkerDeploymentResponse, error) {
+	logger := activity.GetLogger(ctx)
+	logger.Info("adding version to worker-deployment", "deploymentName", input.DeploymentName, "version", input.UpdateArgs.Version)
+	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	resp, err := a.deploymentClient.AddVersionToWorkerDeployment(ctx, a.namespace, input.DeploymentName, input.UpdateArgs, identity, input.RequestId)
+	var precond *serviceerror.FailedPrecondition
+	if errors.As(err, &precond) {
+		return nil, temporal.NewNonRetryableApplicationError("failed to add version to deployment", errTooManyVersions, err)
+	}
+	return resp, err
 }

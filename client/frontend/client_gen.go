@@ -63,6 +63,26 @@ func (c *clientImpl) DeleteSchedule(
 	return c.client.DeleteSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) DeleteWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkerDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DeleteWorkerDeployment(ctx, request, opts...)
+}
+
+func (c *clientImpl) DeleteWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkerDeploymentVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DeleteWorkerDeploymentVersion(ctx, request, opts...)
+}
+
 func (c *clientImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.DeleteWorkflowExecutionRequest,
@@ -131,6 +151,26 @@ func (c *clientImpl) DescribeTaskQueue(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
+}
+
+func (c *clientImpl) DescribeWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkerDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeWorkerDeployment(ctx, request, opts...)
+}
+
+func (c *clientImpl) DescribeWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkerDeploymentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkerDeploymentVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeWorkerDeploymentVersion(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeWorkflowExecution(
@@ -341,6 +381,16 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListWorkerDeployments(
+	ctx context.Context,
+	request *workflowservice.ListWorkerDeploymentsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListWorkerDeploymentsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListWorkerDeployments(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListWorkflowExecutions(
@@ -623,6 +673,26 @@ func (c *clientImpl) SetCurrentDeployment(
 	return c.client.SetCurrentDeployment(ctx, request, opts...)
 }
 
+func (c *clientImpl) SetWorkerDeploymentCurrentVersion(
+	ctx context.Context,
+	request *workflowservice.SetWorkerDeploymentCurrentVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SetWorkerDeploymentCurrentVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SetWorkerDeploymentCurrentVersion(ctx, request, opts...)
+}
+
+func (c *clientImpl) SetWorkerDeploymentRampingVersion(
+	ctx context.Context,
+	request *workflowservice.SetWorkerDeploymentRampingVersionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.SetWorkerDeploymentRampingVersionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SetWorkerDeploymentRampingVersion(ctx, request, opts...)
+}
+
 func (c *clientImpl) ShutdownWorker(
 	ctx context.Context,
 	request *workflowservice.ShutdownWorkerRequest,
@@ -741,6 +811,16 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UpdateWorkerBuildIdCompatibility(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateWorkerDeploymentVersionMetadata(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerDeploymentVersionMetadataRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerDeploymentVersionMetadataResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkerDeploymentVersionMetadata(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateWorkerVersioningRules(

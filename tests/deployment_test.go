@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 	deploymentwf "go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
@@ -128,10 +129,10 @@ func (s *DeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *tas
 		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  "random",
-		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-			UseVersioning:        true,
+		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
 			BuildId:              deployment.BuildId,
-			DeploymentSeriesName: deployment.SeriesName,
+			DeploymentName:       deployment.SeriesName,
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
 	})
 }
@@ -142,10 +143,10 @@ func (s *DeploymentSuite) pollActivityFromDeployment(ctx context.Context, taskQu
 		Namespace: s.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  "random",
-		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-			UseVersioning:        true,
+		DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
 			BuildId:              deployment.BuildId,
-			DeploymentSeriesName: deployment.SeriesName,
+			DeploymentName:       deployment.SeriesName,
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
 		},
 	})
 }
@@ -461,8 +462,8 @@ func (s *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 	// set override on our new unversioned workflow
 	updateOpts := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: workerDeployment,
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(workerDeployment)),
 		},
 	}
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -520,7 +521,8 @@ func (s *DeploymentSuite) checkDescribeWorkflowAfterOverride(
 		a.NoError(err)
 		a.NotNil(resp)
 		a.NotNil(resp.GetWorkflowExecutionInfo())
-		a.True(proto.Equal(expectedOverride, resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride()))
+		a.Equal(expectedOverride.GetBehavior(), resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetBehavior())
+		a.Equal(expectedOverride.GetPinnedVersion(), resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride().GetPinnedVersion())
 	}, 5*time.Second, 50*time.Millisecond)
 }
 
@@ -626,8 +628,8 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 	}
 	pinnedOpts := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: workerDeployment,
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(workerDeployment)),
 		},
 	}
 	noOpts := &workflowpb.WorkflowExecutionOptions{}
@@ -725,14 +727,14 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 	}
 	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deployment1,
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment1)),
 		},
 	}
 	pinnedOpts2 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deployment2,
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment2)),
 		},
 	}
 
@@ -829,8 +831,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 	}
 	unpinnedOpts := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-			Deployment: nil,
+			Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		},
 	}
 	deployment1 := &deploymentpb.Deployment{
@@ -839,8 +840,8 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 	}
 	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deployment1,
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment1)),
 		},
 	}
 
@@ -889,8 +890,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	}
 	unpinnedOpts := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-			Deployment: nil,
+			Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		},
 	}
 	deployment1 := &deploymentpb.Deployment{
@@ -899,8 +899,8 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	}
 	pinnedOpts1 := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deployment1,
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment1)),
 		},
 	}
 
@@ -949,8 +949,8 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 	}
 	pinnedOpts := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: workerDeployment,
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(workerDeployment)),
 		},
 	}
 
@@ -1077,8 +1077,8 @@ func (s *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
 		BuildId:    "A",
 	}
 	override := &workflowpb.VersioningOverride{
-		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-		Deployment: deploymentA,
+		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+		PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deploymentA)),
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
@@ -1142,8 +1142,8 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverrid
 		BuildId:    "A",
 	}
 	override := &workflowpb.VersioningOverride{
-		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-		Deployment: deploymentA,
+		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+		PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deploymentA)),
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error

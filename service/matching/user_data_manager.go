@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,12 +58,14 @@ const (
 	userDataClosed
 )
 
+const maxFastUserDataFetches = 10
+
 type (
 	userDataManager interface {
 		Start()
 		Stop()
 		WaitUntilInitialized(ctx context.Context) error
-		// GetUserData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
+		// GetUserData returns the user data for this task queue. Do not mutate the returned pointer, as doing so
 		// will cause cache inconsistency.
 		GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
@@ -118,10 +121,11 @@ type (
 var _ userDataManager = (*userDataManagerImpl)(nil)
 
 var (
-	errUserDataNoMutateNonRoot = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
-	errTaskQueueClosed         = serviceerror.NewUnavailable("task queue closed")
-	errUserDataUnmodified      = errors.New("sentinel error for unchanged user data")
-	errUserDataVersionMismatch = errors.New("user data version mismatch")
+	errUserDataNoMutateNonRoot  = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
+	errRequestedVersionTooLarge = serviceerror.NewInvalidArgument("requested task queue user data for version greater than known version")
+	errTaskQueueClosed          = serviceerror.NewUnavailable("task queue closed")
+	errUserDataUnmodified       = errors.New("sentinel error for unchanged user data")
+	errUserDataVersionMismatch  = errors.New("user data version mismatch")
 )
 
 func newUserDataManager(
@@ -170,7 +174,7 @@ func (m *userDataManagerImpl) Stop() {
 	m.setUserDataState(userDataClosed, nil)
 }
 
-// GetUserData returns the versioning data for this task queue and a channel that signals when the data has been updated.
+// GetUserData returns the user data for this task queue and a channel that signals when the data has been updated.
 // Do not mutate the returned pointer, as doing so will cause cache inconsistency.
 // If there is no user data, this can return a nil value with no error.
 func (m *userDataManagerImpl) GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
@@ -341,14 +345,14 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
 		if elapsed < m.config.GetUserDataMinWaitTime {
-			if fastResponseCounter >= 3 {
-				// 3 or more consecutive fast responses, let's throttle!
+			if fastResponseCounter >= maxFastUserDataFetches {
+				// maxFastUserDataFetches or more consecutive fast responses, let's throttle!
 				util.InterruptibleSleep(ctx, minWaitTime-elapsed)
 				// Don't let this get near our call timeout, otherwise we can't tell the difference
 				// between a fast reply and a timeout.
 				minWaitTime = min(minWaitTime*2, m.config.GetUserDataLongPollTimeout()/2)
 			} else {
-				// Not yet 3 consecutive fast responses. A few rapid refreshes for versioned queues
+				// Not yet maxFastUserDataFetches consecutive fast responses. A few rapid refreshes for versioned queues
 				// is expected when the first poller arrives. We do not want to slow down the queue
 				// for that.
 				fastResponseCounter++
@@ -595,14 +599,20 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 					tag.UserDataVersion(userData.Version),
 				)
 			} else if userData.Version < version {
-				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
-				// We rely on client retries in this case to let the system eventually self-heal.
-				m.logger.Error("requested task queue user data for version greater than known version",
-					tag.NewInt64("request-known-version", version),
-					tag.UserDataVersion(userData.Version),
-				)
-				return nil, serviceerror.NewInvalidArgument(
-					"requested task queue user data for version greater than known version")
+				if m.store != nil {
+					// When m.store == nil it means this is a non-owner partition, so it is possible
+					// for the requested version to be greater than the known version if there are
+					// concurrent user data updates in flight. We do not log an error in that case.
+
+					// This is highly unlikely to happen in the owner/root partition but may happen
+					// due to an edge case in during ownership transfer.
+					// We rely on client retries in this case to let the system eventually self-heal.
+					m.logger.Error("requested task queue user data for version greater than known version",
+						tag.NewInt64("request-known-version", version),
+						tag.UserDataVersion(userData.Version),
+					)
+				}
+				return nil, errRequestedVersionTooLarge
 			}
 		} else {
 			m.logger.Debug("returning empty user data (no data)", tag.NewBoolTag("long-poll", req.WaitNewData))
@@ -629,7 +639,15 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	var waitingForPartitions atomic.Int64
 	waitingForPartitions.Store(int64(wfPartitions - 1 + actPartitions))
 
-	policy := backoff.NewExponentialRetryPolicy(time.Second)
+	policy := backoff.NewExponentialRetryPolicy(500 * time.Millisecond)
+	isRetryable := func(err error) bool {
+		if strings.Contains(err.Error(), errRequestedVersionTooLarge.Error()) {
+			// It is possible that multiple updates are happening at once and this partition has not
+			// caught up with all the previous updates when we ask for the latest update.
+			return true
+		}
+		return common.IsServiceClientTransientError(err)
+	}
 
 	check := func(p int, tp enumspb.TaskQueueType) {
 		err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
@@ -652,7 +670,7 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 				return serviceerror.NewUnavailable("retry")
 			}
 			return nil
-		}, policy, common.IsServiceClientTransientError)
+		}, policy, isRetryable)
 		if err == nil {
 			if waitingForPartitions.Add(-1) == 0 {
 				complete <- nil
