@@ -90,9 +90,9 @@ type (
 // TODO (alex): this should be gone.
 func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplicationConfig {
 	config := make([]*replicationpb.ClusterReplicationConfig, 2)
-	for i, cluster := range []*testcore.TestCluster{s.cluster1, s.cluster2} {
-		config[i] = &replicationpb.ClusterReplicationConfig{
-			ClusterName: cluster.ClusterName(),
+	for ci, c := range []*testcore.TestCluster{s.cluster1, s.cluster2} {
+		config[ci] = &replicationpb.ClusterReplicationConfig{
+			ClusterName: c.ClusterName(),
 		}
 	}
 	return config
@@ -251,12 +251,14 @@ func (s *xdcBaseSuite) createNamespace(
 	ctx := testcore.NewContext()
 	ns := "test-namespace-" + uuid.NewString()
 	var replicationConfigs []*replicationpb.ClusterReplicationConfig
+	var clusterNames []string
 	if isGlobal {
 		replicationConfigs = make([]*replicationpb.ClusterReplicationConfig, len(clusters))
-		for i, cluster := range clusters {
-			replicationConfigs[i] = &replicationpb.ClusterReplicationConfig{
-				ClusterName: cluster.ClusterName(),
+		for ci, c := range clusters {
+			replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{
+				ClusterName: c.ClusterName(),
 			}
+			clusterNames[ci] = c.ClusterName()
 		}
 	}
 
@@ -291,10 +293,6 @@ func (s *xdcBaseSuite) createNamespace(
 					assert.NoError(t, err)
 					if assert.NotNil(t, resp) {
 						assert.Equal(t, isGlobal, resp.IsGlobalNamespace())
-						var clusterNames []string
-						for _, cl := range clusters {
-							clusterNames = append(clusterNames, cl.ClusterName())
-						}
 						assert.Equal(t, clusterNames, resp.ClusterNames())
 					}
 				}
@@ -385,10 +383,12 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 ) {
 
 	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusters))
-	for i, cluster := range clusters {
-		replicationConfigs[i] = &replicationpb.ClusterReplicationConfig{
-			ClusterName: cluster.ClusterName(),
+	clusterNames := make([]string, len(clusters))
+	for ci, c := range clusters {
+		replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{
+			ClusterName: c.ClusterName(),
 		}
+		clusterNames[ci] = c.ClusterName()
 	}
 
 	_, err := clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
@@ -397,11 +397,6 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 			Clusters: replicationConfigs,
 		}})
 	s.NoError(err)
-
-	var clusterNames []string
-	for _, cl := range clusters {
-		clusterNames = append(clusterNames, cl.ClusterName())
-	}
 
 	var isGlobalNamespace bool
 	s.EventuallyWithT(func(t *assert.CollectT) {
