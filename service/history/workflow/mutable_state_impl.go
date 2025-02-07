@@ -2932,6 +2932,49 @@ func (ms *MutableStateImpl) getPinnedDeployment() *deploymentpb.Deployment {
 	return ms.GetEffectiveDeployment()
 }
 
+// getPinnedVersion returns nil if the workflow is not pinned. If there is a pinned override,
+// it returns the override deployment. If there is no override, it returns execution_info.deployment,
+// which is the last deployment that this workflow completed a task on.
+func (ms *MutableStateImpl) getPinnedVersion() string {
+	if ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED {
+		return ""
+	}
+	if override := ms.executionInfo.GetVersioningInfo().GetVersioningOverride(); override != nil {
+		return override.GetPinnedVersion()
+	}
+	return ms.executionInfo.GetVersioningInfo().GetVersion()
+}
+
+// getVersionedBuildId returns the override build id if it exists or the regular build id.
+// Works for Worker Deployments and Deployments.
+func (ms *MutableStateImpl) getVersionedBuildId() string {
+	versioningInfo := ms.executionInfo.GetVersioningInfo()
+	if override := versioningInfo.GetVersioningOverride(); override != nil {
+		if versioningInfo.GetVersion() != "" { // worker deployments
+			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+				v, _ := worker_versioning.WorkerDeploymentVersionFromString(override.GetPinnedVersion())
+				return v.GetBuildId()
+			}
+			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+				return versioningInfo.GetVersion()
+			}
+		} else { // deployments
+			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+				return override.GetDeployment().GetBuildId()
+			}
+			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+				return versioningInfo.GetDeployment().GetBuildId()
+			}
+		}
+	}
+	if versioningInfo.GetVersion() != "" { // worker deployments
+		v, _ := worker_versioning.WorkerDeploymentVersionFromString(versioningInfo.GetVersion())
+		return v.GetBuildId()
+	} else { // deployments
+		return versioningInfo.GetDeployment().GetBuildId()
+	}
+}
+
 // Takes a list of loaded build IDs from a search attribute and adds a new build ID to it. Also makes sure that the
 // resulting SA list begins with either "unversioned" or "assigned:<bld>" based on workflow's Build ID assignment status.
 // Returns a potentially modified list.
@@ -2942,47 +2985,47 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 	stamp *commonpb.WorkerVersionStamp,
 ) []string {
 	var newValues []string
+	var buildId string
 	effectiveBehavior := ms.GetEffectiveVersioningBehavior()
+
+	// set up the unversioned or assigned:x sentinels (versioning v2)
 	if !stamp.GetUseVersioning() && effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED { // unversioned workflows may still have non-nil deployment, so we don't check deployment
 		newValues = append(newValues, worker_versioning.UnversionedSearchAttribute)
-	} else if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		vInfo := ms.GetExecutionInfo().GetVersioningInfo()
-		if vInfo.GetVersioningOverride().GetPinnedVersion() != "" {
-			if vInfo.GetVersion() != "" { // worker deployments
-				newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(nil, vInfo.GetVersioningOverride().GetPinnedVersion()))
-			} else { // deployments
-				newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(ms.getPinnedDeployment(), ""))
-			}
-		} else if vInfo.GetVersion() != "" { // worker deployments
-			newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(nil, vInfo.GetVersion()))
-		} else { // deployments
-			newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(ms.getPinnedDeployment(), ""))
-		}
 	} else if ms.GetAssignedBuildId() != "" {
 		newValues = append(newValues, worker_versioning.AssignedBuildIdSearchAttribute(ms.GetAssignedBuildId()))
 	}
 
-	if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		buildId := worker_versioning.VersionStampToBuildIdSearchAttribute(stamp)
-		found := slices.Contains(newValues, buildId)
-		for _, existingValue := range existingValues {
-			if existingValue == buildId {
-				found = true
-			}
-			if !worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(existingValue) {
-				newValues = append(newValues, existingValue)
-			}
-		}
-		if !found {
-			newValues = append(newValues, buildId)
+	// get the most up-to-date pinned entry put it at the front (v3 reachability and v3.1 drainage)
+	if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		if ms.GetExecutionInfo().GetVersioningInfo().GetVersion() == "" { // deployments
+			newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(ms.getPinnedDeployment(), ""))
+		} else { // worker deployments
+			newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(nil, ms.getPinnedVersion()))
 		}
 	}
 
-	// Remove pinned build id search attribute if it exists and we are not pinned
-	if effectiveBehavior != enumspb.VERSIONING_BEHAVIOR_PINNED {
-		newValues = slices.DeleteFunc(newValues, func(s string) bool {
-			return strings.HasPrefix(s, worker_versioning.BuildIdSearchAttributePrefixPinned)
-		})
+	// get the build id entry (all versions of versioning)
+	if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		buildId = worker_versioning.VersionStampToBuildIdSearchAttribute(stamp)
+	} else { // versioning behaviors
+		buildId = worker_versioning.VersionedBuildIdSearchAttribute(ms.getVersionedBuildId())
+	}
+
+	// add all previous values except for unversioned, assigned, or pinned (there can only be one, and we just added it)
+	foundBuildId := false
+	for _, existingValue := range existingValues {
+		if existingValue == buildId {
+			foundBuildId = true
+		}
+		if !worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(existingValue) &&
+			!strings.HasPrefix(existingValue, worker_versioning.BuildIdSearchAttributePrefixPinned) {
+			newValues = append(newValues, existingValue)
+		}
+	}
+
+	// add buildId to the list only if it wasn't there before
+	if !foundBuildId {
+		newValues = append(newValues, buildId)
 	}
 	return newValues
 }
@@ -7640,14 +7683,11 @@ func (ms *MutableStateImpl) GetWorkerDeploymentVersionSA() string {
 }
 
 func (ms *MutableStateImpl) GetWorkflowVersioningBehaviorSA() string {
-	s := ms.GetExecutionInfo().GetVersioningInfo().GetBehavior()
-	if override := ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(); override != nil {
-		s = override.GetBehavior()
-	}
-	if s == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+	b := ms.GetEffectiveVersioningBehavior()
+	if b == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		return ""
 	}
-	return s.String()
+	return b.String()
 }
 
 func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
