@@ -2960,9 +2960,11 @@ func (ms *MutableStateImpl) getVersionedBuildId() string {
 			}
 		} else { // deployments
 			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+				//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 				return override.GetDeployment().GetBuildId()
 			}
 			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
+				//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 				return versioningInfo.GetDeployment().GetBuildId()
 			}
 		}
@@ -2971,6 +2973,7 @@ func (ms *MutableStateImpl) getVersionedBuildId() string {
 		v, _ := worker_versioning.WorkerDeploymentVersionFromString(versioningInfo.GetVersion())
 		return v.GetBuildId()
 	} else { // deployments
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		return versioningInfo.GetDeployment().GetBuildId()
 	}
 }
