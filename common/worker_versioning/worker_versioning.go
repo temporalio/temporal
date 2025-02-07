@@ -79,14 +79,23 @@ func escapeChar(s, escape, delimiter string) string {
 // 'pinned:<deployment_series_name>:<deployment_build_id>'. Each workflow execution will have at most one member of the
 // BuildIds KeywordList in this format. If the workflow becomes unpinned or unversioned, this entry will be removed from
 // that list.
-func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment) string {
-	return fmt.Sprintf("%s%s%s%s%s",
-		BuildIdSearchAttributePrefixPinned,
-		BuildIdSearchAttributeDelimiter,
-		escapeChar(deployment.GetSeriesName(), BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
-		BuildIdSearchAttributeDelimiter,
-		escapeChar(deployment.GetBuildId(), BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
-	)
+func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment, version string) string {
+	if version != "" {
+		return fmt.Sprintf("%s%s%s%s%s",
+			BuildIdSearchAttributePrefixPinned,
+			BuildIdSearchAttributeDelimiter,
+			escapeChar(version, BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
+		)
+	} else if deployment != nil {
+		return fmt.Sprintf("%s%s%s%s%s",
+			BuildIdSearchAttributePrefixPinned,
+			BuildIdSearchAttributeDelimiter,
+			escapeChar(deployment.GetSeriesName(), BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
+			BuildIdSearchAttributeDelimiter,
+			escapeChar(deployment.GetBuildId(), BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
+		)
+	}
+	return ""
 }
 
 // AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID

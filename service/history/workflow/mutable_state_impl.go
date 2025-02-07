@@ -2946,7 +2946,18 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 	if !stamp.GetUseVersioning() && effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED { // unversioned workflows may still have non-nil deployment, so we don't check deployment
 		newValues = append(newValues, worker_versioning.UnversionedSearchAttribute)
 	} else if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(ms.getPinnedDeployment()))
+		vInfo := ms.GetExecutionInfo().GetVersioningInfo()
+		if vInfo.GetVersioningOverride().GetPinnedVersion() != "" {
+			if vInfo.GetVersion() != "" { // worker deployments
+				newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(nil, vInfo.GetVersioningOverride().GetPinnedVersion()))
+			} else { // deployments
+				newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(ms.getPinnedDeployment(), ""))
+			}
+		} else if vInfo.GetVersion() != "" { // worker deployments
+			newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(nil, vInfo.GetVersion()))
+		} else { // deployments
+			newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(ms.getPinnedDeployment(), ""))
+		}
 	} else if ms.GetAssignedBuildId() != "" {
 		newValues = append(newValues, worker_versioning.AssignedBuildIdSearchAttribute(ms.GetAssignedBuildId()))
 	}

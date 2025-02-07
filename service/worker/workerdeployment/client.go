@@ -177,7 +177,7 @@ type Client interface {
 	GetVersionDrainageStatus(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		deploymentName, version string) (enumspb.VersionDrainageStatus, error)
+		version string) (enumspb.VersionDrainageStatus, error)
 
 	// Used internally by the Worker Deployment workflow in its IsVersionMissingTaskQueues Activity
 	// to verify if there are missing task queues in the new current/ramping version.
@@ -1289,11 +1289,11 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namesp
 func (d *ClientImpl) GetVersionDrainageStatus(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	deploymentName, buildID string) (enumspb.VersionDrainageStatus, error) {
+	version string) (enumspb.VersionDrainageStatus, error) {
 	countRequest := manager.CountWorkflowExecutionsRequest{
 		NamespaceID: namespaceEntry.ID(),
 		Namespace:   namespaceEntry.Name(),
-		Query:       makeDeploymentQuery(deploymentName, buildID),
+		Query:       makeDeploymentQuery(version),
 	}
 	countResponse, err := d.visibilityManager.CountWorkflowExecutions(ctx, &countRequest)
 	if err != nil {
@@ -1305,12 +1305,9 @@ func (d *ClientImpl) GetVersionDrainageStatus(
 	return enumspb.VERSION_DRAINAGE_STATUS_DRAINING, nil
 }
 
-func makeDeploymentQuery(deploymentName, buildID string) string {
+func makeDeploymentQuery(version string) string {
 	var statusFilter string
-	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(&deploymentpb.Deployment{
-		SeriesName: deploymentName,
-		BuildId:    buildID,
-	}))
+	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(nil, version))
 	statusFilter = "= 'Running'"
 	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
 }
