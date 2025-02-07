@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -343,6 +344,12 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 		})
 		a.NoError(err)
 		a.Equal(secondVersion.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+		firstSummary := slices.IndexFunc(resp.GetWorkerDeploymentInfo().GetVersionSummaries(),
+			func(summary *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary) bool {
+				return summary.GetVersion() == firstVersion.DeploymentVersionString()
+			})
+		a.Greater(firstSummary, -1)
+		a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINING, resp.GetWorkerDeploymentInfo().GetVersionSummaries()[firstSummary].GetDrainageStatus())
 	}, time.Second*10, time.Millisecond*1000)
 }
 

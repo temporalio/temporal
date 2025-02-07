@@ -136,18 +136,19 @@ message WorkerDeploymentWorkflowArgs {
     WorkerDeploymentLocalState state = 4;
 }
 
+// used as drainage workflow input:
+message DrainageWorkflowArgs {
+    string namespace_name = 1;
+    WorkerDeploymentVersion version = 2;
+    bool is_can = 3;
+}
+
 // Local state for Worker Deployment
 message WorkerDeploymentLocalState {
     google.protobuf.Timestamp create_time = 1;
     // Encapsulates task routing information for this deployment.
     temporal.api.deployment.v1.RoutingConfig routing_config = 2;
-    // Deployment Versions that are currently tracked in this Deployment. 
-    // A DeploymentVersion will be cleaned up automatically if all the following conditions meet:
-    // - It does not receive new executions (see WorkerDeploymentVersionInfo.accepts_new_executions) 
-    // - It has no active pollers (see WorkerDeploymentVersionInfo.pollers_status) 
-    // - It is drained (see WorkerDeploymentVersionInfo.drainage_status)
-    // TODO (Shivam) - Removal of registered versions based on the above conditions.
-    repeated WorkerDeploymentVersionSummary versions = 3;
+    map<string, WorkerDeploymentVersionSummary> versions = 3;
     bytes conflict_token = 4;
 }
 

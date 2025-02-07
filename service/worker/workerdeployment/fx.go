@@ -113,14 +113,14 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	}
 	registry.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 
-	drainageWorkflow := func(ctx workflow.Context, version *deploymentspb.WorkerDeploymentVersion, first bool) error {
+	drainageWorkflow := func(ctx workflow.Context, args *deploymentspb.DrainageWorkflowArgs) error {
 		refreshIntervalGetter := func() any {
 			return dynamicconfig.VersionDrainageStatusRefreshInterval.Get(s.dynamicConfig)(ns.Name().String())
 		}
 		visibilityGracePeriodGetter := func() any {
 			return dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(s.dynamicConfig)(ns.Name().String())
 		}
-		return DrainageWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, version, first)
+		return DrainageWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
 	}
 
 	registry.RegisterWorkflowWithOptions(

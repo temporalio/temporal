@@ -29,6 +29,7 @@ import (
 
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -43,9 +44,11 @@ func DrainageWorkflow(
 	ctx workflow.Context,
 	unsafeRefreshIntervalGetter func() any,
 	unsafeVisibilityGracePeriodGetter func() any,
-	version *deploymentspb.WorkerDeploymentVersion,
-	first bool,
+	args *deploymentspb.DrainageWorkflowArgs,
 ) error {
+	if args.Version == nil {
+		return serviceerror.NewInvalidArgument("version cannot be nil")
+	}
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var a *DrainageActivities
 
@@ -58,7 +61,7 @@ func DrainageWorkflow(
 	})
 
 	// Set status = DRAINING and then sleep for visibilityGracePeriod (to let recently-started workflows arrive in visibility)
-	if first { // skip if resuming after the parent continued-as-new
+	if !args.IsCan { // skip if resuming after the parent continued-as-new
 		parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
 		now := timestamppb.Now()
 		drainingInfo := &deploymentpb.VersionDrainageInfo{
@@ -85,7 +88,7 @@ func DrainageWorkflow(
 		err := workflow.ExecuteActivity(
 			activityCtx,
 			a.GetVersionDrainageStatus,
-			version,
+			args.Version,
 		).Get(ctx, &info)
 		if err != nil {
 			return err
@@ -104,5 +107,10 @@ func DrainageWorkflow(
 			return err
 		}
 		_ = workflow.Sleep(ctx, refresh)
+
+		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+			args.IsCan = true
+			return workflow.NewContinueAsNewError(ctx, WorkerDeploymentDrainageWorkflowType, args)
+		}
 	}
 }
