@@ -114,7 +114,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
+		ActiveClusterName:                s.cluster1.ClusterName(),
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
 	_, err := activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
@@ -181,7 +181,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
+		ActiveClusterName:                s.cluster1.ClusterName(),
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
 	_, err := activeFrontendClient.RegisterNamespace(ctx, regReq)
@@ -354,7 +354,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	}
 
 	// update namespace to cross clusters
-	s.updateNamespaceClusters(namespace, 0, s.clusterNames, []*testcore.TestCluster{s.cluster1, s.cluster2})
+	s.updateNamespaceClusters(namespace, 0, []*testcore.TestCluster{s.cluster1, s.cluster2})
 
 	// we should see one new namespace task in the replication queue
 	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
@@ -403,7 +403,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.Equal(expectedReplicatedTaskQueues, seenTaskQueues)
 
 	// failover and check on the other side
-	s.failover(namespace, 0, s.clusterNames[1], 2)
+	s.failover(namespace, 0, s.cluster2.ClusterName(), 2)
 
 	activeFrontendClient = s.cluster2.FrontendClient()
 	for i := 0; i < numTaskQueues; i++ {
@@ -593,7 +593,7 @@ func (s *UserDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTomb
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
+		ActiveClusterName:                s.cluster1.ClusterName(),
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	})
 	s.Require().NoError(err)

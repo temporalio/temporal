@@ -137,7 +137,7 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 			Namespace: s.namespaceName,
 			Clusters:  s.clusterReplicationConfig(),
 			// The first cluster is the active cluster.
-			ActiveClusterName: s.clusterNames[0],
+			ActiveClusterName: s.cluster1.ClusterName(),
 			// Needed so that the namespace is replicated.
 			IsGlobalNamespace: true,
 			// This is a required parameter.
