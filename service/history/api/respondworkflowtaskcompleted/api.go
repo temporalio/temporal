@@ -215,10 +215,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	behavior := request.GetVersioningBehavior()
-	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && request.GetDeployment() == nil {
+	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && request.GetDeployment() == nil &&
+		(request.GetDeploymentOptions() == nil || request.GetDeploymentOptions().GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED) {
 		// Mutable state wasn't changed yet and doesn't have to be cleared.
 		releaseLeaseWithError = false
-		return nil, serviceerror.NewInvalidArgument("deployment must be set when versioning behavior specified")
+		return nil, serviceerror.NewInvalidArgument("versioning behavior cannot be specified without deployment options being set with versioned mode")
 	}
 
 	assignedBuildId := ms.GetAssignedBuildId()
@@ -252,7 +254,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}()
 
 	// It's an error if the workflow has used versioning in the past but this task has no versioning info.
-	if ms.GetMostRecentWorkerVersionStamp().GetUseVersioning() && !request.GetWorkerVersionStamp().GetUseVersioning() {
+	if ms.GetMostRecentWorkerVersionStamp().GetUseVersioning() &&
+		//nolint:staticcheck // SA1019 deprecated stamp will clean up later
+		!request.GetWorkerVersionStamp().GetUseVersioning() &&
+		request.GetDeploymentOptions().GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED {
 		// Mutable state wasn't changed yet and doesn't have to be cleared.
 		releaseLeaseWithError = false
 		return nil, serviceerror.NewInvalidArgument("Workflow using versioning must continue to use versioning.")

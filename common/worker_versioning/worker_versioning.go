@@ -84,23 +84,12 @@ func escapeChar(s, escape, delimiter string) string {
 // will. The values used will be the override deployment_series and build_id if set, or versioningInfo.Deployment.
 //
 // If the workflow becomes unpinned or unversioned, this entry will be removed from that list.
-func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment, version string) string {
-	if version != "" {
-		return fmt.Sprintf("%s%s%s",
-			BuildIdSearchAttributePrefixPinned,
-			BuildIdSearchAttributeDelimiter,
-			escapeChar(version, BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
-		)
-	} else if deployment != nil {
-		return fmt.Sprintf("%s%s%s%s%s",
-			BuildIdSearchAttributePrefixPinned,
-			BuildIdSearchAttributeDelimiter,
-			escapeChar(deployment.GetSeriesName(), BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
-			BuildIdSearchAttributeDelimiter,
-			escapeChar(deployment.GetBuildId(), BuildIdSearchAttributeEscape, BuildIdSearchAttributeDelimiter),
-		)
-	}
-	return ""
+func PinnedBuildIdSearchAttribute(version string) string {
+	return fmt.Sprintf("%s%s%s",
+		BuildIdSearchAttributePrefixPinned,
+		BuildIdSearchAttributeDelimiter,
+		version,
+	)
 }
 
 // AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID
