@@ -26,7 +26,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sync/atomic"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
@@ -140,7 +139,7 @@ func ClientProviderFactory(
 			httpCaller = func(r *http.Request) (*http.Response, error) {
 				r.Header.Set(NexusCallbackSourceHeader, clusterInfo.ClusterID)
 				resp, callErr := httpClient.Do(r)
-				setFailureSourceOnContext(ctx, resp)
+				commonnexus.SetFailureSourceOnContext(ctx, resp)
 				return resp, callErr
 			}
 		}
@@ -157,24 +156,4 @@ func ClientProviderFactory(
 
 func CallbackTokenGeneratorProvider() *commonnexus.CallbackTokenGenerator {
 	return commonnexus.NewCallbackTokenGenerator()
-}
-
-func setFailureSourceOnContext(ctx context.Context, response *http.Response) {
-	if response == nil || response.Header == nil {
-		return
-	}
-
-	failureSourceHeader := response.Header.Get(commonnexus.FailureSourceHeaderName)
-	if failureSourceHeader == "" {
-		return
-	}
-
-	failureSourceContext := ctx.Value(commonnexus.FailureSourceContextKey)
-	if failureSourceContext == nil {
-		return
-	}
-
-	if val, ok := failureSourceContext.(*atomic.Value); ok {
-		val.Store(failureSourceHeader)
-	}
 }
