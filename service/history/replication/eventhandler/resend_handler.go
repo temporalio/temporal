@@ -276,10 +276,7 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 			nil,
 			"",
 		)
-		if errors.Is(err, consts.ErrDuplicate) {
-			return nil
-		}
-		if err != nil {
+		if err != nil && !errors.Is(err, consts.ErrDuplicate) {
 			r.logger.Error("failed to replicate events",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(workflowID),

@@ -1510,7 +1510,7 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 	}
 
 	err2 := engine.ReplicateEventsV2(ctx, request)
-	if err2 != nil {
+	if err2 != nil && errors.Is(err2, consts.ErrDuplicate) {
 		return nil, h.convertError(err2)
 	}
 
