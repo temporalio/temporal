@@ -98,7 +98,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 
 	ns := s.createGlobalNamespace()
 	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
 		Namespace: ns,
 		Logger:    log.NewSdkLogger(s.logger),
 	})
@@ -138,7 +138,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		},
 		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
 	}
-	pauseResp, err := s.cluster1.Host().FrontendClient().PauseActivity(ctx, pauseRequest)
+	pauseResp, err := s.clusters[0].Host().FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(pauseResp)
 
@@ -165,7 +165,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval", "retry_policy.maximum_attempts"}},
 	}
-	respUpdate, err := s.cluster1.Host().FrontendClient().UpdateActivityOptions(ctx, updateRequest)
+	respUpdate, err := s.clusters[0].Host().FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(respUpdate)
 
@@ -190,7 +190,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		Activity:   &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
 		KeepPaused: true,
 	}
-	resetResp, err := s.cluster1.Host().FrontendClient().ResetActivity(ctx, resetRequest)
+	resetResp, err := s.clusters[0].Host().FrontendClient().ResetActivity(ctx, resetRequest)
 	s.NoError(err)
 	s.NotNil(resetResp)
 
@@ -211,11 +211,11 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	worker1.Stop()
 
 	// failover to standby cluster
-	s.failover(ns, 0, s.cluster2.ClusterName(), 2)
+	s.failover(ns, 0, s.clusters[1].ClusterName(), 2)
 
 	// get standby client
 	standbyClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
+		HostPort:  s.clusters[1].Host().FrontendGRPCAddress(),
 		Namespace: ns,
 	})
 	s.NoError(err)
@@ -252,7 +252,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		},
 		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
 	}
-	unpauseResp, err := s.cluster2.Host().FrontendClient().UnpauseActivity(ctx, unpauseRequest)
+	unpauseResp, err := s.clusters[1].Host().FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
 

@@ -181,8 +181,8 @@ func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.Can
 	s.testsByNamespaceName[ns] = &t
 	s.testMapLock.Unlock()
 
-	t.cluster1 = t.newHrsuTestCluster(ns, s.cluster1)
-	t.cluster2 = t.newHrsuTestCluster(ns, s.cluster2)
+	t.cluster1 = t.newHrsuTestCluster(ns, s.clusters[0])
+	t.cluster2 = t.newHrsuTestCluster(ns, s.clusters[1])
 	t.registerMultiRegionNamespace(ctx)
 	return &t, ctx, cancel
 }
@@ -632,9 +632,9 @@ func (t *hrsuTest) enterSplitBrainStateAndCompletedUpdatesInBothClusters(ctx con
 
 // TODO (alex): replace this with t.s.failover()
 func (t *hrsuTest) failover1To2(ctx context.Context) {
-	t.s.Equal([]string{t.s.cluster1.ClusterName(), t.s.cluster1.ClusterName()}, t.getActiveClusters(ctx))
-	t.cluster1.setActive(ctx, t.s.cluster2.ClusterName())
-	t.s.Equal([]string{t.s.cluster2.ClusterName(), t.s.cluster1.ClusterName()}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[0].ClusterName()}, t.getActiveClusters(ctx))
+	t.cluster1.setActive(ctx, t.s.clusters[1].ClusterName())
+	t.s.Equal([]string{t.s.clusters[1].ClusterName(), t.s.clusters[0].ClusterName()}, t.getActiveClusters(ctx))
 
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
@@ -642,13 +642,13 @@ func (t *hrsuTest) failover1To2(ctx context.Context) {
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
-	t.s.Equal([]string{t.s.cluster2.ClusterName(), t.s.cluster2.ClusterName()}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[1].ClusterName(), t.s.clusters[1].ClusterName()}, t.getActiveClusters(ctx))
 }
 
 func (t *hrsuTest) failover2To1(ctx context.Context) {
-	t.s.Equal([]string{t.s.cluster2.ClusterName(), t.s.cluster2.ClusterName()}, t.getActiveClusters(ctx))
-	t.cluster1.setActive(ctx, t.s.cluster1.ClusterName())
-	t.s.Equal([]string{t.s.cluster1.ClusterName(), t.s.cluster2.ClusterName()}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[1].ClusterName(), t.s.clusters[1].ClusterName()}, t.getActiveClusters(ctx))
+	t.cluster1.setActive(ctx, t.s.clusters[0].ClusterName())
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[1].ClusterName()}, t.getActiveClusters(ctx))
 
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
@@ -656,15 +656,15 @@ func (t *hrsuTest) failover2To1(ctx context.Context) {
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
-	t.s.Equal([]string{t.s.cluster1.ClusterName(), t.s.cluster1.ClusterName()}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[0].ClusterName()}, t.getActiveClusters(ctx))
 }
 
 func (t *hrsuTest) enterSplitBrainState(ctx context.Context) {
 	// We now create a "split brain" state by setting cluster2 to active. We do not execute namespace replication tasks
 	// afterward, so cluster1 does not learn of the change.
-	t.s.Equal([]string{t.s.cluster1.ClusterName(), t.s.cluster1.ClusterName()}, t.getActiveClusters(ctx))
-	t.cluster2.setActive(ctx, t.s.cluster2.ClusterName())
-	t.s.Equal([]string{t.s.cluster1.ClusterName(), t.s.cluster2.ClusterName()}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[0].ClusterName()}, t.getActiveClusters(ctx))
+	t.cluster2.setActive(ctx, t.s.clusters[1].ClusterName())
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[1].ClusterName()}, t.getActiveClusters(ctx))
 
 	// TODO (dan) Why do the tests still pass with this? Does this not remove the split-brain?
 	// s.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_UPDATE, 2)
@@ -762,9 +762,9 @@ func (task *hrsuTestExecutableTask) Execute() error {
 		return fmt.Errorf("failed to retrieve test for workflow %s", task.workflowId())
 	}
 	switch task.sourceCluster {
-	case task.s.cluster1.ClusterName():
+	case task.s.clusters[0].ClusterName():
 		test.cluster2.inboundHistoryReplicationTasks <- task
-	case task.s.cluster2.ClusterName():
+	case task.s.clusters[1].ClusterName():
 		test.cluster1.inboundHistoryReplicationTasks <- task
 	default:
 		task.s.FailNow(fmt.Sprintf("invalid cluster name: %s", task.sourceCluster))
@@ -995,7 +995,7 @@ func (t *hrsuTest) registerMultiRegionNamespace(ctx context.Context) {
 	_, err := t.cluster1.testCluster.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        t.tv.NamespaceName().String(),
 		Clusters:                         t.s.clusterReplicationConfig(),
-		ActiveClusterName:                t.s.cluster1.ClusterName(),
+		ActiveClusterName:                t.s.clusters[0].ClusterName(),
 		IsGlobalNamespace:                true,                           // Needed so that the namespace is replicated
 		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24), // Required parameter
 	})
@@ -1003,7 +1003,7 @@ func (t *hrsuTest) registerMultiRegionNamespace(ctx context.Context) {
 	// Namespace event replication tasks are being captured; we need to execute the pending ones now to propagate the
 	// new namespace to cluster 2.
 	t.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_CREATE)
-	t.s.Equal([]string{t.s.cluster1.ClusterName(), t.s.cluster1.ClusterName()}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[0].ClusterName()}, t.getActiveClusters(ctx))
 }
 
 func (t *hrsuTest) getActiveClusters(ctx context.Context) []string {

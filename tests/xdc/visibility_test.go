@@ -106,11 +106,11 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 					},
 				}
 			},
-			[]*testcore.TestCluster{s.cluster1, s.cluster2}, 0)
+			s.clusters, 0)
 	}
 
-	client1 := s.cluster1.FrontendClient() // active
-	client2 := s.cluster2.FrontendClient() // standby
+	client0 := s.clusters[0].FrontendClient() // active
+	client1 := s.clusters[1].FrontendClient() // standby
 
 	// start a workflow
 	id := "xdc-search-attr-test-" + uuid.New()
@@ -137,7 +137,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 		SearchAttributes:    searchAttr,
 	}
 	startTime := time.Now().UTC()
-	we, err := client1.StartWorkflowExecution(testcore.NewContext(), startReq)
+	we, err := client0.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
@@ -175,11 +175,11 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	}
 
 	// List workflow in active
-	engine1 := s.cluster1.FrontendClient()
+	engine1 := s.clusters[0].FrontendClient()
 	testListResult(engine1, saListRequest)
 
 	// List workflow in standby
-	engine2 := s.cluster2.FrontendClient()
+	engine2 := s.clusters[1].FrontendClient()
 	testListResult(engine2, saListRequest)
 
 	// upsert search attributes
@@ -194,7 +194,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	}
 
 	poller := testcore.TaskPoller{
-		Client:              client1,
+		Client:              client0,
 		Namespace:           ns,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
@@ -263,7 +263,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
 	terminateDetails := payloads.EncodeString("terminate details")
-	_, err = client1.TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = client0.TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: ns,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -290,7 +290,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
   5 v1 UpsertWorkflowSearchAttributes
   6 v1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`,
 		func() *historypb.History {
-			historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			historyResponse, err := client0.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			s.NoError(err)
 			return historyResponse.History
 		}, 1*time.Second, 100*time.Millisecond)
@@ -304,7 +304,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
   5 v1 UpsertWorkflowSearchAttributes
   6 v1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`,
 		func() *historypb.History {
-			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			if err != nil {
 				return nil
 			}
