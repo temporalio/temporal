@@ -405,6 +405,27 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Equal(t, 1, len(events))
 			},
 		},
+		{
+			name:            "token to long",
+			requestTimeout:  time.Hour,
+			destinationDown: false,
+			onStartOperation: func(
+				ctx context.Context,
+				service, operation string,
+				input *nexus.LazyValue,
+				options nexus.StartOperationOptions,
+			) (nexus.HandlerStartOperationResult[any], error) {
+				return &nexus.HandlerStartOperationResultAsync{OperationToken: "12345678901"}, nil
+			},
+			expectedMetricOutcome: "pending",
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
+				require.Equal(t, 1, len(events))
+				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
+				require.NotNil(t, failure.GetApplicationFailureInfo())
+				require.Equal(t, "invalid operation token: length exceeds allowed limit (11/10)", failure.Message)
+			},
+		},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -490,11 +511,12 @@ func TestProcessInvocationTask(t *testing.T) {
 			}
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
-					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
-					MinOperationTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
-					PayloadSizeLimit:    dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
-					CallbackURLTemplate: dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
+					Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
+					RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
+					MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+					MinOperationTimeout:     dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+					PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
+					CallbackURLTemplate:     dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
