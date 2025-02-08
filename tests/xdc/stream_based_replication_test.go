@@ -170,7 +170,7 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 		versions = []int64{2, 12, 22, 32, 2, 1, 5, 8, 9}
 	}
 
-	// let's import some events into cluster 1
+	// let's import some events into cluster0
 	historyClient0 := s.clusters[0].HistoryClient()
 	executions := s.importTestEvents(historyClient0, namespace.Name(s.namespaceName), namespace.ID(s.namespaceID), versions)
 
@@ -436,7 +436,8 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		}}, nil
 	}
 
-	poller := &testcore.TaskPoller{
+	// nolint
+	poller0 := &testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           ns,
 		TaskQueue:           taskQueue,
@@ -446,8 +447,8 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		T:                   s.T(),
 	}
 
-	// Process start event in cluster 1
-	_, err = poller.PollAndProcessWorkflowTask()
+	// Process start event in cluster0
+	_, err = poller0.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	resetResp, err := client0.ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
@@ -462,7 +463,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	})
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask()
+	_, err = poller0.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	_, err = client0.DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
@@ -572,7 +573,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		}}, nil
 	}
 
-	poller := &testcore.TaskPoller{
+	// nolint
+	poller0 := &testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           ns,
 		TaskQueue:           taskQueue,
@@ -582,8 +584,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		T:                   s.T(),
 	}
 
-	// Process start event in cluster 1
-	_, err = poller.PollAndProcessWorkflowTask()
+	// Process start event in cluster0
+	_, err = poller0.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	resetResp1, err := client0.ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
@@ -598,7 +600,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	})
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask()
+	_, err = poller0.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	resetResp2, err := client0.ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
@@ -613,7 +615,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	})
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask()
+	_, err = poller0.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
 	s.Eventually(func() bool {

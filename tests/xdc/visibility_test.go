@@ -193,7 +193,8 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 		return []*commandpb.Command{upsertCommand}, nil
 	}
 
-	poller := testcore.TaskPoller{
+	// nolint
+	poller0 := testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           ns,
 		TaskQueue:           taskQueue,
@@ -203,7 +204,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 		T:                   s.T(),
 	}
 
-	_, err = poller.PollAndProcessWorkflowTask()
+	_, err = poller0.PollAndProcessWorkflowTask()
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

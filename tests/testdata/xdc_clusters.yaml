@@ -1,7 +1,6 @@
 - clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
-  clusterno: 0
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
@@ -16,7 +15,6 @@
 - clustermetadata:
     enableGlobalNamespace: true
     failoverVersionIncrement: 10
-  clusterno: 1
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1

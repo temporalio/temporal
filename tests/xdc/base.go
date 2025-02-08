@@ -100,12 +100,6 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 
 	params := testcore.ApplyTestClusterOptions(opts)
 
-	suffix := common.GenerateRandomString(5)
-	clusterNames := []string{
-		"active_" + suffix,
-		"standby_" + suffix,
-	}
-
 	if s.logger == nil {
 		s.logger = log.NewTestLogger()
 	}
@@ -128,24 +122,28 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 
 	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
+	s.Require().Len(clusterConfigs, 2)
+	s.clusters = make([]*testcore.TestCluster, len(clusterConfigs))
+	suffix := common.GenerateRandomString(5)
+
 	testClusterFactory := testcore.NewTestClusterFactory()
-	for i, config := range clusterConfigs {
-		config.DynamicConfigOverrides = s.dynamicConfigOverrides
-		clusterConfigs[i].ClusterMetadata.MasterClusterName = clusterNames[i]
-		clusterConfigs[i].ClusterMetadata.CurrentClusterName = clusterNames[i]
-		clusterConfigs[i].ClusterMetadata.EnableGlobalNamespace = true
-		clusterConfigs[i].Persistence.DBName = "func_tests_" + clusterNames[i]
-		clusterConfigs[i].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
-			clusterNames[i]: cluster.ClusterInformation{
+	for clusterIndex, clusterName := range []string{"active_" + suffix, "standby_" + suffix} {
+		clusterConfigs[clusterIndex].DynamicConfigOverrides = s.dynamicConfigOverrides
+		clusterConfigs[clusterIndex].ClusterMetadata.MasterClusterName = clusterName
+		clusterConfigs[clusterIndex].ClusterMetadata.CurrentClusterName = clusterName
+		clusterConfigs[clusterIndex].ClusterMetadata.EnableGlobalNamespace = true
+		clusterConfigs[clusterIndex].Persistence.DBName = "func_tests_" + clusterName
+		clusterConfigs[clusterIndex].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
+			clusterName: {
 				Enabled:                true,
-				InitialFailoverVersion: int64(i + 1),
+				InitialFailoverVersion: int64(clusterIndex + 1),
 				// RPCAddress and HTTPAddress will be filled in
 			},
 		}
-		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
-		clusterConfigs[i].EnableMetricsCapture = true
+		clusterConfigs[clusterIndex].ServiceFxOptions = params.ServiceOptions
+		clusterConfigs[clusterIndex].EnableMetricsCapture = true
 
-		s.clusters[i], err = testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterNames[0])))
+		s.clusters[clusterIndex], err = testClusterFactory.NewCluster(s.T(), clusterConfigs[clusterIndex], log.With(s.logger, tag.ClusterName(clusterName)))
 		s.Require().NoError(err)
 	}
 
