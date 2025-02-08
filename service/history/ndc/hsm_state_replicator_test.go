@@ -24,7 +24,6 @@ package ndc
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/pborman/uuid"
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/shard"
@@ -197,7 +197,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_Diverge_LocalEventVersionLarger() 
 			},
 		},
 	})
-	s.NoError(err)
+	s.ErrorIs(err, consts.ErrDuplicate)
 }
 
 func (s *hsmStateReplicatorSuite) TestSyncHSM_Diverge_IncomingEventVersionLarger() {
@@ -359,7 +359,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateStale() {
 			},
 		},
 	})
-	s.NoError(err)
+	s.ErrorIs(err, consts.ErrDuplicate)
 }
 
 func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionStale() {
@@ -398,7 +398,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionStale() {
 			},
 		},
 	})
-	s.NoError(err)
+	s.ErrorIs(err, consts.ErrDuplicate)
 }
 
 func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionedTransitionStale() {
@@ -438,7 +438,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionedTransit
 			},
 		},
 	})
-	s.NoError(err)
+	s.ErrorIs(err, consts.ErrDuplicate)
 }
 
 func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionNewer() {
@@ -728,7 +728,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 	testCases := []struct {
 		name           string
 		versionHistory *historyspb.VersionHistory
-		expectError    bool
+		expectedError  error
 	}{
 		{
 			name: "local version higher - ignore missing state machine",
@@ -738,7 +738,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 					{EventId: 102, Version: baseVersion - 50},
 				},
 			},
-			expectError: false,
+			expectedError: consts.ErrDuplicate,
 		},
 		{
 			name: "incoming version higher - return notFoundErr",
@@ -748,7 +748,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 					{EventId: 102, Version: baseVersion},
 				},
 			},
-			expectError: true,
+			expectedError: hsm.ErrStateMachineNotFound,
 		},
 	}
 
@@ -780,9 +780,8 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 				},
 			})
 
-			if tc.expectError {
-				s.Error(err)
-				s.True(errors.Is(err, hsm.ErrStateMachineNotFound), "expected ErrStateMachineNotFound error")
+			if tc.expectedError != nil {
+				s.ErrorIs(err, tc.expectedError)
 			} else {
 				s.NoError(err)
 			}

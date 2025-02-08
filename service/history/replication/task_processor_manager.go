@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -131,7 +132,7 @@ func NewTaskProcessorManager(
 					nil,
 					"",
 				)
-				if errors.Is(err, ErrDuplicatedReplicationRequest) {
+				if errors.Is(err, consts.ErrDuplicate) {
 					return nil
 				}
 				return err

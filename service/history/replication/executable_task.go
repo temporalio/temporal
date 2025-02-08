@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -76,8 +77,7 @@ var (
 			WithMaximumInterval(5 * time.Second).
 			WithMaximumAttempts(80).
 			WithExpirationInterval(10 * time.Minute)
-	ErrResendAttemptExceeded        = serviceerror.NewInternal("resend history attempts exceeded")
-	ErrDuplicatedReplicationRequest = errors.New("duplicated replication task")
+	ErrResendAttemptExceeded = serviceerror.NewInternal("resend history attempts exceeded")
 )
 
 type (
@@ -308,6 +308,10 @@ func (e *ExecutableTaskImpl) MarkTaskDuplicated() {
 func (e *ExecutableTaskImpl) emitFinishMetrics(
 	now time.Time,
 ) {
+	if e.isDuplicated {
+		metrics.ReplicationDuplicatedTaskCount.With(e.MetricsHandler).Record(1)
+		return
+	}
 	nsTag := metrics.NamespaceUnknownTag()
 	item := e.namespace.Load()
 	if item != nil {
@@ -318,21 +322,20 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
 	)
-	// replication lag is only meaningful for non-low priority tasks as for low priority task, we may delay processing
-	if e.taskPriority != enumsspb.TASK_PRIORITY_LOW {
-		metrics.ReplicationLatency.With(e.MetricsHandler).Record(
-			now.Sub(e.taskCreationTime),
-			metrics.OperationTag(e.metricsTag),
-			nsTag,
-			metrics.SourceClusterTag(e.sourceClusterName),
-		)
-		metrics.ReplicationTaskTransmissionLatency.With(e.MetricsHandler).Record(
-			e.taskReceivedTime.Sub(e.taskCreationTime),
-			metrics.OperationTag(e.metricsTag),
-			nsTag,
-			metrics.SourceClusterTag(e.sourceClusterName),
-		)
-	}
+
+	metrics.ReplicationLatency.With(e.MetricsHandler).Record(
+		now.Sub(e.taskCreationTime),
+		metrics.OperationTag(e.metricsTag),
+		nsTag,
+		metrics.SourceClusterTag(e.sourceClusterName),
+	)
+	metrics.ReplicationTaskTransmissionLatency.With(e.MetricsHandler).Record(
+		e.taskReceivedTime.Sub(e.taskCreationTime),
+		metrics.OperationTag(e.metricsTag),
+		nsTag,
+		metrics.SourceClusterTag(e.sourceClusterName),
+	)
+
 	// TODO consider emit attempt metrics
 }
 
@@ -705,7 +708,7 @@ func (e *ExecutableTaskImpl) SyncState(
 		return false, err
 	}
 	err = engine.ReplicateVersionedTransition(ctx, resp.VersionedTransitionArtifact, e.SourceClusterName())
-	if err == nil || errors.Is(err, ErrDuplicatedReplicationRequest) {
+	if err == nil || errors.Is(err, consts.ErrDuplicate) {
 		return true, nil
 	}
 	return false, err

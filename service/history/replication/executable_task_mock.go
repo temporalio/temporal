@@ -191,6 +191,18 @@ func (mr *MockExecutableTaskMockRecorder) MarkPoisonPill() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkPoisonPill", reflect.TypeOf((*MockExecutableTask)(nil).MarkPoisonPill))
 }
 
+// MarkTaskDuplicated mocks base method.
+func (m *MockExecutableTask) MarkTaskDuplicated() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MarkTaskDuplicated")
+}
+
+// MarkTaskDuplicated indicates an expected call of MarkTaskDuplicated.
+func (mr *MockExecutableTaskMockRecorder) MarkTaskDuplicated() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkTaskDuplicated", reflect.TypeOf((*MockExecutableTask)(nil).MarkTaskDuplicated))
+}
+
 // Nack mocks base method.
 func (m *MockExecutableTask) Nack(err error) {
 	m.ctrl.T.Helper()

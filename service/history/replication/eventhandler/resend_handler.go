@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/replication"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -276,7 +276,7 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 			nil,
 			"",
 		)
-		if errors.Is(err, replication.ErrDuplicatedReplicationRequest) {
+		if errors.Is(err, consts.ErrDuplicate) {
 			return nil
 		}
 		if err != nil {

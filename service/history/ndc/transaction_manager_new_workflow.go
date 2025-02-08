@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/service/history/replication"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -93,7 +93,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 		return err
 	}
 	if currentRunID == targetRunID {
-		return replication.ErrDuplicatedReplicationRequest
+		return consts.ErrDuplicate
 	}
 
 	if currentRunID == "" {

@@ -1543,7 +1543,7 @@ func (h *Handler) ReplicateWorkflowState(
 	}
 
 	err = engine.ReplicateWorkflowState(ctx, request)
-	if err == nil || errors.Is(err, replication.ErrDuplicatedReplicationRequest) {
+	if err == nil || errors.Is(err, consts.ErrDuplicate) {
 		return &historyservice.ReplicateWorkflowStateResponse{}, nil
 	}
 	return nil, err

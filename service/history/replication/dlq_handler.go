@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/consts"
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -149,7 +150,7 @@ func newDLQHandler(
 					nil,
 					"",
 				)
-				if errors.Is(err, ErrDuplicatedReplicationRequest) {
+				if errors.Is(err, consts.ErrDuplicate) {
 					return nil
 				}
 				return err

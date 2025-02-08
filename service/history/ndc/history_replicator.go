@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/service/history/replication"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -323,7 +323,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 		}
 		err := workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition)
 		if err == nil {
-			return replication.ErrDuplicatedReplicationRequest
+			return consts.ErrDuplicate
 		}
 	}
 
@@ -334,7 +334,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 		metrics.DuplicateReplicationEventsCounter.With(r.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.BackfillHistoryEventsTaskScope))
-		return replication.ErrDuplicatedReplicationRequest
+		return consts.ErrDuplicate
 	}
 
 	if mutableState.GetExecutionInfo().GetVersionHistories().GetCurrentVersionHistoryIndex() == prepareHistoryBranchOut.BranchIndex {
@@ -493,7 +493,7 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 				metrics.DuplicateReplicationEventsCounter.With(r.metricsHandler).Record(
 					1,
 					metrics.OperationTag(metrics.ReplicateHistoryEventsScope))
-				return replication.ErrDuplicatedReplicationRequest
+				return consts.ErrDuplicate
 			}
 			err = task.skipDuplicatedEvents(prepareHistoryBranchOut.EventsApplyIndex)
 			if err != nil {
