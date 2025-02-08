@@ -4977,8 +4977,8 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 
 	if r := request.GetResponse().GetStartOperation().GetAsyncSuccess(); r != nil {
 		operationToken := r.OperationToken
-		if operationToken == "" && r.OperationId != "" {
-			operationToken = r.OperationId
+		if operationToken == "" && r.OperationId != "" { //nolint:staticcheck // SA1019 this field might be by old clients.
+			operationToken = r.OperationId //nolint:staticcheck // SA1019 this field might be set by old clients.
 		}
 		if operationToken == "" {
 			return nil, serviceerror.NewInvalidArgument("missing opration token in response")
