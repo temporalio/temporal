@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -130,20 +131,20 @@ var (
 	versionOverrideMask = &fieldmaskpb.FieldMask{Paths: []string{"versioning_behavior_override"}}
 	pinnedOptions1      = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deployment1,
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment1)),
 		},
 	}
 	pinnedOptions2 = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deployment2,
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment2)),
 		},
 	}
 	pinnedOptions3 = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: deployment3,
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment3)),
 		},
 	}
 	unpinnedOptions = &workflowpb.WorkflowExecutionOptions{
@@ -339,6 +340,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		"",
 		worker_versioning.StampFromBuildId("b2"),
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		nil,
 		false,
 	)
 	s.NoError(err)
@@ -362,6 +364,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		"",
 		worker_versioning.StampFromBuildId("b2"),
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b0"},
+		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -382,6 +385,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
 		tq,
 		"",
 		worker_versioning.StampFromBuildId("b2"),
+		nil,
 		nil,
 		false,
 	)
@@ -404,6 +408,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
 		"",
 		nil,
 		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -425,6 +430,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
 		"",
 		sticky,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -452,6 +458,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_StickyInvalid() {
 		"",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -472,6 +479,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 		"",
 		sticky,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -504,6 +512,7 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 		tq,
 		"",
 		worker_versioning.StampFromBuildId("b1"),
+		nil,
 		nil,
 		false,
 	)
@@ -538,25 +547,29 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	ms.executionInfo.VersioningInfo = versioningInfo
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
+	dv1 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment1))
+	dv2 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment2))
+	dv3 := worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment3))
+
 	// ------- Without override, without transition
 
 	// deployment is set but behavior is not -> unversioned
-	versioningInfo.Deployment = deployment1
+	versioningInfo.Version = dv1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	versioningInfo.Deployment = deployment1
+	versioningInfo.Version = dv1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_PINNED)
 
-	versioningInfo.Deployment = deployment1
+	versioningInfo.Version = dv1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
 	// ------- With override, without transition
 
 	// deployment and behavior are not set, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
-	versioningInfo.Deployment = nil
+	versioningInfo.Version = ""
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 		Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
@@ -564,7 +577,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
 	// deployment is set, behavior is not, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
-	versioningInfo.Deployment = deployment1
+	versioningInfo.Version = dv1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 		Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
@@ -572,65 +585,65 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
 	// worker says PINNED, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
-	versioningInfo.Deployment = deployment1
+	versioningInfo.Version = dv1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
 		Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		// Technically, API should not allow deployment to be set for AUTO_UPGRADE override, but we
 		// test it this way to make sure it is ignored.
-		Deployment: deployment2,
+		PinnedVersion: dv2,
 	}
 	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
 	// deployment and behavior are not set, but override behavior is PINNED -> PINNED
-	versioningInfo.Deployment = nil
+	versioningInfo.Version = ""
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-		Deployment: deployment2,
+		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+		PinnedVersion: dv2,
 	}
 	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
 
 	// deployment is set, behavior is not, but override behavior is PINNED --> PINNED
-	versioningInfo.Deployment = deployment1
+	versioningInfo.Version = dv1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-		Deployment: deployment2,
+		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+		PinnedVersion: dv2,
 	}
 	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
 
 	// worker says AUTO_UPGRADE, but override behavior is PINNED --> PINNED
-	versioningInfo.Deployment = deployment1
+	versioningInfo.Version = dv1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-		Deployment: deployment2,
+		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+		PinnedVersion: dv2,
 	}
 	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
 
 	// ------- With transition
 
-	versioningInfo.Deployment = deployment1
+	versioningInfo.Version = dv1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-		Deployment: deployment2,
+		Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		PinnedVersion: dv2,
 	}
-	versioningInfo.DeploymentTransition = &workflowpb.DeploymentTransition{
-		Deployment: deployment3,
+	versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
+		Version: dv3,
 	}
 	s.verifyEffectiveDeployment(deployment3, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
-	// Transitioning to unversioned
-	versioningInfo.Deployment = deployment1
+	versioningInfo.Version = dv1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
-		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-		Deployment: deployment2,
+		// Transitioning to unversioned
+		Behavior:      enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		PinnedVersion: dv2,
 	}
-	versioningInfo.DeploymentTransition = &workflowpb.DeploymentTransition{
-		Deployment: nil,
+	versioningInfo.VersionTransition = &workflowpb.DeploymentVersionTransition{
+		Version: "",
 	}
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 }
@@ -684,6 +697,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		"",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	s.NoError(err)
@@ -733,6 +747,7 @@ func (s *mutableStateSuite) TestUnpinnedTransition() {
 		"",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	s.NoError(err)
@@ -769,6 +784,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
 		"",
 		tq,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -812,6 +828,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
 		"",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	s.NoError(err)
@@ -838,8 +855,16 @@ func (s *mutableStateSuite) verifyOverrides(
 	versioningInfo := s.mutableState.GetExecutionInfo().GetVersioningInfo()
 	s.Equal(expectedBehavior, versioningInfo.GetBehavior())
 	s.Equal(expectedBehaviorOverride, versioningInfo.GetVersioningOverride().GetBehavior())
-	s.Equal(expectedDeployment, versioningInfo.GetDeployment())
-	s.Equal(expectedDeploymentOverride, versioningInfo.GetVersioningOverride().GetDeployment())
+	expectedVersion := ""
+	if expectedDeployment != nil {
+		expectedVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(expectedDeployment))
+	}
+	s.Equal(expectedVersion, versioningInfo.GetVersion())
+	expectedPinnedVersion := ""
+	if expectedDeploymentOverride != nil {
+		expectedPinnedVersion = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(expectedDeploymentOverride))
+	}
+	s.Equal(expectedPinnedVersion, versioningInfo.GetVersioningOverride().GetPinnedVersion())
 }
 
 func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmptyOptions() {
@@ -849,7 +874,7 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set pinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride(), false)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride(), false, "", nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -862,7 +887,7 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment2)
 
 	// unset pinned override with boolean
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -882,7 +907,7 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set unpinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride(), false)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride(), false, "", nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -895,7 +920,7 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, nil)
 
 	// unset pinned override with empty
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -914,7 +939,7 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -940,7 +965,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride(), false, "", nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -969,6 +994,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		"",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	s.NoError(err)
@@ -989,7 +1015,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment2, deployment3)
 
 	// now we unset the override and check that the base deployment/behavior is in effect
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(nil, true, "", nil, nil)
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEventAttr(
@@ -1263,6 +1289,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		uuid.New(),
 		&taskqueuepb.TaskQueue{Name: f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(5).RpcName()},
 		"random identity",
+		nil,
 		nil,
 		nil,
 		false,
@@ -2134,7 +2161,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.Equal(activityFailure.GetMessage(), activityInfo.RetryLastFailure.Cause.GetMessage())
 }
 
-func (s *mutableStateSuite) TestUpdateBuildIdsSearchAttribute() {
+func (s *mutableStateSuite) TestupdateBuildIdsAndDeploymentSearchAttributes() {
 	versioned := func(buildId string) *commonpb.WorkerVersionStamp {
 		return &commonpb.WorkerVersionStamp{BuildId: buildId, UseVersioning: true}
 	}
@@ -2171,25 +2198,25 @@ func (s *mutableStateSuite) TestUpdateBuildIdsSearchAttribute() {
 			s.NoError(err)
 
 			// Max 0
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 0)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 0)
 			s.NoError(err)
 			s.Equal([]string{}, s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
 			// Add the same build ID
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.1"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.1"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1"), s.getBuildIdsFromMutableState())
 
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.2"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.2"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.1", "0.2"), s.getBuildIdsFromMutableState())
 
 			// Limit applies
-			err = s.mutableState.updateBuildIdsSearchAttribute(c.stamp("0.3"), 40)
+			err = s.mutableState.updateBuildIdsAndDeploymentSearchAttributes(c.stamp("0.3"), 40)
 			s.NoError(err)
 			s.Equal(c.searchAttribute("0.2", "0.3"), s.getBuildIdsFromMutableState())
 		})
@@ -2492,9 +2519,9 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 			var expectedTransitionHistory []*persistencespb.VersionedTransition
 			if s.mutableState.executionInfo.TransitionHistory == nil {
-				expectedTransitionHistory = CopyVersionedTransitions(s.mutableState.executionInfo.PreviousTransitionHistory)
+				expectedTransitionHistory = transitionhistory.CopyVersionedTransitions(s.mutableState.executionInfo.PreviousTransitionHistory)
 			} else {
-				expectedTransitionHistory = CopyVersionedTransitions(s.mutableState.executionInfo.TransitionHistory)
+				expectedTransitionHistory = transitionhistory.CopyVersionedTransitions(s.mutableState.executionInfo.TransitionHistory)
 			}
 
 			if tc.versionedTransitionUpdated {
@@ -2556,8 +2583,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingActivityInfos(), 2)
 				for _, ai := range ms.GetPendingActivityInfos() {
@@ -2585,8 +2611,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingTimerInfos(), 2)
 				for _, ti := range ms.GetPendingTimerInfos() {
@@ -2613,8 +2638,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingChildExecutionInfos(), 2)
 				for _, ci := range ms.GetPendingChildExecutionInfos() {
@@ -2641,8 +2665,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingRequestCancelExternalInfos(), 2)
 				for _, ci := range ms.GetPendingRequestCancelExternalInfos() {
@@ -2674,8 +2697,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 
 				s.Len(ms.GetPendingSignalExternalInfos(), 2)
 				for _, ci := range ms.GetPendingSignalExternalInfos() {
@@ -2695,9 +2717,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().SignalRequestIdsLastUpdateVersionedTransition)
 			},
 		},
@@ -2716,9 +2736,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				s.Len(ms.GetExecutionInfo().UpdateInfos, 1)
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().UpdateInfos[updateID].LastUpdateVersionedTransition)
 			},
@@ -2744,9 +2762,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition)
 			},
 		},
@@ -2763,9 +2779,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionInfo().VisibilityLastUpdateVersionedTransition)
 			},
 		},
@@ -2783,9 +2797,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				protorequire.ProtoEqual(s.T(), currentVersionedTransition, ms.GetExecutionState().LastUpdateVersionedTransition)
 			},
 		},
@@ -2798,9 +2810,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				err = ms.HSM().Walk(func(n *hsm.Node) error {
 					if n.Parent == nil {
 						// skip root which is entire mutable state
@@ -2821,9 +2831,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				_, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
 				s.NoError(err)
 
-				currentTransitionHistory := ms.GetExecutionInfo().TransitionHistory
-				currentVersionedTransition := currentTransitionHistory[len(currentTransitionHistory)-1]
-
+				currentVersionedTransition := ms.CurrentVersionedTransition()
 				err = ms.HSM().Walk(func(n *hsm.Node) error {
 					if n.Parent == nil {
 						// skip root which is entire mutable state
@@ -3683,10 +3691,10 @@ func (s *mutableStateSuite) TestVersionedTransitionInDB() {
 	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
 	s.NoError(err)
 
-	s.True(proto.Equal(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1], ms.versionedTransitionInDB))
+	s.True(proto.Equal(ms.CurrentVersionedTransition(), ms.versionedTransitionInDB))
 
 	s.NoError(ms.cleanupTransaction())
-	s.True(proto.Equal(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1], ms.versionedTransitionInDB))
+	s.True(proto.Equal(ms.CurrentVersionedTransition(), ms.versionedTransitionInDB))
 
 	ms.executionInfo.TransitionHistory = nil
 	s.NoError(ms.cleanupTransaction())
@@ -3702,7 +3710,7 @@ func (s *mutableStateSuite) TestVersionedTransitionInDB() {
 
 	ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(ms.executionInfo.TransitionHistory, s.namespaceEntry.FailoverVersion())
 	s.NoError(ms.cleanupTransaction())
-	s.True(proto.Equal(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1], ms.versionedTransitionInDB))
+	s.True(proto.Equal(ms.CurrentVersionedTransition(), ms.versionedTransitionInDB))
 }
 
 func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
@@ -3833,8 +3841,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 			mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
 			s.NoError(err)
 
-			transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-			currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+			currentVersionedTransition := mutableState.CurrentVersionedTransition()
 			newVersionedTranstion := common.CloneProto(currentVersionedTransition)
 			newVersionedTranstion.TransitionCount += 1
 
@@ -3882,8 +3889,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_CapIfLargerThanL
 		},
 	}
 
-	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+	currentVersionedTransition := mutableState.CurrentVersionedTransition()
 	newVersionedTranstion := common.CloneProto(currentVersionedTransition)
 	newVersionedTranstion.TransitionCount += 1
 	signalMap := mutableState.GetPendingSignalExternalInfos()
@@ -3934,8 +3940,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEm
 		},
 	}
 
-	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+	currentVersionedTransition := mutableState.CurrentVersionedTransition()
 	newVersionedTranstion := common.CloneProto(currentVersionedTransition)
 	newVersionedTranstion.TransitionCount += 1
 
@@ -4424,7 +4429,7 @@ func (s *mutableStateSuite) TestApplyMutation() {
 	s.NoError(err)
 
 	transitionHistory := targetMS.executionInfo.TransitionHistory
-	failoverVersion := transitionHistory[len(transitionHistory)-1].NamespaceFailoverVersion
+	failoverVersion := transitionhistory.LastVersionedTransition(transitionHistory).NamespaceFailoverVersion
 	targetMS.executionInfo.TransitionHistory = UpdatedTransitionHistory(transitionHistory, failoverVersion)
 
 	// set updateXXX so LastUpdateVersionedTransition will be updated
@@ -4444,7 +4449,7 @@ func (s *mutableStateSuite) TestApplyMutation() {
 
 	tombstonesToAdd := []*persistencespb.StateMachineTombstoneBatch{
 		{
-			VersionedTransition: targetMS.currentVersionedTransition(),
+			VersionedTransition: targetMS.CurrentVersionedTransition(),
 			StateMachineTombstones: []*persistencespb.StateMachineTombstone{
 				{
 					StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{

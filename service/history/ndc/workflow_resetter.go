@@ -59,6 +59,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const (
+	maxChildrenInResetMutableState = 1000 // max number of children tracked in reset mutable state
+)
+
+var (
+	errWorkflowResetterMaxChildren = serviceerror.NewInvalidArgument(fmt.Sprintf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState))
+)
+
 type (
 	workflowResetReapplyEventsFn func(ctx context.Context, resetMutableState workflow.MutableState) error
 
@@ -180,6 +188,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				baseRebuildLastEventID+1,
 				baseNextEventID,
 				resetReapplyExcludeTypes,
+				allowResetWithPendingChildren,
 			)
 			if err != nil {
 				return err
@@ -207,6 +216,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 				baseRebuildLastEventID+1,
 				baseNextEventID,
 				resetReapplyExcludeTypes,
+				allowResetWithPendingChildren,
 			)
 			return err
 		}
@@ -525,6 +535,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			consts.IdentityHistoryService,
 			nil,
 			nil,
+			nil,
 			// skipping versioning checks because this task is not actually dispatched but will fail immediately.
 			true,
 		)
@@ -638,6 +649,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	baseRebuildNextEventID int64,
 	baseNextEventID int64,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	allowResetWithPendingChildren bool,
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -648,6 +660,11 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		// All subsequent events should be excluded from being re-applied. So, do nothing and return.
 		return lastVisitedRunID, nil
 	}
+
+	// track the child workflows initiated after reset.
+	// This will be saved in the parent workflow (in execution info) and used by the parent later to determine how to start these child workflows again.
+	childrenInitializedAfterReset := make(map[string]*persistencespb.ResetChildInfo)
+
 	// First, special handling of remaining events for base workflow
 	nextRunID, err := r.reapplyEventsFromBranch(
 		ctx,
@@ -656,6 +673,8 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		baseNextEventID,
 		baseBranchToken,
 		resetReapplyExcludeTypes,
+		allowResetWithPendingChildren,
+		childrenInitializedAfterReset,
 	)
 	switch err.(type) {
 	case nil:
@@ -721,6 +740,8 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			nextWorkflowNextEventID,
 			nextWorkflowBranchToken,
 			resetReapplyExcludeTypes,
+			allowResetWithPendingChildren,
+			childrenInitializedAfterReset,
 		)
 		switch err.(type) {
 		case nil:
@@ -733,6 +754,9 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			return "", err
 		}
 	}
+	if len(childrenInitializedAfterReset) > 0 {
+		resetMutableState.SetChildrenInitializedPostResetPoint(childrenInitializedAfterReset)
+	}
 	return lastVisitedRunID, nil
 }
 
@@ -743,6 +767,8 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 	nextEventID int64,
 	branchToken []byte,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	allowResetWithPendingChildren bool,
+	childrenInitializedAfterReset map[string]*persistencespb.ResetChildInfo,
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -767,6 +793,23 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 		lastEvents = batch.Events
 		if _, err := r.reapplyEvents(ctx, mutableState, lastEvents, resetReapplyExcludeTypes); err != nil {
 			return "", err
+		}
+		// track the child workflows initiated after reset-point
+		if allowResetWithPendingChildren {
+			for _, event := range lastEvents {
+				if event.GetEventType() == enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED {
+					attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+					// TODO: there is a possibility the childIDs constructed this way may not be unique. But the probability of that is very low.
+					// Need to figure out a better way to track these child workflows.
+					childID := fmt.Sprintf("%s:%s", attr.GetWorkflowType().Name, attr.GetWorkflowId())
+					childrenInitializedAfterReset[childID] = &persistencespb.ResetChildInfo{
+						ShouldTerminateAndStart: true,
+					}
+					if len(childrenInitializedAfterReset) > maxChildrenInResetMutableState {
+						return "", errWorkflowResetterMaxChildren
+					}
+				}
+			}
 		}
 	}
 
@@ -894,6 +937,21 @@ func reapplyEvents(
 			}
 			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent(
 				request,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+			if isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+			if _, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+				attr.GetVersioningOverride(),
+				attr.GetUnsetVersioningOverride(),
+				attr.GetAttachedRequestId(),
+				attr.GetAttachedCompletionCallbacks(),
+				event.Links,
 			); err != nil {
 				return reappliedEvents, err
 			}

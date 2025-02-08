@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -296,12 +297,12 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			if err != nil {
 				return err
 			}
-			sourceLastWriteVersion := sourceTransitionHistory[len(sourceTransitionHistory)-1].NamespaceFailoverVersion
+			sourceLastWriteVersion := transitionhistory.LastVersionedTransition(sourceTransitionHistory).NamespaceFailoverVersion
 
 			if localLastWriteVersion > sourceLastWriteVersion {
 				// local is newer, try backfill events
 				releaseFn(nil)
-				return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, sourceTransitionHistory[len(sourceTransitionHistory)-1])
+				return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 			}
 			if localLastWriteVersion < sourceLastWriteVersion ||
 				localLastHistoryItem.GetEventId() <= sourceLastHistoryItem.EventId {
@@ -311,7 +312,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		}
 
 		sourceTransitionHistory := executionInfo.TransitionHistory
-		err = workflow.TransitionHistoryStalenessCheck(localTransitionHistory, sourceTransitionHistory[len(sourceTransitionHistory)-1])
+		err = workflow.TransitionHistoryStalenessCheck(localTransitionHistory, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		switch {
 		case err == nil:
 			// verify tasks
@@ -323,7 +324,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			return r.applyMutation(ctx, namespaceID, wid, rid, wfCtx, ms, releaseFn, versionedTransition, sourceClusterName)
 		case errors.Is(err, consts.ErrStaleReference):
 			releaseFn(nil)
-			return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, sourceTransitionHistory[len(sourceTransitionHistory)-1])
+			return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		default:
 			return err
 		}
@@ -358,18 +359,19 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 			nil,
 		)
 	}
-	localTransitionHistory := workflow.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
+	localTransitionHistory := transitionhistory.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
+	localVersionedTransition := transitionhistory.LastVersionedTransition(localTransitionHistory)
 	sourceTransitionHistory := mutation.StateMutation.ExecutionInfo.TransitionHistory
 
 	// make sure mutation range is extension of local range
 	if workflow.TransitionHistoryStalenessCheck(localTransitionHistory, mutation.ExclusiveStartVersionedTransition) != nil ||
-		workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localTransitionHistory[len(localTransitionHistory)-1]) != nil {
+		workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localVersionedTransition) != nil {
 		return serviceerrors.NewSyncState(
 			fmt.Sprintf("Failed to apply mutation due to version check failed. local transition history: %v, source transition history: %v", localTransitionHistory, sourceTransitionHistory),
 			namespaceID.String(),
 			workflowID,
 			runID,
-			localTransitionHistory[len(localTransitionHistory)-1],
+			localVersionedTransition,
 			localMutableState.GetExecutionInfo().VersionHistories,
 		)
 	}
@@ -401,7 +403,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 		}
 	}
 
-	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
+	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localVersionedTransition)
 	if err != nil {
 		return err
 	}
@@ -452,10 +454,12 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	}
 	var isBranchSwitched bool
 	var localTransitionHistory []*persistencespb.VersionedTransition
+	var localVersionedTransition *persistencespb.VersionedTransition
 	if len(localMutableState.GetExecutionInfo().TransitionHistory) != 0 {
-		localTransitionHistory = workflow.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
+		localTransitionHistory = transitionhistory.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
+		localVersionedTransition = transitionhistory.LastVersionedTransition(localTransitionHistory)
 		sourceTransitionHistory := snapshot.ExecutionInfo.TransitionHistory
-		err := workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localTransitionHistory[len(localTransitionHistory)-1])
+		err := workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localVersionedTransition)
 		switch {
 		case err == nil:
 			// no branch switch
@@ -465,7 +469,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 				namespaceID.String(),
 				workflowID,
 				runID,
-				localTransitionHistory[len(localTransitionHistory)-1],
+				localVersionedTransition,
 				localMutableState.GetExecutionInfo().VersionHistories,
 			)
 		case errors.Is(err, consts.ErrStaleReference):
@@ -507,7 +511,6 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	if err != nil {
 		return err
 	}
-	localMutableState.PopTasks() // tasks are refreshed manually below
 
 	var newRunWorkflow Workflow
 	if versionedTransition.NewRunInfo != nil {
@@ -529,7 +532,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 			return err
 		}
 	} else {
-		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
+		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localVersionedTransition)
 		if err != nil {
 			return err
 		}

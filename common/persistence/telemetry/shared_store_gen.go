@@ -33,6 +33,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -65,11 +66,19 @@ func newTelemetryShardStore(
 
 // AssertShardOwnership wraps ShardStore.AssertShardOwnership.
 func (d telemetryShardStore) AssertShardOwnership(ctx context.Context, request *_sourcePersistence.AssertShardOwnershipRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ShardStore/AssertShardOwnership")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ShardStore/AssertShardOwnership",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ShardStore"),
+			attribute.Key("persistence.method").String("AssertShardOwnership"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ShardStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("AssertShardOwnership"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ShardStore.AssertShardOwnership(ctx, request)
 	if err != nil {
@@ -92,11 +101,19 @@ func (d telemetryShardStore) AssertShardOwnership(ctx context.Context, request *
 
 // GetOrCreateShard wraps ShardStore.GetOrCreateShard.
 func (d telemetryShardStore) GetOrCreateShard(ctx context.Context, request *_sourcePersistence.InternalGetOrCreateShardRequest) (ip1 *_sourcePersistence.InternalGetOrCreateShardResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ShardStore/GetOrCreateShard")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ShardStore/GetOrCreateShard",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ShardStore"),
+			attribute.Key("persistence.method").String("GetOrCreateShard"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ShardStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetOrCreateShard"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ShardStore.GetOrCreateShard(ctx, request)
 	if err != nil {
@@ -126,11 +143,19 @@ func (d telemetryShardStore) GetOrCreateShard(ctx context.Context, request *_sou
 
 // UpdateShard wraps ShardStore.UpdateShard.
 func (d telemetryShardStore) UpdateShard(ctx context.Context, request *_sourcePersistence.InternalUpdateShardRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ShardStore/UpdateShard")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ShardStore/UpdateShard",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ShardStore"),
+			attribute.Key("persistence.method").String("UpdateShard"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ShardStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("UpdateShard"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ShardStore.UpdateShard(ctx, request)
 	if err != nil {

@@ -24,6 +24,7 @@ package ndc
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/pborman/uuid"
@@ -700,6 +701,93 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowClosed(
 		},
 	})
 	s.NoError(err)
+}
+
+func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
+	const (
+		deletedMachineID = "child1"
+		initialCount     = 50
+	)
+
+	baseVersion := s.namespaceEntry.FailoverVersion()
+	persistedState := s.buildWorkflowMutableState()
+
+	// Remove the state machine to simulate deletion
+	delete(persistedState.ExecutionInfo.SubStateMachinesByType[s.stateMachineDef.Type()].MachinesById, deletedMachineID)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: s.workflowKey.NamespaceID,
+		WorkflowID:  s.workflowKey.WorkflowID,
+		RunID:       s.workflowKey.RunID,
+	}).Return(&persistence.GetWorkflowExecutionResponse{
+		State:           persistedState,
+		DBRecordVersion: 777,
+	}, nil).AnyTimes()
+
+	testCases := []struct {
+		name           string
+		versionHistory *historyspb.VersionHistory
+		expectError    bool
+	}{
+		{
+			name: "local version higher - ignore missing state machine",
+			versionHistory: &historyspb.VersionHistory{
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 50, Version: baseVersion - 100},
+					{EventId: 102, Version: baseVersion - 50},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "incoming version higher - return notFoundErr",
+			versionHistory: &historyspb.VersionHistory{
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 50, Version: baseVersion - 100},
+					{EventId: 102, Version: baseVersion},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		s.Run(tc.name, func() {
+			lastVersion := tc.versionHistory.Items[len(tc.versionHistory.Items)-1].Version
+
+			err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+				WorkflowKey:         s.workflowKey,
+				EventVersionHistory: tc.versionHistory,
+				StateMachineNode: &persistencespb.StateMachineNode{
+					Children: map[string]*persistencespb.StateMachineMap{
+						s.stateMachineDef.Type(): {
+							MachinesById: map[string]*persistencespb.StateMachineNode{
+								deletedMachineID: {
+									Data: []byte(hsmtest.State3),
+									InitialVersionedTransition: &persistencespb.VersionedTransition{
+										NamespaceFailoverVersion: lastVersion,
+									},
+									LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+										NamespaceFailoverVersion: lastVersion,
+									},
+									TransitionCount: initialCount,
+								},
+							},
+						},
+					},
+				},
+			})
+
+			if tc.expectError {
+				s.Error(err)
+				s.True(errors.Is(err, hsm.ErrStateMachineNotFound), "expected ErrStateMachineNotFound error")
+			} else {
+				s.NoError(err)
+			}
+		})
+	}
 }
 
 func (s *hsmStateReplicatorSuite) buildWorkflowMutableState() *persistencespb.WorkflowMutableState {

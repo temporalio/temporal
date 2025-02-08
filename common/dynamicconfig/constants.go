@@ -214,7 +214,7 @@ response to a StartWorkflowExecution request and skipping the trip through match
 	)
 	NamespaceCacheRefreshInterval = NewGlobalDurationSetting(
 		"system.namespaceCacheRefreshInterval",
-		10*time.Second,
+		2*time.Second,
 		`NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config`,
 	)
 	PersistenceHealthSignalMetricsEnabled = NewGlobalBoolSetting(
@@ -286,39 +286,6 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		"system.deadlock.MaxWorkersPerRoot",
 		10,
 		`How many extra goroutines can be created per root.`,
-	)
-
-	// utf-8 validation
-
-	ValidateUTF8SampleRPCRequest = NewGlobalFloatSetting(
-		"system.validateUTF8.sample.rpcRequest",
-		0.0,
-		`Sample rate of utf-8 string validation for rpc requests`,
-	)
-	ValidateUTF8SampleRPCResponse = NewGlobalFloatSetting(
-		"system.validateUTF8.sample.rpcResponse",
-		0.0,
-		`Sample rate of utf-8 string validation for rpc responses`,
-	)
-	ValidateUTF8SamplePersistence = NewGlobalFloatSetting(
-		"system.validateUTF8.sample.persistence",
-		0.0,
-		`Sample rate of utf-8 string validation for persistence [de]serialization`,
-	)
-	ValidateUTF8FailRPCRequest = NewGlobalBoolSetting(
-		"system.validateUTF8.fail.rpcRequest",
-		false,
-		`Whether to fail rpcs on utf-8 string validation errors`,
-	)
-	ValidateUTF8FailRPCResponse = NewGlobalBoolSetting(
-		"system.validateUTF8.fail.rpcResponse",
-		false,
-		`Whether to fail rpcs on utf-8 string validation errors`,
-	)
-	ValidateUTF8FailPersistence = NewGlobalBoolSetting(
-		"system.validateUTF8.fail.persistence",
-		false,
-		`Whether to fail persistence [de]serialization on utf-8 string validation errors`,
 	)
 
 	// keys for size limit
@@ -492,6 +459,18 @@ Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this
 to account for the delay in updating the build id field in visibility. Not yet supported for GetDeploymentReachability. We recommend waiting
 at least 2 minutes between changing the current deployment and calling GetDeployment, so that newly started workflow executions using the
 recently-current deployment can arrive in visibility.`,
+	)
+	VersionDrainageStatusVisibilityGracePeriod = NewNamespaceDurationSetting(
+		"matching.wv.VersionDrainageStatusVisibilityGracePeriod",
+		3*time.Minute,
+		`VersionDrainageStatusVisibilityGracePeriod is the time period for which non-current / non-ramping worker deployment versions 
+are still considered active to account for the delay in updating the build id field in visibility.`,
+	)
+	VersionDrainageStatusRefreshInterval = NewNamespaceDurationSetting(
+		"matching.wv.VersionDrainageStatusRefreshInterval",
+		3*time.Minute,
+		`VersionDrainageStatusRefreshInterval is the interval at which each draining deployment version refreshes its
+Drainage Status by querying visibility for open pinned workflows using that version.`,
 	)
 	ReachabilityTaskQueueScanLimit = NewGlobalIntSetting(
 		"limit.reachabilityTaskQueueScan",
@@ -857,11 +836,19 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
+	// [cleanup-wv-pre-release]
 	EnableDeployments = NewNamespaceBoolSetting(
 		"system.enableDeployments",
 		false,
-		`EnableDeployments enables deployments (versioning v3) in all services,
+		`EnableDeployments enables deployments (deprecated versioning v3 pre-release) in all services,
 including deployment-related RPCs in the frontend, deployment entity workflows in the worker,
+and deployment interaction in matching and history.`,
+	)
+	EnableDeploymentVersions = NewNamespaceBoolSetting(
+		"system.enableDeploymentVersions",
+		false,
+		`EnableDeploymentVersions enables deployment versions (versioning v3) in all services,
+including deployment-related RPCs in the frontend, deployment version entity workflows in the worker,
 and deployment interaction in matching and history.`,
 	)
 	EnableNexus = NewGlobalBoolSetting(
@@ -1080,14 +1067,6 @@ See DynamicRateLimitingParams comments for more details.`,
 		primitives.GetHistoryMaxPageSize,
 		`MatchingHistoryMaxPageSize is the maximum page size of history events returned on PollWorkflowTaskQueue requests`,
 	)
-	MatchingLoadUserData = NewTaskQueueBoolSetting(
-		"matching.loadUserData",
-		true,
-		`MatchingLoadUserData can be used to entirely disable loading user data from persistence (and the inter node RPCs
-that propoagate it). When turned off, features that rely on user data (e.g. worker versioning) will essentially
-be disabled. When disabled, matching will drop tasks for versioned workflows and activities to avoid breaking
-versioning semantics. Operator intervention will be required to reschedule the dropped tasks.`,
-	)
 	MatchingUpdateAckInterval = NewTaskQueueDurationSettingWithConstrainedDefault(
 		"matching.updateAckInterval",
 		[]TypedConstrainedValue[time.Duration]{
@@ -1260,6 +1239,21 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		1000,
 		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registed in a single deployment`,
 	)
+	MatchingMaxDeployments = NewNamespaceIntSetting(
+		"matching.maxDeployments",
+		100,
+		`MatchingMaxDeployments represents the maximum number of worker deployments that can be registered in a single namespace`,
+	)
+	MatchingMaxVersionsInDeployment = NewNamespaceIntSetting(
+		"matching.maxVersionsInDeployment",
+		100,
+		`MatchingMaxVersionsInDeployment represents the maximum number of versions that can be registered in a single worker deployment`,
+	)
+	MatchingMaxTaskQueuesInDeploymentVersion = NewNamespaceIntSetting(
+		"matching.maxTaskQueuesInDeploymentVersion",
+		100,
+		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registered in a single worker deployment version`,
+	)
 
 	// keys for history
 
@@ -1388,6 +1382,12 @@ This feature is still under development and should NOT be enabled.`,
 		0*time.Second,
 		`HistoryStartupMembershipJoinDelay is the duration a history instance waits
 before joining membership after starting.`,
+	)
+	HistoryAlignMembershipChange = NewGlobalDurationSetting(
+		"history.alignMembershipChange",
+		0*time.Second,
+		`HistoryAlignMembershipChange is a duration to align history's membership changes to.
+This can help reduce effects of shard movement.`,
 	)
 	HistoryShutdownDrainDuration = NewGlobalDurationSetting(
 		"history.shutdownDrainDuration",
@@ -1976,13 +1976,18 @@ archivalQueueProcessor`,
 	)
 	WorkflowExecutionMaxInFlightUpdatePayloads = NewNamespaceIntSetting(
 		"history.maxInFlightUpdatePayloads",
-		10*1024*1024,
+		20*1024*1024,
 		`WorkflowExecutionMaxInFlightUpdatePayloads is the max total payload size (in bytes) of in-flight updates (admitted but not yet completed) for any given workflow execution. Set to zero to disable.`,
 	)
 	WorkflowExecutionMaxTotalUpdates = NewNamespaceIntSetting(
 		"history.maxTotalUpdates",
 		2000,
 		`WorkflowExecutionMaxTotalUpdates is the max number of updates that any given workflow execution can receive. Set to zero to disable.`,
+	)
+	WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold = NewNamespaceFloatSetting(
+		"history.maxTotalUpdates.suggestContinueAsNewThreshold",
+		0.9,
+		`WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold is the percentage threshold of total updates that any given workflow execution can receive before suggesting to continue-as-new.`,
 	)
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(

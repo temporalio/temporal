@@ -38,6 +38,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -56,6 +57,7 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -68,12 +70,14 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/deployment"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -103,12 +107,13 @@ type (
 	pollMetadata struct {
 		ratePerSecond             *float64
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
+		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
 		forwardedFrom             string
 	}
 
-	namespaceUpdateLocks struct {
-		updateLock      sync.Mutex
-		replicationLock sync.Mutex
+	userDataUpdate struct {
+		taskQueue string
+		update    persistence.SingleTaskQueueUserDataUpdate
 	}
 
 	gaugeMetrics struct {
@@ -126,6 +131,7 @@ type (
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
 		deploymentStoreClient         deployment.DeploymentStoreClient
+		workerDeploymentClient        workerdeployment.Client
 		tokenSerializer               *tasktoken.Serializer
 		historySerializer             serialization.Serializer
 		logger                        log.Logger
@@ -162,10 +168,10 @@ type (
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
-		// Disables concurrent task queue user data updates and replication requests (due to a cassandra limitation)
-		namespaceUpdateLockMap map[string]*namespaceUpdateLocks
-		// Serializes access to the per namespace lock map
-		namespaceUpdateLockMapLock sync.Mutex
+		// Lock to serialize replication queue updates.
+		replicationLock sync.Mutex
+		// Serialize and batch user data updates by namespace.
+		userDataUpdateBatchers collection.SyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]]
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
 	}
@@ -184,6 +190,14 @@ var (
 
 	// The routing key for the single partition used to route Nexus endpoints CRUD RPCs to.
 	nexusEndpointsTablePartitionRoutingKey = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey()
+
+	// Options for batching user data updates.
+	userDataBatcherOptions = stream_batcher.BatcherOptions{
+		MaxItems: 100,
+		MinDelay: 100 * time.Millisecond,
+		MaxDelay: 500 * time.Millisecond,
+		IdleTime: time.Minute,
+	}
 )
 
 var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed implemented
@@ -193,7 +207,8 @@ func NewEngine(
 	taskManager persistence.TaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
-	deploymentStoreClient deployment.DeploymentStoreClient,
+	deploymentStoreClient deployment.DeploymentStoreClient, // [wv-cleanup-pre-release]
+	workerDeploymentClient workerdeployment.Client,
 	config *Config,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
@@ -215,6 +230,7 @@ func NewEngine(
 		matchingRawClient:             matchingRawClient,
 		deploymentStoreClient:         deploymentStoreClient,
 		tokenSerializer:               tasktoken.NewSerializer(),
+		workerDeploymentClient:        workerDeploymentClient,
 		historySerializer:             serialization.NewSerializer(),
 		logger:                        log.With(logger, tag.ComponentMatchingEngine),
 		throttledLogger:               log.With(throttledLogger, tag.ComponentMatchingEngine),
@@ -241,7 +257,7 @@ func NewEngine(
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
+		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -581,6 +597,7 @@ pollLoop:
 		}
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.GetForwardedSource(),
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
@@ -652,7 +669,7 @@ pollLoop:
 		}
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
-			switch err.(type) {
+			switch err := err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss:
 				if e.config.MatchingDropNonRetryableTasks() {
 					e.nonRetryableErrorsDropTask(task, taskQueueName, err)
@@ -700,15 +717,19 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
 				task.finish(nil, false)
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.
+				// BUSY_WORKFLOW is limited to one workflow and is okay to retry.
 				task.finish(err, false)
-				return nil, err
+				if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+					return nil, err
+				}
 			default:
 				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
@@ -815,6 +836,7 @@ pollLoop:
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.GetForwardedSource(),
 		}
 		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
@@ -842,7 +864,7 @@ pollLoop:
 		}
 		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task)
 		if err != nil {
-			switch err.(type) {
+			switch err := err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss:
 				if e.config.MatchingDropNonRetryableTasks() {
 					e.nonRetryableErrorsDropTask(task, taskQueueName, err)
@@ -890,7 +912,8 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
 				task.finish(nil, false)
@@ -904,14 +927,18 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
-					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
+					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 				)
 				task.finish(nil, false)
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.
+				// BUSY_WORKFLOW is limited to one workflow and is okay to retry.
 				task.finish(err, false)
-				return nil, err
+				if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+					return nil, err
+				}
 			default:
 				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
@@ -1067,6 +1094,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		timeSinceLastFanOut := rootPM.TimeSinceLastFanOut()
 		lastFanOutTTL := tqConfig.TaskQueueInfoByBuildIdTTL()
 
+		// TODO bug fix: We cache the same map regardless of VersionSelection or TaskQueueTypes, so if someone queries the Activity Task Queue type of this task queue name, we cache that result and return it even if the next DescribeTQ call is about the WF TQ
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		if timeSinceLastFanOut > lastFanOutTTL {
 			// collect internal info
@@ -1175,7 +1203,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
-	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus()), nil
+	return pm.LegacyDescribeTaskQueue(req.GetIncludeTaskQueueStatus())
 }
 
 func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {
@@ -1621,8 +1649,8 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	if req.Deployment == nil {
-		return nil, errMissingDeployment
+	if req.Deployment == nil && req.GetOperation() == nil {
+		return nil, errMissingDeploymentVersion
 	}
 
 	tqMgr, _, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherWrite)
@@ -1641,30 +1669,75 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		// clone the whole thing so we can just mutate
 		data = common.CloneProto(data)
 
-		// fill in enough structure so we can set/append the new deployment data
+		// fill in enough structure so that we can set/append the new deployment data
 		if data == nil {
 			data = &persistencespb.TaskQueueUserData{}
 		}
 		if data.PerType == nil {
 			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
 		}
-		if data.PerType[int32(req.TaskQueueType)] == nil {
-			data.PerType[int32(req.TaskQueueType)] = &persistencespb.TaskQueueTypeUserData{}
-		}
-		if data.PerType[int32(req.TaskQueueType)].DeploymentData == nil {
-			data.PerType[int32(req.TaskQueueType)].DeploymentData = &persistencespb.DeploymentData{}
+
+		if req.TaskQueueType != enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+			req.TaskQueueTypes = append(req.TaskQueueTypes, req.TaskQueueType)
 		}
 
-		// set/append the new data
-		deploymentData := data.PerType[int32(req.TaskQueueType)].DeploymentData
-		if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
-			deploymentData.Deployments[idx].Data = req.Data
-		} else {
-			deploymentData.Deployments = append(
-				deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
-					Deployment: req.Deployment,
-					Data:       req.Data,
-				})
+		changed := false
+		for _, t := range req.TaskQueueTypes {
+			if data.PerType[int32(t)] == nil {
+				data.PerType[int32(t)] = &persistencespb.TaskQueueTypeUserData{}
+			}
+			if data.PerType[int32(t)].DeploymentData == nil {
+				data.PerType[int32(t)].DeploymentData = &persistencespb.DeploymentData{}
+			}
+
+			// set/append the new data
+			deploymentData := data.PerType[int32(t)].DeploymentData
+			if d := req.Deployment; d != nil {
+				// [cleanup-old-wv]
+				//nolint:staticcheck
+				if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
+					deploymentData.Deployments[idx].Data = req.Data
+				} else {
+					deploymentData.Deployments = append(
+						deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
+							Deployment: req.Deployment,
+							Data:       req.Data,
+						})
+				}
+				changed = true
+			} else if vd := req.GetUpdateVersionData(); vd != nil {
+				if vd.GetVersion() == nil { // unversioned ramp
+					if deploymentData.GetUnversionedRampData().GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
+						continue
+					}
+					changed = true
+					// only update if the timestamp is more recent
+					if vd.GetRampingSinceTime() == nil { // unset
+						deploymentData.UnversionedRampData = nil
+					} else { // set or update
+						deploymentData.UnversionedRampData = vd
+					}
+				} else if idx := findDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
+					old := deploymentData.Versions[idx]
+					if old.GetRoutingUpdateTime().AsTime().After(vd.GetRoutingUpdateTime().AsTime()) {
+						continue
+					}
+					changed = true
+					// only update if the timestamp is more recent
+					deploymentData.Versions[idx] = vd
+				} else {
+					changed = true
+					deploymentData.Versions = append(deploymentData.Versions, vd)
+				}
+			} else if v := req.GetForgetVersion(); v != nil {
+				if idx := findDeploymentVersion(deploymentData, v); idx >= 0 {
+					changed = true
+					deploymentData.Versions = append(deploymentData.Versions[:idx], deploymentData.Versions[idx+1:]...)
+				}
+			}
+		}
+		if !changed {
+			return nil, false, errUserDataUnmodified
 		}
 
 		data.Clock = now
@@ -1808,18 +1881,37 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
-	locks := e.getNamespaceUpdateLocks(request.GetNamespaceId())
-	locks.updateLock.Lock()
-	defer locks.updateLock.Unlock()
-
-	err := e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-		NamespaceID:     request.GetNamespaceId(),
-		TaskQueue:       request.GetTaskQueue(),
-		UserData:        request.GetUserData(),
-		BuildIdsAdded:   request.BuildIdsAdded,
-		BuildIdsRemoved: request.BuildIdsRemoved,
+	namespaceId := namespace.ID(request.NamespaceId)
+	var applied, conflicting bool
+	persistenceErr, ctxErr := e.getUserDataBatcher(namespaceId).Add(ctx, &userDataUpdate{
+		taskQueue: request.GetTaskQueue(),
+		update: persistence.SingleTaskQueueUserDataUpdate{
+			UserData:        request.UserData,
+			BuildIdsAdded:   request.BuildIdsAdded,
+			BuildIdsRemoved: request.BuildIdsRemoved,
+			Applied:         &applied,
+			Conflicting:     &conflicting,
+		},
 	})
-	return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
+	if ctxErr != nil {
+		// Return context errors as-is.
+		return nil, ctxErr
+	}
+	// If applied is true, this one succeeded even though others in the batch failed.
+	if persistenceErr != nil && !applied {
+		if persistence.IsConflictErr(persistenceErr) {
+			if conflicting {
+				// This specific update was the conflicting one. Use InvalidArgument so the
+				// caller does not retry.
+				return nil, serviceerror.NewInvalidArgument(persistenceErr.Error())
+			}
+			// This update may or may not be conflicting. Use Unavailable to allow retries.
+			return nil, serviceerror.NewUnavailable(persistenceErr.Error())
+		}
+		// Other errors from persistence get returned as-is.
+		return nil, persistenceErr
+	}
+	return &matchingservice.UpdateTaskQueueUserDataResponse{}, nil
 }
 
 func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
@@ -1827,9 +1919,8 @@ func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, req
 		return &matchingservice.ReplicateTaskQueueUserDataResponse{}, nil
 	}
 
-	locks := e.getNamespaceUpdateLocks(request.GetNamespaceId())
-	locks.replicationLock.Lock()
-	defer locks.replicationLock.Unlock()
+	e.replicationLock.Lock()
+	defer e.replicationLock.Unlock()
 
 	err := e.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
@@ -1951,6 +2042,7 @@ pollLoop:
 		}
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
+			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.GetForwardedSource(),
 		}
 		task, _, err := e.pollTask(pollerCtx, partition, pollMetadata)
@@ -2139,15 +2231,37 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
 
-func (e *matchingEngineImpl) getNamespaceUpdateLocks(namespaceId string) *namespaceUpdateLocks {
-	e.namespaceUpdateLockMapLock.Lock()
-	defer e.namespaceUpdateLockMapLock.Unlock()
-	locks, found := e.namespaceUpdateLockMap[namespaceId]
-	if !found {
-		locks = &namespaceUpdateLocks{}
-		e.namespaceUpdateLockMap[namespaceId] = locks
+func (e *matchingEngineImpl) getUserDataBatcher(namespaceId namespace.ID) *stream_batcher.Batcher[*userDataUpdate, error] {
+	// Note that values are never removed from this map. The batcher's goroutine will exit
+	// after the idle time, though, which gets most of the desired resource savings.
+	if batcher, ok := e.userDataUpdateBatchers.Get(namespaceId); ok {
+		return batcher
 	}
-	return locks
+	fn := func(batch []*userDataUpdate) error {
+		return e.applyUserDataUpdateBatch(namespaceId, batch)
+	}
+	newBatcher := stream_batcher.NewBatcher[*userDataUpdate, error](fn, userDataBatcherOptions, e.timeSource)
+	batcher, _ := e.userDataUpdateBatchers.GetOrSet(namespaceId, newBatcher)
+	return batcher
+}
+
+func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, batch []*userDataUpdate) error {
+	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
+	// TODO: should use namespace name here
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespaceId.String()))
+	defer cancel()
+
+	// convert to map
+	updatesMap := make(map[string]*persistence.SingleTaskQueueUserDataUpdate)
+	for _, update := range batch {
+		updatesMap[update.taskQueue] = &update.update
+	}
+
+	// now apply the batch of updates
+	return e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+		NamespaceID: namespaceId.String(),
+		Updates:     updatesMap,
+	})
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
@@ -2466,7 +2580,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
-		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
+		ScheduledDeployment: worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:    task.event.Data.VersionDirective,
 	}
 
@@ -2491,7 +2605,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		BuildIdRedirectInfo: task.redirectInfo,
 		Stamp:               task.event.Data.GetStamp(),
 		// TODO: stop sending ScheduledDeployment. [cleanup-old-wv]
-		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
+		ScheduledDeployment: worker_versioning.DirectiveDeployment(task.event.Data.VersionDirective),
 		VersionDirective:    task.event.Data.VersionDirective,
 	}
 

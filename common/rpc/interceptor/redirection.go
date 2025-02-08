@@ -127,17 +127,25 @@ var (
 		"StopBatchOperation":             func() any { return &workflowservice.StopBatchOperationResponse{} },
 		"DescribeBatchOperation":         func() any { return &workflowservice.DescribeBatchOperationResponse{} },
 		"ListBatchOperations":            func() any { return &workflowservice.ListBatchOperationsResponse{} },
-		"UpdateActivityOptionsById":      func() any { return &workflowservice.UpdateActivityOptionsByIdResponse{} },
-		"PauseActivityById":              func() any { return &workflowservice.PauseActivityByIdResponse{} },
-		"UnpauseActivityById":            func() any { return &workflowservice.UnpauseActivityByIdResponse{} },
-		"ResetActivityById":              func() any { return &workflowservice.ResetActivityByIdResponse{} },
+		"UpdateActivityOptions":          func() any { return &workflowservice.UpdateActivityOptionsResponse{} },
+		"PauseActivity":                  func() any { return &workflowservice.PauseActivityResponse{} },
+		"UnpauseActivity":                func() any { return &workflowservice.UnpauseActivityResponse{} },
+		"ResetActivity":                  func() any { return &workflowservice.ResetActivityResponse{} },
 		"UpdateWorkflowExecutionOptions": func() any { return &workflowservice.UpdateWorkflowExecutionOptionsResponse{} },
 
-		"DescribeDeployment":        func() any { return &workflowservice.DescribeDeploymentResponse{} },
-		"ListDeployments":           func() any { return &workflowservice.ListDeploymentsResponse{} },
-		"GetDeploymentReachability": func() any { return &workflowservice.GetDeploymentReachabilityResponse{} },
-		"GetCurrentDeployment":      func() any { return &workflowservice.GetCurrentDeploymentResponse{} },
-		"SetCurrentDeployment":      func() any { return &workflowservice.SetCurrentDeploymentResponse{} },
+		"DescribeDeployment":                    func() any { return &workflowservice.DescribeDeploymentResponse{} },        // [cleanup-wv-pre-release]
+		"ListDeployments":                       func() any { return &workflowservice.ListDeploymentsResponse{} },           // [cleanup-wv-pre-release]
+		"GetDeploymentReachability":             func() any { return &workflowservice.GetDeploymentReachabilityResponse{} }, // [cleanup-wv-pre-release]
+		"GetCurrentDeployment":                  func() any { return &workflowservice.GetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
+		"SetCurrentDeployment":                  func() any { return &workflowservice.SetCurrentDeploymentResponse{} },      // [cleanup-wv-pre-release]
+		"DescribeWorkerDeployment":              func() any { return &workflowservice.DescribeWorkerDeploymentResponse{} },
+		"DescribeWorkerDeploymentVersion":       func() any { return &workflowservice.DescribeWorkerDeploymentVersionResponse{} },
+		"SetWorkerDeploymentCurrentVersion":     func() any { return &workflowservice.SetWorkerDeploymentCurrentVersionResponse{} },
+		"SetWorkerDeploymentRampingVersion":     func() any { return &workflowservice.SetWorkerDeploymentRampingVersionResponse{} },
+		"ListWorkerDeployments":                 func() any { return &workflowservice.ListWorkerDeploymentsResponse{} },
+		"DeleteWorkerDeployment":                func() any { return &workflowservice.DeleteWorkerDeploymentResponse{} },
+		"DeleteWorkerDeploymentVersion":         func() any { return &workflowservice.DeleteWorkerDeploymentVersionResponse{} },
+		"UpdateWorkerDeploymentVersionMetadata": func() any { return &workflowservice.UpdateWorkerDeploymentVersionMetadataResponse{} },
 	}
 )
 

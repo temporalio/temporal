@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -1326,16 +1325,16 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 			_, err := poller.PollAndProcessWorkflowTask()
 			updateResult := <-updateResultCh
 			if tc.RespondWorkflowTaskError != "" {
-				require.Error(s.T(), err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
-				require.Contains(s.T(), err.Error(), tc.RespondWorkflowTaskError)
+				s.Error(err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
+				s.Contains(err.Error(), tc.RespondWorkflowTaskError)
 
 				// When worker returns validation error, API caller got timeout error.
-				require.Error(s.T(), updateResult.err)
-				require.True(s.T(), common.IsContextDeadlineExceededErr(updateResult.err), updateResult.err.Error())
-				require.Nil(s.T(), updateResult.response)
+				s.Error(updateResult.err)
+				s.True(common.IsContextDeadlineExceededErr(updateResult.err), updateResult.err.Error())
+				s.Nil(updateResult.response)
 			} else {
-				require.NoError(s.T(), err)
-				require.NoError(s.T(), updateResult.err)
+				s.NoError(err)
+				s.NoError(updateResult.err)
 			}
 		})
 	}
@@ -1394,9 +1393,9 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 								Messages: s.UpdateAcceptCompleteMessages(tv, updRequestMsg),
 							}, nil
 						})
-				require.NoError(s.T(), err)
-				require.NotNil(s.T(), res)
-				require.EqualValues(s.T(), 0, res.ResetHistoryEventId)
+				s.NoError(err)
+				s.NotNil(res)
+				s.EqualValues(0, res.ResetHistoryEventId)
 			}()
 
 			// This is to make sure that sticky poller above reached server first.
@@ -4874,6 +4873,55 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarrie
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted`, s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
+}
+
+func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_Suggestion() {
+	// setup CAN suggestion to be at 2nd Update
+	cleanup1 := s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 3)
+	defer cleanup1()
+	cleanup2 := s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold, 0.5)
+	defer cleanup2()
+
+	// start workflow
+	tv := testvars.New(s.T())
+	s.startWorkflow(tv)
+	_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	s.NoError(err)
+
+	// send Update #1 - no CAN suggested
+	tv1 := tv.WithUpdateIDNumber(1)
+	updateResultCh := s.sendUpdateNoError(tv1)
+	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv1,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.EqualHistoryEvents(`
+			  1 WorkflowExecutionStarted
+			  2 WorkflowTaskScheduled
+			  3 WorkflowTaskStarted {"SuggestContinueAsNew": false}
+  			  4 WorkflowTaskCompleted
+			  5 WorkflowTaskScheduled
+			  6 WorkflowTaskStarted {"SuggestContinueAsNew": false}`, task.History.Events)
+
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Messages: s.UpdateAcceptCompleteMessages(tv1, task.Messages[0]),
+			}, nil
+		})
+	s.NoError(err)
+	<-updateResultCh
+
+	// send Update #2 - CAN suggested
+	tv2 := tv.WithUpdateIDNumber(2)
+	updateResultCh = s.sendUpdateNoError(tv2)
+	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv2,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.EqualHistoryEventsSuffix(`
+			  WorkflowTaskStarted {"SuggestContinueAsNew": true}`, task.History.Events)
+
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Messages: s.UpdateAcceptCompleteMessages(tv2, task.Messages[0]),
+			}, nil
+		})
+	s.NoError(err)
+	<-updateResultCh
 }
 
 func (s *UpdateWorkflowSuite) TestUpdateWithStart() {

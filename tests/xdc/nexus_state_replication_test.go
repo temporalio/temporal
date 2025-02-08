@@ -47,7 +47,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
@@ -92,8 +91,7 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                               1 * time.Millisecond,
 		callbacks.AllowedAddresses.Key():                                               []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
-	suffix := "_" + common.GenerateRandomString(5)
-	s.setupSuite([]string{"nexus_state_replication_active" + suffix, "nexus_state_replication_standby" + suffix})
+	s.setupSuite()
 }
 
 func (s *NexusStateReplicationSuite) SetupTest() {
@@ -131,7 +129,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackUrl = options.CallbackURL
-			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 	}
 	listenAddr := nexustest.AllocListenAddress()
@@ -209,7 +207,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	s.waitOperationRetry(ctx, sdkClient2, run)
 
 	// Now failover, and let cluster2 be the active.
-	s.failover(ns, s.clusterNames[1], 2, s.cluster1.FrontendClient())
+	s.failover(ns, 0, s.cluster2.ClusterName(), 2)
 
 	s.NoError(sdkClient2.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "dont-care", nil))
 
@@ -248,7 +246,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	s.waitEvent(ctx, sdkClient1, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 
 	// Fail back to cluster1.
-	s.failover(ns, s.clusterNames[0], 11, s.cluster2.FrontendClient())
+	s.failover(ns, 1, s.cluster1.ClusterName(), 11)
 
 	s.completeNexusOperation(ctx, "result", publicCallbackUrl, callbackToken)
 
@@ -281,9 +279,9 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
 			publicCallbackUrl = options.CallbackURL
-			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
-		OnCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
+		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 			return nil
 		},
 	}
@@ -477,7 +475,7 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	})
 
 	// Failover to cluster2.
-	s.failover(ns, s.clusterNames[1], 2, s.cluster1.FrontendClient())
+	s.failover(ns, 0, s.cluster2.ClusterName(), 2)
 
 	// Unblock callback after failover.
 	failCallback.Store(false)
@@ -755,7 +753,7 @@ func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context,
 
 func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, callbackUrl, callbackToken string) {
 	completion, err := nexus.NewOperationCompletionUnsuccessful(
-		nexus.NewCanceledOperationError(errors.New("operation canceled")),
+		nexus.NewOperationCanceledError("operation canceled"),
 		nexus.OperationCompletionUnsuccessfulOptions{},
 	)
 	s.NoError(err)

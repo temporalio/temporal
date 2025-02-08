@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -388,6 +389,9 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 		TransitionHistory: []*persistencespb.VersionedTransition{
 			{NamespaceFailoverVersion: 3, TransitionCount: 3},
 		},
+	}).AnyTimes()
+	mutableState.EXPECT().CurrentVersionedTransition().Return(&persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 3, TransitionCount: 3,
 	}).AnyTimes()
 	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
 
@@ -846,4 +850,73 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDeletedNodes(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ms := NewMockMutableState(ctrl)
+	var genTasks []tasks.Task
+	ms.EXPECT().AddTasks(gomock.Any()).DoAndReturn(func(tasks ...tasks.Task) {
+		genTasks = append(genTasks, tasks...)
+	}).AnyTimes()
+
+	ms.EXPECT().IsTransitionHistoryEnabled().Return(true).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(int64(3)).AnyTimes()
+
+	currentTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 3,
+		TransitionCount:          3,
+	}
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		TransitionHistory: []*persistencespb.VersionedTransition{currentTransition},
+		StateMachineTimers: []*persistencespb.StateMachineTimerGroup{
+			{
+				Deadline: timestamppb.New(time.Now().Add(time.Hour)),
+				Infos: []*persistencespb.StateMachineTaskInfo{
+					{
+						Ref: &persistencespb.StateMachineRef{
+							Path: []*persistencespb.StateMachineKey{
+								{Type: callbacks.StateMachineType, Id: "test-callback"},
+							},
+						},
+						Type: callbacks.TaskTypeBackoff,
+					},
+				},
+			},
+		},
+	}
+	ms.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+
+	reg := hsm.NewRegistry()
+	require.NoError(t, RegisterStateMachine(reg))
+	require.NoError(t, callbacks.RegisterStateMachine(reg))
+
+	cb := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{})
+	root, err := hsm.NewRoot(reg, StateMachineType, ms, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
+	require.NoError(t, err)
+	child, err := callbacks.MachineCollection(root).Add("test-callback", cb)
+	require.NoError(t, err)
+	err = root.DeleteChild(child.Key)
+	require.NoError(t, err)
+
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+	ms.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
+		tests.NamespaceID.String(),
+		tests.WorkflowID,
+		tests.RunID,
+	)).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(
+		namespace.NewMockRegistry(ctrl),
+		ms,
+		&configs.Config{},
+		archiver.NewMockArchivalMetadata(ctrl),
+	)
+
+	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
+	require.NoError(t, err)
+
+	require.Empty(t, genTasks)
+	require.Empty(t, ms.GetExecutionInfo().StateMachineTimers) // Timer should be trimmed
 }

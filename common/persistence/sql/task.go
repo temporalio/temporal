@@ -481,41 +481,53 @@ func (m *sqlTaskManager) UpdateTaskQueueUserData(ctx context.Context, request *p
 		return serviceerror.NewInternal(fmt.Sprintf("failed to parse namespace ID as UUID: %v", err))
 	}
 	err = m.txExecute(ctx, "UpdateTaskQueueUserData", func(tx sqlplugin.Tx) error {
-		err := tx.UpdateTaskQueueUserData(ctx, &sqlplugin.UpdateTaskQueueDataRequest{
-			NamespaceID:   namespaceID,
-			TaskQueueName: request.TaskQueue,
-			Data:          request.UserData.Data,
-			DataEncoding:  request.UserData.EncodingType.String(),
-			Version:       request.Version,
-		})
-		if m.Db.IsDupEntryError(err) {
-			return &persistence.ConditionFailedError{Msg: err.Error()}
-		}
-		if err != nil {
-			return err
-		}
-		if len(request.BuildIdsAdded) > 0 {
-			err = tx.AddToBuildIdToTaskQueueMapping(ctx, sqlplugin.AddToBuildIdToTaskQueueMapping{
+		for taskQueue, update := range request.Updates {
+			err := tx.UpdateTaskQueueUserData(ctx, &sqlplugin.UpdateTaskQueueDataRequest{
 				NamespaceID:   namespaceID,
-				TaskQueueName: request.TaskQueue,
-				BuildIds:      request.BuildIdsAdded,
+				TaskQueueName: taskQueue,
+				Data:          update.UserData.Data,
+				DataEncoding:  update.UserData.EncodingType.String(),
+				Version:       update.Version,
 			})
+			// note these are in a transaction: if one fails the others will be rolled back
+			if m.Db.IsDupEntryError(err) {
+				err = &persistence.ConditionFailedError{Msg: err.Error()}
+			}
+			if persistence.IsConflictErr(err) && update.Conflicting != nil {
+				*update.Conflicting = true
+			}
 			if err != nil {
 				return err
 			}
-		}
-		if len(request.BuildIdsRemoved) > 0 {
-			err = tx.RemoveFromBuildIdToTaskQueueMapping(ctx, sqlplugin.RemoveFromBuildIdToTaskQueueMapping{
-				NamespaceID:   namespaceID,
-				TaskQueueName: request.TaskQueue,
-				BuildIds:      request.BuildIdsRemoved,
-			})
-			if err != nil {
-				return err
+			if len(update.BuildIdsAdded) > 0 {
+				err = tx.AddToBuildIdToTaskQueueMapping(ctx, sqlplugin.AddToBuildIdToTaskQueueMapping{
+					NamespaceID:   namespaceID,
+					TaskQueueName: taskQueue,
+					BuildIds:      update.BuildIdsAdded,
+				})
+				if err != nil {
+					return err
+				}
+			}
+			if len(update.BuildIdsRemoved) > 0 {
+				err = tx.RemoveFromBuildIdToTaskQueueMapping(ctx, sqlplugin.RemoveFromBuildIdToTaskQueueMapping{
+					NamespaceID:   namespaceID,
+					TaskQueueName: taskQueue,
+					BuildIds:      update.BuildIdsRemoved,
+				})
+				if err != nil {
+					return err
+				}
 			}
 		}
 		return nil
 	})
+	// only set Applied if the whole transaction succeeded
+	for _, update := range request.Updates {
+		if update.Applied != nil {
+			*update.Applied = err == nil
+		}
+	}
 	return err
 }
 

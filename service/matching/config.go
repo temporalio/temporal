@@ -53,7 +53,8 @@ type (
 		ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MatchingDropNonRetryableTasks        dynamicconfig.BoolPropertyFn
-		EnableDeployments                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableDeployments                    dynamicconfig.BoolPropertyFnWithNamespaceFilter // [cleanup-wv-pre-release]
+		EnableDeploymentVersions             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
 
@@ -112,8 +113,6 @@ type (
 		VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
 		VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-
-		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
 		NexusEndpointsRefreshInterval     dynamicconfig.DurationPropertyFn
@@ -214,9 +213,9 @@ func NewConfig(
 		PersistenceDynamicRateLimitingParams:     dynamicconfig.MatchingPersistenceDynamicRateLimitingParams.Get(dc),
 		PersistenceQPSBurstRatio:                 dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
 		SyncMatchWaitDuration:                    dynamicconfig.MatchingSyncMatchWaitDuration.Get(dc),
-		LoadUserData:                             dynamicconfig.MatchingLoadUserData.Get(dc),
 		HistoryMaxPageSize:                       dynamicconfig.MatchingHistoryMaxPageSize.Get(dc),
-		EnableDeployments:                        dynamicconfig.EnableDeployments.Get(dc),
+		EnableDeployments:                        dynamicconfig.EnableDeployments.Get(dc), // [cleanup-wv-pre-release]
+		EnableDeploymentVersions:                 dynamicconfig.EnableDeploymentVersions.Get(dc),
 		MaxTaskQueuesInDeployment:                dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),

@@ -61,13 +61,13 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/utf8validator"
 	nexusfrontend "go.temporal.io/server/components/nexusoperations/frontend"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -88,6 +88,7 @@ var Module = fx.Options(
 	scheduler.Module,
 	dynamicconfig.Module,
 	deployment.Module,
+	workerdeployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
 	// This is okay because our routes don't have overlapping matches.
 	// The only important detail is that the PathPrefix("/") route registered in the HTTPAPIServerProvider comes last.
@@ -227,7 +228,6 @@ func GrpcServerOptionsProvider(
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
-	utf8Validator *utf8validator.Validator,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
 ) GrpcServerOptions {
@@ -262,7 +262,6 @@ func GrpcServerOptionsProvider(
 		maskInternalErrorDetailsInterceptor.Intercept,
 		rpc.ServiceErrorInterceptor,
 		rpc.NewFrontendServiceErrorInterceptor(logger),
-		utf8Validator.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
@@ -700,6 +699,7 @@ func HandlerProvider(
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
 	deploymentStoreClient deployment.DeploymentStoreClient,
+	workerDeploymentStoreClient workerdeployment.Client,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
@@ -726,6 +726,7 @@ func HandlerProvider(
 		historyClient,
 		matchingClient,
 		deploymentStoreClient,
+		workerDeploymentStoreClient,
 		archiverProvider,
 		payloadSerializer,
 		namespaceRegistry,

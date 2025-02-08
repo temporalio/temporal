@@ -33,18 +33,15 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/namespace/nsreplication"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
 )
 
 type (
 	// Mutation changes a Namespace "in-flight" during a Clone operation.
 	Mutation interface {
-		apply(*persistence.GetNamespaceResponse)
+		apply(*Namespace)
 	}
 
 	// BadBinaryError is an error type carrying additional information about
@@ -102,74 +99,44 @@ func NewID() ID {
 	return ID(uuid.NewString())
 }
 
-func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
-	return &Namespace{
-		info:                        record.Namespace.Info,
-		config:                      record.Namespace.Config,
-		replicationConfig:           record.Namespace.ReplicationConfig,
-		configVersion:               record.Namespace.ConfigVersion,
-		failoverVersion:             record.Namespace.FailoverVersion,
-		isGlobalNamespace:           record.IsGlobalNamespace,
-		failoverNotificationVersion: record.Namespace.FailoverNotificationVersion,
-		notificationVersion:         record.NotificationVersion,
+func FromPersistentState(
+	detail *persistencespb.NamespaceDetail,
+	mutations ...Mutation,
+) *Namespace {
+	ns := &Namespace{
+		info:                        detail.Info,
+		config:                      detail.Config,
+		replicationConfig:           detail.ReplicationConfig,
+		configVersion:               detail.ConfigVersion,
+		failoverVersion:             detail.FailoverVersion,
+		failoverNotificationVersion: detail.FailoverNotificationVersion,
 		customSearchAttributesMapper: CustomSearchAttributesMapper{
-			fieldToAlias: record.Namespace.Config.CustomSearchAttributeAliases,
-			aliasToField: util.InverseMap(record.Namespace.Config.CustomSearchAttributeAliases),
+			fieldToAlias: detail.Config.CustomSearchAttributeAliases,
+			aliasToField: util.InverseMap(detail.Config.CustomSearchAttributeAliases),
 		},
 	}
+
+	for _, m := range mutations {
+		m.apply(ns)
+	}
+
+	return ns
 }
 
-func FromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *Namespace {
-	info := &persistencespb.NamespaceInfo{
-		Id:          response.GetInfo().GetId(),
-		Name:        response.GetInfo().GetName(),
-		State:       response.GetInfo().GetState(),
-		Description: response.GetInfo().GetDescription(),
-		Owner:       response.GetInfo().GetOwnerEmail(),
-		Data:        response.GetInfo().GetData(),
+func (ns *Namespace) Clone(mutations ...Mutation) *Namespace {
+	detail := &persistencespb.NamespaceDetail{
+		Info:                        common.CloneProto(ns.info),
+		Config:                      common.CloneProto(ns.config),
+		ReplicationConfig:           common.CloneProto(ns.replicationConfig),
+		ConfigVersion:               ns.configVersion,
+		FailoverNotificationVersion: ns.failoverNotificationVersion,
+		FailoverVersion:             ns.failoverVersion,
 	}
-	config := &persistencespb.NamespaceConfig{
-		Retention:                    response.GetConfig().GetWorkflowExecutionRetentionTtl(),
-		HistoryArchivalState:         response.GetConfig().GetHistoryArchivalState(),
-		HistoryArchivalUri:           response.GetConfig().GetHistoryArchivalUri(),
-		VisibilityArchivalState:      response.GetConfig().GetVisibilityArchivalState(),
-		VisibilityArchivalUri:        response.GetConfig().GetVisibilityArchivalUri(),
-		CustomSearchAttributeAliases: response.GetConfig().GetCustomSearchAttributeAliases(),
+	defaultMutations := []Mutation{
+		WithGlobalFlag(ns.isGlobalNamespace),
+		WithNotificationVersion(ns.notificationVersion),
 	}
-	replicationConfig := &persistencespb.NamespaceReplicationConfig{
-		ActiveClusterName: response.GetReplicationConfig().GetActiveClusterName(),
-		State:             response.GetReplicationConfig().GetState(),
-		Clusters:          nsreplication.ConvertClusterReplicationConfigFromProto(response.GetReplicationConfig().GetClusters()),
-		FailoverHistory:   nsreplication.ConvertFailoverHistoryToPersistenceProto(response.GetFailoverHistory()),
-	}
-	return &Namespace{
-		info:              info,
-		config:            config,
-		replicationConfig: replicationConfig,
-		configVersion:     response.GetConfigVersion(),
-		failoverVersion:   response.GetFailoverVersion(),
-		isGlobalNamespace: response.GetIsGlobalNamespace(),
-	}
-}
-
-func (ns *Namespace) Clone(ms ...Mutation) *Namespace {
-	newns := *ns
-	r := persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info:                        common.CloneProto(newns.info),
-			Config:                      common.CloneProto(newns.config),
-			ReplicationConfig:           common.CloneProto(newns.replicationConfig),
-			ConfigVersion:               newns.configVersion,
-			FailoverNotificationVersion: newns.failoverNotificationVersion,
-			FailoverVersion:             newns.failoverVersion,
-		},
-		IsGlobalNamespace:   newns.isGlobalNamespace,
-		NotificationVersion: newns.notificationVersion,
-	}
-	for _, m := range ms {
-		m.apply(&r)
-	}
-	return FromPersistentState(&r)
+	return FromPersistentState(detail, append(defaultMutations, mutations...)...)
 }
 
 // VisibilityArchivalState observes the visibility archive configuration (state
@@ -327,6 +294,7 @@ func (ns *Namespace) Retention() time.Duration {
 	return ns.config.Retention.AsDuration()
 }
 
+// CustomSearchAttributesMapper is a part of temporary solution. Do not use this method.
 func (ns *Namespace) CustomSearchAttributesMapper() CustomSearchAttributesMapper {
 	return ns.customSearchAttributesMapper
 }

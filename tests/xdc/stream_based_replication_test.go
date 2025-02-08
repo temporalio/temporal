@@ -110,10 +110,6 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
 	s.setupSuite(
-		[]string{
-			"active",
-			"standby",
-		},
 		testcore.WithFxOptionsForService(primitives.AllServices,
 			fx.Decorate(
 				func() config.DCRedirectionPolicy {
@@ -141,7 +137,7 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 			Namespace: s.namespaceName,
 			Clusters:  s.clusterReplicationConfig(),
 			// The first cluster is the active cluster.
-			ActiveClusterName: s.clusterNames[0],
+			ActiveClusterName: s.cluster1.ClusterName(),
 			// Needed so that the namespace is replicated.
 			IsGlobalNamespace: true,
 			// This is a required parameter.
@@ -399,19 +395,8 @@ func (s *streamBasedReplicationTestSuite) importEvents(
 }
 
 func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWorkflowNotFound() {
-	ns := "test-force-replicate-reset-" + common.GenerateRandomString(5)
+	ns := s.createGlobalNamespace()
 	client1 := s.cluster1.FrontendClient() // active
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        ns,
-		IsGlobalNamespace:                true,
-		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
-	}
-	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
-	s.NoError(err)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: ns,
@@ -546,27 +531,15 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 }
 
 func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() {
-	ns := "test--reset-sync-workflow-sate" + common.GenerateRandomString(5)
+	ns := s.createGlobalNamespace()
 	client1 := s.cluster1.FrontendClient() // active
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        ns,
-		IsGlobalNamespace:                true,
-		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
+
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Namespace: ns,
 	}
-	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
+	resp, err := client1.DescribeNamespace(testcore.NewContext(), descReq)
 	s.NoError(err)
-	// Wait for namespace cache to pick the change
-	var resp *workflowservice.DescribeNamespaceResponse
-	s.Eventually(func() bool {
-		descReq := &workflowservice.DescribeNamespaceRequest{
-			Namespace: ns,
-		}
-		var err error
-		resp, err = client1.DescribeNamespace(testcore.NewContext(), descReq)
-		return err == nil
-	}, cacheRefreshInterval, time.Second)
+	s.NotNil(resp)
 
 	// Start a workflow
 	id := "reset-test"

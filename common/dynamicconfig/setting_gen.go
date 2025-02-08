@@ -31,6 +31,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/namespace"
 )
 
 const PrecedenceUnknown Precedence = 0
@@ -909,7 +910,7 @@ func GetTypedPropertyFnFilteredByNamespace[T any](value T) TypedPropertyFnWithNa
 	}
 }
 
-type NamespaceIDTypedSetting[T any] setting[T, func(namespaceID string)]
+type NamespaceIDTypedSetting[T any] setting[T, func(namespaceID namespace.ID)]
 
 // NewNamespaceIDTypedSetting creates a setting that uses mapstructure to handle complex structured
 // values. The value from dynamic config will be copied over a shallow copy of 'def', which means
@@ -962,11 +963,11 @@ func (s NamespaceIDTypedSetting[T]) WithDefault(v T) NamespaceIDTypedSetting[T] 
 	return newS
 }
 
-type TypedPropertyFnWithNamespaceIDFilter[T any] func(namespaceID string) T
+type TypedPropertyFnWithNamespaceIDFilter[T any] func(namespaceID namespace.ID) T
 
 func (s NamespaceIDTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithNamespaceIDFilter[T] {
-	return func(namespaceID string) T {
-		prec := []Constraints{{NamespaceID: namespaceID}, {}}
+	return func(namespaceID namespace.ID) T {
+		prec := []Constraints{{NamespaceID: namespaceID.String()}, {}}
 		return matchAndConvert(
 			c,
 			s.key,
@@ -978,11 +979,11 @@ func (s NamespaceIDTypedSetting[T]) Get(c *Collection) TypedPropertyFnWithNamesp
 	}
 }
 
-type TypedSubscribableWithNamespaceIDFilter[T any] func(namespaceID string, callback func(T)) (v T, cancel func())
+type TypedSubscribableWithNamespaceIDFilter[T any] func(namespaceID namespace.ID, callback func(T)) (v T, cancel func())
 
 func (s NamespaceIDTypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWithNamespaceIDFilter[T] {
-	return func(namespaceID string, callback func(T)) (T, func()) {
-		prec := []Constraints{{NamespaceID: namespaceID}, {}}
+	return func(namespaceID namespace.ID, callback func(T)) (T, func()) {
+		prec := []Constraints{{NamespaceID: namespaceID.String()}, {}}
 		return subscribe(c, s.key, s.def, s.cdef, s.convert, prec, callback)
 	}
 }
@@ -998,7 +999,7 @@ func (s NamespaceIDTypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 }
 
 func GetTypedPropertyFnFilteredByNamespaceID[T any](value T) TypedPropertyFnWithNamespaceIDFilter[T] {
-	return func(namespaceID string) T {
+	return func(namespaceID namespace.ID) T {
 		return value
 	}
 }

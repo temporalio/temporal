@@ -81,7 +81,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
@@ -101,7 +100,7 @@ const (
 type (
 	// AdminHandler - gRPC handler interface for adminservice
 	AdminHandler struct {
-		adminservice.UnsafeAdminServiceServer
+		adminservice.UnimplementedAdminServiceServer
 
 		status int32
 
@@ -1891,7 +1890,7 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 				if errors.As(err, &solErr) || errors.As(err, &suErr) {
 					ctx, cl := context.WithTimeout(context.Background(), 2*time.Second)
 					// getShard here to make sure we will talk to correct host when stream is retrying
-					_, err := adh.historyClient.GetShard(ctx, &historyservice.GetShardRequest{ShardId: serverClusterShardID.ShardID})
+					_, err := adh.historyClient.DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{ShardId: serverClusterShardID.ShardID})
 					if err != nil {
 						logger.Error("failed to get shard", tag.Error(err))
 					}
@@ -2022,9 +2021,6 @@ func (adh *AdminHandler) PurgeDLQTasks(
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse); err != nil {
-		return nil, err
-	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.PurgeDLQTasksResponse{
 		JobToken: jobTokenBytes,
@@ -2061,9 +2057,6 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	if err := utf8validator.Validate(&jobToken, utf8validator.SourceRPCResponse); err != nil {
-		return nil, err
-	}
 	jobTokenBytes, _ := jobToken.Marshal()
 	return &adminservice.MergeDLQTasksResponse{
 		JobToken: jobTokenBytes,
@@ -2073,9 +2066,6 @@ func (adh *AdminHandler) MergeDLQTasks(ctx context.Context, request *adminservic
 func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservice.DescribeDLQJobRequest) (*adminservice.DescribeDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
-	if err == nil {
-		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest)
-	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}
@@ -2129,9 +2119,6 @@ func (adh *AdminHandler) DescribeDLQJob(ctx context.Context, request *adminservi
 func (adh *AdminHandler) CancelDLQJob(ctx context.Context, request *adminservice.CancelDLQJobRequest) (*adminservice.CancelDLQJobResponse, error) {
 	jt := adminservice.DLQJobToken{}
 	err := jt.Unmarshal([]byte(request.JobToken))
-	if err == nil {
-		err = utf8validator.Validate(&jt, utf8validator.SourceRPCRequest)
-	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidDLQJobToken, err)
 	}

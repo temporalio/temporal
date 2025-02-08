@@ -29,6 +29,7 @@ import (
 )
 
 type (
+	// TODO (alex): merge this with FunctionalTestBase.
 	FunctionalTestSuite struct {
 		FunctionalTestBase
 
@@ -38,5 +39,5 @@ type (
 
 func (s *FunctionalTestSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-	s.TaskPoller = taskpoller.New(s.T(), s.frontendClient, s.Namespace().String())
+	s.TaskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 }

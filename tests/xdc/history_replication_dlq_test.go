@@ -194,7 +194,6 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 	taskExecutorDecorator := s.getTaskExecutorDecorator()
 	s.logger = log.NewTestLogger()
 	s.setupSuite(
-		[]string{"active", "standby"},
 		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(
 				taskExecutorDecorator,
@@ -246,7 +245,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 		Namespace: ns,
 		Clusters:  s.clusterReplicationConfig(),
 		// The first cluster is the active cluster.
-		ActiveClusterName: s.clusterNames[0],
+		ActiveClusterName: s.cluster1.ClusterName(),
 		// Needed so that the namespace is replicated.
 		IsGlobalNamespace: true,
 		// This is a required parameter.
@@ -336,7 +335,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 		"dlq",
 		"--" + tdbg.FlagDLQVersion, dlqVersion,
 		"merge",
-		"--" + tdbg.FlagCluster, s.clusterNames[0],
+		"--" + tdbg.FlagCluster, s.cluster1.ClusterName(),
 		"--" + tdbg.FlagShardID, "1",
 		"--" + tdbg.FlagLastMessageID, lastMessageID,
 		"--" + tdbg.FlagDLQType, dlqType,
@@ -504,7 +503,7 @@ func (s *historyReplicationDLQSuite) testReadTasks(
 		"dlq",
 		"--" + tdbg.FlagDLQVersion, dlqVersion,
 		"read",
-		"--" + tdbg.FlagCluster, s.clusterNames[0],
+		"--" + tdbg.FlagCluster, s.cluster1.ClusterName(),
 		"--" + tdbg.FlagShardID, "1",
 		"--" + tdbg.FlagLastMessageID, lastMessageID,
 		"--" + tdbg.FlagDLQType, dlqType,

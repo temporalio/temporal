@@ -74,6 +74,7 @@ const (
 
 type Config struct {
 	Enabled                       dynamicconfig.BoolPropertyFn
+	MaxOperationTokenLength       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PayloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ForwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
@@ -150,6 +151,10 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		}
 		return err
 	}
+	tokenLimit := h.Config.MaxOperationTokenLength(ns.Name().String())
+	if len(r.OperationToken) > tokenLimit {
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
+	}
 
 	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
 	if err != nil {
@@ -203,11 +208,11 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		}
 	}
 	hr := &historyservice.CompleteNexusOperationRequest{
-		Completion:  completion,
-		State:       string(r.State),
-		OperationId: r.OperationID,
-		StartTime:   timestamppb.New(r.StartTime),
-		Links:       links,
+		Completion:     completion,
+		State:          string(r.State),
+		OperationToken: r.OperationToken,
+		StartTime:      timestamppb.New(r.StartTime),
+		Links:          links,
 	}
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:

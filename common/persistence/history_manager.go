@@ -824,7 +824,6 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		token.LastNodeID = lastNode.NodeID
 		token.LastTransactionID = lastNode.TransactionID
 	}
-
 	return dataBlobs, transactionIDs, nodeIDs, token, dataSize, nil
 }
 

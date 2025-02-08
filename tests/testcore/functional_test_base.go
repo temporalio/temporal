@@ -83,17 +83,14 @@ type (
 
 		Logger log.Logger
 
-		// Test cluster configuration.
-		testClusterFactory TestClusterFactory
-		testCluster        *TestCluster
-		testClusterConfig  *TestClusterConfig
-		frontendClient     workflowservice.WorkflowServiceClient
-		adminClient        adminservice.AdminServiceClient
-		operatorClient     operatorservice.OperatorServiceClient
-		httpAPIAddress     string
-		namespace          namespace.Name
-		namespaceID        namespace.ID
-		foreignNamespace   namespace.Name
+		testCluster *TestCluster
+		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
+		testClusterConfig *TestClusterConfig
+
+		namespace   namespace.Name
+		namespaceID namespace.ID
+		// TODO (alex): rename to externalNamespace
+		foreignNamespace namespace.Name
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
@@ -146,19 +143,19 @@ func (s *FunctionalTestBase) GetTestClusterConfig() *TestClusterConfig {
 }
 
 func (s *FunctionalTestBase) FrontendClient() workflowservice.WorkflowServiceClient {
-	return s.frontendClient
+	return s.testCluster.FrontendClient()
 }
 
 func (s *FunctionalTestBase) AdminClient() adminservice.AdminServiceClient {
-	return s.adminClient
+	return s.testCluster.AdminClient()
 }
 
 func (s *FunctionalTestBase) OperatorClient() operatorservice.OperatorServiceClient {
-	return s.operatorClient
+	return s.testCluster.OperatorClient()
 }
 
 func (s *FunctionalTestBase) HttpAPIAddress() string {
-	return s.httpAPIAddress
+	return s.testCluster.Host().FrontendHTTPAddress()
 }
 
 func (s *FunctionalTestBase) Namespace() namespace.Name {
@@ -217,9 +214,8 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 	s.testClusterConfig.EnableMetricsCapture = true
 	s.testClusterConfig.EnableArchival = params.ArchivalEnabled
 
-	s.testClusterFactory = NewTestClusterFactory()
-
-	s.testCluster, err = s.testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
+	testClusterFactory := NewTestClusterFactory()
+	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
 	s.Require().NoError(err)
 
 	// Setup test cluster namespaces.
@@ -230,12 +226,6 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 	s.foreignNamespace = namespace.Name(RandomizeStr("foreign-namespace"))
 	_, err = s.RegisterNamespace(s.ForeignNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
-
-	// Setup test cluster clients.
-	s.frontendClient = s.testCluster.FrontendClient()
-	s.adminClient = s.testCluster.AdminClient()
-	s.operatorClient = s.testCluster.OperatorClient()
-	s.httpAPIAddress = s.testCluster.Host().FrontendHTTPAddress()
 }
 
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
@@ -421,7 +411,7 @@ func (s *FunctionalTestBase) MarkNamespaceAsDeleted(
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
-	_, err := s.frontendClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err := s.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: nsName.String(),
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
 			State: enumspb.NAMESPACE_STATE_DELETED,
@@ -433,7 +423,7 @@ func (s *FunctionalTestBase) MarkNamespaceAsDeleted(
 
 func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
-		historyResponse, err := s.frontendClient.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:       namespace,
 			Execution:       execution,
 			MaximumPageSize: 5, // Use small page size to force pagination code path
@@ -442,7 +432,7 @@ func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonp
 
 		events := historyResponse.History.Events
 		for historyResponse.NextPageToken != nil {
-			historyResponse, err = s.frontendClient.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			historyResponse, err = s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace:     namespace,
 				Execution:     execution,
 				NextPageToken: historyResponse.NextPageToken,
@@ -566,7 +556,7 @@ func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{
 // TODO (alex): change to nsName namespace.Name
 func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
-	_, err := s.frontendClient.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err := s.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         nsName,
 		WorkflowExecution: execution,
 		SignalName:        signalName,

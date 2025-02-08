@@ -196,7 +196,7 @@ func (c *operationContext) interceptRequest(
 
 	c.cleanupFunctions = append(c.cleanupFunctions, func(respHeaders map[string]string, retErr error) {
 		if retErr != nil {
-			if source, ok := respHeaders[nexusFailureSourceHeaderName]; ok && source != failureSourceWorker {
+			if source, ok := respHeaders[commonnexus.FailureSourceHeaderName]; ok && source != commonnexus.FailureSourceWorker {
 				c.telemetryInterceptor.HandleError(
 					request,
 					"",
@@ -415,7 +415,7 @@ func (h *nexusHandler) StartOperation(
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 
-		oc.nexusContext.setFailureSource(failureSourceWorker)
+		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return nil, err
@@ -431,17 +431,22 @@ func (h *nexusHandler) StartOperation(
 
 		case *nexuspb.StartOperationResponse_AsyncSuccess:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("async_success"))
+
+			token := t.AsyncSuccess.GetOperationToken()
+			if token == "" {
+				token = t.AsyncSuccess.GetOperationId()
+			}
 			return &nexus.HandlerStartOperationResultAsync{
-				OperationID: t.AsyncSuccess.GetOperationId(),
-				Links:       parseLinks(t.AsyncSuccess.GetLinks(), oc.logger),
+				OperationToken: token,
+				Links:          parseLinks(t.AsyncSuccess.GetLinks(), oc.logger),
 			}, nil
 
 		case *nexuspb.StartOperationResponse_OperationError:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
 
-			oc.nexusContext.setFailureSource(failureSourceWorker)
+			oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
-			err := &nexus.UnsuccessfulOperationError{
+			err := &nexus.OperationError{
 				State: nexus.OperationState(t.OperationError.GetOperationState()),
 				Cause: &nexus.FailureError{
 					Failure: commonnexus.ProtoFailureToNexusFailure(t.OperationError.GetFailure()),
@@ -453,7 +458,7 @@ func (h *nexusHandler) StartOperation(
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 
-	oc.nexusContext.setFailureSource(failureSourceWorker)
+	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
@@ -504,10 +509,10 @@ func (h *nexusHandler) forwardStartOperation(
 		return &nexus.HandlerStartOperationResultSync[any]{Value: resp.Successful.Reader}, nil
 	}
 	// If Nexus client did not return an error, one of Successful or Pending will always be set.
-	return &nexus.HandlerStartOperationResultAsync{OperationID: resp.Pending.ID}, nil
+	return &nexus.HandlerStartOperationResultAsync{OperationToken: resp.Pending.Token}, nil
 }
 
-func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, id string, options nexus.CancelOperationOptions) (retErr error) {
+func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) (retErr error) {
 	oc, err := h.getOperationContext(ctx, "CancelNexusOperation")
 	if err != nil {
 		return err
@@ -519,16 +524,18 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		ScheduledTime: timestamppb.New(oc.requestStartTime),
 		Variant: &nexuspb.Request_CancelOperation{
 			CancelOperation: &nexuspb.CancelOperationRequest{
-				Service:     service,
-				Operation:   operation,
-				OperationId: id,
+				Service:        service,
+				Operation:      operation,
+				OperationToken: token,
+				// TODO(bergundy): Remove this fallback after the 1.27 release.
+				OperationId: token,
 			},
 		},
 	})
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
 		var notActiveErr *serviceerror.NamespaceNotActive
 		if errors.As(err, &notActiveErr) {
-			return h.forwardCancelOperation(ctx, service, operation, id, options, oc)
+			return h.forwardCancelOperation(ctx, service, operation, token, options, oc)
 		}
 		return err
 	}
@@ -549,7 +556,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 
-		oc.nexusContext.setFailureSource(failureSourceWorker)
+		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return err
@@ -560,7 +567,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 
-	oc.nexusContext.setFailureSource(failureSourceWorker)
+	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
 
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
@@ -610,7 +617,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 			return nil, err
 		}
 
-		if failureSource := response.Header.Get(nexusFailureSourceHeaderName); failureSource != "" {
+		if failureSource := response.Header.Get(commonnexus.FailureSourceHeaderName); failureSource != "" {
 			oc.nexusContext.setFailureSource(failureSource)
 		}
 
@@ -637,11 +644,20 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 }
 
 func (h *nexusHandler) convertOutcomeToNexusHandlerError(resp *matchingservice.DispatchNexusTaskResponse_HandlerError) *nexus.HandlerError {
+	var retryBehavior nexus.HandlerErrorRetryBehavior
+	// nolint:exhaustive // unspecified is the default
+	switch resp.HandlerError.RetryBehavior {
+	case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE:
+		retryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
+	case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE:
+		retryBehavior = nexus.HandlerErrorRetryBehaviorNonRetryable
+	}
 	handlerError := &nexus.HandlerError{
 		Type: nexus.HandlerErrorType(resp.HandlerError.GetErrorType()),
 		Cause: &nexus.FailureError{
 			Failure: commonnexus.ProtoFailureToNexusFailure(resp.HandlerError.GetFailure()),
 		},
+		RetryBehavior: retryBehavior,
 	}
 
 	switch handlerError.Type {
@@ -664,5 +680,5 @@ func (h *nexusHandler) convertOutcomeToNexusHandlerError(resp *matchingservice.D
 func (nc *nexusContext) setFailureSource(source string) {
 	nc.responseHeadersMutex.Lock()
 	defer nc.responseHeadersMutex.Unlock()
-	nc.responseHeaders[nexusFailureSourceHeaderName] = source
+	nc.responseHeaders[commonnexus.FailureSourceHeaderName] = source
 }

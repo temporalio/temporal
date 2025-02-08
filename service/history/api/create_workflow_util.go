@@ -27,6 +27,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -47,6 +48,11 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+const (
+	// maxWorkflowTaskStartToCloseTimeout sets the Max Workflow Task start to close timeout for a Workflow
+	maxWorkflowTaskStartToCloseTimeout = 120 * time.Second
 )
 
 type (
@@ -128,6 +134,7 @@ func NewWorkflowWithSignal(
 			startRequest.StartRequest.RequestId,
 			startRequest.StartRequest.TaskQueue,
 			startRequest.StartRequest.Identity,
+			nil,
 			nil,
 			nil,
 			false,
@@ -340,9 +347,9 @@ func OverrideStartWorkflowExecutionRequest(
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
 
-	namespace := request.GetNamespace()
+	ns := namespace.Name(request.GetNamespace())
 
-	workflowRunTimeout := common.OverrideWorkflowRunTimeout(
+	workflowRunTimeout := overrideWorkflowRunTimeout(
 		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
 		timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
 	)
@@ -351,12 +358,12 @@ func OverrideStartWorkflowExecutionRequest(
 		metrics.WorkflowRunTimeoutOverrideCount.With(metricsHandler).Record(
 			1,
 			metrics.OperationTag(operation),
-			metrics.NamespaceTag(namespace),
+			metrics.NamespaceTag(ns.String()),
 		)
 	}
 
-	workflowTaskStartToCloseTimeout := common.OverrideWorkflowTaskTimeout(
-		namespace,
+	workflowTaskStartToCloseTimeout := overrideWorkflowTaskTimeout(
+		ns,
 		timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
 		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
 		shard.GetConfig().DefaultWorkflowTaskTimeout,
@@ -366,7 +373,42 @@ func OverrideStartWorkflowExecutionRequest(
 		metrics.WorkflowTaskTimeoutOverrideCount.With(metricsHandler).Record(
 			1,
 			metrics.OperationTag(operation),
-			metrics.NamespaceTag(namespace),
+			metrics.NamespaceTag(ns.String()),
 		)
 	}
+}
+
+// overrideWorkflowRunTimeout override the run timeout according to execution timeout
+func overrideWorkflowRunTimeout(
+	workflowRunTimeout time.Duration,
+	workflowExecutionTimeout time.Duration,
+) time.Duration {
+
+	if workflowExecutionTimeout == 0 {
+		return workflowRunTimeout
+	} else if workflowRunTimeout == 0 {
+		return workflowExecutionTimeout
+	}
+	return min(workflowRunTimeout, workflowExecutionTimeout)
+}
+
+// overrideWorkflowTaskTimeout override the workflow task timeout according to default timeout or max timeout
+func overrideWorkflowTaskTimeout(
+	ns namespace.Name,
+	taskStartToCloseTimeout time.Duration,
+	workflowRunTimeout time.Duration,
+	getDefaultTimeoutFunc func(namespaceName string) time.Duration,
+) time.Duration {
+
+	if taskStartToCloseTimeout == 0 {
+		taskStartToCloseTimeout = getDefaultTimeoutFunc(ns.String())
+	}
+
+	taskStartToCloseTimeout = min(taskStartToCloseTimeout, maxWorkflowTaskStartToCloseTimeout)
+
+	if workflowRunTimeout == 0 {
+		return taskStartToCloseTimeout
+	}
+
+	return min(taskStartToCloseTimeout, workflowRunTimeout)
 }

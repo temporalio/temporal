@@ -28,6 +28,7 @@ package queues
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -283,6 +284,7 @@ func (e *executableImpl) Execute() (retErr error) {
 	)
 	e.Unlock()
 
+	// Wrapped in if block to avoid unnecessary allocations when OTEL is disabled.
 	if telemetry.IsEnabled(e.tracer) {
 		var span trace.Span
 		ctx, span = e.tracer.Start(
@@ -292,8 +294,17 @@ func (e *executableImpl) Execute() (retErr error) {
 			trace.WithAttributes(
 				attribute.Key(telemetry.WorkflowIDKey).String(e.GetWorkflowID()),
 				attribute.Key(telemetry.WorkflowRunIDKey).String(e.GetRunID()),
-				attribute.Key("task-type").String(e.GetType().String()),
-				attribute.Key("task-id").Int64(e.GetTaskID())))
+				attribute.Key("queue.task.type").String(e.GetType().String()),
+				attribute.Key("queue.task.id").Int64(e.GetTaskID())))
+
+		if telemetry.DebugMode() {
+			if taskPayload, err := json.Marshal(e.GetTask()); err != nil {
+				e.logger.Error("failed to serialize task payload for OTEL span", tag.Error(err))
+			} else {
+				span.SetAttributes(attribute.Key("queue.task.payload").String(string(taskPayload)))
+			}
+		}
+
 		defer func() {
 			if retErr != nil {
 				span.RecordError(retErr)

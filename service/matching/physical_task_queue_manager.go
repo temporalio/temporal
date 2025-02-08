@@ -68,11 +68,6 @@ const (
 
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
-
-	// The duration of each mini-bucket in the circularTaskBuffer
-	intervalSize = 5
-	// The total duration which is used to calculate the rate of tasks added/dispatched
-	totalIntervalSize = 30
 )
 
 type (
@@ -105,111 +100,14 @@ type (
 		tasksDispatchedInIntervals *taskTracker
 		// deploymentWorkflowStarted keeps track if we have already registered the task queue worker
 		// in the deployment.
-		deploymentLock          sync.Mutex
-		deploymentRegistered    bool
-		deploymentRegisterError error // last "too many ..." error we got when registering
-		firstPoll               time.Time
+		deploymentLock              sync.Mutex // TODO (Shivam): Rename after the pre-release versioning API's are removed.
+		deploymentRegistered        bool       // TODO (Shivam): Rename after the pre-release versioning API's are removed.
+		deploymentVersionRegistered bool       // TODO (Shivam): Rename after the pre-release versioning API's are removed.
+		deploymentRegisterError     error      // last "too many ..." error we got when registering // TODO (Shivam): Rename after the pre-release versioning API's are removed.
+
+		firstPoll time.Time
 	}
 )
-
-// a circular array of a fixed size for tracking tasks
-type circularTaskBuffer struct {
-	buffer     []int
-	currentPos int
-}
-
-func newCircularTaskBuffer(size int) circularTaskBuffer {
-	return circularTaskBuffer{
-		buffer: make([]int, size),
-	}
-}
-
-func (cb *circularTaskBuffer) incrementTaskCount() {
-	cb.buffer[cb.currentPos]++
-}
-
-func (cb *circularTaskBuffer) advance() {
-	cb.currentPos = (cb.currentPos + 1) % len(cb.buffer)
-	cb.buffer[cb.currentPos] = 0 // Reset the task count for the new interval
-}
-
-// returns the total number of tasks in the buffer
-func (cb *circularTaskBuffer) totalTasks() int {
-	totalTasks := 0
-	for _, count := range cb.buffer {
-		totalTasks += count
-	}
-	return totalTasks
-}
-
-type taskTracker struct {
-	lock              sync.Mutex
-	clock             clock.TimeSource
-	startTime         time.Time     // time when taskTracker was initialized
-	bucketStartTime   time.Time     // the starting time of a bucket in the buffer
-	bucketSize        time.Duration // the duration of each bucket in the buffer
-	numberOfBuckets   int           // the total number of buckets in the buffer
-	totalIntervalSize time.Duration // the number of seconds over which rate of tasks are added/dispatched
-	tasksInInterval   circularTaskBuffer
-}
-
-func newTaskTracker(timeSource clock.TimeSource) *taskTracker {
-	return &taskTracker{
-		clock:             timeSource,
-		startTime:         timeSource.Now(),
-		bucketStartTime:   timeSource.Now(),
-		bucketSize:        time.Duration(intervalSize) * time.Second,
-		numberOfBuckets:   (totalIntervalSize / intervalSize) + 1,
-		totalIntervalSize: time.Duration(totalIntervalSize) * time.Second,
-		tasksInInterval:   newCircularTaskBuffer((totalIntervalSize / intervalSize) + 1),
-	}
-}
-
-// advanceAndResetTracker advances the trackers position and clears out any expired intervals
-// This method must be called with taskTracker's lock held.
-func (s *taskTracker) advanceAndResetTracker(elapsed time.Duration) {
-	// Calculate the number of intervals elapsed since the start interval time
-	intervalsElapsed := int(elapsed / s.bucketSize)
-
-	for i := 0; i < min(intervalsElapsed, s.numberOfBuckets); i++ {
-		s.tasksInInterval.advance() // advancing our circular buffer's position until we land on the right interval
-	}
-	s.bucketStartTime = s.bucketStartTime.Add(time.Duration(intervalsElapsed) * s.bucketSize)
-}
-
-// incrementTaskCount adds/removes tasks from the current time that falls in the appropriate interval
-func (s *taskTracker) incrementTaskCount() {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	currentTime := s.clock.Now()
-
-	// Calculate elapsed time from the latest start interval time
-	elapsed := currentTime.Sub(s.bucketStartTime)
-	s.advanceAndResetTracker(elapsed)
-	s.tasksInInterval.incrementTaskCount()
-}
-
-// rate returns the rate of tasks added/dispatched in a given interval
-func (s *taskTracker) rate() float32 {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	currentTime := s.clock.Now()
-
-	// Calculate elapsed time from the latest start interval time
-	elapsed := currentTime.Sub(s.bucketStartTime)
-	s.advanceAndResetTracker(elapsed)
-	totalTasks := s.tasksInInterval.totalTasks()
-
-	elapsedTime := min(currentTime.Sub(s.bucketStartTime)+s.totalIntervalSize,
-		currentTime.Sub(s.startTime))
-
-	if elapsedTime <= 0 {
-		return 0
-	}
-
-	// rate per second
-	return float32(totalTasks) / float32(elapsedTime.Seconds())
-}
 
 var _ physicalTaskQueueManager = (*physicalTaskQueueManagerImpl)(nil)
 
@@ -343,8 +241,17 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		return nil, err
 	}
 
-	if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
-		return nil, err
+	// [cleanup-wv-pre-release]
+	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
+		if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
+			return nil, err
+		}
+	}
+
+	if c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
+		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, pollMetadata); err != nil {
+			return nil, err
+		}
 	}
 
 	// the desired global rate limit for the task queue comes from the
@@ -540,12 +447,13 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	return c.matcher.Offer(childCtx, task)
 }
 
+// [cleanup-wv-pre-release]
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	pollMetadata *pollMetadata,
 ) error {
-	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities)
+	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
 	if workerDeployment == nil {
 		return nil
 	}
@@ -573,7 +481,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 	}
 
 	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-	if findDeployment(deploymentData, workerDeployment) >= 0 {
+	if hasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.
@@ -605,7 +513,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 			return err
 		}
 		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-		if findDeployment(deploymentData, workerDeployment) >= 0 {
+		if hasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 			break
 		}
 		select {
@@ -617,6 +525,83 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 	}
 
 	c.deploymentRegistered = true
+	return nil
+}
+
+func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	pollMetadata *pollMetadata,
+) error {
+	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
+	if workerDeployment == nil {
+		return nil
+	}
+	if !c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
+		return errMissingDeploymentVersion
+	}
+
+	// lock so that only one poll does the update and the rest wait for it
+	c.deploymentLock.Lock()
+	defer c.deploymentLock.Unlock()
+
+	if c.deploymentVersionRegistered {
+		// deployment version already registered
+		return nil
+	}
+
+	if c.deploymentRegisterError != nil {
+		// deployment not possible due to registration limits
+		return c.deploymentRegisterError
+	}
+
+	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
+	if err != nil {
+		return err
+	}
+
+	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+	if findDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) != -1 {
+		// already registered in user data, we can assume the workflow is running.
+		// TODO: consider replication scenarios where user data is replicated before
+		// the deployment workflow.
+		return nil
+	}
+
+	// we need to update the deployment workflow to tell it about this task queue
+	// TODO: add some backoff here if we got an error last time
+
+	err = c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
+		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
+		"matching service", uuid.New())
+	if err != nil {
+		var errTooMany deployment.ErrMaxTaskQueuesInDeployment
+		if errors.As(err, &errTooMany) {
+			c.deploymentRegisterError = errTooMany
+		}
+		return err
+	}
+
+	// the deployment workflow will register itself in this task queue's user data.
+	// wait for it to propagate here.
+	for {
+		userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
+		if err != nil {
+			return err
+		}
+		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+		if findDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) >= 0 {
+			break
+		}
+		select {
+		case <-userDataChanged:
+		case <-ctx.Done():
+			c.logger.Error("timed out waiting for worker deployment version to appear in user data")
+			return ctx.Err()
+		}
+	}
+
+	c.deploymentVersionRegistered = true
 	return nil
 }
 
