@@ -123,18 +123,18 @@ TEST_OUTPUT_ROOT        := ./.testoutput
 NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).cover.out   # generates a new filename each time it's substituted
 SUMMARY_COVER_PROFILE  := $(TEST_OUTPUT_ROOT)/summary.cover.out
 NEW_REPORT              = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).junit.xml   # generates a new filename each time it's substituted
+COVERPKG 				= $(shell go list ./... | \
+							  grep -v /server/api/ | \
+							  grep -v /server/cmd/ | \
+							  grep -v /server/tests/ | \
+							  grep -v /server/tools/ | \
+							  grep -v /server/commong/testing/ | \
+							  paste -sd "," -) # exclude generated and test-only packages
+COVERPKG_FLAG 		    = -coverpkg=$(COVERPKG) # individual generated files are removed when generating summary
 
 # DB
 SQL_USER ?= temporal
 SQL_PASSWORD ?= temporal
-
-# Need the following option to have integration and functional tests count towards coverage. godoc below:
-# -coverpkg pkg1,pkg2,pkg3
-#   Apply coverage analysis in each test to the given list of packages.
-#   The default is for each test to analyze only the package being tested.
-#   Packages are specified as import paths.
-INTEGRATION_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/common/persistence/..."
-FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/temporal/..."
 
 # Only prints output if the exit code is non-zero
 define silent_exec
@@ -413,39 +413,34 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) --packages="$(UNIT_TEST_DIRS)" -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE)
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) --packages="$(INTEGRATION_TEST_DIRS)" -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_COVERPKG)
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_DIRS)
 
 # This should use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
-	go test -c -o /dev/null $(FUNCTIONAL_TEST_ROOT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(FUNCTIONAL_TEST_COVERPKG)
+	go test -c -cover -o /dev/null $(FUNCTIONAL_TEST_ROOT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(COVERPKG_FLAG)
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) --packages="$(FUNCTIONAL_TEST_ROOT)" -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) --packages="$(FUNCTIONAL_TEST_XDC_ROOT)" -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_XDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) --packages="$(FUNCTIONAL_TEST_NDC_ROOT)" -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
@@ -456,9 +451,14 @@ $(SUMMARY_COVER_PROFILE):
 		echo "No coverage data, aborting!" && exit 1; \
 	fi
 	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
-	$(foreach COVER_PROFILE,$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out),\
+	$(foreach COVER_PROFILE,$(filter-out $(SUMMARY_COVER_PROFILE),$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out)),\
 		@printf "Add %s...\n" $(COVER_PROFILE); \
-		@grep -v -e "[Mm]ocks\?.go" -e "^mode: \w\+" $(COVER_PROFILE) >> $(SUMMARY_COVER_PROFILE) || true \
+		grep -v \
+			-e "^mode: \w\+" \
+			-e "_gen.go" \
+			-e ".pb.go" \
+			-e "[Mm]ocks\?.go" \
+			$(COVER_PROFILE) >> $(SUMMARY_COVER_PROFILE) || true \
 	$(NEWLINE))
 
 coverage-report: $(SUMMARY_COVER_PROFILE)

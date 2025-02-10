@@ -275,6 +275,14 @@ jobs:
           annotate_only: true
           skip_annotations: true
 
+      - name: Generate code coverage
+        run: make ./.testoutput/summary.cover.out
+      - name: Upload code coverage
+        uses: coverallsapp/github-action@v2
+        with:
+          fail-on-error: false  # don't want to fail the run if coveralls has an issue
+          file: ./.testoutput/summary.cover.out
+
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
@@ -353,6 +361,14 @@ jobs:
           check_annotations: false
           annotate_only: true
           skip_annotations: true
+
+      - name: Generate code coverage
+        run: make ./.testoutput/summary.cover.out
+      - name: Upload code coverage
+        uses: coverallsapp/github-action@v2
+        with:
+          fail-on-error: false  # don't want to fail the run if coveralls has an issue
+          file: ./.testoutput/summary.cover.out
 
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
@@ -504,6 +520,14 @@ jobs:
           annotate_only: true
           skip_annotations: true
 
+      - name: Generate code coverage
+        run: make ./.testoutput/summary.cover.out
+      - name: Upload code coverage
+        uses: coverallsapp/github-action@v2
+        with:
+          fail-on-error: false  # don't want to fail the run if coveralls has an issue
+          file: ./.testoutput/summary.cover.out
+
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
@@ -628,6 +652,14 @@ jobs:
           annotate_only: true
           skip_annotations: true
 
+      - name: Generate code coverage
+        run: make ./.testoutput/summary.cover.out
+      - name: Upload code coverage
+        uses: coverallsapp/github-action@v2
+        with:
+          fail-on-error: false  # don't want to fail the run if coveralls has an issue
+          file: ./.testoutput/summary.cover.out
+
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
@@ -742,6 +774,14 @@ jobs:
       - name: Run functional test ndc
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
+
+      - name: Generate code coverage
+        run: make ./.testoutput/summary.cover.out
+      - name: Upload code coverage
+        uses: coverallsapp/github-action@v2
+        with:
+          fail-on-error: false  # don't want to fail the run if coveralls has an issue
+          file: ./.testoutput/summary.cover.out
 
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
