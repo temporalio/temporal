@@ -1510,11 +1510,10 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 	}
 
 	err2 := engine.ReplicateEventsV2(ctx, request)
-	if err2 != nil && errors.Is(err2, consts.ErrDuplicate) {
-		return nil, h.convertError(err2)
+	if err2 == nil || errors.Is(err2, consts.ErrDuplicate) {
+		return &historyservice.ReplicateEventsV2Response{}, nil
 	}
-
-	return &historyservice.ReplicateEventsV2Response{}, nil
+	return nil, h.convertError(err2)
 }
 
 // ReplicateWorkflowState is called by processor to replicate workflow state for passive namespaces
