@@ -205,7 +205,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.Watc
 		return nil, errNoEvents
 	}
 	lastEvent := events[0]
-
+	a.Logger.Info(fmt.Sprintf("DEBUG ISSUE: %v", events))
 	return rb.Build(lastEvent)
 }
 
