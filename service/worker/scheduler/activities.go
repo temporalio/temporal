@@ -193,6 +193,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 		SkipArchival:           true, // should be recently closed, no need for archival
 	}
 	histRes, err := a.FrontendClient.GetWorkflowExecutionHistory(ctx, histReq)
+	a.Logger.Info(fmt.Sprintf("DEBUG ISSUE: %+v", histRes))
 
 	if err != nil {
 		a.Logger.Error("error from GetWorkflowExecutionHistory", tag.Error(err), tag.WorkflowID(req.Execution.WorkflowId))
