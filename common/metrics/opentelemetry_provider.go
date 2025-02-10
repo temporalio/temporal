@@ -61,6 +61,9 @@ func NewOpenTelemetryProvider(
 ) (*openTelemetryProviderImpl, error) {
 	reg := prometheus.NewRegistry()
 	exporterOpts := []exporters.Option{exporters.WithRegisterer(reg)}
+	if clientConfig.Prefix != "" {
+		exporterOpts = append(exporterOpts, exporters.WithNamespace(clientConfig.Prefix))
+	}
 	if clientConfig.WithoutUnitSuffix {
 		exporterOpts = append(exporterOpts, exporters.WithoutUnits())
 	}
