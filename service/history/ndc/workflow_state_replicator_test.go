@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -688,7 +689,6 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		RunId: s.runID,
 	}).AnyTimes()
 	mockMutableState.EXPECT().ApplySnapshot(versionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes().State)
-	mockMutableState.EXPECT().PopTasks().Times(1)
 	mockTransactionManager.EXPECT().UpdateWorkflow(gomock.Any(), false, gomock.Any(), nil).Return(nil).Times(1)
 	mockTaskRefresher.EXPECT().
 		PartialRefresh(gomock.Any(), gomock.Any(), EqVersionedTransition(&persistencespb.VersionedTransition{
@@ -773,7 +773,6 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		},
 	}).AnyTimes()
 	mockMutableState.EXPECT().ApplySnapshot(versionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes().State)
-	mockMutableState.EXPECT().PopTasks().Times(1)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
@@ -958,6 +957,19 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 	s.IsType(&serviceerrors.SyncState{}, err)
 }
 
+type historyEventMatcher struct {
+	expected *historypb.HistoryEvent
+}
+
+func (m *historyEventMatcher) Matches(x interface{}) bool {
+	evt, ok := x.(*historypb.HistoryEvent)
+	return ok && proto.Equal(evt, m.expected)
+}
+
+func (m *historyEventMatcher) String() string {
+	return fmt.Sprintf("is equal to %v", m.expected)
+}
+
 func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_WithGapAndTailEvents() {
 	namespaceID := uuid.New()
 	versionHistories := &historyspb.VersionHistories{
@@ -1038,6 +1050,14 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 		RunId: s.runID,
 	}).AnyTimes()
 	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any())
+
+	allEvents := append(gapEvents, requestedEvents...)
+	allEvents = append(allEvents, tailEvents...)
+	for _, event := range allEvents {
+		mockMutableState.EXPECT().AddReapplyCandidateEvent(&historyEventMatcher{expected: event}).
+			Times(1)
+	}
+
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	sourceClusterName := "test-cluster"
 	mockShard := shard.NewMockContext(s.controller)

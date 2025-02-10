@@ -158,6 +158,11 @@ service MatchingService {
     // Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
     rpc ReplicateTaskQueueUserData(ReplicateTaskQueueUserDataRequest) returns (ReplicateTaskQueueUserDataResponse) {}
 
+    // Blocks on user data propagation to all loaded partitions. If successful, all loaded
+    // workflow + activity partitions have the requested version or higher.
+    // Routed to user data owner (root partition of workflow task queue).
+    rpc CheckTaskQueueUserDataPropagation(CheckTaskQueueUserDataPropagationRequest) returns (CheckTaskQueueUserDataPropagationResponse) {}
+
     // Create a Nexus endpoint.
     // (-- api-linter: core::0133::method-signature=disabled
     //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)

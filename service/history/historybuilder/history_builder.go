@@ -37,7 +37,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
@@ -136,7 +136,7 @@ func NewImmutable(histories ...[]*historypb.HistoryEvent) *HistoryBuilder {
 	}
 }
 
-func NewImmutableForUpdateNextEventID(lastVersionHistoryItem *history.VersionHistoryItem) *HistoryBuilder {
+func NewImmutableForUpdateNextEventID(lastVersionHistoryItem *historyspb.VersionHistoryItem) *HistoryBuilder {
 	return &HistoryBuilder{
 		EventStore: EventStore{
 			state:           HistoryBuilderStateImmutable,
@@ -238,6 +238,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
+	deploymentName string,
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
@@ -249,6 +250,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 		workerVersionStamp,
 		sdkMetadata,
 		meteringMetadata,
+		deploymentName,
 		deployment,
 		behavior,
 	)
@@ -413,8 +415,18 @@ func (b *HistoryBuilder) AddWorkflowExecutionTerminatedEvent(
 
 func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 	versioningOverride *workflowpb.VersioningOverride,
+	unsetVersioningOverride bool,
+	attachRequestID string,
+	attachCompletionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(versioningOverride)
+	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
+		versioningOverride,
+		unsetVersioningOverride,
+		attachRequestID,
+		attachCompletionCallbacks,
+		links,
+	)
 	event, _ = b.EventStore.add(event)
 	return event
 }

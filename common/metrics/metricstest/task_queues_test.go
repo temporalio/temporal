@@ -28,7 +28,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
 )
@@ -41,7 +41,7 @@ const (
 
 func TestPerTaskQueueScope(t *testing.T) {
 	ns := "my_ns"
-	tq := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW)
+	tq := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	verifyTags(t,
 		metrics.GetPerTaskQueueScope(NewCaptureHandler(), ns, tq, false),
 		map[string]string{"namespace": ns, "taskqueue": omitted, "task_type": "Workflow"},
@@ -55,7 +55,7 @@ func TestPerTaskQueueScope(t *testing.T) {
 
 func TestPerTaskQueuePartitionIDScope_Normal(t *testing.T) {
 	ns := "my_ns"
-	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
+	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
 	verifyTags(t,
 		metrics.GetPerTaskQueuePartitionIDScope(NewCaptureHandler(), ns, p, true, false),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": normal},
@@ -68,7 +68,7 @@ func TestPerTaskQueuePartitionIDScope_Normal(t *testing.T) {
 
 func TestPerTaskQueuePartitionIDScope_Sticky(t *testing.T) {
 	ns := "my_ns"
-	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("abc")
+	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("abc")
 	verifyTags(t,
 		metrics.GetPerTaskQueuePartitionIDScope(NewCaptureHandler(), ns, p, true, false),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": sticky},
@@ -81,7 +81,7 @@ func TestPerTaskQueuePartitionIDScope_Sticky(t *testing.T) {
 
 func TestPerTaskQueuePartitionTypeScope_Normal(t *testing.T) {
 	ns := "my_ns"
-	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
+	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
 	verifyTags(t,
 		metrics.GetPerTaskQueuePartitionTypeScope(NewCaptureHandler(), ns, p, true),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": normal},
@@ -90,7 +90,7 @@ func TestPerTaskQueuePartitionTypeScope_Normal(t *testing.T) {
 
 func TestPerTaskQueuePartitionTypeScope_Sticky(t *testing.T) {
 	ns := "my_ns"
-	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("abc")
+	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("abc")
 	verifyTags(t,
 		metrics.GetPerTaskQueuePartitionTypeScope(NewCaptureHandler(), ns, p, true),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": sticky},

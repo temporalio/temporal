@@ -28,7 +28,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -56,19 +58,22 @@ const (
 	userDataClosed
 )
 
+const maxFastUserDataFetches = 10
+
 type (
 	userDataManager interface {
 		Start()
 		Stop()
 		WaitUntilInitialized(ctx context.Context) error
-		// GetUserData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
+		// GetUserData returns the user data for this task queue. Do not mutate the returned pointer, as doing so
 		// will cause cache inconsistency.
 		GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 		// Extra care should be taken to avoid mutating the existing data in the update function.
-		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
+		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error)
 		// Handles the maybe-long-poll GetUserData RPC.
 		HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
+		CheckTaskQueueUserDataPropagation(context.Context, int64, int, int) error
 	}
 
 	UserDataUpdateOptions struct {
@@ -93,6 +98,7 @@ type (
 	// All other partitions long-poll the latest user data from the owning partition.
 	userDataManagerImpl struct {
 		lock            sync.Mutex
+		onFatalErr      func(unloadCause)
 		partition       tqid.Partition
 		userData        *persistencespb.VersionedTaskQueueUserData
 		userDataChanged chan struct{}
@@ -115,26 +121,29 @@ type (
 var _ userDataManager = (*userDataManagerImpl)(nil)
 
 var (
-	errUserDataNoMutateNonRoot = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
-	errTaskQueueClosed         = serviceerror.NewUnavailable("task queue closed")
-	errUserDataUnmodified      = errors.New("sentinel error for unchanged user data")
+	errUserDataNoMutateNonRoot  = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
+	errRequestedVersionTooLarge = serviceerror.NewInvalidArgument("requested task queue user data for version greater than known version")
+	errTaskQueueClosed          = serviceerror.NewUnavailable("task queue closed")
+	errUserDataUnmodified       = errors.New("sentinel error for unchanged user data")
+	errUserDataVersionMismatch  = errors.New("user data version mismatch")
 )
 
 func newUserDataManager(
 	store persistence.TaskManager,
 	matchingClient matchingservice.MatchingServiceClient,
+	onFatalErr func(unloadCause),
 	partition tqid.Partition,
 	config *taskQueueConfig,
 	logger log.Logger,
 	registry namespace.Registry,
 ) *userDataManagerImpl {
-
 	m := &userDataManagerImpl{
-		logger:            logger,
+		onFatalErr:        onFatalErr,
 		partition:         partition,
+		userDataChanged:   make(chan struct{}),
 		config:            config,
 		namespaceRegistry: registry,
-		userDataChanged:   make(chan struct{}),
+		logger:            logger,
 		matchingClient:    matchingClient,
 		userDataReady:     future.NewFuture[struct{}](),
 	}
@@ -165,7 +174,7 @@ func (m *userDataManagerImpl) Stop() {
 	m.setUserDataState(userDataClosed, nil)
 }
 
-// GetUserData returns the versioning data for this task queue and a channel that signals when the data has been updated.
+// GetUserData returns the user data for this task queue and a channel that signals when the data has been updated.
 // Do not mutate the returned pointer, as doing so will cause cache inconsistency.
 // If there is no user data, this can return a nil value with no error.
 func (m *userDataManagerImpl) GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
@@ -217,7 +226,20 @@ func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
 	ctx = m.callerInfoContext(ctx)
 	err := m.loadUserDataFromDB(ctx)
 	m.setUserDataState(userDataEnabled, err)
-	return nil
+
+	// At this point, it's possible that an old owner has updated user data after we read it.
+	// We should re-read it after a few seconds and then periodically after that to ensure that
+	// we notice if someone else has snuck in a write.
+	util.InterruptibleSleep(ctx, backoff.Jitter(m.config.GetUserDataInitialRefresh, 0.1))
+
+	for ctx.Err() == nil {
+		if err = m.refreshUserDataFromDB(ctx); errors.Is(err, errUserDataVersionMismatch) {
+			m.onFatalErr(unloadCauseConflict)
+		}
+		util.InterruptibleSleep(ctx, backoff.Jitter(m.config.GetUserDataRefresh(), 0.2))
+	}
+
+	return ctx.Err()
 }
 
 func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, error) {
@@ -323,14 +345,14 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
 		if elapsed < m.config.GetUserDataMinWaitTime {
-			if fastResponseCounter >= 3 {
-				// 3 or more consecutive fast responses, let's throttle!
+			if fastResponseCounter >= maxFastUserDataFetches {
+				// maxFastUserDataFetches or more consecutive fast responses, let's throttle!
 				util.InterruptibleSleep(ctx, minWaitTime-elapsed)
 				// Don't let this get near our call timeout, otherwise we can't tell the difference
 				// between a fast reply and a timeout.
 				minWaitTime = min(minWaitTime*2, m.config.GetUserDataLongPollTimeout()/2)
 			} else {
-				// Not yet 3 consecutive fast responses. A few rapid refreshes for versioned queues
+				// Not yet maxFastUserDataFetches consecutive fast responses. A few rapid refreshes for versioned queues
 				// is expected when the first poller arrives. We do not want to slow down the queue
 				// for that.
 				fastResponseCounter++
@@ -366,31 +388,74 @@ func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 	return nil
 }
 
+// Checks if data in db has not been modified since we loaded/modified it.
+func (m *userDataManagerImpl) refreshUserDataFromDB(ctx context.Context) error {
+	// Lock here to ensure we're not in the middle of an update, otherwise we may incorrectly
+	// think the db has old data if we update between read and verify.
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	response, err := m.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
+		NamespaceID: m.partition.NamespaceId(),
+		TaskQueue:   m.partition.TaskQueue().Name(),
+	})
+	if common.IsNotFoundError(err) {
+		response, err = &persistence.GetTaskQueueUserDataResponse{}, nil
+	}
+	if err != nil {
+		return err
+	}
+
+	if response.UserData.GetVersion() == m.userData.GetVersion() {
+		return nil
+	}
+
+	tags := []tag.Tag{
+		tag.UserDataVersion(response.UserData.GetVersion()),
+		tag.NewInt64("expected-user-data-version", m.userData.GetVersion()),
+		tag.Timestamp(hybrid_logical_clock.UTC(response.UserData.GetData().GetClock())),
+		tag.NewTimeTag("expected-user-data-timestamp", hybrid_logical_clock.UTC(m.userData.GetData().GetClock())),
+	}
+
+	if response.UserData.GetVersion() < m.userData.GetVersion() {
+		// We have newer data in memory than the db. This should only happen if the database
+		// went back in time. We should unload and start over.
+		m.logger.Error("user data version mismatch: db had older data; unloading", tags...)
+		return errUserDataVersionMismatch
+	}
+
+	// The db has newer data. We can just update to it.
+	m.setUserDataLocked(response.UserData)
+	m.logger.Warn("user data version mismatch: db had newer data; reloading", tags...)
+
+	return nil
+}
+
 // UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 // Extra care should be taken to avoid mutating the existing data in the update function.
-func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
+func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error) {
 	if m.store == nil {
-		return errUserDataNoMutateNonRoot
+		return 0, errUserDataNoMutateNonRoot
 	}
 	if err := m.WaitUntilInitialized(ctx); err != nil {
-		return err
+		return 0, err
 	}
 	newData, shouldReplicate, err := m.updateUserData(ctx, updateFn, options)
-	if err == errUserDataUnmodified {
-		return nil
+	if errors.Is(err, errUserDataUnmodified) {
+		return newData.GetVersion(), nil
 	} else if err != nil {
-		return err
+		return 0, err
 	} else if !shouldReplicate {
-		return nil
+		return newData.GetVersion(), nil
 	}
 
 	// Only replicate if namespace is global and has at least 2 clusters registered.
 	ns, err := m.namespaceRegistry.GetNamespaceByID(namespace.ID(m.partition.NamespaceId()))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if ns.ReplicationPolicy() != namespace.ReplicationPolicyMultiCluster {
-		return nil
+		return newData.GetVersion(), nil
 	}
 
 	_, err = m.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
@@ -400,9 +465,9 @@ func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDa
 	})
 	if err != nil {
 		m.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
-		return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
+		return 0, serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
 	}
-	return err
+	return newData.GetVersion(), nil
 }
 
 // UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed
@@ -439,7 +504,7 @@ func (m *userDataManagerImpl) updateUserData(
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
 	if err == errUserDataUnmodified {
-		return nil, false, err
+		return userData, false, err
 	}
 	if err != nil {
 		m.logger.Error("user data update function failed", tag.Error(err), tag.NewStringTag("user-data-update-source", options.Source))
@@ -534,14 +599,20 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 					tag.UserDataVersion(userData.Version),
 				)
 			} else if userData.Version < version {
-				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
-				// We rely on client retries in this case to let the system eventually self-heal.
-				m.logger.Error("requested task queue user data for version greater than known version",
-					tag.NewInt64("request-known-version", version),
-					tag.UserDataVersion(userData.Version),
-				)
-				return nil, serviceerror.NewInvalidArgument(
-					"requested task queue user data for version greater than known version")
+				if m.store != nil {
+					// When m.store == nil it means this is a non-owner partition, so it is possible
+					// for the requested version to be greater than the known version if there are
+					// concurrent user data updates in flight. We do not log an error in that case.
+
+					// This is highly unlikely to happen in the owner/root partition but may happen
+					// due to an edge case in during ownership transfer.
+					// We rely on client retries in this case to let the system eventually self-heal.
+					m.logger.Error("requested task queue user data for version greater than known version",
+						tag.NewInt64("request-known-version", version),
+						tag.UserDataVersion(userData.Version),
+					)
+				}
+				return nil, errRequestedVersionTooLarge
 			}
 		} else {
 			m.logger.Debug("returning empty user data (no data)", tag.NewBoolTag("long-poll", req.WaitNewData))
@@ -549,6 +620,77 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 		return resp, nil
 	}
 
+}
+
+func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
+	ctx context.Context,
+	version int64,
+	wfPartitions int,
+	actPartitions int,
+) error {
+	if m.store == nil {
+		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must be called on root workflow task queue")
+	} else if version < 1 {
+		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must wait for version >= 1")
+	}
+
+	complete := make(chan error)
+
+	var waitingForPartitions atomic.Int64
+	waitingForPartitions.Store(int64(wfPartitions - 1 + actPartitions))
+
+	policy := backoff.NewExponentialRetryPolicy(500 * time.Millisecond)
+	isRetryable := func(err error) bool {
+		if strings.Contains(err.Error(), errRequestedVersionTooLarge.Error()) {
+			// It is possible that multiple updates are happening at once and this partition has not
+			// caught up with all the previous updates when we ask for the latest update.
+			return true
+		}
+		return common.IsServiceClientTransientError(err)
+	}
+
+	check := func(p int, tp enumspb.TaskQueueType) {
+		err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
+			res, err := m.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+				NamespaceId:              m.partition.NamespaceId(),
+				TaskQueue:                m.partition.TaskQueue().NormalPartition(p).RpcName(),
+				TaskQueueType:            tp,
+				LastKnownUserDataVersion: version - 1,
+				WaitNewData:              true,
+				OnlyIfLoaded:             true,
+			})
+			if err != nil {
+				var failed *serviceerror.FailedPrecondition
+				if errors.As(err, &failed) {
+					// this means the partition was not loaded, so skip it (if it loads, it will get the newest data)
+					err = nil
+				}
+				return err
+			} else if res.GetUserData().GetVersion() < version {
+				return serviceerror.NewUnavailable("retry")
+			}
+			return nil
+		}, policy, isRetryable)
+		if err == nil {
+			if waitingForPartitions.Add(-1) == 0 {
+				complete <- nil
+			}
+		}
+	}
+
+	for i := 1; i < wfPartitions; i++ {
+		go check(i, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	}
+	for i := 0; i < actPartitions; i++ {
+		go check(i, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-complete:
+		return err
+	}
 }
 
 func (m *userDataManagerImpl) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {

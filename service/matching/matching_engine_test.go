@@ -77,6 +77,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
@@ -93,15 +94,16 @@ type (
 	matchingEngineSuite struct {
 		suite.Suite
 		*require.Assertions
-		controller            *gomock.Controller
-		mockHistoryClient     *historyservicemock.MockHistoryServiceClient
-		mockMatchingClient    *matchingservicemock.MockMatchingServiceClient
-		ns                    *namespace.Namespace
-		mockNamespaceCache    *namespace.MockRegistry
-		mockVisibilityManager *manager.MockVisibilityManager
-		mockHostInfoProvider  *membership.MockHostInfoProvider
-		mockServiceResolver   *membership.MockServiceResolver
-		hostInfoForResolver   membership.HostInfo
+		controller               *gomock.Controller
+		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
+		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
+		ns                       *namespace.Namespace
+		mockNamespaceCache       *namespace.MockRegistry
+		mockVisibilityManager    *manager.MockVisibilityManager
+		mockHostInfoProvider     *membership.MockHostInfoProvider
+		mockServiceResolver      *membership.MockServiceResolver
+		hostInfoForResolver      membership.HostInfo
+		mockNexusEndpointManager *persistence.MockNexusEndpointManager
 
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
@@ -134,7 +136,9 @@ func createTestMatchingEngine(
 	mockServiceResolver.EXPECT().Lookup(gomock.Any()).Return(hostInfo, nil).AnyTimes()
 	mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
-	return newMatchingEngine(config, tm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager, mockHostInfoProvider, mockServiceResolver)
+	mockNexusEndpointManager := persistence.NewMockNexusEndpointManager(controller)
+	mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}, nil).AnyTimes()
+	return newMatchingEngine(config, tm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager, mockHostInfoProvider, mockServiceResolver, mockNexusEndpointManager)
 }
 
 func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
@@ -186,6 +190,8 @@ func (s *matchingEngineSuite) SetupTest() {
 	}).AnyTimes()
 	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+	s.mockNexusEndpointManager = persistence.NewMockNexusEndpointManager(s.controller)
+	s.mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}, nil).AnyTimes()
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
@@ -200,13 +206,14 @@ func (s *matchingEngineSuite) newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager,
 ) *matchingEngineImpl {
 	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient, s.mockVisibilityManager,
-		s.mockHostInfoProvider, s.mockServiceResolver)
+		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
 }
 
 func newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager, mockHistoryClient historyservice.HistoryServiceClient,
 	logger log.Logger, mockNamespaceCache namespace.Registry, mockMatchingClient matchingservice.MatchingServiceClient,
-	mockVisibilityManager manager.VisibilityManager, mockHostInfoProvider membership.HostInfoProvider, mockServiceResolver membership.ServiceResolver,
+	mockVisibilityManager manager.VisibilityManager, mockHostInfoProvider membership.HostInfoProvider,
+	mockServiceResolver membership.ServiceResolver, nexusEndpointManager persistence.NexusEndpointManager,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:   taskMgr,
@@ -223,7 +230,7 @@ func newMatchingEngine(
 		throttledLogger:               log.ThrottledLogger(logger),
 		metricsHandler:                metrics.NoopMetricsHandler,
 		matchingRawClient:             mockMatchingClient,
-		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:               tasktoken.NewSerializer(),
 		config:                        config,
 		namespaceRegistry:             mockNamespaceCache,
 		hostInfoProvider:              mockHostInfoProvider,
@@ -232,6 +239,7 @@ func newMatchingEngine(
 		clusterMeta:                   clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 		timeSource:                    clock.NewRealTimeSource(),
 		visibilityManager:             mockVisibilityManager,
+		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
 	}
 }
@@ -247,7 +255,7 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 
 func (s *matchingEngineSuite) TestAckManager() {
 	backlogMgr := newBacklogMgr(s.controller, false)
-	m := newAckManager(backlogMgr)
+	m := newAckManager(backlogMgr.db, backlogMgr.logger)
 
 	m.setAckLevel(100)
 	s.EqualValues(100, m.getAckLevel())
@@ -312,7 +320,7 @@ func (s *matchingEngineSuite) TestAckManager() {
 
 func (s *matchingEngineSuite) TestAckManager_Sort() {
 	backlogMgr := newBacklogMgr(s.controller, false)
-	m := newAckManager(backlogMgr)
+	m := newAckManager(backlogMgr.db, backlogMgr.logger)
 
 	const t0 = 100
 	m.setAckLevel(t0)
@@ -2402,8 +2410,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2428,8 +2439,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2454,8 +2468,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2527,8 +2544,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2608,8 +2628,11 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 	err := s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		})
 	s.NoError(err)
 
@@ -2704,10 +2727,13 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 
 	err := s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
-		TaskQueue:   tq,
-		UserData: &persistencespb.VersionedTaskQueueUserData{
-			Data:    userData,
-			Version: 34,
+		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+			tq: &persistence.SingleTaskQueueUserDataUpdate{
+				UserData: &persistencespb.VersionedTaskQueueUserData{
+					Data:    userData,
+					Version: 34,
+				},
+			},
 		},
 	})
 	s.Assert().NoError(err)
@@ -2754,10 +2780,13 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 
 	err = s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
-		TaskQueue:   tq,
-		UserData: &persistencespb.VersionedTaskQueueUserData{
-			Data:    userData,
-			Version: 34,
+		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+			tq: &persistence.SingleTaskQueueUserDataUpdate{
+				UserData: &persistencespb.VersionedTaskQueueUserData{
+					Data:    userData,
+					Version: 34,
+				},
+			},
 		},
 	})
 	s.NoError(err)
@@ -2858,22 +2887,17 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionWor
 	captureHandler, ok := s.matchingEngine.metricsHandler.(*metricstest.CaptureHandler)
 	s.True(ok)
 	capture := captureHandler.StartCapture()
-	prtn := newRootPartition(
-		uuid.New(),
-		"MetricTester",
-		enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
+
+	rootPrtn := newRootPartition(uuid.New(), "MetricTester", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	_, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), rootPrtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	s.TaskQueueMetricValidator(capture, 1, 1, 1, 1, 1, 1)
 
 	// Calling the update gauge function should increase each of the metrics to 2
 	// since we are dealing with a root partition
-	tqmImpl, ok := tqm.(*taskQueuePartitionManagerImpl)
-	s.True(ok)
-	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
+	s.matchingEngine.updateTaskQueuePartitionGauge(s.ns, rootPrtn, 1)
 	s.TaskQueueMetricValidator(capture, 2, 2, 2, 2, 2, 2)
-
 }
 
 func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionActivityType() {
@@ -2883,11 +2907,8 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionAct
 	s.True(ok)
 	capture := captureHandler.StartCapture()
 
-	prtn := newRootPartition(
-		uuid.New(),
-		"MetricTester",
-		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
+	rootPrtn := newRootPartition(uuid.New(), "MetricTester", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	_, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), rootPrtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creation of a new root partition, having an activity task queue, should not have
@@ -2896,9 +2917,7 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionAct
 
 	// Calling the update gauge function should increase each of the metrics to 2
 	// since we are dealing with a root partition
-	tqmImpl, ok := tqm.(*taskQueuePartitionManagerImpl)
-	s.True(ok)
-	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
+	s.matchingEngine.updateTaskQueuePartitionGauge(s.ns, rootPrtn, 1)
 	s.TaskQueueMetricValidator(capture, 2, 0, 2, 2, 2, 2)
 }
 
@@ -2908,11 +2927,8 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_NonRootPartition
 	s.True(ok)
 	capture := captureHandler.StartCapture()
 
-	NonRootPrtn := newTestTaskQueue(
-		uuid.New(),
-		"MetricTester",
-		enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(31)
-	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), NonRootPrtn, true, loadCauseUnspecified)
+	nonRootPrtn := newTestTaskQueue(uuid.New(), "MetricTester", enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(31)
+	_, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), nonRootPrtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creation of a non-root partition should only increase the Queue Partition counter
@@ -2920,9 +2936,7 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_NonRootPartition
 
 	// Calling the update gauge function should increase each of the metrics to 2
 	// since we are dealing with a root partition
-	tqmImpl, ok := tqm.(*taskQueuePartitionManagerImpl)
-	s.True(ok)
-	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
+	s.matchingEngine.updateTaskQueuePartitionGauge(s.ns, nonRootPrtn, 1)
 	s.TaskQueueMetricValidator(capture, 2, 0, 2, 0, 2, 2)
 }
 
@@ -2946,7 +2960,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 	tlmImpl, ok := tqm.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
 
-	s.matchingEngine.updatePhysicalTaskQueueGauge(tlmImpl, 1)
+	s.matchingEngine.updatePhysicalTaskQueueGauge(s.ns, prtn, tlmImpl.queue.version, 1)
 
 	s.PhysicalQueueMetricValidator(capture, 2, 2)
 
@@ -2970,7 +2984,8 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 	namespaceId := uuid.New()
 	versionSet := uuid.New()
 	tl := "MetricTester"
-	dbq := VersionSetQueueKey(newTestTaskQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), versionSet)
+	rootPrtn := newTestTaskQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition()
+	dbq := VersionSetQueueKey(rootPrtn, versionSet)
 	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
@@ -2989,7 +3004,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 	// Creating a VersionedQueue results in increasing the size of the map to 2, due to 2 entries now,
 	// with it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 2, 1)
-	s.matchingEngine.updatePhysicalTaskQueueGauge(vqtpm.(*physicalTaskQueueManagerImpl), 1)
+	s.matchingEngine.updatePhysicalTaskQueueGauge(s.ns, rootPrtn, vqtpm.(*physicalTaskQueueManagerImpl).queue.version, 1)
 	s.PhysicalQueueMetricValidator(capture, 3, 2)
 
 	// Validating if versioned has been set right for the specific parameters
@@ -3000,7 +3015,6 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 		versioned:     "versionSet",
 	}
 	assert.Equal(s.T(), s.matchingEngine.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters], 2)
-
 }
 
 func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
@@ -3011,8 +3025,8 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 
 	namespaceId := uuid.New()
 	buildID := uuid.New()
-	tl := "MetricTester"
-	dbq := BuildIdQueueKey(newTestTaskQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), buildID)
+	rootPrtn := newTestTaskQueue(namespaceId, "MetricTester", enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition()
+	dbq := BuildIdQueueKey(rootPrtn, buildID)
 	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
@@ -3020,7 +3034,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 	// the size of the map to 1 and it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
-	Vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(
+	vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(
 		"",
 		buildID,
 		nil,
@@ -3031,7 +3045,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 	// Creating a VersionedQueue results in increasing the size of the map to 2, due to 2 entries now,
 	// with it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 2, 1)
-	s.matchingEngine.updatePhysicalTaskQueueGauge(Vqtpm.(*physicalTaskQueueManagerImpl), 1)
+	s.matchingEngine.updatePhysicalTaskQueueGauge(s.ns, rootPrtn, vqtpm.(*physicalTaskQueueManagerImpl).queue.version, 1)
 	s.PhysicalQueueMetricValidator(capture, 3, 2)
 
 	// Validating if versioned has been set right for the specific parameters
@@ -3397,14 +3411,14 @@ func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {
 
 func (s *matchingEngineSuite) TestNotifyNexusEndpointsOwnershipLost() {
 	ch := s.matchingEngine.nexusEndpointsOwnershipLostCh
-	s.matchingEngine.notifyIfNexusEndpointsOwnershipLost()
+	s.matchingEngine.notifyNexusEndpointsOwnershipChange()
 	select {
 	case <-ch:
 		s.Fail("expected nexusEndpointsOwnershipLost channel to not have been closed")
 	default:
 	}
 	s.hostInfoForResolver = membership.NewHostInfoFromAddress("other")
-	s.matchingEngine.notifyIfNexusEndpointsOwnershipLost()
+	s.matchingEngine.notifyNexusEndpointsOwnershipChange()
 	<-ch
 	// If the channel is unblocked the test passed.
 }
@@ -3900,16 +3914,18 @@ func (m *testTaskManager) GetTaskQueueUserData(_ context.Context, request *persi
 
 // UpdateTaskQueueUserData implements persistence.TaskManager
 func (m *testTaskManager) UpdateTaskQueueUserData(_ context.Context, request *persistence.UpdateTaskQueueUserDataRequest) error {
-	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	if err != nil {
-		return err
+	for tq, update := range request.Updates {
+		dbq, err := ParsePhysicalTaskQueueKey(tq, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		if err != nil {
+			return err
+		}
+		tlm := m.getQueueManager(dbq)
+		tlm.Lock()
+		newData := common.CloneProto(update.UserData)
+		newData.Version++
+		tlm.userData = newData
+		tlm.Unlock()
 	}
-	tlm := m.getQueueManager(dbq)
-	tlm.Lock()
-	defer tlm.Unlock()
-	newData := common.CloneProto(request.UserData)
-	newData.Version++
-	tlm.userData = newData
 	return nil
 }
 

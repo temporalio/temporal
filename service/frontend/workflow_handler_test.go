@@ -39,6 +39,7 @@ import (
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -48,12 +49,13 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -72,7 +74,8 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
-	e "go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
@@ -115,7 +118,7 @@ type (
 		mockHistoryArchiver    *archiver.MockHistoryArchiver
 		mockVisibilityArchiver *archiver.MockVisibilityArchiver
 
-		tokenSerializer common.TaskTokenSerializer
+		tokenSerializer *tasktoken.Serializer
 
 		testNamespace   namespace.Name
 		testNamespaceID namespace.ID
@@ -159,7 +162,7 @@ func (s *WorkflowHandlerSuite) SetupTest() {
 	s.mockHistoryArchiver = archiver.NewMockHistoryArchiver(s.controller)
 	s.mockVisibilityArchiver = archiver.NewMockVisibilityArchiver(s.controller)
 
-	s.tokenSerializer = common.NewProtoTaskTokenSerializer()
+	s.tokenSerializer = tasktoken.NewSerializer()
 
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
 	s.mockExecutionManager.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
@@ -184,7 +187,8 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMetadataManager(),
 		s.mockResource.GetHistoryClient(),
 		s.mockResource.GetMatchingClient(),
-		nil, // TODO (Shivam): test deploymentStoreClient here if desired
+		nil,
+		nil,
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetPayloadSerializer(),
 		s.mockResource.GetNamespaceRegistry(),
@@ -197,6 +201,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetMembershipMonitor(),
 		healthInterceptor,
 		scheduler.NewSpecBuilder(),
+		true,
 	)
 }
 
@@ -641,7 +646,35 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReuse
 
 	s.Nil(resp)
 	s.Equal(err, serviceerror.NewInvalidArgument(
-		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy."))
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy"))
+}
+
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReusePolicy_RejectDuplicate() {
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId:               testWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+	}
+
+	// by default, disallow
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	resp, err := wh.StartWorkflowExecution(context.Background(), req)
+	s.Nil(resp)
+	s.Equal(err, serviceerror.NewInvalidArgument(
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE cannot be used together with WorkflowIdConflictPolicy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING"))
+
+	// allow if explicitly allowed
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.StartWorkflowExecutionResponse{Started: true}, nil)
+
+	config.FollowReusePolicyAfterConflictPolicyTerminate = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh = s.getWorkflowHandler(config)
+	_, err = wh.StartWorkflowExecution(context.Background(), req)
+	s.NoError(err)
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
@@ -828,7 +861,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkf
 
 	s.Nil(resp)
 	s.Equal(err, serviceerror.NewInvalidArgument(
-		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy."))
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy"))
 }
 
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
@@ -2005,16 +2038,16 @@ func (s *WorkflowHandlerSuite) TestCountWorkflowExecutions() {
 }
 
 func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
-	events := make([]*historypb.HistoryEvent, 50)
+	events := make([]*historyspb.StrippedHistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
-		events[i] = &historypb.HistoryEvent{EventId: int64(i + 1)}
+		events[i] = &historyspb.StrippedHistoryEvent{EventId: int64(i + 1)}
 	}
-	var eventsWithHoles []*historypb.HistoryEvent
+	var eventsWithHoles []*historyspb.StrippedHistoryEvent
 	eventsWithHoles = append(eventsWithHoles, events[9:12]...)
 	eventsWithHoles = append(eventsWithHoles, events[20:31]...)
 
 	testCases := []struct {
-		events       []*historypb.HistoryEvent
+		events       []*historyspb.StrippedHistoryEvent
 		firstEventID int64
 		lastEventID  int64
 		isFirstPage  bool
@@ -2048,7 +2081,7 @@ func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 
 	for i, tc := range testCases {
-		err := e.VerifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
+		err := persistence.VerifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
 		if tc.isResultErr {
 			s.Error(err, "testcase %v failed", i)
 		} else {
@@ -2069,8 +2102,7 @@ func (s *WorkflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.SupportsSchedules)
 	s.True(resp.Capabilities.EncodedFailureAttributes)
 	s.True(resp.Capabilities.UpsertMemo)
-	// Nexus is enabled by a dynamic config feature flag which defaults to false.
-	s.False(resp.Capabilities.Nexus)
+	s.True(resp.Capabilities.Nexus)
 }
 
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
@@ -2772,6 +2804,78 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
 	s.ErrorAs(err, &invalidArgumentErr)
 }
 
+func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_FailedConvertedToContinueAsNew() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New().String()}
+	newRunID := uuid.New().String()
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+
+	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:              tests.Namespace.String(),
+		Execution:              &we,
+		MaximumPageSize:        10,
+		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
+		SkipArchival:           true,
+	}
+	s.mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), &historyservice.GetWorkflowExecutionHistoryRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		Request:     req,
+	}).Return(&historyservice.GetWorkflowExecutionHistoryResponse{
+		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
+			History: &historypb.History{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId:   int64(5),
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+						Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
+							WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
+								Failure:                      &failurepb.Failure{Message: "this workflow failed"},
+								RetryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
+								WorkflowTaskCompletedEventId: 4,
+								NewExecutionRunId:            newRunID,
+							},
+						},
+					},
+				},
+			},
+		},
+	}, nil).Times(2)
+
+	oldGoSDKVersion := "1.9.1"
+	newGoSDKVersion := "1.10.1"
+
+	// new sdk: should see failed event
+	ctx := headers.SetVersionsForTests(context.Background(), newGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
+	resp, err := wh.GetWorkflowExecutionHistory(ctx, req)
+	s.NoError(err)
+	s.False(resp.Archived)
+	event := resp.History.Events[0]
+	s.Equal(int64(5), event.EventId)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.EventType)
+	attrs := event.GetWorkflowExecutionFailedEventAttributes()
+	s.Equal("this workflow failed", attrs.Failure.Message)
+	s.Equal(newRunID, attrs.NewExecutionRunId)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, attrs.RetryState)
+
+	// old sdk: should see continued-as-new event
+	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
+	// See comment in workflowHandler.go:GetWorkflowExecutionHistory
+	ctx = headers.SetVersionsForTests(context.Background(), oldGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, "")
+	resp, err = wh.GetWorkflowExecutionHistory(ctx, req)
+	s.NoError(err)
+	s.False(resp.Archived)
+	event = resp.History.Events[0]
+	s.Equal(int64(5), event.EventId)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, event.EventType)
+	attrs2 := event.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(newRunID, attrs2.NewExecutionRunId)
+	s.Equal("this workflow failed", attrs2.Failure.Message)
+}
+
 func (s *WorkflowHandlerSuite) newConfig() *Config {
 	return NewConfig(dc.NewNoopCollection(), numHistoryShards)
 }
@@ -3190,7 +3294,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 
 	expectedMatchingRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
 		NamespaceId: s.testNamespaceID.String(),
-		TaskQueuePartition: &taskqueue.TaskQueuePartition{
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 			TaskQueue:     stickyTaskQueue,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		},
@@ -3207,5 +3311,84 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 	})
 	if err != nil {
 		s.Fail("ShutdownWorker failed:", err)
+	}
+}
+
+// HistoryService returns a different GetWorkflowExecutionHistoryResponse GetWorkflowExecutionHistoryResponseWithRaw to
+// WorkflowHandler. Since HistoryClient is defined with the response type GetWorkflowExecutionHistoryResponse, grpc
+// will deserialize this message to GetWorkflowExecutionHistoryResponse. This is done to avoid the extra CPU usage in
+// history service to deserialize event blobs to []*HistoryEvent. This test ensures that
+// GetWorkflowExecutionHistoryResponseWithRaw is correctly deserialized to GetWorkflowExecutionHistoryResponse.
+func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistoryResponseWithRawHistoryEvents() {
+	// Create history events and batches
+	fullHistory := &historypb.History{
+		Events: []*historypb.HistoryEvent{
+			{
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Version:   100,
+			},
+			{
+				EventId:   2,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+				Version:   101,
+			},
+			{
+				EventId:   3,
+				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
+				Version:   102,
+			},
+			{
+				EventId:   4,
+				EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
+				Version:   103,
+			},
+		},
+	}
+
+	batch1 := &historypb.History{
+		Events: fullHistory.Events[:2],
+	}
+
+	batch2 := &historypb.History{
+		Events: fullHistory.Events[2:],
+	}
+
+	// Marshal each batch
+	rawHistory1, err := batch1.Marshal()
+	s.Require().NoError(err)
+
+	db1 := &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         rawHistory1,
+	}
+
+	rawHistory2, err := batch2.Marshal()
+	s.Require().NoError(err)
+
+	db2 := &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         rawHistory2,
+	}
+
+	// Create a GetWorkflowExecutionHistoryResponse with raw history blobs. This should be wire compatible with
+	// workflowservice.GetWorkflowExecutionHistoryResponse which has repeated HistoryEvent field instead of repeated bytes.
+	rawResp := &historyspb.GetWorkflowExecutionHistoryResponse{
+		History: [][]byte{db1.Data, db2.Data},
+	}
+
+	serializedRawResp, err := rawResp.Marshal()
+	s.Require().NoError(err)
+
+	resp := &workflowservice.GetWorkflowExecutionHistoryResponse{}
+	err = resp.Unmarshal(serializedRawResp)
+	s.Require().NoError(err)
+
+	// Verify resp has same list of history events as fullHistory
+	for i, event := range resp.History.Events {
+		s.Equal(fullHistory.Events[i].EventId, event.EventId)
+		s.Equal(fullHistory.Events[i].Version, event.Version)
+		s.Equal(fullHistory.Events[i].EventType, event.EventType)
+		s.Nil(event.Attributes)
 	}
 }

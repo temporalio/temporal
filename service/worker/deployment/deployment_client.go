@@ -82,6 +82,7 @@ type DeploymentStoreClient interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
+		pageSize int,
 		nextPageToken []byte,
 	) ([]*deploymentpb.DeploymentListInfo, []byte, error)
 
@@ -329,7 +330,8 @@ func (d *DeploymentClientImpl) ListDeployments(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
-	NextPageToken []byte,
+	pageSize int,
+	nextPageToken []byte,
 ) (_ []*deploymentpb.DeploymentListInfo, _ []byte, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("ListDeployments", &retErr, seriesName)()
@@ -341,13 +343,17 @@ func (d *DeploymentClientImpl) ListDeployments(
 		query = DeploymentVisibilityBaseListQuery
 	}
 
+	if pageSize == 0 {
+		pageSize = d.visibilityMaxPageSize(namespaceEntry.Name().String())
+	}
+
 	persistenceResp, err := d.visibilityManager.ListWorkflowExecutions(
 		ctx,
 		&manager.ListWorkflowExecutionsRequestV2{
 			NamespaceID:   namespaceEntry.ID(),
 			Namespace:     namespaceEntry.Name(),
-			PageSize:      d.visibilityMaxPageSize(namespaceEntry.Name().String()),
-			NextPageToken: NextPageToken,
+			PageSize:      pageSize,
+			NextPageToken: nextPageToken,
 			Query:         query,
 		},
 	)
@@ -355,8 +361,8 @@ func (d *DeploymentClientImpl) ListDeployments(
 		return nil, nil, err
 	}
 
-	deployments := make([]*deploymentpb.DeploymentListInfo, 0)
-	for _, ex := range persistenceResp.Executions {
+	deployments := make([]*deploymentpb.DeploymentListInfo, len(persistenceResp.Executions))
+	for i, ex := range persistenceResp.Executions {
 		workflowMemo := DecodeDeploymentMemo(ex.GetMemo())
 
 		deploymentListInfo := &deploymentpb.DeploymentListInfo{
@@ -364,11 +370,10 @@ func (d *DeploymentClientImpl) ListDeployments(
 			CreateTime: workflowMemo.CreateTime,
 			IsCurrent:  workflowMemo.IsCurrentDeployment,
 		}
-		deployments = append(deployments, deploymentListInfo)
+		deployments[i] = deploymentListInfo
 	}
 
-	return deployments, NextPageToken, nil
-
+	return deployments, persistenceResp.NextPageToken, nil
 }
 
 func (d *DeploymentClientImpl) SetCurrentDeployment(
@@ -679,7 +684,9 @@ func (d *DeploymentClientImpl) updateWithStart(
 	}
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	isRetryable := func(err error) bool { return errors.Is(err, errRetry) }
+	isRetryable := func(err error) bool {
+		return errors.Is(err, errRetry)
+	}
 	var outcome *updatepb.Outcome
 
 	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {

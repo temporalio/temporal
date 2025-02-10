@@ -30,7 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -190,7 +190,7 @@ func recordStartedEventIfMissing(
 	ctx context.Context,
 	mutableState workflow.MutableState,
 	request *historyservice.RecordChildExecutionCompletedRequest,
-	ci *persistence.ChildExecutionInfo,
+	ci *persistencespb.ChildExecutionInfo,
 ) error {
 	parentInitiatedID := request.ParentInitiatedId
 	if ci.StartedEventId == common.EmptyEventID {

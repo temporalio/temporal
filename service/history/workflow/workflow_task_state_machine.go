@@ -27,6 +27,7 @@
 package workflow
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"time"
@@ -50,6 +51,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -469,6 +471,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 	skipVersioningCheck bool,
+	updateReg update.Registry,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask := m.GetWorkflowTaskByID(scheduledEventID)
@@ -491,6 +494,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// consistent between the started event in history and the event that was sent to the SDK
 	// that resulted in the successful completion.
 	suggestContinueAsNew, historySizeBytes := m.getHistorySizeInfo()
+	if updateReg != nil {
+		suggestContinueAsNew = cmp.Or(suggestContinueAsNew, updateReg.SuggestContinueAsNew())
+	}
 
 	workflowTask, scheduledEventCreatedForRedirect, redirectCounter, err := m.processBuildIdRedirectInfo(versioningStamp, workflowTask, taskQueue, redirectInfo, skipVersioningCheck)
 	if err != nil {
@@ -728,6 +734,12 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		workflowTask.StartedEventID = startedEvent.GetEventId()
 	}
 
+	deploymentName := request.GetDeploymentOptions().GetDeploymentName()
+	if deploymentName == "" {
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+		deploymentName = request.GetDeployment().GetSeriesName()
+	}
+
 	// Now write the completed event
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
 		workflowTask.ScheduledEventID,
@@ -737,7 +749,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.WorkerVersionStamp,
 		request.SdkMetadata,
 		request.MeteringMetadata,
-		request.Deployment,
+		deploymentName,
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+		worker_versioning.DeploymentOrVersion(request.Deployment, worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions)),
 		request.VersioningBehavior,
 	)
 
@@ -1101,23 +1115,32 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
+	m.ms.executionInfo.WorkerDeploymentName = attrs.GetWorkerDeploymentName()
 
+	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := attrs.GetDeployment()
+	if v := attrs.GetWorkerDeploymentVersion(); v != "" {
+		dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
+		wftDeployment = worker_versioning.DeploymentFromDeploymentVersion(dv)
+	}
 	wftBehavior := attrs.GetVersioningBehavior()
 	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
+	transition := m.ms.GetDeploymentTransition()
 
 	var completedTransition bool
-	if versioningInfo.GetDeploymentTransition() != nil {
+	if transition != nil {
 		// It's possible that the completed WFT is not yet from the current transition because when
 		// the transition started, the current wft was already started. In this case, we allow the
 		// started wft to run and when completed, we create another wft immediately.
-		if versioningInfo.DeploymentTransition.GetDeployment().Equal(wftDeployment) {
+		if transition.GetDeployment().Equal(wftDeployment) {
 			versioningInfo.DeploymentTransition = nil
+			versioningInfo.VersionTransition = nil
+			transition = nil
 			completedTransition = true
 		}
 	}
 
-	if versioningInfo.GetDeploymentTransition() != nil {
+	if transition != nil {
 		// There is still a transition going on. We need to schedule a new WFT so it goes to the
 		// transition deployment this time.
 		if _, err := m.ms.AddWorkflowTaskScheduledEvent(
@@ -1126,40 +1149,50 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		); err != nil {
 			return err
 		}
-	} else {
-		// Deployment and behavior before applying the data came from the completed wft.
-		wfDeploymentBefore := m.ms.GetEffectiveDeployment()
-		wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
+	}
+	// Deployment and behavior before applying the data came from the completed wft.
+	wfDeploymentBefore := m.ms.GetEffectiveDeployment()
+	wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
 
-		// Change deployment and behavior based on the completed wft.
-		if wfBehaviorBefore != wftBehavior || !wfDeploymentBefore.Equal(wftDeployment) {
-			if versioningInfo == nil {
-				versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
-				m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
-			}
+	// Change deployment and behavior based on completed wft.
+	if wftBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		if versioningInfo != nil {
 			versioningInfo.Behavior = wftBehavior
-			versioningInfo.Deployment = wftDeployment
+			// Deployment Version is not set for unversioned workers.
+			versioningInfo.Version = ""
+			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+			versioningInfo.Deployment = nil
 		}
+	} else {
+		if versioningInfo == nil {
+			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+			m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
+		}
+		versioningInfo.Behavior = wftBehavior
+		// Only populating the new field.
+		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+		versioningInfo.Deployment = nil
+		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
+	}
 
-		// Deployment and behavior after applying the data came from the completed wft.
-		wfDeploymentAfter := m.ms.GetEffectiveDeployment()
-		wfBehaviorAfter := m.ms.GetEffectiveVersioningBehavior()
-		// We reschedule activities if a transition was completed because during the transition
-		// ATs might have been dropped. Note that it is possible that transition completes and still
-		// `wfDeploymentBefore == wfDeploymentAfter`. Example: wf was on deployment1, started
-		// transition to deployment2, before completing the transition it changed the transition to
-		// deployment1 (maybe user rolled back current deployment), now the transition completes.
-		if completedTransition ||
-			// It is possible that this WFT is changing workflow's deployment even if there was no
-			// ongoing transition in the MS. That is possible when the wft is speculative. We still
-			// want to reschedule the activities so they are queued with the up-to-date directive.
-			!wfDeploymentBefore.Equal(wfDeploymentAfter) ||
-			// If effective behavior changes we also want to reschedule the pending activities, so
-			// they go to the right matching queues.
-			wfBehaviorBefore != wfBehaviorAfter {
-			if err := m.ms.reschedulePendingActivities(); err != nil {
-				return err
-			}
+	// Deployment and behavior after applying the data came from the completed wft.
+	wfDeploymentAfter := m.ms.GetEffectiveDeployment()
+	wfBehaviorAfter := m.ms.GetEffectiveVersioningBehavior()
+	// We reschedule activities if a transition was completed because during the transition
+	// ATs might have been dropped. Note that it is possible that transition completes and still
+	// `wfDeploymentBefore == wfDeploymentAfter`. Example: wf was on deployment1, started
+	// transition to deployment2, before completing the transition it changed the transition to
+	// deployment1 (maybe user rolled back current deployment), now the transition completes.
+	if completedTransition ||
+		// It is possible that this WFT is changing workflow's deployment even if there was no
+		// ongoing transition in the MS. That is possible when the wft is speculative. We still
+		// want to reschedule the activities so they are queued with the up-to-date directive.
+		!wfDeploymentBefore.Equal(wfDeploymentAfter) ||
+		// If effective behavior changes we also want to reschedule the pending activities, so
+		// they go to the right matching queues.
+		wfBehaviorBefore != wfBehaviorAfter {
+		if err := m.ms.reschedulePendingActivities(); err != nil {
+			return err
 		}
 	}
 
@@ -1175,7 +1208,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	// search attribute here because the reachability deployment may have just been changed by CompleteDeploymentTransition.
 	// This is also useful for unversioned workers.
 	// For v1 and v2 versioned workflows the search attributes should be already up-to-date based on the task started events.
-	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), limits.MaxSearchAttributeValueSize); err != nil {
+	if err := m.ms.updateBuildIdsAndDeploymentSearchAttributes(attrs.GetWorkerVersion(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
 	if addedResetPoint && len(attrs.GetBinaryChecksum()) > 0 {

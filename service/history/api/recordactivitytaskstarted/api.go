@@ -29,9 +29,9 @@ import (
 	"errors"
 	"fmt"
 
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -169,21 +169,13 @@ func recordActivityTaskStarted(
 		return nil, false, serviceerror.NewNotFound(errorMessage)
 	}
 
-	// TODO (shahab): support independent activities. Independent activities do not need all
-	// the deployment validations and do not start workflow transition.
-
+	wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 	wfDeployment := mutableState.GetEffectiveDeployment()
-	pollerDeployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
-	// Effective deployment of the workflow when History scheduled the WFT.
-	scheduledDeployment := request.GetScheduledDeployment()
-	if scheduledDeployment == nil {
-		// Matching does not send the directive deployment when it's the same as poller's.
-		scheduledDeployment = pollerDeployment
-	}
-	if !scheduledDeployment.Equal(wfDeployment) {
-		// This must be an AT scheduled before the workflow transitions to the current
-		// deployment. Matching can drop it.
-		return nil, false, serviceerrors.NewObsoleteMatchingTask("wrong directive deployment")
+	//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+	pollerDeployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities, request.PollRequest.DeploymentOptions)
+	err = worker_versioning.ValidateTaskVersionDirective(request.GetVersionDirective(), wfBehavior, wfDeployment, request.ScheduledDeployment)
+	if err != nil {
+		return nil, false, err
 	}
 
 	if mutableState.GetDeploymentTransition() != nil {
@@ -192,25 +184,31 @@ func recordActivityTaskStarted(
 		return nil, false, serviceerrors.NewActivityStartDuringTransition()
 	}
 
-	if !pollerDeployment.Equal(wfDeployment) {
-		// Task is redirected, see if this activity should start a transition on the workflow. The
-		// workflow transition happens only if the workflow TQ's current deployment is the same as
-		// the poller deployment. Otherwise, it means the activity is independently versioned, we
+	if !pollerDeployment.Equal(wfDeployment) &&
+		// Independent activities of pinned workflows are redirected. They should not start a transition on wf.
+		wfBehavior != enumspb.VERSIONING_BEHAVIOR_PINNED {
+		// AT of an unpinned workflow is redirected, see if a transition on the workflow should start.
+		// The workflow transition happens only if the workflow task of the same execution would go
+		// to the poller deployment. Otherwise, it means the activity is independently versioned, we
 		// allow it to start without affecting the workflow.
-		wfTqCurrentDeployment, err := getTaskQueueCurrentDeployment(ctx,
+		wftDepVer, err := getDeploymentVersionForWorkflowId(ctx,
 			request.NamespaceId,
 			mutableState.GetExecutionInfo().GetTaskQueue(),
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			matchingClient)
+			matchingClient,
+			mutableState.GetWorkflowKey().WorkflowID,
+		)
 		if err != nil {
 			// Let matching retry
 			return nil, false, err
 		}
-		if pollerDeployment.Equal(wfTqCurrentDeployment) {
+		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) {
 			if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
 				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 					// This must be a task from a time that the workflow was unpinned, but it's
 					// now pinned so can't transition. Matching can drop the task safely.
+					// TODO (shahab): remove this special error check because it is not
+					// expected to happen once scheduledBehavior is always populated. see TODOs above.
 					return nil, false, serviceerrors.NewObsoleteMatchingTask(err.Error())
 				}
 				return nil, false, err
@@ -235,8 +233,11 @@ func recordActivityTaskStarted(
 			taggedMetrics,
 			namespaceName,
 			// passing the root partition all the time as we don't care about partition ID in this metric
-			tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(), ai.GetTaskQueue()).TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
-			shardContext.GetConfig().BreakdownMetricsByTaskQueue(namespaceName, ai.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+			tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(),
+				ai.GetTaskQueue()).TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
+			shardContext.GetConfig().BreakdownMetricsByTaskQueue(namespaceName,
+				ai.GetTaskQueue(),
+				enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 		),
 	).Record(scheduleToStartLatency)
 
@@ -251,15 +252,16 @@ func recordActivityTaskStarted(
 	return response, false, nil
 }
 
-// TODO: move this method to a better place
+// TODO (Shahab): move this method to a better place
 // TODO: cache this result (especially if the answer is true)
-func getTaskQueueCurrentDeployment(
+func getDeploymentVersionForWorkflowId(
 	ctx context.Context,
 	namespaceID string,
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
 	matchingClient matchingservice.MatchingServiceClient,
-) (*deploymentpb.Deployment, error) {
+	workflowId string,
+) (*deploymentspb.WorkerDeploymentVersion, error) {
 	resp, err := matchingClient.GetTaskQueueUserData(ctx,
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   namespaceID,
@@ -274,5 +276,6 @@ func getTaskQueueCurrentDeployment(
 		// The TQ is unversioned
 		return nil, nil
 	}
-	return worker_versioning.FindCurrentDeployment(tqData.GetDeploymentData()), nil
+	current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
+	return worker_versioning.FindDeploymentVersionForWorkflowID(current, ramping, workflowId), nil
 }

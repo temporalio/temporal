@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	schedpb "go.temporal.io/api/schedule/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -51,7 +51,7 @@ func (s *specSuite) SetupTest() {
 	s.specBuilder = NewSpecBuilder()
 }
 
-func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
+func (s *specSuite) checkSequenceRaw(spec *schedulepb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
 	cs, err := s.specBuilder.NewCompiledSpec(spec)
 	s.NoError(err)
@@ -62,7 +62,7 @@ func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time
 	}
 }
 
-func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
+func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedulepb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
 	cs, err := s.specBuilder.NewCompiledSpec(spec)
 	s.NoError(err)
@@ -84,33 +84,33 @@ func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedpb.ScheduleS
 }
 
 func (s *specSuite) TestCanonicalize() {
-	canonical, err := canonicalizeSpec(&schedpb.ScheduleSpec{})
+	canonical, err := canonicalizeSpec(&schedulepb.ScheduleSpec{})
 	s.NoError(err)
-	s.ProtoEqual(&schedpb.ScheduleSpec{}, canonical)
+	s.ProtoEqual(&schedulepb.ScheduleSpec{}, canonical)
 
-	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	canonical, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
 		CronString: []string{
 			"@every 43h",
 		},
 	})
 	s.NoError(err)
-	s.ProtoEqual(&schedpb.ScheduleSpec{
-		Interval: []*schedpb.IntervalSpec{{
+	s.ProtoEqual(&schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{{
 			Interval: durationpb.New(43 * time.Hour),
 		}},
 	}, canonical)
 
 	// negative interval
-	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
-		Interval: []*schedpb.IntervalSpec{{
+	_, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{{
 			Interval: durationpb.New(-43 * time.Hour),
 		}},
 	})
 	s.Error(err)
 
 	// phase exceeds interval
-	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
-		Interval: []*schedpb.IntervalSpec{{
+	_, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{{
 			Interval: durationpb.New(3 * time.Hour),
 			Phase:    durationpb.New(4 * time.Hour),
 		}},
@@ -118,51 +118,51 @@ func (s *specSuite) TestCanonicalize() {
 	s.Error(err)
 
 	// various errors in ranges
-	for _, scs := range []*schedpb.StructuredCalendarSpec{
-		{Second: []*schedpb.Range{{Start: 100}}},
-		{Second: []*schedpb.Range{{Start: -3}}},
-		{Second: []*schedpb.Range{{Start: 30, End: 60}}},
-		{Second: []*schedpb.Range{{Start: 30, End: 40, Step: -3}}},
-		{Minute: []*schedpb.Range{{Start: 60}}},
-		{Hour: []*schedpb.Range{{Start: 0, End: 24}}},
-		{Hour: []*schedpb.Range{{Start: 24, End: 26}}},
-		{Hour: []*schedpb.Range{{Start: 16, End: 12}}},
-		{DayOfMonth: []*schedpb.Range{{Start: 0}}},
-		{DayOfMonth: []*schedpb.Range{{End: 33}}},
-		{Month: []*schedpb.Range{{Start: 0}}},
-		{Month: []*schedpb.Range{{End: 13}}},
-		{DayOfWeek: []*schedpb.Range{{Start: 7}}},
-		{DayOfWeek: []*schedpb.Range{{Start: 6, End: 7}}},
-		{Year: []*schedpb.Range{{Start: 1999}}},
-		{Year: []*schedpb.Range{{Start: 2112}}},
+	for _, scs := range []*schedulepb.StructuredCalendarSpec{
+		{Second: []*schedulepb.Range{{Start: 100}}},
+		{Second: []*schedulepb.Range{{Start: -3}}},
+		{Second: []*schedulepb.Range{{Start: 30, End: 60}}},
+		{Second: []*schedulepb.Range{{Start: 30, End: 40, Step: -3}}},
+		{Minute: []*schedulepb.Range{{Start: 60}}},
+		{Hour: []*schedulepb.Range{{Start: 0, End: 24}}},
+		{Hour: []*schedulepb.Range{{Start: 24, End: 26}}},
+		{Hour: []*schedulepb.Range{{Start: 16, End: 12}}},
+		{DayOfMonth: []*schedulepb.Range{{Start: 0}}},
+		{DayOfMonth: []*schedulepb.Range{{End: 33}}},
+		{Month: []*schedulepb.Range{{Start: 0}}},
+		{Month: []*schedulepb.Range{{End: 13}}},
+		{DayOfWeek: []*schedulepb.Range{{Start: 7}}},
+		{DayOfWeek: []*schedulepb.Range{{Start: 6, End: 7}}},
+		{Year: []*schedulepb.Range{{Start: 1999}}},
+		{Year: []*schedulepb.Range{{Start: 2112}}},
 	} {
-		_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
-			StructuredCalendar: []*schedpb.StructuredCalendarSpec{scs},
+		_, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
+			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{scs},
 		})
 		s.Error(err)
 	}
 
 	// check parsing and filling in defaults
-	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
-		Calendar: []*schedpb.CalendarSpec{
+	canonical, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
+		Calendar: []*schedulepb.CalendarSpec{
 			{Hour: "5,7", Minute: "23"},
 		},
 	})
 	s.NoError(err)
-	structured := []*schedpb.StructuredCalendarSpec{{
-		Second:     []*schedpb.Range{{Start: 0}},
-		Minute:     []*schedpb.Range{{Start: 23}},
-		Hour:       []*schedpb.Range{{Start: 5}, {Start: 7}},
-		DayOfMonth: []*schedpb.Range{{Start: 1, End: 31}},
-		Month:      []*schedpb.Range{{Start: 1, End: 12}},
-		DayOfWeek:  []*schedpb.Range{{Start: 0, End: 6}},
+	structured := []*schedulepb.StructuredCalendarSpec{{
+		Second:     []*schedulepb.Range{{Start: 0}},
+		Minute:     []*schedulepb.Range{{Start: 23}},
+		Hour:       []*schedulepb.Range{{Start: 5}, {Start: 7}},
+		DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31}},
+		Month:      []*schedulepb.Range{{Start: 1, End: 12}},
+		DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6}},
 	}}
-	s.ProtoEqual(&schedpb.ScheduleSpec{
+	s.ProtoEqual(&schedulepb.ScheduleSpec{
 		StructuredCalendar: structured,
 	}, canonical)
 
 	// no tz in cron string, leave spec alone
-	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	canonical, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
 		CronString: []string{
 			"23 5,7 * * *",
 		},
@@ -171,7 +171,7 @@ func (s *specSuite) TestCanonicalize() {
 		TimezoneName: "Europe/London",
 	})
 	s.NoError(err)
-	s.ProtoEqual(&schedpb.ScheduleSpec{
+	s.ProtoEqual(&schedulepb.ScheduleSpec{
 		StructuredCalendar: structured,
 		Jitter:             durationpb.New(5 * time.Minute),
 		StartTime:          timestamppb.New(time.Date(2022, 3, 23, 0, 0, 0, 0, time.UTC)),
@@ -179,20 +179,20 @@ func (s *specSuite) TestCanonicalize() {
 	}, canonical)
 
 	// tz matches, ok
-	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	canonical, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
 		CronString: []string{
 			"CRON_TZ=Europe/London 23 5,7 * * *",
 		},
 		TimezoneName: "Europe/London",
 	})
 	s.NoError(err)
-	s.ProtoEqual(&schedpb.ScheduleSpec{
+	s.ProtoEqual(&schedulepb.ScheduleSpec{
 		StructuredCalendar: structured,
 		TimezoneName:       "Europe/London",
 	}, canonical)
 
 	// tz mismatch, error
-	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	_, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
 		CronString: []string{
 			"CRON_TZ=America/New_York 23 5,7 * * *",
 		},
@@ -201,7 +201,7 @@ func (s *specSuite) TestCanonicalize() {
 	s.Error(err)
 
 	// tz mismatch between cron strings, error
-	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	_, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
 		CronString: []string{
 			"CRON_TZ=Europe/London 23 5,7 * * *",
 			"CRON_TZ=America/New_York 23 5,7 * * *",
@@ -210,7 +210,7 @@ func (s *specSuite) TestCanonicalize() {
 	s.Error(err)
 
 	// all cron strings don't agree, error
-	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	_, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
 		CronString: []string{
 			"CRON_TZ=Europe/London 23 5,7 * * *",
 			"23 5,7 * * *",
@@ -219,7 +219,7 @@ func (s *specSuite) TestCanonicalize() {
 	s.Error(err)
 
 	// all cron strings don't agree, error
-	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	_, err = canonicalizeSpec(&schedulepb.ScheduleSpec{
 		CronString: []string{
 			"23 5,7 * * *",
 			"CRON_TZ=Europe/London 23 5,7 * * *",
@@ -230,8 +230,8 @@ func (s *specSuite) TestCanonicalize() {
 
 func (s *specSuite) TestSpecIntervalBasic() {
 	s.checkSequenceRaw(
-		&schedpb.ScheduleSpec{
-			Interval: []*schedpb.IntervalSpec{
+		&schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
 				{Interval: durationpb.New(90 * time.Minute)},
 			},
 		},
@@ -245,8 +245,8 @@ func (s *specSuite) TestSpecIntervalBasic() {
 
 func (s *specSuite) TestSpecIntervalPhase() {
 	s.checkSequenceRaw(
-		&schedpb.ScheduleSpec{
-			Interval: []*schedpb.IntervalSpec{
+		&schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
 				{
 					Interval: durationpb.New(90 * time.Minute),
 					Phase:    durationpb.New(5*time.Minute + 44*time.Second),
@@ -263,8 +263,8 @@ func (s *specSuite) TestSpecIntervalPhase() {
 
 func (s *specSuite) TestSpecIntervalMultiple() {
 	s.checkSequenceRaw(
-		&schedpb.ScheduleSpec{
-			Interval: []*schedpb.IntervalSpec{
+		&schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
 				{
 					Interval: durationpb.New(90 * time.Minute),
 					Phase:    durationpb.New(5*time.Minute + 44*time.Second),
@@ -288,8 +288,8 @@ func (s *specSuite) TestSpecIntervalMultiple() {
 
 func (s *specSuite) TestSpecCalendarBasic() {
 	s.checkSequenceRaw(
-		&schedpb.ScheduleSpec{
-			Calendar: []*schedpb.CalendarSpec{
+		&schedulepb.ScheduleSpec{
+			Calendar: []*schedulepb.CalendarSpec{
 				{Hour: "5,7", Minute: "23"},
 			},
 		},
@@ -303,8 +303,8 @@ func (s *specSuite) TestSpecCalendarBasic() {
 
 func (s *specSuite) TestSpecCalendarMultiple() {
 	s.checkSequenceRaw(
-		&schedpb.ScheduleSpec{
-			Calendar: []*schedpb.CalendarSpec{
+		&schedulepb.ScheduleSpec{
+			Calendar: []*schedulepb.CalendarSpec{
 				{Hour: "5,7", Minute: "23"},
 				{Hour: "11,13", Minute: "55"},
 			},
@@ -323,8 +323,8 @@ func (s *specSuite) TestSpecCalendarMultiple() {
 
 func (s *specSuite) TestSpecCalendarAndCron() {
 	s.checkSequenceRaw(
-		&schedpb.ScheduleSpec{
-			Calendar: []*schedpb.CalendarSpec{
+		&schedulepb.ScheduleSpec{
+			Calendar: []*schedulepb.CalendarSpec{
 				{Hour: "5,7", Minute: "23"},
 			},
 			CronString: []string{
@@ -345,11 +345,11 @@ func (s *specSuite) TestSpecCalendarAndCron() {
 
 func (s *specSuite) TestSpecMixedCalendarInterval() {
 	s.checkSequenceRaw(
-		&schedpb.ScheduleSpec{
-			Calendar: []*schedpb.CalendarSpec{
+		&schedulepb.ScheduleSpec{
+			Calendar: []*schedulepb.CalendarSpec{
 				{Hour: "11,13", Minute: "55"},
 			},
-			Interval: []*schedpb.IntervalSpec{
+			Interval: []*schedulepb.IntervalSpec{
 				{
 					Interval: durationpb.New(90 * time.Minute),
 					Phase:    durationpb.New(7 * time.Minute),
@@ -369,11 +369,11 @@ func (s *specSuite) TestSpecMixedCalendarInterval() {
 func (s *specSuite) TestSpecExclude() {
 	s.checkSequenceFull(
 		"",
-		&schedpb.ScheduleSpec{
-			Interval: []*schedpb.IntervalSpec{
+		&schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
 				{Interval: durationpb.New(90 * time.Minute)},
 			},
-			ExcludeCalendar: []*schedpb.CalendarSpec{
+			ExcludeCalendar: []*schedulepb.CalendarSpec{
 				{
 					Hour:   "12-14",
 					Minute: "*",
@@ -393,8 +393,8 @@ func (s *specSuite) TestSpecExclude() {
 func (s *specSuite) TestSpecStartTime() {
 	s.checkSequenceFull(
 		"",
-		&schedpb.ScheduleSpec{
-			Interval: []*schedpb.IntervalSpec{
+		&schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
 				{Interval: durationpb.New(90 * time.Minute)},
 			},
 			StartTime: timestamppb.New(time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)),
@@ -410,8 +410,8 @@ func (s *specSuite) TestSpecStartTime() {
 func (s *specSuite) TestSpecEndTime() {
 	s.checkSequenceFull(
 		"",
-		&schedpb.ScheduleSpec{
-			Interval: []*schedpb.IntervalSpec{
+		&schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
 				{Interval: durationpb.New(90 * time.Minute)},
 			},
 			EndTime: timestamppb.New(time.Date(2022, 3, 23, 14, 0, 0, 0, time.UTC)),
@@ -427,8 +427,8 @@ func (s *specSuite) TestSpecEndTime() {
 func (s *specSuite) TestSpecBoundedJitter() {
 	s.checkSequenceFull(
 		"",
-		&schedpb.ScheduleSpec{
-			Interval: []*schedpb.IntervalSpec{
+		&schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
 				{Interval: durationpb.New(90 * time.Minute)},
 			},
 			Jitter: durationpb.New(24 * time.Hour),
@@ -443,8 +443,8 @@ func (s *specSuite) TestSpecBoundedJitter() {
 func (s *specSuite) TestSpecJitterSingleRun() {
 	s.checkSequenceFull(
 		"",
-		&schedpb.ScheduleSpec{
-			Calendar: []*schedpb.CalendarSpec{
+		&schedulepb.ScheduleSpec{
+			Calendar: []*schedulepb.CalendarSpec{
 				{Hour: "13", Minute: "55", DayOfMonth: "7", Month: "4", Year: "2022"},
 			},
 		},
@@ -453,8 +453,8 @@ func (s *specSuite) TestSpecJitterSingleRun() {
 	)
 	s.checkSequenceFull(
 		"",
-		&schedpb.ScheduleSpec{
-			Calendar: []*schedpb.CalendarSpec{
+		&schedulepb.ScheduleSpec{
+			Calendar: []*schedulepb.CalendarSpec{
 				{Hour: "13", Minute: "55", DayOfMonth: "7", Month: "4", Year: "2022"},
 			},
 			Jitter: durationpb.New(1 * time.Hour),
@@ -465,8 +465,8 @@ func (s *specSuite) TestSpecJitterSingleRun() {
 }
 
 func (s *specSuite) TestSpecJitterSeed() {
-	spec := &schedpb.ScheduleSpec{
-		Interval: []*schedpb.IntervalSpec{
+	spec := &schedulepb.ScheduleSpec{
+		Interval: []*schedulepb.IntervalSpec{
 			{Interval: durationpb.New(24 * time.Hour)},
 		},
 		Jitter: durationpb.New(1 * time.Hour),

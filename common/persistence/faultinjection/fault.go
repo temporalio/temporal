@@ -82,8 +82,7 @@ func newFault(errName string, errRate float64, methodName string) fault {
 	}
 }
 
-// Not receiver on a *fault because of generics.
-func inject0(f *fault, op func() error) error {
+func (f *fault) inject(op func() error) error {
 	if f == nil {
 		return op()
 	}
@@ -94,32 +93,4 @@ func inject0(f *fault, op func() error) error {
 		}
 	}
 	return f.err
-}
-
-func inject1[T1 any](f *fault, op func() (T1, error)) (T1, error) {
-	if f == nil {
-		return op()
-	}
-	if f.execOp {
-		r1, err := op()
-		if err != nil {
-			return r1, err
-		}
-	}
-	var nilT1 T1
-	return nilT1, f.err
-}
-func inject2[T1 any, T2 any](f *fault, op func() (T1, T2, error)) (T1, T2, error) {
-	if f == nil {
-		return op()
-	}
-	if f.execOp {
-		r1, r2, err := op()
-		if err != nil {
-			return r1, r2, err
-		}
-	}
-	var nilT1 T1
-	var nilT2 T2
-	return nilT1, nilT2, f.err
 }

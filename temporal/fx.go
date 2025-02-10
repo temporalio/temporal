@@ -39,7 +39,6 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
@@ -610,6 +609,7 @@ func ApplyClusterMetadataConfigProvider(
 		customDataStoreFactory,
 		logger,
 		metricsHandler,
+		telemetry.NoopTracerProvider,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
@@ -859,6 +859,12 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 	return nil
 }
 
+type SpanExporterInputs struct {
+	fx.In
+	Lifecycyle fx.Lifecycle
+	Config     *config.Config `optional:"true"`
+}
+
 // TraceExportModule holds process-global telemetry fx state defining the set of
 // OTEL trace/span exporters used by tracing instrumentation. The following
 // types can be overriden/augmented with fx.Replace/fx.Decorate:
@@ -873,10 +879,14 @@ var TraceExportModule = fx.Options(
 		)
 	}),
 
-	fx.Provide(func(lc fx.Lifecycle, c *config.Config) ([]otelsdktrace.SpanExporter, error) {
-		exportersByType, err := c.ExporterConfig.SpanExporters()
-		if err != nil {
-			return nil, err
+	fx.Provide(func(inputs SpanExporterInputs) ([]otelsdktrace.SpanExporter, error) {
+		exportersByType := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
+		if inputs.Config != nil {
+			var err error
+			exportersByType, err = inputs.Config.ExporterConfig.SpanExporters()
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		exportersByTypeFromEnv, err := telemetry.SpanExportersFromEnv(os.LookupEnv)
@@ -888,7 +898,7 @@ var TraceExportModule = fx.Options(
 		maps.Copy(exportersByType, exportersByTypeFromEnv)
 
 		exporters := expmaps.Values(exportersByType)
-		lc.Append(fx.Hook{
+		inputs.Lifecycyle.Append(fx.Hook{
 			OnStart: startAll(exporters),
 			OnStop:  shutdownAll(exporters),
 		})
@@ -906,7 +916,7 @@ var TraceExportModule = fx.Options(
 //   - *go.opentelemetry.io/otel/sdk/resource.Resource
 //     default: resource.Default() augmented with the supplied serviceName
 //   - go.opentelemetry.io/otel/trace.TracerProvider
-//     default: noop.NewTracerProvider()
+//     default: otelnoop.NewTracerProvider()
 //   - go.opentelemetry.io/otel/ppropagation.TextMapPropagator
 //     default: propagation.TraceContext{}
 //   - telemetry.ServerStatsHandler
@@ -949,7 +959,7 @@ var ServiceTracingModule = fx.Options(
 	),
 	fx.Provide(func(lc fx.Lifecycle, r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) trace.TracerProvider {
 		if len(sps) == 0 {
-			return noop.NewTracerProvider()
+			return telemetry.NoopTracerProvider
 		}
 		opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
 		opts = append(opts, otelsdktrace.WithResource(r))

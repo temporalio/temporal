@@ -105,6 +105,7 @@ func Invoke(
 
 	req := request.GetRequest()
 	_, mutableStateStatus := workflowLease.GetMutableState().GetWorkflowStateStatus()
+	scope = scope.WithTags(metrics.StringTag("workflow_status", mutableStateStatus.String()))
 	if mutableStateStatus != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && req.QueryRejectCondition != enumspb.QUERY_REJECT_CONDITION_NONE {
 		notOpenReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_OPEN
 		notCompletedCleanlyReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY && mutableStateStatus != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
@@ -216,7 +217,7 @@ func Invoke(
 					},
 				}, nil
 			case enumspb.QUERY_RESULT_TYPE_FAILED:
-				return nil, serviceerror.NewQueryFailed(result.GetErrorMessage())
+				return nil, serviceerror.NewQueryFailedWithFailure(result.GetErrorMessage(), result.GetFailure())
 			default:
 				metrics.QueryRegistryInvalidStateCount.With(scope).Record(1)
 				return nil, consts.ErrQueryEnteredInvalidState

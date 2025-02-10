@@ -31,6 +31,7 @@ const (
 	ServiceRoleTagName          = "service_role"
 	CacheTypeTagName            = "cache_type"
 	FailureTagName              = "failure"
+	FailureSourceTagName        = "failure_source"
 	TaskCategoryTagName         = "task_category"
 	TaskTypeTagName             = "task_type"
 	TaskPriorityTagName         = "task_priority"
@@ -533,6 +534,8 @@ const (
 	BackfillHistoryEventsTaskScope = "BackfillHistoryEventsTask"
 	// VerifyVersionedTransitionTaskScope is the scope used by verify versioned transition task processing
 	VerifyVersionedTransitionTaskScope = "VerifyVersionedTransitionTask"
+	// SyncVersionedTransitionTaskScope is the scope used by sync versioned transition task processing
+	SyncVersionedTransitionTaskScope = "SyncVersionedTransitionTask"
 	// SyncWatermarkScope is the scope used by closed workflow task replication processing
 	SyncWatermarkScope = "SyncWatermark"
 	// NoopTaskScope is the scope used by noop task
@@ -541,9 +544,6 @@ const (
 	UnknownTaskScope = "UnknownTask"
 	// ParentClosePolicyProcessorScope is scope used by all metrics emitted by worker.ParentClosePolicyProcessor
 	ParentClosePolicyProcessorScope = "ParentClosePolicyProcessor"
-	DeleteNamespaceWorkflowScope    = "DeleteNamespaceWorkflow"
-	ReclaimResourcesWorkflowScope   = "ReclaimResourcesWorkflow"
-	DeleteExecutionsWorkflowScope   = "DeleteExecutionsWorkflow"
 )
 
 // History task type
@@ -659,16 +659,10 @@ var (
 		"wf_too_many_pending_external_workflow_signals",
 		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending signals to external workflows to be exceeded. See https://t.mp/limits for more information."),
 	)
-	UTF8ValidationErrors = NewCounterDef(
-		"utf8_validation_errors",
-		WithDescription("Number of times the service encountered a proto message with invalid UTF-8 in a string field"),
-	)
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
 	AddSearchAttributesWorkflowFailuresCount = NewCounterDef("add_search_attributes_workflow_failure")
-	DeleteNamespaceWorkflowSuccessCount      = NewCounterDef("delete_namespace_workflow_success")
-	DeleteNamespaceWorkflowFailuresCount     = NewCounterDef("delete_namespace_workflow_failure")
 	VersionCheckSuccessCount                 = NewCounterDef("version_check_success")
 	VersionCheckFailedCount                  = NewCounterDef("version_check_failed")
 	VersionCheckRequestFailedCount           = NewCounterDef("version_check_request_failed")
@@ -826,9 +820,11 @@ var (
 	MessageTypeRejectWorkflowExecutionUpdateCounter      = NewCounterDef("reject_workflow_update_message")
 	InvalidStateTransitionWorkflowExecutionUpdateCounter = NewCounterDef("invalid_state_transition_workflow_update_message")
 	WorkflowExecutionUpdateRegistrySize                  = NewBytesHistogramDef("workflow_update_registry_size")
+	WorkflowExecutionUpdateRegistrySizeLimited           = NewCounterDef("workflow_update_registry_size_limited")
 	WorkflowExecutionUpdateRequestRateLimited            = NewCounterDef("workflow_update_request_rate_limited")
 	WorkflowExecutionUpdateTooMany                       = NewCounterDef("workflow_update_request_too_many")
 	WorkflowExecutionUpdateAborted                       = NewCounterDef("workflow_update_aborted")
+	WorkflowExecutionUpdateContinueAsNewSuggestions      = NewCounterDef("workflow_update_continue_as_new_suggestions")
 	WorkflowExecutionUpdateSentToWorker                  = NewCounterDef("workflow_update_sent_to_worker")
 	WorkflowExecutionUpdateSentToWorkerAgain             = NewCounterDef("workflow_update_sent_to_worker_again")
 	WorkflowExecutionUpdateWaitStageAccepted             = NewCounterDef("workflow_update_wait_stage_accepted")
@@ -1073,19 +1069,40 @@ var (
 	ScavengerValidationFailuresCount                = NewCounterDef("scavenger_validation_failures")
 	ScavengerValidationSkipsCount                   = NewCounterDef("scavenger_validation_skips")
 	AddSearchAttributesFailuresCount                = NewCounterDef("add_search_attributes_failures")
-	DeleteNamespaceSuccessCount                     = NewCounterDef("delete_namespace_success")
-	RenameNamespaceSuccessCount                     = NewCounterDef("rename_namespace_success")
-	DeleteExecutionsSuccessCount                    = NewCounterDef("delete_executions_success")
-	DeleteNamespaceFailuresCount                    = NewCounterDef("delete_namespace_failures")
-	UpdateNamespaceFailuresCount                    = NewCounterDef("update_namespace_failures")
-	RenameNamespaceFailuresCount                    = NewCounterDef("rename_namespace_failures")
-	ReadNamespaceFailuresCount                      = NewCounterDef("read_namespace_failures")
-	ListExecutionsFailuresCount                     = NewCounterDef("list_executions_failures")
-	CountExecutionsFailuresCount                    = NewCounterDef("count_executions_failures")
-	DeleteExecutionFailuresCount                    = NewCounterDef("delete_execution_failures")
-	DeleteExecutionNotFoundCount                    = NewCounterDef("delete_execution_not_found")
-	RateLimiterFailuresCount                        = NewCounterDef("rate_limiter_failures")
-	BatcherProcessorSuccess                         = NewCounterDef(
+
+	// Delete Namespace metrics.
+	ReclaimResourcesNamespaceDeleteSuccessCount = NewCounterDef(
+		"reclaim_resources_namespace_delete_success",
+		WithDescription("Incremented every time when ReclaimResources workflow deletes a namespace successfully"),
+	)
+	ReclaimResourcesNamespaceDeleteFailureCount = NewCounterDef(
+		"reclaim_resources_namespace_delete_failure",
+		WithDescription("Incremented every time when ReclaimResources workflow completes without deleting a namespace"),
+	)
+	ReclaimResourcesDeleteExecutionsSuccessCount = NewCounterDef(
+		"reclaim_resources_delete_executions_success",
+		WithDescription("The number of workflow executions that was successfully deleted when ReclaimResources workflow completes"),
+	)
+	ReclaimResourcesDeleteExecutionsFailureCount = NewCounterDef(
+		"reclaim_resources_delete_executions_failure",
+		WithDescription("The number of workflow executions that got error when ReclaimResources workflow completes"),
+	)
+
+	DeleteExecutionsSuccessCount = NewCounterDef(
+		"delete_executions_success",
+		WithDescription("The number of workflow executions that was successfully deleted by DeleteExecutions workflow"),
+	)
+	DeleteExecutionsFailureCount = NewCounterDef(
+		"delete_executions_failure",
+		WithDescription("The number of workflow executions that got error while deleting by DeleteExecutions workflow"),
+	)
+	DeleteExecutionsNotFoundCount = NewCounterDef(
+		"delete_executions_not_found",
+		WithDescription("The number of workflow executions that wasn't found by DeleteExecutions workflow"),
+	)
+
+	// Batcher metrics.
+	BatcherProcessorSuccess = NewCounterDef(
 		"batcher_processor_requests",
 		WithDescription("The number of individual workflow execution tasks successfully processed by the batch request processor"),
 	)
@@ -1204,4 +1221,10 @@ var (
 	MemoryStackGauge     = NewGaugeDef("memory_stack")
 	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
 	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
+	NumGCGauge           = NewGaugeDef("memory_num_gc_last",
+		WithDescription("Last runtime.MemStats.NumGC"),
+	)
+	GcPauseNsTotal = NewGaugeDef("memory_pause_total_ns_last",
+		WithDescription("Last runtime.MemStats.PauseTotalNs"),
+	)
 )

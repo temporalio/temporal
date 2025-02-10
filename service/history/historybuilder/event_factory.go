@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -98,6 +99,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		attributes.ParentWorkflowExecution = parentInfo.Execution
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
 		attributes.ParentInitiatedEventVersion = parentInfo.InitiatedVersion
+		attributes.ParentPinnedWorkerDeploymentVersion = parentInfo.PinnedWorkerDeploymentVersion
 	}
 
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
@@ -157,21 +159,27 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
+	deploymentName string,
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
+	dv := ""
+	if deployment != nil {
+		dv = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment))
+	}
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId:   scheduledEventID,
-			StartedEventId:     startedEventID,
-			Identity:           identity,
-			BinaryChecksum:     checksum,
-			WorkerVersion:      workerVersionStamp,
-			SdkMetadata:        sdkMetadata,
-			MeteringMetadata:   meteringMetadata,
-			Deployment:         deployment,
-			VersioningBehavior: behavior,
+			ScheduledEventId:        scheduledEventID,
+			StartedEventId:          startedEventID,
+			Identity:                identity,
+			BinaryChecksum:          checksum,
+			WorkerVersion:           workerVersionStamp,
+			SdkMetadata:             sdkMetadata,
+			MeteringMetadata:        meteringMetadata,
+			WorkerDeploymentName:    deploymentName,
+			WorkerDeploymentVersion: dv,
+			VersioningBehavior:      behavior,
 		},
 	}
 
@@ -395,13 +403,21 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 
 func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	versioningOverride *workflowpb.VersioningOverride,
+	unsetVersioningOverride bool,
+	attachRequestID string,
+	attachCompletionCallbacks []*commonpb.Callback,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
 		WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
-			VersioningOverride: versioningOverride,
+			VersioningOverride:          versioningOverride,
+			UnsetVersioningOverride:     unsetVersioningOverride,
+			AttachedRequestId:           attachRequestID,
+			AttachedCompletionCallbacks: attachCompletionCallbacks,
 		},
 	}
+	event.Links = links
 	event.WorkerMayIgnore = true
 	return event
 }

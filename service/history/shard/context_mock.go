@@ -372,6 +372,21 @@ func (mr *MockContextMockRecorder) GetHistoryClient() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockContext)(nil).GetHistoryClient))
 }
 
+// GetHistoryTasks mocks base method.
+func (m *MockContext) GetHistoryTasks(ctx context.Context, request *persistence0.GetHistoryTasksRequest) (*persistence0.GetHistoryTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHistoryTasks", ctx, request)
+	ret0, _ := ret[0].(*persistence0.GetHistoryTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHistoryTasks indicates an expected call of GetHistoryTasks.
+func (mr *MockContextMockRecorder) GetHistoryTasks(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockContext)(nil).GetHistoryTasks), ctx, request)
+}
+
 // GetLogger mocks base method.
 func (m *MockContext) GetLogger() log.Logger {
 	m.ctrl.T.Helper()
@@ -1098,6 +1113,21 @@ func (m *MockControllableContext) GetHistoryClient() historyservice.HistoryServi
 func (mr *MockControllableContextMockRecorder) GetHistoryClient() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockControllableContext)(nil).GetHistoryClient))
+}
+
+// GetHistoryTasks mocks base method.
+func (m *MockControllableContext) GetHistoryTasks(ctx context.Context, request *persistence0.GetHistoryTasksRequest) (*persistence0.GetHistoryTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHistoryTasks", ctx, request)
+	ret0, _ := ret[0].(*persistence0.GetHistoryTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHistoryTasks indicates an expected call of GetHistoryTasks.
+func (mr *MockControllableContextMockRecorder) GetHistoryTasks(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockControllableContext)(nil).GetHistoryTasks), ctx, request)
 }
 
 // GetLogger mocks base method.

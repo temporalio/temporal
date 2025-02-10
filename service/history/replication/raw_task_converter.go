@@ -197,6 +197,10 @@ func convertActivityStateReplicationTask(
 						LastAttemptCompleteTime:    activityInfo.LastAttemptCompleteTime,
 						Stamp:                      activityInfo.Stamp,
 						Paused:                     activityInfo.Paused,
+						RetryInitialInterval:       activityInfo.RetryInitialInterval,
+						RetryMaximumInterval:       activityInfo.RetryMaximumInterval,
+						RetryMaximumAttempts:       activityInfo.RetryMaximumAttempts,
+						RetryBackoffCoefficient:    activityInfo.RetryBackoffCoefficient,
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
@@ -644,6 +648,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	// If workflow is not on any versionedTransition (in an unknown state from state-based replication perspective),
 	// we can't convert this raw task to a replication task, instead we need to rely on its task equivalents.
 	if len(executionInfo.TransitionHistory) == 0 {
+		releaseFunc(nil)
 		return c.convertTaskEquivalents(ctx, taskInfo, targetClusterID)
 	}
 
@@ -659,6 +664,12 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		}
 		releaseFunc(nil) // release wf lock before retrieving history events
 		return c.generateBackfillHistoryTask(ctx, taskInfo, targetClusterID)
+	}
+
+	if mutableState.HasBufferedEvents() {
+		// we can't sync state when there's buffered events
+		// as current state could depend on those buffered events
+		return nil, nil
 	}
 
 	var targetHistoryItems [][]*historyspb.VersionHistoryItem
@@ -720,12 +731,16 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 	if err != nil {
 		return nil, err
 	}
-	lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, taskInfo.NextEventID-1)
+	var nextEventId = taskInfo.NextEventID
+	if nextEventId == common.EmptyEventID {
+		nextEventId = taskInfo.LastVersionHistoryItem.GetEventId() + 1
+	}
+	lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, nextEventId-1)
 	if err != nil {
 		return nil, err
 	}
 	capItems, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(currentHistory, &historyspb.VersionHistoryItem{
-		EventId: taskInfo.NextEventID - 1,
+		EventId: nextEventId - 1,
 		Version: lastEventVersion,
 	})
 	if err != nil {
@@ -741,7 +756,7 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 				RunId:               taskInfo.RunID,
 				NewRunId:            taskInfo.NewRunID,
 				EventVersionHistory: capItems.Items,
-				NextEventId:         taskInfo.NextEventID,
+				NextEventId:         nextEventId,
 			},
 		},
 		VersionedTransition: taskInfo.VersionedTransition,

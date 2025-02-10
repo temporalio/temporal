@@ -27,23 +27,24 @@ package startworkflow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -74,13 +75,14 @@ const (
 
 // Starter starts a new workflow execution.
 type Starter struct {
-	shardContext               shard.Context
-	workflowConsistencyChecker api.WorkflowConsistencyChecker
-	tokenSerializer            common.TaskTokenSerializer
-	visibilityManager          manager.VisibilityManager
-	request                    *historyservice.StartWorkflowExecutionRequest
-	namespace                  *namespace.Namespace
-	createLeaseFn              api.CreateLeaseFunc
+	shardContext                                  shard.Context
+	workflowConsistencyChecker                    api.WorkflowConsistencyChecker
+	tokenSerializer                               *tasktoken.Serializer
+	visibilityManager                             manager.VisibilityManager
+	request                                       *historyservice.StartWorkflowExecutionRequest
+	namespace                                     *namespace.Namespace
+	createOrUpdateLeaseFn                         api.CreateOrUpdateLeaseFunc
+	followReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -106,10 +108,10 @@ type mutableStateInfo struct {
 func NewStarter(
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	tokenSerializer common.TaskTokenSerializer,
+	tokenSerializer *tasktoken.Serializer,
 	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
-	createLeaseFn api.CreateLeaseFunc,
+	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
@@ -123,7 +125,8 @@ func NewStarter(
 		visibilityManager:          visibilityManager,
 		request:                    request,
 		namespace:                  namespaceEntry,
-		createLeaseFn:              createLeaseFn,
+		createOrUpdateLeaseFn:      createLeaseFn,
+		followReusePolicyAfterConflictPolicyTerminate: shardContext.GetConfig().FollowReusePolicyAfterConflictPolicyTerminate,
 	}, nil
 }
 
@@ -249,7 +252,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // prepareNewWorkflow creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error) {
-	runID := uuid.NewString()
+	runID := primitives.NewUUID().String()
 	mutableState, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
@@ -262,7 +265,7 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 		return nil, err
 	}
 
-	workflowLease, err := s.createLeaseFn(s.shardContext, mutableState)
+	workflowLease, err := s.createOrUpdateLeaseFn(nil, s.shardContext, mutableState)
 	if err != nil {
 		return nil, err
 	}
@@ -314,9 +317,18 @@ func (s *Starter) handleConflict(
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	request := s.request.StartRequest
-	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() {
-		resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
-		return resp, StartDeduped, err
+	currentWorkflowRequestIDs := currentWorkflowConditionFailed.RequestIDs
+	if requestIDInfo, ok := currentWorkflowRequestIDs[request.GetRequestId()]; ok {
+		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
+			return resp, StartDeduped, err
+		}
+
+		resp := &historyservice.StartWorkflowExecutionResponse{
+			RunId:   currentWorkflowConditionFailed.RunID,
+			Started: false,
+		}
+		return resp, StartDeduped, nil
 	}
 
 	if err := s.verifyNamespaceActive(creationParams, currentWorkflowConditionFailed); err != nil {
@@ -333,7 +345,6 @@ func (s *Starter) handleConflict(
 	if err := s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
 		return nil, StartErr, err
 	}
-
 	resp, err := s.generateResponse(
 		creationParams.runID,
 		creationParams.workflowTaskInfo,
@@ -348,6 +359,11 @@ func (s *Starter) createAsCurrent(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) error {
+	// TODO(stephanos): remove this hack
+	// This is here for Update-with-Start to reapply the Update after it was aborted previously.
+	if _, err := s.createOrUpdateLeaseFn(creationParams.workflowLease, s.shardContext, nil); err != nil {
+		return err
+	}
 	return creationParams.workflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
 		s.shardContext,
@@ -399,7 +415,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	// Using a new RunID here to simplify locking: MultiOperation, that re-uses the Starter, is creating
 	// a locked workflow context for each new workflow. Using a fresh RunID prevents a deadlock with the
 	// previously created workflow context.
-	newRunID := uuid.NewString()
+	newRunID := primitives.NewUUID().String()
 
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
@@ -408,25 +424,24 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		newRunID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
-		currentWorkflowConditionFailed.RequestID,
+		currentWorkflowConditionFailed.RequestIDs,
 		s.request.StartRequest.GetWorkflowIdReusePolicy(),
 		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
 		currentWorkflowStartTime,
+		s.request.ParentExecutionInfo,
+		s.request.ChildWorkflowOnly,
 	)
 
 	switch {
 	case errors.Is(err, api.ErrUseCurrentExecution):
-		resp := &historyservice.StartWorkflowExecutionResponse{
-			RunId:   currentWorkflowConditionFailed.RunID,
-			Started: false, // set explicitly for emphasis
-		}
-		return resp, StartReused, nil
+		return s.handleUseExistingWorkflowOnConflictOptions(ctx, workflowKey, currentWorkflowConditionFailed)
 	case err != nil:
 		return nil, StartErr, err
 	case currentExecutionUpdateAction == nil:
-		return nil, StartErr, nil
+		return nil, StartNew, nil
 	}
 
+	// handle terminating the current execution (currentWorkflowUpdateAction) and starting a new workflow
 	var workflowLease api.WorkflowLease
 	var mutableStateInfo *mutableStateInfo
 	// Update current execution and create new execution in one transaction.
@@ -435,11 +450,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		definition.NewWorkflowKey(
-			s.namespace.ID().String(),
-			workflowID,
-			currentWorkflowConditionFailed.RunID,
-		),
+		workflowKey,
 		currentExecutionUpdateAction,
 		func() (workflow.Context, workflow.MutableState, error) {
 			newMutableState, err := api.NewWorkflowWithSignal(
@@ -453,7 +464,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 				return nil, nil, err
 			}
 
-			workflowLease, err = s.createLeaseFn(s.shardContext, newMutableState)
+			workflowLease, err = s.createOrUpdateLeaseFn(nil, s.shardContext, newMutableState)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -489,9 +500,14 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		resp, err := s.generateResponse(newRunID, mutableStateInfo.workflowTask, events)
 		return resp, StartNew, err
 	case consts.ErrWorkflowCompleted:
-		// current workflow already closed
-		// fallthough to the logic for only creating the new workflow below
-		return nil, StartErr, nil
+		if s.followReusePolicyAfterConflictPolicyTerminate(s.namespace.Name().String()) {
+			// Exit and retry again from the top.
+			// By returning an Unavailable service error, the entire Start request will be retried.
+			// NOTE: This WorkflowIDReusePolicy cannot be RejectDuplicate as the frontend will reject that.
+			return nil, StartErr, serviceerror.NewUnavailable(fmt.Sprintf("Termination failed: %v", err))
+		}
+		// Fallthough to the logic for only creating the new workflow below.
+		return nil, StartNew, nil
 	default:
 		return nil, StartErr, err
 	}
@@ -609,6 +625,79 @@ func (s *Starter) getWorkflowHistory(ctx context.Context, mutableState *mutableS
 	return events, nil
 }
 
+func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
+) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
+	var err error
+	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
+	if onConflictOptions != nil {
+		requestID := ""
+		if onConflictOptions.AttachRequestId {
+			requestID = s.request.StartRequest.GetRequestId()
+		}
+		var completionCallbacks []*commonpb.Callback
+		if onConflictOptions.AttachCompletionCallbacks {
+			completionCallbacks = s.request.StartRequest.GetCompletionCallbacks()
+		}
+		var links []*commonpb.Link
+		if onConflictOptions.AttachLinks {
+			links = s.request.StartRequest.GetLinks()
+		}
+		err = api.GetAndUpdateWorkflowWithNew(
+			ctx,
+			nil,
+			workflowKey,
+			func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+				mutableState := workflowLease.GetMutableState()
+				if !mutableState.IsWorkflowExecutionRunning() {
+					return nil, consts.ErrWorkflowCompleted
+				}
+
+				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+					nil,
+					false,
+					requestID,
+					completionCallbacks,
+					links,
+				)
+				return api.UpdateWorkflowWithoutWorkflowTask, err
+			},
+			nil, // no new workflow
+			s.shardContext,
+			s.workflowConsistencyChecker,
+		)
+	}
+
+	switch err {
+	case nil:
+		resp := &historyservice.StartWorkflowExecutionResponse{
+			RunId:   workflowKey.RunID,
+			Started: false, // set explicitly for emphasis
+		}
+		return resp, StartReused, nil
+	case consts.ErrWorkflowCompleted:
+		// Need to re-evaluate the reuse policy because the previous check didn't lock the current
+		// execution. So it's possible the workflow completed after the first call of
+		// api.ResolveDuplicateWorkflowID and before being able to update the existing workflow.
+		err := api.ResolveWorkflowIDReusePolicy(
+			workflowKey,
+			currentWorkflowConditionFailed.Status,
+			currentWorkflowConditionFailed.RequestIDs,
+			s.request.StartRequest.GetWorkflowIdReusePolicy(),
+		)
+		if err != nil {
+			return nil, StartErr, err
+		}
+		// no error means allowing duplicate workflow id
+		// fallthrough to the logic creating a new workflow
+		return nil, StartNew, nil
+	default:
+		return nil, StartErr, err
+	}
+}
+
 // extractHistoryEvents extracts all history events from a batch of events sent to persistence.
 // It's unlikely that persistence events would span multiple batches but better safe than sorry.
 func extractHistoryEvents(persistenceEvents []*persistence.WorkflowEvents) []*historypb.HistoryEvent {
@@ -641,7 +730,13 @@ func (s *Starter) generateResponse(
 		}, nil
 	}
 
-	if err := api.ProcessOutgoingSearchAttributes(s.shardContext, historyEvents, s.namespace.ID(), s.visibilityManager); err != nil {
+	if err := api.ProcessOutgoingSearchAttributes(
+		shardCtx.GetNamespaceRegistry(),
+		shardCtx.GetSearchAttributesProvider(),
+		shardCtx.GetSearchAttributesMapperProvider(),
+		historyEvents,
+		s.namespace.ID(),
+		s.visibilityManager); err != nil {
 		return nil, err
 	}
 

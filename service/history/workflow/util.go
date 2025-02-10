@@ -26,7 +26,7 @@ package workflow
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentspb "go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -34,8 +34,10 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm"
 )
 
 func failWorkflowTask(
@@ -198,7 +200,7 @@ func (mse MutableStateWithEffects) CanAddEvent() bool {
 }
 
 // GetEffectiveDeployment returns the effective deployment in the following order:
-//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a
+//  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
 //     new deployment
 //  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
 //     at wf start time, or later via UpdateWorkflowExecutionOptions.
@@ -208,15 +210,29 @@ func (mse MutableStateWithEffects) CanAddEvent() bool {
 //     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
 //
 // Note: Deployment objects are immutable, never change their fields.
-func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) *deploymentspb.Deployment {
+//
+//nolint:revive // cognitive complexity to reduce after old code clean up
+func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) *deploymentpb.Deployment {
 	if versioningInfo == nil {
 		return nil
+	} else if transition := versioningInfo.GetVersionTransition(); transition != nil {
+		v, _ := worker_versioning.WorkerDeploymentVersionFromString(transition.GetVersion())
+		return worker_versioning.DeploymentFromDeploymentVersion(v)
 	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
 		return transition.GetDeployment()
 	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
 		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		if pinned := override.GetPinnedVersion(); pinned != "" {
+			v, _ := worker_versioning.WorkerDeploymentVersionFromString(pinned)
+			return worker_versioning.DeploymentFromDeploymentVersion(v)
+		}
 		return override.GetDeployment()
 	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		//nolint:revive // nesting will be reduced after old code clean up
+		if v := versioningInfo.GetVersion(); v != "" {
+			dv, _ := worker_versioning.WorkerDeploymentVersionFromString(v)
+			return worker_versioning.DeploymentFromDeploymentVersion(dv)
+		}
 		return versioningInfo.GetDeployment()
 	}
 	return nil
@@ -235,4 +251,24 @@ func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecution
 		return override.GetBehavior()
 	}
 	return versioningInfo.GetBehavior()
+}
+
+// shouldReapplyEvent returns true if the event should be reapplied to the workflow execution.
+func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
+	switch event.GetEventType() { // nolint:exhaustive
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+		return true
+	}
+
+	// events registered in the hsm framework that are potentially cherry-pickable
+	if _, ok := stateMachineRegistry.EventDefinition(event.GetEventType()); ok {
+		return true
+	}
+
+	return false
 }

@@ -48,7 +48,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -70,7 +70,7 @@ type (
 	// that push their tasks into test-specific (i.e. workflow-specific) buffers.
 	hrsuTestSuite struct {
 		xdcBaseSuite
-		namespaceTaskExecutor namespace.ReplicationTaskExecutor
+		namespaceTaskExecutor nsreplication.TaskExecutor
 		// The injection is performed once, at the level of the test suite, but we need the modified executors to be
 		// able to route tasks to test-specific (i.e. workflow-specific) buffers. The following two maps serve that
 		// purpose (each test registers itself in these maps as it starts). Workflow ID and namespace name are both
@@ -91,7 +91,6 @@ type (
 		s                         *hrsuTestSuite
 	}
 	hrsuTestCluster struct {
-		name        string
 		testCluster *testcore.TestCluster
 		client      sdkclient.Client
 		// Per-test, per-cluster buffer of history event replication tasks
@@ -100,7 +99,7 @@ type (
 	}
 	// Used to inject a modified namespace replication task executor.
 	hrsuTestNamespaceReplicationTaskExecutor struct {
-		replicationTaskExecutor namespace.ReplicationTaskExecutor
+		replicationTaskExecutor nsreplication.TaskExecutor
 		s                       *hrsuTestSuite
 	}
 	// Used to inject a modified history event replication task executor.
@@ -133,10 +132,9 @@ func (s *hrsuTestSuite) SetupSuite() {
 	}
 	s.logger = log.NewTestLogger()
 	s.setupSuite(
-		[]string{"cluster1", "cluster2"},
 		testcore.WithFxOptionsForService(primitives.WorkerService,
 			fx.Decorate(
-				func(executor namespace.ReplicationTaskExecutor) namespace.ReplicationTaskExecutor {
+				func(executor nsreplication.TaskExecutor) nsreplication.TaskExecutor {
 					s.namespaceTaskExecutor = executor
 					return &hrsuTestNamespaceReplicationTaskExecutor{
 						replicationTaskExecutor: executor,
@@ -183,13 +181,13 @@ func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.Can
 	s.testsByNamespaceName[ns] = &t
 	s.testMapLock.Unlock()
 
-	t.cluster1 = t.newHrsuTestCluster(ns, s.clusterNames[0], s.cluster1)
-	t.cluster2 = t.newHrsuTestCluster(ns, s.clusterNames[1], s.cluster2)
+	t.cluster1 = t.newHrsuTestCluster(ns, s.clusters[0])
+	t.cluster2 = t.newHrsuTestCluster(ns, s.clusters[1])
 	t.registerMultiRegionNamespace(ctx)
 	return &t, ctx, cancel
 }
 
-func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *testcore.TestCluster) hrsuTestCluster {
+func (t *hrsuTest) newHrsuTestCluster(ns string, cluster *testcore.TestCluster) hrsuTestCluster {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  cluster.Host().FrontendGRPCAddress(),
 		Namespace: ns,
@@ -197,7 +195,6 @@ func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *testcore.
 	})
 	t.s.NoError(err)
 	return hrsuTestCluster{
-		name:                           name,
 		testCluster:                    cluster,
 		client:                         sdkClient,
 		inboundHistoryReplicationTasks: make(chan *hrsuTestExecutableTask, taskBufferCapacity),
@@ -212,12 +209,12 @@ func (s *hrsuTestSuite) TestAcceptedUpdateCanBeCompletedAfterFailoverAndFailback
 	defer cancel()
 	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
 
-	// Cluster 1 is active initially. We start an update in cluster 1, run it through to acceptance, and replicate the
-	// history to cluster 2. Then we failover to cluster 2 (where the update registry is empty) and confirm that the update
+	// Cluster0 is active initially. We start an update in cluster0, run it through to acceptance, and replicate the
+	// history to cluster1. Then we failover to cluster1 (where the update registry is empty) and confirm that the update
 	// can be completed in the new active cluster.
 	t.startAndAcceptUpdateInCluster1ThenFailoverTo2AndCompleteUpdate(ctx)
-	// Finally, we start an update in cluster 2, run it through to acceptance, failover back to cluster 1 (which already
-	// has an update registry from before the failover), and confirm that the update can be completed in cluster 1.
+	// Finally, we start an update in cluster1, run it through to acceptance, failover back to cluster0 (which already
+	// has an update registry from before the failover), and confirm that the update can be completed in cluster0.
 	t.startAndAcceptUpdateInCluster2ThenFailoverTo1AndCompleteUpdate(ctx)
 }
 
@@ -227,11 +224,11 @@ func (s *hrsuTestSuite) TestUpdateCompletedAfterFailoverCannotBeCompletedAgainAf
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
 	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
-	// Cluster 1 is active initially. We start an update in cluster 1, run it through to acceptance, and replicate the
-	// history to cluster 2. Then we failover to cluster 2 (where the update registry is empty) and confirm that the update
+	// Cluster0 is active initially. We start an update in cluster0, run it through to acceptance, and replicate the
+	// history to cluster1. Then we failover to cluster1 (where the update registry is empty) and confirm that the update
 	// can be completed in the new active cluster.
 	t.startAndAcceptUpdateInCluster1ThenFailoverTo2AndCompleteUpdate(ctx)
-	// Now we fail back to cluster 1. When this cluster was last active this update was in accepted state but,
+	// Now we fail back to cluster0. When this cluster was last active this update was in accepted state but,
 	// nevertheless, it should not be possible to complete it, since it is already completed.
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED)
 	t.failover2To1(ctx)
@@ -262,7 +259,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 	3 v1 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster1-signal\""}]}}
 	`, t.cluster1.getHistory(ctx))
 
-	// cluster2 has also accepted a signal (with failover version 2 since it is endogenous to cluster 2)
+	// cluster2 has also accepted a signal (with failover version 2 since it is endogenous to cluster1)
 	s.EqualHistoryEvents(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
@@ -282,7 +279,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 	`, t.cluster1.getHistory(ctx))
 
 	// cluster1 sends its signal to cluster2. Since it has a lower failover version, it is reapplied after the
-	// endogenous cluster 2 signal.
+	// endogenous cluster1 signal.
 	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 	s.EqualHistoryEvents(`
 	1 v1 WorkflowExecutionStarted
@@ -322,7 +319,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 	5 v2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
 	`, cluster2UpdateId), t.cluster1.getHistory(ctx))
 
-	// cluster2 has reapplied the accepted update from cluster 1 on top of its own update, changing it from state
+	// cluster2 has reapplied the accepted update from cluster0 on top of its own update, changing it from state
 	// Accepted to state Admitted, since it must be submitted to the validator on the new branch.
 	s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
@@ -370,9 +367,9 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAcceptedUpdateWithCo
 	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 	// Cluster1 has received an accepted update with failover version 2, which superseded its own update. Cluster2 has
-	// received an accepted update from cluster 1 with a lower failover version. Normally, such an update would be
-	// reapplied. But since it has the same update ID as the cluster 1 update, and since that update is not completed,
-	// we must not reapply it. The result is that both clusters have the same history; the update accepted in cluster 1
+	// received an accepted update from cluster0 with a lower failover version. Normally, such an update would be
+	// reapplied. But since it has the same update ID as the cluster0 update, and since that update is not completed,
+	// we must not reapply it. The result is that both clusters have the same history; the update accepted in cluster0
 	// has been dropped.
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
 		t.s.EqualHistoryEvents(`
@@ -403,9 +400,9 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyCompleteUpdateWithCo
 	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED)
 
 	// Cluster1 has received an accepted update with failover version 2, which superseded its own update. Cluster2 has
-	// received an accepted update from cluster 1 with a lower failover version. Normally, such an update would be
-	// reapplied. But since it has the same update ID as the cluster 1 update, and since that update is not completed,
-	// we must not reapply it. The result is that both clusters have the same history; the update accepted in cluster 1
+	// received an accepted update from cluster0 with a lower failover version. Normally, such an update would be
+	// reapplied. But since it has the same update ID as the cluster0 update, and since that update is not completed,
+	// we must not reapply it. The result is that both clusters have the same history; the update accepted in cluster0
 	// has been dropped.
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
 		t.s.EqualHistoryEvents(`
@@ -461,14 +458,14 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAdmittedUpdateWithCo
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED)
 	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED)
 
-	// Cluster 2 has the higher failover version, so its history branch is chosen in the conflict resolution.
+	// Cluster1 has the higher failover version, so its history branch is chosen in the conflict resolution.
 	activeRunId := resetRunIds[1]
 
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
 		// Cluster1 has received an admitted update with failover version 2, which superseded its own update. Cluster2 has
-		// received an admitted update from cluster 1 with a lower failover version. Normally, such an update would be
-		// reapplied. But since it has the same update ID as the cluster 1 update, and since that update is not completed,
-		// we must not reapply it. The result is that both clusters have the same history; the update admitted in cluster 1
+		// received an admitted update from cluster0 with a lower failover version. Normally, such an update would be
+		// reapplied. But since it has the same update ID as the cluster0 update, and since that update is not completed,
+		// we must not reapply it. The result is that both clusters have the same history; the update admitted in cluster0
 		// has been dropped.
 		t.s.EqualHistoryEvents(`
 	1 v1 WorkflowExecutionStarted
@@ -481,7 +478,7 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAdmittedUpdateWithCo
 	}
 }
 
-// Start update in cluster 1, run it through to acceptance, replicate it to cluster 2, then failover to 2 and complete
+// Start update in cluster0, run it through to acceptance, replicate it to cluster1, then failover to 2 and complete
 // the update there.
 func (t *hrsuTest) startAndAcceptUpdateInCluster1ThenFailoverTo2AndCompleteUpdate(ctx context.Context) {
 	t.cluster1.sendUpdateAndWaitUntilStage(ctx, "cluster1-update-id", "cluster1-update-input", sdkclient.WorkflowUpdateStageAccepted)
@@ -505,7 +502,7 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster1ThenFailoverTo2AndCompleteUpdat
 	// message. We use a signal for that purpose.
 	t.s.NoError(t.cluster2.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster2-signal"))
 
-	// Complete the update in  cluster 2 after the failover.
+	// Complete the update in  cluster1 after the failover.
 	t.s.NoError(t.cluster2.pollAndCompleteUpdate("cluster1-update-id"))
 
 	t.s.EqualHistoryEvents(`
@@ -522,7 +519,7 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster1ThenFailoverTo2AndCompleteUpdat
 	`, t.cluster2.getHistory(ctx))
 }
 
-// Run an update in cluster 2 to Accepted state, failover to cluster 1, and confirm that it can be completed in cluster 1.
+// Run an update in cluster1 to Accepted state, failover to cluster0, and confirm that it can be completed in cluster0.
 func (t *hrsuTest) startAndAcceptUpdateInCluster2ThenFailoverTo1AndCompleteUpdate(ctx context.Context) {
 	t.cluster2.sendUpdateAndWaitUntilStage(ctx, "cluster2-update-id", "cluster2-update-input", sdkclient.WorkflowUpdateStageAccepted)
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
@@ -593,7 +590,7 @@ func (t *hrsuTest) enterSplitBrainStateAndAcceptUpdatesInBothClusters(ctx contex
 	5 v1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
 	`, cluster1UpdateId), t.cluster1.getHistory(ctx))
 
-	// cluster2 has also accepted an update (events have failover version 2 since they are endogenous to cluster 2)
+	// cluster2 has also accepted an update (events have failover version 2 since they are endogenous to cluster1)
 	t.s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
@@ -622,7 +619,7 @@ func (t *hrsuTest) enterSplitBrainStateAndCompletedUpdatesInBothClusters(ctx con
 	6 v1 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"%[1]s"}}
 	`, cluster1UpdateId), t.cluster1.getHistory(ctx))
 
-	// cluster2 has also completed an update (events have failover version 2 since they are endogenous to cluster 2)
+	// cluster2 has also completed an update (events have failover version 2 since they are endogenous to cluster1)
 	t.s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
@@ -633,10 +630,11 @@ func (t *hrsuTest) enterSplitBrainStateAndCompletedUpdatesInBothClusters(ctx con
 	`, cluster2UpdateId), t.cluster2.getHistory(ctx))
 }
 
+// TODO (alex): replace this with t.s.failover()
 func (t *hrsuTest) failover1To2(ctx context.Context) {
-	t.s.Equal([]string{"cluster1", "cluster1"}, t.getActiveClusters(ctx))
-	t.cluster1.setActive(ctx, "cluster2")
-	t.s.Equal([]string{"cluster2", "cluster1"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[0].ClusterName()}, t.getActiveClusters(ctx))
+	t.cluster1.setActive(ctx, t.s.clusters[1].ClusterName())
+	t.s.Equal([]string{t.s.clusters[1].ClusterName(), t.s.clusters[0].ClusterName()}, t.getActiveClusters(ctx))
 
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
@@ -644,13 +642,13 @@ func (t *hrsuTest) failover1To2(ctx context.Context) {
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
-	t.s.Equal([]string{"cluster2", "cluster2"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[1].ClusterName(), t.s.clusters[1].ClusterName()}, t.getActiveClusters(ctx))
 }
 
 func (t *hrsuTest) failover2To1(ctx context.Context) {
-	t.s.Equal([]string{"cluster2", "cluster2"}, t.getActiveClusters(ctx))
-	t.cluster1.setActive(ctx, "cluster1")
-	t.s.Equal([]string{"cluster1", "cluster2"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[1].ClusterName(), t.s.clusters[1].ClusterName()}, t.getActiveClusters(ctx))
+	t.cluster1.setActive(ctx, t.s.clusters[0].ClusterName())
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[1].ClusterName()}, t.getActiveClusters(ctx))
 
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
@@ -658,15 +656,15 @@ func (t *hrsuTest) failover2To1(ctx context.Context) {
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
 	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
-	t.s.Equal([]string{"cluster1", "cluster1"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[0].ClusterName()}, t.getActiveClusters(ctx))
 }
 
 func (t *hrsuTest) enterSplitBrainState(ctx context.Context) {
 	// We now create a "split brain" state by setting cluster2 to active. We do not execute namespace replication tasks
 	// afterward, so cluster1 does not learn of the change.
-	t.s.Equal([]string{"cluster1", "cluster1"}, t.getActiveClusters(ctx))
-	t.cluster2.setActive(ctx, "cluster2")
-	t.s.Equal([]string{"cluster1", "cluster2"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[0].ClusterName()}, t.getActiveClusters(ctx))
+	t.cluster2.setActive(ctx, t.s.clusters[1].ClusterName())
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[1].ClusterName()}, t.getActiveClusters(ctx))
 
 	// TODO (dan) Why do the tests still pass with this? Does this not remove the split-brain?
 	// s.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_UPDATE, 2)
@@ -764,9 +762,9 @@ func (task *hrsuTestExecutableTask) Execute() error {
 		return fmt.Errorf("failed to retrieve test for workflow %s", task.workflowId())
 	}
 	switch task.sourceCluster {
-	case "cluster1":
+	case task.s.clusters[0].ClusterName():
 		test.cluster2.inboundHistoryReplicationTasks <- task
-	case "cluster2":
+	case task.s.clusters[1].ClusterName():
 		test.cluster1.inboundHistoryReplicationTasks <- task
 	default:
 		task.s.FailNow(fmt.Sprintf("invalid cluster name: %s", task.sourceCluster))
@@ -958,7 +956,7 @@ func (c *hrsuTestCluster) completeUpdateMessageHandler(updateId string) func(res
 
 // updateResult returns the update result sent by the worker in this cluster.
 func (c *hrsuTestCluster) updateResult(updateId string) string {
-	return fmt.Sprintf("%s-%s-result", c.name, updateId)
+	return fmt.Sprintf("%s-%s-result", c.testCluster.ClusterName(), updateId)
 }
 
 func (t *hrsuTest) completeUpdateWFTHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -997,15 +995,15 @@ func (t *hrsuTest) registerMultiRegionNamespace(ctx context.Context) {
 	_, err := t.cluster1.testCluster.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        t.tv.NamespaceName().String(),
 		Clusters:                         t.s.clusterReplicationConfig(),
-		ActiveClusterName:                t.s.clusterNames[0],
+		ActiveClusterName:                t.s.clusters[0].ClusterName(),
 		IsGlobalNamespace:                true,                           // Needed so that the namespace is replicated
 		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24), // Required parameter
 	})
 	t.s.NoError(err)
 	// Namespace event replication tasks are being captured; we need to execute the pending ones now to propagate the
-	// new namespace to cluster 2.
+	// new namespace to cluster1.
 	t.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_CREATE)
-	t.s.Equal([]string{"cluster1", "cluster1"}, t.getActiveClusters(ctx))
+	t.s.Equal([]string{t.s.clusters[0].ClusterName(), t.s.clusters[0].ClusterName()}, t.getActiveClusters(ctx))
 }
 
 func (t *hrsuTest) getActiveClusters(ctx context.Context) []string {

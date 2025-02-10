@@ -32,7 +32,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -55,7 +55,7 @@ func NewNamespaceReplicationQueue(
 ) (NamespaceReplicationQueue, error) {
 
 	blob, err := serializer.QueueMetadataToBlob(
-		&persistence.QueueMetadata{
+		&persistencespb.QueueMetadata{
 			ClusterAckLevels: make(map[string]int64),
 		}, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
@@ -234,7 +234,7 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 
 	// update ack level
 	ackLevels[clusterName] = lastProcessedMessageID
-	blob, err := q.serializer.QueueMetadataToBlob(&persistence.QueueMetadata{
+	blob, err := q.serializer.QueueMetadataToBlob(&persistencespb.QueueMetadata{
 		ClusterAckLevels: ackLevels,
 	}, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {

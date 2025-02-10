@@ -183,10 +183,41 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 		incomingNodePath := incomingNode.Path()
 		currentNode, err := currentHSM.Child(incomingNodePath)
 		if err != nil {
-			// 1. Already done history resend if needed before,
-			// and node creation today always associated with an event
-			// 2. Node deletion is not supported right now.
-			// Based on 1 and 2, node should always be found here.
+			// The node may not be found if:
+			// State machine was deleted in terminal state.
+			// Both state machine creation and deletion are always associated with an event, so any missing state
+			// machine must have a corresponding event in history.
+			if errors.Is(err, hsm.ErrStateMachineNotFound) {
+				notFoundErr := err
+				// Get the last items from both version histories
+				currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(
+					mutableState.GetExecutionInfo().GetVersionHistories(),
+				)
+				if err != nil {
+					return err
+				}
+				lastLocalItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+				if err != nil {
+					return err
+				}
+				lastIncomingItem, err := versionhistory.GetLastVersionHistoryItem(request.EventVersionHistory)
+				if err != nil {
+					return err
+				}
+
+				// Only accept "not found" if our version history is ahead
+				if versionhistory.CompareVersionHistoryItem(lastLocalItem, lastIncomingItem) > 0 {
+					r.logger.Debug("State machine not found - likely deleted in terminal state",
+						tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
+						tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
+						tag.WorkflowRunID(mutableState.GetExecutionInfo().OriginalExecutionRunId),
+					)
+					return nil
+				}
+
+				// Otherwise, we might be missing events
+				return notFoundErr
+			}
 			return err
 		}
 

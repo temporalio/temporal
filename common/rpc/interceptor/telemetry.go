@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -101,17 +102,17 @@ var (
 	}
 
 	// commandActions is a subset of all the commands that are counted as actions.
-	commandActions = map[enums.CommandType]struct{}{
-		enums.COMMAND_TYPE_RECORD_MARKER:                      {},
-		enums.COMMAND_TYPE_START_TIMER:                        {},
-		enums.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:             {},
-		enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:     {},
-		enums.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION: {},
-		enums.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:  {},
-		enums.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES:         {},
-		enums.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION: {},
-		enums.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION:           {},
-		enums.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION:     {},
+	commandActions = map[enumspb.CommandType]struct{}{
+		enumspb.COMMAND_TYPE_RECORD_MARKER:                      {},
+		enumspb.COMMAND_TYPE_START_TIMER:                        {},
+		enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:             {},
+		enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:     {},
+		enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION: {},
+		enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:  {},
+		enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES:         {},
+		enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION: {},
+		enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION:           {},
+		enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION:     {},
 	}
 )
 
@@ -125,7 +126,7 @@ func NewTelemetryInterceptor(
 		namespaceRegistry: namespaceRegistry,
 		metricsHandler:    metricsHandler,
 		logger:            logger,
-		workflowTags:      logtags.NewWorkflowTags(common.NewProtoTaskTokenSerializer(), logger),
+		workflowTags:      logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
 		logAllReqErrors:   logAllReqErrors,
 	}
 }
@@ -287,10 +288,10 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 			}
 
 			switch command.CommandType { // nolint:exhaustive
-			case enums.COMMAND_TYPE_RECORD_MARKER:
+			case enumspb.COMMAND_TYPE_RECORD_MARKER:
 				// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
 				hasMarker = true
-			case enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
+			case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
 				// Each child workflow counts as 2 actions. We use separate tags to track them separately.
 				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
 				metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("command_"+command.CommandType.String()+"_Extra"))

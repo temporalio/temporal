@@ -32,7 +32,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -75,7 +75,7 @@ var (
 			WithBackoffCoefficient(1.2).
 			WithMaximumInterval(5 * time.Second).
 			WithMaximumAttempts(80).
-			WithExpirationInterval(5 * time.Minute)
+			WithExpirationInterval(10 * time.Minute)
 	ErrResendAttemptExceeded = serviceerror.NewInternal("resend history attempts exceeded")
 )
 
@@ -640,6 +640,18 @@ func (e *ExecutableTaskImpl) SyncState(
 		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
 	})
 	if err != nil {
+		logger := log.With(e.Logger,
+			tag.WorkflowNamespaceID(syncStateErr.NamespaceId),
+			tag.WorkflowID(syncStateErr.WorkflowId),
+			tag.WorkflowRunID(syncStateErr.RunId),
+			tag.ReplicationTask(e.replicationTask),
+		)
+
+		var workflowNotReady *serviceerror.WorkflowNotReady
+		if errors.As(err, &workflowNotReady) {
+			logger.Info("Dropped replication task as source mutable state has buffered events.", tag.Error(err))
+			return false, nil
+		}
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		if !errors.As(err, &failedPreconditionErr) {
 			return false, err
@@ -647,13 +659,6 @@ func (e *ExecutableTaskImpl) SyncState(
 		// Unable to perform sync state. Transition history maybe disabled in source cluster.
 		// Add task equivalents back to source cluster.
 		taskEquivalents := e.replicationTask.GetRawTaskInfo().GetTaskEquivalents()
-
-		logger := log.With(e.Logger,
-			tag.WorkflowNamespaceID(syncStateErr.NamespaceId),
-			tag.WorkflowID(syncStateErr.WorkflowId),
-			tag.WorkflowRunID(syncStateErr.RunId),
-			tag.ReplicationTask(e.replicationTask),
-		)
 
 		if len(taskEquivalents) == 0 {
 			// Just drop the task since there's nothing to replicate in event-based stack.
@@ -763,7 +768,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	}
 
 	e.namespace.Store(namespaceEntry.Name())
-	if namespaceEntry.State() == enums.NAMESPACE_STATE_DELETED {
+	if namespaceEntry.State() == enumspb.NAMESPACE_STATE_DELETED {
 		return namespaceEntry.Name().String(), false, nil
 	}
 	shouldProcessTask := false

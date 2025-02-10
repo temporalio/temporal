@@ -189,13 +189,14 @@ func isUnhealthyError(err error) bool {
 	if common.IsContextCanceledErr(err) {
 		return true
 	}
+	if common.IsContextDeadlineExceededErr(err) {
+		return true
+	}
 
 	switch err.(type) {
 	case *AppendHistoryTimeoutError,
 		*TimeoutError:
 		return true
-
-	default:
-		return false
 	}
+	return false
 }

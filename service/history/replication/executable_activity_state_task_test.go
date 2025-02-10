@@ -37,7 +37,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -124,7 +124,7 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		LastFailure:        &failurepb.Failure{},
 		LastWorkerIdentity: uuid.NewString(),
 		BaseExecutionInfo:  &workflowspb.BaseExecutionInfo{},
-		VersionHistory:     &history.VersionHistory{},
+		VersionHistory:     &historyspb.VersionHistory{},
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
 	s.sourceShardKey = ClusterShardKey{
@@ -479,7 +479,7 @@ func (s *executableActivityStateTaskSuite) generateReplicationAttribute(
 		LastFailure:        &failurepb.Failure{},
 		LastWorkerIdentity: uuid.NewString(),
 		BaseExecutionInfo:  &workflowspb.BaseExecutionInfo{},
-		VersionHistory:     &history.VersionHistory{},
+		VersionHistory:     &historyspb.VersionHistory{},
 	}
 }
 

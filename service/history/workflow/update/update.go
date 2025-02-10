@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -68,6 +67,7 @@ type (
 		request         *anypb.Any // of type *updatepb.Request
 		acceptedEventID int64
 		onComplete      func()
+		checkLimits     func(*updatepb.Request) error
 		instrumentation *instrumentation
 		admittedTime    time.Time
 
@@ -85,6 +85,7 @@ func New(id string, opts ...updateOpt) *Update {
 		id:              id,
 		state:           stateCreated,
 		onComplete:      func() {},
+		checkLimits:     func(request *updatepb.Request) error { return nil },
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewFuture[*failurepb.Failure](),
 		outcome:         future.NewFuture[*updatepb.Outcome](),
@@ -154,6 +155,12 @@ func withCompletionCallback(cb func()) updateOpt {
 	}
 }
 
+func withLimitChecker(cb func(req *updatepb.Request) error) updateOpt {
+	return func(u *Update) {
+		u.checkLimits = cb
+	}
+}
+
 func withInstrumentation(i *instrumentation) updateOpt {
 	return func(u *Update) {
 		u.instrumentation = i
@@ -175,27 +182,28 @@ func (u *Update) WaitLifecycleStage(
 	stCtx, stCancel := context.WithTimeout(ctx, softTimeout)
 	defer stCancel()
 
+	var err error
+
 	if u.outcome.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-		outcome, err := u.outcome.Get(stCtx)
+		var outcome *updatepb.Outcome
+		outcome, err = u.outcome.Get(stCtx)
 		if err == nil {
 			return statusCompleted(outcome), nil
 		}
 
-		// If err is coming from user context (user deadline exceeded), then return it to the caller.
+		// If err is coming from the user provided context (context.DeadlineExceeded or context.Canceled), then return it to the caller.
 		if errors.Is(err, ctx.Err()) {
 			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
-			return nil, ctx.Err()
-		}
-
-		// Update uses registryClearedErr when Registry is cleared. This error has special handling here:
-		//   stop waiting for COMPLETED stage and check if Update has reached ACCEPTED stage.
-		// If err is not registryClearedErr and is not coming from stCtx,
-		// then it means that the error is from the future itself and needs to be returned to the caller.
-		if !errors.Is(err, registryClearedErr) && !errors.Is(err, stCtx.Err()) {
 			return nil, err
 		}
 
-		// Only get here if there is an error, and this error is stCtx.Err() (softTimeout has expired) or registryClearedErr.
+		// If err is not coming from stCtx, then it means that the error is coming from the future itself.
+		// If this err is not registryClearedErr, then it needs to be returned to the caller.
+		if !errors.Is(err, stCtx.Err()) && !errors.Is(err, registryClearedErr) {
+			return nil, err
+		}
+
+		// Only get here if there is an error, and this error is coming from stCtx or is registryClearedErr.
 		// In both cases, check if the Update has reached ACCEPTED stage.
 	}
 
@@ -203,7 +211,8 @@ func (u *Update) WaitLifecycleStage(
 	if u.accepted.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
 		// Using the same context which might be already expired, but if accepted future is ready,
 		// then it will return immediately without checking context deadline.
-		rejection, err := u.accepted.Get(stCtx)
+		var rejection *failurepb.Failure
+		rejection, err = u.accepted.Get(stCtx)
 		if err == nil {
 			if rejection != nil {
 				return statusRejected(rejection), nil
@@ -223,26 +232,28 @@ func (u *Update) WaitLifecycleStage(
 			return statusAccepted(), nil
 		}
 
-		// If err is coming from user context (user deadline exceeded), then return it to the caller.
+		// If err is coming from the user provided context (context.DeadlineExceeded or context.Canceled), then return it to the caller.
 		if errors.Is(err, ctx.Err()) {
 			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
 			return nil, ctx.Err()
 		}
 
-		// Update uses registryClearedErr when Registry is cleared. This error has special handling here:
-		//   stop waiting for ACCEPTED stage and return Unavailable (retryable) error to the caller.
-		// This error will be retried (by history service handler, or history service client in frontend,
-		// or SDK, or user client). This will recreate Update in the Registry.
-		if errors.Is(err, registryClearedErr) {
-			return nil, WorkflowUpdateAbortedErr
-		}
-
-		// If err is not coming from stCtx,
-		// then it means that the error is from the future itself and needs to be returned to the caller.
-		if !errors.Is(err, stCtx.Err()) {
+		// If err is not coming from stCtx, then it means that the error is coming from the future itself.
+		// If this err is not registryClearedErr, then it needs to be returned to the caller.
+		if !errors.Is(err, stCtx.Err()) && !errors.Is(err, registryClearedErr) {
 			return nil, err
 		}
 	}
+
+	// Because of the checks above err (if is not nil) can be only registryClearedErr here.
+	// It is converted to Unavailable (retryable) error and returned to the caller.
+	// This error will be retried (by history service handler, or history service client in frontend,
+	// or SDK, or user client). This will recreate Update in the Registry.
+	if errors.Is(err, registryClearedErr) {
+		return nil, WorkflowUpdateAbortedErr
+	}
+
+	// TODO: assert(err == nil)
 
 	// If waitStage=COMPLETED or ACCEPTED and neither has been reached before the softTimeout has expired.
 	if stCtx.Err() != nil {
@@ -262,8 +273,9 @@ func (u *Update) abort(
 	reason AbortReason,
 	effects effect.Controller,
 ) {
-	const terminalStates = stateSet(stateCompleted | stateProvisionallyAborted | stateAborted)
-	if u.state.Matches(terminalStates) {
+	abortFailure, abortErr := reason.FailureError(u.state)
+	if abortFailure == nil && abortErr == nil {
+		// If both failure and err are nil, then it means that Update in this state can't be aborted.
 		return
 	}
 
@@ -274,7 +286,6 @@ func (u *Update) abort(
 		if !u.state.Matches(stateSet(stateProvisionallyAborted | stateProvisionallyCompletedAfterAccepted)) {
 			return
 		}
-		abortFailure, abortErr := reason.FailureError(prevState)
 		var abortOutcome *updatepb.Outcome
 		if abortFailure != nil {
 			abortOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: abortFailure}}
@@ -322,6 +333,11 @@ func (u *Update) Admit(
 	if u.state != stateCreated {
 		return nil
 	}
+	if err := u.checkLimits(req); err != nil {
+		// Remove the update from the registry immediately.
+		u.onComplete()
+		return err
+	}
 	if err := validateRequestMsg(u.id, req); err != nil {
 		return err
 	}
@@ -337,9 +353,6 @@ func (u *Update) Admit(
 	u.instrumentation.countRequestMsg()
 
 	// Marshal Update request here to return InvalidArgument to the API caller if it can't be marshaled.
-	if err := utf8validator.Validate(req, utf8validator.SourceRPCRequest); err != nil {
-		return invalidArgf("unable to validate utf-8 request: %v", err)
-	}
 	reqAny, err := anypb.New(req)
 	if err != nil {
 		return invalidArgf("unable to unmarshal request: %v", err)
@@ -390,10 +403,6 @@ func (u *Update) OnProtocolMessage(
 	body, err := protocolMsg.Body.UnmarshalNew()
 	if err != nil {
 		return invalidArgf("unable to unmarshal request: %v", err)
-	}
-	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
-	if err != nil {
-		return invalidArgf("unable to validate utf-8 request: %v", err)
 	}
 
 	// If no new events can be added to the event store (e.g., workflow is completed),
@@ -511,7 +520,6 @@ func (u *Update) onAcceptanceMsg(
 			return internalErrorf("unable to unmarshal original request: %v", err)
 		}
 	}
-	// utf8validator: we just marshaled u.request ourself earlier, so we don't need to validate it for utf8 strings here
 
 	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(
 		u.id,

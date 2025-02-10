@@ -75,6 +75,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
@@ -230,7 +231,7 @@ func (s *engineSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.mockShard.GetLogger(),
 		metricsHandler:     s.mockShard.GetMetricsHandler(),
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:    tasktoken.NewSerializer(),
 		eventNotifier:      eventNotifier,
 		config:             s.config,
 		queueProcessors: map[tasks.Category]queues.Queue{
@@ -434,7 +435,8 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			int64(1),
 			enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			ms.GetExecutionInfo().GetVersionHistories()),
+			ms.GetExecutionInfo().GetVersionHistories(),
+			ms.GetExecutionInfo().GetTransitionHistory()),
 		)
 	}
 
@@ -5312,6 +5314,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(),
 	).Return(nil)
 
 	err = s.historyEngine.ReapplyEvents(
@@ -5475,6 +5478,11 @@ func (s *engineSuite) TestGetHistory() {
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	namespaceEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{},
+		"")
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 	newRunID := uuid.New()
 
 	req := &historyservice.GetWorkflowExecutionHistoryRequest{
@@ -5520,15 +5528,8 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 		RunID:       we.RunId,
 	}).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
 	// GetWorkflowExecutionHistory will request the last event
-	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    5,
-		MaxEventID:    6,
-		PageSize:      10,
-		NextPageToken: nil,
-		ShardID:       1,
-	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*historypb.HistoryEvent{
+	history := historypb.History{
+		Events: []*historypb.HistoryEvent{
 			{
 				EventId:   int64(5),
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
@@ -5542,9 +5543,28 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 				},
 			},
 		},
+	}
+
+	historyBlob, err := history.Marshal()
+	s.NoError(err)
+
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    5,
+		MaxEventID:    6,
+		PageSize:      10,
+		NextPageToken: nil,
+		ShardID:       1,
+	}).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{
+			{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         historyBlob,
+			},
+		},
 		NextPageToken: []byte{},
 		Size:          1,
-	}, nil).Times(2)
+	}, nil).Times(1)
 
 	s.mockExecutionMgr.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
@@ -5553,35 +5573,18 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
 	s.NoError(err)
 
-	oldGoSDKVersion := "1.9.1"
-	newGoSDKVersion := "1.10.1"
-
-	// new sdk: should see failed event
-	ctx := headers.SetVersionsForTests(context.Background(), newGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
-	resp, err := engine.GetWorkflowExecutionHistory(ctx, req)
+	resp, err := engine.GetWorkflowExecutionHistory(context.Background(), req)
 	s.NoError(err)
 	s.False(resp.Response.Archived)
-	event := resp.Response.History.Events[0]
+	err = history.Unmarshal(resp.Response.History[0])
+	s.NoError(err)
+	event := history.Events[0]
 	s.Equal(int64(5), event.EventId)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.EventType)
 	attrs := event.GetWorkflowExecutionFailedEventAttributes()
 	s.Equal("this workflow failed", attrs.Failure.Message)
 	s.Equal(newRunID, attrs.NewExecutionRunId)
 	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, attrs.RetryState)
-
-	// old sdk: should see continued-as-new event
-	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
-	// See comment in workflowHandler.go:GetWorkflowExecutionHistory
-	ctx = headers.SetVersionsForTests(context.Background(), oldGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, "")
-	resp, err = engine.GetWorkflowExecutionHistory(ctx, req)
-	s.NoError(err)
-	s.False(resp.Response.Archived)
-	event = resp.Response.History.Events[0]
-	s.Equal(int64(5), event.EventId)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, event.EventType)
-	attrs2 := event.GetWorkflowExecutionContinuedAsNewEventAttributes()
-	s.Equal(newRunID, attrs2.NewExecutionRunId)
-	s.Equal("this workflow failed", attrs2.Failure.Message)
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
@@ -5626,18 +5629,22 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
-	historyBlob1, err := s.mockShard.GetPayloadSerializer().SerializeEvent(
-		&historypb.HistoryEvent{
-			EventId:   int64(3),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+	historyBlob1, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
+		[]*historypb.HistoryEvent{
+			{
+				EventId:   int64(3),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			},
 		},
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
-	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvent(
-		&historypb.HistoryEvent{
-			EventId:   int64(4),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
+	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
+		[]*historypb.HistoryEvent{
+			{
+				EventId:   int64(4),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
+			},
 		},
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
@@ -5659,14 +5666,12 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	resp, err := engine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Response.Archived)
-	s.Empty(resp.Response.History.Events)
-	s.Len(resp.Response.RawHistory, 4)
-	event, err := s.mockShard.GetPayloadSerializer().DeserializeEvent(resp.Response.RawHistory[2])
+	s.Empty(resp.Response.History)
+	s.Len(resp.Response.RawHistory, 3)
+	historyEvents, err := s.mockShard.GetPayloadSerializer().DeserializeEvents(resp.Response.RawHistory[2])
 	s.NoError(err)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, event.EventType)
-	event, err = s.mockShard.GetPayloadSerializer().DeserializeEvent(resp.Response.RawHistory[3])
-	s.NoError(err)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, event.EventType)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, historyEvents[0].EventType)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, historyEvents[1].EventType)
 }
 
 func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkflowID() {
@@ -6328,6 +6333,7 @@ func addWorkflowTaskStartedEventWithRequestID(ms workflow.MutableState, schedule
 		requestID,
 		&taskqueuepb.TaskQueue{Name: taskQueue},
 		identity,
+		nil,
 		nil,
 		nil,
 		false,

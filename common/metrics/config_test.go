@@ -135,22 +135,28 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 		expectResult map[string][]float64
 	}
 
-	customizedBoundaries := map[string][]float64{
-		Dimensionless: {1},
-		Milliseconds:  defaultPerUnitHistogramBoundaries[Milliseconds],
-		Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
-	}
 	testCases := []histogramTest{
 		{
-			input:        nil,
-			expectResult: defaultPerUnitHistogramBoundaries,
+			input: nil,
+			expectResult: map[string][]float64{
+				Dimensionless: defaultPerUnitHistogramBoundaries[Dimensionless],
+				Milliseconds:  defaultPerUnitHistogramBoundaries[Milliseconds],
+				Seconds:       {0.001, 0.002, 0.005, 0.010, 0.020, 0.050, 0.100, 0.200, 0.500, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000},
+				Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
+			},
 		},
 		{
 			input: map[string][]float64{
 				UnitNameDimensionless: {1},
+				UnitNameMilliseconds:  {10, 1000, 2000},
 				"notDefine":           {1},
 			},
-			expectResult: customizedBoundaries,
+			expectResult: map[string][]float64{
+				Dimensionless: {1},
+				Milliseconds:  {10, 1000, 2000},
+				Seconds:       {0.01, 1, 2},
+				Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
+			},
 		},
 	}
 
@@ -170,11 +176,34 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 		name         string
 		cfg          *Config
 		expectedType interface{}
+		cfgValidator func(*Config) bool
 	}{
 		{
 			name:         "nil config",
 			cfg:          nil,
 			expectedType: &noopMetricsHandler{},
+			cfgValidator: func(c *Config) bool { return true },
+		},
+		{
+			name:         "nil prometheus config",
+			cfg:          &Config{Prometheus: nil},
+			expectedType: &noopMetricsHandler{},
+			cfgValidator: func(c *Config) bool { return true },
+		},
+		{
+			name: "no framework set",
+			cfg: &Config{
+				Prometheus: &PrometheusConfig{
+					Framework:     "",
+					ListenAddress: "localhost:0",
+				},
+			},
+			expectedType: &otelMetricsHandler{},
+			cfgValidator: func(c *Config) bool {
+				return c.ClientConfig.WithoutUnitSuffix &&
+					c.ClientConfig.WithoutCounterSuffix &&
+					c.ClientConfig.RecordTimerInSeconds
+			},
 		},
 		{
 			name: "tally",
@@ -184,17 +213,30 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 					ListenAddress: "localhost:0",
 				},
 			},
-			expectedType: &tallyMetricsHandler{},
+			expectedType: &otelMetricsHandler{},
+			cfgValidator: func(c *Config) bool {
+				return c.ClientConfig.WithoutUnitSuffix &&
+					c.ClientConfig.WithoutCounterSuffix &&
+					c.ClientConfig.RecordTimerInSeconds
+			},
 		},
 		{
 			name: "opentelemetry",
 			cfg: &Config{
+				ClientConfig: ClientConfig{
+					WithoutUnitSuffix: true,
+				},
 				Prometheus: &PrometheusConfig{
 					Framework:     FrameworkOpentelemetry,
 					ListenAddress: "localhost:0",
 				},
 			},
 			expectedType: &otelMetricsHandler{},
+			cfgValidator: func(c *Config) bool {
+				return c.ClientConfig.WithoutUnitSuffix &&
+					!c.ClientConfig.WithoutCounterSuffix &&
+					!c.ClientConfig.RecordTimerInSeconds
+			},
 		},
 	} {
 		c := c
@@ -207,6 +249,7 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 				handler.Stop(logger)
 			})
 			assert.IsType(t, c.expectedType, handler)
+			assert.True(t, c.cfgValidator(c.cfg))
 		})
 	}
 

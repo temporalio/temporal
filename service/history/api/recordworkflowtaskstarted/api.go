@@ -167,14 +167,13 @@ func Invoke(
 				return nil, serviceerrors.NewObsoleteMatchingTask("wrong task queue type")
 			}
 
+			wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 			wfDeployment := mutableState.GetEffectiveDeployment()
-			pollerDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
-			// Effective deployment of the workflow when History scheduled the WFT.
-			scheduledDeployment := req.GetScheduledDeployment()
-			if !scheduledDeployment.Equal(wfDeployment) {
-				// This must be an AT scheduled before the workflow transitions to the current
-				// deployment. Matching can drop it.
-				return nil, serviceerrors.NewObsoleteMatchingTask("wrong directive deployment")
+			//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
+			pollerDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities, req.PollRequest.DeploymentOptions)
+			err = worker_versioning.ValidateTaskVersionDirective(req.GetVersionDirective(), wfBehavior, wfDeployment, req.ScheduledDeployment)
+			if err != nil {
+				return nil, err
 			}
 
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
@@ -184,6 +183,7 @@ func Invoke(
 				req.PollRequest.Identity,
 				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
 				req.GetBuildIdRedirectInfo(),
+				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
 			)
 			if err != nil {
@@ -210,6 +210,8 @@ func Invoke(
 						if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 							// This must be a task from a time that the workflow was unpinned, but it's
 							// now pinned so can't transition. Matching can drop the task safely.
+							// TODO (shahab): remove this special error check because it is not
+							// expected to happen once scheduledBehavior is always populated. see TODOs above.
 							return nil, serviceerrors.NewObsoleteMatchingTask(err.Error())
 						}
 						return nil, err

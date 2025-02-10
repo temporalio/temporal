@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	workflowpb "go.temporal.io/server/api/workflow/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -107,7 +108,7 @@ type (
 		ReplicateHistoryEvents(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
-			baseExecutionInfo *workflowpb.BaseExecutionInfo,
+			baseExecutionInfo *workflowspb.BaseExecutionInfo,
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			events [][]*historypb.HistoryEvent,
 			newEvents []*historypb.HistoryEvent,
@@ -308,20 +309,21 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 	}
 
 	transitionHistory := mutableState.GetExecutionInfo().GetTransitionHistory()
-	if workflow.CompareVersionedTransition(versionedTransition, transitionHistory[len(transitionHistory)-1]) > 0 {
-		return serviceerrors.NewSyncState(
-			mutableStateMissingMessage,
-			task.getNamespaceID().String(),
-			task.getWorkflowID(),
-			task.getRunID(),
-			task.getVersionedTransition(),
-			mutableState.GetExecutionInfo().VersionHistories,
-		)
-	}
-
-	err := workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition)
-	if err == nil {
-		return nil
+	if len(transitionHistory) != 0 {
+		if workflow.CompareVersionedTransition(versionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
+			return serviceerrors.NewSyncState(
+				mutableStateMissingMessage,
+				task.getNamespaceID().String(),
+				task.getWorkflowID(),
+				task.getRunID(),
+				task.getVersionedTransition(),
+				mutableState.GetExecutionInfo().VersionHistories,
+			)
+		}
+		err := workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition)
+		if err == nil {
+			return nil
+		}
 	}
 
 	mutableState, prepareHistoryBranchOut, err := r.mutableStateMapper.GetOrCreateHistoryBranch(ctx, wfContext, mutableState, task)
@@ -418,7 +420,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEventsWithoutNew(
 func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
-	baseExecutionInfo *workflowpb.BaseExecutionInfo,
+	baseExecutionInfo *workflowspb.BaseExecutionInfo,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	eventsSlice [][]*historypb.HistoryEvent,
 	newEvents []*historypb.HistoryEvent,

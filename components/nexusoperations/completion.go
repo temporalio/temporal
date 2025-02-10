@@ -41,11 +41,11 @@ func handleSuccessfulOperationResult(
 	node *hsm.Node,
 	operation Operation,
 	result *commonpb.Payload,
-	completionSource CompletionSource,
-) (hsm.TransitionOutput, error) {
+	links []*commonpb.Link,
+) error {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
-		return hsm.TransitionOutput{}, err
+		return err
 	}
 	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
 		// We must assign to this property, linter doesn't like this.
@@ -57,24 +57,25 @@ func handleSuccessfulOperationResult(
 				RequestId:        operation.RequestId,
 			},
 		}
+		e.Links = links
 	})
-	return TransitionSucceeded.Apply(operation, EventSucceeded{
-		Time:             event.EventTime.AsTime(),
-		Node:             node,
-		CompletionSource: completionSource,
-	})
+	return CompletedEventDefinition{}.Apply(node.Parent, event)
 }
 
 func handleUnsuccessfulOperationError(
 	node *hsm.Node,
 	operation Operation,
-	opFailedError *nexus.UnsuccessfulOperationError,
-	completionSource CompletionSource,
-) (hsm.TransitionOutput, error) {
+	opFailedError *nexus.OperationError,
+) error {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
-		return hsm.TransitionOutput{}, err
+		return err
 	}
+	failure, err := commonnexus.OperationErrorToTemporalFailure(opFailedError)
+	if err != nil {
+		return err
+	}
+
 	switch opFailedError.State { // nolint:exhaustive
 	case nexus.OperationStateFailed:
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
@@ -82,49 +83,32 @@ func handleUnsuccessfulOperationError(
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 				NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-					Failure: nexusOperationFailure(
-						operation,
-						eventID,
-						commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
-					),
+					Failure:          nexusOperationFailure(operation, eventID, failure),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},
 			}
 		})
 
-		return TransitionFailed.Apply(operation, EventFailed{
-			Time:             event.EventTime.AsTime(),
-			Attributes:       event.GetNexusOperationFailedEventAttributes(),
-			Node:             node,
-			CompletionSource: completionSource,
-		})
+		return FailedEventDefinition{}.Apply(node.Parent, event)
 	case nexus.OperationStateCanceled:
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
 				NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
-					Failure: nexusOperationFailure(
-						operation,
-						eventID,
-						commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
-					),
+					Failure:          nexusOperationFailure(operation, eventID, failure),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},
 			}
 		})
 
-		return TransitionCanceled.Apply(operation, EventCanceled{
-			Time:             event.EventTime.AsTime(),
-			Node:             node,
-			CompletionSource: completionSource,
-		})
+		return CanceledEventDefinition{}.Apply(node.Parent, event)
 	default:
 		// Both the Nexus Client and CompletionHandler reject invalid states, but just in case, we return this as a
 		// transition error.
-		return hsm.TransitionOutput{}, fmt.Errorf("unexpected operation state: %v", opFailedError.State)
+		return fmt.Errorf("unexpected operation state: %v", opFailedError.State)
 	}
 }
 
@@ -133,7 +117,7 @@ func handleUnsuccessfulOperationError(
 func fabricateStartedEventIfMissing(
 	node *hsm.Node,
 	requestID string,
-	operationID string,
+	operationToken string,
 	startTime *timestamppb.Timestamp,
 	links []*commonpb.Link,
 ) error {
@@ -142,38 +126,32 @@ func fabricateStartedEventIfMissing(
 		return err
 	}
 
-	if TransitionStarted.Possible(operation) {
-		eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
-		if err != nil {
-			return err
-		}
+	// The operation was already started, ignore.
+	if !TransitionStarted.Possible(operation) {
+		return nil
+	}
 
-		operation.OperationId = operationID
-
-		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
-			e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
-				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
-					ScheduledEventId: eventID,
-					OperationId:      operationID,
-					RequestId:        requestID,
-				},
-			}
-			e.Links = links
-			if startTime != nil {
-				e.EventTime = startTime
-			}
-		})
-
-		_, err = TransitionStarted.Apply(operation, EventStarted{
-			Time:       event.EventTime.AsTime(),
-			Node:       node,
-			Attributes: event.GetNexusOperationStartedEventAttributes(),
-		})
-
+	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+	if err != nil {
 		return err
 	}
 
-	return nil
+	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+				ScheduledEventId: eventID,
+				OperationToken:   operationToken,
+				// TODO(bergundy): Remove this fallback after the 1.27 release.
+				OperationId: operationToken,
+				RequestId:   requestID,
+			},
+		}
+		e.Links = links
+		if startTime != nil {
+			e.EventTime = startTime
+		}
+	})
+	return StartedEventDefinition{}.Apply(node.Parent, event)
 }
 
 func CompletionHandler(
@@ -181,11 +159,11 @@ func CompletionHandler(
 	env hsm.Environment,
 	ref hsm.Ref,
 	requestID string,
-	operationID string,
+	operationToken string,
 	startTime *timestamppb.Timestamp,
 	links []*commonpb.Link,
 	result *commonpb.Payload,
-	opFailedError *nexus.UnsuccessfulOperationError,
+	opFailedError *nexus.OperationError,
 ) error {
 	// The initial version of the completion token did not include a request ID.
 	// Only retry Access without a run ID if the request ID is not empty.
@@ -194,20 +172,24 @@ func CompletionHandler(
 		if err := node.CheckRunning(); err != nil {
 			return serviceerror.NewNotFound("operation not found")
 		}
-		if err := fabricateStartedEventIfMissing(node, requestID, operationID, startTime, links); err != nil {
+		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
 			return err
 		}
-		err := hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
-			if requestID != "" && operation.RequestId != requestID {
-				isRetryableNotFoundErr = false
-				return hsm.TransitionOutput{}, serviceerror.NewNotFound("operation not found")
-			}
-			if opFailedError != nil {
-				return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceCallback)
-			}
-			return handleSuccessfulOperationResult(node, operation, result, CompletionSourceCallback)
-		})
-		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion.
+		operation, err := hsm.MachineData[Operation](node)
+		if err != nil {
+			return nil
+		}
+		if requestID != "" && operation.RequestId != requestID {
+			isRetryableNotFoundErr = false
+			return serviceerror.NewNotFound("operation not found")
+		}
+		if opFailedError != nil {
+			err = handleUnsuccessfulOperationError(node, operation, opFailedError)
+		} else {
+			err = handleSuccessfulOperationResult(node, operation, result, nil)
+		}
+		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion with state
+		// based replication.
 		if errors.Is(err, hsm.ErrInvalidTransition) {
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
@@ -217,7 +199,7 @@ func CompletionHandler(
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
 		// Try again without a run ID in case the original run was reset.
 		ref.WorkflowKey.RunID = ""
-		return CompletionHandler(ctx, env, ref, requestID, operationID, startTime, links, result, opFailedError)
+		return CompletionHandler(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
 	}
 	return err
 }

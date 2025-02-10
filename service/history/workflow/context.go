@@ -426,11 +426,25 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}
 
+	eventsToReapply := resetWorkflowEventsSeq
+	if len(resetWorkflowEventsSeq) == 0 {
+		eventsToReapply = []*persistence.WorkflowEvents{
+			{
+				NamespaceID: c.workflowKey.NamespaceID,
+				WorkflowID:  c.workflowKey.WorkflowID,
+				RunID:       c.workflowKey.RunID,
+				Events:      resetMutableState.GetReapplyCandidateEvents(),
+			},
+		}
+	}
+
 	if err := c.conflictResolveEventReapply(
 		ctx,
 		shardContext,
 		conflictResolveMode,
-		resetWorkflowEventsSeq,
+		eventsToReapply,
+		// The new run is created by applying events so the history builder in newMutableState contains the events be re-applied.
+		// So we can use newWorkflowEventsSeq directly to reapply events.
 		newWorkflowEventsSeq,
 		// current workflow events will not participate in the events reapplication
 	); err != nil {
@@ -613,11 +627,25 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		return err
 	}
 
+	eventsToReapply := updateWorkflowEventsSeq
+	if len(updateWorkflowEventsSeq) == 0 {
+		eventsToReapply = []*persistence.WorkflowEvents{
+			{
+				NamespaceID: c.workflowKey.NamespaceID,
+				WorkflowID:  c.workflowKey.WorkflowID,
+				RunID:       c.workflowKey.RunID,
+				Events:      c.MutableState.GetReapplyCandidateEvents(),
+			},
+		}
+	}
+
 	if err := c.updateWorkflowExecutionEventReapply(
 		ctx,
 		shardContext,
 		updateMode,
-		updateWorkflowEventsSeq,
+		eventsToReapply,
+		// The new run is created by applying events so the history builder in newMutableState contains the events be re-applied.
+		// So we can use newWorkflowEventsSeq directly to reapply events.
 		newWorkflowEventsSeq,
 	); err != nil {
 		return err
@@ -862,11 +890,7 @@ func (c *ContextImpl) ReapplyEvents(
 
 		for _, e := range events.Events {
 			event := e
-			switch event.GetEventType() {
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
-
+			if shouldReapplyEvent(shardContext.StateMachineRegistry(), event) {
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}
@@ -961,7 +985,7 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 	}
 
 	if c.updateRegistry == nil {
-		nsIDStr := c.MutableState.GetNamespaceEntry().ID().String()
+		nsName := c.MutableState.GetNamespaceEntry().Name().String()
 
 		c.updateRegistry = update.NewRegistry(
 			c.MutableState,
@@ -970,12 +994,22 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
 			update.WithInFlightLimit(
 				func() int {
-					return c.config.WorkflowExecutionMaxInFlightUpdates(nsIDStr)
+					return c.config.WorkflowExecutionMaxInFlightUpdates(nsName)
+				},
+			),
+			update.WithInFlightSizeLimit(
+				func() int {
+					return c.config.WorkflowExecutionMaxInFlightUpdatePayloads(nsName)
 				},
 			),
 			update.WithTotalLimit(
 				func() int {
-					return c.config.WorkflowExecutionMaxTotalUpdates(nsIDStr)
+					return c.config.WorkflowExecutionMaxTotalUpdates(nsName)
+				},
+			),
+			update.WithTotalLimitSuggestCAN(
+				func() float64 {
+					return c.config.WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold(nsName)
 				},
 			),
 		)

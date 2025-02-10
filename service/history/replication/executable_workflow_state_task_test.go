@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
@@ -103,12 +103,12 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 	s.executableTask = NewMockExecutableTask(s.controller)
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.replicationTask = &replicationspb.SyncWorkflowStateTaskAttributes{
-		WorkflowState: &persistencepb.WorkflowMutableState{
-			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
+		WorkflowState: &persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId: uuid.NewString(),
 				WorkflowId:  uuid.NewString(),
 			},
-			ExecutionState: &persistencepb.WorkflowExecutionState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId: uuid.NewString(),
 			},
 		},
@@ -263,7 +263,7 @@ func (s *executableWorkflowStateTaskSuite) TestMarkPoisonPill() {
 	err := s.task.MarkPoisonPill()
 	s.NoError(err)
 
-	s.Equal(&persistencepb.ReplicationTaskInfo{
+	s.Equal(&persistencespb.ReplicationTaskInfo{
 		NamespaceId: s.task.NamespaceID,
 		WorkflowId:  s.task.WorkflowID,
 		RunId:       s.task.RunID,

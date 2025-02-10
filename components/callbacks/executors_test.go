@@ -32,7 +32,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -144,14 +143,12 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
-				namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-					Namespace: &persistencespb.NamespaceDetail{
-						Info: &persistencespb.NamespaceInfo{
-							Id:   "namespace-id",
-							Name: "namespace-name",
-						},
-						Config: &persistencespb.NamespaceConfig{},
+				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{
+						Id:   "namespace-id",
+						Name: "namespace-name",
 					},
+					Config: &persistencespb.NamespaceConfig{},
 				}),
 				nil,
 			)
@@ -276,14 +273,12 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			namespaceRegistryMock.EXPECT().GetNamespaceByID(namespace.ID("namespace-id")).Return(
-				namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-					Namespace: &persistencespb.NamespaceDetail{
-						Info: &persistencespb.NamespaceInfo{
-							Id:   "namespace-id",
-							Name: "namespace-name",
-						},
-						Config: &persistencespb.NamespaceConfig{},
+				namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+					Info: &persistencespb.NamespaceInfo{
+						Id:   "namespace-id",
+						Name: "namespace-name",
 					},
+					Config: &persistencespb.NamespaceConfig{},
 				}),
 				nil,
 			)
@@ -348,7 +343,7 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 				require.Equal(t, "mywid", arg.WorkflowId)
 				require.Equal(t, "myrid", arg.RunId)
 				require.Equal(t, int64(42), arg.LastEvent.EventId)
-				require.Equal(t, enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, arg.LastEvent.EventType)
+				require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, arg.LastEvent.EventType)
 
 				return &historyservice.InvokeStateMachineMethodResponse{}, tc.expectedError
 			}).Times(1)
@@ -451,7 +446,7 @@ func newMutableState(t *testing.T) mutableState {
 		RunId:       "myrid",
 		LastEvent: &historypb.HistoryEvent{
 			EventId:   42,
-			EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
 	return mutableState{

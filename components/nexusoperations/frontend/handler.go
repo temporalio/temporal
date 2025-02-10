@@ -74,6 +74,7 @@ const (
 
 type Config struct {
 	Enabled                       dynamicconfig.BoolPropertyFn
+	MaxOperationTokenLength       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PayloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ForwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
@@ -150,6 +151,10 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		}
 		return err
 	}
+	tokenLimit := h.Config.MaxOperationTokenLength(ns.Name().String())
+	if len(r.OperationToken) > tokenLimit {
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
+	}
 
 	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
 	if err != nil {
@@ -179,7 +184,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 	var links []*commonpb.Link
-	for _, nexusLink := range r.StartLinks {
+	for _, nexusLink := range r.Links {
 		switch nexusLink.Type {
 		case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
 			link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
@@ -203,16 +208,23 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		}
 	}
 	hr := &historyservice.CompleteNexusOperationRequest{
-		Completion:  completion,
-		State:       string(r.State),
-		OperationId: r.OperationID,
-		StartTime:   timestamppb.New(r.StartTime),
-		Links:       links,
+		Completion:     completion,
+		State:          string(r.State),
+		OperationToken: r.OperationToken,
+		StartTime:      timestamppb.New(r.StartTime),
+		Links:          links,
 	}
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
+		failureErr, ok := r.Error.(*nexus.FailureError)
+		if !ok {
+			// This shouldn't happen as the Nexus SDK is always expected to convert Failures from the wire to
+			// FailureErrors.
+			logger.Error("result error is not a FailureError", tag.Error(err))
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
+		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
-			Failure: commonnexus.NexusFailureToProtoFailure(r.Failure),
+			Failure: commonnexus.NexusFailureToProtoFailure(failureErr.Failure),
 		}
 	case nexus.OperationStateSucceeded:
 		var result *commonpb.Payload
@@ -301,13 +313,13 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 
 	// TODO: Upgrade Nexus SDK in order to reduce HTTP exposure
 	handlerErr := &nexus.HandlerError{
-		Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
-		Failure: &failure,
+		Type:  commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
+		Cause: &nexus.FailureError{Failure: failure},
 	}
 
 	if handlerErr.Type == nexus.HandlerErrorTypeInternal && resp.StatusCode != http.StatusInternalServerError {
 		h.Logger.Warn("received unknown status code on Nexus client unexpected response error", tag.Value(resp.StatusCode))
-		handlerErr.Failure.Message = "internal error"
+		handlerErr.Cause = errors.New("internal error")
 	}
 
 	return handlerErr

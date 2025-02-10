@@ -29,8 +29,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -86,7 +86,7 @@ func EnqueueMessage(
 ) (*persistence.InternalEnqueueMessageResponse, error) {
 	params := EnqueueParams{
 		Data:         []byte("1"),
-		EncodingType: int(enums.ENCODING_TYPE_JSON),
+		EncodingType: int(enumspb.ENCODING_TYPE_JSON),
 	}
 	for _, opt := range opts {
 		opt(&params)
@@ -94,8 +94,8 @@ func EnqueueMessage(
 	return queue.EnqueueMessage(ctx, &persistence.InternalEnqueueMessageRequest{
 		QueueType: queueType,
 		QueueName: queueName,
-		Blob: &common.DataBlob{
-			EncodingType: enums.EncodingType(params.EncodingType),
+		Blob: &commonpb.DataBlob{
+			EncodingType: enumspb.EncodingType(params.EncodingType),
 			Data:         params.Data,
 		},
 	})
