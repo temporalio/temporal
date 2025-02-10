@@ -282,18 +282,27 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 		return
 	}
 
+	var tags []metrics.Tag
+
 	if conf.IncludeServiceTag {
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusServiceTag(service))
+		tags = append(tags, metrics.NexusServiceTag(service))
 	}
 
 	if conf.IncludeOperationTag {
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusOperationTag(operation))
+		tags = append(tags, metrics.NexusOperationTag(operation))
 	}
 
 	for _, mapping := range conf.HeaderTagMappings {
-		if value, ok := requestHeader[mapping.SourceHeader]; ok {
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.NexusRequestHeaderTag(mapping.TargetTag, value))
+		value, ok := requestHeader[mapping.SourceHeader]
+		if !ok {
+			c.logger.Debug("no value found for header", tag.Value(mapping.SourceHeader))
+			continue
 		}
+		tags = append(tags, metrics.NexusRequestHeaderTag(mapping.TargetTag, value))
+	}
+
+	if len(tags) > 0 {
+		c.metricsHandler = c.metricsHandler.WithTags(tags...)
 	}
 }
 
