@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -249,40 +250,39 @@ func (s *engine2Suite) TearDownSubTest() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
-	fakeHistory := historypb.History{
-		Events: []*historypb.HistoryEvent{
-			{
-				EventId:   int64(1),
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-			},
-			{
-				EventId:   int64(2),
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-						SearchAttributes: &commonpb.SearchAttributes{
-							IndexedFields: map[string]*commonpb.Payload{
-								"CustomKeywordField":    payload.EncodeString("random-keyword"),
-								"TemporalChangeVersion": payload.EncodeString("random-data"),
-							},
+	serializer := serialization.NewSerializer()
+	fakeHistory := []*historypb.HistoryEvent{
+		{
+			EventId:   int64(1),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		},
+		{
+			EventId:   int64(2),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+					SearchAttributes: &commonpb.SearchAttributes{
+						IndexedFields: map[string]*commonpb.Payload{
+							"CustomKeywordField":    payload.EncodeString("random-keyword"),
+							"TemporalChangeVersion": payload.EncodeString("random-data"),
 						},
 					},
 				},
 			},
-			{
-				EventId:   int64(3),
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-			},
+		},
+		{
+			EventId:   int64(3),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		},
 	}
-	historyBlob, err := fakeHistory.Marshal()
+	historyBlob, err := serializer.SerializeEvents(fakeHistory, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{
 			{
 				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				Data:         historyBlob,
+				Data:         historyBlob.Data,
 			},
 		},
 		NextPageToken: []byte{},
@@ -347,7 +347,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	currentBranchTokken, err := ms.GetCurrentBranchToken()
 	s.NoError(err)
 	expectedResponse.BranchToken = currentBranchTokken
-	expectedResponse.History = [][]byte{historyBlob}
+	expectedResponse.History = [][]byte{historyBlob.Data}
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &request)

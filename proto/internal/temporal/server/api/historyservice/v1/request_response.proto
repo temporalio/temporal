@@ -275,6 +275,9 @@ message RecordWorkflowTaskStartedResponse {
     bytes next_page_token = 19;
 }
 
+// RecordWorkflowTaskStartedResponseWithRawHistory should be wire compatible with RecordWorkflowTaskStartedResponse.
+// The only difference is that RecordWorkflowTaskStartedResponseWithRawHistory has a `history` field that contains the
+// raw history batches.
 message RecordWorkflowTaskStartedResponseWithRawHistory {
     temporal.api.common.v1.WorkflowType workflow_type = 1;
     int64 previous_started_event_id = 2;
