@@ -23,9 +23,11 @@
 package nexus
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -36,6 +38,37 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 )
+
+const (
+	// FailureSourceHeaderName is the header used to indicate from where the Nexus failure originated.
+	FailureSourceHeaderName = "Temporal-Nexus-Failure-Source"
+	// FailureSourceWorker indicates the failure originated from outside the server (e.g. bad request or on the Nexus worker).
+	FailureSourceWorker = "worker"
+)
+
+type failureSourceContextKeyType struct{}
+
+var FailureSourceContextKey = failureSourceContextKeyType{}
+
+func SetFailureSourceOnContext(ctx context.Context, response *http.Response) {
+	if response == nil || response.Header == nil {
+		return
+	}
+
+	failureSourceHeader := response.Header.Get(FailureSourceHeaderName)
+	if failureSourceHeader == "" {
+		return
+	}
+
+	failureSourceContext := ctx.Value(FailureSourceContextKey)
+	if failureSourceContext == nil {
+		return
+	}
+
+	if val, ok := failureSourceContext.(*atomic.Value); ok {
+		val.Store(failureSourceHeader)
+	}
+}
 
 var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
 

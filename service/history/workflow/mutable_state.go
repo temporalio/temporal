@@ -431,7 +431,7 @@ type (
 
 		ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool
 		// GetEffectiveDeployment returns the effective deployment in the following order:
-		//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a
+		//  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
 		//     new deployment
 		//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
 		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
@@ -459,5 +459,10 @@ type (
 
 		AddReapplyCandidateEvent(event *historypb.HistoryEvent)
 		GetReapplyCandidateEvents() []*historypb.HistoryEvent
+
+		CurrentVersionedTransition() *persistencespb.VersionedTransition
+
+		DeleteSubStateMachine(path *persistencespb.StateMachinePath) error
+		IsSubStateMachineDeleted() bool
 	}
 )

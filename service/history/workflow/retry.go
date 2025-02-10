@@ -256,6 +256,7 @@ func SetupNewWorkflowForRetryOrCron(
 		CronSchedule:             startAttr.CronSchedule,
 		Memo:                     startAttr.Memo,
 		SearchAttributes:         startAttr.SearchAttributes,
+		CompletionCallbacks:      startAttr.CompletionCallbacks,
 	}
 
 	attempt := int32(1)

@@ -83,13 +83,13 @@ type (
 
 		Logger log.Logger
 
-		// Test cluster configuration.
-		testClusterFactory TestClusterFactory
-		testCluster        *TestCluster
-		testClusterConfig  *TestClusterConfig
+		testCluster *TestCluster
+		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
+		testClusterConfig *TestClusterConfig
 
-		namespace        namespace.Name
-		namespaceID      namespace.ID
+		namespace   namespace.Name
+		namespaceID namespace.ID
+		// TODO (alex): rename to externalNamespace
 		foreignNamespace namespace.Name
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
@@ -214,9 +214,8 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 	s.testClusterConfig.EnableMetricsCapture = true
 	s.testClusterConfig.EnableArchival = params.ArchivalEnabled
 
-	s.testClusterFactory = NewTestClusterFactory()
-
-	s.testCluster, err = s.testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
+	testClusterFactory := NewTestClusterFactory()
+	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
 	s.Require().NoError(err)
 
 	// Setup test cluster namespaces.

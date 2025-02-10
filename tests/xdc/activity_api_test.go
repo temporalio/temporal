@@ -65,7 +65,7 @@ func (s *ActivityApiStateReplicationSuite) SetupSuite() {
 	}
 	s.dynamicConfigOverrides[dynamicconfig.ActivityAPIsEnabled.Key()] = true
 
-	s.setupSuite([]string{"active", "standby"})
+	s.setupSuite()
 }
 
 func (s *ActivityApiStateReplicationSuite) SetupTest() {
@@ -211,7 +211,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	worker1.Stop()
 
 	// failover to standby cluster
-	s.failover(ns, s.clusterNames[1], int64(2), s.cluster1.FrontendClient())
+	s.failover(ns, 0, s.cluster2.ClusterName(), 2)
 
 	// get standby client
 	standbyClient, err := sdkclient.Dial(sdkclient.Options{

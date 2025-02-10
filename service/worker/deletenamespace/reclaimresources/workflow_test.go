@@ -63,6 +63,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
+		TotalExecutionsCount: 10,
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
 	}).Return(deleteexecutions.DeleteExecutionsResult{
@@ -114,6 +115,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
+		TotalExecutionsCount: 10,
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
 	}).Return(deleteexecutions.DeleteExecutionsResult{
@@ -163,6 +165,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
+		TotalExecutionsCount: 10,
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
 	}).Return(deleteexecutions.DeleteExecutionsResult{
@@ -261,6 +264,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
+		TotalExecutionsCount: 1,
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
 	}).Return(deleteexecutions.DeleteExecutionsResult{
@@ -338,6 +342,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
+		TotalExecutionsCount: 1,
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
 	}).Return(deleteexecutions.DeleteExecutionsResult{

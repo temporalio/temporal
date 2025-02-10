@@ -104,8 +104,8 @@ func GetPendingActivityInfo(
 	now := shardContext.GetTimeSource().Now().UTC()
 
 	p := &workflowpb.PendingActivityInfo{
-		ActivityId:     ai.ActivityId,
-		LastDeployment: ai.LastStartedDeployment,
+		ActivityId:                  ai.ActivityId,
+		LastWorkerDeploymentVersion: ai.LastWorkerDeploymentVersion,
 	}
 	if ai.GetUseWorkflowBuildIdInfo() != nil {
 		p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}

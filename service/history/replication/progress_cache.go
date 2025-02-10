@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/workflow"
@@ -111,7 +112,7 @@ func (c *progressCacheImpl) updateStates(
 
 	if item.versionedTransitions == nil {
 		item.versionedTransitions = [][]*persistencespb.VersionedTransition{
-			workflow.CopyVersionedTransitions(versionedTransitions),
+			transitionhistory.CopyVersionedTransitions(versionedTransitions),
 		}
 		item.lastVersionTransitionIndex = 0
 		return true
@@ -119,7 +120,7 @@ func (c *progressCacheImpl) updateStates(
 
 	for idx, transitions := range item.versionedTransitions {
 		if workflow.TransitionHistoryStalenessCheck(versionedTransitions, transitions[len(transitions)-1]) == nil {
-			item.versionedTransitions[idx] = workflow.CopyVersionedTransitions(versionedTransitions)
+			item.versionedTransitions[idx] = transitionhistory.CopyVersionedTransitions(versionedTransitions)
 			item.lastVersionTransitionIndex = idx
 			return true
 		}
@@ -129,7 +130,7 @@ func (c *progressCacheImpl) updateStates(
 		}
 	}
 	item.lastVersionTransitionIndex = len(item.versionedTransitions)
-	item.versionedTransitions = append(item.versionedTransitions, workflow.CopyVersionedTransitions(versionedTransitions))
+	item.versionedTransitions = append(item.versionedTransitions, transitionhistory.CopyVersionedTransitions(versionedTransitions))
 	return true
 }
 

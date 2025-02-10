@@ -478,7 +478,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 
 	// TODO: versioning 3 allows eager activity dispatch for both pinned and unpinned workflows, no
 	// special consideration is need. Remove the versioning logic from here. [cleanup-old-wv]
-	oldVersioningUsed := handler.mutableState.GetMostRecentWorkerVersionStamp().GetUseVersioning()
+	oldVersioningUsed := handler.mutableState.GetMostRecentWorkerVersionStamp().GetUseVersioning() &&
+		// for V3 versioning it's ok to dispatch eager activities
+		handler.mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	newVersioningUsed := handler.mutableState.GetExecutionInfo().GetAssignedBuildId() != ""
 	versioningUsed := oldVersioningUsed || newVersioningUsed
 

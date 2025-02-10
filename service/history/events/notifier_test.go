@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -98,7 +99,11 @@ func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 	versionHistoryItem := versionhistory.NewVersionHistoryItem(nextEventID-1, 1)
 	currentVersionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{versionHistoryItem})
 	versionHistories := versionhistory.NewVersionHistories(currentVersionHistory)
-	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, workflowState, workflowStatus, versionHistories)
+	transitionHistory := []*persistencespb.VersionedTransition{
+		{NamespaceFailoverVersion: 1234, TransitionCount: 1024},
+		{TransitionCount: 1025},
+	}
+	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, workflowState, workflowStatus, versionHistories, transitionHistory)
 	timerChan := time.NewTimer(time.Second * 2).C
 
 	subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
@@ -133,7 +138,11 @@ func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 	versionHistoryItem := versionhistory.NewVersionHistoryItem(nextEventID-1, 1)
 	currentVersionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{versionHistoryItem})
 	versionHistories := versionhistory.NewVersionHistories(currentVersionHistory)
-	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, workflowState, workflowStatus, versionHistories)
+	transitionHistory := []*persistencespb.VersionedTransition{
+		{NamespaceFailoverVersion: 1234, TransitionCount: 1024},
+		{TransitionCount: 1025},
+	}
+	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, workflowState, workflowStatus, versionHistories, transitionHistory)
 	timerChan := time.NewTimer(time.Second * 5).C
 
 	subscriberCount := 100

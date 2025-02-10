@@ -54,19 +54,20 @@ func GetRawHistory(
 	firstEventID int64,
 	nextEventID int64,
 	pageSize int32,
-	nextPageToken []byte,
+	token []byte,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shard.GetConfig().NumberOfShards)
-	rawHistory, size, nextPageToken, err := persistence.ReadFullPageRawEvents(
+	logger := shard.GetLogger()
+	rawHistory, size, nextToken, err := persistence.ReadFullPageRawEvents(
 		ctx, shard.GetExecutionManager(),
 		&persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
 			MinEventID:    firstEventID,
 			MaxEventID:    nextEventID,
 			PageSize:      int(pageSize),
-			NextPageToken: nextPageToken,
+			NextPageToken: token,
 			ShardID:       shardID,
 		},
 	)
@@ -75,10 +76,39 @@ func GetRawHistory(
 		return nil, nil, err
 	}
 
+	allEvents := make([]*historyspb.StrippedHistoryEvent, 0)
+	var lastEventID int64
+	for _, blob := range rawHistory {
+		events, err := shard.GetPayloadSerializer().DeserializeStrippedEvents(blob)
+		if err != nil {
+			return nil, nil, err
+		}
+		err = persistence.ValidateBatch(events, branchToken, lastEventID, logger)
+		if err != nil {
+			return nil, nil, err
+		}
+		allEvents = append(allEvents, events...)
+		lastEventID = events[len(events)-1].GetEventId()
+	}
+	if err = persistence.VerifyHistoryIsComplete(
+		allEvents,
+		firstEventID,
+		nextEventID-1,
+		len(token) == 0,
+		len(nextToken) == 0,
+		int(pageSize),
+	); err != nil {
+		metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
+		metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
+		logger.Error("getHistory: incomplete history",
+			tag.WorkflowBranchToken(branchToken),
+			tag.Error(err))
+	}
+
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shard.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
-	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
+	if len(nextToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			logger := shard.GetLogger()
 			metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetRawHistoryScope))
@@ -99,7 +129,7 @@ func GetRawHistory(
 			rawHistory = append(rawHistory, blob)
 		}
 	}
-	return rawHistory, nextPageToken, nil
+	return rawHistory, nextToken, nil
 }
 
 func GetHistory(

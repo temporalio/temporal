@@ -27,6 +27,7 @@ package workerdeployment
 import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -40,8 +41,8 @@ import (
 
 type (
 	workerComponent struct {
-		activityDeps activityDeps
-		enabledForNs dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		activityDeps  activityDeps
+		dynamicConfig *dynamicconfig.Collection
 	}
 
 	activityDeps struct {
@@ -67,22 +68,19 @@ var Module = fx.Options(
 func ClientProvider(
 	logger log.Logger,
 	historyClient resource.HistoryClient,
+	matchingClient resource.MatchingClient,
 	visibilityManager manager.VisibilityManager,
 	dc *dynamicconfig.Collection,
 ) Client {
 	return &ClientImpl{
-		logger:                logger,
-		historyClient:         historyClient,
-		visibilityManager:     visibilityManager,
-		maxIDLengthLimit:      dynamicconfig.MaxIDLengthLimit.Get(dc),
-		visibilityMaxPageSize: dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
-		reachabilityCache: newReachabilityCache(
-			metrics.NoopMetricsHandler,
-			visibilityManager,
-			dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc)(),
-			dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc)(),
-		),
-		maxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
+		logger:                           logger,
+		historyClient:                    historyClient,
+		visibilityManager:                visibilityManager,
+		matchingClient:                   matchingClient,
+		maxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
+		visibilityMaxPageSize:            dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
+		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
 	}
 }
 
@@ -92,21 +90,43 @@ func NewResult(
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			activityDeps: params,
-			enabledForNs: dynamicconfig.EnableDeployments.Get(dc),
+			activityDeps:  params,
+			dynamicConfig: dc,
 		},
 	}
 }
 
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	return &workercommon.PerNSDedicatedWorkerOptions{
-		Enabled: s.enabledForNs(ns.Name().String()),
+		Enabled: true,
 	}
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(VersionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
-	registry.RegisterWorkflowWithOptions(Workflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
+
+	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+		maxVersionsGetter := func() int {
+			return dynamicconfig.MatchingMaxVersionsInDeployment.Get(s.dynamicConfig)(ns.Name().String())
+		}
+		return Workflow(ctx, maxVersionsGetter, args)
+	}
+	registry.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
+
+	drainageWorkflow := func(ctx workflow.Context, args *deploymentspb.DrainageWorkflowArgs) error {
+		refreshIntervalGetter := func() any {
+			return dynamicconfig.VersionDrainageStatusRefreshInterval.Get(s.dynamicConfig)(ns.Name().String())
+		}
+		visibilityGracePeriodGetter := func() any {
+			return dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(s.dynamicConfig)(ns.Name().String())
+		}
+		return DrainageWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
+	}
+
+	registry.RegisterWorkflowWithOptions(
+		drainageWorkflow,
+		workflow.RegisterOptions{Name: WorkerDeploymentDrainageWorkflowType},
+	)
 
 	versionActivities := &VersionActivities{
 		namespace:        ns,
@@ -118,8 +138,15 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	activities := &Activities{
 		namespace:        ns,
 		deploymentClient: s.activityDeps.WorkerDeploymentClient,
+		matchingClient:   s.activityDeps.MatchingClient,
 	}
 	registry.RegisterActivity(activities)
+
+	drainageActivities := &DrainageActivities{
+		namespace:        ns,
+		deploymentClient: s.activityDeps.WorkerDeploymentClient,
+	}
+	registry.RegisterActivity(drainageActivities)
 
 	return nil
 }

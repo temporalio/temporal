@@ -26,14 +26,10 @@ package xdc
 
 import (
 	"fmt"
-	"os"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -41,57 +37,24 @@ import (
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
-	replicationpb "go.temporal.io/api/replication/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/testing/historyrequire"
-	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"gopkg.in/yaml.v3"
 )
 
-type AdvVisCrossDCTestSuite struct {
-	// TODO (alex): use FunctionalTestSuite
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-	// not merely log an error
-	*require.Assertions
-	protorequire.ProtoAssertions
-	historyrequire.HistoryRequire
-	suite.Suite
-
-	testClusterFactory testcore.TestClusterFactory
-
-	cluster1               *testcore.TestCluster
-	cluster2               *testcore.TestCluster
-	logger                 log.Logger
-	clusterConfigs         []*testcore.TestClusterConfig
-	isElasticsearchEnabled bool
-
-	dynamicConfigOverrides  map[dynamicconfig.Key]interface{}
-	enableTransitionHistory bool
-
-	testSearchAttributeKey string
-	testSearchAttributeVal string
-
-	startTime          time.Time
-	onceClusterConnect sync.Once
+type VisibilityTestSuite struct {
+	xdcBaseSuite
 }
 
-func TestAdvVisCrossDCTestSuite(t *testing.T) {
+func TestVisibilityTestSuite(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name                    string
@@ -107,155 +70,47 @@ func TestAdvVisCrossDCTestSuite(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := &AdvVisCrossDCTestSuite{
-				enableTransitionHistory: tc.enableTransitionHistory,
-			}
+			s := &VisibilityTestSuite{}
+			s.enableTransitionHistory = tc.enableTransitionHistory
 			suite.Run(t, s)
 		})
 	}
 }
 
-var (
-	clusterNameAdvVis              = []string{"active-adv-vis", "standby-adv-vis"}
-	clusterReplicationConfigAdvVis = []*replicationpb.ClusterReplicationConfig{
-		{
-			ClusterName: clusterNameAdvVis[0],
-		},
-		{
-			ClusterName: clusterNameAdvVis[1],
-		},
-	}
-)
-
-func (s *AdvVisCrossDCTestSuite) SetupSuite() {
-	s.logger = log.NewTestLogger()
-	s.testClusterFactory = testcore.NewTestClusterFactory()
-
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableTransitionHistory.Key(): s.enableTransitionHistory,
-	}
-
-	fileName := "../testdata/xdc_adv_vis_es_clusters.yaml"
-
-	if testcore.TestFlags.TestClusterConfigFile != "" {
-		fileName = testcore.TestFlags.TestClusterConfigFile
-	}
-	environment.SetupEnv()
-
-	confContent, err := os.ReadFile(fileName)
-	s.Require().NoError(err)
-	confContent = []byte(os.ExpandEnv(string(confContent)))
-
-	var clusterConfigs []*testcore.TestClusterConfig
-	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
-	s.clusterConfigs = clusterConfigs
-
-	for _, config := range clusterConfigs {
-		config.DynamicConfigOverrides = s.dynamicConfigOverrides
-	}
-
-	c, err := s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterNameAdvVis[0])))
-	s.Require().NoError(err)
-	s.cluster1 = c
-
-	c, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterNameAdvVis[1])))
-	s.Require().NoError(err)
-	s.cluster2 = c
-
-	s.startTime = time.Now()
-
-	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
-	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
-	_, err = s.cluster1.AdminClient().AddOrUpdateRemoteCluster(testcore.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:               cluster2Address,
-		EnableRemoteClusterConnection: true,
-	})
-	s.Require().NoError(err)
-
-	_, err = s.cluster2.AdminClient().AddOrUpdateRemoteCluster(testcore.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:               cluster1Address,
-		EnableRemoteClusterConnection: true,
-	})
-	s.Require().NoError(err)
-	// Wait for cluster metadata to refresh new added clusters
-	time.Sleep(time.Millisecond * 200) // nolint:forbidigo
-
-	s.testSearchAttributeKey = "CustomTextField"
-	s.testSearchAttributeVal = "test value"
+func (s *VisibilityTestSuite) SetupSuite() {
+	s.setupSuite()
 }
 
-func (s *AdvVisCrossDCTestSuite) SetupTest() {
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
-	s.ProtoAssertions = protorequire.New(s.T())
-	s.HistoryRequire = historyrequire.New(s.T())
-
-	s.onceClusterConnect.Do(func() {
-		waitForClusterConnected(s.Assertions, s.logger, s.cluster1, clusterNameAdvVis[0], clusterNameAdvVis[1], s.startTime)
-		waitForClusterConnected(s.Assertions, s.logger, s.cluster2, clusterNameAdvVis[1], clusterNameAdvVis[0], s.startTime)
-	})
+func (s *VisibilityTestSuite) SetupTest() {
+	s.setupTest()
 }
 
-func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
-	s.NoError(s.cluster1.TearDownCluster())
-	s.NoError(s.cluster2.TearDownCluster())
+func (s *VisibilityTestSuite) TearDownSuite() {
+	s.tearDownSuite()
 }
 
-func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
-	ns := "test-xdc-search-attr-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.FrontendClient() // active
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        ns,
-		Clusters:                         clusterReplicationConfigAdvVis,
-		ActiveClusterName:                clusterNameAdvVis[0],
-		IsGlobalNamespace:                true,
-		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
-	}
-	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
-	s.NoError(err)
-
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
+func (s *VisibilityTestSuite) TestSearchAttributes() {
+	ns := s.createGlobalNamespace()
 	if testcore.UseSQLVisibility() {
 		// When Elasticsearch is enabled, the search attribute aliases are not used.
-		_, err = client1.UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
-			Namespace: ns,
-			Config: &namespacepb.NamespaceConfig{
-				CustomSearchAttributeAliases: map[string]string{
-					"Bool01":     "CustomBoolField",
-					"Datetime01": "CustomDatetimeField",
-					"Double01":   "CustomDoubleField",
-					"Int01":      "CustomIntField",
-					"Keyword01":  "CustomKeywordField",
-					"Text01":     "CustomTextField",
-				},
+		updateNamespaceConfig(s.Assertions, ns,
+			func() *namespacepb.NamespaceConfig {
+				return &namespacepb.NamespaceConfig{
+					CustomSearchAttributeAliases: map[string]string{
+						"Bool01":     "CustomBoolField",
+						"Datetime01": "CustomDatetimeField",
+						"Double01":   "CustomDoubleField",
+						"Int01":      "CustomIntField",
+						"Keyword01":  "CustomKeywordField",
+						"Text01":     "CustomTextField",
+					},
+				}
 			},
-		})
-		s.NoError(err)
-		// Wait for namespace cache to pick the UpdateNamespace changes.
-		time.Sleep(cacheRefreshInterval) // nolint:forbidigo
+			[]*testcore.TestCluster{s.cluster1, s.cluster2}, 0)
 	}
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		// Wait for namespace record to be replicated and loaded into memory.
-		for _, r := range s.cluster2.Host().FrontendNamespaceRegistries() {
-			_, err := r.GetNamespace(namespace.Name(ns))
-			assert.NoError(t, err)
-		}
-	}, 15*time.Second, 500*time.Millisecond)
-
-	descReq := &workflowservice.DescribeNamespaceRequest{
-		Namespace: ns,
-	}
-	resp, err := client1.DescribeNamespace(testcore.NewContext(), descReq)
-	s.NoError(err)
-	s.NotNil(resp)
-
+	client1 := s.cluster1.FrontendClient() // active
 	client2 := s.cluster2.FrontendClient() // standby
-	resp2, err := client2.DescribeNamespace(testcore.NewContext(), descReq)
-	s.NoError(err)
-	s.NotNil(resp2)
-	s.Equal(resp, resp2)
 
 	// start a workflow
 	id := "xdc-search-attr-test-" + uuid.New()
@@ -266,7 +121,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			s.testSearchAttributeKey: payload.EncodeString(s.testSearchAttributeVal),
+			"CustomTextField": payload.EncodeString("test value"),
 		},
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
@@ -293,29 +148,30 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	saListRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: ns,
 		PageSize:  5,
-		Query:     fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal),
+		Query:     fmt.Sprintf(`WorkflowId = "%s" and CustomTextField = "test value"`, id),
 	}
 
 	testListResult := func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		var openExecution *workflowpb.WorkflowExecutionInfo
-		for i := 0; i < numOfRetry; i++ {
+
+		s.Eventually(func() bool {
 			startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 
 			resp, err := client.ListWorkflowExecutions(testcore.NewContext(), lr)
 			s.NoError(err)
 			if len(resp.GetExecutions()) == 1 {
 				openExecution = resp.GetExecutions()[0]
-				break
+				return true
 			}
-			time.Sleep(waitTimeInMs * time.Millisecond) // nolint:forbidigo
-		}
+			return false
+		}, 20*time.Second, 100*time.Millisecond)
 		s.NotNil(openExecution)
 		s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
-		searchValPayload := openExecution.GetSearchAttributes().GetIndexedFields()[s.testSearchAttributeKey]
+		searchValPayload := openExecution.GetSearchAttributes().GetIndexedFields()["CustomTextField"]
 		var searchVal string
 		err = payload.Decode(searchValPayload, &searchVal)
 		s.NoError(err)
-		s.Equal(s.testSearchAttributeVal, searchVal)
+		s.Equal("test value", searchVal)
 	}
 
 	// List workflow in active
@@ -351,8 +207,6 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	time.Sleep(waitForESToSettle) // nolint:forbidigo
-
 	testListResult = func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		s.Eventually(func() bool {
 			resp, err := client.ListWorkflowExecutions(testcore.NewContext(), lr)
@@ -365,7 +219,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 				return false
 			}
 
-			searchValBytes := fields[s.testSearchAttributeKey]
+			searchValBytes := fields["CustomTextField"]
 			var searchVal string
 			payload.Decode(searchValBytes, &searchVal)
 			s.Equal("another string", searchVal)
@@ -382,13 +236,13 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 			s.Equal([]string{worker_versioning.UnversionedSearchAttribute}, buildIds)
 
 			return true
-		}, waitTimeInMs*time.Millisecond*numOfRetry, waitTimeInMs*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 	}
 
 	saListRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: ns,
 		PageSize:  int32(2),
-		Query:     fmt.Sprintf(`WorkflowId = "%s" and %s = "another string"`, id, s.testSearchAttributeKey),
+		Query:     fmt.Sprintf(`WorkflowId = "%s" and CustomTextField = "another string"`, id),
 	}
 
 	// test upsert result in active
@@ -455,7 +309,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 				return nil
 			}
 			return historyResponse.History
-		}, waitTimeInMs*numOfRetry*time.Millisecond, waitTimeInMs*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 	terminatedListRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: ns,
@@ -468,6 +322,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	testListResult(engine2, terminatedListRequest)
 }
 
+// TODO (alex): remove this func.
 func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 	attrValPayload2, _ := payload.Encode(123)
 	upsertSearchAttr := &commonpb.SearchAttributes{

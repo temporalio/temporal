@@ -26,7 +26,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http/httptrace"
 	"strings"
+	"sync/atomic"
 	"text/template"
 	"time"
 
@@ -52,6 +54,7 @@ import (
 )
 
 var ErrOperationTimeoutBelowMin = errors.New("remaining operation timeout is less than required minimum")
+var ErrInvalidOperationToken = errors.New("invalid operation token")
 
 // ClientProvider provides a nexus client for a given endpoint.
 type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error)
@@ -66,6 +69,7 @@ type TaskExecutorOptions struct {
 	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
 	ClientProvider         ClientProvider
 	EndpointRegistry       commonnexus.EndpointRegistry
+	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
 }
 
 func RegisterExecutor(
@@ -153,6 +157,9 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 	callbackURL := builder.String()
 
+	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
+	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &atomic.Value{})
+
 	client, err := e.ClientProvider(
 		ctx,
 		ref.WorkflowKey.GetNamespaceID(),
@@ -197,6 +204,22 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
+	if e.HTTPTraceProvider != nil {
+		traceLogger := log.With(e.Logger,
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.RequestID(args.requestID),
+			tag.Operation(args.operation),
+			tag.Endpoint(args.endpointName),
+			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
+			tag.WorkflowRunID(ref.WorkflowKey.RunID),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.Attempt(task.Attempt),
+		)
+		if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
+			callCtx = httptrace.WithClientTrace(callCtx, trace)
+		}
+	}
+
 	startTime := time.Now()
 	var rawResult *nexus.ClientStartOperationResult[*nexus.LazyValue]
 	var callErr error
@@ -218,18 +241,24 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
-	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag)
-	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag)
+	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(ctx))
+	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
+	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 
 	var result *nexus.ClientStartOperationResult[*commonpb.Payload]
 	if callErr == nil {
 		if rawResult.Pending != nil {
-			result = &nexus.ClientStartOperationResult[*commonpb.Payload]{
-				Pending: &nexus.OperationHandle[*commonpb.Payload]{
-					Operation: rawResult.Pending.Operation,
-					Token:     rawResult.Pending.Token,
-				},
-				Links: rawResult.Links,
+			tokenLimit := e.Config.MaxOperationTokenLength(ns.Name().String())
+			if len(rawResult.Pending.Token) > tokenLimit {
+				callErr = fmt.Errorf("%w: length exceeds allowed limit (%d/%d)", ErrInvalidOperationToken, len(rawResult.Pending.Token), tokenLimit)
+			} else {
+				result = &nexus.ClientStartOperationResult[*commonpb.Payload]{
+					Pending: &nexus.OperationHandle[*commonpb.Payload]{
+						Operation: rawResult.Pending.Operation,
+						Token:     rawResult.Pending.Token,
+					},
+					Links: rawResult.Links,
+				}
 			}
 		} else {
 			var payload *commonpb.Payload
@@ -406,6 +435,10 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
 		return handleNonRetryableStartOperationError(node, operation, callErr)
+	} else if errors.Is(callErr, ErrInvalidOperationToken) {
+		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
+		// operation if the response's operation token is too large.
+		return handleNonRetryableStartOperationError(node, operation, callErr)
 	} else if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
 		// Operation timeout is not retryable
 		return handleNonRetryableStartOperationError(node, operation, callErr)
@@ -516,6 +549,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		return err
 	}
 
+	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
+	ctx = context.WithValue(ctx, commonnexus.FailureSourceContextKey, &atomic.Value{})
+
 	client, err := e.ClientProvider(
 		ctx,
 		ref.WorkflowKey.NamespaceID,
@@ -538,6 +574,22 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
+	if e.HTTPTraceProvider != nil {
+		traceLogger := log.With(e.Logger,
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.RequestID(args.requestID),
+			tag.Operation(args.operation),
+			tag.Endpoint(args.endpointName),
+			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
+			tag.WorkflowRunID(ref.WorkflowKey.RunID),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.Attempt(task.Attempt),
+		)
+		if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
+			callCtx = httptrace.WithClientTrace(callCtx, trace)
+		}
+	}
+
 	var callErr error
 	startTime := time.Now()
 	if callTimeout < e.Config.MinOperationTimeout(ns.Name().String()) {
@@ -550,8 +602,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	statusCodeTag := metrics.OutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
-	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag)
-	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag)
+	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(ctx))
+	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
+	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 
 	if callErr != nil {
 		e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
@@ -567,9 +620,9 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 }
 
 type cancelArgs struct {
-	service, operation, token, endpointID, endpointName string
-	scheduledTime                                       time.Time
-	scheduleToCloseTimeout                              time.Duration
+	service, operation, token, endpointID, endpointName, requestID string
+	scheduledTime                                                  time.Time
+	scheduleToCloseTimeout                                         time.Duration
 }
 
 // loadArgsForCancelation loads state from the operation state machine that's the parent of the cancelation machine the
@@ -590,6 +643,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 		args.token = op.OperationToken
 		args.endpointID = op.EndpointId
 		args.endpointName = op.Endpoint
+		args.requestID = op.RequestId
 		args.scheduledTime = op.ScheduledTime.AsTime()
 		args.scheduleToCloseTimeout = op.ScheduleToCloseTimeout.AsDuration()
 		return nil
@@ -726,6 +780,9 @@ func isDestinationDown(err error) bool {
 	if errors.Is(err, ErrResponseBodyTooLarge) {
 		return false
 	}
+	if errors.Is(err, ErrInvalidOperationToken) {
+		return false
+	}
 	if errors.Is(err, ErrOperationTimeoutBelowMin) {
 		return false
 	}
@@ -735,11 +792,20 @@ func isDestinationDown(err error) bool {
 func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
 	var handlerErr *nexus.HandlerError
 	if errors.As(callErr, &handlerErr) {
+		var retryBehavior enumspb.NexusHandlerErrorRetryBehavior
+		// nolint:exhaustive // unspecified is the default
+		switch handlerErr.RetryBehavior {
+		case nexus.HandlerErrorRetryBehaviorRetryable:
+			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE
+		case nexus.HandlerErrorRetryBehaviorNonRetryable:
+			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE
+		}
 		failure := &failurepb.Failure{
 			Message: handlerErr.Error(),
 			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
 				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-					Type: string(handlerErr.Type),
+					Type:          string(handlerErr.Type),
+					RetryBehavior: retryBehavior,
 				},
 			},
 		}
@@ -763,4 +829,24 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 			},
 		},
 	}, nil
+}
+
+func failureSourceFromContext(ctx context.Context) string {
+	ctxVal := ctx.Value(commonnexus.FailureSourceContextKey)
+	if ctxVal == nil {
+		return ""
+	}
+	val, ok := ctxVal.(*atomic.Value)
+	if !ok {
+		return ""
+	}
+	src := val.Load()
+	if src == nil {
+		return ""
+	}
+	source, ok := src.(string)
+	if !ok {
+		return ""
+	}
+	return source
 }

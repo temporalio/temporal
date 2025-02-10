@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -300,30 +301,30 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	if err != nil {
 		return err
 	}
+
 	for _, op := range opLog {
-		transitionOp, ok := op.(hsm.TransitionOperation)
-		if !ok {
-			continue
-		}
-
-		node, err := tree.Child(transitionOp.Path())
-		if err != nil {
-			return err
-		}
-
-		for _, task := range transitionOp.Output.Tasks {
-			// since this method is called after transition history is updated for the current transition,
-			// we can safely call generateSubStateMachineTask which sets MutableStateVersionedTransition
-			// to the last versioned transition in StateMachineRef
-			if err := generateSubStateMachineTask(
-				r.mutableState,
-				stateMachineRegistry,
-				node,
-				transitionOp.Path(),
-				transitionOp.Output.TransitionCount,
-				task,
-			); err != nil {
+		switch transitionOp := op.(type) {
+		case hsm.DeleteOperation:
+			deleteStateMachineTimersByPath(r.mutableState.GetExecutionInfo(), transitionOp.Path())
+		case hsm.TransitionOperation:
+			node, err := tree.Child(transitionOp.Path())
+			if err != nil {
 				return err
+			}
+			for _, task := range transitionOp.Output.Tasks {
+				// since this method is called after transition history is updated for the current transition,
+				// we can safely call generateSubStateMachineTask which sets MutableStateVersionedTransition
+				// to the last versioned transition in StateMachineRef
+				if err := generateSubStateMachineTask(
+					r.mutableState,
+					stateMachineRegistry,
+					node,
+					transitionOp.Path(),
+					transitionOp.Output.TransitionCount,
+					task,
+				); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -766,7 +767,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 				WorkflowKey:         workflowKey,
 				Priority:            enumsspb.TASK_PRIORITY_LOW,
-				VersionedTransition: transitionHistory[len(transitionHistory)-1],
+				VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
 				FirstEventID:        executionInfo.LastFirstEventId,
 				FirstEventVersion:   lastItem.Version,
 				NextEventID:         lastItem.GetEventId() + 1,
@@ -810,7 +811,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 			WorkflowKey:         workflowKey,
 			Priority:            enumsspb.TASK_PRIORITY_LOW,
-			VersionedTransition: transitionHistory[len(transitionHistory)-1],
+			VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
 			FirstEventID:        executionInfo.LastFirstEventId,
 			FirstEventVersion:   lastItem.GetVersion(),
 			NextEventID:         lastItem.GetEventId() + 1,
@@ -879,11 +880,7 @@ func generateSubStateMachineTask(
 	}
 	machineLastUpdateVersionedTransition := node.InternalRepr().GetLastUpdateVersionedTransition()
 
-	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-	var currentVersionedTransition *persistencespb.VersionedTransition
-	if len(transitionHistory) > 0 {
-		currentVersionedTransition = transitionHistory[len(transitionHistory)-1]
-	}
+	currentVersionedTransition := mutableState.CurrentVersionedTransition()
 	ref := &persistencespb.StateMachineRef{
 		Path:                                 ppath,
 		MutableStateVersionedTransition:      currentVersionedTransition,
@@ -925,4 +922,37 @@ func generateSubStateMachineTask(
 	}
 
 	return nil
+}
+
+func deleteStateMachineTimersByPath(execInfo *persistencespb.WorkflowExecutionInfo, path []hsm.Key) {
+	trimmedTimers := make([]*persistencespb.StateMachineTimerGroup, 0, len(execInfo.StateMachineTimers))
+
+	for _, group := range execInfo.StateMachineTimers {
+		trimmedInfos := make([]*persistencespb.StateMachineTaskInfo, 0, len(group.Infos))
+		for _, info := range group.GetInfos() {
+			if !isPathAffectedByDelete(path, info.GetRef().GetPath()) {
+				trimmedInfos = append(trimmedInfos, info)
+			}
+		}
+		if len(trimmedInfos) > 0 {
+			trimmedTimers = append(trimmedTimers, &persistencespb.StateMachineTimerGroup{
+				Infos:     trimmedInfos,
+				Deadline:  group.Deadline,
+				Scheduled: group.Scheduled,
+			})
+		}
+	}
+	execInfo.StateMachineTimers = trimmedTimers
+}
+
+func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.StateMachineKey) bool {
+	if len(deletePath) > len(timerPath) {
+		return false
+	}
+	for i := range deletePath {
+		if deletePath[i].Type != timerPath[i].GetType() || deletePath[i].ID != timerPath[i].GetId() {
+			return false
+		}
+	}
+	return true
 }

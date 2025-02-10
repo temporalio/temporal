@@ -631,6 +631,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 		baseFirstEventID,
 		baseNextEventID,
 		nil,
+		false, // allowResetWithPendingChildren
 	)
 	s.NoError(err)
 	s.Equal(s.baseRunID, lastVisitedRunID)
@@ -759,6 +760,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 		baseFirstEventID,
 		baseNextEventID,
 		nil,
+		false, // allowResetWithPendingChildren
 	)
 	s.NoError(err)
 	s.Equal(newRunID, lastVisitedRunID)
@@ -825,6 +827,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		nextEventID,
 		branchToken,
 		nil,
+		false, // allowResetWithPendingChildren
 		map[string]*persistencespb.ResetChildInfo{},
 	)
 	s.NoError(err)
@@ -1337,6 +1340,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_ExcludeAl
 		baseFirstEventID,
 		baseNextEventID,
 		optionExcludeAllReapplyEvents,
+		false, // allowResetWithPendingChildren
 	)
 	s.NoError(err)
 	s.Equal(s.baseRunID, lastVisitedRunID)

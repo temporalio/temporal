@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -186,6 +187,9 @@ type Config struct {
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	// Enable deployment version RPCs
+	EnableDeploymentVersions dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
 	// Enable batcher RPCs
 	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Batch operation dynamic configs
@@ -209,6 +213,7 @@ type Config struct {
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
 
+	MaxNexusOperationTokenLength dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
 
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -319,7 +324,9 @@ func NewConfig(
 
 		EnableSchedules: dynamicconfig.FrontendEnableSchedules.Get(dc),
 
-		EnableDeployments: dynamicconfig.EnableDeployments.Get(dc),
+		// [cleanup-wv-pre-release]
+		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
+		EnableDeploymentVersions: dynamicconfig.EnableDeploymentVersions.Get(dc),
 
 		EnableBatcher:                   dynamicconfig.FrontendEnableBatcher.Get(dc),
 		MaxConcurrentBatchOperation:     dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
@@ -334,11 +341,11 @@ func NewConfig(
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
 		EnableWorkerVersioningRules:    dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Get(dc),
 
-		EnableNexusAPIs:         dynamicconfig.EnableNexus.Get(dc),
-		CallbackURLMaxLength:    dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		CallbackHeaderMaxSize:   dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		MaxCallbacksPerWorkflow: dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
-
+		EnableNexusAPIs:              dynamicconfig.EnableNexus.Get(dc),
+		CallbackURLMaxLength:         dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		CallbackHeaderMaxSize:        dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		MaxCallbacksPerWorkflow:      dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+		MaxNexusOperationTokenLength: nexusoperations.MaxOperationTokenLength.Get(dc),
 		NexusRequestHeadersBlacklist: dynamicconfig.NewGlobalCachedTypedValue(
 			dc,
 			dynamicconfig.FrontendNexusRequestHeadersBlacklist,

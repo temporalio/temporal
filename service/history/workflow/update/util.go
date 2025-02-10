@@ -97,6 +97,10 @@ func (i *instrumentation) countAborted() {
 	i.oneOf(metrics.WorkflowExecutionUpdateAborted.Name())
 }
 
+func (i *instrumentation) countContinueAsNewSuggestions() {
+	i.oneOf(metrics.WorkflowExecutionUpdateContinueAsNewSuggestions.Name())
+}
+
 func (i *instrumentation) countSent() {
 	i.oneOf(metrics.WorkflowExecutionUpdateSentToWorker.Name())
 }

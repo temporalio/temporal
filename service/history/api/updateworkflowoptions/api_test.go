@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"google.golang.org/protobuf/proto"
@@ -44,14 +43,14 @@ var (
 	}
 	pinnedOverrideOptionsA = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: &deploymentpb.Deployment{SeriesName: "X", BuildId: "A"},
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: "X.A",
 		},
 	}
 	pinnedOverrideOptionsB = &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: &deploymentpb.Deployment{SeriesName: "X", BuildId: "B"},
+			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+			PinnedVersion: "X.B",
 		},
 	}
 )

@@ -38,9 +38,11 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -244,14 +246,17 @@ func (tv *TestVars) WithBuildIDNumber(n int) *TestVars {
 	return tv.cloneSetN("build_id", n)
 }
 
+// [cleanup-wv-pre-release]
 func (tv *TestVars) DeploymentSeries() string {
 	return getOrCreate(tv, "deployment_series", tv.uniqueString, tv.stringNSetter)
 }
 
+// [cleanup-wv-pre-release]
 func (tv *TestVars) WithDeploymentSeriesNumber(n int) *TestVars {
 	return tv.cloneSetN("deployment_series", n)
 }
 
+// [cleanup-wv-pre-release]
 func (tv *TestVars) Deployment() *deploymentpb.Deployment {
 	return &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(),
@@ -259,16 +264,27 @@ func (tv *TestVars) Deployment() *deploymentpb.Deployment {
 	}
 }
 
-func (tv *TestVars) DeploymentTransition() *workflowpb.DeploymentTransition {
-	return &workflowpb.DeploymentTransition{
-		Deployment: tv.Deployment(),
+func (tv *TestVars) DeploymentVersion() *deploymentspb.WorkerDeploymentVersion {
+	return &deploymentspb.WorkerDeploymentVersion{
+		BuildId:        tv.BuildID(),
+		DeploymentName: tv.DeploymentSeries(),
+	}
+}
+
+func (tv *TestVars) DeploymentVersionString() string {
+	return worker_versioning.WorkerDeploymentVersionToString(tv.DeploymentVersion())
+}
+
+func (tv *TestVars) DeploymentVersionTransition() *workflowpb.DeploymentVersionTransition {
+	return &workflowpb.DeploymentVersionTransition{
+		Version: tv.DeploymentVersionString(),
 	}
 }
 
 func (tv *TestVars) VersioningOverridePinned() *workflowpb.VersioningOverride {
 	return &workflowpb.VersioningOverride{
-		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
-		Deployment: tv.Deployment(),
+		Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
+		PinnedVersion: tv.DeploymentVersionString(),
 	}
 }
 
@@ -399,4 +415,16 @@ func (tv *TestVars) Any() Any {
 
 func (tv *TestVars) Global() Global {
 	return newGlobal()
+}
+
+func (tv *TestVars) WorkerDeploymentOptions(versioned bool) *deploymentpb.WorkerDeploymentOptions {
+	m := enumspb.WORKER_VERSIONING_MODE_UNVERSIONED
+	if versioned {
+		m = enumspb.WORKER_VERSIONING_MODE_VERSIONED
+	}
+	return &deploymentpb.WorkerDeploymentOptions{
+		BuildId:              tv.BuildID(),
+		DeploymentName:       tv.DeploymentSeries(),
+		WorkerVersioningMode: m,
+	}
 }
