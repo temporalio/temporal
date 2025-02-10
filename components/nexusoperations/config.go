@@ -149,6 +149,23 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 	`The maximum backoff interval between every nexus StartOperation or CancelOperation request for a given operation.`,
 )
 
+var MetricTagConfiguration = dynamicconfig.NewNamespaceTypedSetting(
+	"component.nexusoperations.metrics.tags",
+	&NexusMetricTagConfig{
+		IncludeServiceTag:   false,
+		IncludeOperationTag: false,
+		HeaderTagMappings:   []NexusHeaderTagMapping{},
+	},
+	`Controls which metric tags are included with Nexus operation metrics. This configuration supports:
+1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag)
+2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag)
+3. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings)
+
+Note: default metric tags (like namespace, endpoint) are always included and not affected by this configuration.
+Adding high-cardinality tags (like unique operation names) can significantly increase metric storage
+requirements and query complexity. Consider the cardinality impact when enabling these tags.`,
+)
+
 type Config struct {
 	Enabled                            dynamicconfig.BoolPropertyFn
 	RequestTimeout                     dynamicconfig.DurationPropertyFnWithDestinationFilter
