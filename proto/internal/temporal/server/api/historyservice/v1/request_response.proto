@@ -984,11 +984,6 @@ message GetWorkflowExecutionHistoryResponse {
     temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse response = 1;
 }
 
-// This message must be wire compatible with GetWorkflowExecutionHistoryResponse.
-message GetWorkflowExecutionHistoryResponseWithRaw {
-    temporal.server.api.history.v1.GetWorkflowExecutionHistoryResponse response = 1;
-}
-
 message GetWorkflowExecutionHistoryReverseRequest {
     option (routing).workflow_id = "request.execution.workflow_id";
 
