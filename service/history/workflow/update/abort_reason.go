@@ -107,14 +107,14 @@ var reasonStateMatrix = map[reasonState]failureError{
 	reasonState{r: AbortReasonWorkflowContinuing, st: stateProvisionallyAborted}: {f: nil, err: nil},
 	reasonState{r: AbortReasonWorkflowContinuing, st: stateAborted}:              {f: nil, err: nil},
 
-	// AbortReasonWorkflowTaskFailed reason is used when WFT fails unexpectedly,
-	// for example, during completion (call to RespondWorkflowTaskCompleted API),
-	// not when WFT is explicitly failing by SDK (call to RespondWorkflowTaskFailed API).
-	// Updates which haven't seen by the Workflow are aborted with retryable registryClearedErr error.
+	// AbortReasonWorkflowTaskFailed reason is used when the WFT fails unexpectedly,
+	// for example, during completion (call to RespondWorkflowTaskCompleted API)
+	// - not when WFT is explicitly failed by SDK (call to RespondWorkflowTaskFailed API).
+	// Updates which have *not* been seen by the Workflow are aborted with a retryable error.
 	reasonState{r: AbortReasonWorkflowTaskFailed, st: stateCreated}:               {f: nil, err: registryClearedErr},
 	reasonState{r: AbortReasonWorkflowTaskFailed, st: stateProvisionallyAdmitted}: {f: nil, err: registryClearedErr},
 	reasonState{r: AbortReasonWorkflowTaskFailed, st: stateAdmitted}:              {f: nil, err: registryClearedErr},
-	// Updates which have been seen by the Workflow are aborted with non-retryable error.
+	// Updates which *have* been seen by the Workflow are aborted with non-retryable error.
 	// Failed WFT will be retried but Update must not. Otherwise, internal retries will exhaust and Unavailable error will be returned to the client.
 	reasonState{r: AbortReasonWorkflowTaskFailed, st: stateSent}: {f: nil, err: workflowTaskFailErr},
 	// Updates which passed Accepted state are not retried when the registry is cleared, so there is no need to abort them.

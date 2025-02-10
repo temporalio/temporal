@@ -2345,7 +2345,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
   7 WorkflowTaskFailed
   8 WorkflowTaskScheduled
   9 WorkflowTaskStarted
- 10 WorkflowTaskCompleted // Transient WFT was completed successfully and end up in the history.
+ 10 WorkflowTaskCompleted // Transient WFT was completed successfully and ended up in the history.
  11 WorkflowExecutionUpdateAccepted
  12 WorkflowExecutionUpdateCompleted
  13 WorkflowExecutionCompleted`, events)
