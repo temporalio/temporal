@@ -214,9 +214,9 @@ type Config struct {
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
 
-	MaxNexusOperationTokenLength dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NexusRequestHeadersBlacklist *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
-	MetricTagConfig              dynamicconfig.TypedPropertyFnWithNamespaceFilter[*nexusoperations.NexusMetricTagConfig]
+	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NexusRequestHeadersBlacklist   *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	NexusOperationsMetricTagConfig dynamicconfig.TypedPropertyFnWithNamespaceFilter[*nexusoperations.NexusMetricTagConfig]
 
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -358,7 +358,7 @@ func NewConfig(
 				return util.WildCardStringsToRegexp(patterns)
 			},
 		),
-		MetricTagConfig: nexusoperations.MetricTagConfiguration.Get(dc),
+		NexusOperationsMetricTagConfig: nexusoperations.MetricTagConfiguration.Get(dc),
 
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
