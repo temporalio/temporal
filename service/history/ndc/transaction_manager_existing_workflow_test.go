@@ -116,36 +116,6 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	s.True(newReleaseCalled)
 }
 
-func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_IsCurrent() {
-	ctx := context.Background()
-
-	namespaceID := namespace.ID("some random namespace ID")
-	workflowID := "some random workflow ID"
-	targetRunID := "some random run ID"
-
-	isWorkflowRebuilt := false
-
-	targetWorkflow := NewMockWorkflow(s.controller)
-	targetMutableState := workflow.NewMockMutableState(s.controller)
-	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
-
-	newWorkflow := NewMockWorkflow(s.controller)
-
-	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
-	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID.String(),
-		WorkflowId:  workflowID,
-	}).AnyTimes()
-	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
-		RunId: targetRunID,
-	}).AnyTimes()
-	targetMutableState.EXPECT().IsTransitionHistoryEnabled().Return(false)
-	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(targetRunID, nil)
-
-	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
-	s.Error(err)
-}
-
 func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_NotCurrent_CurrentRunning_UpdateAsCurrent() {
 	ctx := context.Background()
 
@@ -483,7 +453,6 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	targetMutableState.EXPECT().IsTransitionHistoryEnabled().Return(false)
 	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(targetRunID, nil)
 
 	targetContext.EXPECT().ConflictResolveWorkflowExecution(

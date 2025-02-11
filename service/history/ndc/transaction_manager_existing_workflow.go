@@ -116,10 +116,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	}
 
 	if currentRunID == targetRunID {
-		if !mutableState.IsTransitionHistoryEnabled() && !isWorkflowRebuilt {
-			return serviceerror.NewInternal("transactionMgr: encountered workflow not rebuilt & current workflow not guaranteed")
-		}
-
 		// update to current record, since target workflow is pointed by current record
 		return r.dispatchWorkflowUpdateAsCurrent(
 			ctx,
