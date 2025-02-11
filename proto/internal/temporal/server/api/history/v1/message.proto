@@ -29,7 +29,6 @@ option go_package = "go.temporal.io/server/api/history/v1;history";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/history/v1/message.proto";
-import "temporal/api/common/v1/message.proto";
 
 message TransientWorkflowTaskInfo {
     reserved 1;
@@ -65,27 +64,4 @@ message TaskKey {
 message TaskRange {
     TaskKey inclusive_min_task_key = 1;
     TaskKey exclusive_max_task_key = 2;
-}
-
-// StrippedHistoryEvent is a stripped down version of HistoryEvent that only contains the event_id and version.
-message StrippedHistoryEvent {
-    int64 event_id = 1;
-    int64 version = 4;
-}
-
-message StrippedHistoryEvents {
-    repeated StrippedHistoryEvent events = 1;
-}
-
-// api-linter: core::0158::response-next-page-token-field=disabled
-// api-linter: core::0158::response-repeated-first-field=disabled
-// api-linter: core::0158::response-plural-first-field=disabled
-// GetWorkflowExecutionHistoryResponse is added to the response of GetWorkflowExecutionHistory call. It contains raw
-// bytes for history events. The frontend service will deserialize this message as
-// temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse because the two message definitions are byte-compatible.
-message GetWorkflowExecutionHistoryResponse {
-    repeated bytes history = 1;
-    repeated temporal.api.common.v1.DataBlob raw_history = 2;
-    bytes next_page_token = 3;
-    bool archived = 4;
 }

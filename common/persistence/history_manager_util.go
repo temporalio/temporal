@@ -26,16 +26,10 @@ package persistence
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
-	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
-	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 )
 
 // ReadFullPageEvents reads a full page of history events from ExecutionManager. Due to storage format of V2 History
@@ -57,30 +51,6 @@ func ReadFullPageEvents(
 		size += response.Size
 		if len(historyEvents) >= req.PageSize || len(response.NextPageToken) == 0 {
 			return historyEvents, size, response.NextPageToken, nil
-		}
-		req.NextPageToken = response.NextPageToken
-	}
-}
-
-// ReadFullPageRawEvents reads a full page of raw history events from ExecutionManager. Due to storage format of V2 History
-// it is not guaranteed that pageSize amount of data is returned. Function returns the list of history blobs, the size
-// of data read, the next page token, and an error if present.
-func ReadFullPageRawEvents(
-	ctx context.Context,
-	executionMgr ExecutionManager,
-	req *ReadHistoryBranchRequest,
-) ([]*commonpb.DataBlob, int, []byte, error) {
-	var blobs []*commonpb.DataBlob
-	size := 0
-	for {
-		response, err := executionMgr.ReadRawHistoryBranch(ctx, req)
-		if err != nil {
-			return nil, 0, nil, err
-		}
-		blobs = append(blobs, response.HistoryEventBlobs...)
-		size += response.Size
-		if len(blobs) >= req.PageSize || len(response.NextPageToken) == 0 {
-			return blobs, size, response.NextPageToken, nil
 		}
 		req.NextPageToken = response.NextPageToken
 	}
@@ -157,98 +127,4 @@ func sortAncestors(ans []*persistencespb.HistoryBranchRange) {
 			(ans)[i].BeginNodeId = (ans)[i-1].GetEndNodeId()
 		}
 	}
-}
-
-func ValidateBatch(
-	batch []*historyspb.StrippedHistoryEvent,
-	branchToken []byte,
-	lastEventID int64,
-	logger log.Logger,
-) error {
-	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
-	var eventCount int
-	dataLossTags := func(cause string) []tag.Tag {
-		return []tag.Tag{
-			tag.Cause(cause),
-			tag.WorkflowBranchToken(branchToken),
-			tag.WorkflowFirstEventID(firstEvent.GetEventId()),
-			tag.FirstEventVersion(firstEvent.GetVersion()),
-			tag.WorkflowNextEventID(lastEvent.GetEventId()),
-			tag.LastEventVersion(lastEvent.GetVersion()),
-			tag.Counter(eventCount),
-			tag.TokenLastEventID(lastEventID),
-		}
-	}
-	firstEvent = batch[0]
-	eventCount = len(batch)
-	lastEvent = batch[eventCount-1]
-
-	if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
-		// in a single batch, version should be the same, and ID should be contiguous
-		logger.Error(dataLossMsg, dataLossTags(errWrongVersion)...)
-		return serviceerror.NewDataLoss(errWrongVersion)
-	}
-	// If it is the first batch in the response, we cannot check the first event id here. That information is in the historyPagingToken.
-	// TODO: PPV refactor to move this check to ExecutionManager so that we can include that check as well.
-	if lastEventID != 0 && firstEvent.GetEventId() != lastEventID+1 {
-		logger.Error(dataLossMsg, dataLossTags(errNonContiguousEventID)...)
-		return serviceerror.NewDataLoss(errNonContiguousEventID)
-	}
-	return nil
-}
-
-func VerifyHistoryIsComplete(
-	events []*historyspb.StrippedHistoryEvent,
-	expectedFirstEventID int64,
-	expectedLastEventID int64,
-	isFirstPage bool,
-	isLastPage bool,
-	pageSize int,
-) error {
-
-	nEvents := len(events)
-	if nEvents == 0 {
-		if isLastPage {
-			// we seem to be returning a non-nil pageToken on the lastPage which
-			// in turn cases the client to call getHistory again - only to find
-			// there are no more events to consume - bail out if this is the case here
-			return nil
-		}
-		return serviceerror.NewDataLoss("History contains zero events.")
-	}
-
-	firstEventID := events[0].GetEventId()
-	lastEventID := events[nEvents-1].GetEventId()
-
-	if !isFirstPage { // at least one page of history has been read previously
-		if firstEventID <= expectedFirstEventID {
-			// not first page and no events have been read in the previous pages - not possible
-			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID))
-		}
-		expectedFirstEventID = firstEventID
-	}
-
-	if !isLastPage {
-		// estimate lastEventID based on pageSize. This is a lower bound
-		// since the persistence layer counts "batch of events" as a single page
-		expectedLastEventID = expectedFirstEventID + int64(pageSize) - 1
-	}
-
-	nExpectedEvents := expectedLastEventID - expectedFirstEventID + 1
-
-	if firstEventID == expectedFirstEventID &&
-		((isLastPage && lastEventID == expectedLastEventID && int64(nEvents) == nExpectedEvents) ||
-			(!isLastPage && lastEventID >= expectedLastEventID && int64(nEvents) >= nExpectedEvents)) {
-		return nil
-	}
-
-	return serviceerror.NewDataLoss(fmt.Sprintf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
-		expectedFirstEventID,
-		expectedLastEventID,
-		firstEventID,
-		lastEventID,
-		nEvents,
-		isFirstPage,
-		isLastPage,
-		pageSize))
 }
