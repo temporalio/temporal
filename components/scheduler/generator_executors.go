@@ -104,7 +104,7 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 	}
 
 	// Transition the executor sub state machine to execute the new buffered actions.
-	executorNode, err := schedulerNode.Child([]hsm.Key{ExecutorMachineKey})
+	executorNode, err := schedulerNode.Child([]hsm.Key{InvokerMachineKey})
 	if err != nil {
 		return fmt.Errorf(
 			"%w: %w",
@@ -112,8 +112,8 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 			err,
 		)
 	}
-	err = hsm.MachineTransition(executorNode, func(e Executor) (hsm.TransitionOutput, error) {
-		return TransitionExecute.Apply(e, EventExecute{
+	err = hsm.MachineTransition(executorNode, func(e Invoker) (hsm.TransitionOutput, error) {
+		return TransitionEnqueue.Apply(e, EventEnqueue{
 			Node:           executorNode,
 			BufferedStarts: res.BufferedStarts,
 		})

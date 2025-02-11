@@ -547,35 +547,35 @@ func (this *GeneratorInternal) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type ExecutorInternal to the protobuf v3 wire format
-func (val *ExecutorInternal) Marshal() ([]byte, error) {
+// Marshal an object of type InvokerInternal to the protobuf v3 wire format
+func (val *InvokerInternal) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type ExecutorInternal from the protobuf v3 wire format
-func (val *ExecutorInternal) Unmarshal(buf []byte) error {
+// Unmarshal an object of type InvokerInternal from the protobuf v3 wire format
+func (val *InvokerInternal) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *ExecutorInternal) Size() int {
+func (val *InvokerInternal) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two ExecutorInternal values are equivalent by recursively
+// Equal returns whether two InvokerInternal values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ExecutorInternal) Equal(that interface{}) bool {
+func (this *InvokerInternal) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *ExecutorInternal
+	var that1 *InvokerInternal
 	switch t := that.(type) {
-	case *ExecutorInternal:
+	case *InvokerInternal:
 		that1 = t
-	case ExecutorInternal:
+	case InvokerInternal:
 		that1 = &t
 	default:
 		return false

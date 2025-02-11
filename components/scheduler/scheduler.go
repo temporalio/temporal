@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
@@ -69,6 +70,9 @@ const (
 
 	// The top-level scheduler only has a single, constant state.
 	SchedulerMachineStateRunning SchedulerMachineState = 0
+
+	// How many recent actions to keep on the Info.RecentActions list.
+	recentActionCount = 10
 )
 
 var (
@@ -119,7 +123,7 @@ func RegisterStateMachines(r *hsm.Registry) error {
 	if err := r.RegisterMachine(generatorMachineDefinition{}); err != nil {
 		return err
 	}
-	if err := r.RegisterMachine(executorMachineDefinition{}); err != nil {
+	if err := r.RegisterMachine(invokerMachineDefinition{}); err != nil {
 		return err
 	}
 	// TODO: add other state machines here
@@ -251,3 +255,36 @@ func (s *Scheduler) validateCachedState() {
 func (s *Scheduler) updateConflictToken() {
 	s.ConflictToken++
 }
+
+type EventRecordAction struct {
+	Node *hsm.Node
+
+	ActionCount    int64
+	OverlapSkipped int64
+	BufferDropped  int64
+	Results        []*schedulepb.ScheduleActionResult
+}
+
+// Fired when an action has been taken by the state machine scheduler and should
+// be recorded.
+var TransitionRecordAction = hsm.NewTransition(
+	[]SchedulerMachineState{SchedulerMachineStateRunning},
+	SchedulerMachineStateRunning,
+	func(s Scheduler, event EventRecordAction) (hsm.TransitionOutput, error) {
+		s.Info.ActionCount += event.ActionCount
+		s.Info.OverlapSkipped += event.OverlapSkipped
+		s.Info.BufferDropped += event.BufferDropped
+
+		if len(event.Results) > 0 {
+			s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, event.Results...), recentActionCount)
+		}
+
+		for _, result := range event.Results {
+			if result.StartWorkflowResult != nil {
+				s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, result.StartWorkflowResult)
+			}
+		}
+
+		return hsm.TransitionOutput{}, nil
+	},
+)

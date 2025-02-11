@@ -52,8 +52,10 @@ message BufferedStart {
     // execution. Only used by the state machine scheduler (otherwise left
     // empty).
     string request_id = 6;
-    // When a BufferedStart fails execution, its attempt count here is incremented. Only
-    // used by the state machine scheduler (otherwise left empty).
+    // Initially 0. Once a BufferedStart is ready to execute (overlap policies
+    // are resolved), its attempt count is set to 1. If a BufferedStart fails
+    // execution, its attempt count here is incremented. Only used by the state
+    // machine scheduler (otherwise left empty).
     int64 attempt = 7;
     // If a BufferedStart is rate limited or needs to backoff while retrying,
     // this time will be set, and the start will be held in the buffer until the
@@ -186,16 +188,22 @@ message GeneratorInternal {
     google.protobuf.Timestamp last_processed_time = 3;
 }
 
-// State machine scheduler's Executor internal state.
-message ExecutorInternal {
-    temporal.server.api.enums.v1.SchedulerExecutorState state = 1;
+// State machine scheduler's Invoker internal state.
+message InvokerInternal {
+    temporal.server.api.enums.v1.SchedulerInvokerState state = 1;
 
-    // Wakes immediately after actions are buffered, or when the deadline from
-    // the BACKING_OFF state has expired.
-    google.protobuf.Timestamp next_invocation_time = 2;
+    // Buffered starts that will be started by the Invoker.
+    repeated BufferedStart buffered_starts = 2;
 
-    // Buffered starts that will be started by the Executor.
-    repeated BufferedStart buffered_starts = 3;
+    // Workflow executions that will be cancelled due to overlap policy.
+    repeated temporal.api.common.v1.WorkflowExecution cancel_workflows = 3;
+
+    // Workflow executions that will be terminated due to overlap policy.
+    repeated temporal.api.common.v1.WorkflowExecution terminate_workflows = 4;
+
+    // High water mark, used for evaluating when to fire tasks that are backing
+    // off from a retry.
+    google.protobuf.Timestamp last_processed_time = 5;
 }
 
 // State machine scheduler's Backfiller internal state. Backfill requests are 1:1
