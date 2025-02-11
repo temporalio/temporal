@@ -58,6 +58,9 @@ type processBufferResult struct {
 	// Number of buffered starts dropped due to overlap policy during processing.
 	OverlapSkipped int64
 
+	// Nunmber of buffered starts dropped from missing the catchup window.
+	MissedCatchupWindow int64
+
 	// Number of buffered starts dropped due to the max buffer size having been exceeded.
 	// TODO - set this from Generator/Backfiller
 	BufferDropped int64

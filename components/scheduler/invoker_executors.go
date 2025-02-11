@@ -277,9 +277,9 @@ func (e invokerTaskExecutor) executeProcessBufferTask(env hsm.Environment, node 
 	// Update Scheduler metadata.
 	err = hsm.MachineTransition(schedulerNode, func(s Scheduler) (hsm.TransitionOutput, error) {
 		return TransitionRecordAction.Apply(s, EventRecordAction{
-			Node:           schedulerNode,
-			OverlapSkipped: result.OverlapSkipped,
-			BufferDropped:  result.BufferDropped,
+			Node:                schedulerNode,
+			OverlapSkipped:      result.OverlapSkipped,
+			MissedCatchupWindow: result.MissedCatchupWindow,
 		})
 	})
 	if err != nil {
@@ -326,6 +326,8 @@ func (e invokerTaskExecutor) processBuffer(
 ) (result processBufferResult) {
 	isRunning := len(scheduler.Info.RunningWorkflows) > 0
 
+	// If the buffer
+
 	// Processing completely ignores any BufferedStart that's already executing/backing off.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 		return start.Attempt == 0
@@ -361,7 +363,7 @@ func (e invokerTaskExecutor) processBuffer(
 
 		if env.Now().After(e.startWorkflowDeadline(scheduler, start)) {
 			// Drop expired starts.
-			// TODO - we should increment a user-visible counter on ScheduleInfo when this happens.
+			result.MissedCatchupWindow++
 			result.DiscardStarts = append(result.DiscardStarts, start)
 			continue
 		}

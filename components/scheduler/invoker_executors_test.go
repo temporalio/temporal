@@ -215,6 +215,34 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_AllowAll() {
 	})
 }
 
+// ProcessBuffer processes a start that missed the catchup window.
+func (e *invokerExecutorsSuite) TestProcessBufferTask_MissedCatchupWindow() {
+	now := e.env.Now()
+	startTime := now.Add(-defaultCatchupWindow * 2)
+	startTimestamp := timestamppb.New(startTime)
+	bufferedStarts := []*schedulespb.BufferedStart{
+		{
+			NominalTime:   startTimestamp,
+			ActualTime:    startTimestamp,
+			DesiredTime:   startTimestamp,
+			Manual:        false,
+			RequestId:     "req1",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}
+
+	e.runTestCase(&testCase{
+		TaskType:                    scheduler.TaskTypeProcessBuffer,
+		InitialBufferedStarts:       bufferedStarts,
+		InitialState:                enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
+		ExpectedBufferedStarts:      0,
+		ExpectedOverlapSkipped:      0,
+		ExpectedMissedCatchupWindow: 1,
+		ExpectedState:               enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
+		ExpectedTasks:               map[string]int{},
+	})
+}
+
 // ProcessBuffer defers a start (from overlap policy) by placing it into
 // NewBuffer.
 func (e *invokerExecutorsSuite) TestProcessBufferTask_BufferOne() {
@@ -670,14 +698,15 @@ type testCase struct {
 	InitialRunningWorkflows   []*commonpb.WorkflowExecution
 	InitialState              enumsspb.SchedulerInvokerState
 
-	ExpectedBufferedStarts     int
-	ExpectedRunningWorkflows   int
-	ExpectedTerminateWorkflows int
-	ExpectedCancelWorkflows    int
-	ExpectedActionCount        int64
-	ExpectedOverlapSkipped     int64
-	ExpectedState              enumsspb.SchedulerInvokerState
-	ExpectedTasks              map[string]int // task type -> expected count
+	ExpectedBufferedStarts      int
+	ExpectedRunningWorkflows    int
+	ExpectedTerminateWorkflows  int
+	ExpectedCancelWorkflows     int
+	ExpectedActionCount         int64
+	ExpectedOverlapSkipped      int64
+	ExpectedMissedCatchupWindow int64
+	ExpectedState               enumsspb.SchedulerInvokerState
+	ExpectedTasks               map[string]int // task type -> expected count
 
 	Validate func(*testing.T, scheduler.Invoker) // Called after all other validations pass for additional assertions.
 }
@@ -712,6 +741,7 @@ func (e *invokerExecutorsSuite) runTestCase(c *testCase) {
 	require.Equal(t, c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
 	require.Equal(t, c.ExpectedActionCount, schedulerSm.Info.ActionCount)
 	require.Equal(t, c.ExpectedOverlapSkipped, schedulerSm.Info.OverlapSkipped)
+	require.Equal(t, c.ExpectedMissedCatchupWindow, schedulerSm.Info.MissedCatchupWindow)
 	require.Equal(t, c.ExpectedState, invoker.State())
 
 	tasks := e.opLogTaskMap()

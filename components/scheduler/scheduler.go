@@ -259,10 +259,11 @@ func (s *Scheduler) updateConflictToken() {
 type EventRecordAction struct {
 	Node *hsm.Node
 
-	ActionCount    int64
-	OverlapSkipped int64
-	BufferDropped  int64
-	Results        []*schedulepb.ScheduleActionResult
+	ActionCount         int64
+	OverlapSkipped      int64
+	BufferDropped       int64
+	MissedCatchupWindow int64
+	Results             []*schedulepb.ScheduleActionResult
 }
 
 // Fired when an action has been taken by the state machine scheduler and should
@@ -274,6 +275,7 @@ var TransitionRecordAction = hsm.NewTransition(
 		s.Info.ActionCount += event.ActionCount
 		s.Info.OverlapSkipped += event.OverlapSkipped
 		s.Info.BufferDropped += event.BufferDropped
+		s.Info.MissedCatchupWindow += event.MissedCatchupWindow
 
 		if len(event.Results) > 0 {
 			s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, event.Results...), recentActionCount)
