@@ -191,10 +191,10 @@ func Invoke(
 		}
 	}()
 
-	var historyBlob []*commonpb.DataBlob
+	var historyBlobs []*commonpb.DataBlob
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
-			historyBlob, _, err = api.GetRawHistory(
+			historyBlobs, _, err = api.GetRawHistory(
 				ctx,
 				shardContext,
 				namespaceID,
@@ -211,7 +211,24 @@ func Invoke(
 			}
 
 			// since getHistory func will not return empty history, so the below is safe
-			historyBlob = historyBlob[len(historyBlob)-1:]
+			historyBlobs = historyBlobs[len(historyBlobs)-1:]
+
+			// Only return the last event in this history batch.
+			// TODO Prathyush: Remove this after next release
+			serializer := shardContext.GetPayloadSerializer()
+			batch, err := serializer.DeserializeEvents(historyBlobs[0])
+			if err != nil {
+				return nil, err
+			}
+			if len(batch) > 0 {
+				batch = batch[len(batch)-1:]
+			}
+			blob, err := serializer.SerializeEvents(batch, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return nil, err
+			}
+			historyBlobs[0] = blob
+
 			continuationToken = nil
 		} else if isLongPoll {
 			// set the persistence token to be nil so next time we will query history for updates
@@ -227,7 +244,7 @@ func Invoke(
 				continuationToken = nil
 			}
 		} else {
-			historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
+			historyBlobs, continuationToken.PersistenceToken, err = api.GetRawHistory(
 				ctx,
 				shardContext,
 				namespaceID,
@@ -266,10 +283,10 @@ func Invoke(
 		},
 	}
 	if shardContext.GetConfig().SendRawWorkflowHistory(request.Request.GetNamespace()) {
-		resp.Response.RawHistory = historyBlob
+		resp.Response.RawHistory = historyBlobs
 	} else {
 		fullHistory := make([][]byte, 0)
-		for _, blob := range historyBlob {
+		for _, blob := range historyBlobs {
 			fullHistory = append(fullHistory, blob.Data)
 		}
 		// If there are no events in the history, frontend will not be able to deserialize the response to History object.
