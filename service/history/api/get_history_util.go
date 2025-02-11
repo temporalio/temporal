@@ -247,16 +247,16 @@ func GetHistoryReverse(
 }
 
 func ProcessOutgoingSearchAttributes(
-	shard shard.Context,
+	shardCtx shard.Context,
 	events []*historypb.HistoryEvent,
 	namespaceId namespace.ID,
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) error {
-	namespace, err := shard.GetNamespaceRegistry().GetNamespaceName(namespaceId)
+	ns, err := shardCtx.GetNamespaceRegistry().GetNamespaceName(namespaceId)
 	if err != nil {
 		return err
 	}
-	saTypeMap, err := shard.GetSearchAttributesProvider().GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
+	saTypeMap, err := shardCtx.GetSearchAttributesProvider().GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(consts.ErrUnableToGetSearchAttributesMessage, err))
 	}
@@ -274,7 +274,7 @@ func ProcessOutgoingSearchAttributes(
 		}
 		if searchAttributes != nil {
 			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-			aliasedSas, err := searchattribute.AliasFields(shard.GetSearchAttributesMapperProvider(), searchAttributes, namespace.String())
+			aliasedSas, err := searchattribute.AliasFields(shardCtx.GetSearchAttributesMapperProvider(), searchAttributes, ns.String())
 			if err != nil {
 				return err
 			}

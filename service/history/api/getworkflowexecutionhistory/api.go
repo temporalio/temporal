@@ -339,6 +339,7 @@ func makeFakeContinuedAsNewEvent(
 	_ context.Context,
 	lastEvent *historypb.HistoryEvent,
 ) (*historypb.HistoryEvent, error) {
+	// nolint:exhaustive
 	switch lastEvent.EventType {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		if lastEvent.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId() == "" {
@@ -361,6 +362,7 @@ func makeFakeContinuedAsNewEvent(
 	// the client looks at in this case, but copy the last result or failure from the real completed
 	// event just so it's clear what the result was.
 	newAttrs := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{}
+	// nolint:exhaustive
 	switch lastEvent.EventType {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
