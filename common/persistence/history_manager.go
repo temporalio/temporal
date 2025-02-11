@@ -33,7 +33,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
@@ -813,20 +812,9 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	transactionIDs := make([]int64, 0, len(nodes))
 	nodeIDs := make([]int64, 0, len(nodes))
 	dataSize := 0
-	allEvents := make([]*historyspb.StrippedHistoryEvent, 0, request.PageSize)
 	if len(nodes) > 0 {
 		dataBlobs = make([]*commonpb.DataBlob, len(nodes))
 		for index, node := range nodes {
-			events, err := m.serializer.DeserializeStrippedEvents(node.Events)
-			if err != nil {
-				return nil, nil, nil, nil, 0, err
-			}
-			allEvents = append(allEvents, events...)
-			err = ValidateBatch(events, branchToken, token, m.logger)
-			if err != nil {
-				return nil, nil, nil, nil, 0, err
-			}
-
 			dataBlobs[index] = node.Events
 			dataSize += len(node.Events.Data)
 			transactionIDs = append(transactionIDs, node.TransactionID)
@@ -837,18 +825,6 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		token.LastTransactionID = lastNode.TransactionID
 	}
 
-	if err := VerifyHistoryIsComplete(
-		allEvents,
-		minNodeID,
-		maxNodeID-1,
-		len(request.NextPageToken) == 0,
-		len(token.StoreToken) == 0,
-		request.PageSize,
-	); err != nil {
-		m.logger.Error("getHistory: incomplete history",
-			tag.WorkflowBranchToken(branchToken),
-			tag.Error(err))
-	}
 	return dataBlobs, transactionIDs, nodeIDs, token, dataSize, nil
 }
 
@@ -955,17 +931,51 @@ func (m *executionManagerImpl) readHistoryBranch(
 	historyEvents := make([]*historypb.HistoryEvent, 0, request.PageSize)
 	historyEventBatches := make([]*historypb.History, 0, request.PageSize)
 
+	var firstEvent, lastEvent *historypb.HistoryEvent
+	var eventCount int
+
+	dataLossTags := func(cause string) []tag.Tag {
+		return []tag.Tag{
+			tag.Cause(cause),
+			tag.WorkflowBranchToken(request.BranchToken),
+			tag.WorkflowFirstEventID(firstEvent.GetEventId()),
+			tag.FirstEventVersion(firstEvent.GetVersion()),
+			tag.WorkflowNextEventID(lastEvent.GetEventId()),
+			tag.LastEventVersion(lastEvent.GetVersion()),
+			tag.Counter(eventCount),
+			tag.TokenLastEventID(token.LastEventID),
+		}
+	}
+
 	for _, batch := range dataBlobs {
 		events, err := m.serializer.DeserializeEvents(batch)
 		if err != nil {
 			return nil, nil, nil, nil, dataSize, err
 		}
+		if len(events) == 0 {
+			m.logger.Error(dataLossMsg, dataLossTags(errEmptyEvents)...)
+			return nil, nil, nil, nil, dataSize, serviceerror.NewDataLoss(errEmptyEvents)
+		}
+
+		firstEvent = events[0]
+		eventCount = len(events)
+		lastEvent = events[eventCount-1]
+
+		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
+			// in a single batch, version should be the same, and ID should be contiguous
+			m.logger.Error(dataLossMsg, dataLossTags(errWrongVersion)...)
+			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errWrongVersion)
+		}
+		if firstEvent.GetEventId() != token.LastEventID+1 {
+			m.logger.Error(dataLossMsg, dataLossTags(errNonContiguousEventID)...)
+			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss(errNonContiguousEventID)
+		}
+
 		if byBatch {
 			historyEventBatches = append(historyEventBatches, &historypb.History{Events: events})
 		} else {
 			historyEvents = append(historyEvents, events...)
 		}
-		lastEvent := events[len(events)-1]
 		token.LastEventID = lastEvent.GetEventId()
 	}
 

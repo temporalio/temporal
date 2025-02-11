@@ -5478,11 +5478,6 @@ func (s *engineSuite) TestGetHistory() {
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
-	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: "test-namespace"},
-		&persistencespb.NamespaceConfig{},
-		"")
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 	newRunID := uuid.New()
 
 	req := &historyservice.GetWorkflowExecutionHistoryRequest{
@@ -5528,8 +5523,15 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 		RunID:       we.RunId,
 	}).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
 	// GetWorkflowExecutionHistory will request the last event
-	history := historypb.History{
-		Events: []*historypb.HistoryEvent{
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    5,
+		MaxEventID:    6,
+		PageSize:      10,
+		NextPageToken: nil,
+		ShardID:       1,
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId:   int64(5),
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
@@ -5543,28 +5545,9 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 				},
 			},
 		},
-	}
-
-	historyBlob, err := history.Marshal()
-	s.NoError(err)
-
-	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    5,
-		MaxEventID:    6,
-		PageSize:      10,
-		NextPageToken: nil,
-		ShardID:       1,
-	}).Return(&persistence.ReadRawHistoryBranchResponse{
-		HistoryEventBlobs: []*commonpb.DataBlob{
-			{
-				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-				Data:         historyBlob,
-			},
-		},
 		NextPageToken: []byte{},
 		Size:          1,
-	}, nil).Times(1)
+	}, nil).Times(2)
 
 	s.mockExecutionMgr.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
@@ -5573,18 +5556,35 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
 	s.NoError(err)
 
-	resp, err := engine.GetWorkflowExecutionHistory(context.Background(), req)
+	oldGoSDKVersion := "1.9.1"
+	newGoSDKVersion := "1.10.1"
+
+	// new sdk: should see failed event
+	ctx := headers.SetVersionsForTests(context.Background(), newGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
+	resp, err := engine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Response.Archived)
-	err = history.Unmarshal(resp.Response.History[0])
-	s.NoError(err)
-	event := history.Events[0]
+	event := resp.Response.History.Events[0]
 	s.Equal(int64(5), event.EventId)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.EventType)
 	attrs := event.GetWorkflowExecutionFailedEventAttributes()
 	s.Equal("this workflow failed", attrs.Failure.Message)
 	s.Equal(newRunID, attrs.NewExecutionRunId)
 	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, attrs.RetryState)
+
+	// old sdk: should see continued-as-new event
+	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
+	// See comment in workflowHandler.go:GetWorkflowExecutionHistory
+	ctx = headers.SetVersionsForTests(context.Background(), oldGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, "")
+	resp, err = engine.GetWorkflowExecutionHistory(ctx, req)
+	s.NoError(err)
+	s.False(resp.Response.Archived)
+	event = resp.Response.History.Events[0]
+	s.Equal(int64(5), event.EventId)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, event.EventType)
+	attrs2 := event.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(newRunID, attrs2.NewExecutionRunId)
+	s.Equal("this workflow failed", attrs2.Failure.Message)
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
@@ -5662,7 +5662,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	resp, err := engine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Response.Archived)
-	s.Empty(resp.Response.History)
+	s.Empty(resp.Response.History.Events)
 	s.Len(resp.Response.RawHistory, 4)
 	event, err := s.mockShard.GetPayloadSerializer().DeserializeEvent(resp.Response.RawHistory[2])
 	s.NoError(err)
