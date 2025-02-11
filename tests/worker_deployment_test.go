@@ -909,7 +909,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 	tv := testvars.New(s)
 	currentVars := tv.WithBuildIDNumber(1)
 	go s.pollFromDeployment(ctx, currentVars)
-	s.ensureCreateVersion(ctx, currentVars)
+	s.ensureCreateVersionInDeployment(currentVars)
 
 	// check that the current version's task queues have current version unversioned to start
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
@@ -934,15 +934,13 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 
 // Should see that the current version of the task queue becomes unversioned, and the unversioned ramping version of the task queue is removed
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_PromoteUnversionedRamp() {
-	// TODO (Carly): fix flakiness and unskip
-	s.T().Skip()
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
 	tv := testvars.New(s)
 	currentVars := tv.WithBuildIDNumber(1)
-	s.pollFromDeployment(ctx, currentVars)
-	s.ensureCreateVersion(ctx, currentVars)
+
+	go s.pollFromDeployment(ctx, currentVars)
+	s.ensureCreateVersionInDeployment(currentVars)
 
 	// make the current version versioned, so that we can set ramp to unversioned
 	s.setCurrentVersion(ctx, currentVars, worker_versioning.UnversionedVersionId, true, "")
@@ -975,7 +973,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	tv := testvars.New(s)
 	currentVars := tv.WithBuildIDNumber(1)
 	s.pollFromDeployment(ctx, currentVars)
-	s.ensureCreateVersion(ctx, currentVars)
+	s.ensureCreateVersionInDeployment(currentVars)
 
 	// check that the current version's task queues have ramping version == ""
 	s.setCurrentVersion(ctx, currentVars, worker_versioning.UnversionedVersionId, true, "")
