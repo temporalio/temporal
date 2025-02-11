@@ -79,6 +79,15 @@ ScheduleNexusOperation commands with an operation name that exceeds this limit w
 Uses Go's len() function to determine the length.`,
 )
 
+var MaxOperationTokenLength = dynamicconfig.NewNamespaceIntSetting(
+	"component.nexusoperations.limit.operation.token.length",
+	4096,
+	`Limits the maximum allowed length for a Nexus Operation token. Tokens returned via start responses or via async
+completions that exceed this limit will be rejected. Uses Go's len() function to determine the length.
+Leave this limit long enough to fit a workflow ID and namespace name plus padding at minimum since that's what the SDKs
+use as the token.`,
+)
+
 var MaxOperationHeaderSize = dynamicconfig.NewNamespaceIntSetting(
 	"component.nexusoperations.limit.header.size",
 	4096,
@@ -147,6 +156,7 @@ type Config struct {
 	MaxConcurrentOperations            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationTokenLength            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationHeaderSize             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DisallowedOperationHeaders         dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 	MaxOperationScheduleToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -164,6 +174,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxConcurrentOperations:            MaxConcurrentOperations.Get(dc),
 		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),
 		MaxOperationNameLength:             MaxOperationNameLength.Get(dc),
+		MaxOperationTokenLength:            MaxOperationTokenLength.Get(dc),
 		MaxOperationHeaderSize:             MaxOperationHeaderSize.Get(dc),
 		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),

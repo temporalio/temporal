@@ -4975,6 +4975,21 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 		return nil, errRequestNotSet
 	}
 
+	if r := request.GetResponse().GetStartOperation().GetAsyncSuccess(); r != nil {
+		operationToken := r.OperationToken
+		if operationToken == "" && r.OperationId != "" { //nolint:staticcheck // SA1019 this field might be by old clients.
+			operationToken = r.OperationId //nolint:staticcheck // SA1019 this field might be set by old clients.
+		}
+		if operationToken == "" {
+			return nil, serviceerror.NewInvalidArgument("missing opration token in response")
+		}
+
+		tokenLimit := wh.config.MaxNexusOperationTokenLength(request.Namespace)
+		if len(operationToken) > tokenLimit {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("operation token length exceeds allowed limit (%d/%d)", len(operationToken), tokenLimit))
+		}
+	}
+
 	// Both the task token and the request have a reference to a namespace. We prefer using the namespace ID from
 	// the token as it is a more stable identifier.
 	// There's no need to validate that the namespace in the token and the request match,

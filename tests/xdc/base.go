@@ -67,20 +67,14 @@ const (
 type (
 	xdcBaseSuite struct {
 		// TODO (alex): use FunctionalTestSuite
+		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
 		protorequire.ProtoAssertions
 		historyrequire.HistoryRequire
-		// TODO (alex): name should be a cluster property.
-		clusterNames []string
-		suite.Suite
 
-		testClusterFactory testcore.TestClusterFactory
-
-		// TODO (alex): replace cluster1 and cluster2 with a slice of clusters.
-		cluster1               *testcore.TestCluster
-		cluster2               *testcore.TestCluster
+		clusters               []*testcore.TestCluster
 		logger                 log.Logger
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
 
@@ -93,25 +87,18 @@ type (
 
 // TODO (alex): this should be gone.
 func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplicationConfig {
-	config := make([]*replicationpb.ClusterReplicationConfig, len(s.clusterNames))
-	for i, clusterName := range s.clusterNames {
-		config[i] = &replicationpb.ClusterReplicationConfig{
-			ClusterName: clusterName,
+	config := make([]*replicationpb.ClusterReplicationConfig, 2)
+	for ci, c := range s.clusters {
+		config[ci] = &replicationpb.ClusterReplicationConfig{
+			ClusterName: c.ClusterName(),
 		}
 	}
 	return config
 }
 
 func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
-	s.testClusterFactory = testcore.NewTestClusterFactory()
 
 	params := testcore.ApplyTestClusterOptions(opts)
-
-	suffix := common.GenerateRandomString(5)
-	s.clusterNames = []string{
-		"active_" + suffix,
-		"standby_" + suffix,
-	}
 
 	if s.logger == nil {
 		s.logger = log.NewTestLogger()
@@ -135,63 +122,59 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 
 	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
-	for i, config := range clusterConfigs {
-		config.DynamicConfigOverrides = s.dynamicConfigOverrides
-		clusterConfigs[i].ClusterMetadata.MasterClusterName = s.clusterNames[i]
-		clusterConfigs[i].ClusterMetadata.CurrentClusterName = s.clusterNames[i]
-		clusterConfigs[i].ClusterMetadata.EnableGlobalNamespace = true
-		clusterConfigs[i].Persistence.DBName = "func_tests_" + s.clusterNames[i]
-		clusterConfigs[i].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
-			s.clusterNames[i]: cluster.ClusterInformation{
+	s.Require().Len(clusterConfigs, 2)
+	s.clusters = make([]*testcore.TestCluster, len(clusterConfigs))
+	suffix := common.GenerateRandomString(5)
+
+	testClusterFactory := testcore.NewTestClusterFactory()
+	for clusterIndex, clusterName := range []string{"active_" + suffix, "standby_" + suffix} {
+		clusterConfigs[clusterIndex].DynamicConfigOverrides = s.dynamicConfigOverrides
+		clusterConfigs[clusterIndex].ClusterMetadata.MasterClusterName = clusterName
+		clusterConfigs[clusterIndex].ClusterMetadata.CurrentClusterName = clusterName
+		clusterConfigs[clusterIndex].ClusterMetadata.EnableGlobalNamespace = true
+		clusterConfigs[clusterIndex].Persistence.DBName = "func_tests_" + clusterName
+		clusterConfigs[clusterIndex].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
+			clusterName: {
 				Enabled:                true,
-				InitialFailoverVersion: int64(i + 1),
+				InitialFailoverVersion: int64(clusterIndex + 1),
 				// RPCAddress and HTTPAddress will be filled in
 			},
 		}
-		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
-		clusterConfigs[i].EnableMetricsCapture = true
+		clusterConfigs[clusterIndex].ServiceFxOptions = params.ServiceOptions
+		clusterConfigs[clusterIndex].EnableMetricsCapture = true
+
+		s.clusters[clusterIndex], err = testClusterFactory.NewCluster(s.T(), clusterConfigs[clusterIndex], log.With(s.logger, tag.ClusterName(clusterName)))
+		s.Require().NoError(err)
 	}
-
-	s.cluster1, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
-	s.Require().NoError(err)
-
-	s.cluster2, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
-	s.Require().NoError(err)
 
 	s.startTime = time.Now()
 
-	_, err = s.cluster1.AdminClient().AddOrUpdateRemoteCluster(
-		testcore.NewContext(),
-		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               s.cluster2.Host().RemoteFrontendGRPCAddress(),
-			FrontendHttpAddress:           s.cluster2.Host().FrontendHTTPAddress(),
-			EnableRemoteClusterConnection: true,
-		})
-	s.Require().NoError(err)
-
-	_, err = s.cluster2.AdminClient().AddOrUpdateRemoteCluster(
-		testcore.NewContext(),
-		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               s.cluster1.Host().RemoteFrontendGRPCAddress(),
-			FrontendHttpAddress:           s.cluster1.Host().FrontendHTTPAddress(),
-			EnableRemoteClusterConnection: true,
-		})
-	s.Require().NoError(err)
+	for ci, c := range s.clusters {
+		for remoteCi, remoteC := range s.clusters {
+			if ci != remoteCi {
+				_, err = c.AdminClient().AddOrUpdateRemoteCluster(
+					testcore.NewContext(),
+					&adminservice.AddOrUpdateRemoteClusterRequest{
+						FrontendAddress:               remoteC.Host().RemoteFrontendGRPCAddress(),
+						FrontendHttpAddress:           remoteC.Host().FrontendHTTPAddress(),
+						EnableRemoteClusterConnection: true,
+					})
+				s.Require().NoError(err)
+			}
+		}
+	}
+	// TODO (alex): This looks suspicious. Why 200ms?
 	// Wait for cluster metadata to refresh new added clusters
 	time.Sleep(time.Millisecond * 200)
 }
 
-func waitForClusterConnected(
-	s *require.Assertions,
-	logger log.Logger,
+func (s *xdcBaseSuite) waitForClusterConnected(
 	sourceCluster *testcore.TestCluster,
-	source string,
-	target string,
-	startTime time.Time,
+	targetClusterName string,
 ) {
-	logger.Info("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
+	s.logger.Info("wait for clusters to be synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		logger.Info("check if clusters are synced", tag.SourceCluster(source), tag.TargetCluster(target))
+		s.logger.Info("check if clusters are synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
 		resp, err := sourceCluster.HistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
 		if !assert.NoError(c, err) {
 			return
@@ -204,28 +187,34 @@ func waitForClusterConnected(
 		}
 		assert.Greater(c, shard.MaxReplicationTaskId, int64(0))
 		assert.NotNil(c, shard.ShardLocalTime)
-		assert.WithinRange(c, shard.ShardLocalTime.AsTime(), startTime, time.Now())
+		assert.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
 		assert.NotNil(c, shard.RemoteClusters)
 
-		standbyAckInfo, ok := shard.RemoteClusters[target]
+		standbyAckInfo, ok := shard.RemoteClusters[targetClusterName]
 		if !assert.True(c, ok) || !assert.NotNil(c, standbyAckInfo) {
 			return
 		}
 		assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
 		assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
-		assert.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), startTime, time.Now())
+		assert.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
 	}, 90*time.Second, 1*time.Second)
-	logger.Info("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
+	s.logger.Info("clusters synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
 }
 
 func (s *xdcBaseSuite) tearDownSuite() {
-	s.NoError(s.cluster1.TearDownCluster())
-	s.NoError(s.cluster2.TearDownCluster())
+	for _, c := range s.clusters {
+		s.NoError(c.TearDownCluster())
+	}
 }
 
 func (s *xdcBaseSuite) waitForClusterSynced() {
-	waitForClusterConnected(s.Assertions, s.logger, s.cluster1, s.clusterNames[0], s.clusterNames[1], s.startTime)
-	waitForClusterConnected(s.Assertions, s.logger, s.cluster2, s.clusterNames[1], s.clusterNames[0], s.startTime)
+	for sourceClusterI, sourceCluster := range s.clusters {
+		for targetClusterI, targetCluster := range s.clusters {
+			if sourceClusterI != targetClusterI {
+				s.waitForClusterConnected(sourceCluster, targetCluster.ClusterName())
+			}
+		}
+	}
 }
 
 func (s *xdcBaseSuite) setupTest() {
@@ -240,29 +229,28 @@ func (s *xdcBaseSuite) setupTest() {
 }
 
 func (s *xdcBaseSuite) createGlobalNamespace() string {
-	return createNamespace(s.Assertions, true, s.clusterNames, []*testcore.TestCluster{s.cluster1, s.cluster2})
+	return s.createNamespace(true, s.clusters)
 }
 
+// TODO (alex): rename this to createLocalNamespace, and everywhere where it is called with isGlobal == true, add call to promoteNamespace.
 func (s *xdcBaseSuite) createNamespaceInCluster0(isGlobal bool) string {
-	return createNamespace(s.Assertions, isGlobal, s.clusterNames[0:1], []*testcore.TestCluster{s.cluster1})
+	return s.createNamespace(isGlobal, s.clusters[:1])
 }
 
-// TODO (alex): merge this and above functions when all xdc tests share same base struct
-func createNamespace(
-	s *require.Assertions,
+func (s *xdcBaseSuite) createNamespace(
 	isGlobal bool,
-	clusterNames []string, // TODO (alex): name should be cluster property
 	clusters []*testcore.TestCluster,
 ) string {
 	ctx := testcore.NewContext()
 	ns := "test-namespace-" + uuid.NewString()
 	var replicationConfigs []*replicationpb.ClusterReplicationConfig
+	var clusterNames []string
 	if isGlobal {
-		replicationConfigs = make([]*replicationpb.ClusterReplicationConfig, len(clusterNames))
-		for i, clusterName := range clusterNames {
-			replicationConfigs[i] = &replicationpb.ClusterReplicationConfig{
-				ClusterName: clusterName,
-			}
+		replicationConfigs = make([]*replicationpb.ClusterReplicationConfig, len(clusters))
+		clusterNames = make([]string, len(clusters))
+		for ci, c := range clusters {
+			replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{ClusterName: c.ClusterName()}
+			clusterNames[ci] = c.ClusterName()
 		}
 	}
 
@@ -270,7 +258,7 @@ func createNamespace(
 		Namespace:                        ns,
 		IsGlobalNamespace:                isGlobal,
 		Clusters:                         replicationConfigs,
-		ActiveClusterName:                clusterNames[0], // cluster 0 is always active.
+		ActiveClusterName:                clusters[0].ClusterName(), // cluster 0 is always active.
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
 	// namespace is always created in cluster 0.
@@ -372,26 +360,17 @@ func updateNamespaceConfig(
 	}
 }
 
-// TODO (alex): change cluster1 and cluster2 to clusters slice and remove this method.
-func (s *xdcBaseSuite) clusterAt(i int) *testcore.TestCluster {
-	if i == 0 {
-		return s.cluster1
-	}
-	return s.cluster2
-}
-
 func (s *xdcBaseSuite) updateNamespaceClusters(
 	ns string,
 	inClusterIndex int,
-	clusterNames []string,
 	clusters []*testcore.TestCluster,
 ) {
 
-	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusterNames))
-	for i, clusterName := range clusterNames {
-		replicationConfigs[i] = &replicationpb.ClusterReplicationConfig{
-			ClusterName: clusterName,
-		}
+	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusters))
+	clusterNames := make([]string, len(clusters))
+	for ci, c := range clusters {
+		replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{ClusterName: c.ClusterName()}
+		clusterNames[ci] = c.ClusterName()
 	}
 
 	_, err := clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
@@ -438,14 +417,14 @@ func (s *xdcBaseSuite) promoteNamespace(
 	inClusterIndex int,
 ) {
 
-	_, err := s.clusterAt(inClusterIndex).FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
+	_, err := s.clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
 		Namespace:        ns,
 		PromoteNamespace: true,
 	})
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range s.clusterAt(inClusterIndex).Host().NamespaceRegistries() {
+		for _, r := range s.clusters[inClusterIndex].Host().NamespaceRegistries() {
 			resp, err := r.GetNamespace(namespace.Name(ns))
 			assert.NoError(t, err)
 			if assert.NotNil(t, resp) {
@@ -470,14 +449,14 @@ func (s *xdcBaseSuite) failover(
 			ActiveClusterName: targetCluster,
 		},
 	}
-	updateResp, err := s.clusterAt(inClusterIndex).FrontendClient().UpdateNamespace(testcore.NewContext(), updateReq)
+	updateResp, err := s.clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), updateReq)
 	s.NoError(err)
 	// TODO (alex): not clear why it matters.
 	s.Equal(targetFailoverVersion, updateResp.GetFailoverVersion())
 
 	// check local and remote clusters
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, c := range []*testcore.TestCluster{s.cluster1, s.cluster2} {
+		for _, c := range s.clusters {
 			for _, r := range c.Host().NamespaceRegistries() {
 				resp, err := r.GetNamespace(namespace.Name(ns))
 				assert.NoError(t, err)

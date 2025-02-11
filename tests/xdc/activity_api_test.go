@@ -98,7 +98,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 
 	ns := s.createGlobalNamespace()
 	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
+		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
 		Namespace: ns,
 		Logger:    log.NewSdkLogger(s.logger),
 	})
@@ -130,7 +130,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		assert.Greater(t, startedActivityCount.Load(), int32(2))
 	}, 5*time.Second, 200*time.Millisecond)
 
-	// pause the activity in cluster 1
+	// pause the activity in cluster0
 	pauseRequest := &workflowservice.PauseActivityRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
@@ -138,11 +138,11 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		},
 		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
 	}
-	pauseResp, err := s.cluster1.Host().FrontendClient().PauseActivity(ctx, pauseRequest)
+	pauseResp, err := s.clusters[0].Host().FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(pauseResp)
 
-	// verify activity is paused is cluster 1
+	// verify activity is paused is cluster0
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
@@ -150,7 +150,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		assert.True(t, description.PendingActivities[0].Paused)
 	}, 5*time.Second, 200*time.Millisecond)
 
-	// update the activity properties in cluster 1
+	// update the activity properties in cluster0
 	updateRequest := &workflowservice.UpdateActivityOptionsRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
@@ -165,11 +165,11 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval", "retry_policy.maximum_attempts"}},
 	}
-	respUpdate, err := s.cluster1.Host().FrontendClient().UpdateActivityOptions(ctx, updateRequest)
+	respUpdate, err := s.clusters[0].Host().FrontendClient().UpdateActivityOptions(ctx, updateRequest)
 	s.NoError(err)
 	s.NotNil(respUpdate)
 
-	// verify activity is updated in cluster 1
+	// verify activity is updated in cluster0
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
@@ -181,7 +181,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
-	// reset the activity in cluster 1, while keeping it paused
+	// reset the activity in cluster0, while keeping it paused
 	resetRequest := &workflowservice.ResetActivityRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
@@ -190,11 +190,11 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		Activity:   &workflowservice.ResetActivityRequest_Id{Id: "activity-id"},
 		KeepPaused: true,
 	}
-	resetResp, err := s.cluster1.Host().FrontendClient().ResetActivity(ctx, resetRequest)
+	resetResp, err := s.clusters[0].Host().FrontendClient().ResetActivity(ctx, resetRequest)
 	s.NoError(err)
 	s.NotNil(resetResp)
 
-	// verify activity is reset, updated and paused in cluster 1
+	// verify activity is reset, updated and paused in cluster0
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := activeSDKClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
@@ -207,21 +207,21 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
-	// stop worker1 so cluster 1 won't make any progress on the activity (just in case)
+	// stop worker1 so cluster0 won't make any progress on the activity (just in case)
 	worker1.Stop()
 
 	// failover to standby cluster
-	s.failover(ns, 0, s.clusterNames[1], 2)
+	s.failover(ns, 0, s.clusters[1].ClusterName(), 2)
 
 	// get standby client
 	standbyClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
+		HostPort:  s.clusters[1].Host().FrontendGRPCAddress(),
 		Namespace: ns,
 	})
 	s.NoError(err)
 	s.NotNil(standbyClient)
 
-	// verify activity is still paused in cluster 2
+	// verify activity is still paused in cluster1
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		description, err := standbyClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
@@ -244,7 +244,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	// let the activity make progress once unpaused
 	activityWasPaused.Store(true)
 
-	// unpause the activity in cluster 2
+	// unpause the activity in cluster1
 	unpauseRequest := &workflowservice.UnpauseActivityRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
@@ -252,7 +252,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 		},
 		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
 	}
-	unpauseResp, err := s.cluster2.Host().FrontendClient().UnpauseActivity(ctx, unpauseRequest)
+	unpauseResp, err := s.clusters[1].Host().FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
 
