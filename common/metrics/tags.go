@@ -343,6 +343,9 @@ func NexusOperationTag(value string) Tag {
 }
 
 func NexusRequestHeaderTag(name, value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
 	return &tagImpl{key: name, value: value}
 }
 

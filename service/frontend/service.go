@@ -216,7 +216,7 @@ type Config struct {
 
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
-	NexusOperationsMetricTagConfig dynamicconfig.TypedPropertyFnWithNamespaceFilter[*nexusoperations.NexusMetricTagConfig]
+	NexusOperationsMetricTagConfig *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -358,7 +358,16 @@ func NewConfig(
 				return util.WildCardStringsToRegexp(patterns)
 			},
 		),
-		NexusOperationsMetricTagConfig: nexusoperations.MetricTagConfiguration.Get(dc),
+		NexusOperationsMetricTagConfig: dynamicconfig.NewGlobalCachedTypedValue(
+			dc,
+			nexusoperations.MetricTagConfiguration,
+			func(config *nexusoperations.NexusMetricTagConfig) (*nexusoperations.NexusMetricTagConfig, error) {
+				if config == nil {
+					return &nexusoperations.NexusMetricTagConfig{}, nil
+				}
+				return config, nil
+			},
+		),
 
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),

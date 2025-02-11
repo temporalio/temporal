@@ -95,7 +95,7 @@ type operationContext struct {
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	headersBlacklist              *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
-	metricTagConfig               dynamicconfig.TypedPropertyFnWithNamespaceFilter[*nexusoperations.NexusMetricTagConfig]
+	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 	cleanupFunctions              []func(map[string]string, error)
 }
 
@@ -277,7 +277,7 @@ func (c *operationContext) shouldForwardRequest(ctx context.Context, header nexu
 
 // enrichNexusOperationMetrics enhances metrics with additional Nexus operation context based on configuration.
 func (c *operationContext) enrichNexusOperationMetrics(service, operation string, requestHeader nexus.Header) {
-	conf := c.metricTagConfig(c.namespaceName)
+	conf := c.metricTagConfig.Get()
 	if conf == nil {
 		return
 	}
@@ -293,12 +293,7 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	}
 
 	for _, mapping := range conf.HeaderTagMappings {
-		value, ok := requestHeader.Get(mapping.SourceHeader)
-		if !ok {
-			c.logger.Debug("no value found for header", tag.Value(mapping.SourceHeader))
-			continue
-		}
-		tags = append(tags, metrics.NexusRequestHeaderTag(mapping.TargetTag, value))
+		tags = append(tags, metrics.NexusRequestHeaderTag(mapping.TargetTag, requestHeader.Get(mapping.SourceHeader)))
 	}
 
 	if len(tags) > 0 {
@@ -325,7 +320,7 @@ type nexusHandler struct {
 	forwardingClients             *cluster.FrontendHTTPClientCache
 	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	headersBlacklist              *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
-	metricTagConfig               dynamicconfig.TypedPropertyFnWithNamespaceFilter[*nexusoperations.NexusMetricTagConfig]
+	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -553,6 +548,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	if err != nil {
 		return err
 	}
+	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 

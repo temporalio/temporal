@@ -149,7 +149,7 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 	`The maximum backoff interval between every nexus StartOperation or CancelOperation request for a given operation.`,
 )
 
-var MetricTagConfiguration = dynamicconfig.NewNamespaceTypedSetting(
+var MetricTagConfiguration = dynamicconfig.NewGlobalTypedSetting(
 	"component.nexusoperations.metrics.tags",
 	&NexusMetricTagConfig{
 		IncludeServiceTag:   false,
