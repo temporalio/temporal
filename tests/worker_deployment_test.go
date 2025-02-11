@@ -940,7 +940,8 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_PromoteUnversi
 	defer cancel()
 	tv := testvars.New(s)
 	currentVars := tv.WithBuildIDNumber(1)
-	s.pollFromDeployment(ctx, currentVars)
+
+	go s.pollFromDeployment(ctx, currentVars)
 	s.ensureCreateVersionInDeployment(currentVars)
 
 	// make the current version versioned, so that we can set ramp to unversioned
