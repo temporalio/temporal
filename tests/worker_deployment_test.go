@@ -172,7 +172,7 @@ func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {
 
 	// Start a version workflow
 	s.startVersionWorkflow(ctx, tv)
-	s.ensureCreateDeployment(tv)
+	s.ensureCreateVersionInDeployment(tv)
 
 	// Set the version as current
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
