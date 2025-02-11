@@ -70,6 +70,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -5585,6 +5586,109 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	s.Equal("this workflow failed", attrs.Failure.Message)
 	s.Equal(newRunID, attrs.NewExecutionRunId)
 	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, attrs.RetryState)
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistoryCloseEventsOnly() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	req := &historyservice.GetWorkflowExecutionHistoryRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Execution:              &we,
+			MaximumPageSize:        10,
+			NextPageToken:          nil,
+			WaitNewEvent:           true,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
+			SkipArchival:           true,
+		},
+	}
+
+	branchToken := []byte{1, 2, 3}
+
+	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
+	})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	mState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  we.RunId,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		NextEventId: 6,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:         tests.NamespaceID.String(),
+			WorkflowId:          we.WorkflowId,
+			VersionHistories:    versionHistories,
+			WorkflowTypeName:    "mytype",
+			LastFirstEventId:    5,
+			LastFirstEventTxnId: 100,
+		},
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     1,
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  we.WorkflowId,
+		RunID:       we.RunId,
+	}).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
+	// GetWorkflowExecutionHistory will request the last event
+	eventBatch := []*historypb.HistoryEvent{
+		{
+			EventId:   int64(4),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+			Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
+				WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
+					ScheduledEventId: 4,
+				},
+			},
+		},
+		{
+			EventId:   int64(5),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
+				WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
+					WorkflowTaskCompletedEventId: 4,
+				},
+			},
+		},
+	}
+
+	serializer := serialization.NewSerializer()
+	historyBlob, err := serializer.SerializeEvents(eventBatch, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    5,
+		MaxEventID:    6,
+		PageSize:      10,
+		NextPageToken: nil,
+		ShardID:       1,
+	}).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{
+			historyBlob,
+		},
+		NextPageToken: []byte{},
+		Size:          1,
+	}, nil).Times(1)
+
+	s.mockExecutionMgr.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	resp, err := engine.GetWorkflowExecutionHistory(context.Background(), req)
+	s.NoError(err)
+	s.Len(resp.Response.History, 1)
+	history := &historypb.History{}
+	err = history.Unmarshal(resp.Response.History[0])
+	s.NoError(err)
+	s.Len(history.Events, 1)
+	event := history.Events[0]
+	s.Equal(int64(5), event.EventId)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, event.EventType)
+	attrs := event.GetWorkflowExecutionCompletedEventAttributes()
+	s.Equal(int64(4), attrs.WorkflowTaskCompletedEventId)
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
