@@ -276,7 +276,7 @@ func (c *operationContext) shouldForwardRequest(ctx context.Context, header nexu
 }
 
 // enrichNexusOperationMetrics enhances metrics with additional Nexus operation context based on configuration.
-func (c *operationContext) enrichNexusOperationMetrics(service, operation string, requestHeader map[string]string) {
+func (c *operationContext) enrichNexusOperationMetrics(service, operation string, requestHeader nexus.Header) {
 	conf := c.metricTagConfig(c.namespaceName)
 	if conf == nil {
 		return
@@ -293,7 +293,7 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	}
 
 	for _, mapping := range conf.HeaderTagMappings {
-		value, ok := requestHeader[mapping.SourceHeader]
+		value, ok := requestHeader.Get(mapping.SourceHeader)
 		if !ok {
 			c.logger.Debug("no value found for header", tag.Value(mapping.SourceHeader))
 			continue
