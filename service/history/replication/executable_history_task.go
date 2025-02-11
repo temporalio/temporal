@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -186,6 +188,10 @@ func (e *ExecutableHistoryTask) Execute() error {
 }
 
 func (e *ExecutableHistoryTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	switch retryErr := err.(type) {
 	case nil, *serviceerror.NotFound:
 		return nil

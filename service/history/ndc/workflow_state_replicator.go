@@ -308,14 +308,14 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 				localLastHistoryItem.GetEventId() <= sourceLastHistoryItem.EventId {
 				return r.applySnapshot(ctx, namespaceID, wid, rid, wfCtx, releaseFn, ms, versionedTransition, sourceClusterName)
 			}
-			return nil
+			return consts.ErrDuplicate
 		}
 
 		sourceTransitionHistory := executionInfo.TransitionHistory
 		err = workflow.TransitionHistoryStalenessCheck(localTransitionHistory, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		switch {
 		case err == nil:
-			// verify tasks
+			return consts.ErrDuplicate
 		case errors.Is(err, consts.ErrStaleState):
 			// local is stale, try to apply mutable state update
 			if snapshot != nil {
@@ -331,7 +331,6 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	default:
 		return err
 	}
-	return nil
 }
 
 func (r *WorkflowStateReplicatorImpl) applyMutation(
