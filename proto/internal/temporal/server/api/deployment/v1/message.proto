@@ -150,6 +150,7 @@ message WorkerDeploymentLocalState {
     temporal.api.deployment.v1.RoutingConfig routing_config = 2;
     map<string, WorkerDeploymentVersionSummary> versions = 3;
     bytes conflict_token = 4;
+    string last_modifier_client = 5;
 }
 
 message WorkerDeploymentVersionSummary {
