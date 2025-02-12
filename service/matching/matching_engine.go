@@ -105,6 +105,7 @@ type (
 	}
 
 	pollMetadata struct {
+		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
 		ratePerSecond             *float64
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
@@ -835,12 +836,13 @@ pollLoop:
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		pollMetadata := &pollMetadata{
+			taskQueueMetadata:         request.TaskQueueMetadata,
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.GetForwardedSource(),
 		}
-		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
-			pollMetadata.ratePerSecond = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
+		if v := request.TaskQueueMetadata.GetMaxTasksPerSecond(); v != nil {
+			pollMetadata.ratePerSecond = &v.Value
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {

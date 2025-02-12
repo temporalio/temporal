@@ -285,6 +285,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 					Kind: fwdr.partition.Kind(),
 				},
 				Identity:                  identity,
+				TaskQueueMetadata:         pollMetadata.taskQueueMetadata,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 			},
