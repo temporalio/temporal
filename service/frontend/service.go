@@ -361,11 +361,8 @@ func NewConfig(
 		NexusOperationsMetricTagConfig: dynamicconfig.NewGlobalCachedTypedValue(
 			dc,
 			nexusoperations.MetricTagConfiguration,
-			func(config *nexusoperations.NexusMetricTagConfig) (*nexusoperations.NexusMetricTagConfig, error) {
-				if config == nil {
-					return &nexusoperations.NexusMetricTagConfig{}, nil
-				}
-				return config, nil
+			func(config nexusoperations.NexusMetricTagConfig) (*nexusoperations.NexusMetricTagConfig, error) {
+				return &config, nil
 			},
 		),
 
