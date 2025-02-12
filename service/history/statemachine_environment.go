@@ -233,7 +233,8 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 	if ref.StateMachineRef.MutableStateVersionedTransition == nil ||
 		ref.StateMachineRef.MachineInitialVersionedTransition.TransitionCount == 0 ||
 		(ref.StateMachineRef.MachineLastUpdateVersionedTransition != nil &&
-			ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount == 0) {
+			ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount == 0) ||
+		len(ms.GetExecutionInfo().TransitionHistory) == 0 {
 		// Transtion history was disabled when the ref is generated,
 		// fallback to the old validation logic.
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
