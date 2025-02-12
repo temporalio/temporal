@@ -65,6 +65,21 @@ func (c *retryableClient) CreateSchedule(
 	return resp, err
 }
 
+func (c *retryableClient) CreateWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.CreateWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateWorkflowRuleResponse, error) {
+	var resp *workflowservice.CreateWorkflowRuleResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CreateWorkflowRule(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeleteSchedule(
 	ctx context.Context,
 	request *workflowservice.DeleteScheduleRequest,
@@ -119,6 +134,21 @@ func (c *retryableClient) DeleteWorkflowExecution(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.DeleteWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DeleteWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkflowRuleResponse, error) {
+	var resp *workflowservice.DeleteWorkflowRuleResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeleteWorkflowRule(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -254,6 +284,21 @@ func (c *retryableClient) DescribeWorkflowExecution(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.DescribeWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DescribeWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkflowRuleResponse, error) {
+	var resp *workflowservice.DescribeWorkflowRuleResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeWorkflowRule(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -584,6 +629,21 @@ func (c *retryableClient) ListWorkflowExecutions(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.ListWorkflowExecutions(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ListWorkflowRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkflowRulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListWorkflowRulesResponse, error) {
+	var resp *workflowservice.ListWorkflowRulesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListWorkflowRules(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
