@@ -774,11 +774,6 @@ func (d *ClientImpl) StartWorkerDeployment(
 		return err
 	}
 
-	memo, err := d.buildInitialMemo(deploymentName)
-	if err != nil {
-		return err
-	}
-
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                requestID,
 		Namespace:                namespaceEntry.Name().String(),
@@ -789,7 +784,6 @@ func (d *ClientImpl) StartWorkerDeployment(
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		SearchAttributes:         d.buildSearchAttributes(),
-		Memo:                     memo,
 	}
 
 	historyStartReq := &historyservice.StartWorkflowExecutionRequest{
@@ -1173,23 +1167,6 @@ func (d *ClientImpl) updateWithStart(
 	}, policy, isRetryable)
 
 	return outcome, err
-}
-
-func (d *ClientImpl) buildInitialMemo(deploymentName string) (*commonpb.Memo, error) {
-	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.WorkerDeploymentWorkflowMemo{
-		DeploymentName: deploymentName,
-		CreateTime:     timestamppb.Now(),
-		RoutingConfig:  &deploymentpb.RoutingConfig{},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{
-			WorkerDeploymentMemoField: pl,
-		},
-	}, nil
 }
 
 func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
