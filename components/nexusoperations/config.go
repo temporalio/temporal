@@ -96,6 +96,7 @@ Uses Go's len() function on header keys and values to determine the total size.`
 )
 
 // defaultDisallowedOperationHeaders - set in the convert function below due to a limitation in the dynamic config framework.
+// TODO: restore after an upgrade to Go 1.24 and merging #7052.
 var defaultDisallowedOperationHeaders = []string{
 	"request-timeout",
 	interceptor.DCRedirectionApiHeaderName,
