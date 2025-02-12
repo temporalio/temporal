@@ -1084,7 +1084,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 	}
 
 	event, _ = mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity: "some random identity",
+		Identity: consts.IdentityResetter,
 		Commands: commands,
 	}, defaultWorkflowTaskCompletionLimits)
 
@@ -1104,7 +1104,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 	mutableState.FlushBufferedEvents()
 
 	taskID := s.mustGenerateTaskID()
-	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+	// Simulate termination due to reset.
+	event, err = mutableState.AddWorkflowExecutionTerminatedEvent(event.GetEventId(), "some reason", nil, consts.IdentityResetter, false, nil)
+	s.NoError(err)
 
 	transferTask := &tasks.CloseExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
