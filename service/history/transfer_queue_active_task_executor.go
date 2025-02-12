@@ -344,9 +344,10 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		RunId:      task.GetRunID(),
 	}
 	executionInfo := mutableState.GetExecutionInfo()
+	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 	var completionEvent *historypb.HistoryEvent // needed to report close event to parent workflow
 	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
-	if replyToParentWorkflow {
+	if replyToParentWorkflow || len(children) > 0 {
 		// only load close event if needed.
 		completionEvent, err = mutableState.GetCompletionEvent(ctx)
 		if err != nil {
@@ -369,7 +370,6 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 
 	namespaceName := mutableState.GetNamespaceEntry().Name()
-	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 
 	// NOTE: do not access anything related mutable state after this lock release.
 	// Release lock immediately since mutable state is not needed
@@ -402,13 +402,16 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 
 	// process parentClosePolicy except when the execution was reset. In case of reset, we need to keep the children around so that we can reconnect to them.
 	// We know an execution was reset when ResetRunId was populated in it.
-	// TODO (Chetan): update this condition as new reset policies are added. For now we keep all children since "Reconnect" is the only policy available.
+	// Note: Sometimes the reset operation might race with this task processing. i.e the WF was closed and before this task can be executed, a reset operation is recorded.
+	// So we need to additionally check the termination reason for this parent to determine if this task was indeed created due to reset or due to normal completion of the WF.
+	// Also, checking the dynamic config is not strictly safe since by definition it can change at any time. However this reduces the chance of us skipping the parent close policy when we shouldn't.
 	allowResetWithPendingChildren := t.config.AllowResetWithPendingChildren(namespaceName.String())
 	shouldSkipParentClosePolicy := false
-	if executionInfo.GetResetRunId() != "" && allowResetWithPendingChildren {
+	isParentTerminatedDueToReset := (completionEvent != nil) && ndc.IsTerminatedByResetter(completionEvent)
+	if isParentTerminatedDueToReset && executionInfo.GetResetRunId() != "" && allowResetWithPendingChildren {
+		// TODO (Chetan): update this condition as new reset policies/cases are added.
 		shouldSkipParentClosePolicy = true // only skip if the parent is reset and we are using the new flow.
 	}
-
 	if !shouldSkipParentClosePolicy {
 		if err := t.processParentClosePolicy(
 			ctx,

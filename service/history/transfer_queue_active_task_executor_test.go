@@ -1172,7 +1172,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	}
 
 	event, _ = mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity: "some random identity",
+		Identity: consts.IdentityResetter,
 		Commands: commands,
 	}, defaultWorkflowTaskCompletionLimits)
 
