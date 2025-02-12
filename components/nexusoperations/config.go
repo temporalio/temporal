@@ -23,7 +23,6 @@
 package nexusoperations
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -96,26 +95,19 @@ ScheduleNexusOperation commands with a "nexus_header" field that exceeds this li
 Uses Go's len() function on header keys and values to determine the total size.`,
 )
 
-var DisallowedOperationHeaders = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+// defaultDisallowedOperationHeaders - set in the convert function below due to a limitation in the dynamic config framework.
+var defaultDisallowedOperationHeaders = []string{
+	"request-timeout",
+	interceptor.DCRedirectionApiHeaderName,
+	interceptor.DCRedirectionContextHeaderName,
+	headers.CallerNameHeaderName,
+	headers.CallerTypeHeaderName,
+	headers.CallOriginHeaderName,
+}
+
+var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSetting(
 	"component.nexusoperations.disallowedHeaders",
-	func(a any) ([]string, error) {
-		keys, ok := a.([]string)
-		if !ok {
-			return nil, fmt.Errorf("expected a string slice, got: %v", a)
-		}
-		for i, k := range keys {
-			keys[i] = strings.ToLower(k)
-		}
-		return keys, nil
-	},
-	[]string{
-		"request-timeout",
-		interceptor.DCRedirectionApiHeaderName,
-		interceptor.DCRedirectionContextHeaderName,
-		headers.CallerNameHeaderName,
-		headers.CallerTypeHeaderName,
-		headers.CallOriginHeaderName,
-	},
+	[]string(nil),
 	`Case insensitive list of disallowed header keys for Nexus Operations.
 ScheduleNexusOperation commands with a "nexus_header" field that contains any of these disallowed keys will be
 rejected.`,
@@ -158,7 +150,7 @@ type Config struct {
 	MaxOperationNameLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationTokenLength            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationHeaderSize             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	DisallowedOperationHeaders         dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	DisallowedOperationHeaders         dynamicconfig.TypedPropertyFn[[]string]
 	MaxOperationScheduleToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                dynamicconfig.StringPropertyFn
@@ -168,15 +160,25 @@ type Config struct {
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Enabled:                            dynamicconfig.EnableNexus.Get(dc),
-		RequestTimeout:                     RequestTimeout.Get(dc),
-		MinOperationTimeout:                MinOperationTimeout.Get(dc),
-		MaxConcurrentOperations:            MaxConcurrentOperations.Get(dc),
-		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),
-		MaxOperationNameLength:             MaxOperationNameLength.Get(dc),
-		MaxOperationTokenLength:            MaxOperationTokenLength.Get(dc),
-		MaxOperationHeaderSize:             MaxOperationHeaderSize.Get(dc),
-		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
+		Enabled:                 dynamicconfig.EnableNexus.Get(dc),
+		RequestTimeout:          RequestTimeout.Get(dc),
+		MinOperationTimeout:     MinOperationTimeout.Get(dc),
+		MaxConcurrentOperations: MaxConcurrentOperations.Get(dc),
+		MaxServiceNameLength:    MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:  MaxOperationNameLength.Get(dc),
+		MaxOperationTokenLength: MaxOperationTokenLength.Get(dc),
+		MaxOperationHeaderSize:  MaxOperationHeaderSize.Get(dc),
+		DisallowedOperationHeaders: dynamicconfig.NewGlobalCachedTypedValue(dc, DisallowedOperationHeaders, func(keys []string) ([]string, error) {
+			// Override with defaults unless explicitly set.
+			// Note that this prevents the ability to unset the config but that's an acceptable limitation.
+			if len(keys) == 0 {
+				keys = defaultDisallowedOperationHeaders
+			}
+			for i, k := range keys {
+				keys[i] = strings.ToLower(k)
+			}
+			return keys, nil
+		}).Get,
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),

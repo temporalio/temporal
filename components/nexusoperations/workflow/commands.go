@@ -130,7 +130,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 	headerLength := 0
 	for k, v := range attrs.NexusHeader {
 		headerLength += len(k) + len(v)
-		if slices.Contains(ch.config.DisallowedOperationHeaders(nsName), strings.ToLower(k)) {
+		if slices.Contains(ch.config.DisallowedOperationHeaders(), strings.ToLower(k)) {
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 				Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains a disallowed header key: %q", k),
