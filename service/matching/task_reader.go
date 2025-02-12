@@ -62,6 +62,7 @@ type (
 		notifyC    chan struct{} // Used as signal to notify pump of new tasks
 		backlogMgr *backlogManagerImpl
 		gorogrp    goro.Group
+		readerCtx  context.Context // TODO(pri): consolidate contexts and clean this up
 
 		backoffTimerLock sync.Mutex
 		backoffTimer     *time.Timer
@@ -133,22 +134,42 @@ func (tr *taskReader) getBacklogHeadAge() time.Duration {
 	return max(0, tr.backlogAge.getAge()) // return 0 instead of -1
 }
 
-func (tr *taskReader) completeTask(task *persistencespb.AllocatedTaskInfo, err error) {
+func (tr *taskReader) completeTask(task *internalTask, res taskResponse) {
+	err := res.startErr
+	if res.forwarded {
+		err = res.forwardErr
+	}
+
+	// We can handle some transient errors by just putting the task back in the matcher to
+	// match again. Note that for forwarded tasks, it's expected to get DeadlineExceeded when
+	// the task doesn't match on the root after backlogTaskForwardTimeout, and also expected to
+	// get errRemoteSyncMatchFailed, which is a serviceerror.Canceled error.
+	if err != nil && (common.IsServiceClientTransientError(err) ||
+		common.IsContextDeadlineExceededErr(err) ||
+		common.IsContextCanceledErr(err)) {
+		tr.addTaskToMatcher(tr.readerCtx, task)
+		return
+	}
+
+	// Otherwise, remove from tracking and pass to backlogManager, which will rewrite the task to the end
+	// of a backlog on error.
+
 	loaded := tr.loadedTasks.Add(-1)
 
 	tr.backlogAgeLock.Lock()
-	tr.backlogAge.record(task.Data.CreateTime, -1)
+	tr.backlogAge.record(task.event.AllocatedTaskInfo.Data.CreateTime, -1)
 	tr.backlogAgeLock.Unlock()
 
 	// use == so we just signal once when we cross this threshold
 	if int(loaded) == tr.backlogMgr.config.GetTasksBatchSize()/reloadFraction {
 		tr.Signal()
 	}
-	tr.backlogMgr.completeTask(task, err)
+	tr.backlogMgr.completeTask(task.event.AllocatedTaskInfo, err)
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
 	ctx = tr.backlogMgr.contextInfoProvider(ctx)
+	tr.readerCtx = ctx
 
 	if err := tr.backlogMgr.WaitUntilInitialized(ctx); err != nil {
 		return err
@@ -292,23 +313,27 @@ func (tr *taskReader) addTasksToMatcher(
 
 		// After we get to this point, we must eventually call task.finish or
 		// task.finishForwarded, which will call tr.completeTask.
-
-		err := tr.backlogMgr.addSpooledTask(ctx, task)
-
-		if err != nil {
-			if drop, retry := tr.addErrorBehavior(err); drop {
-				task.finish(nil, false)
-			} else if retry {
-				// This should only be due to persistence problems. Retry in a new goroutine
-				// to not block other tasks, up to some concurrency limit.
-				if tr.addRetries.Acquire(ctx, 1) != nil {
-					return nil
-				}
-				go tr.retryAddAfterError(ctx, task)
-			}
-		}
+		tr.addTaskToMatcher(ctx, task)
 	}
 	return nil
+}
+
+func (tr *taskReader) addTaskToMatcher(ctx context.Context, task *internalTask) {
+	err := tr.backlogMgr.addSpooledTask(ctx, task)
+	if err == nil {
+		return
+	}
+
+	if drop, retry := tr.addErrorBehavior(err); drop {
+		task.finish(nil, false)
+	} else if retry {
+		// This should only be due to persistence problems. Retry in a new goroutine
+		// to not block other tasks, up to some concurrency limit.
+		if tr.addRetries.Acquire(ctx, 1) != nil {
+			return
+		}
+		go tr.retryAddAfterError(ctx, task)
+	}
 }
 
 func (tr *taskReader) addErrorBehavior(err error) (drop, retry bool) {

@@ -401,7 +401,7 @@ func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTas
 }
 
 func (c *physicalTaskQueueManagerImpl) UserDataChanged() {
-	c.matcher.RecheckAllRedirects()
+	c.matcher.ReprocessAllTasks()
 }
 
 // DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,

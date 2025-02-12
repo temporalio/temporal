@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -86,7 +87,7 @@ type waitingPoller struct {
 type matchResult struct {
 	task      *internalTask
 	poller    *waitingPoller
-	ctxErr    error // set if context timed out/canceled
+	ctxErr    error // set if context timed out/canceled or reprocess task
 	ctxErrIdx int   // index of context that closed first
 }
 
@@ -100,6 +101,13 @@ const (
 
 var (
 	errNoRecentPoller = status.Error(codes.FailedPrecondition, "no poller seen for task queue recently, worker may be down")
+
+	// This is a fake error used to force reprocessing of task redirection as used by versioning.
+	// Situations where we do this:
+	// - after validateTasksOnRoot maybe-validates a task (only local backlog)
+	// - when userdata changes, on in-mem tasks (may be either sync or local backlog)
+	// This must be an error type that taskReader will treat as transient and re-enqueue the task.
+	errReprocessTask = serviceerror.NewCanceled("reprocess task")
 )
 
 // newTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
@@ -128,10 +136,13 @@ func newTaskMatcher(config *taskQueueConfig, partition tqid.Partition, fwdr *For
 
 	return &TaskMatcher{
 		config: config,
+		// FIXME: make real constructor
 		data: matcherData{
 			config:      config,
 			rateLimiter: limiter,
-			backlogAge:  newBacklogAgeTracker(),
+			tasks: taskPQ{
+				ages: newBacklogAgeTracker(),
+			},
 		},
 		dynamicRateBurst:   dynamicRateBurst,
 		dynamicRateLimiter: dynamicRateLimiter,
@@ -235,16 +246,8 @@ func (tm *TaskMatcher) forwardTask(task *internalTask) error {
 
 	// normal wf/activity task
 	err := tm.fwdr.ForwardTask(ctx, task)
+	task.finishForward(nil, err, true)
 
-	// If task was from our backlog, and forwarding timed out (as opposed to explicitly
-	// failed), then we should re-enqueue the task and let it match or forward again.
-	// Parent may explicitly return errRemoteSyncMatchFailed which is a Canceled error.
-	if task.forwardCtx == nil && (common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err)) {
-		// Ask the task to redirect itself again. If not, add it back ourselves.
-		tm.data.RedirectOrEnqueue(task)
-	} else {
-		task.finishForward(nil, err, true)
-	}
 	return err
 }
 
@@ -263,15 +266,19 @@ func (tm *TaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier backo
 		bugIf(res.task == nil, "bug: bad match result in validateTasksOnRoot")
 
 		task := res.task
-		maybeValid := tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.partition.TaskType())
+		bugIf(task.forwardCtx != nil || task.isSyncMatchTask() || task.source != enumsspb.TASK_SOURCE_DB_BACKLOG,
+			"bug: validator got a sync task")
+		maybeValid := tm.validator == nil || tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.partition.TaskType())
 		if !maybeValid {
-			// we found an invalid one, complete it and go back for another immediately
+			// We found an invalid one, complete it and go back for another immediately.
 			task.finish(nil, false)
 			tm.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
 			retrier.Reset()
 		} else {
 			// Task was valid, put it back and slow down checking.
-			tm.data.RedirectOrEnqueue(task)
+			task.finish(errReprocessTask, true)
+			// retrier's max interval is backlogTaskForwardTimeout, so for just valid tasks,
+			// this loop will essentially be limited to that interval.
 			util.InterruptibleSleep(tm.matcherCtx, retrier.NextBackOff(nil))
 		}
 	}
@@ -371,7 +378,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.matcherCtx}, task)
 
 	if res.ctxErr != nil {
-		return false, nil
+		return false, res.ctxErr
 	}
 	bugIf(res.poller == nil, "bug: bad match result in Offer")
 	return finish()
@@ -472,8 +479,18 @@ func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetad
 	return tm.poll(ctx, pollMetadata, true)
 }
 
-func (tm *TaskMatcher) RecheckAllRedirects() {
-	tm.data.RecheckAllRedirects()
+func (tm *TaskMatcher) ReprocessAllTasks() {
+	tasks := tm.data.ReprocessTasks(func(task *internalTask) (shouldRemove bool) {
+		// TODO(pri): do we have to reprocess _all_ backlog tasks or can we determine
+		// somehow which are potentially redirected?
+		return true
+	})
+	// ReprocessTasks will have woken sync tasks, but for backlog we also need to call finish.
+	for _, task := range tasks {
+		if !task.isSyncMatchTask() {
+			task.finish(errReprocessTask, true)
+		}
+	}
 }
 
 // UpdateRatelimit updates the task dispatch rate

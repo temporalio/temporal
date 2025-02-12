@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	enumspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/util"
 )
@@ -48,10 +48,6 @@ type matcherData struct {
 	pollers pollerPQ
 	tasks   taskPQ
 
-	// backlogAge holds task create time for tasks from merged local backlogs (not forwarded).
-	// note that matcherData may get tasks from multiple versioned backlogs due to
-	// versioning redirection.
-	backlogAge backlogAgeTracker
 	lastPoller time.Time // most recent poll start time
 }
 
@@ -95,6 +91,10 @@ func (p *pollerPQ) Pop() any {
 
 type taskPQ struct {
 	heap []*internalTask
+	// ages holds task create time for tasks from merged local backlogs (not forwarded).
+	// note that matcherData may get tasks from multiple versioned backlogs due to
+	// versioning redirection.
+	ages backlogAgeTracker
 }
 
 func (t *taskPQ) Len() int {
@@ -120,6 +120,10 @@ func (t *taskPQ) Push(x any) {
 	task := x.(*internalTask)
 	task.matchHeapIndex = len(t.heap)
 	t.heap = append(t.heap, task)
+
+	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
+		t.ages.record(task.event.Data.CreateTime, 1)
+	}
 }
 
 func (t *taskPQ) Pop() any {
@@ -127,16 +131,39 @@ func (t *taskPQ) Pop() any {
 	task := t.heap[last]
 	t.heap = t.heap[:last]
 	task.matchHeapIndex = -13
+
+	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
+		t.ages.record(task.event.Data.CreateTime, -1)
+	}
+
 	return task
+}
+
+// Calls pred on each task. If it returns true, call post on the task and remove it
+// from the queue, otherwise keep it.
+// pred and post must not make any other calls on taskPQ until ForEachTask returns!
+func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalTask)) {
+	t.heap = slices.DeleteFunc(t.heap, func(task *internalTask) bool {
+		if task.isPollForwarder || !pred(task) {
+			return false
+		}
+		task.matchHeapIndex = -14 // maintain heap/index invariant
+		if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
+			t.ages.record(task.event.Data.CreateTime, -1)
+		}
+		post(task)
+		return true
+	})
+	// re-establish heap
+	for i, task := range t.heap {
+		task.matchHeapIndex = i
+	}
+	heap.Init(t)
 }
 
 func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-
-	if task.source == enumspb.TASK_SOURCE_DB_BACKLOG {
-		d.backlogAge.record(task.event.Data.CreateTime, 1)
-	}
 
 	task.initMatch(d)
 	heap.Push(&d.tasks, task)
@@ -246,48 +273,21 @@ func (d *matcherData) MatchNextPoller(task *internalTask) (canSyncMatch, gotSync
 	return true, false
 }
 
-func (d *matcherData) RecheckAllRedirects() {
+func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalTask {
 	d.lock.Lock()
+	defer d.lock.Unlock()
 
-	// TODO(pri): do we have to do _all_ backlog tasks or can we determine somehow which are
-	// potentially redirected?
-	redirectable := make([]*internalTask, 0, len(d.tasks.heap))
-	d.tasks.heap = slices.DeleteFunc(d.tasks.heap, func(task *internalTask) bool {
-		if task.forwardInfo.GetTaskSource() == enumspb.TASK_SOURCE_DB_BACKLOG {
-			// forwarded from a backlog, kick this back to the child so they can redirect it,
-			// by faking a context cancel
-			task.matchHeapIndex = -13
-			task.wake(&matchResult{ctxErr: context.Canceled})
-			return true
-		} else if task.checkRedirect != nil {
-			redirectable = append(redirectable, task)
-			if task.source == enumspb.TASK_SOURCE_DB_BACKLOG {
-				d.backlogAge.record(task.event.Data.CreateTime, -1)
-			}
-			task.matchHeapIndex = -13
-			return true
-		}
-		return false
-	})
-
-	// fix indexes and re-establish heap
-	for i, task := range d.tasks.heap {
-		task.matchHeapIndex = i
-	}
-	heap.Init(&d.tasks)
-
-	d.lock.Unlock()
-
-	// re-redirect them all (or put back if redirect fails)
-	for _, task := range redirectable {
-		d.RedirectOrEnqueue(task)
-	}
-}
-
-func (d *matcherData) RedirectOrEnqueue(task *internalTask) {
-	if task.checkRedirect == nil || !task.checkRedirect() {
-		d.EnqueueTaskNoWait(task)
-	}
+	reprocess := make([]*internalTask, 0, len(d.tasks.heap))
+	d.tasks.ForEachTask(
+		pred,
+		func(task *internalTask) {
+			// for sync tasks: wake up waiters with a fake context error
+			// for backlog tasks: the caller should call finish()
+			task.wake(&matchResult{ctxErr: errReprocessTask, ctxErrIdx: -1})
+			reprocess = append(reprocess, task)
+		},
+	)
+	return reprocess
 }
 
 // findMatch should return the highest priority task+poller match even if the per-task rate
@@ -390,10 +390,6 @@ func (d *matcherData) match() {
 		// instead of full match and then pass forward result on response channel?
 		// TODO(pri): maybe consider leaving tasks and polls in the heap while forwarding and
 		// allow them to be matched locally while forwarded (and then cancel the forward)?
-
-		if task.source == enumspb.TASK_SOURCE_DB_BACKLOG {
-			d.backlogAge.record(task.event.Data.CreateTime, -1)
-		}
 	}
 }
 
@@ -438,7 +434,7 @@ func (d *matcherData) finishMatchAfterPollForward(poller *waitingPoller, task *i
 // isBacklogNegligible returns true if the age of the task backlog is less than the threshold.
 // call with lock held.
 func (d *matcherData) isBacklogNegligible() bool {
-	return d.backlogAge.getAge() < d.config.BacklogNegligibleAge()
+	return d.tasks.ages.getAge() < d.config.BacklogNegligibleAge()
 }
 
 func (d *matcherData) TimeSinceLastPoll() time.Duration {

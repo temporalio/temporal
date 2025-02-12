@@ -159,6 +159,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
 	directive := params.taskInfo.GetVersionDirective()
 	// spoolQueue will be nil iff task is forwarded.
+reredirectTask:
 	spoolQueue, syncMatchQueue, _, err = pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId())
 	if err != nil {
 		return "", false, err
@@ -197,7 +198,12 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 			// For sync-match case, History has already received the build ID in the Record*TaskStarted call.
 			// By omitting the build ID from this response we help History immediately know that no MS update is needed.
 			return "", syncMatched, err
+		} else if errors.Is(err, errReprocessTask) {
+			// We get this if userdata changed while the task was blocked in TrySyncMatch
+			// (only for backlog tasks forwarded to root)
+			goto reredirectTask
 		}
+		// other errors are ignored and we try to spool the task
 	}
 
 	if spoolQueue == nil {
@@ -342,7 +348,7 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 		// construct directive based on the build ID of the spool queue
 		directive = worker_versioning.MakeBuildIdDirective(assignedBuildId)
 	}
-	newBacklogQueue, syncMatchQueue, userDataChanged, err := pm.getPhysicalQueuesForAdd(
+	newBacklogQueue, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
 		ctx,
 		directive,
 		nil,
@@ -376,17 +382,6 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 		task.finish(nil, false)
 		return nil
 	}
-	// TODO(pri): Is this always necessary or can we determine that some can't be re-redirected?
-	// TODO(pri): Can we avoid allocating a closure when re-redirection is necessary?
-	task.checkRedirect = func() (handled bool) {
-		select {
-		case <-userDataChanged:
-			// user data has changed, call again to re-evaluate redirections
-			return pm.AddSpooledTask(ctx, task, backlogQueue) == nil
-		default:
-			return false // unchanged, leave task in matcher
-		}
-	}
 	syncMatchQueue.AddSpooledTaskToMatcher(task)
 	return nil
 }
@@ -396,6 +391,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
+reredirectTask:
 	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
 		ctx,
 		request.VersionDirective,
@@ -416,7 +412,11 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 		pm.defaultQueue.MarkAlive()
 	}
 
-	return syncMatchQueue.DispatchQueryTask(ctx, taskID, request)
+	res, err := syncMatchQueue.DispatchQueryTask(ctx, taskID, request)
+	if errors.Is(err, errReprocessTask) {
+		goto reredirectTask
+	}
+	return res, err
 }
 
 func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
@@ -424,6 +424,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	taskId string,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
+reredirectTask:
 	_, syncMatchQueue, _, err := pm.getPhysicalQueuesForAdd(
 		ctx,
 		worker_versioning.MakeUseAssignmentRulesDirective(),
@@ -444,7 +445,11 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 		pm.defaultQueue.MarkAlive()
 	}
 
-	return syncMatchQueue.DispatchNexusTask(ctx, taskId, request)
+	res, err := syncMatchQueue.DispatchNexusTask(ctx, taskId, request)
+	if errors.Is(err, errReprocessTask) {
+		goto reredirectTask
+	}
+	return res, err
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetUserDataManager() userDataManager {
