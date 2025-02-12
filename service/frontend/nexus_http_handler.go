@@ -110,6 +110,7 @@ func NewNexusHTTPHandler(
 				forwardingClients:             clientCache,
 				payloadSizeLimit:              serviceConfig.BlobSizeLimitError,
 				headersBlacklist:              serviceConfig.NexusRequestHeadersBlacklist,
+				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),

@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -49,6 +50,7 @@ import (
 	"go.temporal.io/server/internal/goro"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 var rpsInf = math.Inf(1)
@@ -172,12 +174,20 @@ func TestReaderSignaling(t *testing.T) {
 		"Sync match should not signal taskReader")
 }
 
+func makePollMetadata(rps float64) *pollMetadata {
+	return &pollMetadata{taskQueueMetadata: &taskqueuepb.TaskQueueMetadata{
+		MaxTasksPerSecond: &wrapperspb.DoubleValue{
+			Value: rps,
+		},
+	}}
+}
+
 // runOneShotPoller spawns a goroutine to call tqm.PollTask on the provided tqm.
 // The second return value is a channel of either error or *internalTask.
 func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.Handle, chan interface{}) {
 	out := make(chan interface{}, 1)
 	handle := goro.NewHandle(ctx).Go(func(ctx context.Context) error {
-		task, err := tqm.PollTask(ctx, &pollMetadata{ratePerSecond: &rpsInf})
+		task, err := tqm.PollTask(ctx, makePollMetadata(rpsInf))
 		if task == nil {
 			out <- err
 			return nil
@@ -273,14 +283,14 @@ func TestReaderBacklogAge(t *testing.T) {
 		assert.InDelta(t, time.Minute, tlm.backlogMgr.taskReader.getBacklogHeadAge(), float64(time.Second))
 	}, time.Second, 10*time.Millisecond)
 
-	_, err := tlm.backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
+	_, err := tlm.backlogMgr.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		assert.InDelta(t, 10*time.Second, tlm.backlogMgr.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
 	}, time.Second, 10*time.Millisecond)
 
-	_, err = tlm.backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
+	_, err = tlm.backlogMgr.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
@@ -354,7 +364,7 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	require.NotEmpty(t, descResp.DescResponse.Pollers[0].GetLastAccessTime())
 
 	rps := 5.0
-	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &pollMetadata{ratePerSecond: &rps})
+	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), makePollMetadata(rps))
 	descResp = tlm.LegacyDescribeTaskQueue(includeTaskStatus)
 	require.Equal(t, 1, len(descResp.DescResponse.GetPollers()))
 	require.Equal(t, PollerIdentity, descResp.DescResponse.Pollers[0].GetIdentity())
