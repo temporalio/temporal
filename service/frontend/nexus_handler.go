@@ -293,7 +293,7 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	}
 
 	for _, mapping := range conf.HeaderTagMappings {
-		tags = append(tags, metrics.NexusRequestHeaderTag(mapping.TargetTag, requestHeader.Get(mapping.SourceHeader)))
+		tags = append(tags, metrics.StringTag(mapping.TargetTag, requestHeader.Get(mapping.SourceHeader)))
 	}
 
 	if len(tags) > 0 {

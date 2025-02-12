@@ -342,13 +342,6 @@ func NexusOperationTag(value string) Tag {
 	return &tagImpl{key: nexusOperationTagName, value: value}
 }
 
-func NexusRequestHeaderTag(name, value string) Tag {
-	if len(value) == 0 {
-		value = unknownValue
-	}
-	return &tagImpl{key: name, value: value}
-}
-
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
 	return &tagImpl{key: httpStatusTagName, value: strconv.Itoa(value)}
