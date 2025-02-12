@@ -468,7 +468,9 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).
+		// +3 because the counter resets when version changes so the calls with error do not count
+		MaxTimes(maxFastUserDataFetches + 3)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -552,7 +554,9 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).
+		// +3 because the counter resets when version changes so the calls with error do not count
+		MaxTimes(maxFastUserDataFetches + 3)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
