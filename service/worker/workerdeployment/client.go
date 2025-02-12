@@ -1269,7 +1269,7 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 	workerDeploymentInfo.Name = deploymentName
 	workerDeploymentInfo.CreateTime = state.CreateTime
 	workerDeploymentInfo.RoutingConfig = state.RoutingConfig
-	workerDeploymentInfo.LastModifierIdentity = state.LastModifierClient
+	workerDeploymentInfo.LastModifierIdentity = state.LastModifierIdentity
 
 	for _, v := range state.Versions {
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{

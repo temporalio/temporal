@@ -344,7 +344,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 	d.State.RoutingConfig.RampingVersionPercentage = args.Percentage
 	d.State.RoutingConfig.RampingVersionChangedTime = rampingVersionUpdateTime
 	d.State.ConflictToken, _ = routingUpdateTime.AsTime().MarshalBinary()
-	d.State.LastModifierClient = args.Identity
+	d.State.LastModifierIdentity = args.Identity
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
@@ -395,7 +395,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 
 	// update local state
 	delete(d.State.Versions, args.Version)
-	d.State.LastModifierClient = args.Identity
+	d.State.LastModifierIdentity = args.Identity
 
 	// update memo
 	return d.updateMemo(ctx)
@@ -494,7 +494,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	d.State.RoutingConfig.CurrentVersion = args.Version
 	d.State.RoutingConfig.CurrentVersionChangedTime = updateTime
 	d.State.ConflictToken, _ = updateTime.AsTime().MarshalBinary()
-	d.State.LastModifierClient = args.Identity
+	d.State.LastModifierIdentity = args.Identity
 
 	// unset ramping version if it was set to current version
 	if d.State.RoutingConfig.CurrentVersion == d.State.RoutingConfig.RampingVersion {
