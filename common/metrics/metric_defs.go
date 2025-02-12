@@ -44,6 +44,8 @@ const (
 	httpStatusTagName           = "http_status"
 	nexusMethodTagName          = "method"
 	nexusEndpointTagName        = "nexus_endpoint"
+	nexusServiceTagName         = "nexus_service"
+	nexusOperationTagName       = "nexus_operation"
 	outcomeTagName              = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
