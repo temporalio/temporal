@@ -39,10 +39,10 @@ on:
       test_runner:
         description: "Which runner to use. Choose higher RAM if your n_runs is high."
         type: choice
-        default: "16GB RAM (ubuntu-20.04)"
+        default: "16GB RAM (ubuntu-latest)"
         options:
-          - "16GB RAM (ubuntu-20.04)"
-          - "64GB RAM (ubuntu-22.04)"
+          - "16GB RAM (ubuntu-latest)"
+          - "64GB RAM (ubuntu-latest-16-cores)"
       test_dbs:
         description: 'List of DBs to test on (i.e. ["sqlite", "cassandra", "mysql8", "postgres12"])'
         type: string
@@ -65,7 +65,7 @@ env:
 jobs:
   set-up-single-test:
     name: Set up single test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     outputs:
       shard_indices: ${{ steps.generate_output.outputs.shard_indices }}
       total_shards: ${{ steps.generate_output.outputs.shards }}
@@ -84,12 +84,12 @@ jobs:
         run: |
           shards=3
           timeout=25   # update this to TEST_TIMEOUT if you update the Makefile
-          runs_on='["ubuntu-20.04"]'
+          runs_on='["ubuntu-latest"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
             shards=1
             timeout=${{ inputs.timeout_minutes }}
             single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
-            if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-22.04)" ]]; then
+            if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-latest-16-cores)" ]]; then
               runs_on='[ "ubuntu-latest-16-cores" ]'
             fi
           fi
@@ -137,7 +137,7 @@ jobs:
     name: Pre-build for cache
     strategy:
       fail-fast: false
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -181,7 +181,7 @@ jobs:
     needs: pre-build
     strategy:
       fail-fast: false
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -214,7 +214,7 @@ jobs:
       - uses: arduino/setup-protoc@v3
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -231,7 +231,7 @@ jobs:
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       BUILDKITE_MESSAGE: '{"job": "unit-test"}'
     steps:
@@ -304,7 +304,7 @@ jobs:
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       BUILDKITE_MESSAGE: '{"job": "integration-test"}'
     steps:
@@ -560,7 +560,7 @@ jobs:
             persistence_driver: postgres12_pgx
             parallel_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -686,7 +686,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -775,7 +775,7 @@ jobs:
       - functional-test
       - functional-test-xdc
       - functional-test-ndc
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       RESULTS: ${{ toJSON(needs.*.result) }}
     steps:
