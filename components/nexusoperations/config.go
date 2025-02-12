@@ -151,11 +151,7 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 
 var MetricTagConfiguration = dynamicconfig.NewGlobalTypedSetting(
 	"component.nexusoperations.metrics.tags",
-	&NexusMetricTagConfig{
-		IncludeServiceTag:   false,
-		IncludeOperationTag: false,
-		HeaderTagMappings:   []NexusHeaderTagMapping{},
-	},
+	NexusMetricTagConfig{},
 	`Controls which metric tags are included with Nexus operation metrics. This configuration supports:
 1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag)
 2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag)
