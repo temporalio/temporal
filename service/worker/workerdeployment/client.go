@@ -415,7 +415,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		return nil, nil, err
 	}
 
-	dInfo, err := d.deploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)
+	dInfo, err := d.deploymentStateToDeploymentInfo(deploymentName, queryResponse.State)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1259,17 +1259,17 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 	}
 }
 
-func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namespaceEntry *namespace.Namespace,
-	deploymentName string, state *deploymentspb.WorkerDeploymentLocalState) (*deploymentpb.WorkerDeploymentInfo, error) {
+func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, state *deploymentspb.WorkerDeploymentLocalState) (*deploymentpb.WorkerDeploymentInfo, error) {
 	if state == nil {
 		return nil, nil
 	}
 
 	var workerDeploymentInfo deploymentpb.WorkerDeploymentInfo
+
 	workerDeploymentInfo.Name = deploymentName
 	workerDeploymentInfo.CreateTime = state.CreateTime
-
 	workerDeploymentInfo.RoutingConfig = state.RoutingConfig
+	workerDeploymentInfo.LastModifierIdentity = state.LastModifierIdentity
 
 	for _, v := range state.Versions {
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
