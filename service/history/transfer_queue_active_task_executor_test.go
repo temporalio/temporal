@@ -1057,6 +1057,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 	s.Nil(err)
 
 	mutableState.GetExecutionInfo().ResetRunId = uuid.New() // indicate that the execution was reset.
+	s.mockShard.GetConfig().AllowResetWithPendingChildren = func(namespace string) bool {
+		return true // force the dynamic config to allow reset with pending children.
+	}
+
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()

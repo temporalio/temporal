@@ -403,7 +403,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	// process parentClosePolicy except when the execution was reset. In case of reset, we need to keep the children around so that we can reconnect to them.
 	// We know an execution was reset when ResetRunId was populated in it.
 	// TODO (Chetan): update this condition as new reset policies are added. For now we keep all children since "Reconnect" is the only policy available.
-	allowResetWithPendingChildren := t.shardContext.GetConfig().AllowResetWithPendingChildren(namespaceName.String())
+	allowResetWithPendingChildren := t.config.AllowResetWithPendingChildren(namespaceName.String())
 	shouldSkipParentClosePolicy := false
 	if executionInfo.GetResetRunId() != "" && allowResetWithPendingChildren {
 		shouldSkipParentClosePolicy = true // only skip if the parent is reset and we are using the new flow.
