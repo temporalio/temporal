@@ -288,9 +288,12 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 	// hasFetchedUserData is true if we have gotten a successful reply to GetTaskQueueUserData.
 	// It's used to control whether we do a long poll or a simple get.
 	hasFetchedUserData := false
+	userDataVersionChanged := false
 
 	op := func(ctx context.Context) error {
 		knownUserData, _, _ := m.GetUserData()
+		userDataVersionChanged = false
+		previousVersion := knownUserData.GetVersion()
 
 		callCtx, cancel := context.WithTimeout(ctx, m.config.GetUserDataLongPollTimeout())
 		defer cancel()
@@ -328,6 +331,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 			m.logger.Debug("fetched user data from parent, no change")
 		}
 		hasFetchedUserData = true
+		userDataVersionChanged = res.GetUserData().GetVersion() != previousVersion
 		m.setUserDataState(userDataEnabled, nil)
 		return nil
 	}
@@ -337,15 +341,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 
 	for ctx.Err() == nil {
 		start := time.Now()
-		m.lock.Lock()
-		previousVersion := m.userData.GetVersion()
-		m.lock.Unlock()
-
 		_ = backoff.ThrottleRetryContext(ctx, op, m.config.GetUserDataRetryPolicy, nil)
-
-		m.lock.Lock()
-		currentVersion := m.userData.GetVersion()
-		m.lock.Unlock()
 		elapsed := time.Since(start)
 
 		// In general, we want to start a new call immediately on completion of the previous
@@ -353,7 +349,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
 		// If the user data version changed it means new data was received so we skip this check.
-		if previousVersion == currentVersion && elapsed < m.config.GetUserDataMinWaitTime {
+		if !userDataVersionChanged && elapsed < m.config.GetUserDataMinWaitTime {
 			if fastResponseCounter >= maxFastUserDataFetches {
 				// maxFastUserDataFetches or more consecutive fast responses, let's throttle!
 				util.InterruptibleSleep(ctx, minWaitTime-elapsed)

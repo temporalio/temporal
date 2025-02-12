@@ -331,7 +331,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // only one fetch
@@ -625,7 +625,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -731,7 +731,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
