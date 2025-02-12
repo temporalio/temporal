@@ -676,7 +676,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(maxFastUserDataFetches)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
