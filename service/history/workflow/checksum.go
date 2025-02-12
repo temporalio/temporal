@@ -26,12 +26,12 @@ package workflow
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 
 	checksumspb "go.temporal.io/server/api/checksum/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/checksum"
-	"go.temporal.io/server/common/util"
-	expmaps "golang.org/x/exp/maps"
 )
 
 const (
@@ -87,23 +87,19 @@ func newMutableStateChecksumPayload(ms MutableState) *checksumspb.MutableStateCh
 	for _, ti := range ms.GetPendingTimerInfos() {
 		pendingTimerIDs = append(pendingTimerIDs, ti.GetStartedEventId())
 	}
-	util.SortSlice(pendingTimerIDs)
+	slices.Sort(pendingTimerIDs)
 	payload.PendingTimerStartedEventIds = pendingTimerIDs
 
-	pendingActivityIDs := expmaps.Keys(ms.GetPendingActivityInfos())
-	util.SortSlice(pendingActivityIDs)
+	pendingActivityIDs := slices.Sorted(maps.Keys(ms.GetPendingActivityInfos()))
 	payload.PendingActivityScheduledEventIds = pendingActivityIDs
 
-	pendingChildIDs := expmaps.Keys(ms.GetPendingChildExecutionInfos())
-	util.SortSlice(pendingChildIDs)
+	pendingChildIDs := slices.Sorted(maps.Keys(ms.GetPendingChildExecutionInfos()))
 	payload.PendingChildInitiatedEventIds = pendingChildIDs
 
-	signalIDs := expmaps.Keys(ms.GetPendingSignalExternalInfos())
-	util.SortSlice(signalIDs)
+	signalIDs := slices.Sorted(maps.Keys(ms.GetPendingSignalExternalInfos()))
 	payload.PendingSignalInitiatedEventIds = signalIDs
 
-	requestCancelIDs := expmaps.Keys(ms.GetPendingRequestCancelExternalInfos())
-	util.SortSlice(requestCancelIDs)
+	requestCancelIDs := slices.Sorted(maps.Keys(ms.GetPendingRequestCancelExternalInfos()))
 	payload.PendingReqCancelInitiatedEventIds = requestCancelIDs
 	return payload
 }

@@ -25,15 +25,16 @@
 package api
 
 import (
+	"maps"
 	"reflect"
 	"regexp"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	expmaps "golang.org/x/exp/maps"
 )
 
 var publicMethodRgx = regexp.MustCompile("^[A-Z]")
@@ -50,7 +51,7 @@ func TestOperatorServiceMetadata(t *testing.T) {
 
 func checkService(t *testing.T, tp reflect.Type, m map[string]MethodMetadata) {
 	methods := getMethodNames(tp)
-	require.ElementsMatch(t, methods, expmaps.Keys(m),
+	require.ElementsMatch(t, methods, slices.Collect(maps.Keys(m)),
 		"If you're adding a new method to Workflow/OperatorService, please add metadata for it in metadata.go")
 
 	for _, method := range methods {

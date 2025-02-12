@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -55,7 +56,6 @@ import (
 	"go.temporal.io/server/common/util"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
-	expmaps "golang.org/x/exp/maps"
 )
 
 const (
@@ -207,7 +207,7 @@ func (wm *perNamespaceWorkerManager) Stop() {
 	close(wm.membershipChangedCh)
 
 	wm.lock.Lock()
-	workers := expmaps.Values(wm.workers)
+	workers := slices.Collect(maps.Values(wm.workers))
 	maps.DeleteFunc(wm.workers, func(_ namespace.ID, _ *perNamespaceWorker) bool { return true })
 	wm.lock.Unlock()
 

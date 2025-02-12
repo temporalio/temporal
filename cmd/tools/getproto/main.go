@@ -29,13 +29,13 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
-	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -77,7 +77,7 @@ func findProtoImports() []string {
 		}
 		return nil
 	}))
-	return expmaps.Keys(importMap)
+	return slices.Collect(maps.Keys(importMap))
 }
 
 func getImportName(i string) string {
@@ -94,7 +94,7 @@ func mangle(p string) string {
 }
 
 func genFileList(protoImports []string) {
-	sort.Strings(protoImports)
+	slices.Sort(protoImports)
 
 	goImportsMap := make(map[string]string)
 	protoToPackage := make(map[string]string)
@@ -113,8 +113,7 @@ func genFileList(protoImports []string) {
 			protoToPackage[i] = base
 		}
 	}
-	goImports := expmaps.Keys(goImportsMap)
-	sort.Strings(goImports)
+	goImports := slices.Sorted(maps.Keys(goImportsMap))
 
 	out, err := os.Create("cmd/tools/getproto/files.go")
 	fatalIfErr(err)
@@ -152,7 +151,7 @@ func addImports(missing []string) {
 		newImportMap[i] = struct{}{}
 	}
 
-	genFileList(expmaps.Keys(newImportMap))
+	genFileList(slices.Collect(maps.Keys(newImportMap)))
 	fmt.Println("<rerun>")
 	os.Exit(0)
 }
@@ -178,7 +177,7 @@ func checkImports(files map[string]protoreflect.FileDescriptor) {
 		}
 	}
 	if len(missing) > 0 {
-		addImports(expmaps.Keys(missing)) // doesn't return
+		addImports(slices.Collect(maps.Keys(missing))) // doesn't return
 	}
 }
 

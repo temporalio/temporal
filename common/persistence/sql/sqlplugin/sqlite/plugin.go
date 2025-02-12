@@ -28,8 +28,9 @@ package sqlite
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/iancoleman/strcase"
@@ -41,7 +42,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 	sqliteschema "go.temporal.io/server/schema/sqlite"
-	expmaps "golang.org/x/exp/maps"
 )
 
 const (
@@ -194,8 +194,7 @@ func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 	parameters := url.Values{}
 
 	// sort ConnectAttributes to get a deterministic order
-	keys := expmaps.Keys(cfg.ConnectAttributes)
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(cfg.ConnectAttributes))
 
 	for _, k := range keys {
 		key := strings.TrimSpace(k)

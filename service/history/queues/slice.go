@@ -26,10 +26,11 @@ package queues
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
-	expmaps "golang.org/x/exp/maps"
 )
 
 const (
@@ -365,7 +366,7 @@ func (s *SliceImpl) shrinkPredicate() {
 		return
 	}
 
-	s.scope.Predicate = s.grouper.Predicate(expmaps.Keys(pendingPerKey))
+	s.scope.Predicate = s.grouper.Predicate(slices.Collect(maps.Keys(pendingPerKey)))
 	s.ensurePredicateSizeLimit()
 }
 

@@ -28,6 +28,8 @@ package nsregistry
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -44,7 +46,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/internal/goro"
-	expmaps "golang.org/x/exp/maps"
 )
 
 const (
@@ -443,7 +444,7 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	r.cacheNameToID = newCacheNameToID
 	stateChanged = append(stateChanged, r.stateChangedDuringReadthrough...)
 	r.stateChangedDuringReadthrough = nil
-	stateChangeCallbacks = expmaps.Values(r.stateChangeCallbacks)
+	stateChangeCallbacks = slices.Collect(maps.Values(r.stateChangeCallbacks))
 	r.cacheLock.Unlock()
 
 	// call state change callbacks
