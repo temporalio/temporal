@@ -293,7 +293,6 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 	op := func(ctx context.Context) error {
 		knownUserData, _, _ := m.GetUserData()
 		userDataVersionChanged = false
-		previousVersion := knownUserData.GetVersion()
 
 		callCtx, cancel := context.WithTimeout(ctx, m.config.GetUserDataLongPollTimeout())
 		defer cancel()
@@ -326,12 +325,12 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// nil inner fields.
 		if res.GetUserData() != nil {
 			m.setUserDataForNonOwningPartition(res.GetUserData())
+			userDataVersionChanged = res.GetUserData().GetVersion() != knownUserData.GetVersion()
 			m.logNewUserData("fetched user data from parent", res.GetUserData())
 		} else {
 			m.logger.Debug("fetched user data from parent, no change")
 		}
 		hasFetchedUserData = true
-		userDataVersionChanged = res.GetUserData().GetVersion() != previousVersion
 		m.setUserDataState(userDataEnabled, nil)
 		return nil
 	}
