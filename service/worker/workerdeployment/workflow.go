@@ -437,6 +437,7 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deployment
 		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
+		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
 	return nil
@@ -450,6 +451,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
 		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	d.pendingUpdates++
