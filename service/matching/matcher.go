@@ -135,15 +135,8 @@ func newTaskMatcher(config *taskQueueConfig, partition tqid.Partition, fwdr *For
 	matcherCtx, matcherCtxCancel := context.WithCancel(matcherCtx)
 
 	return &TaskMatcher{
-		config: config,
-		// FIXME: make real constructor
-		data: matcherData{
-			config:      config,
-			rateLimiter: limiter,
-			tasks: taskPQ{
-				ages: newBacklogAgeTracker(),
-			},
-		},
+		config:             config,
+		data:               newMatcherData(config, limiter),
 		dynamicRateBurst:   dynamicRateBurst,
 		dynamicRateLimiter: dynamicRateLimiter,
 		metricsHandler:     metricsHandler,

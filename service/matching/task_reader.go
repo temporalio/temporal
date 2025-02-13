@@ -147,6 +147,11 @@ func (tr *taskReader) completeTask(task *internalTask, res taskResponse) {
 	if err != nil && (common.IsServiceClientTransientError(err) ||
 		common.IsContextDeadlineExceededErr(err) ||
 		common.IsContextCanceledErr(err)) {
+		// TODO(pri): if this was a start error (not a forwarding error): consider adding a
+		// per-task backoff here, in case the error was workflow busy, we don't want to end up
+		// trying the same task immediately. maybe also: after a few attempts on the same task,
+		// let it get cycled to the end of the queue, in case there's some task/wf-specific
+		// thing.
 		tr.addTaskToMatcher(tr.readerCtx, task)
 		return
 	}

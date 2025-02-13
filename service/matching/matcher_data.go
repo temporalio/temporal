@@ -34,31 +34,16 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
-type matcherData struct {
-	config      *taskQueueConfig
-	rateLimiter quotas.RateLimiter // whole-queue rate limiter
-
-	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
-
-	rateLimitTimer         resettableTimer
-	reconsiderForwardTimer resettableTimer
-
-	// waiting pollers and tasks
-	// invariant: all pollers and tasks in these data structures have matchResult == nil
-	pollers pollerPQ
-	tasks   taskPQ
-
-	lastPoller time.Time // most recent poll start time
-}
-
 type pollerPQ struct {
 	heap []*waitingPoller
 }
 
+// implements heap.Interface
 func (p *pollerPQ) Len() int {
 	return len(p.heap)
 }
 
+// implements heap.Interface, do not call directly
 func (p *pollerPQ) Less(i int, j int) bool {
 	a, b := p.heap[i], p.heap[j]
 	if !(a.isTaskForwarder || a.isTaskValidator) && (b.isTaskForwarder || b.isTaskValidator) {
@@ -69,18 +54,29 @@ func (p *pollerPQ) Less(i int, j int) bool {
 	return false
 }
 
+func (p *pollerPQ) Add(poller *waitingPoller) {
+	heap.Push(p, poller)
+}
+
+func (p *pollerPQ) Remove(poller *waitingPoller) {
+	heap.Remove(p, poller.matchHeapIndex)
+}
+
+// implements heap.Interface, do not call directly
 func (p *pollerPQ) Swap(i int, j int) {
 	p.heap[i], p.heap[j] = p.heap[j], p.heap[i]
 	p.heap[i].matchHeapIndex = i
 	p.heap[j].matchHeapIndex = j
 }
 
+// implements heap.Interface, do not call directly
 func (p *pollerPQ) Push(x any) {
 	poller := x.(*waitingPoller)
 	poller.matchHeapIndex = len(p.heap)
 	p.heap = append(p.heap, poller)
 }
 
+// implements heap.Interface, do not call directly
 func (p *pollerPQ) Pop() any {
 	last := len(p.heap) - 1
 	poller := p.heap[last]
@@ -97,10 +93,20 @@ type taskPQ struct {
 	ages backlogAgeTracker
 }
 
+func (t *taskPQ) Add(task *internalTask) {
+	heap.Push(t, task)
+}
+
+func (t *taskPQ) Remove(task *internalTask) {
+	heap.Remove(t, task.matchHeapIndex)
+}
+
+// implements heap.Interface
 func (t *taskPQ) Len() int {
 	return len(t.heap)
 }
 
+// implements heap.Interface, do not call directly
 func (t *taskPQ) Less(i int, j int) bool {
 	a, b := t.heap[i], t.heap[j]
 	if !a.isPollForwarder && b.isPollForwarder {
@@ -110,12 +116,14 @@ func (t *taskPQ) Less(i int, j int) bool {
 	return false
 }
 
+// implements heap.Interface, do not call directly
 func (t *taskPQ) Swap(i int, j int) {
 	t.heap[i], t.heap[j] = t.heap[j], t.heap[i]
 	t.heap[i].matchHeapIndex = i
 	t.heap[j].matchHeapIndex = j
 }
 
+// implements heap.Interface, do not call directly
 func (t *taskPQ) Push(x any) {
 	task := x.(*internalTask)
 	task.matchHeapIndex = len(t.heap)
@@ -126,6 +134,7 @@ func (t *taskPQ) Push(x any) {
 	}
 }
 
+// implements heap.Interface, do not call directly
 func (t *taskPQ) Pop() any {
 	last := len(t.heap) - 1
 	task := t.heap[last]
@@ -161,12 +170,39 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 	heap.Init(t)
 }
 
+type matcherData struct {
+	config      *taskQueueConfig
+	rateLimiter quotas.RateLimiter // whole-queue rate limiter
+
+	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
+
+	rateLimitTimer         resettableTimer
+	reconsiderForwardTimer resettableTimer
+
+	// waiting pollers and tasks
+	// invariant: all pollers and tasks in these data structures have matchResult == nil
+	pollers pollerPQ
+	tasks   taskPQ
+
+	lastPoller time.Time // most recent poll start time
+}
+
+func newMatcherData(config *taskQueueConfig, limiter quotas.RateLimiter) matcherData {
+	return matcherData{
+		config:      config,
+		rateLimiter: limiter,
+		tasks: taskPQ{
+			ages: newBacklogAgeTracker(),
+		},
+	}
+}
+
 func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
 	task.initMatch(d)
-	heap.Push(&d.tasks, task)
+	d.tasks.Add(task)
 	d.match()
 }
 
@@ -176,7 +212,7 @@ func (d *matcherData) EnqueueTaskAndWait(ctxs []context.Context, task *internalT
 
 	// add and look for match
 	task.initMatch(d)
-	heap.Push(&d.tasks, task)
+	d.tasks.Add(task)
 	d.match()
 
 	// if already matched, return
@@ -191,7 +227,7 @@ func (d *matcherData) EnqueueTaskAndWait(ctxs []context.Context, task *internalT
 			defer d.lock.Unlock()
 
 			if task.matchResult == nil {
-				heap.Remove(&d.tasks, task.matchHeapIndex)
+				d.tasks.Remove(task)
 				task.wake(&matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
 			}
 		})
@@ -206,7 +242,7 @@ func (d *matcherData) ReenqueuePollerIfNotMatched(poller *waitingPoller) {
 	defer d.lock.Unlock()
 
 	if poller.matchResult == nil {
-		heap.Push(&d.pollers, poller)
+		d.pollers.Add(poller)
 		d.match()
 	}
 }
@@ -220,7 +256,7 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 
 	// add and look for match
 	poller.initMatch(d)
-	heap.Push(&d.pollers, poller)
+	d.pollers.Add(poller)
 	d.match()
 
 	// if already matched, return
@@ -238,7 +274,7 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 				// if poll was being forwarded, it would be absent from heap even though
 				// matchResult == nil
 				if poller.matchHeapIndex >= 0 {
-					heap.Remove(&d.pollers, poller.matchHeapIndex)
+					d.pollers.Remove(poller)
 				}
 				poller.wake(&matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
 			}
@@ -263,13 +299,13 @@ func (d *matcherData) MatchNextPoller(task *internalTask) (canSyncMatch, gotSync
 	}
 
 	task.initMatch(d)
-	heap.Push(&d.tasks, task)
+	d.tasks.Add(task)
 	d.match()
 	// don't wait, check if match() picked this one already
 	if task.matchResult != nil {
 		return true, true
 	}
-	heap.Remove(&d.tasks, task.matchHeapIndex)
+	d.tasks.Remove(task)
 	return true, false
 }
 
@@ -295,7 +331,7 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 // call with lock held
 func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPoller) {
 	// FIXME: optimize so it's not O(d*n) worst case
-	// FIXME: this isn't actually correct
+	// FIXME: this isn't actually correct (iterates over heap as slice)
 	for _, task := range d.tasks.heap {
 		if !allowForwarding && task.isPollForwarder {
 			continue
@@ -343,12 +379,8 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 	// true to false and not the other way, so that's safe. But it is possible
 	// that we no longer have recent polls. So we need to ensure that match() is
 	// called again in that case, using reconsiderForwardTimer.
-	defer func() {
-		if allowForwarding {
-			d.reconsiderForwardTimer.unset()
-		}
-	}()
 	if d.isBacklogNegligible() {
+		d.reconsiderForwardTimer.unset()
 		return true
 	}
 	delayToForwardingAllowed := d.config.MaxWaitForPollerBeforeFwd() - time.Since(d.lastPoller)
@@ -364,9 +396,8 @@ func (d *matcherData) match() {
 		// search for highest priority match
 		task, poller := d.findMatch(allowForwarding)
 		if task == nil || poller == nil {
-			// no more current matches, stop timers if they were running
+			// no more current matches, stop rate limit timer if was running
 			d.rateLimitTimer.unset()
-			d.reconsiderForwardTimer.unset()
 			return
 		}
 
@@ -376,8 +407,8 @@ func (d *matcherData) match() {
 		}
 
 		// ready to signal match
-		heap.Remove(&d.tasks, task.matchHeapIndex)
-		heap.Remove(&d.pollers, poller.matchHeapIndex)
+		d.tasks.Remove(task)
+		d.pollers.Remove(poller)
 
 		res := &matchResult{task: task, poller: poller}
 
@@ -406,9 +437,10 @@ func (d *matcherData) rateLimitTask(task *internalTask) bool {
 	}
 
 	delay := d.rateLimiter.Reserve().Delay()
+	// TODO(pri): RecycleToken doesn't actually work since we're not using Wait
 	task.recycleToken = d.rateLimiter.RecycleToken
 
-	// TODO: account for per-priority/fairness key rate limits also, e.g.
+	// TODO(pri): account for per-priority/fairness key rate limits also, e.g.
 	// delay = max(delay, perTaskDelay)
 
 	d.rateLimitTimer.set(d.rematch, delay)
