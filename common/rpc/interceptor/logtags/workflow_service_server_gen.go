@@ -41,6 +41,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.CreateScheduleResponse:
 		return nil
+	case *workflowservice.CreateWorkflowRuleRequest:
+		return nil
+	case *workflowservice.CreateWorkflowRuleResponse:
+		return nil
 	case *workflowservice.DeleteScheduleRequest:
 		return nil
 	case *workflowservice.DeleteScheduleResponse:
@@ -59,6 +63,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
 	case *workflowservice.DeleteWorkflowExecutionResponse:
+		return nil
+	case *workflowservice.DeleteWorkflowRuleRequest:
+		return nil
+	case *workflowservice.DeleteWorkflowRuleResponse:
 		return nil
 	case *workflowservice.DeprecateNamespaceRequest:
 		return nil
@@ -98,6 +106,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
 	case *workflowservice.DescribeWorkflowExecutionResponse:
+		return nil
+	case *workflowservice.DescribeWorkflowRuleRequest:
+		return nil
+	case *workflowservice.DescribeWorkflowRuleResponse:
 		return nil
 	case *workflowservice.ExecuteMultiOperationRequest:
 		return nil
@@ -192,6 +204,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.ListWorkflowExecutionsRequest:
 		return nil
 	case *workflowservice.ListWorkflowExecutionsResponse:
+		return nil
+	case *workflowservice.ListWorkflowRulesRequest:
+		return nil
+	case *workflowservice.ListWorkflowRulesResponse:
 		return nil
 	case *workflowservice.PatchScheduleRequest:
 		return nil
