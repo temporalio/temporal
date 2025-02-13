@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/api/sdk/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/util"
 	"testing"
@@ -29,8 +28,9 @@ func TestPollerScalingFunctionalSuite(t *testing.T) {
 func (s *PollerScalingIntegSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		// Force one partition so we can reliably see the backlog
-		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  1,
-		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 1,
+		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():     1,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key():    1,
+		dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Key(): 50 * time.Millisecond,
 	}
 	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -53,7 +53,8 @@ func (s *PollerScalingIntegSuite) TearDownTest() {
 }
 
 func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
 	tq := testcore.RandomizeStr(s.T().Name())
 
 	// Queue up a couple workflows
@@ -64,6 +65,8 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 		s.NoError(err)
 		runHandles = append(runHandles, run)
 	}
+	// Wait for the backlog age to pass the config threshold
+	time.Sleep(50 * time.Millisecond)
 
 	// Poll for a tasks and see attached decision is to scale up b/c of backlog
 	feClient := s.FrontendClient()
@@ -73,7 +76,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	})
 	s.NoError(err)
 	s.NotNil(resp.PollerScalingDecision)
-	s.Assert().GreaterOrEqual(int32(1), resp.PollerScalingDecision.PollerDelta)
+	s.Assert().GreaterOrEqual(int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
 }
 
 // Here we verify that, even with multiple partitions, pollers see scaling decisions at least often enough
@@ -102,7 +105,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 		}
 	}()
 
-	allScaleDecisions := make([]*sdk.PollerScalingDecision, 0, 15)
+	allScaleDecisions := make([]*taskqueuepb.PollerScalingDecision, 0, 15)
 	for i := 0; i < 15; i++ {
 		resp, _ := s.FrontendClient().PollWorkflowTaskQueue(longctx, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
@@ -117,6 +120,6 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 	startWfCancel()
 
 	// We must have seen at least a handful of non-nil scaling decisions
-	nonNilDecisions := util.FilterSlice(allScaleDecisions, func(d *sdk.PollerScalingDecision) bool { return d != nil })
+	nonNilDecisions := util.FilterSlice(allScaleDecisions, func(d *taskqueuepb.PollerScalingDecision) bool { return d != nil })
 	s.Assert().GreaterOrEqual(len(nonNilDecisions), 3)
 }
