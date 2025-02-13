@@ -153,7 +153,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_Basic() {
 			RunId: "run-id",
 		}, nil)
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:                 scheduler.TaskTypeExecute,
 		InitialBufferedStarts:    bufferedStarts,
 		InitialState:             enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
@@ -197,7 +197,7 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_AllowAll() {
 		},
 	}
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:               scheduler.TaskTypeProcessBuffer,
 		InitialBufferedStarts:  bufferedStarts,
 		InitialState:           enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
@@ -231,7 +231,7 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_MissedCatchupWindow() {
 		},
 	}
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:                    scheduler.TaskTypeProcessBuffer,
 		InitialBufferedStarts:       bufferedStarts,
 		InitialState:                enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
@@ -274,7 +274,7 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_BufferOne() {
 		},
 	}
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:               scheduler.TaskTypeProcessBuffer,
 		InitialBufferedStarts:  bufferedStarts,
 		InitialState:           enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
@@ -294,7 +294,7 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_BufferOne() {
 
 // Execute is scheduled with an empty buffer.
 func (e *invokerExecutorsSuite) TestExecuteTask_Empty() {
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:              scheduler.TaskTypeExecute,
 		InitialBufferedStarts: nil,
 		InitialState:          enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
@@ -305,7 +305,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_Empty() {
 
 // ProcessBuffer is scheduled with an empty buffer.
 func (e *invokerExecutorsSuite) TestProcessBufferTask_Empty() {
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:              scheduler.TaskTypeProcessBuffer,
 		InitialBufferedStarts: nil,
 		InitialState:          enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
@@ -342,7 +342,7 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_BackingOff() {
 		},
 	}
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:               scheduler.TaskTypeProcessBuffer,
 		InitialBufferedStarts:  bufferedStarts,
 		InitialState:           enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
@@ -353,9 +353,10 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_BackingOff() {
 		},
 		Validate: func(t *testing.T, i scheduler.Invoker) {
 			// The ProcessBuffer task should have a backoff deadline.
-			tasks := e.opLogTaskMap()
+			tasks, err := opLogTaskMap(e.rootNode)
+			require.NoError(t, err)
 			bufferTasks := tasks[scheduler.TaskTypeProcessBuffer]
-			require.Equal(e.T(), backoffTime, bufferTasks[0].Deadline())
+			require.Equal(t, backoffTime, bufferTasks[0].Deadline())
 		},
 	})
 }
@@ -378,7 +379,7 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_BackingOffReady() {
 		},
 	}
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:               scheduler.TaskTypeProcessBuffer,
 		InitialBufferedStarts:  bufferedStarts,
 		InitialState:           enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
@@ -436,7 +437,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_RetryableFailure() {
 			RunId: "run-id",
 		}, nil)
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:                 scheduler.TaskTypeExecute,
 		InitialBufferedStarts:    bufferedStarts,
 		InitialState:             enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
@@ -456,7 +457,8 @@ func (e *invokerExecutorsSuite) TestExecuteTask_RetryableFailure() {
 			require.Equal(e.T(), int64(2), failedStart.Attempt)
 
 			// The ProcessBuffer task should have a backoff deadline.
-			tasks := e.opLogTaskMap()
+			tasks, err := opLogTaskMap(e.rootNode)
+			require.NoError(t, err)
 			bufferTasks := tasks[scheduler.TaskTypeProcessBuffer]
 			require.Equal(e.T(), backoffTime, bufferTasks[0].Deadline())
 		},
@@ -484,7 +486,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_AlreadyStarted() {
 		Times(1).
 		Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("workflow already started", "", ""))
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:                 scheduler.TaskTypeExecute,
 		InitialBufferedStarts:    bufferedStarts,
 		InitialState:             enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
@@ -513,7 +515,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_ExceedsMaxAttempts() {
 		},
 	}
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:                 scheduler.TaskTypeExecute,
 		InitialBufferedStarts:    bufferedStarts,
 		InitialState:             enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
@@ -548,7 +550,7 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_NeedsTerminate() {
 		},
 	}
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:                scheduler.TaskTypeProcessBuffer,
 		InitialBufferedStarts:   bufferedStarts,
 		InitialRunningWorkflows: initialRunningWorkflows,
@@ -589,7 +591,7 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_NeedsCancel() {
 		},
 	}
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:                scheduler.TaskTypeProcessBuffer,
 		InitialBufferedStarts:   bufferedStarts,
 		InitialRunningWorkflows: initialRunningWorkflows,
@@ -632,7 +634,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_CancelTerminateFailure() {
 
 	// Terminate and Cancel are both attempted only once. Regardless of the service
 	// call's outcome, they should have been removed from the Invoker's queue.
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:                   scheduler.TaskTypeExecute,
 		InitialBufferedStarts:      nil,
 		InitialCancelWorkflows:     cancelWorkflows,
@@ -671,7 +673,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_CancelTerminateSucceed() {
 	e.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
 		Return(nil, nil)
 
-	e.runTestCase(&testCase{
+	e.runTestCase(&invokerTestCase{
 		TaskType:                   scheduler.TaskTypeExecute,
 		InitialBufferedStarts:      nil,
 		InitialCancelWorkflows:     cancelWorkflows,
@@ -689,7 +691,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_CancelTerminateSucceed() {
 	})
 }
 
-type testCase struct {
+type invokerTestCase struct {
 	TaskType string
 
 	InitialBufferedStarts     []*schedulespb.BufferedStart
@@ -711,7 +713,7 @@ type testCase struct {
 	Validate func(*testing.T, scheduler.Invoker) // Called after all other validations pass for additional assertions.
 }
 
-func (e *invokerExecutorsSuite) runTestCase(c *testCase) {
+func (e *invokerExecutorsSuite) runTestCase(c *invokerTestCase) {
 	t := e.T()
 
 	schedulerSm, err := hsm.MachineData[scheduler.Scheduler](e.schedulerNode)
@@ -744,7 +746,8 @@ func (e *invokerExecutorsSuite) runTestCase(c *testCase) {
 	require.Equal(t, c.ExpectedMissedCatchupWindow, schedulerSm.Info.MissedCatchupWindow)
 	require.Equal(t, c.ExpectedState, invoker.State())
 
-	tasks := e.opLogTaskMap()
+	tasks, err := opLogTaskMap(e.rootNode)
+	require.NoError(t, err)
 	for taskType, count := range c.ExpectedTasks {
 		actualCount := len(tasks[taskType])
 		require.Equal(t, count, actualCount, "expected %d %s tasks, had %d", count, taskType, actualCount)
@@ -754,20 +757,6 @@ func (e *invokerExecutorsSuite) runTestCase(c *testCase) {
 	if c.Validate != nil {
 		c.Validate(t, invoker)
 	}
-}
-
-// opLogTaskMap returns a map from task type -> []hsm.Task{}.
-func (e *invokerExecutorsSuite) opLogTaskMap() map[string][]hsm.Task {
-	result := make(map[string][]hsm.Task)
-	tasks, err := opLogTasks(e.rootNode)
-	require.NoError(e.T(), err)
-
-	for _, task := range tasks {
-		key := task.Type()
-		result[key] = append(result[key], task)
-	}
-
-	return result
 }
 
 type startWorkflowExecutionRequestIdMatcher struct {

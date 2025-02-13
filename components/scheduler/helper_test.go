@@ -69,7 +69,7 @@ func (root) IsWorkflowExecutionRunning() bool {
 
 func newFakeEnv() *fakeEnv {
 	return &fakeEnv{
-		now: time.Now(),
+		now: time.Now().UTC(),
 	}
 }
 
@@ -127,7 +127,7 @@ func newSchedulerTree(
 	_, err = schedulerNode.AddChild(scheduler.GeneratorMachineKey, *generator)
 	require.NoError(t, err)
 
-	// Add Executor sub state machine node
+	// Add Invoker sub state machine node
 	executor := scheduler.NewInvoker()
 	_, err = schedulerNode.AddChild(scheduler.InvokerMachineKey, *executor)
 	require.NoError(t, err)
@@ -195,4 +195,20 @@ func opLogTasks(node *hsm.Node) (tasks []hsm.Task, err error) {
 	}
 
 	return tasks, nil
+}
+
+// opLogTaskMap returns a map from task type -> []hsm.Task{}.
+func opLogTaskMap(node *hsm.Node) (map[string][]hsm.Task, error) {
+	result := make(map[string][]hsm.Task)
+	tasks, err := opLogTasks(node)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, task := range tasks {
+		key := task.Type()
+		result[key] = append(result[key], task)
+	}
+
+	return result, nil
 }

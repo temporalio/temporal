@@ -60,13 +60,13 @@ var (
 	RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
 		"component.scheduler.retryPolicy.initialInterval",
 		time.Second,
-		`The initial backoff interval when retrying a failed workflow start.`,
+		`The initial backoff interval when retrying a failed task.`,
 	)
 
 	RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 		"component.scheduler.retryPolicy.maxInterval",
 		time.Minute,
-		`The maximum backoff interval when retrying a failed workflow start.`,
+		`The maximum backoff interval when retrying a failed task.`,
 	)
 
 	ServiceCallTimeout = dynamicconfig.NewGlobalDurationSetting(

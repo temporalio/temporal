@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
@@ -126,8 +127,7 @@ func RegisterStateMachines(r *hsm.Registry) error {
 	if err := r.RegisterMachine(invokerMachineDefinition{}); err != nil {
 		return err
 	}
-	// TODO: add other state machines here
-	return nil
+	return r.RegisterMachine(backfillerMachineDefinition{})
 }
 
 func (s Scheduler) State() SchedulerMachineState {
@@ -254,6 +254,54 @@ func (s *Scheduler) validateCachedState() {
 // should invalidate other in-flight updates.
 func (s *Scheduler) updateConflictToken() {
 	s.ConflictToken++
+}
+
+// RequestImmediate spawns a new Backfiller node to the scheduler tree for a
+// BackfillRequest.
+func (s Scheduler) RequestBackfill(
+	env hsm.Environment,
+	node *hsm.Node,
+	request *schedulepb.BackfillRequest,
+) (hsm.TransitionOutput, error) {
+	id := uuid.New()
+	backfiller := Backfiller{
+		BackfillerInternal: &schedulespb.BackfillerInternal{
+			Request:           &schedulespb.BackfillerInternal_BackfillRequest{BackfillRequest: request},
+			BackfillId:        id,
+			LastProcessedTime: timestamppb.New(env.Now()),
+		},
+	}
+
+	_, err := node.AddChild(BackfillerMachineKey(id), backfiller)
+	if err != nil {
+		return hsm.TransitionOutput{}, err
+	}
+
+	return backfiller.output()
+}
+
+// RequestImmediate spawns a new Backfiller node to the scheduler tree for a
+// TriggerImmediately request.
+func (s Scheduler) RequestImmediate(
+	env hsm.Environment,
+	node *hsm.Node,
+	trigger *schedulepb.TriggerImmediatelyRequest,
+) (hsm.TransitionOutput, error) {
+	id := uuid.New()
+	backfiller := Backfiller{
+		BackfillerInternal: &schedulespb.BackfillerInternal{
+			Request:           &schedulespb.BackfillerInternal_TriggerRequest{TriggerRequest: trigger},
+			BackfillId:        id,
+			LastProcessedTime: timestamppb.New(env.Now()),
+		},
+	}
+
+	_, err := node.AddChild(BackfillerMachineKey(id), backfiller)
+	if err != nil {
+		return hsm.TransitionOutput{}, err
+	}
+
+	return backfiller.output()
 }
 
 type EventRecordAction struct {

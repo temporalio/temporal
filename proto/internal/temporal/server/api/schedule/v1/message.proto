@@ -207,10 +207,26 @@ message InvokerInternal {
 }
 
 // State machine scheduler's Backfiller internal state. Backfill requests are 1:1
-// with Backfiller nodes.
+// with Backfiller nodes. Backfiller nodes also handle immediate trigger requests.
 message BackfillerInternal {
-    temporal.api.schedule.v1.BackfillRequest request = 1;
+    oneof request {
+        temporal.api.schedule.v1.BackfillRequest backfill_request = 1;
 
+        // When set, immediately buffer a single manual action.
+        temporal.api.schedule.v1.TriggerImmediatelyRequest trigger_request = 2;
+    }
+
+    // Every Backfiller should be assigned a unique ID upon creation, used
+    // for deduplication.
+    string backfill_id = 5;
+    
     // Backfiller waits for the next_invocation_time before buffering more actions.
-    google.protobuf.Timestamp next_invocation_time = 2;
+    google.protobuf.Timestamp next_invocation_time = 6;
+     
+    // High water mark.
+    google.protobuf.Timestamp last_processed_time = 7;
+
+    // Attempt count, incremented when the buffer is full and the Backfiller
+    // needs to back off before retrying to fill.
+    int64 attempt = 8;
 }
