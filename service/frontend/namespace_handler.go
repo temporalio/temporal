@@ -892,7 +892,7 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
 func validateRetentionDuration(retention *durationpb.Duration, isGlobalNamespace bool) error {
-	if err := timestamp.ValidateProtoDuration(retention); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(retention); err != nil {
 		return errInvalidRetentionPeriod
 	}
 
