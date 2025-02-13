@@ -409,7 +409,6 @@ func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersio
 		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
-		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
 	return nil
@@ -419,7 +418,6 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
-		d.logger.Error("Could not acquire workflow lock")
 		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	d.pendingUpdates++
@@ -427,6 +425,15 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
+
+	// todo Shivam - is this guy even needed?
+	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
+		return nil, temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
+	}
+
+	if args.Version == d.State.RoutingConfig.CurrentVersion {
+		return nil, temporal.NewApplicationError("no change", errNoChangeType)
+	}
 
 	prevCurrentVersion := d.State.RoutingConfig.CurrentVersion
 	newCurrentVersion := args.Version

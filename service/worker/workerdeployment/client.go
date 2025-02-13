@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -477,7 +479,6 @@ func (d *ClientImpl) SetCurrentVersion(
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), version, identity)()
 
-	requestID := uuid.New()
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
@@ -503,13 +504,26 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, err
 	}
 
+	updateID := uuid.New()
+	if conflictToken != nil {
+		// When a conflict token is provided, we use the hash of the conflict token, deploymentName and the version. This is done
+		// to ensure the automatic de-duplication of updates with the same UpdateID.
+
+		combinedBytes := make([]byte, 0, len(conflictToken)+len(deploymentName)+len(version))
+		combinedBytes = append(combinedBytes, conflictToken...)
+		combinedBytes = append(combinedBytes, []byte(deploymentName)...)
+		combinedBytes = append(combinedBytes, []byte(version)...)
+
+		updateID = convert.Uint64ToString(farm.Fingerprint64(combinedBytes))
+	}
+
 	outcome, err := d.update(
 		ctx,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+			Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
 		},
 	)
 	if err != nil {
