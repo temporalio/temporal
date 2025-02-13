@@ -39,16 +39,31 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	codeCoverageExtension = ".cover.out"
+	retriesFlag           = "--retries="
+	coverProfileFlag      = "-coverprofile="
+	junitReportFlag       = "--junitfile="
+)
+
 type attempt struct {
-	runner      *runner
-	number      int
-	exitErr     *exec.ExitError
-	junitReport *junitReport
+	runner           *runner
+	number           int
+	exitErr          *exec.ExitError
+	junitReport      *junitReport
+	coverProfilePath string
 }
 
 func (a *attempt) run(ctx context.Context, args []string) (string, error) {
-	args = append([]string{"--junitfile", a.junitReport.path}, args...)
-	log.Printf("starting test attempt %d with args: %v", a.number, args)
+	for i, arg := range args {
+		if strings.HasPrefix(arg, coverProfileFlag) {
+			args[i] = coverProfileFlag + a.coverProfilePath
+		} else if strings.HasPrefix(arg, junitReportFlag) {
+			args[i] = junitReportFlag + a.junitReport.path
+		}
+	}
+	log.Printf("starting test attempt #%d: %v %v",
+		a.number, a.runner.gotestsumExecutable, strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, a.runner.gotestsumExecutable, args...)
 	var output strings.Builder
 	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
@@ -63,6 +78,7 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 type runner struct {
 	gotestsumExecutable string
 	junitOutputPath     string
+	coverProfilePath    string
 	attempts            []*attempt
 	retries             int
 }
@@ -76,61 +92,36 @@ func newRunner(gotestsumExecutable string) *runner {
 
 func (r *runner) sanitizeAndParseArgs(args []string) ([]string, error) {
 	var sanitizedArgs []string
-	type action struct {
-		f   func(string) error
-		err string
-	}
-	var next *action
-	for i, arg := range args {
-		if next != nil {
-			if err := next.f(arg); err != nil {
-				return nil, err
-			}
-			next = nil
-			continue
-		} else if arg == "-retries" {
-			next = &action{
-				f: func(arg string) error {
-					var err error
-					r.retries, err = strconv.Atoi(arg)
-					return err
-				},
-				err: "got -retries flag with no value",
-			}
-			continue
-		} else if strings.HasPrefix(arg, "-retries=") {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, retriesFlag) {
 			var err error
-			r.retries, err = strconv.Atoi(arg[len("-retries="):])
+			r.retries, err = strconv.Atoi(strings.Split(arg, "=")[1])
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("invalid argument %q: %w", retriesFlag, err)
 			}
-			continue
-		} else if arg == "--junitfile" {
-			// --junitfile is used by gotestsum
-			next = &action{
-				f: func(arg string) error {
-					r.junitOutputPath = arg
-					return nil
-				},
-				err: "got --junitfile flag with no value",
+			if r.retries == 0 {
+				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", retriesFlag)
 			}
-			continue
-		} else if strings.HasPrefix(arg, "--junitfile=") {
-			// --junitfile is used by gotestsum
-			r.junitOutputPath = arg[len("--junitfile="):]
-			continue
-		} else if arg == "--" {
-			// Forward all arguments from -- on.
-			sanitizedArgs = append(sanitizedArgs, args[i:]...)
-			break
+			continue // this is a `testrunner` only arg and not passed through
 		}
+
+		if strings.HasPrefix(arg, coverProfileFlag) {
+			r.coverProfilePath = strings.Split(arg, "=")[1]
+		} else if strings.HasPrefix(arg, junitReportFlag) {
+			// --junitfile is used by gotestsum
+			r.junitOutputPath = strings.Split(arg, "=")[1]
+		}
+
 		sanitizedArgs = append(sanitizedArgs, arg)
 	}
-	if next != nil {
-		return nil, fmt.Errorf("incomplete command line arguments: %s", next.err)
-	}
 	if r.junitOutputPath == "" {
-		return nil, fmt.Errorf("missing required argument --junitfile")
+		return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
+	}
+	if r.coverProfilePath == "" {
+		return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
+	}
+	if r.retries == 0 {
+		return nil, fmt.Errorf("missing required argument %q", retriesFlag)
 	}
 	return sanitizedArgs, nil
 }
@@ -139,6 +130,11 @@ func (r *runner) newAttempt() *attempt {
 	a := &attempt{
 		runner: r,
 		number: len(r.attempts) + 1,
+		coverProfilePath: fmt.Sprintf(
+			"%v_%v%v",
+			strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
+			len(r.attempts),
+			codeCoverageExtension),
 		junitReport: &junitReport{
 			path: filepath.Join(os.TempDir(), fmt.Sprintf("temporalio-temporal-%s-junit.xml", uuid.NewString())),
 		},
