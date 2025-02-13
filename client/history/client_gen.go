@@ -94,6 +94,26 @@ func (c *clientImpl) CompleteNexusOperation(
 	return response, nil
 }
 
+func (c *clientImpl) CreateWorkflowRule(
+	ctx context.Context,
+	request *historyservice.CreateWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.CreateWorkflowRuleResponse, error) {
+	shardID := c.getRandomShard()
+	var response *historyservice.CreateWorkflowRuleResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.CreateWorkflowRule(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) DeleteDLQTasks(
 	ctx context.Context,
 	request *historyservice.DeleteDLQTasksRequest,
@@ -126,6 +146,26 @@ func (c *clientImpl) DeleteWorkflowExecution(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.DeleteWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) DeleteWorkflowRule(
+	ctx context.Context,
+	request *historyservice.DeleteWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteWorkflowRuleResponse, error) {
+	shardID := c.getRandomShard()
+	var response *historyservice.DeleteWorkflowRuleResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.DeleteWorkflowRule(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
@@ -186,6 +226,26 @@ func (c *clientImpl) DescribeWorkflowExecution(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.DescribeWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) DescribeWorkflowRule(
+	ctx context.Context,
+	request *historyservice.DescribeWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DescribeWorkflowRuleResponse, error) {
+	shardID := c.getRandomShard()
+	var response *historyservice.DescribeWorkflowRuleResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.DescribeWorkflowRule(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
@@ -550,6 +610,26 @@ func (c *clientImpl) ListTasks(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.ListTasks(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) ListWorkflowRules(
+	ctx context.Context,
+	request *historyservice.ListWorkflowRulesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ListWorkflowRulesResponse, error) {
+	shardID := c.getRandomShard()
+	var response *historyservice.ListWorkflowRulesResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ListWorkflowRules(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {

@@ -66,10 +66,14 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/createworkflowrule"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
+	"go.temporal.io/server/service/history/api/deleteworkflowrule"
+	"go.temporal.io/server/service/history/api/describeworkflowrule"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/api/getdlqtasks"
 	"go.temporal.io/server/service/history/api/listqueues"
+	"go.temporal.io/server/service/history/api/listworkflowrules"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -2604,6 +2608,78 @@ func (h *Handler) ResetActivity(
 	}
 
 	response, err = engine.ResetActivity(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+func (h *Handler) CreateWorkflowRule(
+	ctx context.Context, request *historyservice.CreateWorkflowRuleRequest,
+) (response *historyservice.CreateWorkflowRuleResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	response, err := createworkflowrule.Invoke(ctx, request)
+
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+func (h *Handler) DescribeWorkflowRule(
+	ctx context.Context, request *historyservice.DescribeWorkflowRuleRequest,
+) (response *historyservice.DescribeWorkflowRuleResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	response, err := describeworkflowrule.Invoke(ctx, request)
+
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+func (h *Handler) DeleteWorkflowRule(
+	ctx context.Context, request *historyservice.DeleteWorkflowRuleRequest,
+) (response *historyservice.DeleteWorkflowRuleResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	response, err := deleteworkflowrule.Invoke(ctx, request)
+
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+func (h *Handler) ListWorkflowRules(
+	ctx context.Context, request *historyservice.ListWorkflowRulesRequest,
+) (response *historyservice.ListWorkflowRulesResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	response, err := listworkflowrules.Invoke(ctx, request)
+
 	if err != nil {
 		return nil, h.convertError(err)
 	}
