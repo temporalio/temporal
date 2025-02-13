@@ -31,15 +31,17 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// 250 years. Maximum representable golang time.Duration is approximately 290 years (INT64_MAX * time.Nanosecond)
-const maxAllowedDuration = 250 * 365 * 24 * time.Hour
+const (
+	// 250 years. Maximum representable golang time.Duration is approximately 290 years (INT64_MAX * time.Nanosecond)
+	maxAllowedDuration = 250 * 365 * 24 * time.Hour
+	maxNanos           = int32(0) // A year is always a round number of seconds.
+)
 
 var (
 	errNegativeDuration = fmt.Errorf("negative duration")
 	errMismatchedSigns  = fmt.Errorf("duration has seconds and nanos with different signs")
 
 	maxSeconds = maxAllowedDuration.Nanoseconds() / 1e9
-	maxNanos   = int32(maxAllowedDuration.Nanoseconds() % 1e9)
 )
 
 func DurationValue(d *durationpb.Duration) time.Duration {
