@@ -39,7 +39,7 @@ var (
 	errMismatchedSigns  = fmt.Errorf("duration has seconds and nanos with different signs")
 
 	maxSeconds = maxAllowedDuration.Nanoseconds() / 1e9
-	maxNanos   = int32(maxAllowedDuration.Nanoseconds() - maxSeconds*1e9)
+	maxNanos   = int32(maxAllowedDuration.Nanoseconds() % 1e9)
 )
 
 func DurationValue(d *durationpb.Duration) time.Duration {
