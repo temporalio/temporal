@@ -510,7 +510,9 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_OneVersion_OneDeployme
 	expectedDeploymentSummaries := s.buildWorkerDeploymentSummary(
 		tv.DeploymentSeries(),
 		timestamppb.Now(),
-		&deploymentpb.RoutingConfig{},
+		&deploymentpb.RoutingConfig{
+			CurrentVersion: worker_versioning.UnversionedVersionId, // default current version is __unversioned__
+		},
 	)
 
 	s.startAndValidateWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
