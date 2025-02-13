@@ -1266,6 +1266,8 @@ message UpdateWorkflowExecutionOptionsResponse {
 // (-- api-linter: core::0133::request-unknown-fields=disabled
 // (-- api-linter: core::0133::request-parent-required=disabled
 message CreateWorkflowRuleRequest {
+    option (routing).any_host = true;
+
     string namespace_id = 1;
     temporal.api.workflowservice.v1.CreateWorkflowRuleRequest frontend_request = 2;
 
@@ -1273,13 +1275,15 @@ message CreateWorkflowRuleRequest {
 
 message CreateWorkflowRuleResponse {
     // Created rule.
-    temporal.api.rules.v1.WorkflowRule  rule = 1;
+    temporal.api.rules.v1.WorkflowRule rule = 1;
 
     // Job ID if force-scan flag was provided. Otherwise empty.
     string job_id = 2;
 }
 
 message DescribeWorkflowRuleRequest {
+    option (routing).any_host = true;
+
     string namespace_id = 1;
     temporal.api.workflowservice.v1.DescribeWorkflowRuleRequest frontend_request = 2;
 }
@@ -1290,6 +1294,8 @@ message DescribeWorkflowRuleResponse {
 }
 
 message DeleteWorkflowRuleRequest {
+    option (routing).any_host = true;
+
     string namespace_id = 1;
     temporal.api.workflowservice.v1.DeleteWorkflowRuleRequest frontend_request = 2;
 }
@@ -1298,6 +1304,8 @@ message DeleteWorkflowRuleResponse {
 }
 
 message ListWorkflowRulesRequest {
+    option (routing).any_host = true;
+
     string namespace_id = 1;
     temporal.api.workflowservice.v1.ListWorkflowRulesRequest frontend_request = 2;
 }

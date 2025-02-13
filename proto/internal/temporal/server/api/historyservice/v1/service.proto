@@ -437,4 +437,26 @@ service HistoryService {
     rpc ResetActivity (ResetActivityRequest) returns (ResetActivityResponse) {
     }
 
+    // Create a new workflow rule.
+    // If the rule with such ID already exist this call will fail.
+    // (-- api-linter: core::0133::http-uri-parent=disabled
+    // (-- api-linter: core::0133::response-message-name=disabled
+    // (-- api-linter: core::0133::method-signature=disabled
+    rpc CreateWorkflowRule (CreateWorkflowRuleRequest) returns (CreateWorkflowRuleResponse) {
+    }
+
+    // DescribeWorkflowRule return the rule specification for existing rule id.
+    // If there is no rule with such id - NO FOUND error will be returned.
+    rpc DescribeWorkflowRule (DescribeWorkflowRuleRequest) returns (DescribeWorkflowRuleResponse) {
+    }
+
+    // Delete rule by rule id
+    rpc DeleteWorkflowRule (DeleteWorkflowRuleRequest) returns (DeleteWorkflowRuleResponse) {
+    }
+
+    // Return all namespace rules
+    rpc ListWorkflowRules (ListWorkflowRulesRequest) returns (ListWorkflowRulesResponse) {
+    }
+
+
 }
