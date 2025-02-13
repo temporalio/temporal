@@ -104,7 +104,7 @@ func ValidateAndCapProtoDuration(d *durationpb.Duration) error {
 
 	if d.AsDuration() > maxAllowedDuration {
 		d.Seconds = maxSeconds
-		d.Nanos = int32(0) // A year is always a round number of seconds.
+		d.Nanos = 0 // A year is always a round number of seconds.
 	}
 
 	return nil
