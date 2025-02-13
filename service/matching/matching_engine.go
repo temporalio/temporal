@@ -109,8 +109,7 @@ type (
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
 		forwardedFrom             string
-		// TODO: Should we set this in forwarded polls as well, or is local wait time sufficient?
-		localPollStartTime time.Time
+		localPollStartTime        time.Time
 	}
 
 	userDataUpdate struct {
@@ -2493,9 +2492,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	if task.backlogCountHint != nil {
 		response.BacklogCountHint = task.backlogCountHint()
 	}
-	if task.pollerScalingDecision != nil {
-		response.PollerScalingDecision = task.pollerScalingDecision
-	}
+	response.PollerScalingDecision = task.pollerScalingDecision
 	return response
 }
 

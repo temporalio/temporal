@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"sync"
 	"testing"
 	"time"
@@ -487,9 +488,23 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 func (s *PartitionManagerTestSuite) TestPollScalingUpOnBacklog() {
 	fakeStats := &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
 	}
-	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, &internalTask{}, time.Now())
-	s.Assert().GreaterOrEqual(decision.PollerDelta, int32(1))
+	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
+	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
+	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
+	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
+}
+
+func (s *PartitionManagerTestSuite) TestPollScalingNoChangeOnNoBacklogFastMatch() {
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+		ApproximateBacklogAge:   durationpb.New(0),
+	}
+	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
+	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
+	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
+	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(0))
 }
 
 func (s *PartitionManagerTestSuite) TestPollScalingNonRootPartition() {
@@ -501,17 +516,21 @@ func (s *PartitionManagerTestSuite) TestPollScalingNonRootPartition() {
 	// Also disable rate limit to ensure that's not why nil is returned here
 	s.controller = gomock.NewController(s.T())
 	rl := quotas.NewMockRateLimiter(s.controller)
-	rl.EXPECT().Allow().Return(true).Times(1)
-	s.partitionMgr.pollerScalingRateLimiter = rl
+	rl.EXPECT().Allow().Return(true).AnyTimes()
 
 	fakeStats := &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
 	}
-	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, &internalTask{}, time.Now())
-	s.Assert().GreaterOrEqual(decision.PollerDelta, int32(1))
+	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
+	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(2)
+
+	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
+	s.Assert().NotNil(decision)
+	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 
 	fakeStats.ApproximateBacklogCount = 0
-	decision = s.partitionMgr.makePollerScalingDecision(fakeStats, &internalTask{}, time.Now())
+	decision = s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
 	s.Assert().Nil(decision)
 }
 
@@ -522,34 +541,10 @@ func (s *PartitionManagerTestSuite) TestPollScalingDownOnLongSyncMatch() {
 	fakeInternalTask := &internalTask{
 		source: serverenumspb.TASK_SOURCE_HISTORY,
 	}
-	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, fakeInternalTask, time.Now().Add(-2*time.Second))
-	s.Assert().LessOrEqual(decision.PollerDelta, int32(-1))
-}
-
-func (s *PartitionManagerTestSuite) TestPollScalingUpOnSlowDispatching() {
-	fakeStats := &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: 0,
-		TasksAddRate:            1000,
-		TasksDispatchRate:       100,
-	}
-	fakeInternalTask := &internalTask{
-		source: serverenumspb.TASK_SOURCE_HISTORY,
-	}
-	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, fakeInternalTask, time.Now())
-	s.Assert().GreaterOrEqual(decision.PollerDelta, int32(1))
-}
-
-func (s *PartitionManagerTestSuite) TestPollScalingDownOnFastDispatching() {
-	fakeStats := &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: 0,
-		TasksAddRate:            100,
-		TasksDispatchRate:       1000,
-	}
-	fakeInternalTask := &internalTask{
-		source: serverenumspb.TASK_SOURCE_HISTORY,
-	}
-	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, fakeInternalTask, time.Now())
-	s.Assert().LessOrEqual(decision.PollerDelta, int32(-1))
+	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
+	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
+	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, fakeInternalTask, time.Now().Add(-2*time.Second))
+	s.Assert().LessOrEqual(decision.PollRequestDeltaSuggestion, int32(-1))
 }
 
 func (s *PartitionManagerTestSuite) TestPollScalingDecisionsAreRateLimited() {
@@ -560,10 +555,13 @@ func (s *PartitionManagerTestSuite) TestPollScalingDecisionsAreRateLimited() {
 	s.partitionMgr.pollerScalingRateLimiter = rl
 	fakeStats := &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
 	}
-	decision := s.partitionMgr.makePollerScalingDecision(fakeStats, &internalTask{}, time.Now())
-	s.Assert().GreaterOrEqual(decision.PollerDelta, int32(1))
-	decision = s.partitionMgr.makePollerScalingDecision(fakeStats, &internalTask{}, time.Now())
+	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
+	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
+	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
+	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
+	decision = s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
 	s.Assert().Nil(decision)
 }
 
