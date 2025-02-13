@@ -117,6 +117,7 @@ UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_RO
 endif
 
 PINNED_DEPENDENCIES := \
+	modernc.org/sqlite@v1.34.0
 
 # Code coverage & test report output files.
 TEST_OUTPUT_ROOT        := ./.testoutput
