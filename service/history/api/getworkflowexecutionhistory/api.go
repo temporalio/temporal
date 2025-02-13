@@ -64,6 +64,8 @@ func Invoke(
 		return nil, err
 	}
 
+	isCloseEventOnly := request.Request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
+
 	// this function returns the following 7 things,
 	// 1. the current branch token (to use to retrieve history events)
 	// 2. the workflow run ID
@@ -94,6 +96,24 @@ func Invoke(
 			workflowConsistencyChecker,
 			eventNotifier,
 		)
+		if err != nil && isCloseEventOnly {
+			shardContext.GetLogger().Info("Got CurrentBranchChanged, retry with empty branch token")
+			// if we are only querying for close event, and encounter CurrentBranchChanged error, then we retry with empty branch token to get the close event
+			response, err = api.GetOrPollMutableState(
+				ctx,
+				shardContext,
+				&historyservice.GetMutableStateRequest{
+					NamespaceId:         namespaceUUID.String(),
+					Execution:           execution,
+					ExpectedNextEventId: expectedNextEventID,
+					CurrentBranchToken:  nil,
+					VersionHistoryItem:  nil,
+					VersionedTransition: nil,
+				},
+				workflowConsistencyChecker,
+				eventNotifier,
+			)
+		}
 		if err != nil {
 			return nil, "", 0, 0, false, nil, nil, err
 		}
@@ -120,7 +140,6 @@ func Invoke(
 	}
 
 	isLongPoll := request.Request.GetWaitNewEvent()
-	isCloseEventOnly := request.Request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 	execution := request.Request.Execution
 	var continuationToken *tokenspb.HistoryContinuation
 
