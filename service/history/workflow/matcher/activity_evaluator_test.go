@@ -217,9 +217,6 @@ func TestActivityInfoMatchEvaluator_Basic(t *testing.T) {
 		TaskQueue:        "task_queue",
 	}
 
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			match, err := MatchActivity(ai, tt.query)

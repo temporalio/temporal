@@ -46,15 +46,15 @@ const (
 	activityStartedTime            = "StartedTime"
 )
 
-type ActivityMatchEvaluator struct {
+type activityMatchEvaluator struct {
 	ai *persistencespb.ActivityInfo
 }
 
-func newActivityMatchEvaluator(ai *persistencespb.ActivityInfo) *ActivityMatchEvaluator {
-	return &ActivityMatchEvaluator{ai: ai}
+func newActivityMatchEvaluator(ai *persistencespb.ActivityInfo) *activityMatchEvaluator {
+	return &activityMatchEvaluator{ai: ai}
 }
 
-func (m *ActivityMatchEvaluator) Evaluate(query string) (bool, error) {
+func (m *activityMatchEvaluator) Evaluate(query string) (bool, error) {
 	if m.ai == nil {
 		return false, NewMatcherError("activity info is nil")
 	}
@@ -71,7 +71,7 @@ func (m *ActivityMatchEvaluator) Evaluate(query string) (bool, error) {
 	return m.evaluateExpression(whereCause)
 }
 
-func (m *ActivityMatchEvaluator) evaluateExpression(expr sqlparser.Expr) (bool, error) {
+func (m *activityMatchEvaluator) evaluateExpression(expr sqlparser.Expr) (bool, error) {
 
 	if expr == nil {
 		return false, NewMatcherError("input expression cannot be nil")
@@ -101,7 +101,7 @@ func (m *ActivityMatchEvaluator) evaluateExpression(expr sqlparser.Expr) (bool, 
 	}
 }
 
-func (m *ActivityMatchEvaluator) evaluateAnd(expr *sqlparser.AndExpr) (bool, error) {
+func (m *activityMatchEvaluator) evaluateAnd(expr *sqlparser.AndExpr) (bool, error) {
 	if expr == nil {
 		return false, NewMatcherError("And expression input expression cannot be nil")
 	}
@@ -113,7 +113,7 @@ func (m *ActivityMatchEvaluator) evaluateAnd(expr *sqlparser.AndExpr) (bool, err
 	return m.evaluateExpression(expr.Right)
 }
 
-func (m *ActivityMatchEvaluator) evaluateOr(expr *sqlparser.OrExpr) (bool, error) {
+func (m *activityMatchEvaluator) evaluateOr(expr *sqlparser.OrExpr) (bool, error) {
 	if expr == nil {
 		return false, NewMatcherError("Or expression input expression cannot be nil")
 	}
@@ -124,7 +124,7 @@ func (m *ActivityMatchEvaluator) evaluateOr(expr *sqlparser.OrExpr) (bool, error
 	return m.evaluateExpression(expr.Right)
 }
 
-func (m *ActivityMatchEvaluator) evaluateComparison(expr *sqlparser.ComparisonExpr) (bool, error) {
+func (m *activityMatchEvaluator) evaluateComparison(expr *sqlparser.ComparisonExpr) (bool, error) {
 	if expr == nil {
 		return false, NewMatcherError("ComparisonExpr input expression cannot be nil")
 	}
@@ -186,11 +186,11 @@ func (m *ActivityMatchEvaluator) evaluateComparison(expr *sqlparser.ComparisonEx
 	case activityStartedTime:
 		return m.compareStartTime(valStr, expr.Operator)
 	default:
-		return false, fmt.Errorf("unknown or unsupported search attribute name: %s", colNameStr)
+		return false, fmt.Errorf("unknown or unsupported activity search field name: %s", colNameStr)
 	}
 }
 
-func (m *ActivityMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (bool, error) {
+func (m *activityMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (bool, error) {
 	if expr == nil {
 		return false, NewMatcherError("RangeCond input expression cannot be nil")
 	}
@@ -224,21 +224,21 @@ func (m *ActivityMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (bool,
 		}
 
 	default:
-		return false, fmt.Errorf("unknown or unsupported search attribute name: %s", colNameStr)
+		return false, fmt.Errorf("unknown or unsupported activity search field: %s", colNameStr)
 	}
 }
 
-func (m *ActivityMatchEvaluator) compareActivityType(activityType string, operation string) (bool, error) {
+func (m *activityMatchEvaluator) compareActivityType(activityType string, operation string) (bool, error) {
 	existingActivityType := m.ai.GetActivityType().GetName()
 	return compareQueryString(activityType, existingActivityType, operation, activityTypeNameColName)
 }
 
-func (m *ActivityMatchEvaluator) compareActivityId(activityId string, operation string) (bool, error) {
+func (m *activityMatchEvaluator) compareActivityId(activityId string, operation string) (bool, error) {
 	existingActivityId := m.ai.GetActivityId()
 	return compareQueryString(activityId, existingActivityId, operation, workflowIDColName)
 }
 
-func (m *ActivityMatchEvaluator) compareActivityStatus(status string, operator string) (bool, error) {
+func (m *activityMatchEvaluator) compareActivityStatus(status string, operator string) (bool, error) {
 	if m.ai.Paused {
 		return compareQueryString(status, "Paused", operator, activityStatusColName)
 	}
@@ -254,17 +254,17 @@ func (m *ActivityMatchEvaluator) compareActivityStatus(status string, operator s
 	}
 }
 
-func (m *ActivityMatchEvaluator) compareActivityTaskQueue(taskQueue string, operator string) (bool, error) {
+func (m *activityMatchEvaluator) compareActivityTaskQueue(taskQueue string, operator string) (bool, error) {
 	existingTaskQueue := m.ai.TaskQueue
 	return compareQueryString(taskQueue, existingTaskQueue, operator, activityTaskQueueColName)
 }
 
-func (m *ActivityMatchEvaluator) compareActivityAttempts(attempts int, operator string) (bool, error) {
+func (m *activityMatchEvaluator) compareActivityAttempts(attempts int, operator string) (bool, error) {
 	existingAttempts := m.ai.Attempt
 	return compareQueryInt(attempts, int(existingAttempts), operator, activityAttemptsColName)
 }
 
-func (m *ActivityMatchEvaluator) compareBackoffInterval(intervalInSec int, operator string) (bool, error) {
+func (m *activityMatchEvaluator) compareBackoffInterval(intervalInSec int, operator string) (bool, error) {
 	if m.ai.Attempt < 2 {
 		// no backoff interval for first attempt
 		return false, nil
@@ -274,7 +274,7 @@ func (m *ActivityMatchEvaluator) compareBackoffInterval(intervalInSec int, opera
 	return compareQueryInt(intervalInSec, backoffIntervalSec, operator, activityBackoffIntervalColName)
 }
 
-func (m *ActivityMatchEvaluator) compareLastFailure(val string, operator string) (bool, error) {
+func (m *activityMatchEvaluator) compareLastFailure(val string, operator string) (bool, error) {
 	if m.ai.RetryLastFailure == nil || m.ai.RetryLastFailure.Message == "" {
 		return false, nil
 	}
@@ -284,7 +284,7 @@ func (m *ActivityMatchEvaluator) compareLastFailure(val string, operator string)
 	return strings.Contains(m.ai.RetryLastFailure.Message, val), nil
 }
 
-func (m *ActivityMatchEvaluator) compareStartTime(val string, operation string) (bool, error) {
+func (m *activityMatchEvaluator) compareStartTime(val string, operation string) (bool, error) {
 	expectedTime, err := sqlquery.ConvertToTime(val)
 	if err != nil {
 		return false, err
@@ -308,7 +308,7 @@ func (m *ActivityMatchEvaluator) compareStartTime(val string, operation string) 
 	}
 }
 
-func (m *ActivityMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toTime time.Time) (bool, error) {
+func (m *activityMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toTime time.Time) (bool, error) {
 	if m.ai.GetStartedTime() == nil {
 		return false, nil
 	}

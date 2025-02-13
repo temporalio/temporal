@@ -40,15 +40,15 @@ const (
 	workflowExecutionStatusColName = searchattribute.ExecutionStatus
 )
 
-type MutableStateMatchEvaluator struct {
+type mutableStateMatchEvaluator struct {
 	ms workflow.MutableState
 }
 
-func newMutableStateMatchEvaluator(ms workflow.MutableState) *MutableStateMatchEvaluator {
-	return &MutableStateMatchEvaluator{ms: ms}
+func newMutableStateMatchEvaluator(ms workflow.MutableState) *mutableStateMatchEvaluator {
+	return &mutableStateMatchEvaluator{ms: ms}
 }
 
-func (m *MutableStateMatchEvaluator) Evaluate(query string) (bool, error) {
+func (m *mutableStateMatchEvaluator) Evaluate(query string) (bool, error) {
 	query, err := prepareQuery(query)
 	if err != nil {
 		return false, err
@@ -62,7 +62,7 @@ func (m *MutableStateMatchEvaluator) Evaluate(query string) (bool, error) {
 	return m.evaluateExpression(whereCause)
 }
 
-func (m *MutableStateMatchEvaluator) evaluateExpression(expr sqlparser.Expr) (bool, error) {
+func (m *mutableStateMatchEvaluator) evaluateExpression(expr sqlparser.Expr) (bool, error) {
 
 	if expr == nil {
 		return false, NewMatcherError("input expression cannot be nil")
@@ -92,7 +92,7 @@ func (m *MutableStateMatchEvaluator) evaluateExpression(expr sqlparser.Expr) (bo
 	}
 }
 
-func (m *MutableStateMatchEvaluator) evaluateAnd(expr *sqlparser.AndExpr) (bool, error) {
+func (m *mutableStateMatchEvaluator) evaluateAnd(expr *sqlparser.AndExpr) (bool, error) {
 	if expr == nil {
 		return false, NewMatcherError("And expression input expression cannot be nil")
 	}
@@ -104,7 +104,7 @@ func (m *MutableStateMatchEvaluator) evaluateAnd(expr *sqlparser.AndExpr) (bool,
 	return m.evaluateExpression(expr.Right)
 }
 
-func (m *MutableStateMatchEvaluator) evaluateOr(expr *sqlparser.OrExpr) (bool, error) {
+func (m *mutableStateMatchEvaluator) evaluateOr(expr *sqlparser.OrExpr) (bool, error) {
 	if expr == nil {
 		return false, NewMatcherError("Or expression input expression cannot be nil")
 	}
@@ -115,7 +115,7 @@ func (m *MutableStateMatchEvaluator) evaluateOr(expr *sqlparser.OrExpr) (bool, e
 	return m.evaluateExpression(expr.Right)
 }
 
-func (m *MutableStateMatchEvaluator) evaluateComparison(expr *sqlparser.ComparisonExpr) (bool, error) {
+func (m *mutableStateMatchEvaluator) evaluateComparison(expr *sqlparser.ComparisonExpr) (bool, error) {
 	if expr == nil {
 		return false, NewMatcherError("ComparisonExpr input expression cannot be nil")
 	}
@@ -158,7 +158,7 @@ func (m *MutableStateMatchEvaluator) evaluateComparison(expr *sqlparser.Comparis
 	}
 }
 
-func (m *MutableStateMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (bool, error) {
+func (m *mutableStateMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (bool, error) {
 	if expr == nil {
 		return false, NewMatcherError("RangeCond input expression cannot be nil")
 	}
@@ -196,17 +196,17 @@ func (m *MutableStateMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (b
 	}
 }
 
-func (m *MutableStateMatchEvaluator) compareWorkflowType(workflowType string, operation string) (bool, error) {
+func (m *mutableStateMatchEvaluator) compareWorkflowType(workflowType string, operation string) (bool, error) {
 	existingWorkflowType := m.ms.GetExecutionInfo().WorkflowTypeName
 	return compareQueryString(existingWorkflowType, workflowType, operation, workflowTypeNameColName)
 }
 
-func (m *MutableStateMatchEvaluator) compareWorkflowID(workflowID string, operation string) (bool, error) {
+func (m *mutableStateMatchEvaluator) compareWorkflowID(workflowID string, operation string) (bool, error) {
 	existingWorkflowId := m.ms.GetExecutionInfo().WorkflowId
 	return compareQueryString(workflowID, existingWorkflowId, operation, workflowIDColName)
 }
 
-func (m *MutableStateMatchEvaluator) compareWorkflowStatus(status string, operation string) (bool, error) {
+func (m *mutableStateMatchEvaluator) compareWorkflowStatus(status string, operation string) (bool, error) {
 	if len(status) == 0 {
 		return false, NewMatcherError("workflow status cannot be empty")
 	}
@@ -221,7 +221,7 @@ func (m *MutableStateMatchEvaluator) compareWorkflowStatus(status string, operat
 	}
 }
 
-func (m *MutableStateMatchEvaluator) compareStartTime(val string, operation string) (bool, error) {
+func (m *mutableStateMatchEvaluator) compareStartTime(val string, operation string) (bool, error) {
 	expectedTime, err := sqlquery.ConvertToTime(val)
 	if err != nil {
 		return false, err
@@ -245,7 +245,7 @@ func (m *MutableStateMatchEvaluator) compareStartTime(val string, operation stri
 	}
 }
 
-func (m *MutableStateMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toTime time.Time) (bool, error) {
+func (m *mutableStateMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toTime time.Time) (bool, error) {
 	startTime := m.ms.GetExecutionState().StartTime.AsTime()
 	lc := startTime.Compare(fromTime)
 	rc := startTime.Compare(toTime)
