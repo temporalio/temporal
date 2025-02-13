@@ -82,6 +82,7 @@ func durationMultipleOf(amt int64, mult time.Duration) *durationpb.Duration {
 //  2. the golang representation of the duration is not negative
 //
 // Durations are capped to 250 years to prevent overflow and serialization errors.
+// NB: to cap durations, the proto Seconds and Nanos fields are modified!
 //
 // nil durations are considered valid because they will be treated as the zero value.
 // durationpb.CheckValid cannot be used directly because it will return an error for
