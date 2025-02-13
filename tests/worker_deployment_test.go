@@ -397,7 +397,8 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_WithConf
 		})
 	}()
 
-	// // To allow the first go-routine to start before the second one.
+	// To allow the first go-routine to start before the second one.
+	//nolint:forbidigo
 	time.Sleep(2 * time.Millisecond)
 
 	go func() {
@@ -473,6 +474,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NoConfli
 	}()
 
 	// To allow the first go-routine to start before the second one.
+	//nolint:forbidigo
 	time.Sleep(2 * time.Millisecond)
 
 	go func() {
@@ -557,7 +559,8 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_WithConf
 		})
 	}()
 
-	// // To allow the first go-routine to start before the second one.
+	// To allow the first go-routine to start before the second one.
+	//nolint:forbidigo
 	time.Sleep(2 * time.Millisecond)
 
 	go func() {
@@ -634,6 +637,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NoConfli
 	}()
 
 	// To allow the first go-routine to start before the second one.
+	//nolint:forbidigo
 	time.Sleep(2 * time.Millisecond)
 
 	go func() {
