@@ -58,7 +58,7 @@ const (
 	userDataClosed
 )
 
-const maxFastUserDataFetches = 10
+const maxFastUserDataFetches = 5
 
 type (
 	userDataManager interface {
@@ -288,9 +288,11 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 	// hasFetchedUserData is true if we have gotten a successful reply to GetTaskQueueUserData.
 	// It's used to control whether we do a long poll or a simple get.
 	hasFetchedUserData := false
+	userDataVersionChanged := false
 
 	op := func(ctx context.Context) error {
 		knownUserData, _, _ := m.GetUserData()
+		userDataVersionChanged = false
 
 		callCtx, cancel := context.WithTimeout(ctx, m.config.GetUserDataLongPollTimeout())
 		defer cancel()
@@ -323,6 +325,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// nil inner fields.
 		if res.GetUserData() != nil {
 			m.setUserDataForNonOwningPartition(res.GetUserData())
+			userDataVersionChanged = res.GetUserData().GetVersion() != knownUserData.GetVersion()
 			m.logNewUserData("fetched user data from parent", res.GetUserData())
 		} else {
 			m.logger.Debug("fetched user data from parent, no change")
@@ -344,7 +347,8 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// one. But if the remote is broken and returns success immediately, we might end up
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
-		if elapsed < m.config.GetUserDataMinWaitTime {
+		// If the user data version changed it means new data was received so we skip this check.
+		if !userDataVersionChanged && elapsed < m.config.GetUserDataMinWaitTime {
 			if fastResponseCounter >= maxFastUserDataFetches {
 				// maxFastUserDataFetches or more consecutive fast responses, let's throttle!
 				util.InterruptibleSleep(ctx, minWaitTime-elapsed)
@@ -575,7 +579,28 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 		} else if err != nil {
 			return nil, err
 		}
-		if req.WaitNewData && userData.GetVersion() == version {
+		if userData.GetVersion() > version {
+			resp.UserData = userData
+			m.logger.Info("returning user data",
+				tag.NewBoolTag("long-poll", req.WaitNewData),
+				tag.NewInt64("request-known-version", version),
+				tag.UserDataVersion(userData.Version),
+			)
+		} else if userData != nil && userData.Version < version && m.store != nil {
+			// When m.store == nil it means this is a non-owner partition, so it is possible
+			// for the requested version to be greater than the known version if there are
+			// concurrent user data updates in flight. We do not log an error in that case.
+
+			// This is highly unlikely to happen in the owner/root partition but may happen
+			// due to an edge case in during ownership transfer.
+			// We rely on client retries in this case to let the system eventually self-heal.
+			m.logger.Error("requested task queue user data for version greater than known version",
+				tag.NewInt64("request-known-version", version),
+				tag.UserDataVersion(userData.Version),
+			)
+			return nil, errRequestedVersionTooLarge
+		}
+		if req.WaitNewData && userData.GetVersion() <= version {
 			// long-poll: wait for data to change/appear
 			select {
 			case <-ctx.Done():
@@ -590,31 +615,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 				continue
 			}
 		}
-		if userData != nil {
-			if userData.Version > version {
-				resp.UserData = userData
-				m.logger.Info("returning user data",
-					tag.NewBoolTag("long-poll", req.WaitNewData),
-					tag.NewInt64("request-known-version", version),
-					tag.UserDataVersion(userData.Version),
-				)
-			} else if userData.Version < version {
-				if m.store != nil {
-					// When m.store == nil it means this is a non-owner partition, so it is possible
-					// for the requested version to be greater than the known version if there are
-					// concurrent user data updates in flight. We do not log an error in that case.
-
-					// This is highly unlikely to happen in the owner/root partition but may happen
-					// due to an edge case in during ownership transfer.
-					// We rely on client retries in this case to let the system eventually self-heal.
-					m.logger.Error("requested task queue user data for version greater than known version",
-						tag.NewInt64("request-known-version", version),
-						tag.UserDataVersion(userData.Version),
-					)
-				}
-				return nil, errRequestedVersionTooLarge
-			}
-		} else {
+		if userData == nil {
 			m.logger.Debug("returning empty user data (no data)", tag.NewBoolTag("long-poll", req.WaitNewData))
 		}
 		return resp, nil
