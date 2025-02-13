@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -770,6 +771,56 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 		a.Error(err)
 		var nfe *serviceerror.NotFound
 		a.True(errors.As(err, &nfe))
+	}, time.Second*5, time.Millisecond*200)
+}
+
+func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
+	// s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	s.startVersionWorkflow(ctx, tv1)
+
+	// Wait for pollers going away
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     s.Namespace().String(),
+			TaskQueue:     tv1.TaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, resp.Pollers)
+	}, 10*time.Second, time.Second)
+
+	// concurrent delete version requests should not break the system.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		s.tryDeleteVersion(ctx, tv1, true, true)
+	}()
+	go func() {
+		defer wg.Done()
+		s.tryDeleteVersion(ctx, tv1, true, true)
+	}()
+	wg.Wait()
+
+	// deployment version does not exist in the deployment list
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv1.DeploymentSeries(),
+		})
+		a.NoError(err)
+		if resp != nil {
+			for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+				a.NotEqual(tv1.DeploymentVersionString(), vs.Version)
+			}
+		}
 	}, time.Second*5, time.Millisecond*200)
 }
 

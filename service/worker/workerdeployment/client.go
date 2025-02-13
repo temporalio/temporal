@@ -564,7 +564,7 @@ func (d *ClientImpl) SetRampingVersion(
 ) (_ *deploymentspb.SetRampingVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SetRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
-	requestID := uuid.New()
+
 	var err error
 	if version != "" {
 		var versionObj *deploymentspb.WorkerDeploymentVersion
@@ -595,13 +595,30 @@ func (d *ClientImpl) SetRampingVersion(
 		return nil, err
 	}
 
+	updateID := uuid.New()
+	if conflictToken != nil {
+		// When a conflict token is provided, we use the hash of the conflict token, deploymentName, version and the ceiled percentage. This is done
+		// to ensure the automatic de-duplication of updates with the same UpdateID.
+
+		ceiledPercentage := convert.Int64Ceil(float64(percentage))
+		stringedPercentage := convert.Int64ToString(ceiledPercentage)
+
+		combinedBytes := make([]byte, 0, len(conflictToken)+len(deploymentName)+len(version)+len(stringedPercentage))
+		combinedBytes = append(combinedBytes, conflictToken...)
+		combinedBytes = append(combinedBytes, []byte(deploymentName)...)
+		combinedBytes = append(combinedBytes, []byte(version)...)
+		combinedBytes = append(combinedBytes, []byte(stringedPercentage)...)
+
+		updateID = convert.Uint64ToString(farm.Fingerprint64(combinedBytes))
+	}
+
 	outcome, err := d.update(
 		ctx,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetRampingVersion, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+			Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
 		},
 	)
 	if err != nil {

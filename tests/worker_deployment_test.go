@@ -355,7 +355,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	}, time.Second*10, time.Millisecond*1000)
 }
 
-// Testing UpdateID de-duplication
+// Testing UpdateID de-duplication for SetCurrentVersion
 
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_WithConflictToken_DuplicateUpdateID() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
@@ -511,6 +511,167 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NoConfli
 	// Since the first update completes successfully, the previous version will be __unversioned__
 	s.Equal(worker_versioning.UnversionedVersionId, resp1.GetPreviousVersion())
 	// Since the second update was de-duped in the update handler, the previous version will be the current version which is the version from the first update
+	s.Equal(tv.DeploymentVersionString(), resp2.GetPreviousVersion())
+}
+
+// Testing UpdateID de-duplication for SetRampingVersion
+
+func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_WithConflictToken_DuplicateUpdateID() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s)
+
+	go s.pollFromDeployment(ctx, tv)
+
+	var cT []byte
+	// No ramping deployment version set.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal("", resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+		cT = resp.GetConflictToken()
+	}, time.Second*10, time.Millisecond*1000)
+	s.ensureCreateVersionInDeployment(tv)
+
+	// Simulate two concurrent updates with the same updateID but with different identities.
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var err1, err2 error
+	var resp1, resp2 *workflowservice.SetWorkerDeploymentRampingVersionResponse
+
+	go func() {
+		defer wg.Done()
+		resp1, err1 = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+			Version:        tv.DeploymentVersionString(),
+			Percentage:     5,
+			ConflictToken:  cT,
+			Identity:       tv.ClientIdentity(),
+		})
+	}()
+
+	// // To allow the first go-routine to start before the second one.
+	time.Sleep(2 * time.Millisecond)
+
+	go func() {
+		defer wg.Done()
+		resp2, err2 = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+			Version:        tv.DeploymentVersionString(),
+			Percentage:     5,
+			ConflictToken:  cT,
+			Identity:       tv.Any().String(), // note: different identity
+		})
+	}()
+
+	wg.Wait()
+
+	s.NoError(err1)
+	s.NoError(err2)
+
+	// Assert that the first update succeeded, due to the forceful sleep, and the second was ignored by verifying the last modifier identity.
+	// Since the second go-routine would have it's request de-duped, the last modifier identity would be the client from the first go-routine.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
+	}, time.Second*10, time.Millisecond*1000)
+
+	// Since the second update was de-duped and was not accepted by the update handler, the response objects from both the updates
+	// would be identitical and have the same previous current version ("")
+	s.Equal(resp1.GetPreviousVersion(), resp2.GetPreviousVersion())
+	s.Equal("", resp1.GetPreviousVersion())
+}
+
+func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NoConflictToken_DuplicateRequests() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s)
+
+	go s.pollFromDeployment(ctx, tv)
+
+	// No ramping deployment version set.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal("", resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+	}, time.Second*10, time.Millisecond*1000)
+	s.ensureCreateVersionInDeployment(tv)
+
+	// Simulate two concurrent updates with different identities and no conflict token set.
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var err1, err2 error
+	var resp1, resp2 *workflowservice.SetWorkerDeploymentRampingVersionResponse
+	go func() {
+		defer wg.Done()
+		resp1, err1 = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+			Version:        tv.DeploymentVersionString(),
+			Identity:       tv.ClientIdentity(),
+		})
+	}()
+
+	// To allow the first go-routine to start before the second one.
+	time.Sleep(2 * time.Millisecond)
+
+	go func() {
+		defer wg.Done()
+		resp2, err2 = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+			Version:        tv.DeploymentVersionString(),
+			Identity:       tv.Any().String(), // note: different identity
+		})
+	}()
+
+	wg.Wait()
+
+	s.NoError(err1)
+	s.NoError(err2)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity()) // note: the last modifier identity should be the one from the first update
+	}, time.Second*10, time.Millisecond*1000)
+
+	// Since the two clients did not provide a conflict token, the updateID for both these requests will be different. This will result in both the updates being applied
+	// and de-duplication will take place inside the update handler. This behaviour is different from the test above where the update requests share the same updateID
+	// and only one update gets accepted.
+
+	// Since both the updates are accepted, the response objects will be different.
+
+	// Since the first update completes successfully, the previous version will be ""
+	s.Equal("", resp1.GetPreviousVersion())
+	// Since the second update was de-duped in the update handler, the previous version will be the current ramping version which is the version from the first update
 	s.Equal(tv.DeploymentVersionString(), resp2.GetPreviousVersion())
 }
 
