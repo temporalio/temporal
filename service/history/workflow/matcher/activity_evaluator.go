@@ -23,7 +23,6 @@
 package matcher
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -131,12 +130,12 @@ func (m *activityMatchEvaluator) evaluateComparison(expr *sqlparser.ComparisonEx
 
 	colName, ok := expr.Left.(*sqlparser.ColName)
 	if !ok {
-		return false, fmt.Errorf("invalid filter name: %s", sqlparser.String(expr.Left))
+		return false, NewMatcherError("invalid filter name: %s", sqlparser.String(expr.Left))
 	}
 	colNameStr := sqlparser.String(colName)
 	valExpr, ok := expr.Right.(*sqlparser.SQLVal)
 	if !ok {
-		return false, fmt.Errorf("invalid value: %s", sqlparser.String(expr.Right))
+		return false, NewMatcherError("invalid value: %s", sqlparser.String(expr.Right))
 	}
 	valStr := sqlparser.String(valExpr)
 
@@ -186,7 +185,7 @@ func (m *activityMatchEvaluator) evaluateComparison(expr *sqlparser.ComparisonEx
 	case activityStartedTime:
 		return m.compareStartTime(valStr, expr.Operator)
 	default:
-		return false, fmt.Errorf("unknown or unsupported activity search field name: %s", colNameStr)
+		return false, NewMatcherError("unknown or unsupported activity search field: %s", colNameStr)
 	}
 }
 
@@ -196,7 +195,7 @@ func (m *activityMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (bool,
 	}
 	colName, ok := expr.Left.(*sqlparser.ColName)
 	if !ok {
-		return false, fmt.Errorf("unknown or unsupported search attribute name: %s", sqlparser.String(expr.Left))
+		return false, NewMatcherError("unknown or unsupported search field name: %s", sqlparser.String(expr.Left))
 	}
 	colNameStr := sqlparser.String(colName)
 
@@ -224,7 +223,7 @@ func (m *activityMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (bool,
 		}
 
 	default:
-		return false, fmt.Errorf("unknown or unsupported activity search field: %s", colNameStr)
+		return false, NewMatcherError("unknown or unsupported activity search field: %s", colNameStr)
 	}
 }
 
