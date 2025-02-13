@@ -34,6 +34,8 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
+const invalidHeapIndex = -13 // use unusual value to stand out in panics
+
 type pollerPQ struct {
 	heap []*waitingPoller
 }
@@ -71,7 +73,7 @@ func (p *pollerPQ) Swap(i int, j int) {
 
 // implements heap.Interface, do not call directly
 func (p *pollerPQ) Push(x any) {
-	poller := x.(*waitingPoller)
+	poller := x.(*waitingPoller) // nolint:revive
 	poller.matchHeapIndex = len(p.heap)
 	p.heap = append(p.heap, poller)
 }
@@ -81,7 +83,7 @@ func (p *pollerPQ) Pop() any {
 	last := len(p.heap) - 1
 	poller := p.heap[last]
 	p.heap = p.heap[:last]
-	poller.matchHeapIndex = -11
+	poller.matchHeapIndex = invalidHeapIndex
 	return poller
 }
 
@@ -125,7 +127,7 @@ func (t *taskPQ) Swap(i int, j int) {
 
 // implements heap.Interface, do not call directly
 func (t *taskPQ) Push(x any) {
-	task := x.(*internalTask)
+	task := x.(*internalTask) // nolint:revive
 	task.matchHeapIndex = len(t.heap)
 	t.heap = append(t.heap, task)
 
@@ -139,7 +141,7 @@ func (t *taskPQ) Pop() any {
 	last := len(t.heap) - 1
 	task := t.heap[last]
 	t.heap = t.heap[:last]
-	task.matchHeapIndex = -13
+	task.matchHeapIndex = invalidHeapIndex
 
 	if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 		t.ages.record(task.event.Data.CreateTime, -1)
@@ -156,7 +158,7 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 		if task.isPollForwarder || !pred(task) {
 			return false
 		}
-		task.matchHeapIndex = -14 // maintain heap/index invariant
+		task.matchHeapIndex = invalidHeapIndex - 1 // maintain heap/index invariant
 		if task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && task.forwardInfo == nil {
 			t.ages.record(task.event.Data.CreateTime, -1)
 		}
@@ -231,7 +233,7 @@ func (d *matcherData) EnqueueTaskAndWait(ctxs []context.Context, task *internalT
 				task.wake(&matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
 			}
 		})
-		defer stop()
+		defer stop() // nolint:revive // there's only ever a small number of contexts
 	}
 
 	return task.waitForMatch()
@@ -279,7 +281,7 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 				poller.wake(&matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
 			}
 		})
-		defer stop()
+		defer stop() // nolint:revive // there's only ever a small number of contexts
 	}
 
 	return poller.waitForMatch()
@@ -329,9 +331,10 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 // findMatch should return the highest priority task+poller match even if the per-task rate
 // limit doesn't allow the task to be matched yet.
 // call with lock held
+// nolint:revive // will improve later
 func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPoller) {
-	// FIXME: optimize so it's not O(d*n) worst case
-	// FIXME: this isn't actually correct (iterates over heap as slice)
+	// TODO(pri): optimize so it's not O(d*n) worst case
+	// TODO(pri): this iterates over heap as slice, which isn't quite correct, but okay for now
 	for _, task := range d.tasks.heap {
 		if !allowForwarding && task.isPollForwarder {
 			continue

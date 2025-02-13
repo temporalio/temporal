@@ -89,7 +89,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	tlCfg.forwarderConfig = forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },
 		ForwarderMaxOutstandingTasks: func() int { return 1 },
-		ForwarderMaxRatePerSecond:    func() int { return 2 },
+		ForwarderMaxRatePerSecond:    func() float64 { return 2 },
 		ForwarderMaxChildrenPerNode:  func() int { return 20 },
 	}
 	t.childConfig = tlCfg
@@ -752,7 +752,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	}()
 
 	taskCompleted := false
-	completionFunc := func(*persistencespb.AllocatedTaskInfo, error) {
+	completionFunc := func(*internalTask, taskResponse) {
 		taskCompleted = true
 	}
 

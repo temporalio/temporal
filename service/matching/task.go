@@ -71,7 +71,7 @@ type (
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
 		namespace        namespace.Name
 		source           enumsspb.TaskSource
-		responseC        chan taskResponse // non-nil only where there is a caller waiting for response (sync-match)
+		responseC        chan taskResponse // non-nil only where there is a caller waiting for response (sync match)
 		backlogCountHint func() int64
 		// forwardInfo contains information about forward source partition and versioning decisions made by it
 		// a parent partition receiving forwarded tasks makes no versioning decisions and only follows what the source
@@ -80,11 +80,11 @@ type (
 		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks, this is populated
 		// based on forwardInfo.
 		redirectInfo *taskqueuespb.BuildIdRedirectInfo
+		recycleToken func()
 
 		// These fields are for use by matcherData:
 		waitableMatchResult
 		forwardCtx      context.Context // non-nil for sync match task only
-		recycleToken    func()
 		isPollForwarder bool
 	}
 

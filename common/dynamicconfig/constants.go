@@ -1070,6 +1070,12 @@ See DynamicRateLimitingParams comments for more details.`,
 		time.Minute,
 		`MatchingLongPollExpirationInterval is the long poll expiration interval in the matching service`,
 	)
+	// TODO(pri): old matcher cleanup
+	MatchingSyncMatchWaitDuration = NewTaskQueueDurationSetting(
+		"matching.syncMatchWaitDuration",
+		200*time.Millisecond,
+		`MatchingSyncMatchWaitDuration is to wait time for sync match`,
+	)
 	MatchingHistoryMaxPageSize = NewNamespaceIntSetting(
 		"matching.historyMaxPageSize",
 		primitives.GetHistoryMaxPageSize,
@@ -1254,6 +1260,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.maxTaskQueuesInDeployment",
 		1000,
 		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registed in a single deployment`,
+	)
+	MatchingUseNewMatcher = NewTaskQueueBoolSetting(
+		"matching.useNewMatcher",
+		false,
+		`Use priority-enabled TaskMatcher.`,
 	)
 
 	// keys for history

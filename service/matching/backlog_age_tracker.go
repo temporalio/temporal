@@ -50,7 +50,7 @@ func (b backlogAgeTracker) record(ts *timestamppb.Timestamp, delta int) {
 	createTime := ts.AsTime().UnixNano()
 	count := delta
 	if prev, ok := b.tree.Get(createTime); ok {
-		count += prev.(int)
+		count += prev.(int) // nolint:revive
 	}
 	if count = max(0, count); count == 0 {
 		b.tree.Remove(createTime)
@@ -66,6 +66,6 @@ func (b backlogAgeTracker) getAge() time.Duration {
 		return emptyBacklogAge
 	}
 	k, _ := b.tree.Min()
-	oldest := k.(int64)
+	oldest := k.(int64) // nolint:revive
 	return time.Since(time.Unix(0, oldest))
 }

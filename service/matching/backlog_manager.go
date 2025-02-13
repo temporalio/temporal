@@ -68,7 +68,8 @@ type (
 		pqMgr               physicalTaskQueueManager
 		db                  *taskQueueDB
 		taskWriter          *taskWriter
-		taskReader          *taskReader // reads tasks from db and async matches it with poller
+		taskReader          *taskReader    // reads tasks from db and async matches it with poller
+		priTaskReader       *priTaskReader // reads tasks from db and async matches it with poller
 		taskGC              *taskGC
 		taskAckManager      ackManager // tracks ackLevel for delivered messages
 		config              *taskQueueConfig
@@ -108,7 +109,11 @@ func newBacklogManager(
 	}
 	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
 	bmg.taskWriter = newTaskWriter(bmg)
-	bmg.taskReader = newTaskReader(bmg)
+	if config.NewMatcher() {
+		bmg.priTaskReader = newPriTaskReader(bmg)
+	} else {
+		bmg.taskReader = newTaskReader(bmg)
+	}
 	bmg.taskAckManager = newAckManager(bmg.db, logger)
 	bmg.taskGC = newTaskGC(bmg.db, config)
 
@@ -135,7 +140,11 @@ func (c *backlogManagerImpl) signalIfFatal(err error) bool {
 
 func (c *backlogManagerImpl) Start() {
 	c.taskWriter.Start()
-	c.taskReader.Start()
+	if c.priTaskReader != nil {
+		c.priTaskReader.Start()
+	} else {
+		c.taskReader.Start()
+	}
 }
 
 func (c *backlogManagerImpl) Stop() {
@@ -154,7 +163,11 @@ func (c *backlogManagerImpl) Stop() {
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
 	c.taskWriter.Stop()
-	c.taskReader.Stop()
+	if c.priTaskReader != nil {
+		c.priTaskReader.Stop()
+	} else {
+		c.taskReader.Stop()
+	}
 }
 
 func (c *backlogManagerImpl) SetInitializedError(err error) {
@@ -176,9 +189,21 @@ func (c *backlogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error 
 	_, err := c.taskWriter.appendTask(taskInfo)
 	c.signalIfFatal(err)
 	if err == nil {
-		c.taskReader.Signal()
+		if c.priTaskReader != nil {
+			c.priTaskReader.Signal()
+		} else {
+			c.taskReader.Signal()
+		}
 	}
 	return err
+}
+
+// TODO(pri): old matcher cleanup
+func (c *backlogManagerImpl) processSpooledTask(
+	ctx context.Context,
+	task *internalTask,
+) error {
+	return c.pqMgr.ProcessSpooledTask(ctx, task)
 }
 
 func (c *backlogManagerImpl) addSpooledTask(ctx context.Context, task *internalTask) error {
@@ -186,7 +211,24 @@ func (c *backlogManagerImpl) addSpooledTask(ctx context.Context, task *internalT
 }
 
 func (c *backlogManagerImpl) BacklogCountHint() int64 {
-	return c.taskReader.getLoadedTasks()
+	if c.priTaskReader != nil {
+		return c.priTaskReader.getLoadedTasks()
+	}
+	return c.taskAckManager.getBacklogCountHint()
+}
+
+func (c *backlogManagerImpl) BacklogHeadAge() time.Duration {
+	if c.priTaskReader != nil {
+		return c.priTaskReader.getBacklogHeadAge()
+	}
+	return c.taskReader.getBacklogHeadAge()
+}
+
+func (c *backlogManagerImpl) ReadBufferLength() int64 {
+	if c.priTaskReader != nil {
+		return c.priTaskReader.loadedTasks.Load()
+	}
+	return int64(len(c.taskReader.taskBuffer))
 }
 
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
@@ -245,7 +287,11 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 			c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
 			return
 		}
-		c.taskReader.Signal()
+		if c.priTaskReader != nil {
+			c.priTaskReader.Signal()
+		} else {
+			c.taskReader.Signal()
+		}
 	}
 
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())

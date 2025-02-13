@@ -47,6 +47,7 @@ type (
 		PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
+		SyncMatchWaitDuration                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		RPS                                  dynamicconfig.IntPropertyFn
 		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
 		AlignMembershipChange                dynamicconfig.DurationPropertyFn
@@ -60,6 +61,7 @@ type (
 		// task queue configuration
 
 		RangeSize                                int64
+		NewMatcher                               dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -131,12 +133,14 @@ type (
 	taskQueueConfig struct {
 		forwarderConfig
 		CallerInfo                   headers.CallerInfo
+		SyncMatchWaitDuration        func() time.Duration
 		BacklogNegligibleAge         func() time.Duration
 		MaxWaitForPollerBeforeFwd    func() time.Duration
 		QueryPollerUnavailableWindow func() time.Duration
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
 		RangeSize                  int64
+		NewMatcher                 func() bool
 		GetTasksBatchSize          func() int
 		UpdateAckInterval          func() time.Duration
 		MaxTaskQueueIdleTime       func() time.Duration
@@ -213,6 +217,7 @@ func NewConfig(
 		PersistencePerShardNamespaceMaxQPS:       dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		PersistenceDynamicRateLimitingParams:     dynamicconfig.MatchingPersistenceDynamicRateLimitingParams.Get(dc),
 		PersistenceQPSBurstRatio:                 dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
+		SyncMatchWaitDuration:                    dynamicconfig.MatchingSyncMatchWaitDuration.Get(dc),
 		LoadUserData:                             dynamicconfig.MatchingLoadUserData.Get(dc),
 		HistoryMaxPageSize:                       dynamicconfig.MatchingHistoryMaxPageSize.Get(dc),
 		EnableDeployments:                        dynamicconfig.EnableDeployments.Get(dc),
@@ -220,6 +225,7 @@ func NewConfig(
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
+		NewMatcher:                               dynamicconfig.MatchingUseNewMatcher.Get(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
@@ -286,6 +292,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	return &taskQueueConfig{
 		CallerInfo: headers.NewBackgroundCallerInfo(ns.String()),
 		RangeSize:  config.RangeSize,
+		NewMatcher: func() bool {
+			return config.NewMatcher(ns.String(), taskQueueName, taskType)
+		},
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
 		},
@@ -297,6 +306,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		MinTaskThrottlingBurstSize: func() int {
 			return config.MinTaskThrottlingBurstSize(ns.String(), taskQueueName, taskType)
+		},
+		SyncMatchWaitDuration: func() time.Duration {
+			return config.SyncMatchWaitDuration(ns.String(), taskQueueName, taskType)
 		},
 		BacklogNegligibleAge: func() time.Duration {
 			return config.BacklogNegligibleAge(ns.String(), taskQueueName, taskType)

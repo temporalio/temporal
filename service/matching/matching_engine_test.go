@@ -1108,17 +1108,17 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.True(ok)
 
-	mgrImpl.matcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
-	mgrImpl.matcher.rateLimiter = quotas.NewRateLimiter(
+	mgrImpl.oldMatcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
+	mgrImpl.oldMatcher.rateLimiter = quotas.NewRateLimiter(
 		defaultTaskDispatchRPS,
 		defaultTaskDispatchRPS,
 	)
-	mgrImpl.matcher.dynamicRateBurst = &dynamicRateBurstWrapper{
+	mgrImpl.oldMatcher.dynamicRateBurst = &dynamicRateBurstWrapper{
 		MutableRateBurst: quotas.NewMutableRateBurst(
 			defaultTaskDispatchRPS,
 			defaultTaskDispatchRPS,
 		),
-		RateLimiterImpl: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiterImpl),
+		RateLimiterImpl: mgrImpl.oldMatcher.rateLimiter.(*quotas.RateLimiterImpl),
 	}
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 
@@ -1324,17 +1324,17 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 	s.Assert().True(ok)
 
-	mgrImpl.matcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
-	mgrImpl.matcher.rateLimiter = quotas.NewRateLimiter(
+	mgrImpl.oldMatcher.config.MinTaskThrottlingBurstSize = func() int { return 0 }
+	mgrImpl.oldMatcher.rateLimiter = quotas.NewRateLimiter(
 		defaultTaskDispatchRPS,
 		defaultTaskDispatchRPS,
 	)
-	mgrImpl.matcher.dynamicRateBurst = &dynamicRateBurstWrapper{
+	mgrImpl.oldMatcher.dynamicRateBurst = &dynamicRateBurstWrapper{
 		MutableRateBurst: quotas.NewMutableRateBurst(
 			defaultTaskDispatchRPS,
 			defaultTaskDispatchRPS,
 		),
-		RateLimiterImpl: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiterImpl),
+		RateLimiterImpl: mgrImpl.oldMatcher.rateLimiter.(*quotas.RateLimiterImpl),
 	}
 	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
 	mgr.Start()

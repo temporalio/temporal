@@ -26,8 +26,6 @@ package matching
 
 import (
 	"context"
-	"errors"
-	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -37,95 +35,54 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
-	// Forwarder is the type that contains state pertaining to
+	// priForwarder is the type that contains state pertaining to
 	// the api call forwarder component
-	Forwarder struct {
+	priForwarder struct {
 		cfg       *forwarderConfig
 		queue     *PhysicalTaskQueueKey
 		partition *tqid.NormalPartition
 		client    matchingservice.MatchingServiceClient
-
-		// token channels that vend tokens necessary to make
-		// API calls exposed by forwarder. Tokens are used
-		// to enforce maxOutstanding forwarded calls from this
-		// instance. And channels are used so that the caller
-		// can use them in a select{} block along with other
-		// conditions
-		addReqToken  atomic.Value
-		pollReqToken atomic.Value
-
-		// cached values of maxOutstanding dynamic config values.
-		// these are used to detect changes
-		outstandingTasksLimit int32
-		outstandingPollsLimit int32
-
-		// todo: implement a rate limiter that automatically
-		// adjusts rate based on ServiceBusy errors from API calls
-		limiter *quotas.DynamicRateLimiterImpl
-	}
-	// ForwarderReqToken is the token that must be acquired before
-	// making forwarder API calls. This type contains the state
-	// for the token itself
-	ForwarderReqToken struct {
-		ch chan *ForwarderReqToken
 	}
 )
 
-var (
-	errInvalidTaskQueueType = errors.New("unrecognized task queue type")
-	errForwarderSlowDown    = errors.New("limit exceeded")
-)
+// TODO(pri): old matcher cleanup, move to here
+// var errInvalidTaskQueueType = errors.New("unrecognized task queue type")
 
-// newForwarder returns an instance of Forwarder object which
+// newPriForwarder returns an instance of priForwarder object which
 // can be used to forward api request calls from a task queue
 // child partition to a task queue parent partition. The returned
 // forwarder is tied to a single task queue partition. All exposed
 // methods can return the following errors:
 // Returns following errors:
 //   - taskqueue.ErrNoParent, taskqueue.ErrInvalidDegree: If this task queue doesn't have a parent to forward to
-//   - errForwarderSlowDown: When the rate limit is exceeded
-func newForwarder(
+func newPriForwarder(
 	cfg *forwarderConfig,
 	queue *PhysicalTaskQueueKey,
 	client matchingservice.MatchingServiceClient,
-) (*Forwarder, error) {
+) (*priForwarder, error) {
 	partition, ok := queue.Partition().(*tqid.NormalPartition)
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument("physical queue of normal partition expected")
 	}
-
-	fwdr := &Forwarder{
-		cfg:                   cfg,
-		client:                client,
-		partition:             partition,
-		queue:                 queue,
-		outstandingTasksLimit: int32(cfg.ForwarderMaxOutstandingTasks()),
-		outstandingPollsLimit: int32(cfg.ForwarderMaxOutstandingPolls()),
-		limiter: quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(cfg.ForwarderMaxRatePerSecond()) },
-		),
-	}
-	fwdr.addReqToken.Store(newForwarderReqToken(cfg.ForwarderMaxOutstandingTasks()))
-	fwdr.pollReqToken.Store(newForwarderReqToken(cfg.ForwarderMaxOutstandingPolls()))
-	return fwdr, nil
+	return &priForwarder{
+		cfg:       cfg,
+		client:    client,
+		partition: partition,
+		queue:     queue,
+	}, nil
 }
 
 // ForwardTask forwards an activity or workflow task to the parent task queue partition if it exists
-func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) error {
-	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
-	target, err := fwdr.partition.ParentPartition(degree)
+func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) error {
+	degree := f.cfg.ForwarderMaxChildrenPerNode()
+	target, err := f.partition.ParentPartition(degree)
 	if err != nil {
 		return err
-	}
-
-	if !fwdr.limiter.Allow() {
-		return errForwarderSlowDown
 	}
 
 	var expirationDuration *durationpb.Duration
@@ -139,37 +96,38 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		expirationDuration = durationpb.New(remaining)
 	}
 
-	switch fwdr.partition.TaskType() {
+	// nolint:exhaustive // there's a default clause
+	switch f.partition.TaskType() {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
-		_, err = fwdr.client.AddWorkflowTask(
+		_, err = f.client.AddWorkflowTask(
 			ctx, &matchingservice.AddWorkflowTaskRequest{
 				NamespaceId: task.event.Data.GetNamespaceId(),
 				Execution:   task.workflowExecution(),
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
-					Kind: fwdr.partition.Kind(),
+					Kind: f.partition.Kind(),
 				},
 				ScheduledEventId:       task.event.Data.GetScheduledEventId(),
 				Clock:                  task.event.Data.GetClock(),
 				ScheduleToStartTimeout: expirationDuration,
-				ForwardInfo:            fwdr.getForwardInfo(task),
+				ForwardInfo:            f.getForwardInfo(task),
 				VersionDirective:       task.event.Data.GetVersionDirective(),
 				Priority:               task.event.Data.GetPriority(),
 			},
 		)
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
-		_, err = fwdr.client.AddActivityTask(
+		_, err = f.client.AddActivityTask(
 			ctx, &matchingservice.AddActivityTaskRequest{
 				NamespaceId: task.event.Data.GetNamespaceId(),
 				Execution:   task.workflowExecution(),
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
-					Kind: fwdr.partition.Kind(),
+					Kind: f.partition.Kind(),
 				},
 				ScheduledEventId:       task.event.Data.GetScheduledEventId(),
 				Clock:                  task.event.Data.GetClock(),
 				ScheduleToStartTimeout: expirationDuration,
-				ForwardInfo:            fwdr.getForwardInfo(task),
+				ForwardInfo:            f.getForwardInfo(task),
 				Stamp:                  task.event.Data.GetStamp(),
 				VersionDirective:       task.event.Data.GetVersionDirective(),
 				Priority:               task.event.Data.GetPriority(),
@@ -179,185 +137,141 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		return errInvalidTaskQueueType
 	}
 
-	return fwdr.handleErr(err)
+	return err
 }
 
-func (fwdr *Forwarder) getForwardInfo(task *internalTask) *taskqueuespb.TaskForwardInfo {
+func (f *priForwarder) getForwardInfo(task *internalTask) *taskqueuespb.TaskForwardInfo {
 	if task.isForwarded() {
 		// task is already forwarded from a child partition, only overwrite SourcePartition
 		clone := common.CloneProto(task.forwardInfo)
-		clone.SourcePartition = fwdr.partition.RpcName()
+		clone.SourcePartition = f.partition.RpcName()
 		return clone
 	}
 	// task is forwarded for the first time
-	forwardInfo := &taskqueuespb.TaskForwardInfo{
+	return &taskqueuespb.TaskForwardInfo{
 		TaskSource:         task.source,
-		SourcePartition:    fwdr.partition.RpcName(),
-		DispatchBuildId:    fwdr.queue.Version().BuildId(),
-		DispatchVersionSet: fwdr.queue.Version().VersionSet(),
+		SourcePartition:    f.partition.RpcName(),
+		DispatchBuildId:    f.queue.Version().BuildId(),
+		DispatchVersionSet: f.queue.Version().VersionSet(),
 		RedirectInfo:       task.redirectInfo,
 	}
-	return forwardInfo
 }
 
 // ForwardQueryTask forwards a query task to parent task queue partition, if it exists
-func (fwdr *Forwarder) ForwardQueryTask(
+func (f *priForwarder) ForwardQueryTask(
 	ctx context.Context,
 	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
-	target, err := fwdr.partition.ParentPartition(degree)
+	degree := f.cfg.ForwarderMaxChildrenPerNode()
+	target, err := f.partition.ParentPartition(degree)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := fwdr.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
+	resp, err := f.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
 		NamespaceId: task.query.request.GetNamespaceId(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: target.RpcName(),
-			Kind: fwdr.partition.Kind(),
+			Kind: f.partition.Kind(),
 		},
 		QueryRequest:     task.query.request.QueryRequest,
 		VersionDirective: task.query.request.VersionDirective,
-		ForwardInfo:      fwdr.getForwardInfo(task),
+		ForwardInfo:      f.getForwardInfo(task),
 	})
 
-	return resp, fwdr.handleErr(err)
+	return resp, err
 }
 
 // ForwardNexusTask forwards a nexus task to parent task queue partition, if it exists.
-func (fwdr *Forwarder) ForwardNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
-	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
-	target, err := fwdr.partition.ParentPartition(degree)
+func (f *priForwarder) ForwardNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
+	degree := f.cfg.ForwarderMaxChildrenPerNode()
+	target, err := f.partition.ParentPartition(degree)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := fwdr.client.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
+	resp, err := f.client.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: task.nexus.request.GetNamespaceId(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: target.RpcName(),
-			Kind: fwdr.partition.Kind(),
+			Kind: f.partition.Kind(),
 		},
 		Request:     task.nexus.request.Request,
-		ForwardInfo: fwdr.getForwardInfo(task),
+		ForwardInfo: f.getForwardInfo(task),
 	})
 
-	return resp, fwdr.handleErr(err)
+	return resp, err
 }
 
 // ForwardPoll forwards a poll request to parent task queue partition if it exist
-func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
-	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
-	target, err := fwdr.partition.ParentPartition(degree)
+func (f *priForwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
+	degree := f.cfg.ForwarderMaxChildrenPerNode()
+	target, err := f.partition.ParentPartition(degree)
 	if err != nil {
 		return nil, err
 	}
 
-	pollerID, _ := ctx.Value(pollerIDKey).(string)
-	identity, _ := ctx.Value(identityKey).(string)
+	pollerID, _ := ctx.Value(pollerIDKey).(string) // nolint:revive
+	identity, _ := ctx.Value(identityKey).(string) // nolint:revive
 
-	switch fwdr.partition.TaskType() {
+	// nolint:exhaustive // there's a default clause
+	switch f.partition.TaskType() {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
-		resp, err := fwdr.client.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
-			NamespaceId: fwdr.partition.TaskQueue().NamespaceId(),
+		resp, err := f.client.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+			NamespaceId: f.partition.TaskQueue().NamespaceId(),
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
-					Kind: fwdr.partition.Kind(),
+					Kind: f.partition.Kind(),
 				},
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 			},
-			ForwardedSource: fwdr.partition.RpcName(),
+			ForwardedSource: f.partition.RpcName(),
 		})
 		if err != nil {
-			return nil, fwdr.handleErr(err)
+			return nil, err
 		}
 		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
-		resp, err := fwdr.client.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
-			NamespaceId: fwdr.partition.TaskQueue().NamespaceId(),
+		resp, err := f.client.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
+			NamespaceId: f.partition.TaskQueue().NamespaceId(),
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
-					Kind: fwdr.partition.Kind(),
+					Kind: f.partition.Kind(),
 				},
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 			},
-			ForwardedSource: fwdr.partition.RpcName(),
+			ForwardedSource: f.partition.RpcName(),
 		})
 		if err != nil {
-			return nil, fwdr.handleErr(err)
+			return nil, err
 		}
 		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_NEXUS:
-		resp, err := fwdr.client.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
-			NamespaceId: fwdr.partition.TaskQueue().NamespaceId(),
+		resp, err := f.client.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
+			NamespaceId: f.partition.TaskQueue().NamespaceId(),
 			PollerId:    pollerID,
 			Request: &workflowservice.PollNexusTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
-					Kind: fwdr.partition.Kind(),
+					Kind: f.partition.Kind(),
 				},
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				// Namespace is ignored here.
 			},
-			ForwardedSource: fwdr.partition.RpcName(),
+			ForwardedSource: f.partition.RpcName(),
 		})
 		if err != nil {
-			return nil, fwdr.handleErr(err)
+			return nil, err
 		}
 		return newInternalStartedTask(&startedTaskInfo{nexusTaskInfo: resp}), nil
 	default:
 		return nil, errInvalidTaskQueueType
 	}
-}
-
-// AddReqTokenC returns a channel that can be used to wait for a token
-// that's necessary before making a ForwardTask or ForwardQueryTask API call.
-// After the API call is invoked, token.release() must be invoked
-func (fwdr *Forwarder) AddReqTokenC() <-chan *ForwarderReqToken {
-	fwdr.refreshTokenC(&fwdr.addReqToken, &fwdr.outstandingTasksLimit, int32(fwdr.cfg.ForwarderMaxOutstandingTasks()))
-	return fwdr.addReqToken.Load().(*ForwarderReqToken).ch
-}
-
-// PollReqTokenC returns a channel that can be used to wait for a token
-// that's necessary before making a ForwardPoll API call. After the API
-// call is invoked, token.release() must be invoked
-func (fwdr *Forwarder) PollReqTokenC() <-chan *ForwarderReqToken {
-	fwdr.refreshTokenC(&fwdr.pollReqToken, &fwdr.outstandingPollsLimit, int32(fwdr.cfg.ForwarderMaxOutstandingPolls()))
-	return fwdr.pollReqToken.Load().(*ForwarderReqToken).ch
-}
-
-func (fwdr *Forwarder) refreshTokenC(value *atomic.Value, curr *int32, maxLimit int32) {
-	currLimit := atomic.LoadInt32(curr)
-	if currLimit != maxLimit {
-		if atomic.CompareAndSwapInt32(curr, currLimit, maxLimit) {
-			value.Store(newForwarderReqToken(int(maxLimit)))
-		}
-	}
-}
-
-func (fwdr *Forwarder) handleErr(err error) error {
-	if _, ok := err.(*serviceerror.ResourceExhausted); ok {
-		return errForwarderSlowDown
-	}
-	return err
-}
-
-func newForwarderReqToken(maxOutstanding int) *ForwarderReqToken {
-	reqToken := &ForwarderReqToken{ch: make(chan *ForwarderReqToken, maxOutstanding)}
-	for i := 0; i < maxOutstanding; i++ {
-		reqToken.ch <- reqToken
-	}
-	return reqToken
-}
-
-func (token *ForwarderReqToken) release() {
-	token.ch <- token
 }

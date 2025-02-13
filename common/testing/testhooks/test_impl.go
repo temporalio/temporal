@@ -58,11 +58,14 @@ type (
 //
 // TestHooks should be used very sparingly, see comment on TestHooks.
 func Get[T any](th TestHooks, key Key) (T, bool) {
+	var zero T
+	if th == nil {
+		return zero, false
+	}
 	if val, ok := th.get(key); ok {
 		// this is only used in test so we want to panic on type mismatch:
 		return val.(T), ok // nolint:revive
 	}
-	var zero T
 	return zero, false
 }
 

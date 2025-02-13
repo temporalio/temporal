@@ -200,7 +200,7 @@ reredirectTask:
 			return "", syncMatched, err
 		} else if errors.Is(err, errReprocessTask) {
 			// We get this if userdata changed while the task was blocked in TrySyncMatch
-			// (only for backlog tasks forwarded to root)
+			// (only for backlog tasks forwarded to root with the new matcher)
 			goto reredirectTask
 		}
 		// other errors are ignored and we try to spool the task
@@ -335,6 +335,63 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	return task, versionSetUsed, err
 }
 
+// TODO(pri): old matcher cleanup
+func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
+	ctx context.Context,
+	task *internalTask,
+	backlogQueue *PhysicalTaskQueueKey,
+) error {
+	taskInfo := task.event.GetData()
+	// This task came from taskReader so task.event is always set here.
+	directive := taskInfo.GetVersionDirective()
+	assignedBuildId := backlogQueue.Version().BuildId()
+	if assignedBuildId != "" {
+		// construct directive based on the build ID of the spool queue
+		directive = worker_versioning.MakeBuildIdDirective(assignedBuildId)
+	}
+	// Redirect and re-resolve if we're blocked in matcher and user data changes.
+	for {
+		newBacklogQueue, syncMatchQueue, userDataChanged, err := pm.getPhysicalQueuesForAdd(
+			ctx,
+			directive,
+			nil,
+			taskInfo.GetRunId(),
+		)
+		if err != nil {
+			return err
+		}
+		// set redirect info if spoolQueue and syncMatchQueue build ids are different
+		if assignedBuildId != syncMatchQueue.QueueKey().Version().BuildId() {
+			task.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
+				AssignedBuildId: assignedBuildId,
+			}
+		} else {
+			// make sure to reset redirectInfo in case it was set in a previous loop cycle
+			task.redirectInfo = nil
+		}
+		if !backlogQueue.version.Deployment().Equal(newBacklogQueue.QueueKey().version.Deployment()) {
+			// Backlog queue has changed, spool to the new queue. This should happen rarely: when
+			// activity of pinned workflow was determined independent and sent to the default queue
+			// but now at dispatch time, the determination is different because the activity pollers
+			// on the pinned deployment have reached server.
+			// TODO: before spooling, try to sync-match the task on the new queue
+			err = newBacklogQueue.SpoolTask(taskInfo)
+			if err != nil {
+				// return the error so task_reader retries the outer call
+				return err
+			}
+			// Finish the task because now it is copied to the other backlog. It should be considered
+			// invalid because a poller did not receive the task.
+			task.finish(nil, false)
+			return nil
+		}
+		err = syncMatchQueue.DispatchSpooledTask(ctx, task, userDataChanged)
+		if err != errInterrupted {
+			return err
+		}
+	}
+}
+
 func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 	ctx context.Context,
 	task *internalTask,
@@ -414,6 +471,7 @@ reredirectTask:
 
 	res, err := syncMatchQueue.DispatchQueryTask(ctx, taskID, request)
 	if errors.Is(err, errReprocessTask) {
+		// We get this if userdata changed while the task was blocked in DispatchQueryTask
 		goto reredirectTask
 	}
 	return res, err
@@ -447,6 +505,7 @@ reredirectTask:
 
 	res, err := syncMatchQueue.DispatchNexusTask(ctx, taskId, request)
 	if errors.Is(err, errReprocessTask) {
+		// We get this if userdata changed while the task was blocked in DispatchNexusTask
 		goto reredirectTask
 	}
 	return res, err

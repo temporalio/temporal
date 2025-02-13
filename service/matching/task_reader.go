@@ -31,7 +31,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -39,58 +38,46 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
-	"golang.org/x/sync/semaphore"
 )
 
 const (
+	taskReaderOfferThrottleWait  = time.Second
 	taskReaderThrottleRetryDelay = 3 * time.Second
-
-	// Load more tasks when loaded count is <= MaxBatchSize/reloadFraction.
-	// E.g. if MaxBatchSize is 1000, then we'll load 1000, dispatch down to 200,
-	// load another batch to make 1200, down to 200, etc.
-	reloadFraction = 5 // TODO(pri): make dynamic config
-
-	concurrentAddRetries = 10
 )
 
 type (
 	taskReader struct {
 		status     int32
-		notifyC    chan struct{} // Used as signal to notify pump of new tasks
+		taskBuffer chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
+		notifyC    chan struct{}                          // Used as signal to notify pump of new tasks
 		backlogMgr *backlogManagerImpl
 		gorogrp    goro.Group
-		readerCtx  context.Context // TODO(pri): consolidate contexts and clean this up
 
-		backoffTimerLock sync.Mutex
-		backoffTimer     *time.Timer
-		retrier          backoff.Retrier
-		loadedTasks      atomic.Int64
-
-		backlogAgeLock sync.Mutex
-		backlogAge     backlogAgeTracker
-
-		addRetries *semaphore.Weighted
+		backoffTimerLock      sync.Mutex
+		backoffTimer          *time.Timer
+		retrier               backoff.Retrier
+		backlogHeadCreateTime atomic.Int64
 	}
 )
-
-var addErrorRetryPolicy = backoff.NewExponentialRetryPolicy(2 * time.Second).
-	WithExpirationInterval(backoff.NoInterval)
 
 func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
 	tr := &taskReader{
 		status:     common.DaemonStatusInitialized,
 		backlogMgr: backlogMgr,
 		notifyC:    make(chan struct{}, 1),
+		// we always dequeue the head of the buffer and try to dispatch it to a poller
+		// so allocate one less than desired target buffer size
+		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, backlogMgr.config.GetTasksBatchSize()-1),
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
 			clock.NewRealTimeSource(),
 		),
-		backlogAge: newBacklogAgeTracker(),
-		addRetries: semaphore.NewWeighted(concurrentAddRetries),
 	}
+	tr.backlogHeadCreateTime.Store(-1)
 	return tr
 }
 
@@ -104,11 +91,12 @@ func (tr *taskReader) Start() {
 		return
 	}
 
+	tr.gorogrp.Go(tr.dispatchBufferedTasks)
 	tr.gorogrp.Go(tr.getTasksPump)
 }
 
 // Stop taskReader goroutines.
-// Note that this does not wait until they stop before returning.
+// Note that this does not wait until
 func (tr *taskReader) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&tr.status,
@@ -122,65 +110,83 @@ func (tr *taskReader) Stop() {
 }
 
 func (tr *taskReader) Signal() {
+	var event struct{}
 	select {
-	case tr.notifyC <- struct{}{}:
+	case tr.notifyC <- event:
 	default: // channel already has an event, don't block
 	}
 }
 
+func (tr *taskReader) updateBacklogAge(task *internalTask) {
+	if task.event.Data.CreateTime == nil {
+		return // should not happen but for safety
+	}
+	ts := timestamp.TimeValue(task.event.Data.CreateTime).UnixNano()
+	tr.backlogHeadCreateTime.Store(ts)
+}
+
 func (tr *taskReader) getBacklogHeadAge() time.Duration {
-	tr.backlogAgeLock.Lock()
-	defer tr.backlogAgeLock.Unlock()
-	return max(0, tr.backlogAge.getAge()) // return 0 instead of -1
+	if tr.backlogHeadCreateTime.Load() == -1 {
+		return time.Duration(0)
+	}
+	return time.Since(time.Unix(0, tr.backlogHeadCreateTime.Load()))
+}
+
+func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
+	ctx = tr.backlogMgr.contextInfoProvider(ctx)
+
+dispatchLoop:
+	for ctx.Err() == nil {
+		if len(tr.taskBuffer) == 0 {
+			// reset the atomic since we have no tasks from the backlog
+			tr.backlogHeadCreateTime.Store(-1)
+		}
+		select {
+		case taskInfo, ok := <-tr.taskBuffer:
+			if !ok { // Task queue getTasks pump is shutdown
+				break dispatchLoop
+			}
+			task := newInternalTaskFromBacklog(taskInfo, tr.completeTask)
+			for ctx.Err() == nil {
+				tr.updateBacklogAge(task)
+				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
+				err := tr.backlogMgr.processSpooledTask(taskCtx, task)
+				cancel()
+				if err == nil {
+					continue dispatchLoop
+				}
+
+				var stickyUnavailable *serviceerrors.StickyWorkerUnavailable
+				// if task is still valid (truly valid or unable to verify if task is valid)
+				metrics.BufferThrottlePerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
+				if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) &&
+					// StickyWorkerUnavailable is expected for versioned sticky queues
+					!errors.As(err, &stickyUnavailable) {
+					tr.throttledLogger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
+				}
+				util.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
+			}
+			return ctx.Err()
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return ctx.Err()
 }
 
 func (tr *taskReader) completeTask(task *internalTask, res taskResponse) {
-	err := res.startErr
-	if res.forwarded {
-		err = res.forwardErr
-	}
-
-	// We can handle some transient errors by just putting the task back in the matcher to
-	// match again. Note that for forwarded tasks, it's expected to get DeadlineExceeded when
-	// the task doesn't match on the root after backlogTaskForwardTimeout, and also expected to
-	// get errRemoteSyncMatchFailed, which is a serviceerror.Canceled error.
-	if err != nil && (common.IsServiceClientTransientError(err) ||
-		common.IsContextDeadlineExceededErr(err) ||
-		common.IsContextCanceledErr(err)) {
-		// TODO(pri): if this was a start error (not a forwarding error): consider adding a
-		// per-task backoff here, in case the error was workflow busy, we don't want to end up
-		// trying the same task immediately. maybe also: after a few attempts on the same task,
-		// let it get cycled to the end of the queue, in case there's some task/wf-specific
-		// thing.
-		tr.addTaskToMatcher(tr.readerCtx, task)
-		return
-	}
-
-	// Otherwise, remove from tracking and pass to backlogManager, which will rewrite the task to the end
-	// of a backlog on error.
-
-	loaded := tr.loadedTasks.Add(-1)
-
-	tr.backlogAgeLock.Lock()
-	tr.backlogAge.record(task.event.AllocatedTaskInfo.Data.CreateTime, -1)
-	tr.backlogAgeLock.Unlock()
-
-	// use == so we just signal once when we cross this threshold
-	if int(loaded) == tr.backlogMgr.config.GetTasksBatchSize()/reloadFraction {
-		tr.Signal()
-	}
-	tr.backlogMgr.completeTask(task.event.AllocatedTaskInfo, err)
+	tr.backlogMgr.completeTask(task.event.AllocatedTaskInfo, res.startErr)
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
 	ctx = tr.backlogMgr.contextInfoProvider(ctx)
-	tr.readerCtx = ctx
 
 	if err := tr.backlogMgr.WaitUntilInitialized(ctx); err != nil {
 		return err
 	}
 
-	updateAckTicker := time.NewTicker(tr.backlogMgr.config.UpdateAckInterval())
+	updateAckTimer := time.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
+	defer updateAckTimer.Stop()
 
 	tr.Signal() // prime pump
 Loop:
@@ -197,20 +203,14 @@ Loop:
 			return nil
 
 		case <-tr.notifyC:
-			if int(tr.loadedTasks.Load()) > tr.backlogMgr.config.GetTasksBatchSize()/reloadFraction {
-				// Too many loaded already, ignore this signal. We'll get another signal when
-				// loadedTasks drops low enough.
-				continue Loop
-			}
-
 			batch, err := tr.getTaskBatch(ctx)
 			tr.backlogMgr.signalIfFatal(err)
 			if err != nil {
 				// TODO: Should we ever stop retrying on db errors?
 				if common.IsResourceExhausted(err) {
-					tr.backoffSignal(taskReaderThrottleRetryDelay)
+					tr.reEnqueueAfterDelay(taskReaderThrottleRetryDelay)
 				} else {
-					tr.backoffSignal(tr.retrier.NextBackOff(err))
+					tr.reEnqueueAfterDelay(tr.retrier.NextBackOff(err))
 				}
 				continue Loop
 			}
@@ -224,11 +224,13 @@ Loop:
 				continue Loop
 			}
 
-			tr.addTasksToMatcher(ctx, batch.tasks)
-			// There may be more tasks.
+			// only error here is due to context cancellation which we also
+			// handle above
+			_ = tr.addTasksToBuffer(ctx, batch.tasks)
+			// There maybe more tasks. We yield now, but signal pump to check again later.
 			tr.Signal()
 
-		case <-updateAckTicker.C:
+		case <-updateAckTimer.C:
 			err := tr.persistAckBacklogCountLevel(ctx)
 			isConditionFailed := tr.backlogMgr.signalIfFatal(err)
 			if err != nil && !isConditionFailed {
@@ -237,8 +239,8 @@ Loop:
 					tag.Error(err))
 				// keep going as saving ack is not critical
 			}
-			// TODO(pri): don't do this, or else prove that it's needed
 			tr.Signal() // periodically signal pump to check persistence for tasks
+			updateAckTimer = time.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
 		}
 	}
 }
@@ -296,7 +298,7 @@ func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse,
 	}, nil // caller will update readLevel when no task grabbed
 }
 
-func (tr *taskReader) addTasksToMatcher(
+func (tr *taskReader) addTasksToBuffer(
 	ctx context.Context,
 	tasks []*persistencespb.AllocatedTaskInfo,
 ) error {
@@ -308,90 +310,24 @@ func (tr *taskReader) addTasksToMatcher(
 			tr.backlogMgr.taskAckManager.setReadLevel(t.GetTaskId())
 			continue
 		}
-
-		tr.backlogMgr.taskAckManager.addTask(t.GetTaskId())
-		tr.loadedTasks.Add(1)
-		tr.backlogAgeLock.Lock()
-		tr.backlogAge.record(t.Data.CreateTime, 1)
-		tr.backlogAgeLock.Unlock()
-		task := newInternalTaskFromBacklog(t, tr.completeTask)
-
-		// After we get to this point, we must eventually call task.finish or
-		// task.finishForwarded, which will call tr.completeTask.
-		tr.addTaskToMatcher(ctx, task)
+		if err := tr.addSingleTaskToBuffer(ctx, t); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (tr *taskReader) addTaskToMatcher(ctx context.Context, task *internalTask) {
-	err := tr.backlogMgr.addSpooledTask(ctx, task)
-	if err == nil {
-		return
+func (tr *taskReader) addSingleTaskToBuffer(
+	ctx context.Context,
+	task *persistencespb.AllocatedTaskInfo,
+) error {
+	tr.backlogMgr.taskAckManager.addTask(task.GetTaskId())
+	select {
+	case tr.taskBuffer <- task:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-
-	if drop, retry := tr.addErrorBehavior(err); drop {
-		task.finish(nil, false)
-	} else if retry {
-		// This should only be due to persistence problems. Retry in a new goroutine
-		// to not block other tasks, up to some concurrency limit.
-		if tr.addRetries.Acquire(ctx, 1) != nil {
-			return
-		}
-		go tr.retryAddAfterError(ctx, task)
-	}
-}
-
-func (tr *taskReader) addErrorBehavior(err error) (drop, retry bool) {
-	// addSpooledTask can only fail due to:
-	// - the task queue is closed (errTaskQueueClosed or context.Canceled)
-	// - ValidateDeployment failed (InvalidArgument)
-	// - versioning wants to get a versioned queue and it can't be initialized
-	// - versioning wants to re-spool the task on a different queue and that failed
-	// - versioning says StickyWorkerUnavailable
-	if errors.Is(err, errTaskQueueClosed) || common.IsContextCanceledErr(err) {
-		return false, false
-	}
-	var stickyUnavailable *serviceerrors.StickyWorkerUnavailable
-	if errors.As(err, &stickyUnavailable) {
-		return true, false // drop the task
-	}
-	var invalid *serviceerror.InvalidArgument
-	var internal *serviceerror.Internal
-	if errors.As(err, &invalid) || errors.As(err, &internal) {
-		tr.throttledLogger().Error("nonretryable error processing spooled task", tag.Error(err))
-		return true, false // drop the task
-	}
-	// For any other error (this should be very rare), we can retry.
-	tr.throttledLogger().Error("retryable error processing spooled task", tag.Error(err))
-	return false, true
-}
-
-func (tr *taskReader) retryAddAfterError(ctx context.Context, task *internalTask) {
-	defer tr.addRetries.Release(1)
-	metrics.BufferThrottlePerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
-
-	// initial sleep since we just tried once
-	util.InterruptibleSleep(ctx, time.Second)
-
-	backoff.ThrottleRetryContext(
-		ctx,
-		func(ctx context.Context) error {
-			if IsTaskExpired(task.event.AllocatedTaskInfo) {
-				task.finish(nil, false)
-				return nil
-			}
-			err := tr.backlogMgr.addSpooledTask(ctx, task)
-			if drop, retry := tr.addErrorBehavior(err); drop {
-				task.finish(nil, false)
-			} else if retry {
-				metrics.BufferThrottlePerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
-				return err
-			}
-			return nil
-		},
-		addErrorRetryPolicy,
-		nil,
-	)
 }
 
 func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
@@ -411,7 +347,7 @@ func (tr *taskReader) taggedMetricsHandler() metrics.Handler {
 	return tr.backlogMgr.metricsHandler
 }
 
-func (tr *taskReader) backoffSignal(duration time.Duration) {
+func (tr *taskReader) reEnqueueAfterDelay(duration time.Duration) {
 	tr.backoffTimerLock.Lock()
 	defer tr.backoffTimerLock.Unlock()
 
@@ -424,8 +360,4 @@ func (tr *taskReader) backoffSignal(duration time.Duration) {
 			tr.backoffTimer = nil
 		})
 	}
-}
-
-func (tr *taskReader) getLoadedTasks() int64 {
-	return tr.loadedTasks.Load()
 }
