@@ -202,6 +202,10 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"DeleteWorkerDeployment":                {},
 		"DeleteWorkerDeploymentVersion":         {},
 		"UpdateWorkerDeploymentVersionMetadata": {},
+		"CreateWorkflowRule":                    {},
+		"DescribeWorkflowRule":                  {},
+		"DeleteWorkflowRule":                    {},
+		"ListWorkflowRules":                     {},
 	}, apis)
 }
 
