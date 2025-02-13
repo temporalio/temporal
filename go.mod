@@ -77,7 +77,7 @@ require (
 	gopkg.in/go-jose/go-jose.v2 v2.6.3
 	gopkg.in/validator.v2 v2.0.1
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.34.0
+	modernc.org/sqlite v1.34.1
 )
 
 require (
