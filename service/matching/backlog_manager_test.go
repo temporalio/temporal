@@ -50,7 +50,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 		func(tlm *physicalTaskQueueManagerImpl) { tlm.backlogMgr.taskReader.gorogrp.Cancel() },
 		func(tlm *physicalTaskQueueManagerImpl) {
 			rps := 0.1
-			tlm.matcher.UpdateRatelimit(&rps)
+			tlm.matcher.UpdateRatelimit(rps)
 			tlm.backlogMgr.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
 				Data: &persistencespb.TaskInfo{},
 			}

@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -94,6 +95,7 @@ type operationContext struct {
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	headersBlacklist              *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 	cleanupFunctions              []func(map[string]string, error)
 }
 
@@ -273,6 +275,32 @@ func (c *operationContext) shouldForwardRequest(ctx context.Context, header nexu
 		c.forwardingEnabledForNamespace(c.namespaceName)
 }
 
+// enrichNexusOperationMetrics enhances metrics with additional Nexus operation context based on configuration.
+func (c *operationContext) enrichNexusOperationMetrics(service, operation string, requestHeader nexus.Header) {
+	conf := c.metricTagConfig.Get()
+	if conf == nil {
+		return
+	}
+
+	var tags []metrics.Tag
+
+	if conf.IncludeServiceTag {
+		tags = append(tags, metrics.NexusServiceTag(service))
+	}
+
+	if conf.IncludeOperationTag {
+		tags = append(tags, metrics.NexusOperationTag(operation))
+	}
+
+	for _, mapping := range conf.HeaderTagMappings {
+		tags = append(tags, metrics.StringTag(mapping.TargetTag, requestHeader.Get(mapping.SourceHeader)))
+	}
+
+	if len(tags) > 0 {
+		c.metricsHandler = c.metricsHandler.WithTags(tags...)
+	}
+}
+
 // Key to extract a nexusContext object from a context.Context.
 type nexusContextKey struct{}
 
@@ -292,6 +320,7 @@ type nexusHandler struct {
 	forwardingClients             *cluster.FrontendHTTPClientCache
 	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	headersBlacklist              *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -311,6 +340,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 		redirectionInterceptor:        h.redirectionInterceptor,
 		forwardingEnabledForNamespace: h.forwardingEnabledForNamespace,
 		headersBlacklist:              h.headersBlacklist,
+		metricTagConfig:               h.metricTagConfig,
 		cleanupFunctions:              make([]func(map[string]string, error), 0),
 	}
 	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(
@@ -355,6 +385,7 @@ func (h *nexusHandler) StartOperation(
 		return nil, err
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
+	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -517,6 +548,8 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	if err != nil {
 		return err
 	}
+	ctx = oc.augmentContext(ctx, options.Header)
+	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{

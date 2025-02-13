@@ -329,6 +329,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 		})
 		a.NoError(err)
 		a.Equal(firstVersion.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
 	}, time.Second*10, time.Millisecond*1000)
 
 	// Set a new second version and set it as the current version
@@ -509,7 +510,9 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_OneVersion_OneDeployme
 	expectedDeploymentSummaries := s.buildWorkerDeploymentSummary(
 		tv.DeploymentSeries(),
 		timestamppb.Now(),
-		&deploymentpb.RoutingConfig{},
+		&deploymentpb.RoutingConfig{
+			CurrentVersion: worker_versioning.UnversionedVersionId, // default current version is __unversioned__
+		},
 	)
 
 	s.startAndValidateWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
@@ -688,6 +691,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 				CurrentVersion:            worker_versioning.UnversionedVersionId,
 				CurrentVersionChangedTime: nil,
 			},
+			LastModifierIdentity: tv.ClientIdentity(),
 		},
 	})
 
@@ -710,6 +714,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Ramping_Wi
 				CurrentVersion:            currentVersionVars.DeploymentVersionString(),
 				CurrentVersionChangedTime: timestamppb.Now(),
 			},
+			LastModifierIdentity: tv.ClientIdentity(),
 		},
 	})
 }
@@ -741,6 +746,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_DuplicateR
 				CurrentVersion:            worker_versioning.UnversionedVersionId,
 				CurrentVersionChangedTime: nil,
 			},
+			LastModifierIdentity: rampingVersionVars.ClientIdentity(),
 		},
 	})
 
@@ -777,6 +783,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Invalid_Se
 				CurrentVersion:            currentVersionVars.DeploymentVersionString(),
 				CurrentVersionChangedTime: timestamppb.Now(),
 			},
+			LastModifierIdentity: currentVersionVars.ClientIdentity(),
 		},
 	})
 }
@@ -828,6 +835,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 				CurrentVersion:            currentVersionVars.DeploymentVersionString(),
 				CurrentVersionChangedTime: timestamppb.Now(),
 			},
+			LastModifierIdentity: tv.ClientIdentity(),
 		},
 	})
 
@@ -852,6 +860,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_WithCurren
 				CurrentVersion:            currentVersionVars.DeploymentVersionString(),
 				CurrentVersionChangedTime: timestamppb.Now(),
 			},
+			LastModifierIdentity: tv.ClientIdentity(),
 		},
 	})
 }
@@ -883,6 +892,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_SetRamping
 				CurrentVersion:            rampingVersionVars.DeploymentVersionString(),
 				CurrentVersionChangedTime: timestamppb.Now(),
 			},
+			LastModifierIdentity: tv.ClientIdentity(),
 		},
 	})
 }
@@ -1198,8 +1208,8 @@ func (s *WorkerDeploymentSuite) verifyDescribeWorkerDeployment(
 	s.True((actualResp.GetWorkerDeploymentInfo() == nil) == (expectedResp.GetWorkerDeploymentInfo() == nil))
 	s.True((actualResp.GetWorkerDeploymentInfo().GetRoutingConfig() == nil) == (expectedResp.GetWorkerDeploymentInfo().GetRoutingConfig() == nil))
 	s.Equal(expectedResp.GetWorkerDeploymentInfo().GetName(), actualResp.GetWorkerDeploymentInfo().GetName())
-
 	s.True(expectedResp.GetWorkerDeploymentInfo().GetCreateTime().AsTime().Sub(actualResp.GetWorkerDeploymentInfo().GetCreateTime().AsTime()) < maxDurationBetweenTimeStamps)
+	s.Equal(expectedResp.GetWorkerDeploymentInfo().GetLastModifierIdentity(), actualResp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
 
 	actualRoutingInfo := actualResp.GetWorkerDeploymentInfo().GetRoutingConfig()
 	expectedRoutingInfo := expectedResp.GetWorkerDeploymentInfo().GetRoutingConfig()
@@ -1253,7 +1263,7 @@ func (s *WorkerDeploymentSuite) setAndVerifyRampingVersionUnversionedOption(
 		DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
 		Version:                 version,
 		Percentage:              float32(percentage),
-		Identity:                tv.Any().String(),
+		Identity:                tv.ClientIdentity(),
 		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
 	})
 	if expectedError != "" {
@@ -1284,6 +1294,7 @@ func (s *WorkerDeploymentSuite) setCurrentVersionUnversionedOption(ctx context.C
 		DeploymentName:          tv.DeploymentVersion().GetDeploymentName(),
 		Version:                 version,
 		IgnoreMissingTaskQueues: ignoreMissingTaskQueues,
+		Identity:                tv.ClientIdentity(),
 	})
 	if expectedError != "" {
 		s.Error(err)
