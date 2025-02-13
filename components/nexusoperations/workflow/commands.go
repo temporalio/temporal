@@ -111,7 +111,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
-	if err := timestamp.ValidateProtoDuration(attrs.ScheduleToCloseTimeout); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attrs.ScheduleToCloseTimeout); err != nil {
 		return workflow.FailWorkflowTaskError{
 			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf(
