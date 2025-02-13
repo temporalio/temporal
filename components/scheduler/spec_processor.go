@@ -27,6 +27,7 @@ package scheduler
 import (
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,9 +49,13 @@ type (
 		// The parameter manual is propagated to the returned BufferedStarts. When the limit
 		// is set to a non-nil pointer, it will be decremented for each buffered start, and
 		// the function will return early should limit reach 0.
+		//
+		// If backfillID is set, it will be used to generate request IDs.
 		ProcessTimeRange(
 			scheduler Scheduler,
 			start, end time.Time,
+			overlapPolicy enumspb.ScheduleOverlapPolicy,
+			backfillID string,
 			manual bool,
 			limit *int,
 		) (*ProcessedTimeRange, error)
@@ -75,11 +80,13 @@ type (
 func (s SpecProcessorImpl) ProcessTimeRange(
 	scheduler Scheduler,
 	start, end time.Time,
+	overlapPolicy enumspb.ScheduleOverlapPolicy,
+	backfillID string,
 	manual bool,
 	limit *int,
 ) (*ProcessedTimeRange, error) {
 	tweakables := s.Config.Tweakables(scheduler.Namespace)
-	overlapPolicy := scheduler.overlapPolicy()
+	overlapPolicy = scheduler.resolveOverlapPolicy(overlapPolicy)
 
 	s.Logger.Debug("ProcessTimeRange",
 		tag.NewTimeTag("start", start),
@@ -118,7 +125,7 @@ func (s SpecProcessorImpl) ProcessTimeRange(
 			continue
 		}
 
-		if end.Sub(next.Next) > catchupWindow {
+		if !manual && end.Sub(next.Next) > catchupWindow {
 			s.Logger.Warn("Schedule missed catchup window",
 				tag.NewTimeTag("now", end),
 				tag.NewTimeTag("time", next.Next))
@@ -135,7 +142,7 @@ func (s SpecProcessorImpl) ProcessTimeRange(
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
-			RequestId:     generateRequestID(scheduler, "", next.Nominal, next.Next),
+			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
 		})
 		lastAction = next.Next
 
