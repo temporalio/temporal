@@ -29,7 +29,6 @@ option go_package = "go.temporal.io/server/api/history/v1;history";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/history/v1/message.proto";
-import "temporal/api/common/v1/message.proto";
 
 message TransientWorkflowTaskInfo {
     reserved 1;
