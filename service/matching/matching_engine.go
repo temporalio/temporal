@@ -77,6 +77,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -786,6 +787,20 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 	// This happens when history.sendRawHistoryBetweenInternalServices is enabled.
 	if resp.History != nil {
 		resp.Response.History = resp.History
+		ns, err := e.namespaceRegistry.GetNamespaceName(nsID)
+		if err != nil {
+			return nil, nil, err
+		}
+		err = api.ProcessOutgoingSearchAttributes(
+			e.saProvider,
+			e.saMapperProvider,
+			resp.Response.History.Events,
+			ns,
+			e.visibilityManager,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	hist := resp.GetResponse().GetHistory()

@@ -771,7 +771,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	if response.History != nil {
 		response.Response.History = response.History
 		isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
-		if isCloseEventOnly {
+		if isCloseEventOnly && len(response.Response.History.Events) > 0 {
 			response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
 		}
 		err = api.ProcessOutgoingSearchAttributes(

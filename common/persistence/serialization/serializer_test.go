@@ -363,8 +363,6 @@ func (s *temporalSerializerSuite) TestGetWorkflowExecutionHistoryResponseWithRaw
 		Data:         rawHistory2,
 	}
 
-	// Create a GetWorkflowExecutionHistoryResponse with raw history blobs. This should be wire compatible with
-	// workflowservice.GetWorkflowExecutionHistoryResponse which has repeated HistoryEvent field instead of repeated bytes.
 	rawResp := &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
 		History: [][]byte{db1.Data, db2.Data},
 	}
