@@ -2804,15 +2804,19 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
 	s.ErrorAs(err, &invalidArgumentErr)
 }
 
-func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_FailedConvertedToContinueAsNew() {
+// This test is to make sure that GetWorkflowExecutionHistory returns the correct history when history service sends
+// History events in the field response.History. This happens when history.sendRawHistoryBetweenInternalServices is enabled.
+// This test verifies that HistoryEventFilterType is applied and EVENT_TYPE_WORKFLOW_EXECUTION_FAILED is converted to
+// EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW for older SDKs.
+func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistoryEnabled() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New().String()}
 	newRunID := uuid.New().String()
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil).AnyTimes()
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).Times(2)
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil).Times(2)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil).Times(2)
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:              tests.Namespace.String(),
@@ -2826,18 +2830,28 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_FailedConvertedTo
 		Request:     req,
 	}).Return(&historyservice.GetWorkflowExecutionHistoryResponse{
 		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
-			History: &historypb.History{
-				Events: []*historypb.HistoryEvent{
-					{
-						EventId:   int64(5),
-						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
-						Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
-							WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
-								Failure:                      &failurepb.Failure{Message: "this workflow failed"},
-								RetryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
-								WorkflowTaskCompletedEventId: 4,
-								NewExecutionRunId:            newRunID,
-							},
+			History: &historypb.History{},
+		},
+		History: &historypb.History{
+			Events: []*historypb.HistoryEvent{
+				{
+					EventId:   int64(5),
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+					Attributes: &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{
+						WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
+							Failure: &failurepb.Failure{Message: "this workflow task failed"},
+						},
+					},
+				},
+				{
+					EventId:   int64(5),
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
+						WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
+							Failure:                      &failurepb.Failure{Message: "this workflow failed"},
+							RetryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
+							WorkflowTaskCompletedEventId: 4,
+							NewExecutionRunId:            newRunID,
 						},
 					},
 				},

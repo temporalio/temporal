@@ -191,12 +191,15 @@ func GetHistory(
 		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
 	}
 
+	ns, err := shard.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+	if err != nil {
+		return nil, nil, err
+	}
 	if err := ProcessOutgoingSearchAttributes(
-		shard.GetNamespaceRegistry(),
 		shard.GetSearchAttributesProvider(),
 		shard.GetSearchAttributesMapperProvider(),
 		historyEvents,
-		namespaceID,
+		ns,
 		persistenceVisibilityMgr); err != nil {
 		return nil, nil, err
 	}
@@ -248,12 +251,15 @@ func GetHistoryReverse(
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryReverseScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
+	ns, err := shard.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+	if err != nil {
+		return nil, nil, 0, err
+	}
 	if err := ProcessOutgoingSearchAttributes(
-		shard.GetNamespaceRegistry(),
 		shard.GetSearchAttributesProvider(),
 		shard.GetSearchAttributesMapperProvider(),
 		historyEvents,
-		namespaceID,
+		ns,
 		persistenceVisibilityMgr); err != nil {
 		return nil, nil, 0, err
 	}
@@ -273,17 +279,12 @@ func GetHistoryReverse(
 }
 
 func ProcessOutgoingSearchAttributes(
-	nsRegistry namespace.Registry,
 	saProvider searchattribute.Provider,
 	saMapperProvider searchattribute.MapperProvider,
 	events []*historypb.HistoryEvent,
-	namespaceId namespace.ID,
+	ns namespace.Name,
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) error {
-	ns, err := nsRegistry.GetNamespaceName(namespaceId)
-	if err != nil {
-		return err
-	}
 	saTypeMap, err := saProvider.GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(consts.ErrUnableToGetSearchAttributesMessage, err))

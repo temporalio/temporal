@@ -31,11 +31,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -191,27 +193,51 @@ func Invoke(
 		}
 	}()
 
+	history := &historypb.History{}
+	history.Events = []*historypb.HistoryEvent{}
 	var historyBlob []*commonpb.DataBlob
+	config := shardContext.GetConfig()
+	sendRawHistoryBetweenInternalServices := config.SendRawHistoryBetweenInternalServices()
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
-			historyBlob, _, err = api.GetRawHistory(
-				ctx,
-				shardContext,
-				namespaceID,
-				execution,
-				lastFirstEventID,
-				nextEventID,
-				request.Request.GetMaximumPageSize(),
-				nil,
-				continuationToken.TransientWorkflowTask,
-				continuationToken.BranchToken,
-			)
-			if err != nil {
-				return nil, err
+			if config.SendRawWorkflowHistory(request.Request.GetNamespace()) || sendRawHistoryBetweenInternalServices {
+				historyBlob, _, err = api.GetRawHistory(
+					ctx,
+					shardContext,
+					namespaceID,
+					execution,
+					lastFirstEventID,
+					nextEventID,
+					request.Request.GetMaximumPageSize(),
+					nil,
+					continuationToken.TransientWorkflowTask,
+					continuationToken.BranchToken,
+				)
+				if err != nil {
+					return nil, err
+				}
+				// since getHistory func will not return empty history, so the below is safe
+				historyBlob = historyBlob[len(historyBlob)-1:]
+			} else {
+				history, _, err = api.GetHistory(
+					ctx,
+					shardContext,
+					namespaceID,
+					execution,
+					lastFirstEventID,
+					nextEventID,
+					request.Request.GetMaximumPageSize(),
+					nil,
+					continuationToken.TransientWorkflowTask,
+					continuationToken.BranchToken,
+					persistenceVisibilityMgr,
+				)
+				if err != nil {
+					return nil, err
+				}
+				// since getHistory func will not return empty history, so the below is safe
+				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
 			}
-
-			// since getHistory func will not return empty history, so the below is safe
-			historyBlob = historyBlob[len(historyBlob)-1:]
 			continuationToken = nil
 		} else if isLongPoll {
 			// set the persistence token to be nil so next time we will query history for updates
@@ -223,22 +249,40 @@ func Invoke(
 		// return all events
 		if continuationToken.FirstEventId >= continuationToken.NextEventId {
 			// currently there is no new event
+			history.Events = []*historypb.HistoryEvent{}
 			if !isWorkflowRunning {
 				continuationToken = nil
 			}
 		} else {
-			historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
-				ctx,
-				shardContext,
-				namespaceID,
-				execution,
-				continuationToken.FirstEventId,
-				continuationToken.NextEventId,
-				request.Request.GetMaximumPageSize(),
-				continuationToken.PersistenceToken,
-				continuationToken.TransientWorkflowTask,
-				continuationToken.BranchToken,
-			)
+			if config.SendRawWorkflowHistory(request.Request.GetNamespace()) || sendRawHistoryBetweenInternalServices {
+				historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
+					ctx,
+					shardContext,
+					namespaceID,
+					execution,
+					continuationToken.FirstEventId,
+					continuationToken.NextEventId,
+					request.Request.GetMaximumPageSize(),
+					continuationToken.PersistenceToken,
+					continuationToken.TransientWorkflowTask,
+					continuationToken.BranchToken,
+				)
+			} else {
+				history, continuationToken.PersistenceToken, err = api.GetHistory(
+					ctx,
+					shardContext,
+					namespaceID,
+					execution,
+					continuationToken.FirstEventId,
+					continuationToken.NextEventId,
+					request.Request.GetMaximumPageSize(),
+					continuationToken.PersistenceToken,
+					continuationToken.TransientWorkflowTask,
+					continuationToken.BranchToken,
+					persistenceVisibilityMgr,
+				)
+			}
+
 			if err != nil {
 				return nil, err
 			}
@@ -257,32 +301,129 @@ func Invoke(
 		return nil, err
 	}
 
-	resp := &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
-		Response: &historyspb.GetWorkflowExecutionHistoryResponse{
-			History:       nil,
-			RawHistory:    nil,
-			NextPageToken: nextToken,
-			Archived:      false,
-		},
+	// if SendRawHistoryBetweenInternalServices is enabled, we do this check in frontend service
+	if len(history.Events) > 0 {
+		err = FixFollowEvents(ctx, versionChecker, isCloseEventOnly, history)
+		if err != nil {
+			return nil, err
+		}
 	}
-	if shardContext.GetConfig().SendRawWorkflowHistory(request.Request.GetNamespace()) {
-		resp.Response.RawHistory = historyBlob
-	} else {
-		fullHistory := make([][]byte, 0)
+
+	var rawHistory [][]byte
+	// if sendRawHistoryBetweenInternalServices is true and SendRawWorkflowHistory is not enabled for this namespace,
+	// send history in raw format in History field of historyservice.GetWorkflowExecutionHistoryResponseWithRaw.
+	// If SendRawWorkflowHistory is enabled for this namespace, raw history will be appended to RawHistory field in
+	// workflowservice.GetWorkflowExecutionHistoryResponse.
+	if sendRawHistoryBetweenInternalServices && !config.SendRawWorkflowHistory(request.Request.GetNamespace()) {
+		rawHistory = make([][]byte, 0, len(historyBlob))
 		for _, blob := range historyBlob {
-			fullHistory = append(fullHistory, blob.Data)
+			rawHistory = append(rawHistory, blob.Data)
 		}
 		// If there are no events in the history, frontend will not be able to deserialize the response to History object.
 		// In that case, create an empty history object and set it in the response.
-		if len(fullHistory) == 0 {
-			history := historypb.History{}
+		if len(rawHistory) == 0 {
 			blob, err := history.Marshal()
 			if err != nil {
 				return nil, err
 			}
-			fullHistory = append(fullHistory, blob)
+			rawHistory = [][]byte{blob}
 		}
-		resp.Response.History = fullHistory
+		historyBlob = nil
 	}
-	return resp, nil
+
+	return &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
+		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
+			History:       history,
+			RawHistory:    historyBlob,
+			NextPageToken: nextToken,
+			Archived:      false,
+		},
+		History: rawHistory,
+	}, nil
+}
+
+func FixFollowEvents(
+	ctx context.Context,
+	versionChecker headers.VersionChecker,
+	isCloseEventOnly bool,
+	history *historypb.History,
+) error {
+	// Backwards-compatibility fix for retry events after #1866: older SDKs don't know how to "follow"
+	// subsequent runs linked in WorkflowExecutionFailed or TimedOut events, so they'll get the wrong result
+	// when trying to "get" the result of a workflow run. (This applies to cron runs also but "get" on a cron
+	// workflow isn't really sensible.)
+	//
+	// To handle this in a backwards-compatible way, we'll pretend the completion event is actually
+	// ContinuedAsNew, if it's Failed or TimedOut. We want to do this only when the client is looking for a
+	// completion event, and not when it's getting the history to display for other purposes. The best signal
+	// for that purpose is `isCloseEventOnly`. (We can't use `isLongPoll` also because in some cases, older
+	// versions of the Java SDK don't set that flag.)
+	//
+	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
+	// Revisit this once we have an SDK deprecation policy.
+	followsNextRunId := versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID)
+	if isCloseEventOnly && !followsNextRunId && len(history.Events) > 0 {
+		lastEvent := history.Events[len(history.Events)-1]
+		fakeEvent, err := makeFakeContinuedAsNewEvent(ctx, lastEvent)
+		if err != nil {
+			return err
+		}
+		if fakeEvent != nil {
+			history.Events[len(history.Events)-1] = fakeEvent
+		}
+	}
+	return nil
+}
+
+func makeFakeContinuedAsNewEvent(
+	_ context.Context,
+	lastEvent *historypb.HistoryEvent,
+) (*historypb.HistoryEvent, error) {
+	switch lastEvent.EventType {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		if lastEvent.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		if lastEvent.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		if lastEvent.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	default:
+		return nil, nil
+	}
+
+	// We need to replace the last event with a continued-as-new event that has at least the
+	// NewExecutionRunId field. We don't actually need any other fields, since that's the only one
+	// the client looks at in this case, but copy the last result or failure from the real completed
+	// event just so it's clear what the result was.
+	newAttrs := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{}
+	switch lastEvent.EventType {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.LastCompletionResult = attrs.Result
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		attrs := lastEvent.GetWorkflowExecutionFailedEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.Failure = attrs.Failure
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		attrs := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.Failure = failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	}
+
+	return &historypb.HistoryEvent{
+		EventId:   lastEvent.EventId,
+		EventTime: lastEvent.EventTime,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		Version:   lastEvent.Version,
+		TaskId:    lastEvent.TaskId,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
+			WorkflowExecutionContinuedAsNewEventAttributes: newAttrs,
+		},
+	}, nil
 }
