@@ -75,6 +75,20 @@ func (c *metricClient) CompleteNexusOperation(
 	return c.client.CompleteNexusOperation(ctx, request, opts...)
 }
 
+func (c *metricClient) CreateWorkflowRule(
+	ctx context.Context,
+	request *historyservice.CreateWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.CreateWorkflowRuleResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientCreateWorkflowRule")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CreateWorkflowRule(ctx, request, opts...)
+}
+
 func (c *metricClient) DeepHealthCheck(
 	ctx context.Context,
 	request *historyservice.DeepHealthCheckRequest,
@@ -115,6 +129,20 @@ func (c *metricClient) DeleteWorkflowExecution(
 	}()
 
 	return c.client.DeleteWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) DeleteWorkflowRule(
+	ctx context.Context,
+	request *historyservice.DeleteWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.DeleteWorkflowRuleResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientDeleteWorkflowRule")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeleteWorkflowRule(ctx, request, opts...)
 }
 
 func (c *metricClient) DeleteWorkflowVisibilityRecord(
@@ -171,6 +199,20 @@ func (c *metricClient) DescribeWorkflowExecution(
 	}()
 
 	return c.client.DescribeWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) DescribeWorkflowRule(
+	ctx context.Context,
+	request *historyservice.DescribeWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.DescribeWorkflowRuleResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientDescribeWorkflowRule")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeWorkflowRule(ctx, request, opts...)
 }
 
 func (c *metricClient) ExecuteMultiOperation(
@@ -451,6 +493,20 @@ func (c *metricClient) ListTasks(
 	}()
 
 	return c.client.ListTasks(ctx, request, opts...)
+}
+
+func (c *metricClient) ListWorkflowRules(
+	ctx context.Context,
+	request *historyservice.ListWorkflowRulesRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ListWorkflowRulesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientListWorkflowRules")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListWorkflowRules(ctx, request, opts...)
 }
 
 func (c *metricClient) MergeDLQMessages(
