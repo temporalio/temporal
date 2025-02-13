@@ -5873,3 +5873,59 @@ func (wh *WorkflowHandler) ResetActivity(
 
 	return &workflowservice.ResetActivityResponse{}, nil
 }
+
+func (wh *WorkflowHandler) CreateWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.CreateWorkflowRuleRequest,
+) (_ *workflowservice.CreateWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method CreateWorkflowRule not supported")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetSpec() == nil {
+		return nil, serviceerror.NewInvalidArgument("Rule Specification is not set.")
+	}
+
+	return nil, status.Errorf(codes.Unimplemented, "method CreateWorkflowRule not implemented")
+}
+
+func (wh *WorkflowHandler) DescribeWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkflowRuleRequest,
+) (_ *workflowservice.DescribeWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method DescribeWorkflowRule not supported")
+	}
+	return nil, status.Errorf(codes.Unimplemented, "method DescribeWorkflowRule not implemented")
+}
+
+func (wh *WorkflowHandler) DeleteWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowRuleRequest,
+) (_ *workflowservice.DeleteWorkflowRuleResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method DeleteWorkflowRule not supported")
+	}
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteWorkflowRule not implemented")
+}
+
+func (wh *WorkflowHandler) ListWorkflowRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkflowRulesRequest,
+) (_ *workflowservice.ListWorkflowRulesResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method ListWorkflowRules not supported")
+	}
+	return nil, status.Errorf(codes.Unimplemented, "method ListWorkflowRules not implemented")
+}

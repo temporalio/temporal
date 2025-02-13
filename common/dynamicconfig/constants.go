@@ -2655,4 +2655,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`ActivityAPIsEnabled is a "feature enable" flag. `,
 	)
+
+	WorkflowRulesAPIsEnabled = NewNamespaceBoolSetting(
+		"frontend.workflowRulesAPIsEnabled",
+		false,
+		`WorkflowRulesAPIsEnabled is a "feature enable" flag. `,
+	)
 )

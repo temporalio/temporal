@@ -5578,3 +5578,299 @@ func (this *UpdateWorkflowExecutionOptionsResponse) Equal(that interface{}) bool
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type CreateWorkflowRuleRequest to the protobuf v3 wire format
+func (val *CreateWorkflowRuleRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CreateWorkflowRuleRequest from the protobuf v3 wire format
+func (val *CreateWorkflowRuleRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CreateWorkflowRuleRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CreateWorkflowRuleRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CreateWorkflowRuleRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CreateWorkflowRuleRequest
+	switch t := that.(type) {
+	case *CreateWorkflowRuleRequest:
+		that1 = t
+	case CreateWorkflowRuleRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type CreateWorkflowRuleResponse to the protobuf v3 wire format
+func (val *CreateWorkflowRuleResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CreateWorkflowRuleResponse from the protobuf v3 wire format
+func (val *CreateWorkflowRuleResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CreateWorkflowRuleResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CreateWorkflowRuleResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CreateWorkflowRuleResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CreateWorkflowRuleResponse
+	switch t := that.(type) {
+	case *CreateWorkflowRuleResponse:
+		that1 = t
+	case CreateWorkflowRuleResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DescribeWorkflowRuleRequest to the protobuf v3 wire format
+func (val *DescribeWorkflowRuleRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DescribeWorkflowRuleRequest from the protobuf v3 wire format
+func (val *DescribeWorkflowRuleRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DescribeWorkflowRuleRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DescribeWorkflowRuleRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DescribeWorkflowRuleRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DescribeWorkflowRuleRequest
+	switch t := that.(type) {
+	case *DescribeWorkflowRuleRequest:
+		that1 = t
+	case DescribeWorkflowRuleRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DescribeWorkflowRuleResponse to the protobuf v3 wire format
+func (val *DescribeWorkflowRuleResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DescribeWorkflowRuleResponse from the protobuf v3 wire format
+func (val *DescribeWorkflowRuleResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DescribeWorkflowRuleResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DescribeWorkflowRuleResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DescribeWorkflowRuleResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DescribeWorkflowRuleResponse
+	switch t := that.(type) {
+	case *DescribeWorkflowRuleResponse:
+		that1 = t
+	case DescribeWorkflowRuleResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DeleteWorkflowRuleRequest to the protobuf v3 wire format
+func (val *DeleteWorkflowRuleRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DeleteWorkflowRuleRequest from the protobuf v3 wire format
+func (val *DeleteWorkflowRuleRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DeleteWorkflowRuleRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DeleteWorkflowRuleRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DeleteWorkflowRuleRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DeleteWorkflowRuleRequest
+	switch t := that.(type) {
+	case *DeleteWorkflowRuleRequest:
+		that1 = t
+	case DeleteWorkflowRuleRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DeleteWorkflowRuleResponse to the protobuf v3 wire format
+func (val *DeleteWorkflowRuleResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DeleteWorkflowRuleResponse from the protobuf v3 wire format
+func (val *DeleteWorkflowRuleResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DeleteWorkflowRuleResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DeleteWorkflowRuleResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DeleteWorkflowRuleResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DeleteWorkflowRuleResponse
+	switch t := that.(type) {
+	case *DeleteWorkflowRuleResponse:
+		that1 = t
+	case DeleteWorkflowRuleResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ListWorkflowRulesRequest to the protobuf v3 wire format
+func (val *ListWorkflowRulesRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListWorkflowRulesRequest from the protobuf v3 wire format
+func (val *ListWorkflowRulesRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListWorkflowRulesRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListWorkflowRulesRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListWorkflowRulesRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListWorkflowRulesRequest
+	switch t := that.(type) {
+	case *ListWorkflowRulesRequest:
+		that1 = t
+	case ListWorkflowRulesRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ListWorkflowRulesResponse to the protobuf v3 wire format
+func (val *ListWorkflowRulesResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListWorkflowRulesResponse from the protobuf v3 wire format
+func (val *ListWorkflowRulesResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListWorkflowRulesResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListWorkflowRulesResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListWorkflowRulesResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListWorkflowRulesResponse
+	switch t := that.(type) {
+	case *ListWorkflowRulesResponse:
+		that1 = t
+	case ListWorkflowRulesResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
