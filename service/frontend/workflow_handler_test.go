@@ -2816,7 +2816,6 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 	newRunID := uuid.New().String()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).Times(2)
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil).Times(2)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil).Times(2)
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{

@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/tasktoken"
@@ -145,6 +146,8 @@ type (
 		visibilityManager             manager.VisibilityManager
 		nexusEndpointClient           *nexusEndpointClient
 		nexusEndpointsOwnershipLostCh chan struct{}
+		saMapperProvider              searchattribute.MapperProvider
+		saProvider                    searchattribute.Provider
 		metricsHandler                metrics.Handler
 		partitionsLock                sync.RWMutex // locks mutation of partitions
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
@@ -221,6 +224,8 @@ func NewEngine(
 	visibilityManager manager.VisibilityManager,
 	nexusEndpointManager persistence.NexusEndpointManager,
 	testHooks testhooks.TestHooks,
+	saProvider searchattribute.Provider,
+	saMapperProvider searchattribute.MapperProvider,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -243,6 +248,8 @@ func NewEngine(
 		visibilityManager:             visibilityManager,
 		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
+		saProvider:                    saProvider,
+		saMapperProvider:              saMapperProvider,
 		metricsHandler:                scopedMetricsHandler,
 		partitions:                    make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
@@ -773,6 +780,12 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 		})
 	if err != nil {
 		return nil, nil, err
+	}
+
+	// History service can send history events in response.History.Events. In that case use that directly.
+	// This happens when history.sendRawHistoryBetweenInternalServices is enabled.
+	if resp.History != nil {
+		resp.Response.History = resp.History
 	}
 
 	hist := resp.GetResponse().GetHistory()
