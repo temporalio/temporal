@@ -48,6 +48,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.CompleteNexusOperationResponse:
 		return nil
+	case *historyservice.CreateWorkflowRuleRequest:
+		return nil
+	case *historyservice.CreateWorkflowRuleResponse:
+		return nil
 	case *historyservice.DeepHealthCheckRequest:
 		return nil
 	case *historyservice.DeepHealthCheckResponse:
@@ -62,6 +66,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
 	case *historyservice.DeleteWorkflowExecutionResponse:
+		return nil
+	case *historyservice.DeleteWorkflowRuleRequest:
+		return nil
+	case *historyservice.DeleteWorkflowRuleResponse:
 		return nil
 	case *historyservice.DeleteWorkflowVisibilityRecordRequest:
 		return []tag.Tag{
@@ -90,6 +98,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 			tag.WorkflowRunID(r.GetRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.DescribeWorkflowExecutionResponse:
+		return nil
+	case *historyservice.DescribeWorkflowRuleRequest:
+		return nil
+	case *historyservice.DescribeWorkflowRuleResponse:
 		return nil
 	case *historyservice.ExecuteMultiOperationRequest:
 		return []tag.Tag{
@@ -208,6 +220,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 	case *historyservice.ListTasksRequest:
 		return nil
 	case *historyservice.ListTasksResponse:
+		return nil
+	case *historyservice.ListWorkflowRulesRequest:
+		return nil
+	case *historyservice.ListWorkflowRulesResponse:
 		return nil
 	case *historyservice.MergeDLQMessagesRequest:
 		return nil
