@@ -242,15 +242,16 @@ func (m *activityMatchEvaluator) compareActivityStatus(status string, operator s
 	if m.ai.Paused {
 		return compareQueryString(status, "Paused", operator, activityStatusColName)
 	}
-	switch workflow.GetActivityState(m.ai) { //nolint:exhaustive
+	activityState := workflow.GetActivityState(m.ai)
+	switch activityState { //nolint:exhaustive
 	case enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED:
-		return compareQueryString(status, "Cancelled", operator, activityStatusColName)
+		return compareQueryString(status, activityState.String(), operator, activityStatusColName)
 	case enumspb.PENDING_ACTIVITY_STATE_STARTED:
-		return compareQueryString(status, "Running", operator, activityStatusColName)
+		return compareQueryString(status, activityState.String(), operator, activityStatusColName)
 	case enumspb.PENDING_ACTIVITY_STATE_SCHEDULED:
-		return compareQueryString(status, "Scheduled", operator, activityStatusColName)
+		return compareQueryString(status, activityState.String(), operator, activityStatusColName)
 	default:
-		return false, NewMatcherError("unknown activity status: %s", status)
+		return false, NewMatcherError("unknown or unsupported activity status: %s", status)
 	}
 }
 
