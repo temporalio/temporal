@@ -492,3 +492,8 @@ func (e *ExecutableHistoryTask) CanBatch() bool {
 func (e *ExecutableHistoryTask) MarkUnbatchable() {
 	e.batchable = false
 }
+
+func (e *ExecutableHistoryTask) Cancel() {
+	e.MarkUnbatchable()
+	e.ExecutableTask.Cancel()
+}
