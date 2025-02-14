@@ -487,7 +487,7 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// simulate ownership lost
-	ttm := tm.getQueueManager(tqCfg.dbq)
+	ttm := tm.getQueueManagerByKey(tqCfg.dbq)
 	ttm.Lock()
 	ttm.rangeID++
 	ttm.Unlock()
