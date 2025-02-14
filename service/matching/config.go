@@ -170,6 +170,8 @@ type (
 		BreakdownMetricsByPartition func() bool
 		BreakdownMetricsByBuildID   func() bool
 
+		PollerHistoryTTL func() time.Duration
+
 		loadCause loadCause
 	}
 
@@ -364,6 +366,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		GetUserDataRetryPolicy: backoff.NewExponentialRetryPolicy(1 * time.Second).WithMaximumInterval(5 * time.Minute),
 		TaskQueueInfoByBuildIdTTL: func() time.Duration {
 			return config.TaskQueueInfoByBuildIdTTL(ns.String(), taskQueueName, taskType)
+		},
+		PollerHistoryTTL: func() time.Duration {
+			return config.PollerHistoryTTL(ns.String())
 		},
 	}
 }
