@@ -128,8 +128,9 @@ func TestHistoryReplicationSignalsAndUpdatesTestSuite(t *testing.T) {
 
 func (s *hrsuTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableReplicationStream.Key():           true,
-		dynamicconfig.HistoryLongPollExpirationInterval.Key(): 1 * time.Second,
+		dynamicconfig.EnableReplicationStream.Key(): true,
+		// Use short interval to make long poll timeout
+		dynamicconfig.HistoryLongPollExpirationInterval.Key(): 100 * time.Millisecond,
 	}
 	s.logger = log.NewTestLogger()
 	s.setupSuite(
@@ -1087,6 +1088,7 @@ func (c *hrsuTestCluster) pollWorkflowResult(ctx context.Context, runId string) 
 
 	var token []byte
 	var allEvents []*historypb.HistoryEvent
+	multiPoll := false
 	for {
 		events, nextPageToken := getHistoryWithLongPoll(token)
 		allEvents = append(allEvents, events...)
@@ -1094,9 +1096,11 @@ func (c *hrsuTestCluster) pollWorkflowResult(ctx context.Context, runId string) 
 			break
 		}
 		token = nextPageToken
+		multiPoll = true
 	}
 
 	c.t.s.Len(allEvents, 1)
+	c.t.s.True(multiPoll, "Expected to have multiple polls of history events")
 	return allEvents[0]
 }
 
@@ -1156,6 +1160,9 @@ func (s *hrsuTestSuite) TestConflictResolutionGetResult() {
 		workflowResultCh <- event
 	}
 	go workflowResultFn()
+
+	// Ensure long poll is timeout
+	time.Sleep(time.Millisecond * 100) //nolint:forbidigo
 
 	// Execute pending history replication tasks. Each cluster sends its signal to the other, but these have the same
 	// event ID; this conflict is resolved by reapplying one of the signals after the other.

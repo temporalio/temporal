@@ -26,6 +26,7 @@ package getworkflowexecutionhistory
 
 import (
 	"context"
+	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -96,7 +98,9 @@ func Invoke(
 			workflowConsistencyChecker,
 			eventNotifier,
 		)
-		if err != nil && isCloseEventOnly {
+
+		var branchErr *serviceerrors.CurrentBranchChanged
+		if errors.As(err, &branchErr) && isCloseEventOnly {
 			shardContext.GetLogger().Info("Got CurrentBranchChanged, retry with empty branch token")
 			// if we are only querying for close event, and encounter CurrentBranchChanged error, then we retry with empty branch token to get the close event
 			response, err = api.GetOrPollMutableState(
