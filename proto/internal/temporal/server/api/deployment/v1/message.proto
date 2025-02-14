@@ -338,7 +338,7 @@ message SetRampingVersionArgs {
 // used as Worker Deployment activity input:
 message SyncVersionStateActivityArgs {
     string deployment_name = 1;
-    // <deployment_name>/<build_id> or possibly just <version_id> in the future
+    // <deployment_name>.<build_id> or possibly just <version_id> in the future
     string version = 2;
     SyncVersionStateUpdateArgs update_args = 3;
     string request_id = 4;

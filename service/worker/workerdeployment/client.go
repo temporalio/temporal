@@ -256,7 +256,7 @@ func (d *ClientImpl) DescribeVersion(
 ) (_ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
 	v, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>/<build_id>\"", version))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version))
 	}
 	deploymentName := v.GetDeploymentName()
 	buildID := v.GetBuildId()
@@ -627,7 +627,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 ) (retErr error) {
 	v, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>/<build_id>\"", version))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version))
 	}
 	deploymentName := v.GetDeploymentName()
 	buildId := v.GetBuildId()
