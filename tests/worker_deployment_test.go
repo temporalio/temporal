@@ -1031,7 +1031,7 @@ func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Contex
 }
 
 func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
-	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 5*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -1075,7 +1075,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		})
 		assert.NoError(t, err)
 		assert.Empty(t, resp.Pollers)
-	}, 10*time.Second, time.Second)
+	}, 5*time.Second, time.Second)
 
 	// delete succeeds
 	s.tryDeleteVersion(ctx, tv1, true)

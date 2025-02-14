@@ -453,7 +453,7 @@ to exceed this number will fail with a FailedPrecondition error.`,
 Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this time, the tombstones are deleted at the next time update of versioning data for the task queue.`,
 	)
 	PollerHistoryTTL = NewNamespaceDurationSetting(
-		"matching.wv.PollerHistoryTTL",
+		"matching.PollerHistoryTTL",
 		5*time.Minute,
 		`PollerHistoryTTL is the time to live for poller histories in the pollerHistory cache of a physical task queue. Poller histories are fetched when
 		requiring a list of pollers that polled a given task queue.`,
