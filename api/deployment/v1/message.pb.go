@@ -2147,7 +2147,7 @@ type SyncVersionStateActivityArgs struct {
 	unknownFields protoimpl.UnknownFields
 
 	DeploymentName string `protobuf:"bytes,1,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
-	// <deployment_name>/<build_id> or possibly just <version_id> in the future
+	// <deployment_name>.<build_id> or possibly just <version_id> in the future
 	Version    string                      `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	UpdateArgs *SyncVersionStateUpdateArgs `protobuf:"bytes,3,opt,name=update_args,json=updateArgs,proto3" json:"update_args,omitempty"`
 	RequestId  string                      `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
