@@ -90,8 +90,15 @@ func GetRawHistory(
 		allEvents = append(allEvents, events...)
 		lastEventID = events[len(events)-1].GetEventId()
 	}
+	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
+	if len(allEvents) > 0 {
+		firstEvent = allEvents[0]
+		lastEvent = allEvents[len(allEvents)-1]
+	}
 	if err = VerifyHistoryIsComplete(
-		allEvents,
+		firstEvent,
+		lastEvent,
+		len(allEvents),
 		firstEventID,
 		nextEventID-1,
 		len(token) == 0,
@@ -147,6 +154,7 @@ func GetHistory(
 ) (*historypb.History, []byte, error) {
 
 	var size int
+	isFirstPage := len(nextPageToken) == 0
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shard.GetConfig().NumberOfShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
@@ -178,6 +186,32 @@ func GetHistory(
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
+	isLastPage := len(nextPageToken) == 0
+	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
+	if len(historyEvents) > 0 {
+		firstEvent = &historyspb.StrippedHistoryEvent{
+			EventId: historyEvents[0].GetEventId(),
+		}
+		lastEvent = &historyspb.StrippedHistoryEvent{
+			EventId: historyEvents[len(historyEvents)-1].GetEventId(),
+		}
+	}
+	if err := VerifyHistoryIsComplete(
+		firstEvent,
+		lastEvent,
+		len(historyEvents),
+		firstEventID,
+		nextEventID-1,
+		isFirstPage,
+		isLastPage,
+		int(pageSize)); err != nil {
+		metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
+		logger.Error("getHistory: incomplete history",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(execution.GetWorkflowId()),
+			tag.WorkflowRunID(execution.GetRunId()),
+			tag.Error(err))
+	}
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
@@ -336,7 +370,9 @@ func validateTransientWorkflowTaskEvents(
 }
 
 func VerifyHistoryIsComplete(
-	events []*historyspb.StrippedHistoryEvent,
+	firstEvent *historyspb.StrippedHistoryEvent,
+	lastEvent *historyspb.StrippedHistoryEvent,
+	eventCount int,
 	expectedFirstEventID int64,
 	expectedLastEventID int64,
 	isFirstPage bool,
@@ -344,8 +380,7 @@ func VerifyHistoryIsComplete(
 	pageSize int,
 ) error {
 
-	nEvents := len(events)
-	if nEvents == 0 {
+	if eventCount == 0 {
 		if isLastPage {
 			// we seem to be returning a non-nil pageToken on the lastPage which
 			// in turn cases the client to call getHistory again - only to find
@@ -355,15 +390,12 @@ func VerifyHistoryIsComplete(
 		return serviceerror.NewDataLoss("History contains zero events.")
 	}
 
-	firstEventID := events[0].GetEventId()
-	lastEventID := events[nEvents-1].GetEventId()
-
 	if !isFirstPage { // at least one page of history has been read previously
-		if firstEventID <= expectedFirstEventID {
+		if firstEvent.GetEventId() <= expectedFirstEventID {
 			// not first page and no events have been read in the previous pages - not possible
-			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEventID))
+			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEvent.GetEventId()))
 		}
-		expectedFirstEventID = firstEventID
+		expectedFirstEventID = firstEvent.GetEventId()
 	}
 
 	if !isLastPage {
@@ -374,18 +406,18 @@ func VerifyHistoryIsComplete(
 
 	nExpectedEvents := expectedLastEventID - expectedFirstEventID + 1
 
-	if firstEventID == expectedFirstEventID &&
-		((isLastPage && lastEventID == expectedLastEventID && int64(nEvents) == nExpectedEvents) ||
-			(!isLastPage && lastEventID >= expectedLastEventID && int64(nEvents) >= nExpectedEvents)) {
+	if firstEvent.GetEventId() == expectedFirstEventID &&
+		((isLastPage && lastEvent.GetEventId() == expectedLastEventID && int64(eventCount) == nExpectedEvents) ||
+			(!isLastPage && lastEvent.GetEventId() >= expectedLastEventID && int64(eventCount) >= nExpectedEvents)) {
 		return nil
 	}
 
 	return serviceerror.NewDataLoss(fmt.Sprintf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
 		expectedFirstEventID,
 		expectedLastEventID,
-		firstEventID,
-		lastEventID,
-		nEvents,
+		firstEvent.GetEventId(),
+		lastEvent.GetEventId(),
+		eventCount,
 		isFirstPage,
 		isLastPage,
 		pageSize))

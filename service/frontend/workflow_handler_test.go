@@ -2082,7 +2082,16 @@ func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 
 	for i, tc := range testCases {
-		err := api.VerifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
+		err := api.VerifyHistoryIsComplete(
+			tc.events[0],
+			tc.events[len(tc.events)-1],
+			len(tc.events),
+			tc.firstEventID,
+			tc.lastEventID,
+			tc.isFirstPage,
+			tc.isLastPage,
+			tc.pageSize,
+		)
 		if tc.isResultErr {
 			s.Error(err, "testcase %v failed", i)
 		} else {
