@@ -96,14 +96,17 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	selector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		var newInfo *deploymentpb.VersionDrainageInfo
 		c.Receive(ctx, &newInfo)
-		if d.VersionState.GetDrainageInfo() == nil {
-			d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
-		}
-		d.VersionState.DrainageInfo.LastCheckedTime = newInfo.LastCheckedTime
+		mergedInfo := &deploymentpb.VersionDrainageInfo{}
+		mergedInfo.LastCheckedTime = newInfo.LastCheckedTime
 		if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
-			d.VersionState.DrainageInfo.Status = newInfo.Status
-			d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
+			mergedInfo.Status = newInfo.Status
+			mergedInfo.LastChangedTime = newInfo.LastCheckedTime
+			d.VersionState.DrainageInfo = mergedInfo
 			d.syncSummary(ctx)
+		} else {
+			mergedInfo.Status = d.VersionState.DrainageInfo.Status
+			mergedInfo.LastChangedTime = d.VersionState.DrainageInfo.LastChangedTime
+			d.VersionState.DrainageInfo = mergedInfo
 		}
 	})
 
@@ -233,6 +236,14 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 }
 
 func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, isCan bool) {
+	if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED {
+		now := timestamppb.New(workflow.Now(ctx))
+		d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
+			Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+			LastChangedTime: now,
+			LastCheckedTime: now,
+		}
+	}
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	})
