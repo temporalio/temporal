@@ -288,7 +288,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 
 	// Manual deletion of versions is only possible when:
 	// 1. The version is not current or ramping
-	// 2. The version is drained. (check skipped when `skip-drainage=true` )
+	// 2. The version is not draining. (check skipped when `skip-drainage=true` )
 	// 3. The version has no active pollers.
 
 	// 1. Check if the version is not current or ramping.
@@ -299,9 +299,9 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 
 	// 2. Check if the version is drained.
 	if !args.SkipDrainage {
-		if state.GetDrainageInfo() == nil || state.GetDrainageInfo().Status != enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+		if state.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 			// activity won't retry on this error since version not eligible for deletion
-			return serviceerror.NewFailedPrecondition(errVersionNotDrained)
+			return serviceerror.NewFailedPrecondition(errVersionIsDraining)
 		}
 	}
 

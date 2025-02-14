@@ -513,7 +513,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 	s.tryDeleteVersion(ctx, tv1, false, false)
 }
 
-func (s *DeploymentVersionSuite) TestDeleteVersion_NotDrained() {
+func (s *DeploymentVersionSuite) TestDeleteVersion_DrainingVersion() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
@@ -521,8 +521,39 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NotDrained() {
 	// Start deployment workflow 1 and wait for the deployment version to exist
 	s.startVersionWorkflow(ctx, tv1)
 
-	// Version is not "drained" so delete should fail
+	// Make the version current
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv1.DeploymentSeries(),
+		Version:        tv1.DeploymentVersionString(),
+		Identity:       tv1.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	// Start another version workflow
+	tv2 := testvars.New(s).WithBuildIDNumber(2)
+	s.startVersionWorkflow(ctx, tv2)
+
+	// Setting this version to current should start the drainage workflow for version1 and make it draining
+	_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:               s.Namespace().String(),
+		DeploymentName:          tv2.DeploymentSeries(),
+		Version:                 tv2.DeploymentVersionString(),
+		Identity:                tv2.ClientIdentity(),
+		IgnoreMissingTaskQueues: true,
+	})
+	s.Nil(err)
+
+	// Version should be draining
+	s.checkVersionDrainage(ctx, tv1, &deploymentpb.VersionDrainageInfo{
+		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+		LastChangedTime: nil, // don't test this now
+		LastCheckedTime: nil, // don't test this now
+	}, false, false)
+
+	// delete should fail
 	s.tryDeleteVersion(ctx, tv1, false, false)
+
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
