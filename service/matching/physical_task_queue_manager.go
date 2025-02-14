@@ -144,7 +144,8 @@ func newPhysicalTaskQueueManager(
 		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
 		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
 	}
-	pqMgr.pollerHistory = newPollerHistory()
+
+	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL())
 
 	pqMgr.liveness = newLiveness(
 		clock.NewRealTimeSource(),

@@ -437,7 +437,6 @@ func (d *ClientImpl) ListWorkerDeployments(
 		pageSize = d.visibilityMaxPageSize(namespaceEntry.Name().String())
 	}
 
-	// todo (Shivam): closed workflows should be filtered out.
 	persistenceResp, err := d.visibilityManager.ListWorkflowExecutions(
 		ctx,
 		&manager.ListWorkflowExecutionsRequestV2{
