@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -101,7 +102,12 @@ func Invoke(
 
 		var branchErr *serviceerrors.CurrentBranchChanged
 		if errors.As(err, &branchErr) && isCloseEventOnly {
-			shardContext.GetLogger().Info("Got CurrentBranchChanged, retry with empty branch token")
+			shardContext.GetLogger().Info("Got CurrentBranchChanged, retry with empty branch token",
+				tag.WorkflowNamespaceID(namespaceUUID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err),
+			)
 			// if we are only querying for close event, and encounter CurrentBranchChanged error, then we retry with empty branch token to get the close event
 			response, err = api.GetOrPollMutableState(
 				ctx,
