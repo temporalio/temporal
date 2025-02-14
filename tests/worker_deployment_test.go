@@ -1116,13 +1116,16 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	}, time.Second*5, time.Millisecond*200)
 
 	// ListDeployments should not show the closed/deleted Worker Deployment
-	listResp, err := s.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
-		Namespace: s.Namespace().String(),
-	})
-	s.Nil(err)
-	for _, dInfo := range listResp.GetWorkerDeployments() {
-		s.NotEqual(tv1.DeploymentSeries(), dInfo.GetName())
-	}
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		listResp, err := s.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+			Namespace: s.Namespace().String(),
+		})
+		a.Nil(err)
+		for _, dInfo := range listResp.GetWorkerDeployments() {
+			a.NotEqual(tv1.DeploymentSeries(), dInfo.GetName())
+		}
+	}, time.Second*5, time.Millisecond*200)
 }
 
 func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_Idempotent() {
