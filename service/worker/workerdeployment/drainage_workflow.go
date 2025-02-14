@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -62,17 +61,6 @@ func DrainageWorkflow(
 
 	// Set status = DRAINING and then sleep for visibilityGracePeriod (to let recently-started workflows arrive in visibility)
 	if !args.IsCan { // skip if resuming after the parent continued-as-new
-		parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
-		now := timestamppb.Now()
-		drainingInfo := &deploymentpb.VersionDrainageInfo{
-			Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
-			LastChangedTime: now,
-			LastCheckedTime: now,
-		}
-		err := workflow.SignalExternalWorkflow(ctx, parentWf.ID, parentWf.RunID, SyncDrainageSignalName, drainingInfo).Get(ctx, nil)
-		if err != nil {
-			return err
-		}
 		grace, err := getSafeDurationConfig(ctx, "getVisibilityGracePeriod", unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
 		if err != nil {
 			return err

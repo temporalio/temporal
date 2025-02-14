@@ -243,6 +243,7 @@ func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, isCan bool) 
 			LastChangedTime: now,
 			LastCheckedTime: now,
 		}
+                d.syncSummary(ctx)
 	}
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
