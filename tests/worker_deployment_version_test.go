@@ -523,6 +523,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoWfs() {
 	// Create a deployment version
 	s.startVersionWorkflow(ctx, tv1)
 
+	//nolint:forbidigo
 	time.Sleep(2 * time.Second) // todo (Shivam): remove this after the above skip is removed
 
 	// delete should succeed

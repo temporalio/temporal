@@ -316,8 +316,6 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		return err
 	}
 
-	d.logger.Info("Version is eligible for deletion")
-
 	// sync version removal to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version:       state.GetVersion(),
