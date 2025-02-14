@@ -680,7 +680,7 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
-	s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 5*time.Second)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -718,7 +718,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
-	s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 5*time.Second)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

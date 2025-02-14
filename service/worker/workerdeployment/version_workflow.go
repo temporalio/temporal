@@ -581,6 +581,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// stopped accepting new workflows --> start drainage child wf
 	if wasAcceptingNewWorkflows && !isAcceptingNewWorkflows {
+		fmt.Println("starting drainage lets goooo")
 		d.startDrainage(ctx, false)
 	}
 
