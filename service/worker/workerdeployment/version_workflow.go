@@ -297,7 +297,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		return serviceerror.NewFailedPrecondition(errVersionIsCurrentOrRamping)
 	}
 
-	// 2. Check if the version is drained.
+	// 2. Check if the version is draining.
 	if !args.SkipDrainage {
 		if state.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 			// activity won't retry on this error since version not eligible for deletion

@@ -513,6 +513,37 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 	s.tryDeleteVersion(ctx, tv1, false, false)
 }
 
+func (s *DeploymentVersionSuite) TestDeleteVersion_NoWfs() {
+	s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Create a deployment version
+	s.startVersionWorkflow(ctx, tv1)
+
+	time.Sleep(2 * time.Second) // todo (Shivam): remove this after the above skip is removed
+
+	// delete should succeed
+	s.tryDeleteVersion(ctx, tv1, true, false)
+
+	// deployment version does not exist in the deployment list
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv1.DeploymentSeries(),
+		})
+		a.NoError(err)
+		if resp != nil {
+			for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+				a.NotEqual(tv1.DeploymentVersionString(), vs.Version)
+			}
+		}
+	}, time.Second*5, time.Millisecond*200)
+}
+
 func (s *DeploymentVersionSuite) TestDeleteVersion_DrainingVersion() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
