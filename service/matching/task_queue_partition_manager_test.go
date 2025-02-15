@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"sync"
 	"testing"
 	"time"
@@ -52,6 +51,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -492,7 +492,7 @@ func (s *PartitionManagerTestSuite) TestPollScalingUpOnBacklog() {
 	}
 	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
 	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
-	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
+	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
 	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 }
 
@@ -503,7 +503,7 @@ func (s *PartitionManagerTestSuite) TestPollScalingNoChangeOnNoBacklogFastMatch(
 	}
 	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
 	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
-	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
+	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
 	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(0))
 }
 
@@ -525,12 +525,12 @@ func (s *PartitionManagerTestSuite) TestPollScalingNonRootPartition() {
 	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
 	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(2)
 
-	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
+	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
 	s.Assert().NotNil(decision)
 	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 
 	fakeStats.ApproximateBacklogCount = 0
-	decision = s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
+	decision = s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
 	s.Assert().Nil(decision)
 }
 
@@ -543,7 +543,7 @@ func (s *PartitionManagerTestSuite) TestPollScalingDownOnLongSyncMatch() {
 	}
 	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
 	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
-	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, fakeInternalTask, time.Now().Add(-2*time.Second))
+	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now().Add(-2*time.Second))
 	s.Assert().LessOrEqual(decision.PollRequestDeltaSuggestion, int32(-1))
 }
 
@@ -559,9 +559,9 @@ func (s *PartitionManagerTestSuite) TestPollScalingDecisionsAreRateLimited() {
 	}
 	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
 	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
-	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
+	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
 	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
-	decision = s.partitionMgr.makePollerScalingDecision(mockPTQM, &internalTask{}, time.Now())
+	decision = s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
 	s.Assert().Nil(decision)
 }
 

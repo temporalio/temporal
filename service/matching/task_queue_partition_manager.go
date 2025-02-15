@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -332,7 +331,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	task, err := dbq.PollTask(ctx, pollMetadata)
 
 	if task != nil {
-		task.pollerScalingDecision = pm.makePollerScalingDecision(dbq, task, pollMetadata.localPollStartTime)
+		task.pollerScalingDecision = pm.makePollerScalingDecision(dbq, pollMetadata.localPollStartTime)
 	}
 
 	return task, versionSetUsed, err
@@ -1084,8 +1083,7 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 // makePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state of the
 // task queue and the task about to be returned. Does not modify inputs.
 func (pm *taskQueuePartitionManagerImpl) makePollerScalingDecision(
-	dbq physicalTaskQueueManager, task *internalTask, pollStartTime time.Time,
-) *taskqueuepb.PollerScalingDecision {
+	dbq physicalTaskQueueManager, pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
 	// Avoid thrashing pollers all over the place by limiting how frequently change decisions are issued.
 	if !pm.pollerScalingRateLimiter.Allow() {
 		return nil
@@ -1101,12 +1099,18 @@ func (pm *taskQueuePartitionManagerImpl) makePollerScalingDecision(
 	} else if !pm.partition.IsRoot() {
 		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
 		return nil
-	} else if task.source == enumsspb.TASK_SOURCE_HISTORY &&
-		pollWaitTime >= pm.config.PollerScalingSyncMatchWaitTime() {
+	} else if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
+		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
+		// since those (currently) don't get backlogged.
+		delta = 1
+	} else if pollWaitTime >= pm.config.PollerScalingSyncMatchWaitTime() {
 		// Decrease if any poll matched after sitting idle for some configured period
 		delta = -1
 	}
 
+	if delta == 0 {
+		return nil
+	}
 	return &taskqueuepb.PollerScalingDecision{
 		PollRequestDeltaSuggestion: delta,
 	}
