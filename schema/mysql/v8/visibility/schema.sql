@@ -1,7 +1,7 @@
 CREATE TABLE executions_visibility (
   namespace_id            CHAR(64)      NOT NULL,
   run_id                  CHAR(64)      NOT NULL,
-  version                 BIGINT        NOT NULL DEFAULT 0,
+  _version                BIGINT        NOT NULL DEFAULT 0,
   start_time              DATETIME(6)   NOT NULL,
   execution_time          DATETIME(6)   NOT NULL,
   workflow_id             VARCHAR(255)  NOT NULL,
@@ -86,7 +86,7 @@ CREATE INDEX by_temporal_namespace_division   ON executions_visibility (namespac
 CREATE TABLE custom_search_attributes (
   namespace_id      CHAR(64)  NOT NULL,
   run_id            CHAR(64)  NOT NULL,
-  version           BIGINT    NOT NULL DEFAULT 0,
+  _version           BIGINT    NOT NULL DEFAULT 0,
   search_attributes JSON      NULL,
   Bool01            BOOLEAN         GENERATED ALWAYS AS (search_attributes->"$.Bool01"),
   Bool02            BOOLEAN         GENERATED ALWAYS AS (search_attributes->"$.Bool02"),

@@ -43,7 +43,7 @@ import (
 
 var (
 	ErrInvalidKeywordListDataType = errors.New("Unexpected data type in keyword list")
-	VersionColumnName = "version" 
+	VersionColumnName             = "_version"
 )
 
 type (
@@ -55,7 +55,6 @@ type (
 	VisibilityRow struct {
 		NamespaceID          string
 		RunID                string
-		Version 		     int64
 		WorkflowTypeName     string
 		WorkflowID           string
 		StartTime            time.Time
@@ -74,6 +73,11 @@ type (
 		ParentRunID          *string
 		RootWorkflowID       string
 		RootRunID            string
+
+		// Version must be at the end because the version column has to be the last column in the insert statement.
+		// Otherwise we may do partial updates as the version changes halfway through.
+		// This is because MySQL doesn't support row versioning in a way that prevents out-of-order updates.
+		Version int64 `db:"_version"`
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that
@@ -225,25 +229,6 @@ func getDbFields() []string {
 			dbFields[i] = strcase.ToSnake(f.Name)
 		}
 	}
-
-	// We have to do this for MySQL because the version column has to be the last column in the insert statement.
-	// Otherwise we may do partial updates as the version changes halfway through.
-	// Basically we are just pushing "version" to the end of the list.
-	// We could put "version" at the end of the definition but that would be brittle and break if we add a new column.
-	// This is a hack but we are trapped because MySQL doesn't support row versioning
-	// in a way that prevents out-of-order updates.
-	var foundVersion bool
-	for i := 0; i < len(dbFields)-1; i++ {
-		if dbFields[i] == VersionColumnName {
-			foundVersion = true
-		}
-		if foundVersion {
-			dbFields[i] = dbFields[i+1]
-		}
-	}
-	end := len(dbFields) - 1
-	dbFields[end] = VersionColumnName
-
 	return dbFields
 }
 

@@ -1,1 +1,1 @@
-ALTER TABLE executions_visibility ADD COLUMN version BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE executions_visibility ADD COLUMN _version BIGINT NOT NULL DEFAULT 0;
