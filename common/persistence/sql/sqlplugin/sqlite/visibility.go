@@ -72,10 +72,11 @@ func buildOnDuplicateKeyUpdate(fields ...string) string {
 		items[i] = fmt.Sprintf("%s = excluded.%s", field, field)
 	}
 	return fmt.Sprintf(
-		"ON CONFLICT (namespace_id, run_id) DO UPDATE SET %s",
-		strings.Join(items, ", "),
+		"ON CONFLICT (namespace_id, run_id) DO UPDATE SET %s WHERE %s < EXCLUDED.%s",
+		strings.Join(items, ", "), sqlplugin.VersionColumnName, sqlplugin.VersionColumnName,
 	)
 }
+
 
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made

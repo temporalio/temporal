@@ -1,6 +1,7 @@
 CREATE TABLE executions_visibility (
   namespace_id            CHAR(64)      NOT NULL,
   run_id                  CHAR(64)      NOT NULL,
+  version                 BIGINT        NOT NULL DEFAULT 0,
   start_time              TIMESTAMP     NOT NULL,
   execution_time          TIMESTAMP     NOT NULL,
   workflow_id             VARCHAR(255)  NOT NULL,

@@ -82,7 +82,9 @@ var (
 func buildOnDuplicateKeyUpdate(fields ...string) string {
 	items := make([]string, len(fields))
 	for i, field := range fields {
-		items[i] = fmt.Sprintf("%s = VALUES(%s)", field, field)
+		// This line is to ensure that no update occurs (for any column) if the version is behind the saver version.
+		items[i] = fmt.Sprintf("%v = IF(%v < VALUES(%v), VALUES(%v), %v)",
+		 field, sqlplugin.VersionColumnName, sqlplugin.VersionColumnName, field, field)
 	}
 	return fmt.Sprintf("ON DUPLICATE KEY UPDATE %s", strings.Join(items, ", "))
 }
