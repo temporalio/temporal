@@ -2097,8 +2097,9 @@ pollLoop:
 
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
-				TaskToken: serializedToken,
-				Request:   nexusReq,
+				TaskToken:             serializedToken,
+				Request:               nexusReq,
+				PollerScalingDecision: task.pollerScalingDecision,
 			},
 		}, nil
 	}

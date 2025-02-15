@@ -234,6 +234,9 @@ func (task *internalTask) pollActivityTaskQueueResponse() *matchingservice.PollA
 // should only be called when isStarted() is true
 func (task *internalTask) pollNexusTaskQueueResponse() *matchingservice.PollNexusTaskQueueResponse {
 	if task.isStarted() {
+		if task.started.nexusTaskInfo.Response != nil {
+			task.started.nexusTaskInfo.Response.PollerScalingDecision = task.pollerScalingDecision
+		}
 		return task.started.nexusTaskInfo
 	}
 	return nil

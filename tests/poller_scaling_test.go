@@ -2,22 +2,38 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/components/nexusoperations"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type PollerScalingIntegSuite struct {
 	testcore.FunctionalTestSuite
 	sdkClient sdkclient.Client
+}
+
+func (s *PollerScalingIntegSuite) mustToPayload(v any) *commonpb.Payload {
+	conv := converter.GetDefaultDataConverter()
+	payload, err := conv.ToPayload(v)
+	s.NoError(err)
+	return payload
 }
 
 func TestPollerScalingFunctionalSuite(t *testing.T) {
@@ -55,7 +71,27 @@ func (s *PollerScalingIntegSuite) TearDownTest() {
 func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
+
 	tq := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	s.OverrideDynamicConfig(
+		nexusoperations.CallbackURLTemplate,
+		"http://"+s.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+
+	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_Worker_{
+					Worker: &nexuspb.EndpointTarget_Worker{
+						Namespace: s.Namespace().String(),
+						TaskQueue: tq,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
 
 	// Queue up a couple workflows
 	runHandles := make([]sdkclient.WorkflowRun, 0)
@@ -65,18 +101,81 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 		s.NoError(err)
 		runHandles = append(runHandles, run)
 	}
-	// Wait for the backlog age to pass the config threshold
-	time.Sleep(50 * time.Millisecond)
 
-	// Poll for a tasks and see attached decision is to scale up b/c of backlog
+	// Wait for the backlog age to pass the config threshold
+	//time.Sleep(5000 * time.Millisecond)
+
+	// Poll for a task and see attached decision is to scale up b/c of backlog
 	feClient := s.FrontendClient()
-	resp, err := feClient.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	// This needs to be done in an eventually loop because nexus endpoints don't become available immediately...
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := feClient.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		assert.NoError(t, err)
+		assert.NotNil(t, resp.PollerScalingDecision)
+		assert.GreaterOrEqual(t, int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+
+		// Respond w/ activity and nexus tasks so we can see scaling decisions on polling those.
+		// Two nexus tasks are needed so that the add rate will exceed dispatch rate.
+		_, err = feClient.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: resp.TaskToken,
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:          "1",
+						ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
+						TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						Input:               payloads.EncodeString("test-input"),
+						StartToCloseTimeout: durationpb.New(10 * time.Second),
+					}},
+				},
+				{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+					Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+						ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+							Endpoint:  endpointName,
+							Service:   "service",
+							Operation: "operation",
+							Input:     s.mustToPayload("input"),
+						},
+					},
+				},
+				{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+					Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+						ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+							Endpoint:  endpointName,
+							Service:   "service",
+							Operation: "operation",
+							Input:     s.mustToPayload("input"),
+						},
+					},
+				},
+			},
+		})
+		assert.NoError(t, err)
+	}, 20*time.Second, 200*time.Millisecond)
+
+	actResp, err := feClient.PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.NoError(err)
-	s.NotNil(resp.PollerScalingDecision)
-	s.Assert().GreaterOrEqual(int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.NotNil(actResp.PollerScalingDecision)
+	s.Assert().GreaterOrEqual(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
+
+	// Wait a little time to ensure add rate exceeds dispatch rate
+	time.Sleep(500 * time.Millisecond)
+	nexusResp, err := feClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	s.NoError(err)
+	s.NotNil(nexusResp.PollerScalingDecision)
 }
 
 // Here we verify that, even with multiple partitions, pollers see scaling decisions at least often enough
