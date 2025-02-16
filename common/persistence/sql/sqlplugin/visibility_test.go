@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,14 +20,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package v12
+package sqlplugin
 
-// NOTE: whenever there is a new database schema update, plz update the following versions
+import (
+	"testing"
 
-// Version is the Postgres database release version
-// Temporal supports both MySQL and Postgres officially, so upgrade should be performed for both MySQL and Postgres
-const Version = "1.15"
+	"github.com/stretchr/testify/require"
+)
 
-// VisibilityVersion is the Postgres visibility database release version
-// Temporal supports both MySQL and Postgres officially, so upgrade should be performed for both MySQL and Postgres
-const VisibilityVersion = "1.9"
+func TestDbFields_LastField_Version(t *testing.T) {
+	lastField := DbFields[len(DbFields)-1]
+	require.Equal(t, VersionColumnName, lastField)
+}

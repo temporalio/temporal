@@ -45,6 +45,8 @@ type (
 		*require.Assertions
 
 		store sqlplugin.Visibility
+
+		version int64 // used to create increasing version numbers for `_version` column
 	}
 )
 
@@ -1362,6 +1364,7 @@ func (s *visibilitySuite) newRandomVisibilityRow(
 	closeTime *time.Time,
 	historyLength *int64,
 ) sqlplugin.VisibilityRow {
+	s.version++
 	return sqlplugin.VisibilityRow{
 		NamespaceID:      namespaceID.String(),
 		RunID:            runID.String(),
@@ -1374,6 +1377,7 @@ func (s *visibilitySuite) newRandomVisibilityRow(
 		HistoryLength:    historyLength,
 		Memo:             shuffle.Bytes(testVisibilityData),
 		Encoding:         testVisibilityEncoding,
+		Version:          s.version,
 	}
 }
 
