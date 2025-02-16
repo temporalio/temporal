@@ -85,7 +85,7 @@ func buildOnDuplicateKeyUpdate(fields ...string) string {
 	for i, field := range fields {
 		// This line is to ensure that no update occurs (for any column) if the version is behind the saved version.
 		items[i] = fmt.Sprintf("%v = IF(%v < VALUES(%v), VALUES(%v), %v)",
-		 field, sqlplugin.VersionColumnName, sqlplugin.VersionColumnName, field, field)
+			field, sqlplugin.VersionColumnName, sqlplugin.VersionColumnName, field, field)
 	}
 	return fmt.Sprintf("ON DUPLICATE KEY UPDATE %s", strings.Join(items, ", "))
 }

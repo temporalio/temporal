@@ -68,7 +68,7 @@ func buildOnDuplicateKeyUpdate(fields ...string) string {
 		items[i] = fmt.Sprintf("%s = excluded.%s", field, field)
 	}
 	return fmt.Sprintf(
-		 // The WHERE clause ensures that no update occurs if the version is behind the saved version.
+		// The WHERE clause ensures that no update occurs if the version is behind the saved version.
 		"ON CONFLICT (namespace_id, run_id) DO UPDATE SET %s WHERE executions_visibility.%s < EXCLUDED.%s",
 		strings.Join(items, ", "), sqlplugin.VersionColumnName, sqlplugin.VersionColumnName,
 	)
