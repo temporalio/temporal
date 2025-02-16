@@ -10,7 +10,7 @@ $$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
 CREATE TABLE executions_visibility (
   namespace_id            CHAR(64)      NOT NULL,
   run_id                  CHAR(64)      NOT NULL,
-  _version                BIGINT        NOT NULL DEFAULT 0,
+  _version                BIGINT        NOT NULL DEFAULT 0, -- increasing version, used to reject upserts which are out of order
   start_time              TIMESTAMP     NOT NULL,
   execution_time          TIMESTAMP     NOT NULL,
   workflow_id             VARCHAR(255)  NOT NULL,
