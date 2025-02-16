@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/internal/goro"
 )
 
 const (
@@ -51,11 +50,9 @@ const (
 
 type (
 	taskReader struct {
-		status     int32
 		taskBuffer chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
 		notifyC    chan struct{}                          // Used as signal to notify pump of new tasks
 		backlogMgr *backlogManagerImpl
-		gorogrp    goro.Group
 
 		backoffTimerLock      sync.Mutex
 		backoffTimer          *time.Timer
@@ -66,7 +63,6 @@ type (
 
 func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
 	tr := &taskReader{
-		status:     common.DaemonStatusInitialized,
 		backlogMgr: backlogMgr,
 		notifyC:    make(chan struct{}, 1),
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
@@ -83,30 +79,8 @@ func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
 
 // Start taskReader background goroutines.
 func (tr *taskReader) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&tr.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
-		return
-	}
-
-	tr.gorogrp.Go(tr.dispatchBufferedTasks)
-	tr.gorogrp.Go(tr.getTasksPump)
-}
-
-// Stop taskReader goroutines.
-// Note that this does not wait until
-func (tr *taskReader) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&tr.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
-		return
-	}
-
-	tr.gorogrp.Cancel()
+	go tr.dispatchBufferedTasks()
+	go tr.getTasksPump()
 }
 
 func (tr *taskReader) Signal() {
@@ -132,8 +106,8 @@ func (tr *taskReader) getBacklogHeadAge() time.Duration {
 	return time.Since(time.Unix(0, tr.backlogHeadCreateTime.Load()))
 }
 
-func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
-	ctx = tr.backlogMgr.contextInfoProvider(ctx)
+func (tr *taskReader) dispatchBufferedTasks() error {
+	ctx := tr.backlogMgr.tqCtx
 
 dispatchLoop:
 	for ctx.Err() == nil {
@@ -174,8 +148,8 @@ dispatchLoop:
 	return ctx.Err()
 }
 
-func (tr *taskReader) getTasksPump(ctx context.Context) error {
-	ctx = tr.backlogMgr.contextInfoProvider(ctx)
+func (tr *taskReader) getTasksPump() error {
+	ctx := tr.backlogMgr.tqCtx
 
 	if err := tr.backlogMgr.WaitUntilInitialized(ctx); err != nil {
 		return err

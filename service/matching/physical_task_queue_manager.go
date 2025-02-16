@@ -79,11 +79,15 @@ type (
 	}
 	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
 	physicalTaskQueueManagerImpl struct {
-		status            int32
-		partitionMgr      *taskQueuePartitionManagerImpl
-		queue             *PhysicalTaskQueueKey
-		config            *taskQueueConfig
-		backlogMgr        *backlogManagerImpl
+		status       int32
+		partitionMgr *taskQueuePartitionManagerImpl
+		queue        *PhysicalTaskQueueKey
+		config       *taskQueueConfig
+		backlogMgr   *backlogManagerImpl
+		// This context is valid for lifetime of this physicalTaskQueueManagerImpl.
+		// It can be used to notify when the task queue is closing.
+		tqCtx             context.Context
+		tqCtxCancel       context.CancelFunc
 		liveness          *liveness
 		matcher           *TaskMatcher // for matching a task producer with a poller
 		namespaceRegistry namespace.Registry
@@ -130,16 +134,20 @@ func newPhysicalTaskQueueManager(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
 		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
 
+	tqCtx, tqCancel := context.WithCancel(partitionMgr.callerInfoContext(context.Background()))
+
 	pqMgr := &physicalTaskQueueManagerImpl{
 		status:                     common.DaemonStatusInitialized,
 		partitionMgr:               partitionMgr,
+		queue:                      queue,
+		config:                     config,
+		tqCtx:                      tqCtx,
+		tqCtxCancel:                tqCancel,
 		namespaceRegistry:          e.namespaceRegistry,
 		matchingClient:             e.matchingRawClient,
 		clusterMeta:                e.clusterMeta,
-		queue:                      queue,
 		logger:                     logger,
 		throttledLogger:            throttledLogger,
-		config:                     config,
 		metricsHandler:             taggedMetricsHandler,
 		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
 		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
@@ -153,16 +161,21 @@ func newPhysicalTaskQueueManager(
 		func() { pqMgr.UnloadFromPartitionManager(unloadCauseIdle) },
 	)
 
-	pqMgr.taskValidator = newTaskValidator(pqMgr.newIOContext, pqMgr.clusterMeta, pqMgr.namespaceRegistry, pqMgr.partitionMgr.engine.historyClient)
+	pqMgr.taskValidator = newTaskValidator(
+		tqCtx,
+		pqMgr.clusterMeta,
+		pqMgr.namespaceRegistry,
+		pqMgr.partitionMgr.engine.historyClient,
+	)
 	pqMgr.backlogMgr = newBacklogManager(
 		pqMgr,
 		config,
+		tqCtx,
 		e.taskManager,
 		logger,
 		throttledLogger,
 		e.matchingRawClient,
 		taggedMetricsHandler,
-		partitionMgr.callerInfoContext,
 	)
 
 	var fwdr *Forwarder
@@ -206,9 +219,11 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	) {
 		return
 	}
+	// this may attempt to write one final ack update, do this before canceling tqCtx
 	c.backlogMgr.Stop()
 	c.matcher.Stop()
 	c.liveness.Stop()
+	c.tqCtxCancel()
 	c.logger.Info("Stopped physicalTaskQueueManager", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, -1)
@@ -635,11 +650,6 @@ func newChildContext(
 
 func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 	return c.queue
-}
-
-func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-	return c.partitionMgr.callerInfoContext(ctx), cancel
 }
 
 func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
