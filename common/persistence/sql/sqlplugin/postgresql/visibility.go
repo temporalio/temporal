@@ -45,12 +45,10 @@ var (
 	templateUpsertWorkflowExecution = fmt.Sprintf(
 		`INSERT INTO executions_visibility (%s)
 		VALUES (%s)
-		%s
-		WHERE executions_visibility.%s < EXCLUDED.%s`, // This line is to ensure that no update occurs if the version is behind the saved version.
+		%s`,
 		strings.Join(sqlplugin.DbFields, ", "),
 		sqlplugin.BuildNamedPlaceholder(sqlplugin.DbFields...),
 		buildOnDuplicateKeyUpdate(sqlplugin.DbFields...),
-		sqlplugin.VersionColumnName, sqlplugin.VersionColumnName,
 	)
 
 	templateDeleteWorkflowExecution_v12 = `
@@ -70,8 +68,9 @@ func buildOnDuplicateKeyUpdate(fields ...string) string {
 		items[i] = fmt.Sprintf("%s = excluded.%s", field, field)
 	}
 	return fmt.Sprintf(
-		"ON CONFLICT (namespace_id, run_id) DO UPDATE SET %s",
-		strings.Join(items, ", "),
+		 // The WHERE clause ensures that no update occurs if the version is behind the saved version.
+		"ON CONFLICT (namespace_id, run_id) DO UPDATE SET %s WHERE executions_visibility.%s < EXCLUDED.%s",
+		strings.Join(items, ", "), sqlplugin.VersionColumnName, sqlplugin.VersionColumnName,
 	)
 }
 

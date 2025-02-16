@@ -60,8 +60,8 @@ var (
 
 	templateUpsertCustomSearchAttributes = `
 		INSERT INTO custom_search_attributes (
-			namespace_id, run_id, search_attributes
-		) VALUES (:namespace_id, :run_id, :search_attributes)` +
+			namespace_id, run_id, search_attributes, _version
+		) VALUES (:namespace_id, :run_id, :search_attributes, :_version)` +
 		fmt.Sprintf(`ON DUPLICATE KEY UPDATE search_attributes = IF(%v < VALUES(%v), VALUES(search_attributes), search_attributes)`,
 			sqlplugin.VersionColumnName, sqlplugin.VersionColumnName)
 
