@@ -256,7 +256,7 @@ func validateInterval(i *schedulepb.IntervalSpec) error {
 	if i == nil {
 		return errors.New("interval is nil")
 	}
-	// TODO: use timestamp.ValidateProtoDuration after switching to state machine based implementation.
+	// TODO: use timestamp.ValidateAndCapProtoDuration after switching to state machine based implementation.
 	// 	Not adding it to workflow based implementation to avoid potential non-determinism errors.
 	iv, phase := timestamp.DurationValue(i.Interval), timestamp.DurationValue(i.Phase)
 	if iv < time.Second {

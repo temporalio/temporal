@@ -294,13 +294,13 @@ func ValidateStartWorkflowExecutionRequest(
 	if len(request.GetRequestId()) == 0 {
 		return serviceerror.NewInvalidArgument("Missing request ID.")
 	}
-	if err := timestamp.ValidateProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid WorkflowExecutionTimeoutSeconds: %s", err.Error()))
 	}
-	if err := timestamp.ValidateProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid WorkflowRunTimeoutSeconds: %s", err.Error()))
 	}
-	if err := timestamp.ValidateProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid WorkflowTaskTimeoutSeconds: %s", err.Error()))
 	}
 	if request.TaskQueue == nil || request.TaskQueue.GetName() == "" {

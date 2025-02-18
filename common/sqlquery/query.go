@@ -63,6 +63,14 @@ func ExtractStringValue(s string) (string, error) {
 	return "", fmt.Errorf("value %s is not a string value", s)
 }
 
+func ExtractIntValue(s string) (int, error) {
+	intValue, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, err
+	}
+	return intValue, nil
+}
+
 // ParseValue returns a string, int64 or float64 if the parsing succeeds.
 func ParseValue(sqlValue string) (interface{}, error) {
 	if sqlValue == "" {
