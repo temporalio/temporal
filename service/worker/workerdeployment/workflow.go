@@ -261,7 +261,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 	}()
 
 	// Validating the state before starting the SetRampingVersion operation. This is required due to the following reason:
-	// The validator accepts/rejects updates based on the state of the deployment workflow. Theoretically, two concurrent update requests (with no conflict tokens)
+	// The validator accepts/rejects updates based on the state of the deployment workflow. Theoretically, two concurrent update requests
 	// might be accepted by the validator since the state of the workflow, at that point in time, is valid for the updates to take place. Since this update handler
 	// enforces sequential updates, after the first update completes, the local state of the deployment workflow will change. The second update,
 	// now already accepted by the validator, should now not be allowed to run since the state of the workflow is different.
@@ -467,7 +467,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	}()
 
 	// Validating the state before starting the SetCurrent operation. This is required due to the following reason:
-	// The validator accepts/rejects updates based on the state of the deployment workflow. Theoretically, two concurrent update requests (with no conflict tokens)
+	// The validator accepts/rejects updates based on the state of the deployment workflow. Theoretically, two concurrent update requests
 	// might be accepted by the validator since the state of the workflow, at that point in time, is valid for the updates to take place. Since this update handler
 	// enforces sequential updates, after the first update completes, the local state of the deployment workflow will change. The second update,
 	// now already accepted by the validator, should now not be allowed to run since the state of the workflow is different.
