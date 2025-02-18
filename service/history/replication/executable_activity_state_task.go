@@ -293,3 +293,8 @@ func (e *ExecutableActivityStateTask) CanBatch() bool {
 func (e *ExecutableActivityStateTask) MarkUnbatchable() {
 	e.batchable = false
 }
+
+func (e *ExecutableActivityStateTask) Cancel() {
+	e.MarkUnbatchable()
+	e.ExecutableTask.Cancel()
+}

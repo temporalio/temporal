@@ -26,6 +26,7 @@ package ndc
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -472,61 +473,61 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 		}
 	}()
 
-	switch task.getFirstEvent().GetEventType() {
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
-		return r.applyStartEvents(ctx, wfContext, releaseFn, task)
-
-	default:
-		// apply events, other than simple start workflow execution
-		// the update + start workflow execution combination will also be processed here
-		mutableState, err := wfContext.LoadMutableState(ctx, r.shardContext)
-		switch err.(type) {
-		case nil:
-			mutableState, _, err = r.mutableStateMapper.FlushBufferEvents(ctx, wfContext, mutableState, task)
-			if err != nil {
-				return err
-			}
-			mutableState, prepareHistoryBranchOut, err := r.mutableStateMapper.GetOrCreateHistoryBranch(ctx, wfContext, mutableState, task)
-			if err != nil {
-				return err
-			} else if !prepareHistoryBranchOut.DoContinue {
-				metrics.DuplicateReplicationEventsCounter.With(r.metricsHandler).Record(
-					1,
-					metrics.OperationTag(metrics.ReplicateHistoryEventsScope))
-				return consts.ErrDuplicate
-			}
-			err = task.skipDuplicatedEvents(prepareHistoryBranchOut.EventsApplyIndex)
-			if err != nil {
-				return err
-			}
-
-			mutableState, isRebuilt, err := r.mutableStateMapper.GetOrRebuildCurrentMutableState(
-				ctx,
-				wfContext,
-				mutableState,
-				GetOrRebuildMutableStateIn{replicationTask: task, BranchIndex: prepareHistoryBranchOut.BranchIndex},
-			)
-			if err != nil {
-				return err
-			}
-			if mutableState.GetExecutionInfo().GetVersionHistories().GetCurrentVersionHistoryIndex() == prepareHistoryBranchOut.BranchIndex {
-				return r.applyNonStartEventsToCurrentBranch(ctx, wfContext, mutableState, isRebuilt, releaseFn, task)
-			}
-			return r.applyNonStartEventsToNonCurrentBranch(ctx, wfContext, mutableState, prepareHistoryBranchOut.BranchIndex, releaseFn, task)
-
-		case *serviceerror.NotFound:
-			// mutable state not created, check if is workflow reset
-			mutableState, err := r.applyNonStartEventsMissingMutableState(ctx, wfContext, task)
-			if err != nil {
-				return err
-			}
-
-			return r.applyNonStartEventsResetWorkflow(ctx, wfContext, mutableState, task)
-
-		default:
-			// unable to get mutable state, return err, so we can retry the task later
+	if task.getFirstEvent().GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		err = r.applyStartEvents(ctx, wfContext, releaseFn, task)
+		if !errors.Is(err, consts.ErrDuplicate) { // if ErrDuplicate is returned from creation, we should also look if every event is applied in the mutable state
 			return err
 		}
+	}
+	// apply events, other than simple start workflow execution
+	// the update + start workflow execution combination will also be processed here
+	mutableState, err := wfContext.LoadMutableState(ctx, r.shardContext)
+	switch err.(type) {
+	case nil:
+		mutableState, _, err = r.mutableStateMapper.FlushBufferEvents(ctx, wfContext, mutableState, task)
+		if err != nil {
+			return err
+		}
+		mutableState, prepareHistoryBranchOut, err := r.mutableStateMapper.GetOrCreateHistoryBranch(ctx, wfContext, mutableState, task)
+		if err != nil {
+			return err
+		} else if !prepareHistoryBranchOut.DoContinue {
+			metrics.DuplicateReplicationEventsCounter.With(r.metricsHandler).Record(
+				1,
+				metrics.OperationTag(metrics.ReplicateHistoryEventsScope))
+			return consts.ErrDuplicate
+		}
+		err = task.skipDuplicatedEvents(prepareHistoryBranchOut.EventsApplyIndex)
+		if err != nil {
+			return err
+		}
+
+		mutableState, isRebuilt, err := r.mutableStateMapper.GetOrRebuildCurrentMutableState(
+			ctx,
+			wfContext,
+			mutableState,
+			GetOrRebuildMutableStateIn{replicationTask: task, BranchIndex: prepareHistoryBranchOut.BranchIndex},
+		)
+		if err != nil {
+			return err
+		}
+		if mutableState.GetExecutionInfo().GetVersionHistories().GetCurrentVersionHistoryIndex() == prepareHistoryBranchOut.BranchIndex {
+			return r.applyNonStartEventsToCurrentBranch(ctx, wfContext, mutableState, isRebuilt, releaseFn, task)
+		}
+		return r.applyNonStartEventsToNonCurrentBranch(ctx, wfContext, mutableState, prepareHistoryBranchOut.BranchIndex, releaseFn, task)
+
+	case *serviceerror.NotFound:
+		// mutable state not created, check if is workflow reset
+		mutableState, err := r.applyNonStartEventsMissingMutableState(ctx, wfContext, task)
+		if err != nil {
+			return err
+		}
+
+		return r.applyNonStartEventsResetWorkflow(ctx, wfContext, mutableState, task)
+
+	default:
+		// unable to get mutable state, return err, so we can retry the task later
+		return err
 	}
 }
 
