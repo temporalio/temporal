@@ -216,12 +216,13 @@ func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 }
 
 func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploymentspb.SetRampingVersionArgs) error {
-	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
-		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
-	}
-	if args.Version == d.State.RoutingConfig.RampingVersion && args.Percentage == d.State.RoutingConfig.RampingVersionPercentage {
+	if args.Version == d.State.RoutingConfig.RampingVersion && args.Percentage == d.State.RoutingConfig.RampingVersionPercentage && args.Identity == d.State.LastModifierIdentity {
 		d.logger.Info("version already ramping, no change")
 		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
+	}
+
+	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
+		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
 	}
 	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
@@ -430,11 +431,11 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 }
 
 func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
+	if d.State.RoutingConfig.CurrentVersion == args.Version && d.State.LastModifierIdentity == args.Identity {
+		return temporal.NewApplicationError("no change", errNoChangeType)
+	}
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
 		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
-	}
-	if d.State.RoutingConfig.CurrentVersion == args.Version {
-		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")

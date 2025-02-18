@@ -355,9 +355,9 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	}, time.Second*10, time.Millisecond*1000)
 }
 
-// Testing UpdateID de-duplication for SetCurrentVersion
+// Testing Concurrent stale updates don't break workflow state and are caught in the update handler
 
-func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_WithConflictToken_DuplicateUpdateID() {
+func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NonIdempotentRequests() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
@@ -384,11 +384,10 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_WithConf
 	wg.Add(2)
 
 	var err1, err2 error
-	var resp1, resp2 *workflowservice.SetWorkerDeploymentCurrentVersionResponse
 
 	go func() {
 		defer wg.Done()
-		resp1, err1 = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		_, err1 = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
@@ -399,11 +398,11 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_WithConf
 
 	// To allow the first go-routine to start before the second one.
 	//nolint:forbidigo
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 
 	go func() {
 		defer wg.Done()
-		resp2, err2 = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		_, err2 = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
@@ -415,10 +414,10 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_WithConf
 	wg.Wait()
 
 	s.NoError(err1)
-	s.NoError(err2)
+	// Since the first update completed successfully, the second update will be rejected inside the update handler due to a conflict token mismatch. This happens
+	// since the first update changes the conflict token of the worker-deployment workflow.
+	s.Error(err2)
 
-	// Assert that the first update succeeded, due to the forceful sleep, and the second was ignored by verifying the last modifier identity.
-	// Since the second go-routine would have it's request de-duped, the last modifier identity would be the client from the first go-routine.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 
@@ -431,13 +430,10 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_WithConf
 		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
 	}, time.Second*10, time.Millisecond*1000)
 
-	// Since the second update was de-duped and was not accepted by the update handler, the response objects from both the updates
-	// would be identitical and have the same previous current version (__unversioned__)
-	s.Equal(resp1.GetPreviousVersion(), resp2.GetPreviousVersion())
-	s.Equal(worker_versioning.UnversionedVersionId, resp1.GetPreviousVersion())
 }
 
-func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NoConflictToken_DuplicateRequests() {
+// Testing Concurrent identitical updates are being de-duped.
+func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_IdempotentRequests() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
@@ -457,7 +453,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NoConfli
 	}, time.Second*10, time.Millisecond*1000)
 	s.ensureCreateVersionInDeployment(tv)
 
-	// Simulate two concurrent updates with different identities and no conflict token set.
+	// Simulate two concurrent identical updates.
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -483,7 +479,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NoConfli
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
-			Identity:       tv.Any().String(), // note: different identity
+			Identity:       tv.ClientIdentity(),
 		})
 	}()
 
@@ -503,10 +499,6 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NoConfli
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
 		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity()) // note: the last modifier identity should be the one from the first update
 	}, time.Second*10, time.Millisecond*1000)
-
-	// Since the two clients did not provide a conflict token, the updateID for both these requests will be different. This will result in both the updates being applied
-	// and de-duplication will take place inside the update handler. This behaviour is different from the test above where the update requests share the same updateID
-	// and only one update gets accepted.
 
 	// Since both the updates are accepted, the response objects will be different.
 
@@ -516,9 +508,9 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NoConfli
 	s.Equal(tv.DeploymentVersionString(), resp2.GetPreviousVersion())
 }
 
-// Testing UpdateID de-duplication for SetRampingVersion
+// Testing Concurrent stale updates don't break workflow state and are caught in the update handler
 
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_WithConflictToken_DuplicateUpdateID() {
+func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NonIdempotentRequests() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
@@ -545,11 +537,10 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_WithConf
 	wg.Add(2)
 
 	var err1, err2 error
-	var resp1, resp2 *workflowservice.SetWorkerDeploymentRampingVersionResponse
 
 	go func() {
 		defer wg.Done()
-		resp1, err1 = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+		_, err1 = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
@@ -565,7 +556,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_WithConf
 
 	go func() {
 		defer wg.Done()
-		resp2, err2 = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+		_, err2 = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
@@ -578,10 +569,10 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_WithConf
 	wg.Wait()
 
 	s.NoError(err1)
-	s.NoError(err2)
+	// Since the first update completed successfully, the second update will be rejected inside the update handler due to a conflict token mismatch. This happens
+	// since the first update changes the conflict token of the worker-deployment workflow.
+	s.Error(err2)
 
-	// Assert that the first update succeeded, due to the forceful sleep, and the second was ignored by verifying the last modifier identity.
-	// Since the second go-routine would have it's request de-duped, the last modifier identity would be the client from the first go-routine.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 
@@ -594,13 +585,9 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_WithConf
 		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
 	}, time.Second*10, time.Millisecond*1000)
 
-	// Since the second update was de-duped and was not accepted by the update handler, the response objects from both the updates
-	// would be identitical and have the same previous current version ("")
-	s.Equal(resp1.GetPreviousVersion(), resp2.GetPreviousVersion())
-	s.Equal("", resp1.GetPreviousVersion())
 }
 
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NoConflictToken_DuplicateRequests() {
+func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_IdempotentRequests() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
@@ -620,7 +607,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NoConfli
 	}, time.Second*10, time.Millisecond*1000)
 	s.ensureCreateVersionInDeployment(tv)
 
-	// Simulate two concurrent updates with different identities and no conflict token set.
+	// Simulate two concurrent identical updates.
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -646,7 +633,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NoConfli
 			Namespace:      s.Namespace().String(),
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
-			Identity:       tv.Any().String(), // note: different identity
+			Identity:       tv.ClientIdentity(),
 		})
 	}()
 
@@ -666,12 +653,6 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NoConfli
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity()) // note: the last modifier identity should be the one from the first update
 	}, time.Second*10, time.Millisecond*1000)
-
-	// Since the two clients did not provide a conflict token, the updateID for both these requests will be different. This will result in both the updates being applied
-	// and de-duplication will take place inside the update handler. This behaviour is different from the test above where the update requests share the same updateID
-	// and only one update gets accepted.
-
-	// Since both the updates are accepted, the response objects will be different.
 
 	// Since the first update completes successfully, the previous version will be ""
 	s.Equal("", resp1.GetPreviousVersion())
