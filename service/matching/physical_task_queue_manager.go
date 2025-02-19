@@ -89,7 +89,9 @@ type (
 		tqCtx             context.Context
 		tqCtxCancel       context.CancelFunc
 		liveness          *liveness
-		matcher           *TaskMatcher // for matching a task producer with a poller
+		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
+		priMatcher        *priTaskMatcher
+		matcher           matcherInterface // TODO(pri): old matcher cleanup
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
 		throttledLogger   log.ThrottledLogger
@@ -111,6 +113,19 @@ type (
 		pollerScalingRateLimiter    quotas.RateLimiter
 
 		firstPoll time.Time
+	}
+
+	// TODO(pri): old matcher cleanup
+	matcherInterface interface {
+		Start()
+		Stop()
+		UpdateRatelimit(rpsPtr float64)
+		Rate() float64
+		Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
+		PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
+		OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error)
+		OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error)
+		ReprocessAllTasks()
 	}
 )
 
@@ -185,16 +200,31 @@ func newPhysicalTaskQueueManager(
 		taggedMetricsHandler,
 	)
 
-	var fwdr *Forwarder
-	var err error
-	if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
-		// Every DB Queue needs its own forwarder so that the throttles do not interfere
-		fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
-		if err != nil {
-			return nil, err
+	if config.NewMatcher {
+		var fwdr *priForwarder
+		var err error
+		if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+			// Every DB Queue needs its own forwarder so that the throttles do not interfere
+			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
+			if err != nil {
+				return nil, err
+			}
 		}
+		pqMgr.priMatcher = newPriTaskMatcher(config, queue.partition, fwdr, pqMgr.taskValidator, pqMgr.metricsHandler)
+		pqMgr.matcher = pqMgr.priMatcher
+	} else {
+		var fwdr *Forwarder
+		var err error
+		if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+			// Every DB Queue needs its own forwarder so that the throttles do not interfere
+			fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
+			if err != nil {
+				return nil, err
+			}
+		}
+		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, pqMgr.metricsHandler)
+		pqMgr.matcher = pqMgr.oldMatcher
 	}
-	pqMgr.matcher = newTaskMatcher(config, fwdr, pqMgr.metricsHandler)
 	for _, opt := range opts {
 		opt(pqMgr)
 	}
@@ -211,6 +241,7 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 	}
 	c.liveness.Start()
 	c.backlogMgr.Start()
+	c.matcher.Start()
 	c.logger.Info("Started physicalTaskQueueManager", tag.LifeCycleStarted, tag.Cause(c.config.loadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, 1)
@@ -326,14 +357,16 @@ func (c *physicalTaskQueueManagerImpl) MarkAlive() {
 // DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
 // up the task or if rate limit is exceeded, this method will return error. Task
 // *will not* be persisted to db
+// TODO(pri): old matcher cleanup
 func (c *physicalTaskQueueManagerImpl) DispatchSpooledTask(
 	ctx context.Context,
 	task *internalTask,
 	userDataChanged <-chan struct{},
 ) error {
-	return c.matcher.MustOffer(ctx, task, userDataChanged)
+	return c.oldMatcher.MustOffer(ctx, task, userDataChanged)
 }
 
+// TODO(pri): old matcher cleanup
 func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 	ctx context.Context,
 	task *internalTask,
@@ -345,6 +378,18 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 		return nil
 	}
 	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue)
+}
+
+func (c *physicalTaskQueueManagerImpl) AddSpooledTask(ctx context.Context, task *internalTask) error {
+	return c.partitionMgr.AddSpooledTask(ctx, task, c.queue)
+}
+
+func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
+	c.priMatcher.AddTask(task)
+}
+
+func (c *physicalTaskQueueManagerImpl) UserDataChanged() {
+	c.matcher.ReprocessAllTasks()
 }
 
 // DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
@@ -428,7 +473,7 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
 	return &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: c.backlogMgr.db.getApproximateBacklogCount(),
-		ApproximateBacklogAge:   durationpb.New(c.backlogMgr.taskReader.getBacklogHeadAge()), // using this and not matcher's
+		ApproximateBacklogAge:   durationpb.New(c.backlogMgr.BacklogHeadAge()), // using this and not matcher's
 		// because it reports only the age of the current physical queue backlog (not including the redirected backlogs) which is consistent
 		// with the ApproximateBacklogCount metric.
 		TasksAddRate:      c.tasksAddedInIntervals.rate(),
@@ -441,7 +486,7 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() *taskqueuesp
 		ReadLevel:        c.backlogMgr.taskAckManager.getReadLevel(),
 		AckLevel:         c.backlogMgr.taskAckManager.getAckLevel(),
 		TaskIdBlock:      &taskqueuepb.TaskIdBlock{StartId: c.backlogMgr.taskWriter.taskIDBlock.start, EndId: c.backlogMgr.taskWriter.taskIDBlock.end},
-		ReadBufferLength: int64(len(c.backlogMgr.taskReader.taskBuffer)),
+		ReadBufferLength: c.backlogMgr.ReadBufferLength(),
 	}
 }
 
@@ -454,10 +499,15 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 			return false, nil
 		}
 	}
+
+	if c.priMatcher != nil {
+		return c.priMatcher.Offer(ctx, task)
+	}
+
 	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
-	return c.matcher.Offer(childCtx, task)
+	return c.oldMatcher.Offer(childCtx, task)
 }
 
 // [cleanup-wv-pre-release]
