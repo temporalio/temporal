@@ -41,7 +41,7 @@ type ackManager struct {
 	outstandingTasks *treemap.Map // TaskID->acked
 	readLevel        int64        // Maximum TaskID inserted into outstandingTasks
 	ackLevel         int64        // Maximum TaskID below which all tasks are acked
-	backlogCountHint atomic.Int64
+	backlogCountHint atomic.Int64 // TODO(pri): old matcher cleanup
 	logger           log.Logger
 }
 
