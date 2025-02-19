@@ -598,10 +598,6 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	}, nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) String() string {
-	return pm.defaultQueue.String()
-}
-
 func (pm *taskQueuePartitionManagerImpl) Partition() tqid.Partition {
 	return pm.partition
 }

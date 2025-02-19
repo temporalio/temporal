@@ -25,10 +25,8 @@
 package matching
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -61,7 +59,6 @@ type (
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
-		String() string
 	}
 
 	backlogManagerImpl struct {
@@ -203,17 +200,6 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 			EndId:   taskIDBlock.end,
 		},
 	}
-}
-
-func (c *backlogManagerImpl) String() string {
-	buf := new(bytes.Buffer)
-	rangeID := c.db.RangeID()
-	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
-	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", rangeIDToTaskIDBlock(rangeID, c.config.RangeSize))
-	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
-	_, _ = fmt.Fprintf(buf, "MaxTaskID=%v\n", c.taskAckManager.getReadLevel())
-
-	return buf.String()
 }
 
 // completeTask marks a task as processed. Only tasks created by taskReader (i.e. backlog from db) reach
