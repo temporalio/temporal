@@ -269,6 +269,8 @@ func GrpcServerOptionsProvider(
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		authInterceptor.Intercept,
+		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
+		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		telemetryInterceptor.UnaryIntercept,

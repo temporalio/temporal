@@ -129,16 +129,14 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 				childCancelFn()
 			}()
 		}
+		var handoverErr error
 		select {
 		case <-childCtx.Done():
-			err = common.ErrNamespaceHandover
+			handoverErr = common.ErrNamespaceHandover
 		case <-waitReplicationStateUpdate:
 		}
 		i.namespaceRegistry.UnregisterStateChangeCallback(cbID)
-		if err != nil {
-			// error?
-			return time.Since(startTime), err
-		}
+		return time.Since(startTime), handoverErr
 	}
 	return time.Since(startTime), nil
 }
