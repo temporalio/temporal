@@ -311,5 +311,5 @@ func newBacklogMgr(t cleanupper, controller *gomock.Controller, serviceError boo
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	return newBacklogManager(pqMgr, tlCfg, ctx, tm, logger, logger, matchingClient, handler)
+	return newBacklogManager(ctx, pqMgr, tlCfg, tm, logger, logger, matchingClient, handler)
 }

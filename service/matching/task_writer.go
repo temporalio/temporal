@@ -188,7 +188,7 @@ func (w *taskWriter) appendTasks(
 	return resp, nil
 }
 
-func (w *taskWriter) taskWriterLoop() error {
+func (w *taskWriter) taskWriterLoop() {
 	err := w.initReadWriteState()
 	w.backlogMgr.SetInitializedError(err)
 
@@ -211,7 +211,7 @@ writerLoop:
 			w.sendWriteResponse(reqs, resp, err)
 
 		case <-w.backlogMgr.tqCtx.Done():
-			return w.backlogMgr.tqCtx.Err()
+			return
 		}
 	}
 }

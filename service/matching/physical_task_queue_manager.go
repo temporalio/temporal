@@ -167,9 +167,9 @@ func newPhysicalTaskQueueManager(
 		pqMgr.partitionMgr.engine.historyClient,
 	)
 	pqMgr.backlogMgr = newBacklogManager(
+		tqCtx,
 		pqMgr,
 		config,
-		tqCtx,
 		e.taskManager,
 		logger,
 		throttledLogger,

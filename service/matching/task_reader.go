@@ -106,7 +106,7 @@ func (tr *taskReader) getBacklogHeadAge() time.Duration {
 	return time.Since(time.Unix(0, tr.backlogHeadCreateTime.Load()))
 }
 
-func (tr *taskReader) dispatchBufferedTasks() error {
+func (tr *taskReader) dispatchBufferedTasks() {
 	ctx := tr.backlogMgr.tqCtx
 
 dispatchLoop:
@@ -140,19 +140,19 @@ dispatchLoop:
 				}
 				util.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
 			}
-			return ctx.Err()
+			return
 		case <-ctx.Done():
-			return ctx.Err()
+			return
 		}
 	}
-	return ctx.Err()
 }
 
-func (tr *taskReader) getTasksPump() error {
+// nolint:revive // can improve this later
+func (tr *taskReader) getTasksPump() {
 	ctx := tr.backlogMgr.tqCtx
 
 	if err := tr.backlogMgr.WaitUntilInitialized(ctx); err != nil {
-		return err
+		return
 	}
 
 	updateAckTimer := time.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
@@ -164,13 +164,13 @@ Loop:
 		// Prioritize exiting over other processing
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		default:
 		}
 
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 
 		case <-tr.notifyC:
 			batch, err := tr.getTaskBatch(ctx)

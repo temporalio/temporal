@@ -84,9 +84,9 @@ type (
 var _ backlogManager = (*backlogManagerImpl)(nil)
 
 func newBacklogManager(
+	tqCtx context.Context,
 	pqMgr physicalTaskQueueManager,
 	config *taskQueueConfig,
-	tqCtx context.Context,
 	taskManager persistence.TaskManager,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
