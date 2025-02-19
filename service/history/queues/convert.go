@@ -26,12 +26,13 @@ package queues
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
-	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -296,7 +297,7 @@ func ToPersistenceNamespaceIDPredicate(
 		PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
 		Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
 			NamespaceIdPredicateAttributes: &persistencespb.NamespaceIdPredicateAttributes{
-				NamespaceIds: expmaps.Keys(namespaceIDPredicate.NamespaceIDs),
+				NamespaceIds: slices.Collect(maps.Keys(namespaceIDPredicate.NamespaceIDs)),
 			},
 		},
 	}
@@ -315,7 +316,7 @@ func ToPersistenceTaskTypePredicate(
 		PredicateType: enumsspb.PREDICATE_TYPE_TASK_TYPE,
 		Attributes: &persistencespb.Predicate_TaskTypePredicateAttributes{
 			TaskTypePredicateAttributes: &persistencespb.TaskTypePredicateAttributes{
-				TaskTypes: expmaps.Keys(taskTypePredicate.Types),
+				TaskTypes: slices.Collect(maps.Keys(taskTypePredicate.Types)),
 			},
 		},
 	}
@@ -334,7 +335,7 @@ func ToPersistenceDestinationPredicate(
 		PredicateType: enumsspb.PREDICATE_TYPE_DESTINATION,
 		Attributes: &persistencespb.Predicate_DestinationPredicateAttributes{
 			DestinationPredicateAttributes: &persistencespb.DestinationPredicateAttributes{
-				Destinations: expmaps.Keys(taskDestinationPredicate.Destinations),
+				Destinations: slices.Collect(maps.Keys(taskDestinationPredicate.Destinations)),
 			},
 		},
 	}
@@ -353,7 +354,7 @@ func ToPersistenceOutboundTaskGroupPredicate(
 		PredicateType: enumsspb.PREDICATE_TYPE_OUTBOUND_TASK_GROUP,
 		Attributes: &persistencespb.Predicate_OutboundTaskGroupPredicateAttributes{
 			OutboundTaskGroupPredicateAttributes: &persistencespb.OutboundTaskGroupPredicateAttributes{
-				Groups: expmaps.Keys(pred.Groups),
+				Groups: slices.Collect(maps.Keys(pred.Groups)),
 			},
 		},
 	}

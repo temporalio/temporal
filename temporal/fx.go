@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"slices"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -74,7 +75,6 @@ import (
 	"go.temporal.io/server/service/worker"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
-	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 )
 
@@ -897,7 +897,7 @@ var TraceExportModule = fx.Options(
 		// config-defined exporters override env-defined exporters with the same type
 		maps.Copy(exportersByType, exportersByTypeFromEnv)
 
-		exporters := expmaps.Values(exportersByType)
+		exporters := slices.Collect(maps.Values(exportersByType))
 		inputs.Lifecycyle.Append(fx.Hook{
 			OnStart: startAll(exporters),
 			OnStop:  shutdownAll(exporters),

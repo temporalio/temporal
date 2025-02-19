@@ -28,6 +28,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -57,7 +59,6 @@ import (
 	"go.temporal.io/server/service/worker/deletenamespace"
 	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
 	"go.uber.org/mock/gomock"
-	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 )
 
@@ -819,7 +820,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 						opts ...any,
 					) (*workflowservice.UpdateNamespaceResponse, error) {
 						s.Len(r.Config.CustomSearchAttributeAliases, len(tc.customSearchAttributesToAdd))
-						aliases := expmaps.Values(r.Config.CustomSearchAttributeAliases)
+						aliases := slices.Collect(maps.Values(r.Config.CustomSearchAttributeAliases))
 						for _, saName := range tc.customSearchAttributesToAdd {
 							s.Contains(aliases, saName)
 						}

@@ -29,10 +29,7 @@ package util
 import (
 	"context"
 	"maps"
-	"sort"
 	"time"
-
-	expconstraints "golang.org/x/exp/constraints"
 )
 
 // MinTime returns the earlier of two given time.Time
@@ -55,14 +52,6 @@ func MaxTime(a, b time.Time) time.Time {
 // of `align` since the unix epoch.
 func NextAlignedTime(t time.Time, align time.Duration) time.Time {
 	return time.Unix(0, (t.UnixNano()/int64(align)+1)*int64(align))
-}
-
-// SortSlice sorts the given slice of an ordered type.
-// Sort is not guaranteed to be stable.
-func SortSlice[S ~[]E, E expconstraints.Ordered](slice S) {
-	sort.Slice(slice, func(i, j int) bool {
-		return slice[i] < slice[j]
-	})
 }
 
 // SliceHead returns the first n elements of s. n may be greater than len(s).

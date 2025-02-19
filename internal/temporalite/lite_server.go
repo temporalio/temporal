@@ -32,10 +32,11 @@ package temporalite
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math/rand"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -51,7 +52,6 @@ import (
 	"go.temporal.io/server/internal/freeport"
 	"go.temporal.io/server/schema/sqlite"
 	"go.temporal.io/server/temporal"
-	expmaps "golang.org/x/exp/maps"
 )
 
 const localBroadcastAddress = "127.0.0.1"
@@ -371,9 +371,7 @@ var supportedPragmas = map[string]struct{}{
 }
 
 func getAllowedPragmas() []string {
-	allowedPragmaList := expmaps.Keys(supportedPragmas)
-	sort.Strings(allowedPragmaList)
-	return allowedPragmaList
+	return slices.Sorted(maps.Keys(supportedPragmas))
 }
 
 func (cfg *LiteServerConfig) mustGetService(frontendPortOffset int) config.Service {

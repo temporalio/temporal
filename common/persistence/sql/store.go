@@ -27,6 +27,7 @@ package sql
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"go.temporal.io/server/common/config"
@@ -34,7 +35,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
-	expmaps "golang.org/x/exp/maps"
 )
 
 var ErrPluginNotSupported = errors.New("plugin not supported")
@@ -85,8 +85,7 @@ func NewSQLAdminDB(
 func getPlugin(pluginName string) (sqlplugin.Plugin, error) {
 	plugin, ok := supportedPlugins[pluginName]
 	if !ok {
-		keys := expmaps.Keys(supportedPlugins)
-		slices.Sort(keys)
+		keys := slices.Collect(maps.Keys(supportedPlugins))
 		return nil, fmt.Errorf(
 			"%w: unknown plugin %q, supported plugins: %v",
 			ErrPluginNotSupported,

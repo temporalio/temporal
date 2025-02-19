@@ -25,13 +25,14 @@ package scheduler
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
-	expmaps "golang.org/x/exp/maps"
 )
 
 type (
@@ -95,5 +96,5 @@ func getQueryFields(
 		}
 		return nil, err
 	}
-	return expmaps.Keys(fnInterceptor.names), nil
+	return slices.Collect(maps.Keys(fnInterceptor.names)), nil
 }

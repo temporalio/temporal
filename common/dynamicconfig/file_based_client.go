@@ -29,8 +29,10 @@ package dynamicconfig
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -40,7 +42,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	expmaps "golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 )
 
@@ -211,7 +212,7 @@ func (fc *fileBasedClient) Update() error {
 	}
 
 	fc.subscriptionLock.Lock()
-	subscriptions := expmaps.Values(fc.subscriptions)
+	subscriptions := slices.Collect(maps.Values(fc.subscriptions))
 	fc.subscriptionLock.Unlock()
 
 	for _, update := range subscriptions {
