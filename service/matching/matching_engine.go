@@ -528,6 +528,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		ExpiryTime:       expirationTime,
 		CreateTime:       timestamppb.New(now),
 		VersionDirective: addRequest.VersionDirective,
+		Priority:         addRequest.Priority,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -566,6 +567,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		ExpiryTime:       expirationTime,
 		VersionDirective: addRequest.VersionDirective,
 		Stamp:            addRequest.Stamp,
+		Priority:         addRequest.Priority,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{

@@ -140,7 +140,7 @@ type (
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
 		RangeSize                  int64
-		NewMatcher                 func() bool
+		NewMatcher                 bool
 		GetTasksBatchSize          func() int
 		UpdateAckInterval          func() time.Duration
 		MaxTaskQueueIdleTime       func() time.Duration
@@ -292,9 +292,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	return &taskQueueConfig{
 		CallerInfo: headers.NewBackgroundCallerInfo(ns.String()),
 		RangeSize:  config.RangeSize,
-		NewMatcher: func() bool {
-			return config.NewMatcher(ns.String(), taskQueueName, taskType)
-		},
+		NewMatcher: config.NewMatcher(ns.String(), taskQueueName, taskType),
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
 		},

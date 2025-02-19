@@ -281,7 +281,7 @@ func newPhysicalTaskQueueManager(
 		partitionMgr.callerInfoContext,
 	)
 
-	if config.NewMatcher() {
+	if config.NewMatcher {
 		var fwdr *priForwarder
 		var err error
 		if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {

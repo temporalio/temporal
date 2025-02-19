@@ -110,9 +110,14 @@ var (
 	errReprocessTask = serviceerror.NewCanceled("reprocess task")
 )
 
-// newPriTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
-// find a match. Both sync matches and non-sync matches should use this implementation
-func newPriTaskMatcher(config *taskQueueConfig, partition tqid.Partition, fwdr *priForwarder, validator taskValidator, metricsHandler metrics.Handler) *priTaskMatcher {
+// newPriTaskMatcher returns a task matcher instance
+func newPriTaskMatcher(
+	config *taskQueueConfig,
+	partition tqid.Partition,
+	fwdr *priForwarder,
+	validator taskValidator,
+	metricsHandler metrics.Handler,
+) *priTaskMatcher {
 	dynamicRateBurst := quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
 		int(defaultTaskDispatchRPS),

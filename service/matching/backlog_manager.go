@@ -109,7 +109,7 @@ func newBacklogManager(
 	}
 	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
 	bmg.taskWriter = newTaskWriter(bmg)
-	if config.NewMatcher() {
+	if config.NewMatcher {
 		bmg.priTaskReader = newPriTaskReader(bmg)
 	} else {
 		bmg.taskReader = newTaskReader(bmg)
