@@ -1063,6 +1063,7 @@ See DynamicRateLimitingParams comments for more details.`,
 		time.Minute,
 		`MatchingLongPollExpirationInterval is the long poll expiration interval in the matching service`,
 	)
+	// TODO(pri): old matcher cleanup
 	MatchingSyncMatchWaitDuration = NewTaskQueueDurationSetting(
 		"matching.syncMatchWaitDuration",
 		200*time.Millisecond,
@@ -1160,7 +1161,7 @@ for VERSIONED queues.`,
 		1,
 		`MatchingForwarderMaxOutstandingTasks is the max number of inflight addTask/queryTask from the forwarder`,
 	)
-	MatchingForwarderMaxRatePerSecond = NewTaskQueueIntSetting(
+	MatchingForwarderMaxRatePerSecond = NewTaskQueueFloatSetting(
 		"matching.forwarderMaxRatePerSecond",
 		10,
 		`MatchingForwarderMaxRatePerSecond is the max rate at which add/query can be forwarded`,
@@ -1259,6 +1260,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.maxTaskQueuesInDeploymentVersion",
 		100,
 		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registered in a single worker deployment version`,
+	)
+	MatchingUseNewMatcher = NewTaskQueueBoolSetting(
+		"matching.useNewMatcher",
+		false,
+		`Use priority-enabled TaskMatcher.`,
 	)
 
 	// keys for history

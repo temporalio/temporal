@@ -353,7 +353,7 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 func (db *taskQueueDB) emitBacklogGauges() {
 	if db.backlogMgr.pqMgr.ShouldEmitGauges() {
 		approximateBacklogCount := db.getApproximateBacklogCount()
-		backlogHeadAge := db.backlogMgr.taskReader.getBacklogHeadAge()
+		backlogHeadAge := db.backlogMgr.BacklogHeadAge()
 		metrics.ApproximateBacklogCount.With(db.backlogMgr.metricsHandler).Record(float64(approximateBacklogCount))
 		metrics.ApproximateBacklogAgeSeconds.With(db.backlogMgr.metricsHandler).Record(backlogHeadAge.Seconds())
 

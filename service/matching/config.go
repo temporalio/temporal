@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
 )
@@ -61,6 +62,7 @@ type (
 		// task queue configuration
 
 		RangeSize                                int64
+		NewMatcher                               dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -71,7 +73,7 @@ type (
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		ForwarderMaxOutstandingPolls             dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForwarderMaxOutstandingTasks             dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		ForwarderMaxRatePerSecond                dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ForwarderMaxRatePerSecond                dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		ForwarderMaxChildrenPerNode              dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		VersionCompatibleSetLimitPerQueue        dynamicconfig.IntPropertyFnWithNamespaceFilter
 		VersionBuildIdLimitPerQueue              dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -124,12 +126,13 @@ type (
 	forwarderConfig struct {
 		ForwarderMaxOutstandingPolls func() int
 		ForwarderMaxOutstandingTasks func() int
-		ForwarderMaxRatePerSecond    func() int
+		ForwarderMaxRatePerSecond    func() float64
 		ForwarderMaxChildrenPerNode  func() int
 	}
 
 	taskQueueConfig struct {
 		forwarderConfig
+		CallerInfo                   headers.CallerInfo
 		SyncMatchWaitDuration        func() time.Duration
 		BacklogNegligibleAge         func() time.Duration
 		MaxWaitForPollerBeforeFwd    func() time.Duration
@@ -137,6 +140,7 @@ type (
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
 		RangeSize                  int64
+		NewMatcher                 bool
 		GetTasksBatchSize          func() int
 		UpdateAckInterval          func() time.Duration
 		MaxTaskQueueIdleTime       func() time.Duration
@@ -223,6 +227,7 @@ func NewConfig(
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
+		NewMatcher:                               dynamicconfig.MatchingUseNewMatcher.Get(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
@@ -288,7 +293,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	taskType := tq.TaskType()
 
 	return &taskQueueConfig{
-		RangeSize: config.RangeSize,
+		CallerInfo: headers.NewBackgroundCallerInfo(ns.String()),
+		RangeSize:  config.RangeSize,
+		NewMatcher: config.NewMatcher(ns.String(), taskQueueName, taskType),
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
 		},
@@ -356,7 +363,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 			ForwarderMaxOutstandingTasks: func() int {
 				return config.ForwarderMaxOutstandingTasks(ns.String(), taskQueueName, taskType)
 			},
-			ForwarderMaxRatePerSecond: func() int {
+			ForwarderMaxRatePerSecond: func() float64 {
 				return config.ForwarderMaxRatePerSecond(ns.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxChildrenPerNode: func() int {
