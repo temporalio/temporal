@@ -66,7 +66,7 @@ func DrainageWorkflow(
 		// Workflow history so that all future calls to GetVersion for this change Id—Step 1 in the example—
 		// on this Workflow Execution will always return the given version number, which is 1 in the example.
 		v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 1)
-		if v == workflow.DefaultVersion { // run old / original code here
+		if v == workflow.DefaultVersion { // needs patching because we removed a Signal call
 			parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
 			now := timestamppb.Now()
 			drainingInfo := &deploymentpb.VersionDrainageInfo{
