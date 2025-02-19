@@ -25,6 +25,7 @@
 package workerdeployment
 
 import (
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
 
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -61,6 +62,23 @@ func DrainageWorkflow(
 
 	// Set status = DRAINING and then sleep for visibilityGracePeriod (to let recently-started workflows arrive in visibility)
 	if !args.IsCan { // skip if resuming after the parent continued-as-new
+		// When workflow.GetVersion() is run for the new Workflow Execution, it records a marker in the
+		// Workflow history so that all future calls to GetVersion for this change Id—Step 1 in the example—
+		// on this Workflow Execution will always return the given version number, which is 1 in the example.
+		v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 1)
+		if v == workflow.DefaultVersion { // run old / original code here
+			parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
+			now := timestamppb.Now()
+			drainingInfo := &deploymentpb.VersionDrainageInfo{
+				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+				LastChangedTime: now,
+				LastCheckedTime: now,
+			}
+			err := workflow.SignalExternalWorkflow(ctx, parentWf.ID, parentWf.RunID, SyncDrainageSignalName, drainingInfo).Get(ctx, nil)
+			if err != nil {
+				return err
+			}
+		}
 		grace, err := getSafeDurationConfig(ctx, "getVisibilityGracePeriod", unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
 		if err != nil {
 			return err
