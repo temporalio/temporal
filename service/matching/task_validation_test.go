@@ -93,9 +93,7 @@ func (s *taskValidatorSuite) SetupTest() {
 		},
 	}
 
-	s.taskValidator = newTaskValidator(func() (context.Context, context.CancelFunc) {
-		return context.WithTimeout(context.Background(), 4*time.Second)
-	}, s.clusterMetadata, s.namespaceCache, s.historyClient)
+	s.taskValidator = newTaskValidator(context.Background(), s.clusterMetadata, s.namespaceCache, s.historyClient)
 }
 
 func (s *taskValidatorSuite) TeardownTest() {
