@@ -1932,6 +1932,7 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 				}, 10*time.Second, 100*time.Millisecond)
 				s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 				tc.checkPendingError(t, converter.FailureToError(f))
+				s.NoError(s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test cleanup"))
 			} else {
 				wfErr := run.Get(ctx, nil)
 				s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)

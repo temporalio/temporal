@@ -741,20 +741,20 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 			expectedError: consts.ErrDuplicate,
 		},
 		{
-			name: "incoming version higher - return notFoundErr",
+			name: "incoming version higher - ignored",
 			versionHistory: &historyspb.VersionHistory{
 				Items: []*historyspb.VersionHistoryItem{
 					{EventId: 50, Version: baseVersion - 100},
 					{EventId: 102, Version: baseVersion},
 				},
 			},
-			expectedError: hsm.ErrStateMachineNotFound,
+			expectedError: consts.ErrDuplicate,
 		},
 	}
 
 	for _, tc := range testCases {
 		tc := tc
-		s.Run(tc.name, func() {
+		s.T().Run(tc.name, func(t *testing.T) {
 			lastVersion := tc.versionHistory.Items[len(tc.versionHistory.Items)-1].Version
 
 			err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
@@ -781,9 +781,9 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 			})
 
 			if tc.expectedError != nil {
-				s.ErrorIs(err, tc.expectedError)
+				require.ErrorIs(t, err, tc.expectedError)
 			} else {
-				s.NoError(err)
+				require.NoError(t, err)
 			}
 		})
 	}
