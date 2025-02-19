@@ -2391,7 +2391,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
-	if err := ms.addCompletionCallbacks(startEvent, event.GetCompletionCallbacks()); err != nil {
+	if err := ms.addCompletionCallbacks(
+		startEvent,
+		requestID,
+		event.GetCompletionCallbacks(),
+	); err != nil {
 		return err
 	}
 	if err := ms.UpdateWorkflowStateStatus(
@@ -2539,6 +2543,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
 	event *historypb.HistoryEvent,
+	requestID string,
 	completionCallbaks []*commonpb.Callback,
 ) error {
 	coll := callbacks.MachineCollection(ms.HSM())
@@ -2567,11 +2572,18 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 			}
 		}
 		machine := callbacks.NewCallback(event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
-		// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
-		// IDs that are deterministically created across clusters.
-		// TODO: Replicate the state machine state and allocate a uuid there instead of relying on history event
-		// replication.
-		id := fmt.Sprintf("%d-%d-%d", event.GetVersion(), event.GetEventId(), idx)
+		id := ""
+		// This is for backwards compatibility: callbacks was initially only attached when the workflow
+		// execution started, but now it can be attached while it's running.
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			// Use the start event version and ID as part of the callback ID to ensure that callbacks have unique
+			// IDs that are deterministically created across clusters.
+			// TODO: Replicate the state machine state and allocate a uuid there instead of relying on history event
+			// replication.
+			id = fmt.Sprintf("%d-%d-%d", event.GetVersion(), event.GetEventId(), idx)
+		} else {
+			id = fmt.Sprintf("%s-%d", requestID, idx)
+		}
 		if _, err := coll.Add(id, machine); err != nil {
 			return err
 		}
@@ -4682,7 +4694,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType)
 	}
 	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
-		if err := ms.addCompletionCallbacks(event, attributes.GetAttachedCompletionCallbacks()); err != nil {
+		if err := ms.addCompletionCallbacks(
+			event,
+			attributes.GetAttachedRequestId(),
+			attributes.GetAttachedCompletionCallbacks(),
+		); err != nil {
 			return err
 		}
 	}
