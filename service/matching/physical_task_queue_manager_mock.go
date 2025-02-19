@@ -68,6 +68,32 @@ func (m *MockphysicalTaskQueueManager) EXPECT() *MockphysicalTaskQueueManagerMoc
 	return m.recorder
 }
 
+// AddSpooledTask mocks base method.
+func (m *MockphysicalTaskQueueManager) AddSpooledTask(ctx context.Context, task *internalTask) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddSpooledTask", ctx, task)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddSpooledTask indicates an expected call of AddSpooledTask.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTask(ctx, task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AddSpooledTask), ctx, task)
+}
+
+// AddSpooledTaskToMatcher mocks base method.
+func (m *MockphysicalTaskQueueManager) AddSpooledTaskToMatcher(task *internalTask) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddSpooledTaskToMatcher", task)
+}
+
+// AddSpooledTaskToMatcher indicates an expected call of AddSpooledTaskToMatcher.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTaskToMatcher(task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTaskToMatcher", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AddSpooledTaskToMatcher), task)
+}
+
 // DispatchNexusTask mocks base method.
 func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -340,6 +366,18 @@ func (m *MockphysicalTaskQueueManager) UpdatePollerInfo(arg0 pollerIdentity, arg
 func (mr *MockphysicalTaskQueueManagerMockRecorder) UpdatePollerInfo(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePollerInfo", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UpdatePollerInfo), arg0, arg1)
+}
+
+// UserDataChanged mocks base method.
+func (m *MockphysicalTaskQueueManager) UserDataChanged() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UserDataChanged")
+}
+
+// UserDataChanged indicates an expected call of UserDataChanged.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) UserDataChanged() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UserDataChanged", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UserDataChanged))
 }
 
 // WaitUntilInitialized mocks base method.

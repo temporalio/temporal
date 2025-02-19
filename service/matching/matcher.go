@@ -76,9 +76,8 @@ type TaskMatcher struct {
 }
 
 const (
-	defaultTaskDispatchRPS                  = 100000.0
-	defaultTaskDispatchRPSTTL               = time.Minute
-	emptyBacklogAge           time.Duration = -1
+	defaultTaskDispatchRPS    = 100000.0
+	defaultTaskDispatchRPSTTL = time.Minute
 )
 
 var (
@@ -120,6 +119,9 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler met
 		numPartitions:          config.NumReadPartitions,
 		backlogTasksCreateTime: make(map[int64]int),
 	}
+}
+
+func (tm *TaskMatcher) Start() {
 }
 
 func (tm *TaskMatcher) Stop() {
@@ -184,10 +186,10 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			// and return error if the response contains error
 			err := <-task.responseC
 
-			if err == nil && !task.isForwarded() {
+			if err.startErr == nil && !task.isForwarded() {
 				tm.emitDispatchLatency(task, false)
 			}
-			return true, err
+			return true, err.startErr
 		}
 		return false, nil
 	default:
@@ -222,7 +224,7 @@ func (tm *TaskMatcher) offerOrTimeout(ctx context.Context, task *internalTask) (
 		if task.responseC != nil {
 			select {
 			case err := <-task.responseC:
-				return true, err
+				return true, err.startErr
 			case <-ctx.Done():
 				return false, nil
 			}
@@ -444,6 +446,10 @@ func (tm *TaskMatcher) Poll(ctx context.Context, pollMetadata *pollMetadata) (*i
 func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	task, _, err := tm.poll(ctx, pollMetadata, true)
 	return task, err
+}
+
+func (tm *TaskMatcher) ReprocessAllTasks() {
+	// unused in old matcher
 }
 
 // UpdateRatelimit updates the task dispatch rate

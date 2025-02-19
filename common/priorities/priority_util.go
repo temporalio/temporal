@@ -33,7 +33,7 @@ func Merge(
 	override *commonpb.Priority,
 ) *commonpb.Priority {
 	if base == nil || override == nil {
-		return cmp.Or(base, override)
+		return cmp.Or(override, base)
 	}
 
 	return &commonpb.Priority{
