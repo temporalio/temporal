@@ -5110,6 +5110,9 @@ func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 }
 
 func (wh *WorkflowHandler) validateOnConflictOptions(opts *workflowpb.OnConflictOptions) error {
+	if opts == nil {
+		return nil
+	}
 	if opts.AttachCompletionCallbacks && !opts.AttachRequestId {
 		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
 	}
