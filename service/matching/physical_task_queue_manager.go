@@ -25,7 +25,6 @@
 package matching
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -421,18 +420,6 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() *taskqueuesp
 		TaskIdBlock:      &taskqueuepb.TaskIdBlock{StartId: c.backlogMgr.taskWriter.taskIDBlock.start, EndId: c.backlogMgr.taskWriter.taskIDBlock.end},
 		ReadBufferLength: int64(len(c.backlogMgr.taskReader.taskBuffer)),
 	}
-}
-
-func (c *physicalTaskQueueManagerImpl) String() string {
-	buf := new(bytes.Buffer)
-	if c.queue.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-		buf.WriteString("Activity")
-	} else {
-		buf.WriteString("Workflow")
-	}
-	_, _ = fmt.Fprintf(buf, "Backlog=%s\n", c.backlogMgr.String())
-
-	return buf.String()
 }
 
 func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (bool, error) {
