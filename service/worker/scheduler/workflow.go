@@ -84,6 +84,8 @@ const (
 	AccurateFutureActionTimes = 9
 	// include WorkflowExecutionStatus in ScheduleActionResult
 	ActionResultIncludesStatus = 10
+	// limit the ScheduleSpec specs and exclusions to only 10 entries
+	LimitMemoSpecSize = 11
 )
 
 const (
@@ -116,6 +118,8 @@ const (
 	nextTimeCacheV1Size = 10
 
 	impossibleHistorySize = 1e6 // just for testing, no real history can be this long
+
+	SpecFieldLengthLimit = 10 // 10 items per spec field on the ScheduleInfo memo
 )
 
 type (
@@ -1037,6 +1041,13 @@ func (s *scheduler) getListInfo(inWorkflowContext bool) *schedulepb.ScheduleList
 	spec := common.CloneProto(s.Schedule.Spec)
 	// clear fields that are too large/not useful for the list view
 	spec.TimezoneData = nil
+
+	if s.hasMinVersion(LimitMemoSpecSize) {
+		// Limit the number of specs and exclusions stored on the memo.
+		spec.ExcludeStructuredCalendar = util.SliceHead(spec.ExcludeStructuredCalendar, SpecFieldLengthLimit)
+		spec.Interval = util.SliceHead(spec.Interval, SpecFieldLengthLimit)
+		spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, SpecFieldLengthLimit)
+	}
 
 	return &schedulepb.ScheduleListInfo{
 		Spec:              spec,
