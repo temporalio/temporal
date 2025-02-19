@@ -158,10 +158,14 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20250218202821-56aae31c358a // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
+	modernc.org/cc/v4 v4.24.4 // indirect
+	modernc.org/ccgo/v4 v4.20.4 // indirect
+	modernc.org/gc/v2 v2.6.3 // indirect
 	modernc.org/gc/v3 v3.0.0-20250121204235-2db1fde51ea4 // indirect
-	modernc.org/libc v1.61.13 // indirect
+	modernc.org/libc v1.55.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.8.2 // indirect
+	modernc.org/opt v0.1.4 // indirect
 	modernc.org/strutil v1.2.1 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
