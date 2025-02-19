@@ -25,7 +25,6 @@
 package workerdeployment
 
 import (
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
 
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -33,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
