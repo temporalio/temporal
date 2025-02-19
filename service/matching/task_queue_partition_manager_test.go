@@ -39,7 +39,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	serverenumspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -47,11 +46,9 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -483,86 +480,6 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 			s.Assert().Equal("bid", p.GetWorkerVersionCapabilities().GetBuildId())
 		}
 	}
-}
-
-func (s *PartitionManagerTestSuite) TestPollScalingUpOnBacklog() {
-	fakeStats := &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: 100,
-		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
-	}
-	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
-	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
-	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
-	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
-}
-
-func (s *PartitionManagerTestSuite) TestPollScalingNoChangeOnNoBacklogFastMatch() {
-	fakeStats := &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: 0,
-		ApproximateBacklogAge:   durationpb.New(0),
-	}
-	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
-	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
-	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
-	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(0))
-}
-
-func (s *PartitionManagerTestSuite) TestPollScalingNonRootPartition() {
-	// Non-root partitions only get to emit decisions on high backlog
-	f, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
-	s.Assert().NoError(err)
-	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
-	s.partitionMgr.partition = partition
-	// Also disable rate limit to ensure that's not why nil is returned here
-	s.controller = gomock.NewController(s.T())
-	rl := quotas.NewMockRateLimiter(s.controller)
-	rl.EXPECT().Allow().Return(true).AnyTimes()
-
-	fakeStats := &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: 100,
-		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
-	}
-	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
-	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(2)
-
-	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
-	s.Assert().NotNil(decision)
-	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
-
-	fakeStats.ApproximateBacklogCount = 0
-	decision = s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
-	s.Assert().Nil(decision)
-}
-
-func (s *PartitionManagerTestSuite) TestPollScalingDownOnLongSyncMatch() {
-	fakeStats := &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: 0,
-	}
-	fakeInternalTask := &internalTask{
-		source: serverenumspb.TASK_SOURCE_HISTORY,
-	}
-	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
-	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
-	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now().Add(-2*time.Second))
-	s.Assert().LessOrEqual(decision.PollRequestDeltaSuggestion, int32(-1))
-}
-
-func (s *PartitionManagerTestSuite) TestPollScalingDecisionsAreRateLimited() {
-	s.controller = gomock.NewController(s.T())
-	rl := quotas.NewMockRateLimiter(s.controller)
-	rl.EXPECT().Allow().Return(true).Times(1)
-	rl.EXPECT().Allow().Return(false).Times(1)
-	s.partitionMgr.pollerScalingRateLimiter = rl
-	fakeStats := &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: 100,
-		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
-	}
-	mockPTQM := NewMockphysicalTaskQueueManager(s.controller)
-	mockPTQM.EXPECT().GetStats().Return(fakeStats).Times(1)
-	decision := s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
-	s.Assert().GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
-	decision = s.partitionMgr.makePollerScalingDecision(mockPTQM, time.Now())
-	s.Assert().Nil(decision)
 }
 
 func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistencespb.VersioningData, directive *taskqueuespb.TaskVersionDirective) {

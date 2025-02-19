@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/quotas"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -107,6 +108,7 @@ type (
 		deploymentRegistered        bool       // TODO (Shivam): Rename after the pre-release versioning API's are removed.
 		deploymentVersionRegistered bool       // TODO (Shivam): Rename after the pre-release versioning API's are removed.
 		deploymentRegisterError     error      // last "too many ..." error we got when registering // TODO (Shivam): Rename after the pre-release versioning API's are removed.
+		pollerScalingRateLimiter    quotas.RateLimiter
 
 		firstPoll time.Time
 	}
@@ -150,6 +152,7 @@ func newPhysicalTaskQueueManager(
 		metricsHandler:             taggedMetricsHandler,
 		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
 		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
+		pollerScalingRateLimiter:   quotas.NewDefaultOutgoingRateLimiter(partitionMgr.config.PollerScalingDecisionsPerSecond),
 	}
 
 	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL())
@@ -647,4 +650,44 @@ func (c *physicalTaskQueueManagerImpl) ShouldEmitGauges() bool {
 	return c.config.BreakdownMetricsByTaskQueue() &&
 		c.config.BreakdownMetricsByPartition() &&
 		(!c.queue.IsVersioned() || c.config.BreakdownMetricsByBuildID())
+}
+
+func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
+	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
+	return c.makePollerScalingDecisionImpl(pollStartTime, c.GetStats)
+}
+
+func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
+	pollStartTime time.Time, statsFn func() *taskqueuepb.TaskQueueStats) *taskqueuepb.PollerScalingDecision {
+	// Avoid thrashing pollers all over the place by limiting how frequently change decisions are issued.
+	if !c.pollerScalingRateLimiter.Allow() {
+		return nil
+	}
+
+	delta := int32(0)
+	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
+	stats := statsFn()
+	if stats.ApproximateBacklogCount > 0 &&
+		stats.ApproximateBacklogAge.AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
+		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
+		// sticky queues.
+		delta = 1
+	} else if !c.queue.Partition().IsRoot() {
+		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
+		return nil
+	} else if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
+		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
+		// since those (currently) don't get backlogged.
+		delta = 1
+	} else if pollWaitTime >= c.partitionMgr.config.PollerScalingSyncMatchWaitTime() {
+		// Decrease if any poll matched after sitting idle for some configured period
+		delta = -1
+	}
+
+	if delta == 0 {
+		return nil
+	}
+	return &taskqueuepb.PollerScalingDecision{
+		PollRequestDeltaSuggestion: delta,
+	}
 }

@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -81,7 +80,6 @@ type (
 		cachedPhysicalInfoByBuildId     map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo // non-nil for root-partition
 		cachedPhysicalInfoByBuildIdLock sync.RWMutex                                                             // locks mutation of cachedPhysicalInfoByBuildId
 		lastFanOut                      int64                                                                    // serves as a TTL for cachedPhysicalInfoByBuildId
-		pollerScalingRateLimiter        quotas.RateLimiter
 	}
 )
 
@@ -109,7 +107,6 @@ func newTaskQueuePartitionManager(
 		versionedQueues:             make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
 		userDataManager:             userDataManager,
 		cachedPhysicalInfoByBuildId: nil,
-		pollerScalingRateLimiter:    quotas.NewDefaultOutgoingRateLimiter(tqConfig.PollerScalingDecisionsPerSecond),
 	}
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
@@ -331,7 +328,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	task, err := dbq.PollTask(ctx, pollMetadata)
 
 	if task != nil {
-		task.pollerScalingDecision = pm.makePollerScalingDecision(dbq, pollMetadata.localPollStartTime)
+		task.pollerScalingDecision = dbq.MakePollerScalingDecision(pollMetadata.localPollStartTime)
 	}
 
 	return task, versionSetUsed, err
@@ -1078,40 +1075,4 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 	}
 	perType := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
 	return perType, userDataChanged, nil
-}
-
-// makePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state of the
-// task queue and the task about to be returned. Does not modify inputs.
-func (pm *taskQueuePartitionManagerImpl) makePollerScalingDecision(
-	dbq physicalTaskQueueManager, pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
-	// Avoid thrashing pollers all over the place by limiting how frequently change decisions are issued.
-	if !pm.pollerScalingRateLimiter.Allow() {
-		return nil
-	}
-
-	delta := int32(0)
-	pollWaitTime := pm.engine.timeSource.Since(pollStartTime)
-	stats := dbq.GetStats()
-	if stats.ApproximateBacklogCount > 0 && stats.ApproximateBacklogAge.AsDuration() > pm.config.PollerScalingBacklogAgeScaleUp() {
-		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
-		// sticky queues.
-		delta = 1
-	} else if !pm.partition.IsRoot() {
-		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
-		return nil
-	} else if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
-		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
-		// since those (currently) don't get backlogged.
-		delta = 1
-	} else if pollWaitTime >= pm.config.PollerScalingSyncMatchWaitTime() {
-		// Decrease if any poll matched after sitting idle for some configured period
-		delta = -1
-	}
-
-	if delta == 0 {
-		return nil
-	}
-	return &taskqueuepb.PollerScalingDecision{
-		PollRequestDeltaSuggestion: delta,
-	}
 }
