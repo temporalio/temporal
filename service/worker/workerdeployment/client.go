@@ -1499,8 +1499,8 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 	}
 
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
-		// translate to client-side error type
-		return ErrMaxTaskQueuesInDeployment{error: errors.New(failure.Message)}
+		// translate to a non-retryable error
+		return temporal.NewNonRetryableApplicationError(failure.Message, errMaxTaskQueuesInVersionType, serviceerror.NewFailedPrecondition(failure.Message))
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {

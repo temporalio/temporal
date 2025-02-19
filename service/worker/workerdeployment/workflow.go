@@ -26,6 +26,7 @@ package workerdeployment
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -231,6 +232,15 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		Version:       worker_versioning.WorkerDeploymentVersionToString(args.Version),
 	}).Get(ctx, nil)
 	if err != nil {
+		var appError *temporal.ApplicationError
+		if errors.As(err, &appError) {
+			if appError.Type() == errMaxTaskQueuesInVersionType {
+				return temporal.NewApplicationError(
+					fmt.Sprintf("maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
+					errMaxTaskQueuesInVersionType,
+				)
+			}
+		}
 		return err
 	}
 

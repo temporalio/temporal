@@ -33,6 +33,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/service/worker/workerdeployment"
+
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -578,7 +580,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
 		"matching service", uuid.New())
 	if err != nil {
-		var errTooMany deployment.ErrMaxTaskQueuesInDeployment
+		var errTooMany workerdeployment.ErrMaxTaskQueuesInDeployment
 		if errors.As(err, &errTooMany) {
 			c.deploymentRegisterError = errTooMany
 		}

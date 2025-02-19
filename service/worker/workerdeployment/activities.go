@@ -182,10 +182,14 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 
 func (a *Activities) RegisterWorkerInVersion(ctx context.Context, args *deploymentspb.RegisterWorkerInVersionArgs) error {
 	identity := "worker-deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
-	return a.deploymentClient.RegisterWorkerInVersion(
+	err := a.deploymentClient.RegisterWorkerInVersion(
 		ctx,
 		a.namespace,
 		args,
 		identity,
 	)
+	if err != nil {
+		return err
+	}
+	return nil
 }
