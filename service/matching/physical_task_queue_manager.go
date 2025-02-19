@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/quotas"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,6 +49,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/deployment"
@@ -659,13 +659,21 @@ func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	pollStartTime time.Time, statsFn func() *taskqueuepb.TaskQueueStats) *taskqueuepb.PollerScalingDecision {
+	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
+	// If a poller has waited around a while, we can always suggest a decrease.
+	if pollWaitTime >= c.partitionMgr.config.PollerScalingSyncMatchWaitTime() {
+		// Decrease if any poll matched after sitting idle for some configured period
+		return &taskqueuepb.PollerScalingDecision{
+			PollRequestDeltaSuggestion: -1,
+		}
+	}
+
 	// Avoid thrashing pollers all over the place by limiting how frequently change decisions are issued.
 	if !c.pollerScalingRateLimiter.Allow() {
 		return nil
 	}
 
 	delta := int32(0)
-	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
 	stats := statsFn()
 	if stats.ApproximateBacklogCount > 0 &&
 		stats.ApproximateBacklogAge.AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
@@ -679,9 +687,6 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
 		// since those (currently) don't get backlogged.
 		delta = 1
-	} else if pollWaitTime >= c.partitionMgr.config.PollerScalingSyncMatchWaitTime() {
-		// Decrease if any poll matched after sitting idle for some configured period
-		delta = -1
 	}
 
 	if delta == 0 {

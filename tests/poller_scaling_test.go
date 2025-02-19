@@ -26,7 +26,6 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/server/components/nexusoperations"
 	"testing"
 	"time"
 
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
