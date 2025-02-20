@@ -26,16 +26,17 @@ package workerdeployment
 
 import (
 	"compress/gzip"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/log"
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
 )
 
 // TestReplays tests workflow logic backwards compatibility from previous versions.
