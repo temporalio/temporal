@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -222,7 +223,8 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 		d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
 	}
 
-	for key, payload := range args.UpsertEntries {
+	for _, key := range workflow.DeterministicKeys(args.UpsertEntries) {
+		payload := args.UpsertEntries[key]
 		d.VersionState.Metadata.Entries[key] = payload
 	}
 
@@ -252,13 +254,20 @@ func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, isCan bool) 
 		}
 	}
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+		ParentClosePolicy:     enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+		TypedSearchAttributes: d.buildSearchAttributes(),
 	})
 	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, &deploymentspb.DrainageWorkflowArgs{
 		Version: d.VersionState.Version,
 		IsCan:   isCan,
 	})
 	d.drainageWorkflowFuture = &fut
+}
+
+func (d *VersionWorkflowRunner) buildSearchAttributes() temporal.SearchAttributes {
+	return temporal.NewSearchAttributes(
+		temporal.NewSearchAttributeKeyString(searchattribute.TemporalNamespaceDivision).ValueSet(WorkerDeploymentNamespaceDivision),
+	)
 }
 
 func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
@@ -306,7 +315,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 
 	// Manual deletion of versions is only possible when:
 	// 1. The version is not current or ramping
-	// 2. The version is drained. (check skipped when `skip-drainage=true` )
+	// 2. The version is not draining. (check skipped when `skip-drainage=true` )
 	// 3. The version has no active pollers.
 
 	// 1. Check if the version is not current or ramping.
@@ -315,11 +324,11 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		return serviceerror.NewFailedPrecondition(errVersionIsCurrentOrRamping)
 	}
 
-	// 2. Check if the version is drained.
+	// 2. Check if the version is draining.
 	if !args.SkipDrainage {
-		if state.GetDrainageInfo() == nil || state.GetDrainageInfo().Status != enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+		if state.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 			// activity won't retry on this error since version not eligible for deletion
-			return serviceerror.NewFailedPrecondition(errVersionNotDrained)
+			return serviceerror.NewFailedPrecondition(errVersionIsDraining)
 		}
 	}
 
@@ -334,17 +343,16 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		return err
 	}
 
-	d.logger.Info("Version is eligible for deletion")
-
 	// sync version removal to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version:       state.GetVersion(),
 		ForgetVersion: true,
 	}
 
-	for tqName, byType := range state.TaskQueueFamilies {
+	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
+		byType := state.TaskQueueFamilies[tqName]
 		var types []enumspb.TaskQueueType
-		for tqType := range byType.TaskQueues {
+		for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
 			types = append(types, enumspb.TaskQueueType(tqType))
 		}
 		syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
@@ -384,9 +392,10 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 	// describe all task queues in the deployment, if any have pollers, then cannot delete
 
 	tqNameToTypes := make(map[string]*deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes)
-	for tqName, tqFamilyData := range d.VersionState.TaskQueueFamilies {
+	for _, tqName := range workflow.DeterministicKeys(d.VersionState.TaskQueueFamilies) {
+		tqFamilyData := d.VersionState.TaskQueueFamilies[tqName]
 		var tqTypes []enumspb.TaskQueueType
-		for tqType := range tqFamilyData.TaskQueues {
+		for _, tqType := range workflow.DeterministicKeys(tqFamilyData.TaskQueues) {
 			tqTypes = append(tqTypes, enumspb.TaskQueueType(tqType))
 		}
 		tqNameToTypes[tqName] = &deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes{Types: tqTypes}
@@ -547,7 +556,8 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version: state.GetVersion(),
 	}
-	for tqName, byType := range state.TaskQueueFamilies {
+	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
+		byType := state.TaskQueueFamilies[tqName]
 		data := &deploymentspb.DeploymentVersionData{
 			Version:           d.VersionState.Version,
 			RoutingUpdateTime: args.RoutingUpdateTime,
@@ -556,7 +566,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			RampPercentage:    args.RampPercentage,
 		}
 		var types []enumspb.TaskQueueType
-		for tqType := range byType.TaskQueues {
+		for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
 			types = append(types, enumspb.TaskQueueType(tqType))
 		}
 

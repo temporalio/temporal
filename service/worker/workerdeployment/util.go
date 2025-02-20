@@ -86,7 +86,7 @@ const (
 	errVersionAlreadyExistsType   = "errVersionAlreadyExists"
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionAlreadyCurrentType  = "errVersionAlreadyCurrent"
-	errVersionNotDrained          = "Version cannot be deleted since it is not drained."
+	errVersionIsDraining          = "Version cannot be deleted since it is draining."
 	errVersionNotFound            = "Version not found in deployment"
 	errVersionHasPollers          = "Version cannot be deleted since it has active pollers."
 	errVersionIsCurrentOrRamping  = "Version cannot be deleted since it is current or ramping."

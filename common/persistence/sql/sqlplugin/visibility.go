@@ -43,6 +43,7 @@ import (
 
 var (
 	ErrInvalidKeywordListDataType = errors.New("Unexpected data type in keyword list")
+	VersionColumnName             = "_version"
 )
 
 type (
@@ -72,6 +73,11 @@ type (
 		ParentRunID          *string
 		RootWorkflowID       string
 		RootRunID            string
+
+		// Version must be at the end because the version column has to be the last column in the insert statement.
+		// Otherwise we may do partial updates as the version changes halfway through.
+		// This is because MySQL doesn't support row versioning in a way that prevents out-of-order updates.
+		Version int64 `db:"_version"`
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that

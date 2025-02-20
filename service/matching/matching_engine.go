@@ -369,15 +369,6 @@ func (e *matchingEngineImpl) getTaskQueuePartitions(maxCount int) (lists []taskQ
 	return
 }
 
-func (e *matchingEngineImpl) String() string {
-	// Executes taskQueue.String() on each task queue outside of lock
-	buf := new(bytes.Buffer)
-	for _, l := range e.getTaskQueuePartitions(1000) {
-		fmt.Fprintf(buf, "\n%s", l.String())
-	}
-	return buf.String()
-}
-
 // Returns taskQueuePartitionManager for a task queue. If not already cached, and create is true, tries
 // to get new range from DB and create one. This blocks (up to the context deadline) for the
 // task queue to be initialized.
