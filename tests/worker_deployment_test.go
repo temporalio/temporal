@@ -440,6 +440,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_Idempote
 
 	go s.pollFromDeployment(ctx, tv)
 
+	var cT []byte
 	// No current deployment version set.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
@@ -450,6 +451,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_Idempote
 		})
 		a.NoError(err)
 		a.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+		cT = resp.GetConflictToken()
 	}, time.Second*10, time.Millisecond*1000)
 	s.ensureCreateVersionInDeployment(tv)
 
@@ -466,6 +468,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_Idempote
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
 			Identity:       tv.ClientIdentity(),
+			ConflictToken:  cT,
 		})
 	}()
 
@@ -480,6 +483,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_Idempote
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
 			Identity:       tv.ClientIdentity(),
+			ConflictToken:  []byte{}, // note: different conflict token
 		})
 	}()
 
@@ -506,6 +510,9 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_Idempote
 	s.Equal(worker_versioning.UnversionedVersionId, resp1.GetPreviousVersion())
 	// Since the second update was de-duped in the update handler, the previous version will be the current version which is the version from the first update
 	s.Equal(tv.DeploymentVersionString(), resp2.GetPreviousVersion())
+
+	// The conflict token should be the same as the one set from the first update
+	s.Equal(resp1.GetConflictToken(), resp2.GetConflictToken())
 }
 
 // Testing Concurrent stale updates don't break workflow state and are caught in the update handler
@@ -594,6 +601,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_Idempote
 
 	go s.pollFromDeployment(ctx, tv)
 
+	var cT []byte
 	// No ramping deployment version set.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
@@ -604,6 +612,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_Idempote
 		})
 		a.NoError(err)
 		a.Equal("", resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+		cT = resp.GetConflictToken()
 	}, time.Second*10, time.Millisecond*1000)
 	s.ensureCreateVersionInDeployment(tv)
 
@@ -620,6 +629,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_Idempote
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
 			Identity:       tv.ClientIdentity(),
+			ConflictToken:  cT,
 		})
 	}()
 
@@ -634,6 +644,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_Idempote
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
 			Identity:       tv.ClientIdentity(),
+			ConflictToken:  []byte{}, // note: different conflict token
 		})
 	}()
 
@@ -658,6 +669,9 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_Idempote
 	s.Equal("", resp1.GetPreviousVersion())
 	// Since the second update was de-duped in the update handler, the previous version will be the current ramping version which is the version from the first update
 	s.Equal(tv.DeploymentVersionString(), resp2.GetPreviousVersion())
+
+	// The conflict token should be the same as the one set from the first update
+	s.Equal(resp1.GetConflictToken(), resp2.GetConflictToken())
 }
 
 // Testing ConflictToken

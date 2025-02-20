@@ -520,6 +520,11 @@ func (d *ClientImpl) SetCurrentVersion(
 	var res deploymentspb.SetCurrentVersionResponse
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		res.PreviousVersion = version
+		// Returning the latest conflict token
+		details := failure.GetApplicationFailureInfo().GetDetails().GetPayloads()
+		if len(details) > 0 {
+			res.ConflictToken = details[0].GetData()
+		}
 		return &res, nil
 	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 		return nil, serviceerror.NewNotFound(errVersionNotFound)
@@ -602,6 +607,13 @@ func (d *ClientImpl) SetRampingVersion(
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		res.PreviousVersion = version
 		res.PreviousPercentage = percentage
+
+		// Returning the latest conflict token
+		details := failure.GetApplicationFailureInfo().GetDetails().GetPayloads()
+		if len(details) > 0 {
+			res.ConflictToken = details[0].GetData()
+		}
+
 		return &res, nil
 	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 		return nil, serviceerror.NewNotFound(errVersionNotFound)

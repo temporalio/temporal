@@ -223,7 +223,7 @@ func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploymentspb.SetRampingVersionArgs) error {
 	if args.Version == d.State.RoutingConfig.RampingVersion && args.Percentage == d.State.RoutingConfig.RampingVersionPercentage && args.Identity == d.State.LastModifierIdentity {
 		d.logger.Info("version already ramping, no change")
-		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
+		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType, d.State.ConflictToken)
 	}
 
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
@@ -437,7 +437,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 
 func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
 	if d.State.RoutingConfig.CurrentVersion == args.Version && d.State.LastModifierIdentity == args.Identity {
-		return temporal.NewApplicationError("no change", errNoChangeType)
+		return temporal.NewApplicationError("no change", errNoChangeType, d.State.ConflictToken)
 	}
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
 		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
