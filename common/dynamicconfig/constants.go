@@ -154,7 +154,7 @@ for signal / start / signal with start API if namespace is not active`,
 	)
 	EnableNamespaceHandoverWait = NewNamespaceBoolSetting(
 		"system.enableNamespaceHandoverWait",
-		false,
+		true,
 		`EnableNamespaceHandoverWait whether waiting for namespace replication state update before serve the request`,
 	)
 	TransactionSizeLimit = NewGlobalIntSetting(

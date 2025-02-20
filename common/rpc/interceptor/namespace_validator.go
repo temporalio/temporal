@@ -77,6 +77,10 @@ var (
 	allowedNamespaceStatesDefault = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 
 	allowedMethodsDuringHandover = map[string]struct{}{
+		// System
+		"GetSystemInfo":       {},
+		"GetSearchAttributes": {},
+		"GetClusterInfo":      {},
 		// Namespace APIs
 		"DeprecateNamespace": {},
 		"DescribeNamespace":  {},
@@ -98,6 +102,8 @@ var (
 		"CountWorkflowExecutions":        {},
 		"ListSchedules":                  {},
 		"ListBatchOperations":            {},
+		// Matching
+		"ShutdownWorker": {},
 	}
 )
 

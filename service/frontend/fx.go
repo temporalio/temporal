@@ -359,14 +359,14 @@ func RedirectionInterceptorProvider(
 }
 
 func NamespaceHandoverInterceptorProvider(
-	configuration *Config,
+	dc *dynamicconfig.Collection,
 	namespaceCache namespace.Registry,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 ) *interceptor.NamespaceHandoverInterceptor {
 	return interceptor.NewNamespaceHandoverInterceptor(
-		configuration.EnableNamespaceHandoverWait,
+		dc,
 		namespaceCache,
 		metricsHandler,
 		logger,

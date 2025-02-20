@@ -26,16 +26,17 @@ var _ grpc.UnaryServerInterceptor = (*NamespaceHandoverInterceptor)(nil).Interce
 type (
 	// NamespaceHandoverInterceptor handles the namespace in handover replication state
 	NamespaceHandoverInterceptor struct {
-		namespaceRegistry namespace.Registry
-		timeSource        clock.TimeSource
-		enabledForNS      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		metricsHandler    metrics.Handler
-		logger            log.Logger
+		namespaceRegistry      namespace.Registry
+		timeSource             clock.TimeSource
+		enabledForNS           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		nsCacheRefreshInterval dynamicconfig.DurationPropertyFn
+		metricsHandler         metrics.Handler
+		logger                 log.Logger
 	}
 )
 
 func NewNamespaceHandoverInterceptor(
-	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	dc *dynamicconfig.Collection,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -43,11 +44,12 @@ func NewNamespaceHandoverInterceptor(
 ) *NamespaceHandoverInterceptor {
 
 	return &NamespaceHandoverInterceptor{
-		enabledForNS:      enabledForNS,
-		namespaceRegistry: namespaceRegistry,
-		metricsHandler:    metricsHandler,
-		logger:            logger,
-		timeSource:        timeSource,
+		enabledForNS:           dynamicconfig.EnableNamespaceHandoverWait.Get(dc),
+		nsCacheRefreshInterval: dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
+		namespaceRegistry:      namespaceRegistry,
+		metricsHandler:         metricsHandler,
+		logger:                 logger,
+		timeSource:             timeSource,
 	}
 }
 
@@ -65,19 +67,16 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 
 	// review which method is allowed
 	methodName := api.MethodName(info.FullMethod)
-	namespaceName, err := GetNamespaceName(i.namespaceRegistry, req)
-	if err != nil {
-		return nil, err
-	}
+	namespaceName := MustGetNamespaceName(i.namespaceRegistry, req)
 
-	if i.enabledForNS(namespaceName.String()) {
+	if namespaceName != namespace.EmptyName && i.enabledForNS(namespaceName.String()) {
 		var waitTime *time.Duration
 		defer func() {
 			if waitTime != nil {
 				metrics.HandoverWaitLatency.With(i.metricsHandler).Record(*waitTime)
 			}
 		}()
-		waitTime, err = i.waitNamespaceHandoverUpdate(ctx, namespaceName, methodName)
+		waitTime, err := i.waitNamespaceHandoverUpdate(ctx, namespaceName, methodName)
 		if err != nil {
 			return nil, err
 		}
@@ -123,19 +122,17 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 			}
 		})
 
-		childCtx := context.Background()
+		maxWaitDuration := i.nsCacheRefreshInterval() // cache refresh time
 		if deadline, ok := ctx.Deadline(); ok {
-			var childCancelFn context.CancelFunc
-			childCtx, childCancelFn = context.WithDeadline(ctx, deadline.Add(-ctxTailRoom))
-			defer func() {
-				childCancelFn()
-			}()
+			maxWaitDuration = max(0, time.Until(deadline)-ctxTailRoom)
 		}
+		returnTimer := time.NewTimer(maxWaitDuration)
 		var handoverErr error
 		select {
-		case <-childCtx.Done():
+		case <-returnTimer.C:
 			handoverErr = common.ErrNamespaceHandover
 		case <-waitReplicationStateUpdate:
+			returnTimer.Stop()
 		}
 		i.namespaceRegistry.UnregisterStateChangeCallback(cbID)
 		waitTime := time.Since(startTime)
