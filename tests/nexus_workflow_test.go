@@ -2252,13 +2252,13 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 
 		wg := workflow.NewWaitGroup(ctx)
 		execOpCh := workflow.NewChannel(ctx)
-		client := workflow.NewNexusClient(endpointName, svc.Name)
+		c := workflow.NewNexusClient(endpointName, svc.Name)
 
 		for i := 0; i < numCalls; i++ {
 			wg.Add(1)
 			workflow.Go(ctx, func(ctx workflow.Context) {
 				defer wg.Done()
-				fut := client.ExecuteOperation(ctx, op, input, workflow.NexusOperationOptions{})
+				fut := c.ExecuteOperation(ctx, op, input, workflow.NexusOperationOptions{})
 				var exec workflow.NexusOperationExecution
 				err := fut.GetNexusOperationExecution().Get(ctx, &exec)
 				execOpCh.Send(ctx, nil)
@@ -2291,7 +2291,10 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 		}
 
 		// signal handler workflow so it will complete
-		workflow.SignalExternalWorkflow(ctx, handlerWorkflowID, "", "terminate", nil).Get(ctx, nil)
+		err = workflow.SignalExternalWorkflow(ctx, handlerWorkflowID, "", "terminate", nil).Get(ctx, nil)
+		if err != nil {
+			return output, err
+		}
 		wg.Wait(ctx)
 		return output, retError
 	}
@@ -2299,7 +2302,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 	w.RegisterNexusService(svc)
 	w.RegisterWorkflow(handlerWf)
 	w.RegisterWorkflowWithOptions(callerWf, workflow.RegisterOptions{Name: "caller-wf"})
-	w.Start()
+	s.NoError(w.Start())
 	defer w.Stop()
 
 	testCases := []struct {
