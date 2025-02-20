@@ -30,18 +30,37 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/log"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // TestReplays tests workflow logic backwards compatibility from previous versions.
 func TestReplays(t *testing.T) {
 	replayer := worker.NewWorkflowReplayer()
-	replayer.RegisterWorkflowWithOptions(DrainageWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentDrainageWorkflowType})
+	drainageWorkflow := func(ctx workflow.Context, args *deploymentspb.DrainageWorkflowArgs) error {
+		refreshIntervalGetter := func() any {
+			return time.Minute
+		}
+		visibilityGracePeriodGetter := func() any {
+			return time.Minute
+		}
+		return DrainageWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
+	}
+	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+		maxVersionsGetter := func() int {
+			return 100
+		}
+		return Workflow(ctx, maxVersionsGetter, args)
+	}
+	replayer.RegisterWorkflowWithOptions(VersionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
+	replayer.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
+	replayer.RegisterWorkflowWithOptions(drainageWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentDrainageWorkflowType})
 
-	files, err := filepath.Glob("testdata/replay_drainage_passing-static-check.json.gz")
+	files, err := filepath.Glob("testdata/replay_*.json.gz")
 	require.NoError(t, err)
 
 	logger := log.NewSdkLogger(log.NewTestLogger())
