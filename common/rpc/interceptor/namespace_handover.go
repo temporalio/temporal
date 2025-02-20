@@ -71,11 +71,13 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 	}
 
 	if i.enabledForNS(namespaceName.String()) {
-		startTime := i.timeSource.Now()
+		var waitTime *time.Duration
 		defer func() {
-			metrics.HandoverWaitLatency.With(i.metricsHandler).Record(time.Since(startTime))
+			if waitTime != nil {
+				metrics.HandoverWaitLatency.With(i.metricsHandler).Record(*waitTime)
+			}
 		}()
-		_, err = i.waitNamespaceHandoverUpdate(ctx, namespaceName, methodName)
+		waitTime, err = i.waitNamespaceHandoverUpdate(ctx, namespaceName, methodName)
 		if err != nil {
 			return nil, err
 		}
@@ -88,15 +90,15 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 	ctx context.Context,
 	namespaceName namespace.Name,
 	methodName string,
-) (waitTime time.Duration, retErr error) {
+) (waitTime *time.Duration, retErr error) {
 	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
 		return
 	}
 
-	startTime := time.Now()
+	startTime := i.timeSource.Now()
 	namespaceData, err := i.namespaceRegistry.GetNamespace(namespaceName)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	if namespaceData.ReplicationState() == enumspb.REPLICATION_STATE_HANDOVER {
 		cbID := uuid.New()
@@ -136,7 +138,8 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 		case <-waitReplicationStateUpdate:
 		}
 		i.namespaceRegistry.UnregisterStateChangeCallback(cbID)
-		return time.Since(startTime), handoverErr
+		waitTime := time.Since(startTime)
+		return &waitTime, handoverErr
 	}
-	return time.Since(startTime), nil
+	return nil, nil
 }
