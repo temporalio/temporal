@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -118,12 +119,10 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	s.NoError(err)
 
 	// Queue up a couple workflows
-	runHandles := make([]sdkclient.WorkflowRun, 0)
 	for i := 0; i < 5; i++ {
-		run, err := s.sdkClient.ExecuteWorkflow(
+		_, err := s.sdkClient.ExecuteWorkflow(
 			ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
-		runHandles = append(runHandles, run)
 	}
 
 	// Poll for a task and see attached decision is to scale up b/c of backlog
@@ -138,58 +137,42 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 		assert.NotNil(t, resp.PollerScalingDecision)
 		assert.GreaterOrEqual(t, int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
 
-		// Respond w/ activity and nexus tasks so we can see scaling decisions on polling those.
-		// Two nexus tasks are needed so that the add rate will exceed dispatch rate.
-		_, err = feClient.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Identity:  "test",
-			TaskToken: resp.TaskToken,
-			Commands: []*commandpb.Command{
-				{
-					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:          "1",
-						ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
-						TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-						Input:               payloads.EncodeString("test-input"),
-						StartToCloseTimeout: durationpb.New(10 * time.Second),
-					}},
-				},
-				{
-					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:          "2",
-						ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
-						TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-						Input:               payloads.EncodeString("test-input"),
-						StartToCloseTimeout: durationpb.New(10 * time.Second),
-					}},
-				},
-				{
-					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-					Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-						ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-							Endpoint:  endpointName,
-							Service:   "service",
-							Operation: "operation",
-							Input:     s.mustToPayload("input"),
-						},
-					},
-				},
-				{
-					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-					Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-						ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-							Endpoint:  endpointName,
-							Service:   "service",
-							Operation: "operation",
-							Input:     s.mustToPayload("input"),
-						},
+		// Start enough activities / nexus tasks to ensure we will see scale up decisions
+		commands := make([]*commandpb.Command, 0, 5)
+		for i := 0; i < 5; i++ {
+			commands = append(commands, &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:          fmt.Sprintf("%v", i),
+					ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					Input:               payloads.EncodeString("test-input"),
+					StartToCloseTimeout: durationpb.New(10 * time.Second),
+				}},
+			})
+			commands = append(commands, &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  endpointName,
+						Service:   "service",
+						Operation: "operation",
+						Input:     s.mustToPayload("input"),
 					},
 				},
 			},
+			)
+		}
+		_, err = feClient.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: resp.TaskToken,
+			Commands:  commands,
 		})
 		assert.NoError(t, err)
 	}, 20*time.Second, 200*time.Millisecond)
+
+	// Wait a little time to ensure add rate exceeds dispatch rate & backlog age grows
+	time.Sleep(500 * time.Millisecond) //nolint:forbidigo // can't poll in an eventually, then we'd drain the tasks
 
 	actResp, err := feClient.PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.Namespace().String(),
@@ -199,8 +182,6 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	s.NotNil(actResp.PollerScalingDecision)
 	s.Assert().GreaterOrEqual(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
 
-	// Wait a little time to ensure add rate exceeds dispatch rate
-	time.Sleep(500 * time.Millisecond)
 	nexusResp, err := feClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
 		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -229,7 +210,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(200 * time.Millisecond):
+			case <-time.NewTimer(200 * time.Millisecond).C:
 				continue
 			}
 		}
@@ -245,7 +226,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 			allScaleDecisions = append(allScaleDecisions, resp.PollerScalingDecision)
 		}
 		// Poll slightly less frequently than we insert tasks
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond) //nolint:forbidigo
 	}
 	startWfCancel()
 
