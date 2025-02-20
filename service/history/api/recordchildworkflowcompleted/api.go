@@ -153,6 +153,11 @@ func recordChildWorkflowCompleted(
 				return nil, consts.ErrChildExecutionNotFound
 			}
 
+			if ci.GetStartedRunId() != request.GetChildFirstExecutionRunId() {
+				// this can happen when parent starts another child run in different branch
+				return nil, consts.ErrChildExecutionNotFound
+			}
+
 			completionEvent := request.CompletionEvent
 			switch completionEvent.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:

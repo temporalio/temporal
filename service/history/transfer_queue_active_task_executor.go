@@ -371,6 +371,11 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 
 	namespaceName := mutableState.GetNamespaceEntry().Name()
 
+	firstRunID, err := mutableState.GetFirstRunID(ctx)
+	if err != nil {
+		return err
+	}
+
 	// NOTE: do not access anything related mutable state after this lock release.
 	// Release lock immediately since mutable state is not needed
 	// and the rest of logic is RPC calls, which can take time.
@@ -384,11 +389,12 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 				WorkflowId: parentWorkflowID,
 				RunId:      parentRunID,
 			},
-			ParentInitiatedId:      parentInitiatedID,
-			ParentInitiatedVersion: parentInitiatedVersion,
-			ChildExecution:         &workflowExecution,
-			Clock:                  parentClock,
-			CompletionEvent:        completionEvent,
+			ParentInitiatedId:        parentInitiatedID,
+			ParentInitiatedVersion:   parentInitiatedVersion,
+			ChildExecution:           &workflowExecution,
+			Clock:                    parentClock,
+			CompletionEvent:          completionEvent,
+			ChildFirstExecutionRunId: firstRunID,
 		})
 		switch err.(type) {
 		case nil:
