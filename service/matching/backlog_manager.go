@@ -62,19 +62,19 @@ type (
 	}
 
 	backlogManagerImpl struct {
-		pqMgr               physicalTaskQueueManager
-		db                  *taskQueueDB
-		taskWriter          *taskWriter
-		taskReader          *taskReader // reads tasks from db and async matches it with poller
-		taskGC              *taskGC
-		taskAckManager      ackManager // tracks ackLevel for delivered messages
-		config              *taskQueueConfig
-		logger              log.Logger
-		throttledLogger     log.ThrottledLogger
-		matchingClient      matchingservice.MatchingServiceClient
-		metricsHandler      metrics.Handler
-		contextInfoProvider func(ctx context.Context) context.Context
-		initializedError    *future.FutureImpl[struct{}]
+		pqMgr            physicalTaskQueueManager
+		tqCtx            context.Context
+		db               *taskQueueDB
+		taskWriter       *taskWriter
+		taskReader       *taskReader // reads tasks from db and async matches it with poller
+		taskGC           *taskGC
+		taskAckManager   ackManager // tracks ackLevel for delivered messages
+		config           *taskQueueConfig
+		logger           log.Logger
+		throttledLogger  log.ThrottledLogger
+		matchingClient   matchingservice.MatchingServiceClient
+		metricsHandler   metrics.Handler
+		initializedError *future.FutureImpl[struct{}]
 		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
 		// update before unloading
 		skipFinalUpdate atomic.Bool
@@ -84,6 +84,7 @@ type (
 var _ backlogManager = (*backlogManagerImpl)(nil)
 
 func newBacklogManager(
+	tqCtx context.Context,
 	pqMgr physicalTaskQueueManager,
 	config *taskQueueConfig,
 	taskManager persistence.TaskManager,
@@ -91,23 +92,22 @@ func newBacklogManager(
 	throttledLogger log.ThrottledLogger,
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
-	contextInfoProvider func(ctx context.Context) context.Context,
 ) *backlogManagerImpl {
 	bmg := &backlogManagerImpl{
-		pqMgr:               pqMgr,
-		matchingClient:      matchingClient,
-		metricsHandler:      metricsHandler,
-		logger:              logger,
-		throttledLogger:     throttledLogger,
-		config:              config,
-		contextInfoProvider: contextInfoProvider,
-		initializedError:    future.NewFuture[struct{}](),
+		pqMgr:            pqMgr,
+		tqCtx:            tqCtx,
+		matchingClient:   matchingClient,
+		metricsHandler:   metricsHandler,
+		logger:           logger,
+		throttledLogger:  throttledLogger,
+		config:           config,
+		initializedError: future.NewFuture[struct{}](),
 	}
 	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
 	bmg.taskAckManager = newAckManager(bmg.db, logger)
-	bmg.taskGC = newTaskGC(bmg.db, config)
+	bmg.taskGC = newTaskGC(tqCtx, bmg.db, bmg.config)
 
 	return bmg
 }
@@ -144,14 +144,12 @@ func (c *backlogManagerImpl) Stop() {
 	// tasks, the next owner will just read over an empty range.
 	ackLevel := c.taskAckManager.getAckLevel()
 	if ackLevel >= 0 && !c.skipFinalUpdate.Load() {
-		ctx, cancel := c.newIOContext()
+		ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 		defer cancel()
 
 		_ = c.db.UpdateState(ctx, ackLevel)
-		c.taskGC.RunNow(ctx, ackLevel)
+		c.taskGC.RunNow(ackLevel)
 	}
-	c.taskWriter.Stop()
-	c.taskReader.Stop()
 }
 
 func (c *backlogManagerImpl) SetInitializedError(err error) {
@@ -238,11 +236,7 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 	}
 
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
-
-	// TODO: completeTaskFunc and task.finish() should take in a context
-	ctx, cancel := c.newIOContext()
-	defer cancel()
-	c.taskGC.Run(ctx, ackLevel)
+	c.taskGC.Run(ackLevel)
 }
 
 func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
@@ -266,11 +260,6 @@ func executeWithRetry(
 		}
 		return common.IsPersistenceTransientError(err)
 	})
-}
-
-func (c *backlogManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-	return c.contextInfoProvider(ctx), cancel
 }
 
 func (c *backlogManagerImpl) queueKey() *PhysicalTaskQueueKey {
