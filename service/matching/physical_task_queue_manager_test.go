@@ -523,7 +523,7 @@ func TestPollScalingUpOnBacklog(t *testing.T) {
 	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
 
 	rl := quotas.NewMockRateLimiter(controller)
-	rl.EXPECT().Allow().Return(true).AnyTimes()
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	tqm.pollerScalingRateLimiter = rl
 
 	fakeStats := &taskqueuepb.TaskQueueStats{
@@ -541,7 +541,7 @@ func TestPollScalingUpAddRateExceedsDispatchRate(t *testing.T) {
 	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
 
 	rl := quotas.NewMockRateLimiter(controller)
-	rl.EXPECT().Allow().Return(true).AnyTimes()
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	tqm.pollerScalingRateLimiter = rl
 
 	fakeStats := &taskqueuepb.TaskQueueStats{
@@ -577,7 +577,7 @@ func TestPollScalingNonRootPartition(t *testing.T) {
 	tqm.partitionMgr.partition = partition
 	// Also disable rate limit to ensure that's not why nil is returned here
 	rl := quotas.NewMockRateLimiter(controller)
-	rl.EXPECT().Allow().Return(true).AnyTimes()
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	tqm.pollerScalingRateLimiter = rl
 
 	fakeStats := &taskqueuepb.TaskQueueStats{
@@ -609,8 +609,8 @@ func TestPollScalingDecisionsAreRateLimited(t *testing.T) {
 	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
 
 	rl := quotas.NewMockRateLimiter(controller)
-	rl.EXPECT().Allow().Return(true).Times(1)
-	rl.EXPECT().Allow().Return(false).Times(1)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).Times(1)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(false).Times(1)
 	tqm.pollerScalingRateLimiter = rl
 
 	fakeStats := &taskqueuepb.TaskQueueStats{
