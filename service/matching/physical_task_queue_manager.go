@@ -131,6 +131,11 @@ func newPhysicalTaskQueueManager(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
 		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
 
+	// We multiply by a big number so that we can later divide it by the number of pollers when grabbing permits,
+	// to allow us to make more decisions per second when there are more pollers.
+	pollerScalingRateLimitFn := func() float64 {
+		return config.PollerScalingDecisionsPerSecond() * 1e6
+	}
 	pqMgr := &physicalTaskQueueManagerImpl{
 		status:                     common.DaemonStatusInitialized,
 		partitionMgr:               partitionMgr,
@@ -144,7 +149,7 @@ func newPhysicalTaskQueueManager(
 		metricsHandler:             taggedMetricsHandler,
 		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
 		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
-		pollerScalingRateLimiter:   quotas.NewDefaultOutgoingRateLimiter(partitionMgr.config.PollerScalingDecisionsPerSecond),
+		pollerScalingRateLimiter:   quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
 	}
 
 	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL())
@@ -658,8 +663,13 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		}
 	}
 
-	// Avoid thrashing pollers all over the place by limiting how frequently change decisions are issued.
-	if !c.pollerScalingRateLimiter.Allow() {
+	// Avoid spiking pollers crazy fast by limiting how frequently change decisions are issued. Be more permissive when
+	// there are more recent pollers.
+	numPollers := c.pollerHistory.history.Size()
+	if numPollers == 0 {
+		numPollers = 1
+	}
+	if !c.pollerScalingRateLimiter.AllowN(pollStartTime, 1e6/numPollers) {
 		return nil
 	}
 

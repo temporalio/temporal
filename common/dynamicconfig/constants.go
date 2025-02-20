@@ -1263,7 +1263,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	MatchingPollerScalingBacklogAgeScaleUp = NewTaskQueueDurationSetting(
 		"matching.pollerScalingMinimumBacklog",
 		200*time.Millisecond,
-		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog size that must be accumulated before 
+		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before 
 a decision to scale up the number of pollers will be issued`,
 	)
 	MatchingPollerScalingSyncMatchWaitTime = NewTaskQueueDurationSetting(
