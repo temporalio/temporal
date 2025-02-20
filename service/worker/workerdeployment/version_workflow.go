@@ -219,7 +219,8 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 		d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
 	}
 
-	for key, payload := range args.UpsertEntries {
+	for _, key := range workflow.DeterministicKeys(args.UpsertEntries) {
+		payload := args.UpsertEntries[key]
 		d.VersionState.Metadata.Entries[key] = payload
 	}
 
@@ -322,9 +323,10 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		ForgetVersion: true,
 	}
 
-	for tqName, byType := range state.TaskQueueFamilies {
+	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
+		byType := state.TaskQueueFamilies[tqName]
 		var types []enumspb.TaskQueueType
-		for tqType := range byType.TaskQueues {
+		for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
 			types = append(types, enumspb.TaskQueueType(tqType))
 		}
 		syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
@@ -364,9 +366,10 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 	// describe all task queues in the deployment, if any have pollers, then cannot delete
 
 	tqNameToTypes := make(map[string]*deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes)
-	for tqName, tqFamilyData := range d.VersionState.TaskQueueFamilies {
+	for _, tqName := range workflow.DeterministicKeys(d.VersionState.TaskQueueFamilies) {
+		tqFamilyData := d.VersionState.TaskQueueFamilies[tqName]
 		var tqTypes []enumspb.TaskQueueType
-		for tqType := range tqFamilyData.TaskQueues {
+		for _, tqType := range workflow.DeterministicKeys(tqFamilyData.TaskQueues) {
 			tqTypes = append(tqTypes, enumspb.TaskQueueType(tqType))
 		}
 		tqNameToTypes[tqName] = &deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes{Types: tqTypes}
@@ -527,7 +530,8 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version: state.GetVersion(),
 	}
-	for tqName, byType := range state.TaskQueueFamilies {
+	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
+		byType := state.TaskQueueFamilies[tqName]
 		data := &deploymentspb.DeploymentVersionData{
 			Version:           d.VersionState.Version,
 			RoutingUpdateTime: args.RoutingUpdateTime,
@@ -536,7 +540,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			RampPercentage:    args.RampPercentage,
 		}
 		var types []enumspb.TaskQueueType
-		for tqType := range byType.TaskQueues {
+		for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
 			types = append(types, enumspb.TaskQueueType(tqType))
 		}
 

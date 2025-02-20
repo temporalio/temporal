@@ -572,7 +572,8 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 
 func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 	var sortedSummaries []*deploymentspb.WorkerDeploymentVersionSummary
-	for _, s := range d.State.Versions {
+	for _, k := range workflow.DeterministicKeys(d.State.Versions) {
+		s := d.State.Versions[k]
 		sortedSummaries = append(sortedSummaries, s)
 	}
 
