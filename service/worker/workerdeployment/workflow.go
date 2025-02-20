@@ -109,6 +109,11 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
 		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
+
+		// updating the memo since the RoutingConfig is updated
+		if err := d.updateMemo(ctx); err != nil {
+			return err
+		}
 	}
 	if d.State.Versions == nil {
 		d.State.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionSummary)
@@ -567,7 +572,8 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 
 func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 	var sortedSummaries []*deploymentspb.WorkerDeploymentVersionSummary
-	for _, s := range d.State.Versions {
+	for _, k := range workflow.DeterministicKeys(d.State.Versions) {
+		s := d.State.Versions[k]
 		sortedSummaries = append(sortedSummaries, s)
 	}
 

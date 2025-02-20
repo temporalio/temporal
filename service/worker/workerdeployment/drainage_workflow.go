@@ -63,7 +63,7 @@ func DrainageWorkflow(
 	// Set status = DRAINING and then sleep for visibilityGracePeriod (to let recently-started workflows arrive in visibility)
 	if !args.IsCan { // skip if resuming after the parent continued-as-new
 		parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
-		now := timestamppb.Now()
+		now := timestamppb.New(workflow.Now(ctx))
 		drainingInfo := &deploymentpb.VersionDrainageInfo{
 			Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
 			LastChangedTime: now,

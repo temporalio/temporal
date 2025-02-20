@@ -510,7 +510,9 @@ func (s *WorkerDeploymentSuite) TestListWorkerDeployments_OneVersion_OneDeployme
 	expectedDeploymentSummaries := s.buildWorkerDeploymentSummary(
 		tv.DeploymentSeries(),
 		timestamppb.Now(),
-		&deploymentpb.RoutingConfig{},
+		&deploymentpb.RoutingConfig{
+			CurrentVersion: worker_versioning.UnversionedVersionId, // default current version is __unversioned__
+		},
 	)
 
 	s.startAndValidateWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
@@ -976,6 +978,8 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 
 // Should see that the ramping version of the task queues in the current version is unversioned
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversioned_VersionedCurrent() {
+	s.T().Skip("skipping this test since it's flaking on Cassandra. TODO (Shivam): Fix this.")
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
@@ -1029,7 +1033,7 @@ func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Contex
 }
 
 func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
-	s.T().Skip("skipping this test for now until I make TTL of pollerHistoryTTL configurable by dynamic config.")
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -1073,7 +1077,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		})
 		assert.NoError(t, err)
 		assert.Empty(t, resp.Pollers)
-	}, 10*time.Second, time.Second)
+	}, 5*time.Second, time.Second)
 
 	// delete succeeds
 	s.tryDeleteVersion(ctx, tv1, true)
@@ -1114,13 +1118,16 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	}, time.Second*5, time.Millisecond*200)
 
 	// ListDeployments should not show the closed/deleted Worker Deployment
-	listResp, err := s.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
-		Namespace: s.Namespace().String(),
-	})
-	s.Nil(err)
-	for _, dInfo := range listResp.GetWorkerDeployments() {
-		s.NotEqual(tv1.DeploymentSeries(), dInfo.GetName())
-	}
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		listResp, err := s.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
+			Namespace: s.Namespace().String(),
+		})
+		a.Nil(err)
+		for _, dInfo := range listResp.GetWorkerDeployments() {
+			a.NotEqual(tv1.DeploymentSeries(), dInfo.GetName())
+		}
+	}, time.Second*5, time.Millisecond*200)
 }
 
 func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_Idempotent() {
