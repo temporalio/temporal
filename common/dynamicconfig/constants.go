@@ -463,7 +463,7 @@ recently-current deployment can arrive in visibility.`,
 	VersionDrainageStatusVisibilityGracePeriod = NewNamespaceDurationSetting(
 		"matching.wv.VersionDrainageStatusVisibilityGracePeriod",
 		3*time.Minute,
-		`VersionDrainageStatusVisibilityGracePeriod is the time period for which non-current / non-ramping worker deployment versions 
+		`VersionDrainageStatusVisibilityGracePeriod is the time period for which non-current / non-ramping worker deployment versions
 are still considered active to account for the delay in updating the build id field in visibility.`,
 	)
 	VersionDrainageStatusRefreshInterval = NewNamespaceDurationSetting(
@@ -2080,7 +2080,7 @@ This configuration will be become the default behavior in the next release and r
 	)
 	AllowResetWithPendingChildren = NewNamespaceBoolSetting(
 		"history.allowResetWithPendingChildren",
-		false,
+		true,
 		`Allows resetting of workflows with pending children when set to true`,
 	)
 	HistoryMaxAutoResetPoints = NewNamespaceIntSetting(
