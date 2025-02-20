@@ -528,7 +528,7 @@ func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, us
 }
 
 // Poll task and assert no error and that a non-nil task is returned
-func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioning bool) {
+func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioning bool) *internalTask {
 	ctx, cancel := context.WithTimeout(context.Background(), 1000000*time.Millisecond)
 	defer cancel()
 
@@ -540,6 +540,8 @@ func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioni
 	})
 	s.Assert().NoError(err)
 	s.Assert().NotNil(task)
+
+	return task
 }
 
 // UpdatePollerData is a no-op if the poller context has no identity, so we need a context with identity for any tests that check poller info

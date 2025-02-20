@@ -326,6 +326,11 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	}
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
+
+	if task != nil {
+		task.pollerScalingDecision = dbq.MakePollerScalingDecision(pollMetadata.localPollStartTime)
+	}
+
 	return task, versionSetUsed, err
 }
 
