@@ -202,7 +202,7 @@ func newPhysicalTaskQueueManager(
 				return nil, err
 			}
 		}
-		pqMgr.priMatcher = newPriTaskMatcher(config, queue.partition, fwdr, pqMgr.taskValidator, pqMgr.metricsHandler)
+		pqMgr.priMatcher = newPriTaskMatcher(tqCtx, config, queue.partition, fwdr, pqMgr.taskValidator, pqMgr.metricsHandler)
 		pqMgr.matcher = pqMgr.priMatcher
 	} else {
 		var fwdr *Forwarder
