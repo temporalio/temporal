@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -235,13 +236,20 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 
 func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, isCan bool) {
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+		ParentClosePolicy:     enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+		TypedSearchAttributes: d.buildSearchAttributes(),
 	})
 	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, &deploymentspb.DrainageWorkflowArgs{
 		Version: d.VersionState.Version,
 		IsCan:   isCan,
 	})
 	d.drainageWorkflowFuture = &fut
+}
+
+func (d *VersionWorkflowRunner) buildSearchAttributes() temporal.SearchAttributes {
+	return temporal.NewSearchAttributes(
+		temporal.NewSearchAttributeKeyString(searchattribute.TemporalNamespaceDivision).ValueSet(WorkerDeploymentNamespaceDivision),
+	)
 }
 
 func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
