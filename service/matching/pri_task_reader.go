@@ -125,7 +125,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 		// trying the same task immediately. maybe also: after a few attempts on the same task,
 		// let it get cycled to the end of the queue, in case there's some task/wf-specific
 		// thing.
-		tr.addTaskToMatcher(tr.backlogMgr.tqCtx, task)
+		tr.addTaskToMatcher(task)
 		return
 	}
 
@@ -190,7 +190,7 @@ Loop:
 				continue Loop
 			}
 
-			tr.addTasksToMatcher(ctx, batch.tasks)
+			tr.addTasksToMatcher(batch.tasks)
 			// There may be more tasks.
 			tr.Signal()
 
@@ -209,18 +209,7 @@ Loop:
 	}
 }
 
-func (tr *priTaskReader) getTaskBatchWithRange(
-	ctx context.Context,
-	readLevel int64,
-	maxReadLevel int64,
-) ([]*persistencespb.AllocatedTaskInfo, error) {
-	response, err := tr.backlogMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.backlogMgr.config.GetTasksBatchSize())
-	if err != nil {
-		return nil, err
-	}
-	return response.Tasks, err
-}
-
+// TODO(pri): old matcher cleanup: move here
 // type getTasksBatchResponse struct {
 // 	tasks           []*persistencespb.AllocatedTaskInfo
 // 	readLevel       int64
@@ -230,8 +219,7 @@ func (tr *priTaskReader) getTaskBatchWithRange(
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
 // Also return a bool to indicate whether read is finished
-func (tr *priTaskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse, error) {
-	var tasks []*persistencespb.AllocatedTaskInfo
+func (tr *priTaskReader) getTaskBatch(ctx context.Context) (getTasksBatchResponse, error) {
 	readLevel := tr.backlogMgr.taskAckManager.getReadLevel()
 	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel()
 
@@ -241,13 +229,19 @@ func (tr *priTaskReader) getTaskBatch(ctx context.Context) (*getTasksBatchRespon
 		if upper > maxReadLevel {
 			upper = maxReadLevel
 		}
-		tasks, err := tr.getTaskBatchWithRange(ctx, readLevel, upper)
+		response, err := tr.backlogMgr.db.GetTasks(
+			ctx,
+			readLevel+1,
+			upper+1,
+			tr.backlogMgr.config.GetTasksBatchSize(),
+		)
 		if err != nil {
-			return nil, err
+			return getTasksBatchResponse{}, err
 		}
+		tasks := response.Tasks
 		// return as long as it grabs any tasks
 		if len(tasks) > 0 {
-			return &getTasksBatchResponse{
+			return getTasksBatchResponse{
 				tasks:           tasks,
 				readLevel:       upper,
 				isReadBatchDone: true,
@@ -255,17 +249,14 @@ func (tr *priTaskReader) getTaskBatch(ctx context.Context) (*getTasksBatchRespon
 		}
 		readLevel = upper
 	}
-	return &getTasksBatchResponse{
-		tasks:           tasks,
+	return getTasksBatchResponse{
+		tasks:           nil,
 		readLevel:       readLevel,
 		isReadBatchDone: readLevel == maxReadLevel,
 	}, nil // caller will update readLevel when no task grabbed
 }
 
-func (tr *priTaskReader) addTasksToMatcher(
-	ctx context.Context,
-	tasks []*persistencespb.AllocatedTaskInfo,
-) {
+func (tr *priTaskReader) addTasksToMatcher(tasks []*persistencespb.AllocatedTaskInfo) {
 	for _, t := range tasks {
 		if IsTaskExpired(t) {
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
@@ -284,12 +275,12 @@ func (tr *priTaskReader) addTasksToMatcher(
 
 		// After we get to this point, we must eventually call task.finish or
 		// task.finishForwarded, which will call tr.completeTask.
-		tr.addTaskToMatcher(ctx, task)
+		tr.addTaskToMatcher(task)
 	}
 }
 
-func (tr *priTaskReader) addTaskToMatcher(ctx context.Context, task *internalTask) {
-	err := tr.backlogMgr.addSpooledTask(ctx, task)
+func (tr *priTaskReader) addTaskToMatcher(task *internalTask) {
+	err := tr.backlogMgr.addSpooledTask(task)
 	if err == nil {
 		return
 	}
@@ -299,10 +290,10 @@ func (tr *priTaskReader) addTaskToMatcher(ctx context.Context, task *internalTas
 	} else if retry {
 		// This should only be due to persistence problems. Retry in a new goroutine
 		// to not block other tasks, up to some concurrency limit.
-		if tr.addRetries.Acquire(ctx, 1) != nil {
+		if tr.addRetries.Acquire(tr.backlogMgr.tqCtx, 1) != nil {
 			return
 		}
-		go tr.retryAddAfterError(ctx, task)
+		go tr.retryAddAfterError(task)
 	}
 }
 
@@ -331,21 +322,21 @@ func (tr *priTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 	return false, true
 }
 
-func (tr *priTaskReader) retryAddAfterError(ctx context.Context, task *internalTask) {
+func (tr *priTaskReader) retryAddAfterError(task *internalTask) {
 	defer tr.addRetries.Release(1)
 	metrics.BufferThrottlePerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
 
 	// initial sleep since we just tried once
-	util.InterruptibleSleep(ctx, time.Second)
+	util.InterruptibleSleep(tr.backlogMgr.tqCtx, time.Second)
 
 	_ = backoff.ThrottleRetryContext(
-		ctx,
-		func(ctx context.Context) error {
+		tr.backlogMgr.tqCtx,
+		func(context.Context) error {
 			if IsTaskExpired(task.event.AllocatedTaskInfo) {
 				task.finish(nil, false)
 				return nil
 			}
-			err := tr.backlogMgr.addSpooledTask(ctx, task)
+			err := tr.backlogMgr.addSpooledTask(task)
 			if drop, retry := tr.addErrorBehavior(err); drop {
 				task.finish(nil, false)
 			} else if retry {

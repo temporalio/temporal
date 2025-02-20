@@ -372,8 +372,8 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue)
 }
 
-func (c *physicalTaskQueueManagerImpl) AddSpooledTask(ctx context.Context, task *internalTask) error {
-	return c.partitionMgr.AddSpooledTask(ctx, task, c.queue)
+func (c *physicalTaskQueueManagerImpl) AddSpooledTask(task *internalTask) error {
+	return c.partitionMgr.AddSpooledTask(c.tqCtx, task, c.queue)
 }
 
 func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
