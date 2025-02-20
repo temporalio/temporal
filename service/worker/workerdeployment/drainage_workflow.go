@@ -62,10 +62,6 @@ func DrainageWorkflow(
 
 	// Set status = DRAINING and then sleep for visibilityGracePeriod (to let recently-started workflows arrive in visibility)
 	if !args.IsCan { // skip if resuming after the parent continued-as-new
-<<<<<<< HEAD
-		// When workflow.GetVersion() is run for the new Workflow Execution, it records a marker in the
-		// Workflow history so that all future calls to GetVersion for this change Id—Step 1 in the example—
-		// on this Workflow Execution will always return the given version number, which is 1 in the example.
 		v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 1)
 		if v == workflow.DefaultVersion { // needs patching because we removed a Signal call
 			parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution

@@ -238,9 +238,6 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 }
 
 func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, isCan bool) {
-	// When workflow.GetVersion() is run for the new Workflow Execution, it records a marker in the
-	// Workflow history so that all future calls to GetVersion for this change Id—Step 1 in the example—
-	// on this Workflow Execution will always return the given version number, which is 1 in the example.
 	v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 1)
 	if v != workflow.DefaultVersion { // needs patching because we added a Signal call via d.syncSummary
 		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED {
