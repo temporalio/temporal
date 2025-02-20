@@ -33,9 +33,9 @@ import (
 )
 
 type taskGC struct {
-	backlogMgr *backlogManagerImpl
-	db         *taskQueueDB
-	config     *taskQueueConfig
+	tqCtx  context.Context
+	db     *taskQueueDB
+	config *taskQueueConfig
 
 	lock           int64
 	ackLevel       int64
@@ -55,8 +55,16 @@ var maxTimeBetweenTaskDeletes = time.Second
 //
 // Finally, the Run() method is safe to be called from multiple threads. The underlying
 // implementation will make sure only one caller executes Run() and others simply bail out
-func newTaskGC(backlogMgr *backlogManagerImpl) *taskGC {
-	return &taskGC{backlogMgr: backlogMgr, db: backlogMgr.db, config: backlogMgr.config}
+func newTaskGC(
+	tqCtx context.Context,
+	db *taskQueueDB,
+	config *taskQueueConfig,
+) *taskGC {
+	return &taskGC{
+		tqCtx:  tqCtx,
+		db:     db,
+		config: config,
+	}
 }
 
 // Run deletes a batch of completed tasks, if it's possible to do so
@@ -83,7 +91,7 @@ func (tgc *taskGC) tryDeleteNextBatch(ackLevel int64, ignoreTimeCond bool) {
 	}
 	tgc.lastDeleteTime = time.Now().UTC()
 
-	ctx, cancel := context.WithTimeout(tgc.backlogMgr.tqCtx, ioTimeout)
+	ctx, cancel := context.WithTimeout(tgc.tqCtx, ioTimeout)
 	defer cancel()
 
 	n, err := tgc.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize)

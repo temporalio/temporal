@@ -107,7 +107,7 @@ func newBacklogManager(
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
 	bmg.taskAckManager = newAckManager(bmg.db, logger)
-	bmg.taskGC = newTaskGC(bmg)
+	bmg.taskGC = newTaskGC(tqCtx, bmg.db, bmg.config)
 
 	return bmg
 }
