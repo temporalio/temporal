@@ -221,13 +221,14 @@ func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 	return nil
 }
 
-func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
+func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploymentspb.SetRampingVersionArgs) error {
+	if args.Version == d.State.RoutingConfig.RampingVersion && args.Percentage == d.State.RoutingConfig.RampingVersionPercentage && args.Identity == d.State.LastModifierIdentity {
+		d.logger.Info("version already ramping, no change")
+		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType, d.State.ConflictToken)
+	}
+
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
 		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
-	}
-	if args.Version == d.State.RoutingConfig.RampingVersion && args.Percentage == d.State.RoutingConfig.RampingVersionPercentage {
-		d.logger.Info("version already ramping, no change")
-		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
 	}
 	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
@@ -240,6 +241,10 @@ func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampin
 	}
 
 	return nil
+}
+
+func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
+	return d.validateStateBeforeAcceptingRampingUpdate(args)
 }
 
 //revive:disable-next-line:cognitive-complexity
@@ -255,6 +260,16 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
+
+	// Validating the state before starting the SetRampingVersion operation. This is required due to the following reason:
+	// The validator accepts/rejects updates based on the state of the deployment workflow. Theoretically, two concurrent update requests
+	// might be accepted by the validator since the state of the workflow, at that point in time, is valid for the updates to take place. Since this update handler
+	// enforces sequential updates, after the first update completes, the local state of the deployment workflow will change. The second update,
+	// now already accepted by the validator, should now not be allowed to run since the state of the workflow is different.
+	err = d.validateStateBeforeAcceptingRampingUpdate(args)
+	if err != nil {
+		return nil, err
+	}
 
 	prevRampingVersion := d.State.RoutingConfig.RampingVersion
 	prevRampingVersionPercentage := d.State.RoutingConfig.RampingVersionPercentage
@@ -381,11 +396,15 @@ func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.Versio
 	}
 }
 
-func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+func (d *WorkflowRunner) validateStateBeforeAcceptingDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
 	if _, ok := d.State.Versions[args.Version]; !ok {
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
 	return nil
+}
+
+func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+	return d.validateStateBeforeAcceptingDeleteVersion(args)
 }
 
 func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
@@ -400,6 +419,16 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
+
+	// Validating the state before starting the DeleteVersion operation. This is required due to the following reason:
+	// The validator accepts/rejects updates based on the state of the deployment workflow. Theoretically, two concurrent delete version requests
+	// might be accepted by the validator since the local state of the workflow contains the version which is requested to be deleted. Since this update handler
+	// enforces sequential updates, after the first update completes, the version will be removed from the local state of the deployment workflow. The second update,
+	// now already accepted by the validator, should now not be allowed to run since the initial workflow state is different.
+	err = d.validateStateBeforeAcceptingDeleteVersion(args)
+	if err != nil {
+		return err
+	}
 
 	// ask version to delete itself
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -423,18 +452,22 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 	return d.updateMemo(ctx)
 }
 
-func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
+func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
+	if d.State.RoutingConfig.CurrentVersion == args.Version && d.State.LastModifierIdentity == args.Identity {
+		return temporal.NewApplicationError("no change", errNoChangeType, d.State.ConflictToken)
+	}
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
 		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
-	}
-	if d.State.RoutingConfig.CurrentVersion == args.Version {
-		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
 	return nil
+}
+
+func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
+	return d.validateStateBeforeAcceptingSetCurrent(args)
 }
 
 func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentVersionArgs) (*deploymentspb.SetCurrentVersionResponse, error) {
@@ -449,6 +482,16 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
+
+	// Validating the state before starting the SetCurrent operation. This is required due to the following reason:
+	// The validator accepts/rejects updates based on the state of the deployment workflow. Theoretically, two concurrent update requests
+	// might be accepted by the validator since the state of the workflow, at that point in time, is valid for the updates to take place. Since this update handler
+	// enforces sequential updates, after the first update completes, the local state of the deployment workflow will change. The second update,
+	// now already accepted by the validator, should now not be allowed to run since the state of the workflow is different.
+	err = d.validateStateBeforeAcceptingSetCurrent(args)
+	if err != nil {
+		return nil, err
+	}
 
 	prevCurrentVersion := d.State.RoutingConfig.CurrentVersion
 	newCurrentVersion := args.Version
