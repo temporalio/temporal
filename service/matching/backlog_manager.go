@@ -197,8 +197,8 @@ func (c *backlogManagerImpl) processSpooledTask(
 	return c.pqMgr.ProcessSpooledTask(ctx, task)
 }
 
-func (c *backlogManagerImpl) addSpooledTask(ctx context.Context, task *internalTask) error {
-	return c.pqMgr.AddSpooledTask(ctx, task)
+func (c *backlogManagerImpl) addSpooledTask(task *internalTask) error {
+	return c.pqMgr.AddSpooledTask(task)
 }
 
 func (c *backlogManagerImpl) BacklogCountHint() int64 {
