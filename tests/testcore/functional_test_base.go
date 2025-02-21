@@ -209,6 +209,9 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 	if s.testClusterConfig.ESConfig != nil {
 		s.testClusterConfig.DynamicConfigOverrides[dynamicconfig.SecondaryVisibilityWritingMode.Key()] = visibility.SecondaryVisibilityWritingModeDual
 	}
+	// Enable raw history for functional tests.
+	// TODO (prathyush): remove this after setting it to true by default.
+	s.testClusterConfig.DynamicConfigOverrides[dynamicconfig.SendRawHistoryBetweenInternalServices.Key()] = true
 
 	s.testClusterConfig.ServiceFxOptions = params.ServiceOptions
 	s.testClusterConfig.EnableMetricsCapture = true
