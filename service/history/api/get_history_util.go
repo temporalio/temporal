@@ -443,10 +443,10 @@ func ProcessInternalRawHistory(
 	if response == nil || response.History == nil {
 		return nil
 	}
+	response.Response.History = response.History
 	if isCloseEventOnly && len(response.Response.History.Events) > 0 {
 		response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
 	}
-	response.Response.History = response.History
 	err := ProcessOutgoingSearchAttributes(
 		saProvider,
 		saMapperProvider,
@@ -501,7 +501,7 @@ func makeFakeContinuedAsNewEvent(
 	_ context.Context,
 	lastEvent *historypb.HistoryEvent,
 ) (*historypb.HistoryEvent, error) {
-	switch lastEvent.EventType {
+	switch lastEvent.EventType { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		if lastEvent.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId() == "" {
 			return nil, nil
@@ -523,7 +523,7 @@ func makeFakeContinuedAsNewEvent(
 	// the client looks at in this case, but copy the last result or failure from the real completed
 	// event just so it's clear what the result was.
 	newAttrs := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{}
-	switch lastEvent.EventType {
+	switch lastEvent.EventType { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
 		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
