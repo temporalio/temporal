@@ -126,26 +126,6 @@ func (mr *MockHistoryServiceClientMockRecorder) CompleteNexusOperation(ctx, in a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteNexusOperation", reflect.TypeOf((*MockHistoryServiceClient)(nil).CompleteNexusOperation), varargs...)
 }
 
-// CreateWorkflowRule mocks base method.
-func (m *MockHistoryServiceClient) CreateWorkflowRule(ctx context.Context, in *historyservice.CreateWorkflowRuleRequest, opts ...grpc.CallOption) (*historyservice.CreateWorkflowRuleResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "CreateWorkflowRule", varargs...)
-	ret0, _ := ret[0].(*historyservice.CreateWorkflowRuleResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateWorkflowRule indicates an expected call of CreateWorkflowRule.
-func (mr *MockHistoryServiceClientMockRecorder) CreateWorkflowRule(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowRule", reflect.TypeOf((*MockHistoryServiceClient)(nil).CreateWorkflowRule), varargs...)
-}
-
 // DeepHealthCheck mocks base method.
 func (m *MockHistoryServiceClient) DeepHealthCheck(ctx context.Context, in *historyservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*historyservice.DeepHealthCheckResponse, error) {
 	m.ctrl.T.Helper()
@@ -204,26 +184,6 @@ func (mr *MockHistoryServiceClientMockRecorder) DeleteWorkflowExecution(ctx, in 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteWorkflowExecution), varargs...)
-}
-
-// DeleteWorkflowRule mocks base method.
-func (m *MockHistoryServiceClient) DeleteWorkflowRule(ctx context.Context, in *historyservice.DeleteWorkflowRuleRequest, opts ...grpc.CallOption) (*historyservice.DeleteWorkflowRuleResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "DeleteWorkflowRule", varargs...)
-	ret0, _ := ret[0].(*historyservice.DeleteWorkflowRuleResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DeleteWorkflowRule indicates an expected call of DeleteWorkflowRule.
-func (mr *MockHistoryServiceClientMockRecorder) DeleteWorkflowRule(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowRule", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteWorkflowRule), varargs...)
 }
 
 // DeleteWorkflowVisibilityRecord mocks base method.
@@ -304,26 +264,6 @@ func (mr *MockHistoryServiceClientMockRecorder) DescribeWorkflowExecution(ctx, i
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).DescribeWorkflowExecution), varargs...)
-}
-
-// DescribeWorkflowRule mocks base method.
-func (m *MockHistoryServiceClient) DescribeWorkflowRule(ctx context.Context, in *historyservice.DescribeWorkflowRuleRequest, opts ...grpc.CallOption) (*historyservice.DescribeWorkflowRuleResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "DescribeWorkflowRule", varargs...)
-	ret0, _ := ret[0].(*historyservice.DescribeWorkflowRuleResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DescribeWorkflowRule indicates an expected call of DescribeWorkflowRule.
-func (mr *MockHistoryServiceClientMockRecorder) DescribeWorkflowRule(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowRule", reflect.TypeOf((*MockHistoryServiceClient)(nil).DescribeWorkflowRule), varargs...)
 }
 
 // ExecuteMultiOperation mocks base method.
@@ -724,26 +664,6 @@ func (mr *MockHistoryServiceClientMockRecorder) ListTasks(ctx, in any, opts ...a
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).ListTasks), varargs...)
-}
-
-// ListWorkflowRules mocks base method.
-func (m *MockHistoryServiceClient) ListWorkflowRules(ctx context.Context, in *historyservice.ListWorkflowRulesRequest, opts ...grpc.CallOption) (*historyservice.ListWorkflowRulesResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "ListWorkflowRules", varargs...)
-	ret0, _ := ret[0].(*historyservice.ListWorkflowRulesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListWorkflowRules indicates an expected call of ListWorkflowRules.
-func (mr *MockHistoryServiceClientMockRecorder) ListWorkflowRules(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkflowRules", reflect.TypeOf((*MockHistoryServiceClient)(nil).ListWorkflowRules), varargs...)
 }
 
 // MergeDLQMessages mocks base method.
@@ -1771,21 +1691,6 @@ func (mr *MockHistoryServiceServerMockRecorder) CompleteNexusOperation(arg0, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteNexusOperation", reflect.TypeOf((*MockHistoryServiceServer)(nil).CompleteNexusOperation), arg0, arg1)
 }
 
-// CreateWorkflowRule mocks base method.
-func (m *MockHistoryServiceServer) CreateWorkflowRule(arg0 context.Context, arg1 *historyservice.CreateWorkflowRuleRequest) (*historyservice.CreateWorkflowRuleResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateWorkflowRule", arg0, arg1)
-	ret0, _ := ret[0].(*historyservice.CreateWorkflowRuleResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateWorkflowRule indicates an expected call of CreateWorkflowRule.
-func (mr *MockHistoryServiceServerMockRecorder) CreateWorkflowRule(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowRule", reflect.TypeOf((*MockHistoryServiceServer)(nil).CreateWorkflowRule), arg0, arg1)
-}
-
 // DeepHealthCheck mocks base method.
 func (m *MockHistoryServiceServer) DeepHealthCheck(arg0 context.Context, arg1 *historyservice.DeepHealthCheckRequest) (*historyservice.DeepHealthCheckResponse, error) {
 	m.ctrl.T.Helper()
@@ -1829,21 +1734,6 @@ func (m *MockHistoryServiceServer) DeleteWorkflowExecution(arg0 context.Context,
 func (mr *MockHistoryServiceServerMockRecorder) DeleteWorkflowExecution(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteWorkflowExecution), arg0, arg1)
-}
-
-// DeleteWorkflowRule mocks base method.
-func (m *MockHistoryServiceServer) DeleteWorkflowRule(arg0 context.Context, arg1 *historyservice.DeleteWorkflowRuleRequest) (*historyservice.DeleteWorkflowRuleResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowRule", arg0, arg1)
-	ret0, _ := ret[0].(*historyservice.DeleteWorkflowRuleResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DeleteWorkflowRule indicates an expected call of DeleteWorkflowRule.
-func (mr *MockHistoryServiceServerMockRecorder) DeleteWorkflowRule(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowRule", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteWorkflowRule), arg0, arg1)
 }
 
 // DeleteWorkflowVisibilityRecord mocks base method.
@@ -1904,21 +1794,6 @@ func (m *MockHistoryServiceServer) DescribeWorkflowExecution(arg0 context.Contex
 func (mr *MockHistoryServiceServerMockRecorder) DescribeWorkflowExecution(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).DescribeWorkflowExecution), arg0, arg1)
-}
-
-// DescribeWorkflowRule mocks base method.
-func (m *MockHistoryServiceServer) DescribeWorkflowRule(arg0 context.Context, arg1 *historyservice.DescribeWorkflowRuleRequest) (*historyservice.DescribeWorkflowRuleResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeWorkflowRule", arg0, arg1)
-	ret0, _ := ret[0].(*historyservice.DescribeWorkflowRuleResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DescribeWorkflowRule indicates an expected call of DescribeWorkflowRule.
-func (mr *MockHistoryServiceServerMockRecorder) DescribeWorkflowRule(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowRule", reflect.TypeOf((*MockHistoryServiceServer)(nil).DescribeWorkflowRule), arg0, arg1)
 }
 
 // ExecuteMultiOperation mocks base method.
@@ -2219,21 +2094,6 @@ func (m *MockHistoryServiceServer) ListTasks(arg0 context.Context, arg1 *history
 func (mr *MockHistoryServiceServerMockRecorder) ListTasks(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).ListTasks), arg0, arg1)
-}
-
-// ListWorkflowRules mocks base method.
-func (m *MockHistoryServiceServer) ListWorkflowRules(arg0 context.Context, arg1 *historyservice.ListWorkflowRulesRequest) (*historyservice.ListWorkflowRulesResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListWorkflowRules", arg0, arg1)
-	ret0, _ := ret[0].(*historyservice.ListWorkflowRulesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListWorkflowRules indicates an expected call of ListWorkflowRules.
-func (mr *MockHistoryServiceServerMockRecorder) ListWorkflowRules(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkflowRules", reflect.TypeOf((*MockHistoryServiceServer)(nil).ListWorkflowRules), arg0, arg1)
 }
 
 // MergeDLQMessages mocks base method.

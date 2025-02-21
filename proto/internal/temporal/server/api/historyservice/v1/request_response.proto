@@ -37,7 +37,6 @@ import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
-import "temporal/api/rules/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/nexus/v1/message.proto";
@@ -1267,57 +1266,4 @@ message UpdateWorkflowExecutionOptionsRequest {
 message UpdateWorkflowExecutionOptionsResponse {
     // Workflow Execution options after update.
     temporal.api.workflow.v1.WorkflowExecutionOptions workflow_execution_options = 1;
-}
-
-// (-- api-linter: core::0133::request-resource-field=disabled
-// (-- api-linter: core::0133::request-unknown-fields=disabled
-// (-- api-linter: core::0133::request-parent-required=disabled
-message CreateWorkflowRuleRequest {
-    option (routing).any_host = true;
-
-    string namespace_id = 1;
-    temporal.api.workflowservice.v1.CreateWorkflowRuleRequest frontend_request = 2;
-
-}
-
-message CreateWorkflowRuleResponse {
-    // Created rule.
-    temporal.api.rules.v1.WorkflowRule rule = 1;
-
-    // Job ID if force-scan flag was provided. Otherwise empty.
-    string job_id = 2;
-}
-
-message DescribeWorkflowRuleRequest {
-    option (routing).any_host = true;
-
-    string namespace_id = 1;
-    temporal.api.workflowservice.v1.DescribeWorkflowRuleRequest frontend_request = 2;
-}
-
-message DescribeWorkflowRuleResponse {
-    // The rule that was read.
-    temporal.api.rules.v1.WorkflowRule rule = 1;
-}
-
-message DeleteWorkflowRuleRequest {
-    option (routing).any_host = true;
-
-    string namespace_id = 1;
-    temporal.api.workflowservice.v1.DeleteWorkflowRuleRequest frontend_request = 2;
-}
-
-message DeleteWorkflowRuleResponse {
-}
-
-message ListWorkflowRulesRequest {
-    option (routing).any_host = true;
-
-    string namespace_id = 1;
-    temporal.api.workflowservice.v1.ListWorkflowRulesRequest frontend_request = 2;
-}
-
-message ListWorkflowRulesResponse {
-    repeated temporal.api.rules.v1.WorkflowRule rules = 1;
-    bytes next_page_token = 2;
 }
