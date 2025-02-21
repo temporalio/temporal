@@ -863,7 +863,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	resetChildID := fmt.Sprintf("%s:%s", attributes.GetWorkflowType().Name, attributes.GetWorkflowId())
 	baseWorkflowInfo := mutableState.GetBaseWorkflowInfo()
 	if mutableState.IsResetRun() && baseWorkflowInfo != nil && baseWorkflowInfo.LowestCommonAncestorEventId >= childInfo.InitiatedEventId { // child was started before the reset point.
-		childRunID, err := t.verifyChildWorkflow(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
+		childRunID, childFirstRunID, err := t.verifyChildWorkflow(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
 		if err != nil {
 			return err
 		}
@@ -874,7 +874,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			}
 			childClock := childInfo.Clock
 			// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
-			err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
+			err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childFirstRunID, childClock)
 			if err != nil {
 				return err
 			}
@@ -1003,7 +1003,7 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	mutableState workflow.MutableState,
 	childNamespace *namespace.Namespace,
 	childWorkflowID string,
-) (childID string, retError error) {
+) (childID, firstRunID string, retError error) {
 	childDescribeReq := &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: childNamespace.ID().String(),
 		Request: &workflowservice.DescribeWorkflowExecutionRequest{
@@ -1017,24 +1017,24 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	if err != nil {
 		// It's not an error if the child is not found. Return empty childID so that the child is created.
 		if common.IsNotFoundError(err) {
-			return "", nil
+			return "", "", nil
 		}
-		return "", err
+		return "", "", err
 	}
 
 	if response.WorkflowExecutionInfo.ParentExecution == nil {
 		// The child doesn't have a parent. Maybe it was started by some client.
-		return "", nil
+		return "", "", nil
 	}
 	// Verify if the WorkflowIDs match first.
 	if response.WorkflowExecutionInfo.ParentExecution.WorkflowId != mutableState.GetExecutionInfo().WorkflowId {
-		return "", nil
+		return "", "", nil
 	}
 
 	childsParentRunID := response.WorkflowExecutionInfo.ParentExecution.RunId
 	// Check if the child's parent was the base run for the current run.
 	if childsParentRunID == mutableState.GetExecutionInfo().OriginalExecutionRunId {
-		return response.WorkflowExecutionInfo.Execution.RunId, nil
+		return response.WorkflowExecutionInfo.Execution.RunId, response.WorkflowExecutionInfo.FirstRunId, nil
 	}
 
 	// load the child's parent mutable state.
@@ -1048,21 +1048,21 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 		locks.PriorityLow,
 	)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer func() { release(retError) }()
 
 	childsParentMutableState, err := wfContext.LoadMutableState(ctx, t.shardContext)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	// now check if the child's parent's original run id and the current run's original run ID are the same.
 	if childsParentMutableState.GetExecutionInfo().OriginalExecutionRunId == mutableState.GetExecutionInfo().OriginalExecutionRunId {
-		return response.WorkflowExecutionInfo.Execution.RunId, nil
+		return response.WorkflowExecutionInfo.Execution.RunId, response.WorkflowExecutionInfo.FirstRunId, nil
 	}
 
-	return "", nil
+	return "", "", nil
 }
 
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
