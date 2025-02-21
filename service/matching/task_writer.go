@@ -111,6 +111,12 @@ func (w *taskWriter) initReadWriteState() error {
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
 	w.backlogMgr.db.SetMaxReadLevel(w.taskIDBlock.start - 1)
 	w.backlogMgr.taskAckManager.setAckLevel(state.ackLevel)
+
+	// if this is subqueue zero, report initial subqueue metadata
+	if w.backlogMgr.db.isSubqueueZero() {
+		w.backlogMgr.pqMgr.LoadSubqueues(state.subqueues)
+	}
+
 	return nil
 }
 

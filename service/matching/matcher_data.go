@@ -111,11 +111,27 @@ func (t *taskPQ) Len() int {
 // implements heap.Interface, do not call directly
 func (t *taskPQ) Less(i int, j int) bool {
 	a, b := t.heap[i], t.heap[j]
+
+	// poll forwarder is always last
 	if !a.isPollForwarder && b.isPollForwarder {
 		return true
+	} else if a.isPollForwarder && !b.isPollForwarder {
+		return false
 	}
-	// TODO(pri): use priority, task id, etc.
-	return false
+
+	// try priority
+	ap, bp := a.getPriority(), b.getPriority()
+	apk, bpk := ap.GetPriorityKey(), bp.GetPriorityKey()
+	if apk < bpk {
+		return true
+	} else if apk > bpk {
+		return false
+	}
+
+	// Note: sync match tasks have a fixed negative id.
+	// Query tasks will get 0 here.
+	aid, bid := a.event.GetTaskId(), b.event.GetTaskId()
+	return aid < bid
 }
 
 // implements heap.Interface, do not call directly

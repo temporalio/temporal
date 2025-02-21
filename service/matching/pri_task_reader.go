@@ -195,7 +195,7 @@ Loop:
 			tr.Signal()
 
 		case <-updateAckTicker.C:
-			err := tr.persistAckBacklogCountLevel(ctx)
+			err := tr.persistAckBacklogCountLevel()
 			isConditionFailed := tr.backlogMgr.signalIfFatal(err)
 			if err != nil && !isConditionFailed {
 				tr.logger().Error("Persistent store operation failure",
@@ -350,9 +350,9 @@ func (tr *priTaskReader) retryAddAfterError(task *internalTask) {
 	)
 }
 
-func (tr *priTaskReader) persistAckBacklogCountLevel(ctx context.Context) error {
+func (tr *priTaskReader) persistAckBacklogCountLevel() error {
 	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
-	return tr.backlogMgr.db.UpdateState(ctx, ackLevel)
+	return tr.backlogMgr.db.UpdateState(tr.backlogMgr.tqCtx, ackLevel)
 }
 
 func (tr *priTaskReader) logger() log.Logger {

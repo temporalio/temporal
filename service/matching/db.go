@@ -51,17 +51,21 @@ type (
 	taskQueueDB struct {
 		sync.Mutex
 		backlogMgr              *backlogManagerImpl // accessing taskWriter and taskReader
-		queue                   *PhysicalTaskQueueKey
+		queue                   SubqueueKey
 		rangeID                 int64
 		ackLevel                int64
 		store                   persistence.TaskManager
 		logger                  log.Logger
 		approximateBacklogCount atomic.Int64 // note that even though this is an atomic, it should only be written to while holding the db lock
 		maxReadLevel            atomic.Int64 // note that even though this is an atomic, it should only be written to while holding the db lock
+		// The contents of this slice should be safe for concurrent read access. That means you
+		// can append to it or replace it with a new slice, but never mutate existing values.
+		subqueues []*persistencespb.SubqueueKey
 	}
 	taskQueueState struct {
-		rangeID  int64
-		ackLevel int64
+		rangeID   int64
+		ackLevel  int64
+		subqueues []*persistencespb.SubqueueKey
 	}
 )
 
@@ -78,7 +82,7 @@ type (
 func newTaskQueueDB(
 	backlogMgr *backlogManagerImpl,
 	store persistence.TaskManager,
-	queue *PhysicalTaskQueueKey,
+	queue SubqueueKey,
 	logger log.Logger,
 ) *taskQueueDB {
 	return &taskQueueDB{
@@ -125,7 +129,11 @@ func (db *taskQueueDB) RenewLease(
 			return taskQueueState{}, err
 		}
 	}
-	return taskQueueState{rangeID: db.rangeID, ackLevel: db.ackLevel}, nil
+	return taskQueueState{
+		rangeID:   db.rangeID,
+		ackLevel:  db.ackLevel,
+		subqueues: db.subqueues,
+	}, nil
 }
 
 func (db *taskQueueDB) takeOverTaskQueueLocked(
@@ -151,9 +159,15 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		db.ackLevel = response.TaskQueueInfo.AckLevel
 		db.rangeID = response.RangeID + 1
 		db.approximateBacklogCount.Store(response.TaskQueueInfo.ApproximateBacklogCount)
+		if db.isSubqueueZero() {
+			db.subqueues = db.ensureDefaultSubqueuesLocked(response.TaskQueueInfo.Subqueues)
+		}
 		return nil
 
 	case *serviceerror.NotFound:
+		if db.isSubqueueZero() {
+			db.subqueues = db.ensureDefaultSubqueuesLocked(nil)
+		}
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
 			RangeID:       initialRangeID,
 			TaskQueueInfo: db.cachedQueueInfo(),
@@ -323,6 +337,30 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 	return n, err
 }
 
+func (db *taskQueueDB) AllocateSubqueue(ctx context.Context, priority int32) ([]*persistencespb.SubqueueKey, error) {
+	bugIf(!db.isSubqueueZero(), "bug: AllocateSubqueue called on non-zero subqueue")
+
+	db.Lock()
+	defer db.Unlock()
+
+	prevSubqueues := db.subqueues
+	db.subqueues = append(db.subqueues, &persistencespb.SubqueueKey{
+		Priority: priority,
+	})
+
+	// ensure written to metadata before returning
+	err := db.renewTaskQueueLocked(ctx, db.rangeID)
+	if err != nil {
+		// If this was a conflict, caller will shut down partition. Otherwise, we don't know
+		// for sure if this write made it to persistence or not. We should forget about the new
+		// subqueue and let a future call to AllocateSubqueue add it again. If we crash and
+		// reload, the new owner will see the subqueue present, which is fine.
+		db.subqueues = prevSubqueues
+		return nil, err
+	}
+	return db.subqueues, nil
+}
+
 func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
 	switch db.queue.Partition().Kind() {
 	case enumspb.TASK_QUEUE_KIND_NORMAL:
@@ -344,6 +382,7 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		ExpiryTime:              db.expiryTime(),
 		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
 		ApproximateBacklogCount: db.approximateBacklogCount.Load(),
+		Subqueues:               db.subqueues,
 	}
 }
 
@@ -362,4 +401,25 @@ func (db *taskQueueDB) emitBacklogGauges() {
 		maxReadLevel := db.GetMaxReadLevel()
 		metrics.TaskLagPerTaskQueueGauge.With(db.backlogMgr.metricsHandler).Record(float64(maxReadLevel - db.ackLevel))
 	}
+}
+
+func (db *taskQueueDB) isSubqueueZero() bool {
+	return db.queue.subqueue == 0
+}
+
+func (db *taskQueueDB) ensureDefaultSubqueuesLocked(subqueues []*persistencespb.SubqueueKey) []*persistencespb.SubqueueKey {
+	defPriority := defaultPriorityLevel(db.backlogMgr.config.PriorityLevels())
+	hasDefault := false
+	for _, s := range db.subqueues {
+		hasDefault = s.Priority == defPriority
+		if hasDefault {
+			break
+		}
+	}
+	if !hasDefault {
+		subqueues = append(subqueues, &persistencespb.SubqueueKey{
+			Priority: defPriority,
+		})
+	}
+	return subqueues
 }

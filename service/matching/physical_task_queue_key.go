@@ -62,6 +62,11 @@ type (
 		// When present, it means this is a V3 pinned queue.
 		deploymentSeriesName string
 	}
+
+	SubqueueKey struct {
+		PhysicalTaskQueueKey
+		subqueue int
+	}
 )
 
 var (
@@ -209,4 +214,13 @@ func (v PhysicalTaskQueueVersion) MetricsTagValue() string {
 		return v.buildId
 	}
 	return v.deploymentSeriesName + "/" + v.buildId
+}
+
+func (q *SubqueueKey) PersistenceName() string {
+	// FIXME: this may be ambiguous, fix before merging
+	name := q.PhysicalTaskQueueKey.PersistenceName()
+	if q.subqueue > 0 {
+		name += "%" + strconv.Itoa(q.subqueue)
+	}
+	return name
 }
