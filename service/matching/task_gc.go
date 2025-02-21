@@ -33,11 +33,13 @@ import (
 )
 
 type taskGC struct {
+	tqCtx  context.Context
+	db     *taskQueueDB
+	config *taskQueueConfig
+
 	lock           int64
-	db             *taskQueueDB
 	ackLevel       int64
 	lastDeleteTime time.Time
-	config         *taskQueueConfig
 }
 
 var maxTimeBetweenTaskDeletes = time.Second
@@ -53,32 +55,45 @@ var maxTimeBetweenTaskDeletes = time.Second
 //
 // Finally, the Run() method is safe to be called from multiple threads. The underlying
 // implementation will make sure only one caller executes Run() and others simply bail out
-func newTaskGC(db *taskQueueDB, config *taskQueueConfig) *taskGC {
-	return &taskGC{db: db, config: config}
+func newTaskGC(
+	tqCtx context.Context,
+	db *taskQueueDB,
+	config *taskQueueConfig,
+) *taskGC {
+	return &taskGC{
+		tqCtx:  tqCtx,
+		db:     db,
+		config: config,
+	}
 }
 
 // Run deletes a batch of completed tasks, if it's possible to do so
 // Only attempts deletion if size or time thresholds are met
-func (tgc *taskGC) Run(ctx context.Context, ackLevel int64) {
-	tgc.tryDeleteNextBatch(ctx, ackLevel, false)
+func (tgc *taskGC) Run(ackLevel int64) {
+	tgc.tryDeleteNextBatch(ackLevel, false)
 }
 
 // RunNow deletes a batch of completed tasks if it's possible to do so
 // This method attempts deletions without waiting for size/time threshold to be met
-func (tgc *taskGC) RunNow(ctx context.Context, ackLevel int64) {
-	tgc.tryDeleteNextBatch(ctx, ackLevel, true)
+func (tgc *taskGC) RunNow(ackLevel int64) {
+	tgc.tryDeleteNextBatch(ackLevel, true)
 }
 
-func (tgc *taskGC) tryDeleteNextBatch(ctx context.Context, ackLevel int64, ignoreTimeCond bool) {
+func (tgc *taskGC) tryDeleteNextBatch(ackLevel int64, ignoreTimeCond bool) {
 	if !tgc.tryLock() {
 		return
 	}
 	defer tgc.unlock()
+
 	batchSize := tgc.config.MaxTaskDeleteBatchSize()
 	if !tgc.checkPrecond(ackLevel, batchSize, ignoreTimeCond) {
 		return
 	}
 	tgc.lastDeleteTime = time.Now().UTC()
+
+	ctx, cancel := context.WithTimeout(tgc.tqCtx, ioTimeout)
+	defer cancel()
+
 	n, err := tgc.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize)
 	if err != nil {
 		return

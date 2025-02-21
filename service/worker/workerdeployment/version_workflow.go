@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -96,14 +97,17 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	selector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		var newInfo *deploymentpb.VersionDrainageInfo
 		c.Receive(ctx, &newInfo)
-		if d.VersionState.GetDrainageInfo() == nil {
-			d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{}
-		}
-		d.VersionState.DrainageInfo.LastCheckedTime = newInfo.LastCheckedTime
+		mergedInfo := &deploymentpb.VersionDrainageInfo{}
+		mergedInfo.LastCheckedTime = newInfo.LastCheckedTime
 		if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
-			d.VersionState.DrainageInfo.Status = newInfo.Status
-			d.VersionState.DrainageInfo.LastChangedTime = newInfo.LastCheckedTime
+			mergedInfo.Status = newInfo.Status
+			mergedInfo.LastChangedTime = newInfo.LastCheckedTime
+			d.VersionState.DrainageInfo = mergedInfo
 			d.syncSummary(ctx)
+		} else {
+			mergedInfo.Status = d.VersionState.DrainageInfo.Status
+			mergedInfo.LastChangedTime = d.VersionState.DrainageInfo.LastChangedTime
+			d.VersionState.DrainageInfo = mergedInfo
 		}
 	})
 
@@ -219,7 +223,8 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 		d.VersionState.Metadata.Entries = make(map[string]*commonpb.Payload)
 	}
 
-	for key, payload := range args.UpsertEntries {
+	for _, key := range workflow.DeterministicKeys(args.UpsertEntries) {
+		payload := args.UpsertEntries[key]
 		d.VersionState.Metadata.Entries[key] = payload
 	}
 
@@ -233,14 +238,33 @@ func (d *VersionWorkflowRunner) handleUpdateVersionMetadata(ctx workflow.Context
 }
 
 func (d *VersionWorkflowRunner) startDrainage(ctx workflow.Context, isCan bool) {
+	v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 1)
+	if v != workflow.DefaultVersion { // needs patching because we added a Signal call via d.syncSummary
+		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED {
+			now := timestamppb.New(workflow.Now(ctx))
+			d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
+				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+				LastChangedTime: now,
+				LastCheckedTime: now,
+			}
+			d.syncSummary(ctx)
+		}
+	}
 	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+		ParentClosePolicy:     enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+		TypedSearchAttributes: d.buildSearchAttributes(),
 	})
 	fut := workflow.ExecuteChildWorkflow(childCtx, WorkerDeploymentDrainageWorkflowType, &deploymentspb.DrainageWorkflowArgs{
 		Version: d.VersionState.Version,
 		IsCan:   isCan,
 	})
 	d.drainageWorkflowFuture = &fut
+}
+
+func (d *VersionWorkflowRunner) buildSearchAttributes() temporal.SearchAttributes {
+	return temporal.NewSearchAttributes(
+		temporal.NewSearchAttributeKeyString(searchattribute.TemporalNamespaceDivision).ValueSet(WorkerDeploymentNamespaceDivision),
+	)
 }
 
 func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
@@ -322,9 +346,10 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		ForgetVersion: true,
 	}
 
-	for tqName, byType := range state.TaskQueueFamilies {
+	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
+		byType := state.TaskQueueFamilies[tqName]
 		var types []enumspb.TaskQueueType
-		for tqType := range byType.TaskQueues {
+		for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
 			types = append(types, enumspb.TaskQueueType(tqType))
 		}
 		syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
@@ -364,9 +389,10 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 	// describe all task queues in the deployment, if any have pollers, then cannot delete
 
 	tqNameToTypes := make(map[string]*deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes)
-	for tqName, tqFamilyData := range d.VersionState.TaskQueueFamilies {
+	for _, tqName := range workflow.DeterministicKeys(d.VersionState.TaskQueueFamilies) {
+		tqFamilyData := d.VersionState.TaskQueueFamilies[tqName]
 		var tqTypes []enumspb.TaskQueueType
-		for tqType := range tqFamilyData.TaskQueues {
+		for _, tqType := range workflow.DeterministicKeys(tqFamilyData.TaskQueues) {
 			tqTypes = append(tqTypes, enumspb.TaskQueueType(tqType))
 		}
 		tqNameToTypes[tqName] = &deploymentspb.CheckTaskQueuesHavePollersActivityArgs_TaskQueueTypes{Types: tqTypes}
@@ -527,7 +553,8 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version: state.GetVersion(),
 	}
-	for tqName, byType := range state.TaskQueueFamilies {
+	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
+		byType := state.TaskQueueFamilies[tqName]
 		data := &deploymentspb.DeploymentVersionData{
 			Version:           d.VersionState.Version,
 			RoutingUpdateTime: args.RoutingUpdateTime,
@@ -536,7 +563,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			RampPercentage:    args.RampPercentage,
 		}
 		var types []enumspb.TaskQueueType
-		for tqType := range byType.TaskQueues {
+		for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
 			types = append(types, enumspb.TaskQueueType(tqType))
 		}
 
