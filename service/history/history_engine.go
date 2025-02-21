@@ -1011,7 +1011,7 @@ func (e *historyEngineImpl) GetReplicationStatus(
 func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
-) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retError error) {
+) (_ *historyservice.GetWorkflowExecutionHistoryResponseWithRaw, retError error) {
 	return getworkflowexecutionhistory.Invoke(ctx, e.shardContext, e.workflowConsistencyChecker, e.versionChecker, e.eventNotifier, request, e.persistenceVisibilityMgr)
 }
 
