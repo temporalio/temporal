@@ -62,16 +62,19 @@ func DrainageWorkflow(
 
 	// Set status = DRAINING and then sleep for visibilityGracePeriod (to let recently-started workflows arrive in visibility)
 	if !args.IsCan { // skip if resuming after the parent continued-as-new
-		parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
-		now := timestamppb.New(workflow.Now(ctx))
-		drainingInfo := &deploymentpb.VersionDrainageInfo{
-			Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
-			LastChangedTime: now,
-			LastCheckedTime: now,
-		}
-		err := workflow.SignalExternalWorkflow(ctx, parentWf.ID, parentWf.RunID, SyncDrainageSignalName, drainingInfo).Get(ctx, nil)
-		if err != nil {
-			return err
+		v := workflow.GetVersion(ctx, "Step1", workflow.DefaultVersion, 1)
+		if v == workflow.DefaultVersion { // needs patching because we removed a Signal call
+			parentWf := workflow.GetInfo(ctx).ParentWorkflowExecution
+			now := timestamppb.New(workflow.Now(ctx))
+			drainingInfo := &deploymentpb.VersionDrainageInfo{
+				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+				LastChangedTime: now,
+				LastCheckedTime: now,
+			}
+			err := workflow.SignalExternalWorkflow(ctx, parentWf.ID, parentWf.RunID, SyncDrainageSignalName, drainingInfo).Get(ctx, nil)
+			if err != nil {
+				return err
+			}
 		}
 		grace, err := getSafeDurationConfig(ctx, "getVisibilityGracePeriod", unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
 		if err != nil {
