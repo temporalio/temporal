@@ -156,6 +156,23 @@ const (
 	listTaskQueueNamesByBuildIdPageSize = 100
 )
 
+const (
+	// Row types for table tasks. Lower bit only: see rowTypeTaskInSubqueue for more details.
+	rowTypeTask = iota
+	rowTypeTaskQueue
+)
+
+// We steal some upper bits of the "row type" field to hold a subqueue index.
+// Subqueue 0 must be the same as rowTypeTask (before subqueues were introduced).
+// 00000000: task in subqueue 0
+// 00000001: task queue metadata
+// xxxxxx1x: reserved
+// 00000100: task in subqueue 1
+// nnnnnn00: task in subqueue n, etc.
+func rowTypeTaskInSubqueue(subqueue int) int {
+	return subqueue<<2 | rowTypeTask
+}
+
 type (
 	MatchingTaskStore struct {
 		Session gocql.Session
@@ -353,7 +370,7 @@ func (d *MatchingTaskStore) CreateTasks(
 				namespaceID,
 				taskQueue,
 				taskQueueType,
-				rowTypeTask,
+				rowTypeTaskInSubqueue(task.Subqueue),
 				task.TaskId,
 				task.Task.Data,
 				task.Task.EncodingType.String())
@@ -362,7 +379,7 @@ func (d *MatchingTaskStore) CreateTasks(
 				namespaceID,
 				taskQueue,
 				taskQueueType,
-				rowTypeTask,
+				rowTypeTaskInSubqueue(task.Subqueue),
 				task.TaskId,
 				task.Task.Data,
 				task.Task.EncodingType.String(),
@@ -425,7 +442,7 @@ func (d *MatchingTaskStore) GetTasks(
 		request.NamespaceID,
 		request.TaskQueue,
 		request.TaskType,
-		rowTypeTask,
+		rowTypeTaskInSubqueue(request.Subqueue),
 		request.InclusiveMinTaskID,
 		request.ExclusiveMaxTaskID,
 	).WithContext(ctx)
@@ -485,7 +502,7 @@ func (d *MatchingTaskStore) CompleteTasksLessThan(
 		request.NamespaceID,
 		request.TaskQueueName,
 		request.TaskType,
-		rowTypeTask,
+		rowTypeTaskInSubqueue(request.Subqueue),
 		request.ExclusiveMaxTaskID,
 	).WithContext(ctx)
 	err := query.Exec()

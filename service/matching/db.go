@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -36,9 +35,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -50,18 +49,23 @@ const (
 type (
 	taskQueueDB struct {
 		sync.Mutex
-		backlogMgr              *backlogManagerImpl // accessing taskWriter and taskReader
-		queue                   *PhysicalTaskQueueKey
-		rangeID                 int64
-		ackLevel                int64
-		store                   persistence.TaskManager
-		logger                  log.Logger
-		approximateBacklogCount atomic.Int64 // note that even though this is an atomic, it should only be written to while holding the db lock
-		maxReadLevel            atomic.Int64 // note that even though this is an atomic, it should only be written to while holding the db lock
+		config    *taskQueueConfig
+		queue     *PhysicalTaskQueueKey
+		rangeID   int64
+		store     persistence.TaskManager
+		logger    log.Logger
+		subqueues []*dbSubqueue
 	}
+
+	dbSubqueue struct {
+		persistencespb.SubqueueInfo
+		maxReadLevel int64
+	}
+
 	taskQueueState struct {
-		rangeID  int64
-		ackLevel int64
+		rangeID   int64
+		ackLevel  int64 // TODO(pri): old matcher cleanup, delete later
+		subqueues []persistencespb.SubqueueInfo
 	}
 )
 
@@ -76,16 +80,16 @@ type (
 //     This guarantee makes some of the other code simpler and there is no impact to perf because updates to taskqueue are
 //     spread out and happen in background routines
 func newTaskQueueDB(
-	backlogMgr *backlogManagerImpl,
+	config *taskQueueConfig,
 	store persistence.TaskManager,
 	queue *PhysicalTaskQueueKey,
 	logger log.Logger,
 ) *taskQueueDB {
 	return &taskQueueDB{
-		backlogMgr: backlogMgr,
-		queue:      queue,
-		store:      store,
-		logger:     logger,
+		config: config,
+		queue:  queue,
+		store:  store,
+		logger: logger,
 	}
 }
 
@@ -97,15 +101,14 @@ func (db *taskQueueDB) RangeID() int64 {
 }
 
 // GetMaxReadLevel returns the current maxReadLevel
-func (db *taskQueueDB) GetMaxReadLevel() int64 {
-	return db.maxReadLevel.Load()
-}
-
-// SetMaxReadLevel sets the current maxReadLevel
-func (db *taskQueueDB) SetMaxReadLevel(maxReadLevel int64) {
+func (db *taskQueueDB) GetMaxReadLevel(subqueue int) int64 {
 	db.Lock()
 	defer db.Unlock()
-	db.maxReadLevel.Store(maxReadLevel)
+	return db.getMaxReadLevelLocked(subqueue)
+}
+
+func (db *taskQueueDB) getMaxReadLevelLocked(subqueue int) int64 {
+	return db.subqueues[subqueue].maxReadLevel
 }
 
 // RenewLease renews the lease on a taskqueue. If there is no previous lease,
@@ -125,7 +128,11 @@ func (db *taskQueueDB) RenewLease(
 			return taskQueueState{}, err
 		}
 	}
-	return taskQueueState{rangeID: db.rangeID, ackLevel: db.ackLevel}, nil
+	return taskQueueState{
+		rangeID:   db.rangeID,
+		ackLevel:  db.subqueues[0].AckLevel, // TODO(pri): cleanup, only used by old backlog manager
+		subqueues: db.cloneSubqueues(),
+	}, nil
 }
 
 func (db *taskQueueDB) takeOverTaskQueueLocked(
@@ -148,19 +155,24 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		}); err != nil {
 			return err
 		}
-		db.ackLevel = response.TaskQueueInfo.AckLevel
 		db.rangeID = response.RangeID + 1
-		db.approximateBacklogCount.Store(response.TaskQueueInfo.ApproximateBacklogCount)
+		db.subqueues = db.ensureDefaultSubqueuesLocked(
+			response.TaskQueueInfo.Subqueues,
+			response.TaskQueueInfo.AckLevel,
+			response.TaskQueueInfo.ApproximateBacklogCount,
+		)
 		return nil
 
 	case *serviceerror.NotFound:
+		db.rangeID = initialRangeID
+		db.subqueues = db.ensureDefaultSubqueuesLocked(nil, 0, 0)
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
 			RangeID:       initialRangeID,
 			TaskQueueInfo: db.cachedQueueInfo(),
 		}); err != nil {
+			db.rangeID = 0
 			return err
 		}
-		db.rangeID = initialRangeID
 		return nil
 
 	default:
@@ -184,18 +196,20 @@ func (db *taskQueueDB) renewTaskQueueLocked(
 	return nil
 }
 
-// UpdateState updates the queue state with the given value
-func (db *taskQueueDB) UpdateState(
+// OldUpdateState updates the queue state with the given value. This is used by old backlog
+// manager (not subqueue-enabled).
+// TODO(pro): old matcher cleanup
+func (db *taskQueueDB) OldUpdateState(
 	ctx context.Context,
 	ackLevel int64,
 ) error {
 	db.Lock()
 	defer db.Unlock()
 
-	// Reset approximateBacklogCounter to fix the count divergence issue
-	maxReadLevel := db.GetMaxReadLevel()
+	// Reset approximateBacklogCount to fix the count divergence issue
+	maxReadLevel := db.getMaxReadLevelLocked(0)
 	if ackLevel == maxReadLevel {
-		db.approximateBacklogCount.Store(0)
+		db.subqueues[0].ApproximateBacklogCount = 0
 	}
 
 	queueInfo := db.cachedQueueInfo()
@@ -206,31 +220,75 @@ func (db *taskQueueDB) UpdateState(
 		PrevRangeID:   db.rangeID,
 	})
 	if err == nil {
-		db.ackLevel = ackLevel
+		db.subqueues[0].AckLevel = ackLevel
 	}
 	db.emitBacklogGauges()
 	return err
 }
 
-// updateApproximateBacklogCount updates the in-memory DB state with the given delta value
-func (db *taskQueueDB) updateApproximateBacklogCount(
-	delta int64,
-) {
+func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	db.Lock()
 	defer db.Unlock()
 
-	// Prevent under-counting
-	if db.approximateBacklogCount.Load()+delta < 0 {
-		db.logger.Info("ApproximateBacklogCounter could have under-counted.",
-			tag.WorkerBuildId(db.queue.Version().MetricsTagValue()), tag.WorkflowNamespaceID(db.queue.Partition().NamespaceId()))
-		db.approximateBacklogCount.Store(0)
-	} else {
-		db.approximateBacklogCount.Add(delta)
+	_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
+		RangeID:       db.rangeID,
+		TaskQueueInfo: db.cachedQueueInfo(),
+		PrevRangeID:   db.rangeID,
+	})
+	db.emitBacklogGauges()
+	return err
+}
+
+func (db *taskQueueDB) updateAckLevelAndCount(subqueue int, ackLevel int64, delta int64) {
+	db.Lock()
+	defer db.Unlock()
+
+	if ackLevel < db.subqueues[subqueue].AckLevel {
+		db.logger.DPanic("bug: ack level should not move backwards!")
+	}
+	db.subqueues[subqueue].AckLevel = ackLevel
+
+	if ackLevel == db.getMaxReadLevelLocked(subqueue) {
+		// Reset approximateBacklogCount to fix the count divergence issue
+		db.subqueues[subqueue].ApproximateBacklogCount = 0
+	} else if delta != 0 {
+		db.updateApproximateBacklogCountLocked(subqueue, delta)
 	}
 }
 
-func (db *taskQueueDB) getApproximateBacklogCount() int64 {
-	return db.approximateBacklogCount.Load()
+// updateApproximateBacklogCount updates the in-memory DB state with the given delta value
+func (db *taskQueueDB) updateApproximateBacklogCount(subqueue int, delta int64) {
+	db.Lock()
+	defer db.Unlock()
+	db.updateApproximateBacklogCountLocked(subqueue, delta)
+}
+
+func (db *taskQueueDB) updateApproximateBacklogCountLocked(subqueue int, delta int64) {
+	// Prevent under-counting
+	count := &db.subqueues[subqueue].ApproximateBacklogCount
+	if *count+delta < 0 {
+		db.logger.Info("ApproximateBacklogCount could have under-counted.",
+			tag.WorkerBuildId(db.queue.Version().MetricsTagValue()),
+			tag.WorkflowNamespaceID(db.queue.Partition().NamespaceId()))
+		*count = 0
+	} else {
+		*count += delta
+	}
+}
+
+func (db *taskQueueDB) getApproximateBacklogCount(subqueue int) int64 {
+	db.Lock()
+	defer db.Unlock()
+	return db.subqueues[subqueue].ApproximateBacklogCount
+}
+
+func (db *taskQueueDB) getTotalApproximateBacklogCount() (total int64) {
+	db.Lock()
+	defer db.Unlock()
+	for _, s := range db.subqueues {
+		total += s.ApproximateBacklogCount
+	}
+	return
 }
 
 // CreateTasks creates a batch of given tasks for this task queue
@@ -246,16 +304,24 @@ func (db *taskQueueDB) CreateTasks(
 		return &persistence.CreateTasksResponse{}, nil
 	}
 
-	maxReadLevel := int64(0)
-	var tasks []*persistencespb.AllocatedTaskInfo
+	type update struct{ maxReadLevel, tasks int64 }
+	updates := make(map[int]update)
+	tasks := make([]*persistencespb.AllocatedTaskInfo, len(reqs))
+	subqueues := make([]int, len(reqs))
 	for i, req := range reqs {
-		tasks = append(tasks, &persistencespb.AllocatedTaskInfo{
+		tasks[i] = &persistencespb.AllocatedTaskInfo{
 			TaskId: taskIDs[i],
 			Data:   req.taskInfo,
-		})
-		maxReadLevel = taskIDs[i]
+		}
+		subqueues[i] = req.subqueue
+
+		u := updates[req.subqueue]
+		updates[req.subqueue] = update{maxReadLevel: max(u.maxReadLevel, taskIDs[i]), tasks: u.tasks + 1}
 	}
-	db.approximateBacklogCount.Add(int64(len(tasks)))
+
+	for i, update := range updates {
+		db.subqueues[i].ApproximateBacklogCount += update.tasks
+	}
 
 	resp, err := db.store.CreateTasks(
 		ctx,
@@ -264,17 +330,22 @@ func (db *taskQueueDB) CreateTasks(
 				Data:    db.cachedQueueInfo(),
 				RangeID: db.rangeID,
 			},
-			Tasks: tasks,
+			Tasks:     tasks,
+			Subqueues: subqueues,
 		})
 
 	// Update the maxReadLevel after the writes are completed, but before we send the response,
 	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
-	db.maxReadLevel.Store(maxReadLevel)
+	for i, update := range updates {
+		db.subqueues[i].maxReadLevel = update.maxReadLevel
+	}
 
 	if _, ok := err.(*persistence.ConditionFailedError); ok {
 		// tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
 		// In those cases we keep the count incremented, hence it may be an overestimate.
-		db.approximateBacklogCount.Add(-int64(len(tasks)))
+		for i, update := range updates {
+			db.subqueues[i].ApproximateBacklogCount -= update.tasks
+		}
 	}
 	return resp, err
 }
@@ -282,6 +353,7 @@ func (db *taskQueueDB) CreateTasks(
 // GetTasks returns a batch of tasks between the given range
 func (db *taskQueueDB) GetTasks(
 	ctx context.Context,
+	subqueue int,
 	inclusiveMinTaskID int64,
 	exclusiveMaxTaskID int64,
 	batchSize int,
@@ -290,9 +362,10 @@ func (db *taskQueueDB) GetTasks(
 		NamespaceID:        db.queue.NamespaceId(),
 		TaskQueue:          db.queue.PersistenceName(),
 		TaskType:           db.queue.TaskType(),
-		PageSize:           batchSize,
 		InclusiveMinTaskID: inclusiveMinTaskID,
 		ExclusiveMaxTaskID: exclusiveMaxTaskID,
+		Subqueue:           subqueue,
+		PageSize:           batchSize,
 	})
 }
 
@@ -303,12 +376,14 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 	ctx context.Context,
 	exclusiveMaxTaskID int64,
 	limit int,
+	subqueue int,
 ) (int, error) {
 	n, err := db.store.CompleteTasksLessThan(ctx, &persistence.CompleteTasksLessThanRequest{
 		NamespaceID:        db.queue.NamespaceId(),
 		TaskQueueName:      db.queue.PersistenceName(),
 		TaskType:           db.queue.TaskType(),
 		ExclusiveMaxTaskID: exclusiveMaxTaskID,
+		Subqueue:           subqueue,
 		Limit:              limit,
 	})
 	if err != nil {
@@ -323,6 +398,33 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 	return n, err
 }
 
+func (db *taskQueueDB) AllocateSubqueue(
+	ctx context.Context,
+	key *persistencespb.SubqueueKey,
+) ([]persistencespb.SubqueueInfo, error) {
+	db.Lock()
+	defer db.Unlock()
+
+	newSubqueue := db.newSubqueueLocked(key)
+	db.subqueues = append(db.subqueues, newSubqueue)
+
+	// ensure written to metadata before returning
+	if _, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
+		RangeID:       db.rangeID,
+		TaskQueueInfo: db.cachedQueueInfo(),
+		PrevRangeID:   db.rangeID,
+	}); err != nil {
+		// If this was a conflict, caller will shut down partition. Otherwise, we don't know
+		// for sure if this write made it to persistence or not. We should forget about the new
+		// subqueue and let a future call to AllocateSubqueue add it again. If we crash and
+		// reload, the new owner may see the subqueue present, which is also fine.
+		db.subqueues = db.subqueues[:len(db.subqueues)-1]
+		return nil, err
+	}
+
+	return db.cloneSubqueues(), nil
+}
+
 func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
 	switch db.queue.Partition().Kind() {
 	case enumspb.TASK_QUEUE_KIND_NORMAL:
@@ -335,15 +437,20 @@ func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
 }
 
 func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
+	infos := make([]*persistencespb.SubqueueInfo, len(db.subqueues))
+	for i := range db.subqueues {
+		infos[i] = &db.subqueues[i].SubqueueInfo
+	}
 	return &persistencespb.TaskQueueInfo{
 		NamespaceId:             db.queue.NamespaceId(),
 		Name:                    db.queue.PersistenceName(),
 		TaskType:                db.queue.TaskType(),
 		Kind:                    db.queue.Partition().Kind(),
-		AckLevel:                db.ackLevel,
+		AckLevel:                db.subqueues[0].AckLevel, // backwards compatibility
 		ExpiryTime:              db.expiryTime(),
 		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
-		ApproximateBacklogCount: db.approximateBacklogCount.Load(),
+		ApproximateBacklogCount: db.subqueues[0].ApproximateBacklogCount, // backwards compatibility
+		Subqueues:               infos,
 	}
 }
 
@@ -351,15 +458,73 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 // task_lag_per_tl gauges. For these gauges to be emitted, BreakdownMetricsByTaskQueue and BreakdownMetricsByPartition
 // should be enabled. Additionally, for versioned queues, BreakdownMetricsByBuildID should also be enabled.
 func (db *taskQueueDB) emitBacklogGauges() {
-	if db.backlogMgr.pqMgr.ShouldEmitGauges() {
-		approximateBacklogCount := db.getApproximateBacklogCount()
-		backlogHeadAge := db.backlogMgr.BacklogHeadAge()
-		metrics.ApproximateBacklogCount.With(db.backlogMgr.metricsHandler).Record(float64(approximateBacklogCount))
-		metrics.ApproximateBacklogAgeSeconds.With(db.backlogMgr.metricsHandler).Record(backlogHeadAge.Seconds())
+	// TODO(pri): need to revisit this for subqueues
+	shouldEmitGauges := db.config.BreakdownMetricsByTaskQueue() &&
+		db.config.BreakdownMetricsByPartition() &&
+		(!db.queue.IsVersioned() || db.config.BreakdownMetricsByBuildID())
+	if shouldEmitGauges {
+		// approximateBacklogCount := db.getApproximateBacklogCount()
+		// backlogHeadAge := db.backlogMgr.BacklogHeadAge()
+		// metrics.ApproximateBacklogCount.With(db.backlogMgr.metricsHandler).Record(float64(approximateBacklogCount))
+		// metrics.ApproximateBacklogAgeSeconds.With(db.backlogMgr.metricsHandler).Record(backlogHeadAge.Seconds())
 
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
-		maxReadLevel := db.GetMaxReadLevel()
-		metrics.TaskLagPerTaskQueueGauge.With(db.backlogMgr.metricsHandler).Record(float64(maxReadLevel - db.ackLevel))
+		// maxReadLevel := db.GetMaxReadLevel(0)
+		// metrics.TaskLagPerTaskQueueGauge.With(db.backlogMgr.metricsHandler).Record(float64(maxReadLevel - db.subqueues[0].AckLevel))
 	}
+}
+
+func (db *taskQueueDB) ensureDefaultSubqueuesLocked(
+	infos []*persistencespb.SubqueueInfo,
+	initAckLevel int64,
+	initApproxCount int64,
+) []*dbSubqueue {
+	// convert+copy protos to []*dbSubqueue
+	subqueues := make([]*dbSubqueue, len(infos))
+	initMaxReadLevel := rangeIDToTaskIDBlock(db.rangeID, db.config.RangeSize).start - 1
+	for i, info := range infos {
+		subqueues[i] = &dbSubqueue{maxReadLevel: initMaxReadLevel}
+		proto.Merge(&subqueues[i].SubqueueInfo, info)
+	}
+
+	// check for default priority and add if not present (this may be initializing subqueue 0)
+	defKey := &persistencespb.SubqueueKey{
+		Priority: defaultPriorityLevel(db.config.PriorityLevels()),
+	}
+	hasDefault := false
+	for _, s := range subqueues {
+		if hasDefault = proto.Equal(s.Key, defKey); hasDefault {
+			break
+		}
+	}
+	if !hasDefault {
+		subqueues = append(subqueues, db.newSubqueueLocked(defKey))
+		// If we are transitioning from no-subqueues to subqueues, initialize subqueue 0 with
+		// the ack level and approx count from TaskQueueInfo.
+		if len(subqueues) == 1 {
+			subqueues[0].AckLevel = initAckLevel
+			subqueues[0].ApproximateBacklogCount = initApproxCount
+		}
+	}
+	return subqueues
+}
+
+func (db *taskQueueDB) newSubqueueLocked(key *persistencespb.SubqueueKey) *dbSubqueue {
+	// start ack level + max read level just before the current block
+	initAckLevel := rangeIDToTaskIDBlock(db.rangeID, db.config.RangeSize).start - 1
+
+	s := &dbSubqueue{maxReadLevel: initAckLevel}
+	s.Key = key
+	s.AckLevel = initAckLevel
+	return s
+}
+
+// clone db.subqueues so we can return it outside our lock
+func (db *taskQueueDB) cloneSubqueues() []persistencespb.SubqueueInfo {
+	infos := make([]persistencespb.SubqueueInfo, len(db.subqueues))
+	for i := range db.subqueues {
+		proto.Merge(&infos[i], &db.subqueues[i].SubqueueInfo)
+	}
+	return infos
 }

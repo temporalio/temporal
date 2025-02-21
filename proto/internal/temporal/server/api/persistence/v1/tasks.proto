@@ -65,6 +65,35 @@ message TaskQueueInfo {
     google.protobuf.Timestamp expiry_time = 6;
     google.protobuf.Timestamp last_update_time = 7;
     int64 approximate_backlog_count = 8;
+    // Subqueues contains one entry for each subqueue in this physical task queue.
+    // Tasks are split into subqueues to implement priority and fairness.
+    // Subqueues are indexed starting from 0, the zero subqueue is always present
+    // and corresponds to the "main" queue before subqueues were introduced.
+    //
+    // The message at index n describes the subqueue at index n.
+    //
+    // Each subqueue has its own ack level and approx backlog count, but they share
+    // the range id. For compatibility, ack level and backlog count for subqueue 0
+    // is copied into TaskQueueInfo.
+    repeated SubqueueInfo subqueues = 9;
+}
+
+message SubqueueInfo {
+    // Key is the information used by a splitting algorithm to decide which tasks should go in
+    // this subqueue. It should be regarded as immutable.
+    SubqueueKey key = 1;
+
+    // The rest are mutable state for the subqueue:
+    int64 ack_level = 2;
+    int64 approximate_backlog_count = 3;
+}
+
+message SubqueueKey {
+    // Each subqueue contains tasks from only one priority level.
+    int32 priority = 1;
+
+    // // Additionally, tasks may be split by a fairness mechanism into buckets.
+    // int32 fairness_bucket = 2;
 }
 
 message TaskKey {
