@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
+	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -682,6 +683,107 @@ func (d *namespaceHandler) DeprecateNamespace(
 		return nil, err
 	}
 	return nil, nil
+}
+
+func (d *namespaceHandler) CreateWorkflowRule(
+	ctx context.Context, ruleSpec *rulespb.WorkflowRuleSpec, nsName string,
+) (*rulespb.WorkflowRule, error) {
+	metadata, err := d.metadataMgr.GetMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
+	if err != nil {
+		return nil, err
+	}
+
+	existingNamespace := getResponse.Namespace
+
+	config := existingNamespace.Config
+
+	_, ok := config.WorkflowRules[ruleSpec.GetId()]
+	if ok {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule with this ID already exists.")
+	}
+
+	workflowRule := &rulespb.WorkflowRule{
+		Spec:       ruleSpec,
+		CreateTime: timestamppb.New(d.timeSource.Now()),
+	}
+	config.WorkflowRules[ruleSpec.GetId()] = workflowRule
+	configVersion := existingNamespace.ConfigVersion + 1
+
+	updateReq := &persistence.UpdateNamespaceRequest{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:                        existingNamespace.Info,
+			Config:                      config,
+			ReplicationConfig:           existingNamespace.ReplicationConfig,
+			ConfigVersion:               configVersion,
+			FailoverVersion:             existingNamespace.FailoverVersion,
+			FailoverNotificationVersion: existingNamespace.FailoverNotificationVersion,
+		},
+		IsGlobalNamespace:   getResponse.IsGlobalNamespace,
+		NotificationVersion: metadata.NotificationVersion,
+	}
+	err = d.metadataMgr.UpdateNamespace(ctx, updateReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return workflowRule, nil
+}
+
+func (d *namespaceHandler) DescribeWorkflowRule(
+	ctx context.Context, ruleID string, nsName string,
+) (*rulespb.WorkflowRule, error) {
+	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
+	if err != nil {
+		return nil, err
+	}
+
+	rule, ok := getResponse.Namespace.Config.WorkflowRules[ruleID]
+	if !ok {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
+	}
+
+	return rule, nil
+}
+
+func (d *namespaceHandler) DeleteWorkflowRule(
+	ctx context.Context, ruleID string, nsName string,
+) error {
+	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
+	if err != nil {
+		return err
+	}
+
+	workflowRules := getResponse.Namespace.Config.WorkflowRules
+
+	_, ok := workflowRules[ruleID]
+	if !ok {
+		return serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
+	}
+
+	delete(workflowRules, ruleID)
+
+	return nil
+}
+
+func (d *namespaceHandler) ListWorkflowRules(
+	ctx context.Context, nsName string,
+) ([]*rulespb.WorkflowRule, error) {
+	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
+	if err != nil {
+		return nil, err
+	}
+
+	workflowRulesMap := getResponse.Namespace.Config.WorkflowRules
+
+	workflowRules := make([]*rulespb.WorkflowRule, 0, len(workflowRulesMap))
+	for _, rule := range workflowRulesMap {
+		workflowRules = append(workflowRules, rule)
+	}
+	return workflowRules, nil
 }
 
 func (d *namespaceHandler) createResponse(

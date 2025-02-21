@@ -113,10 +113,6 @@ const (
 	HistoryService_PauseActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/PauseActivity"
 	HistoryService_UnpauseActivity_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseActivity"
 	HistoryService_ResetActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/ResetActivity"
-	HistoryService_CreateWorkflowRule_FullMethodName                     = "/temporal.server.api.historyservice.v1.HistoryService/CreateWorkflowRule"
-	HistoryService_DescribeWorkflowRule_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/DescribeWorkflowRule"
-	HistoryService_DeleteWorkflowRule_FullMethodName                     = "/temporal.server.api.historyservice.v1.HistoryService/DeleteWorkflowRule"
-	HistoryService_ListWorkflowRules_FullMethodName                      = "/temporal.server.api.historyservice.v1.HistoryService/ListWorkflowRules"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -395,19 +391,6 @@ type HistoryServiceClient interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error)
-	// Create a new workflow rule.
-	// If the rule with such ID already exist this call will fail.
-	// (-- api-linter: core::0133::http-uri-parent=disabled
-	// (-- api-linter: core::0133::response-message-name=disabled
-	// (-- api-linter: core::0133::method-signature=disabled
-	CreateWorkflowRule(ctx context.Context, in *CreateWorkflowRuleRequest, opts ...grpc.CallOption) (*CreateWorkflowRuleResponse, error)
-	// DescribeWorkflowRule return the rule specification for existing rule id.
-	// If there is no rule with such id - NO FOUND error will be returned.
-	DescribeWorkflowRule(ctx context.Context, in *DescribeWorkflowRuleRequest, opts ...grpc.CallOption) (*DescribeWorkflowRuleResponse, error)
-	// Delete rule by rule id
-	DeleteWorkflowRule(ctx context.Context, in *DeleteWorkflowRuleRequest, opts ...grpc.CallOption) (*DeleteWorkflowRuleResponse, error)
-	// Return all namespace rules
-	ListWorkflowRules(ctx context.Context, in *ListWorkflowRulesRequest, opts ...grpc.CallOption) (*ListWorkflowRulesResponse, error)
 }
 
 type historyServiceClient struct {
@@ -1079,42 +1062,6 @@ func (c *historyServiceClient) ResetActivity(ctx context.Context, in *ResetActiv
 	return out, nil
 }
 
-func (c *historyServiceClient) CreateWorkflowRule(ctx context.Context, in *CreateWorkflowRuleRequest, opts ...grpc.CallOption) (*CreateWorkflowRuleResponse, error) {
-	out := new(CreateWorkflowRuleResponse)
-	err := c.cc.Invoke(ctx, HistoryService_CreateWorkflowRule_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *historyServiceClient) DescribeWorkflowRule(ctx context.Context, in *DescribeWorkflowRuleRequest, opts ...grpc.CallOption) (*DescribeWorkflowRuleResponse, error) {
-	out := new(DescribeWorkflowRuleResponse)
-	err := c.cc.Invoke(ctx, HistoryService_DescribeWorkflowRule_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *historyServiceClient) DeleteWorkflowRule(ctx context.Context, in *DeleteWorkflowRuleRequest, opts ...grpc.CallOption) (*DeleteWorkflowRuleResponse, error) {
-	out := new(DeleteWorkflowRuleResponse)
-	err := c.cc.Invoke(ctx, HistoryService_DeleteWorkflowRule_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *historyServiceClient) ListWorkflowRules(ctx context.Context, in *ListWorkflowRulesRequest, opts ...grpc.CallOption) (*ListWorkflowRulesResponse, error) {
-	out := new(ListWorkflowRulesResponse)
-	err := c.cc.Invoke(ctx, HistoryService_ListWorkflowRules_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1391,19 +1338,6 @@ type HistoryServiceServer interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error)
-	// Create a new workflow rule.
-	// If the rule with such ID already exist this call will fail.
-	// (-- api-linter: core::0133::http-uri-parent=disabled
-	// (-- api-linter: core::0133::response-message-name=disabled
-	// (-- api-linter: core::0133::method-signature=disabled
-	CreateWorkflowRule(context.Context, *CreateWorkflowRuleRequest) (*CreateWorkflowRuleResponse, error)
-	// DescribeWorkflowRule return the rule specification for existing rule id.
-	// If there is no rule with such id - NO FOUND error will be returned.
-	DescribeWorkflowRule(context.Context, *DescribeWorkflowRuleRequest) (*DescribeWorkflowRuleResponse, error)
-	// Delete rule by rule id
-	DeleteWorkflowRule(context.Context, *DeleteWorkflowRuleRequest) (*DeleteWorkflowRuleResponse, error)
-	// Return all namespace rules
-	ListWorkflowRules(context.Context, *ListWorkflowRulesRequest) (*ListWorkflowRulesResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1623,18 +1557,6 @@ func (UnimplementedHistoryServiceServer) UnpauseActivity(context.Context, *Unpau
 }
 func (UnimplementedHistoryServiceServer) ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
-}
-func (UnimplementedHistoryServiceServer) CreateWorkflowRule(context.Context, *CreateWorkflowRuleRequest) (*CreateWorkflowRuleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateWorkflowRule not implemented")
-}
-func (UnimplementedHistoryServiceServer) DescribeWorkflowRule(context.Context, *DescribeWorkflowRuleRequest) (*DescribeWorkflowRuleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DescribeWorkflowRule not implemented")
-}
-func (UnimplementedHistoryServiceServer) DeleteWorkflowRule(context.Context, *DeleteWorkflowRuleRequest) (*DeleteWorkflowRuleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DeleteWorkflowRule not implemented")
-}
-func (UnimplementedHistoryServiceServer) ListWorkflowRules(context.Context, *ListWorkflowRulesRequest) (*ListWorkflowRulesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListWorkflowRules not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2935,78 +2857,6 @@ func _HistoryService_ResetActivity_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HistoryService_CreateWorkflowRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateWorkflowRuleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(HistoryServiceServer).CreateWorkflowRule(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: HistoryService_CreateWorkflowRule_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HistoryServiceServer).CreateWorkflowRule(ctx, req.(*CreateWorkflowRuleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _HistoryService_DescribeWorkflowRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DescribeWorkflowRuleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(HistoryServiceServer).DescribeWorkflowRule(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: HistoryService_DescribeWorkflowRule_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HistoryServiceServer).DescribeWorkflowRule(ctx, req.(*DescribeWorkflowRuleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _HistoryService_DeleteWorkflowRule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteWorkflowRuleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(HistoryServiceServer).DeleteWorkflowRule(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: HistoryService_DeleteWorkflowRule_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HistoryServiceServer).DeleteWorkflowRule(ctx, req.(*DeleteWorkflowRuleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _HistoryService_ListWorkflowRules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListWorkflowRulesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(HistoryServiceServer).ListWorkflowRules(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: HistoryService_ListWorkflowRules_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HistoryServiceServer).ListWorkflowRules(ctx, req.(*ListWorkflowRulesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3293,22 +3143,6 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetActivity",
 			Handler:    _HistoryService_ResetActivity_Handler,
-		},
-		{
-			MethodName: "CreateWorkflowRule",
-			Handler:    _HistoryService_CreateWorkflowRule_Handler,
-		},
-		{
-			MethodName: "DescribeWorkflowRule",
-			Handler:    _HistoryService_DescribeWorkflowRule_Handler,
-		},
-		{
-			MethodName: "DeleteWorkflowRule",
-			Handler:    _HistoryService_DeleteWorkflowRule_Handler,
-		},
-		{
-			MethodName: "ListWorkflowRules",
-			Handler:    _HistoryService_ListWorkflowRules_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
