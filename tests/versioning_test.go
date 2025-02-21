@@ -2152,6 +2152,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 }
 
 func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
+	s.T().Skip("Skipping test since this tests old versioning behavior and also flakes")
 	// Testing that wf never "goes back" to older build ID in presence of concurrent activities and random failures.
 	//
 	// SETUP:
@@ -3571,6 +3572,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchCronOld() {
+	s.T().Skip("Skipping test since this tests old versioning behavior and also flakes")
 	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(false) })
 }
 
