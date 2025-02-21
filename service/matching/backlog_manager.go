@@ -59,6 +59,8 @@ type (
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
+		TotalApproximateBacklogCount() int64
+		BacklogHeadAge() time.Duration
 	}
 
 	backlogManagerImpl struct {
@@ -66,10 +68,9 @@ type (
 		tqCtx            context.Context
 		db               *taskQueueDB
 		taskWriter       *taskWriter
-		taskReader       *taskReader    // reads tasks from db and async matches it with poller
-		priTaskReader    *priTaskReader // reads tasks from db and async matches it with poller
+		taskReader       *taskReader // reads tasks from db and async matches it with poller
 		taskGC           *taskGC
-		taskAckManager   ackManager // tracks ackLevel for delivered messages
+		taskAckManager   *ackManager // tracks ackLevel for delivered messages
 		config           *taskQueueConfig
 		logger           log.Logger
 		throttledLogger  log.ThrottledLogger
@@ -104,15 +105,11 @@ func newBacklogManager(
 		config:           config,
 		initializedError: future.NewFuture[struct{}](),
 	}
-	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
+	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger)
 	bmg.taskWriter = newTaskWriter(bmg)
-	if config.NewMatcher {
-		bmg.priTaskReader = newPriTaskReader(bmg)
-	} else {
-		bmg.taskReader = newTaskReader(bmg)
-	}
+	bmg.taskReader = newTaskReader(bmg)
 	bmg.taskAckManager = newAckManager(bmg.db, logger)
-	bmg.taskGC = newTaskGC(tqCtx, bmg.db, bmg.config)
+	bmg.taskGC = newTaskGC(tqCtx, bmg.db, config, 0)
 
 	return bmg
 }
@@ -137,11 +134,7 @@ func (c *backlogManagerImpl) signalIfFatal(err error) bool {
 
 func (c *backlogManagerImpl) Start() {
 	c.taskWriter.Start()
-	if c.priTaskReader != nil {
-		c.priTaskReader.Start()
-	} else {
-		c.taskReader.Start()
-	}
+	c.taskReader.Start()
 }
 
 func (c *backlogManagerImpl) Stop() {
@@ -156,7 +149,7 @@ func (c *backlogManagerImpl) Stop() {
 		ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 		defer cancel()
 
-		_ = c.db.UpdateState(ctx, ackLevel)
+		_ = c.db.OldUpdateState(ctx, ackLevel)
 		c.taskGC.RunNow(ackLevel)
 	}
 }
@@ -180,11 +173,7 @@ func (c *backlogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error 
 	_, err := c.taskWriter.appendTask(taskInfo)
 	c.signalIfFatal(err)
 	if err == nil {
-		if c.priTaskReader != nil {
-			c.priTaskReader.Signal()
-		} else {
-			c.taskReader.Signal()
-		}
+		c.taskReader.Signal()
 	}
 	return err
 }
@@ -202,32 +191,24 @@ func (c *backlogManagerImpl) addSpooledTask(task *internalTask) error {
 }
 
 func (c *backlogManagerImpl) BacklogCountHint() int64 {
-	if c.priTaskReader != nil {
-		return c.priTaskReader.getLoadedTasks()
-	}
 	return c.taskAckManager.getBacklogCountHint()
 }
 
 func (c *backlogManagerImpl) BacklogHeadAge() time.Duration {
-	if c.priTaskReader != nil {
-		return c.priTaskReader.getBacklogHeadAge()
-	}
 	return c.taskReader.getBacklogHeadAge()
 }
 
 func (c *backlogManagerImpl) ReadBufferLength() int64 {
-	if c.priTaskReader != nil {
-		return c.priTaskReader.loadedTasks.Load()
-	}
 	return int64(len(c.taskReader.taskBuffer))
 }
 
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
 	return &taskqueuepb.TaskQueueStatus{
-		ReadLevel:        c.taskAckManager.getReadLevel(),
-		AckLevel:         c.taskAckManager.getAckLevel(),
-		BacklogCountHint: c.db.getApproximateBacklogCount(), // use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
+		ReadLevel: c.taskAckManager.getReadLevel(),
+		AckLevel:  c.taskAckManager.getAckLevel(),
+		// use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
+		BacklogCountHint: c.db.getApproximateBacklogCount(0),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
@@ -235,11 +216,16 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	}
 }
 
+func (c *backlogManagerImpl) TotalApproximateBacklogCount() int64 {
+	return c.db.getTotalApproximateBacklogCount()
+}
+
 // completeTask marks a task as processed. Only tasks created by taskReader (i.e. backlog from db) reach
 // here. As part of completion:
 //   - task is deleted from the database when err is nil
 //   - new task is created and current task is deleted when err is not nil
-func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo, err error) {
+func (c *backlogManagerImpl) completeTask(itask *internalTask, err error) {
+	task := itask.event.AllocatedTaskInfo
 	if err != nil {
 		// failed to start the task.
 		// We cannot just remove it from persistence because then it will be lost.
@@ -267,14 +253,13 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 			c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
 			return
 		}
-		if c.priTaskReader != nil {
-			c.priTaskReader.Signal()
-		} else {
-			c.taskReader.Signal()
-		}
+		c.taskReader.Signal()
 	}
 
-	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
+	ackLevel, numAcked := c.taskAckManager.completeTask(task.GetTaskId())
+	if numAcked > 0 {
+		c.db.updateApproximateBacklogCount(0, -numAcked)
+	}
 	c.taskGC.Run(ackLevel)
 }
 

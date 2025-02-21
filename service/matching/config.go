@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
 )
@@ -94,6 +93,7 @@ type (
 		QueryWorkflowTaskTimeoutLogRate          dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		MembershipUnloadDelay                    dynamicconfig.DurationPropertyFn
 		TaskQueueInfoByBuildIdTTL                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		PriorityLevels                           dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -132,7 +132,6 @@ type (
 
 	taskQueueConfig struct {
 		forwarderConfig
-		CallerInfo                   headers.CallerInfo
 		SyncMatchWaitDuration        func() time.Duration
 		BacklogNegligibleAge         func() time.Duration
 		MaxWaitForPollerBeforeFwd    func() time.Duration
@@ -146,6 +145,7 @@ type (
 		MaxTaskQueueIdleTime       func() time.Duration
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
+		PriorityLevels             func() int32
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
@@ -267,6 +267,7 @@ func NewConfig(
 		QueryWorkflowTaskTimeoutLogRate:          dynamicconfig.MatchingQueryWorkflowTaskTimeoutLogRate.Get(dc),
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
+		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
 		MatchingDropNonRetryableTasks:            dynamicconfig.MatchingDropNonRetryableTasks.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
@@ -293,7 +294,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	taskType := tq.TaskType()
 
 	return &taskQueueConfig{
-		CallerInfo: headers.NewBackgroundCallerInfo(ns.String()),
 		RangeSize:  config.RangeSize,
 		NewMatcher: config.NewMatcher(ns.String(), taskQueueName, taskType),
 		GetTasksBatchSize: func() int {
@@ -323,6 +323,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		MaxTaskDeleteBatchSize: func() int {
 			return config.MaxTaskDeleteBatchSize(ns.String(), taskQueueName, taskType)
+		},
+		PriorityLevels: func() int32 {
+			return int32(config.PriorityLevels(ns.String(), taskQueueName, taskType))
 		},
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
@@ -378,4 +381,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 			return config.PollerHistoryTTL(ns.String())
 		},
 	}
+}
+
+func defaultPriorityLevel(priorityLevels int32) int32 {
+	return (priorityLevels + 1) / 2
 }

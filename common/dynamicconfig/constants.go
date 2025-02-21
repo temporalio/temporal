@@ -1266,6 +1266,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		false,
 		`Use priority-enabled TaskMatcher.`,
 	)
+	MatchingPriorityLevels = NewTaskQueueIntSetting(
+		"matching.priorityLevels",
+		5,
+		`Number of simple priority levels`,
+	)
 
 	// keys for history
 

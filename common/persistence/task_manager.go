@@ -199,6 +199,9 @@ func (m *taskManagerImpl) CreateTasks(
 			ExpiryTime: task.Data.ExpiryTime,
 			Task:       taskBlob,
 		}
+		if i < len(request.Subqueues) {
+			tasks[i].Subqueue = request.Subqueues[i]
+		}
 	}
 	internalRequest := &InternalCreateTasksRequest{
 		NamespaceID:   request.TaskQueueInfo.Data.GetNamespaceId(),
