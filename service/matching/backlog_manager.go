@@ -63,6 +63,7 @@ type (
 
 	backlogManagerImpl struct {
 		pqMgr            physicalTaskQueueManager
+		subqueue         int
 		tqCtx            context.Context
 		db               *taskQueueDB
 		taskWriter       *taskWriter
@@ -87,6 +88,7 @@ var _ backlogManager = (*backlogManagerImpl)(nil)
 func newBacklogManager(
 	tqCtx context.Context,
 	pqMgr physicalTaskQueueManager,
+	subqueue int,
 	config *taskQueueConfig,
 	taskManager persistence.TaskManager,
 	logger log.Logger,
@@ -96,6 +98,7 @@ func newBacklogManager(
 ) *backlogManagerImpl {
 	bmg := &backlogManagerImpl{
 		pqMgr:            pqMgr,
+		subqueue:         subqueue,
 		tqCtx:            tqCtx,
 		matchingClient:   matchingClient,
 		metricsHandler:   metricsHandler,
@@ -104,7 +107,11 @@ func newBacklogManager(
 		config:           config,
 		initializedError: future.NewFuture[struct{}](),
 	}
-	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
+	sqkey := SubqueueKey{
+		PhysicalTaskQueueKey: *pqMgr.QueueKey(),
+		subqueue:             subqueue,
+	}
+	bmg.db = newTaskQueueDB(bmg, taskManager, sqkey, logger)
 	bmg.taskWriter = newTaskWriter(bmg)
 	if config.NewMatcher {
 		bmg.priTaskReader = newPriTaskReader(bmg)

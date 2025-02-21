@@ -263,6 +263,15 @@ func (task *internalTask) getResponse() (taskResponse, bool) {
 	return <-task.responseC, true
 }
 
+func (task *internalTask) getPriority() *commonpb.Priority {
+	if task.event != nil {
+		return task.event.AllocatedTaskInfo.GetData().GetPriority()
+	} else if task.query != nil {
+		return task.query.request.GetPriority()
+	}
+	return nil
+}
+
 // finish marks a task as finished. Should be called after a poller picks up a task
 // and marks it as started. If the task is unable to marked as started, then this
 // method should be called with a non-nil error argument.

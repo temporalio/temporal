@@ -76,17 +76,25 @@ type (
 		taskInfo    *persistencespb.TaskInfo
 		forwardInfo *taskqueuespb.TaskForwardInfo
 	}
-	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
+	// physicalTaskQueueManagerImpl manages a set of physical queues that comprise one logical
+	// queue, corresponding to a single versioned queue of a task queue partition.
+	// TODO(pri): rename this
 	physicalTaskQueueManagerImpl struct {
 		status       int32
 		partitionMgr *taskQueuePartitionManagerImpl
 		queue        *PhysicalTaskQueueKey
 		config       *taskQueueConfig
-		backlogMgr   *backlogManagerImpl
+
 		// This context is valid for lifetime of this physicalTaskQueueManagerImpl.
 		// It can be used to notify when the task queue is closing.
-		tqCtx             context.Context
-		tqCtxCancel       context.CancelFunc
+		tqCtx       context.Context
+		tqCtxCancel context.CancelFunc
+
+		backlogLock       sync.Mutex
+		backlogs          []*backlogManagerImpl // backlog managers are 1:1 with subqueues
+		backlogByPriority map[int32]*backlogManagerImpl
+		backlog0          *backlogManagerImpl // this is == backlogs[0] but does not require the lock to read
+
 		liveness          *liveness
 		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
 		priMatcher        *priTaskMatcher
@@ -157,6 +165,7 @@ func newPhysicalTaskQueueManager(
 		config:                     config,
 		tqCtx:                      tqCtx,
 		tqCtxCancel:                tqCancel,
+		backlogByPriority:          make(map[int32]*backlogManagerImpl),
 		namespaceRegistry:          e.namespaceRegistry,
 		matchingClient:             e.matchingRawClient,
 		clusterMeta:                e.clusterMeta,
@@ -181,9 +190,10 @@ func newPhysicalTaskQueueManager(
 		pqMgr.namespaceRegistry,
 		pqMgr.partitionMgr.engine.historyClient,
 	)
-	pqMgr.backlogMgr = newBacklogManager(
+	pqMgr.backlog0 = newBacklogManager(
 		tqCtx,
 		pqMgr,
+		0,
 		config,
 		e.taskManager,
 		logger,
@@ -191,6 +201,7 @@ func newPhysicalTaskQueueManager(
 		e.matchingRawClient,
 		taggedMetricsHandler,
 	)
+	pqMgr.backlogs = []*backlogManagerImpl{pqMgr.backlog0}
 
 	if config.NewMatcher {
 		var fwdr *priForwarder
@@ -232,7 +243,7 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 		return
 	}
 	c.liveness.Start()
-	c.backlogMgr.Start()
+	c.backlog0.Start() // this will call LoadSubqueues after initializing
 	c.matcher.Start()
 	c.logger.Info("Started physicalTaskQueueManager", tag.LifeCycleStarted, tag.Cause(c.config.loadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStartedCounter.Name()).Record(1)
@@ -249,8 +260,12 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	) {
 		return
 	}
-	// this may attempt to write one final ack update, do this before canceling tqCtx
-	c.backlogMgr.Stop()
+	c.backlogLock.Lock()
+	for _, b := range c.backlogs {
+		// this may attempt to write one final ack update, do this before canceling tqCtx
+		b.Stop()
+	}
+	c.backlogLock.Unlock()
 	c.matcher.Stop()
 	c.liveness.Stop()
 	c.tqCtxCancel()
@@ -260,12 +275,93 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 }
 
 func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
-	return c.backlogMgr.WaitUntilInitialized(ctx)
+	return c.backlog0.WaitUntilInitialized(ctx)
+}
+
+// LoadSubqueues is called once on startup and then again each time the set of subqueues changes.
+func (c *physicalTaskQueueManagerImpl) LoadSubqueues(subqueues []*persistencespb.SubqueueKey) {
+	if !c.config.NewMatcher {
+		return
+	}
+
+	c.backlogLock.Lock()
+	defer c.backlogLock.Unlock()
+
+	c.loadSubqueuesLocked(subqueues)
+}
+
+func (c *physicalTaskQueueManagerImpl) loadSubqueuesLocked(subqueues []*persistencespb.SubqueueKey) {
+	// TODO(pri): This assumes that subqueues never shrinks, and priority/fairness index of
+	// existing subqueues never changes. If we change that, this logic will need to change.
+	for i, s := range subqueues {
+		if i >= len(c.backlogs) {
+			b := newBacklogManager(
+				c.tqCtx,
+				c,
+				i,
+				c.config,
+				c.partitionMgr.engine.taskManager,
+				c.logger,
+				c.throttledLogger,
+				c.partitionMgr.engine.matchingRawClient,
+				c.metricsHandler,
+			)
+			b.Start()
+			c.backlogs = append(c.backlogs, b)
+		}
+		c.backlogByPriority[s.Priority] = c.backlogs[i]
+	}
+}
+
+func (c *physicalTaskQueueManagerImpl) getBacklogForPriority(priority int32) *backlogManagerImpl {
+	if !c.config.NewMatcher {
+		return c.backlog0
+	}
+
+	levels := c.config.PriorityLevels()
+	if priority == 0 {
+		priority = defaultPriorityLevel(levels)
+	}
+	if priority < 1 {
+		// this should have been rejected much earlier, but just clip it here
+		priority = 1
+	} else if priority > int32(levels) {
+		priority = int32(levels)
+	}
+
+	c.backlogLock.Lock()
+	defer c.backlogLock.Unlock()
+
+	if b, ok := c.backlogByPriority[priority]; ok {
+		return b
+	}
+
+	// We need to allocate a new subqueue. Note this is doing io under backlogLock,
+	// but we want to serialize these updates.
+	// TODO(pri): maybe we can improve that
+	subqueues, err := c.backlog0.db.AllocateSubqueue(c.tqCtx, priority)
+	if err != nil {
+		c.backlog0.signalIfFatal(err)
+		// If we failed to write the metadata update, just use backlog0. If err was a
+		// fatal error (most likely case), the subsequent call to SpoolTask will fail.
+		return c.backlog0
+	}
+
+	c.loadSubqueuesLocked(subqueues)
+
+	// this should be here now
+	if b, ok := c.backlogByPriority[priority]; ok {
+		return b
+	}
+
+	// if something went wrong, return 0
+	return c.backlog0
 }
 
 func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
 	c.liveness.markAlive()
-	return c.backlogMgr.SpoolTask(taskInfo)
+	b := c.getBacklogForPriority(taskInfo.Priority.GetPriorityKey())
+	return b.SpoolTask(taskInfo)
 }
 
 // PollTask blocks waiting for a task.
@@ -332,7 +428,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 
 		task.namespace = c.partitionMgr.ns.Name()
-		task.backlogCountHint = c.backlogMgr.BacklogCountHint
+		task.backlogCountHint = c.backlogCountHint
 
 		if pollMetadata.forwardedFrom == "" && // only track the original polls, not forwarded ones.
 			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
@@ -340,6 +436,16 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 		return task, nil
 	}
+}
+
+func (c *physicalTaskQueueManagerImpl) backlogCountHint() (total int64) {
+	c.backlogLock.Lock()
+	defer c.backlogLock.Unlock()
+
+	for _, b := range c.backlogs {
+		total += b.BacklogCountHint()
+	}
+	return
 }
 
 func (c *physicalTaskQueueManagerImpl) MarkAlive() {
@@ -456,29 +562,45 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 		},
 	}
 	if includeTaskQueueStatus {
-		response.DescResponse.TaskQueueStatus = c.backlogMgr.BacklogStatus()
+		// TODO(pri): return only backlog 0, need a new api to include info for all subqueues
+		response.DescResponse.TaskQueueStatus = c.backlog0.BacklogStatus()
 		response.DescResponse.TaskQueueStatus.RatePerSecond = c.matcher.Rate()
 	}
 	return response
 }
 
 func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
+	c.backlogLock.Lock()
+	defer c.backlogLock.Unlock()
+
+	var approxCount int64
+	var maxAge time.Duration
+	for _, b := range c.backlogs {
+		approxCount += b.db.getApproximateBacklogCount()
+		// using this and not matcher's because it reports only the age of the current physical
+		// queue backlog (not including the redirected backlogs) which is consistent with the
+		// ApproximateBacklogCount metric.
+		maxAge = max(maxAge, b.BacklogHeadAge())
+	}
 	return &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: c.backlogMgr.db.getApproximateBacklogCount(),
-		ApproximateBacklogAge:   durationpb.New(c.backlogMgr.BacklogHeadAge()), // using this and not matcher's
-		// because it reports only the age of the current physical queue backlog (not including the redirected backlogs) which is consistent
-		// with the ApproximateBacklogCount metric.
-		TasksAddRate:      c.tasksAddedInIntervals.rate(),
-		TasksDispatchRate: c.tasksDispatchedInIntervals.rate(),
+		ApproximateBacklogCount: approxCount,
+		ApproximateBacklogAge:   durationpb.New(maxAge),
+		TasksAddRate:            c.tasksAddedInIntervals.rate(),
+		TasksDispatchRate:       c.tasksDispatchedInIntervals.rate(),
 	}
 }
 
 func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() *taskqueuespb.InternalTaskQueueStatus {
+	// TODO(pri): return only backlog 0, need a new api to include info for all subqueues
+	b := c.backlog0
 	return &taskqueuespb.InternalTaskQueueStatus{
-		ReadLevel:        c.backlogMgr.taskAckManager.getReadLevel(),
-		AckLevel:         c.backlogMgr.taskAckManager.getAckLevel(),
-		TaskIdBlock:      &taskqueuepb.TaskIdBlock{StartId: c.backlogMgr.taskWriter.taskIDBlock.start, EndId: c.backlogMgr.taskWriter.taskIDBlock.end},
-		ReadBufferLength: c.backlogMgr.ReadBufferLength(),
+		ReadLevel: b.taskAckManager.getReadLevel(),
+		AckLevel:  b.taskAckManager.getAckLevel(),
+		TaskIdBlock: &taskqueuepb.TaskIdBlock{
+			StartId: b.taskWriter.taskIDBlock.start,
+			EndId:   b.taskWriter.taskIDBlock.end,
+		},
+		ReadBufferLength: b.ReadBufferLength(),
 	}
 }
 
