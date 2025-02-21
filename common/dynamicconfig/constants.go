@@ -2597,7 +2597,7 @@ If the service configures with archival feature enabled, update worker.historySc
 	)
 	SchedulerLocalActivitySleepLimit = NewNamespaceDurationSetting(
 		"worker.schedulerLocalActivitySleepLimit",
-		1*time.Second,
+		5*time.Second,
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
 	)
