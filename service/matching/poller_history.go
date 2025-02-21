@@ -35,7 +35,6 @@ import (
 
 const (
 	pollerHistoryInitMaxSize = 1000
-	pollerHistoryTTL         = 5 * time.Minute
 )
 
 type (
@@ -52,7 +51,7 @@ type pollerHistory struct {
 	history cache.Cache
 }
 
-func newPollerHistory() *pollerHistory {
+func newPollerHistory(pollerHistoryTTL time.Duration) *pollerHistory {
 	opts := &cache.Options{
 		TTL: pollerHistoryTTL,
 		Pin: false,

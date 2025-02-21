@@ -129,6 +129,8 @@ func TestHistoryReplicationSignalsAndUpdatesTestSuite(t *testing.T) {
 func (s *hrsuTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key(): true,
+		// Use short interval to make long poll timeout
+		dynamicconfig.HistoryLongPollExpirationInterval.Key(): 100 * time.Millisecond,
 	}
 	s.logger = log.NewTestLogger()
 	s.setupSuite(
@@ -1067,6 +1069,41 @@ func (c *hrsuTestCluster) getHistoryForRunId(ctx context.Context, runId string) 
 	return historyResponse.History.Events
 }
 
+func (c *hrsuTestCluster) pollWorkflowResult(ctx context.Context, runId string) *historypb.HistoryEvent {
+	getHistoryWithLongPoll := func(token []byte) ([]*historypb.HistoryEvent, []byte) {
+		responseInner, err := c.testCluster.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace: c.t.tv.NamespaceName().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: c.t.tv.WorkflowID(),
+				RunId:      runId,
+			},
+			MaximumPageSize:        1,
+			WaitNewEvent:           true,
+			NextPageToken:          token,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
+		})
+		c.t.s.NoError(err)
+		return responseInner.History.Events, responseInner.NextPageToken
+	}
+
+	var token []byte
+	var allEvents []*historypb.HistoryEvent
+	multiPoll := false
+	for {
+		events, nextPageToken := getHistoryWithLongPoll(token)
+		allEvents = append(allEvents, events...)
+		if nextPageToken == nil {
+			break
+		}
+		token = nextPageToken
+		multiPoll = true
+	}
+
+	c.t.s.Len(allEvents, 1)
+	c.t.s.True(multiPoll, "Expected to have multiple polls of history events")
+	return allEvents[0]
+}
+
 func (c *hrsuTestCluster) getActiveCluster(ctx context.Context) string {
 	resp, err := c.testCluster.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: c.t.tv.NamespaceName().String()})
 	c.t.s.NoError(err)
@@ -1085,4 +1122,99 @@ func joinHandlers[T any](handlers ...func(task *workflowservice.PollWorkflowTask
 		}
 		return joinedResult, nil
 	}
+}
+
+// TestConflictResolutionGetResult creates a split-brain scenario in which both clusters believe they are active.
+// The test confirms that the workflow result can be retrievved if conflict resolution happens (CurrentBranchChange).
+func (s *hrsuTestSuite) TestConflictResolutionGetResult() {
+	t, ctx, cancel := s.startHrsuTest()
+	defer cancel()
+	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
+
+	t.enterSplitBrainState(ctx)
+
+	// Both clusters now believe they are active and hence both will accept a signal.
+
+	// Send signals
+	s.NoError(t.cluster1.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster1-signal"))
+	s.NoError(t.cluster2.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster2-signal"))
+
+	// cluster1 has accepted a signal
+	s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v1 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster1-signal\""}]}}
+	`, t.cluster1.getHistory(ctx))
+
+	// cluster2 has also accepted a signal (with failover version 2 since it is endogenous to cluster1)
+	s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
+	`, t.cluster2.getHistory(ctx))
+
+	// pull the workflow result from cluster1. This will block until the workflow task is completed.
+	workflowResultCh := make(chan *historypb.HistoryEvent)
+	workflowResultFn := func() {
+		event := t.cluster1.pollWorkflowResult(ctx, t.tv.RunID())
+		workflowResultCh <- event
+	}
+	go workflowResultFn()
+
+	// Ensure long poll is timeout
+	time.Sleep(time.Millisecond * 100) //nolint:forbidigo
+
+	// Execute pending history replication tasks. Each cluster sends its signal to the other, but these have the same
+	// event ID; this conflict is resolved by reapplying one of the signals after the other.
+
+	// cluster2 sends its signal to cluster1. Since it has a higher failover version, it supersedes the endogenous
+	// signal in cluster1.
+	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
+	s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
+	`, t.cluster1.getHistory(ctx))
+
+	// cluster1 sends its signal to cluster2. Since it has a lower failover version, it is reapplied after the
+	// endogenous cluster1 signal.
+	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
+	s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
+	4 v2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster1-signal\""}]}}
+	`, t.cluster2.getHistory(ctx))
+
+	// Cluster2 sends the reapplied signal to cluster1, bringing the cluster histories into agreement.
+	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
+	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
+
+	// Complete the workflow in cluster2. This will cause the workflow result to be sent to cluste1.
+	task, err := t.cluster2.testCluster.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: t.tv.NamespaceName().String(),
+		TaskQueue: t.tv.TaskQueue(),
+		Identity:  t.tv.WorkerIdentity(),
+	})
+	s.Require().NoError(err)
+	_, err = t.cluster2.testCluster.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: task.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+				},
+			},
+		},
+	})
+	s.Require().NoError(err)
+
+	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
+	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
+
+	// Make sure we can get the workflow result after the conflict resolution (CurrentBranchChange).
+	event := <-workflowResultCh
+	s.NotNil(event)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, event.GetEventType())
 }

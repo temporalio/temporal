@@ -452,6 +452,12 @@ to exceed this number will fail with a FailedPrecondition error.`,
 		`MatchingDeletedRuleRetentionTime is the length of time that deleted Version Assignment Rules and
 Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this time, the tombstones are deleted at the next time update of versioning data for the task queue.`,
 	)
+	PollerHistoryTTL = NewNamespaceDurationSetting(
+		"matching.PollerHistoryTTL",
+		5*time.Minute,
+		`PollerHistoryTTL is the time to live for poller histories in the pollerHistory cache of a physical task queue. Poller histories are fetched when
+		requiring a list of pollers that polled a given task queue.`,
+	)
 	ReachabilityBuildIdVisibilityGracePeriod = NewNamespaceDurationSetting(
 		"matching.wv.ReachabilityBuildIdVisibilityGracePeriod",
 		3*time.Minute,
@@ -463,7 +469,7 @@ recently-current deployment can arrive in visibility.`,
 	VersionDrainageStatusVisibilityGracePeriod = NewNamespaceDurationSetting(
 		"matching.wv.VersionDrainageStatusVisibilityGracePeriod",
 		3*time.Minute,
-		`VersionDrainageStatusVisibilityGracePeriod is the time period for which non-current / non-ramping worker deployment versions 
+		`VersionDrainageStatusVisibilityGracePeriod is the time period for which non-current / non-ramping worker deployment versions
 are still considered active to account for the delay in updating the build id field in visibility.`,
 	)
 	VersionDrainageStatusRefreshInterval = NewNamespaceDurationSetting(
@@ -2080,7 +2086,7 @@ This configuration will be become the default behavior in the next release and r
 	)
 	AllowResetWithPendingChildren = NewNamespaceBoolSetting(
 		"history.allowResetWithPendingChildren",
-		false,
+		true,
 		`Allows resetting of workflows with pending children when set to true`,
 	)
 	HistoryMaxAutoResetPoints = NewNamespaceIntSetting(

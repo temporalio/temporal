@@ -352,7 +352,7 @@ func ValidateDeploymentVersionString(version string) (*deploymentspb.WorkerDeplo
 	}
 	v, err := WorkerDeploymentVersionFromString(version)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>/<build_id>\"", version))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version))
 	}
 	return v, nil
 }
