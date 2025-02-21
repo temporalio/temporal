@@ -5476,7 +5476,6 @@ func (s *engineSuite) TestGetHistory() {
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory() {
-	s.config.SendRawHistoryBetweenInternalServices = func() bool { return false }
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 	newRunID := uuid.New()
 
