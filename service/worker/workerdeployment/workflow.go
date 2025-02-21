@@ -27,6 +27,7 @@ package workerdeployment
 import (
 	"bytes"
 	"fmt"
+	enumspb "go.temporal.io/api/enums/v1"
 	"slices"
 
 	"github.com/pborman/uuid"
@@ -284,6 +285,10 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		}
 
 		rampingVersionUpdateTime = routingUpdateTime // ramp was updated to ""
+
+		// Set summary drainage status immediately to draining.
+		// We know prevRampingVersion cannot have been current, so it must now be draining
+		d.State.GetVersions()[prevRampingVersion].DrainageStatus = enumspb.VERSION_DRAINAGE_STATUS_DRAINING
 	} else {
 		// setting ramp
 
@@ -308,6 +313,9 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			}
 			rampingSinceTime = routingUpdateTime
 			rampingVersionUpdateTime = routingUpdateTime
+
+			// Erase summary drainage status immediately, so it is not draining/drained.
+			d.State.GetVersions()[newRampingVersion].DrainageStatus = enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED
 		}
 
 		setRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
@@ -341,6 +349,9 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 					return nil, err
 				}
 			}
+			// Set summary drainage status immediately to draining.
+			// We know prevRampingVersion cannot have been current, so it must now be draining
+			d.State.GetVersions()[prevRampingVersion].DrainageStatus = enumspb.VERSION_DRAINAGE_STATUS_DRAINING
 		}
 	}
 
@@ -461,6 +472,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs); err != nil {
 			return nil, err
 		}
+		// Erase summary drainage status immediately (in case it was previously drained/draining)
+		d.State.GetVersions()[newCurrentVersion].DrainageStatus = enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED
 	} else if d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId {
 		// If the new current is unversioned, and it was previously ramping, we need to tell
 		// all the task queues with unversioned ramp that they no longer have unversioned ramp.
@@ -490,6 +503,9 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs); err != nil {
 			return nil, err
 		}
+		// Set summary drainage status immediately to draining.
+		// We know prevCurrentVersion cannot have been ramping, so it must now be draining
+		d.State.GetVersions()[prevCurrentVersion].DrainageStatus = enumspb.VERSION_DRAINAGE_STATUS_DRAINING
 	}
 	// If the previous current version was unversioned, there is nothing in the task queues
 	// to remove, because they were implicitly unversioned. We don't have to remove any
