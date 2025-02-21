@@ -109,6 +109,8 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
 	s.dynamicConfigOverrides[dynamicconfig.NamespaceCacheRefreshInterval.Key()] = testcore.NamespaceCacheRefreshInterval
 	s.dynamicConfigOverrides[dynamicconfig.EnableTransitionHistory.Key()] = s.enableTransitionHistory
+	// TODO (prathyush): remove this after setting it to true by default.
+	s.dynamicConfigOverrides[dynamicconfig.SendRawHistoryBetweenInternalServices.Key()] = true
 
 	fileName := "../testdata/xdc_clusters.yaml"
 	if testcore.TestFlags.TestClusterConfigFile != "" {

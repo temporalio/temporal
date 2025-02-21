@@ -5330,7 +5330,6 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 	var recordedTasks []tasks.Task
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("mock")
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes("mock", false).Return(searchattribute.NameTypeMap{}, nil)
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
@@ -5587,6 +5586,119 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	s.Equal("this workflow failed", attrs2.Failure.Message)
 }
 
+func (s *engineSuite) TestGetWorkflowExecutionHistoryWhenInternalRawHistoryIsEnabled() {
+	s.config.SendRawHistoryBetweenInternalServices = func() bool { return true }
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	namespaceEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{},
+		"")
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
+	newRunID := uuid.New()
+
+	req := &historyservice.GetWorkflowExecutionHistoryRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Execution:              &we,
+			MaximumPageSize:        10,
+			NextPageToken:          nil,
+			WaitNewEvent:           true,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
+			SkipArchival:           true,
+		},
+	}
+
+	// set up mocks to simulate a failed workflow with a retry policy. the failure event is id 5.
+	branchToken := []byte{1, 2, 3}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil).AnyTimes()
+	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
+	})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	mState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  we.RunId,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		},
+		NextEventId: 6,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:         tests.NamespaceID.String(),
+			WorkflowId:          we.WorkflowId,
+			VersionHistories:    versionHistories,
+			WorkflowTypeName:    "mytype",
+			LastFirstEventId:    5,
+			LastFirstEventTxnId: 100,
+		},
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     1,
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  we.WorkflowId,
+		RunID:       we.RunId,
+	}).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
+	// GetWorkflowExecutionHistory will request the last event
+	history := historypb.History{
+		Events: []*historypb.HistoryEvent{
+			{
+				EventId:   int64(5),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
+					WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
+						Failure:                      &failurepb.Failure{Message: "this workflow failed"},
+						RetryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
+						WorkflowTaskCompletedEventId: 4,
+						NewExecutionRunId:            newRunID,
+					},
+				},
+			},
+		},
+	}
+
+	historyBlob, err := history.Marshal()
+	s.NoError(err)
+
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    5,
+		MaxEventID:    6,
+		PageSize:      10,
+		NextPageToken: nil,
+		ShardID:       1,
+	}).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{
+			{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         historyBlob,
+			},
+		},
+		NextPageToken: []byte{},
+		Size:          1,
+	}, nil).Times(1)
+
+	s.mockExecutionMgr.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	resp, err := engine.GetWorkflowExecutionHistory(context.Background(), req)
+	s.NoError(err)
+	s.False(resp.Response.Archived)
+	s.Len(resp.History, 1)
+	err = history.Unmarshal(resp.History[0])
+	s.NoError(err)
+	event := history.Events[0]
+	s.Equal(int64(5), event.EventId)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.EventType)
+	attrs := event.GetWorkflowExecutionFailedEventAttributes()
+	s.Equal("this workflow failed", attrs.Failure.Message)
+	s.Equal(newRunID, attrs.NewExecutionRunId)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, attrs.RetryState)
+}
+
 func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 
@@ -5629,18 +5741,22 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
-	historyBlob1, err := s.mockShard.GetPayloadSerializer().SerializeEvent(
-		&historypb.HistoryEvent{
-			EventId:   int64(3),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+	historyBlob1, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
+		[]*historypb.HistoryEvent{
+			{
+				EventId:   int64(3),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			},
 		},
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
-	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvent(
-		&historypb.HistoryEvent{
-			EventId:   int64(4),
-			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
+	historyBlob2, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
+		[]*historypb.HistoryEvent{
+			{
+				EventId:   int64(4),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
+			},
 		},
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
@@ -5663,13 +5779,11 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	s.NoError(err)
 	s.False(resp.Response.Archived)
 	s.Empty(resp.Response.History.Events)
-	s.Len(resp.Response.RawHistory, 4)
-	event, err := s.mockShard.GetPayloadSerializer().DeserializeEvent(resp.Response.RawHistory[2])
+	s.Len(resp.Response.RawHistory, 3)
+	historyEvents, err := s.mockShard.GetPayloadSerializer().DeserializeEvents(resp.Response.RawHistory[2])
 	s.NoError(err)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, event.EventType)
-	event, err = s.mockShard.GetPayloadSerializer().DeserializeEvent(resp.Response.RawHistory[3])
-	s.NoError(err)
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, event.EventType)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, historyEvents[0].EventType)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, historyEvents[1].EventType)
 }
 
 func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkflowID() {
