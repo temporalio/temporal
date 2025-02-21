@@ -531,6 +531,7 @@ message RecordChildExecutionCompletedRequest {
     temporal.api.history.v1.HistoryEvent completion_event = 5;
     temporal.server.api.clock.v1.VectorClock clock = 6;
     int64 parent_initiated_version = 7;
+    string child_first_execution_run_id = 8;
 }
 
 message RecordChildExecutionCompletedResponse {
