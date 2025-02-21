@@ -334,6 +334,14 @@ func NexusEndpointTag(value string) Tag {
 	return &tagImpl{key: nexusEndpointTagName, value: value}
 }
 
+func NexusServiceTag(value string) Tag {
+	return &tagImpl{key: nexusServiceTagName, value: value}
+}
+
+func NexusOperationTag(value string) Tag {
+	return &tagImpl{key: nexusOperationTagName, value: value}
+}
+
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
 	return &tagImpl{key: httpStatusTagName, value: strconv.Itoa(value)}

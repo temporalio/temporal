@@ -447,12 +447,7 @@ func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetad
 }
 
 // UpdateRatelimit updates the task dispatch rate
-func (tm *TaskMatcher) UpdateRatelimit(rpsPtr *float64) {
-	if rpsPtr == nil {
-		return
-	}
-
-	rps := *rpsPtr
+func (tm *TaskMatcher) UpdateRatelimit(rps float64) {
 	nPartitions := float64(tm.numPartitions())
 	if nPartitions > 0 {
 		// divide the rate equally across all partitions

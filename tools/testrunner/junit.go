@@ -57,8 +57,8 @@ func generateForTimedoutTests(timedoutTests []string) *junitReport {
 	var testcases []junit.Testcase
 	for _, name := range timedoutTests {
 		testcases = append(testcases, junit.Testcase{
-			Name:    name,
-			Failure: &junit.Result{Message: "timeout"},
+			Name:    name + " (timeout)",
+			Failure: &junit.Result{Message: "Timeout"},
 		})
 	}
 	return &junitReport{

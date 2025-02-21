@@ -448,6 +448,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	wtFailedShouldCreateNewTask := false
 	if wtFailedCause != nil {
 		effects.Cancel(ctx)
+
+		// Abort all Updates with explicit reason, to prevent them to be aborted with generic
+		// registryClearedErr, which may lead to continuous retries of UpdateWorkflowExecution API.
+		updateRegistry.Abort(update.AbortReasonWorkflowTaskFailed)
+
 		metrics.FailedWorkflowTasksCounter.With(handler.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))

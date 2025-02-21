@@ -31,6 +31,7 @@ import (
 
 	"github.com/pborman/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
@@ -109,6 +110,11 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.State.CreateTime = timestamppb.New(workflow.Now(ctx))
 		d.State.RoutingConfig = &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId}
 		d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
+
+		// updating the memo since the RoutingConfig is updated
+		if err := d.updateMemo(ctx); err != nil {
+			return err
+		}
 	}
 	if d.State.Versions == nil {
 		d.State.Versions = make(map[string]*deploymentspb.WorkerDeploymentVersionSummary)
@@ -215,13 +221,14 @@ func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 	return nil
 }
 
-func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
+func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploymentspb.SetRampingVersionArgs) error {
+	if args.Version == d.State.RoutingConfig.RampingVersion && args.Percentage == d.State.RoutingConfig.RampingVersionPercentage && args.Identity == d.State.LastModifierIdentity {
+		d.logger.Info("version already ramping, no change")
+		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType, d.State.ConflictToken)
+	}
+
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
 		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
-	}
-	if args.Version == d.State.RoutingConfig.RampingVersion && args.Percentage == d.State.RoutingConfig.RampingVersionPercentage {
-		d.logger.Info("version already ramping, no change")
-		return temporal.NewApplicationError("version already ramping, no change", errNoChangeType)
 	}
 	if args.Version == d.State.RoutingConfig.CurrentVersion {
 		d.logger.Info("version can't be set to ramping since it is already current")
@@ -234,6 +241,10 @@ func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampin
 	}
 
 	return nil
+}
+
+func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
+	return d.validateStateBeforeAcceptingRampingUpdate(args)
 }
 
 //revive:disable-next-line:cognitive-complexity
@@ -249,6 +260,16 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
+
+	// Validating the state before starting the SetRampingVersion operation. This is required due to the following reason:
+	// The validator accepts/rejects updates based on the state of the deployment workflow. Theoretically, two concurrent update requests
+	// might be accepted by the validator since the state of the workflow, at that point in time, is valid for the updates to take place. Since this update handler
+	// enforces sequential updates, after the first update completes, the local state of the deployment workflow will change. The second update,
+	// now already accepted by the validator, should now not be allowed to run since the state of the workflow is different.
+	err = d.validateStateBeforeAcceptingRampingUpdate(args)
+	if err != nil {
+		return nil, err
+	}
 
 	prevRampingVersion := d.State.RoutingConfig.RampingVersion
 	prevRampingVersionPercentage := d.State.RoutingConfig.RampingVersionPercentage
@@ -279,6 +300,10 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 		}
 
 		rampingVersionUpdateTime = routingUpdateTime // ramp was updated to ""
+
+		// Set summary drainage status immediately to draining.
+		// We know prevRampingVersion cannot have been current, so it must now be draining
+		d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
 	} else {
 		// setting ramp
 
@@ -303,6 +328,9 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			}
 			rampingSinceTime = routingUpdateTime
 			rampingVersionUpdateTime = routingUpdateTime
+
+			// Erase summary drainage status immediately, so it is not draining/drained.
+			d.setDrainageStatus(newRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED)
 		}
 
 		setRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
@@ -336,6 +364,9 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 					return nil, err
 				}
 			}
+			// Set summary drainage status immediately to draining.
+			// We know prevRampingVersion cannot have been current, so it must now be draining
+			d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
 		}
 	}
 
@@ -344,6 +375,7 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 	d.State.RoutingConfig.RampingVersionPercentage = args.Percentage
 	d.State.RoutingConfig.RampingVersionChangedTime = rampingVersionUpdateTime
 	d.State.ConflictToken, _ = routingUpdateTime.AsTime().MarshalBinary()
+	d.State.LastModifierIdentity = args.Identity
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
@@ -358,11 +390,21 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 }
 
-func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.VersionDrainageStatus) {
+	if summary := d.State.GetVersions()[version]; summary != nil {
+		summary.DrainageStatus = status
+	}
+}
+
+func (d *WorkflowRunner) validateStateBeforeAcceptingDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
 	if _, ok := d.State.Versions[args.Version]; !ok {
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
 	return nil
+}
+
+func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+	return d.validateStateBeforeAcceptingDeleteVersion(args)
 }
 
 func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
@@ -377,6 +419,16 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
+
+	// Validating the state before starting the DeleteVersion operation. This is required due to the following reason:
+	// The validator accepts/rejects updates based on the state of the deployment workflow. Theoretically, two concurrent delete version requests
+	// might be accepted by the validator since the local state of the workflow contains the version which is requested to be deleted. Since this update handler
+	// enforces sequential updates, after the first update completes, the version will be removed from the local state of the deployment workflow. The second update,
+	// now already accepted by the validator, should now not be allowed to run since the initial workflow state is different.
+	err = d.validateStateBeforeAcceptingDeleteVersion(args)
+	if err != nil {
+		return err
+	}
 
 	// ask version to delete itself
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -394,23 +446,28 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 
 	// update local state
 	delete(d.State.Versions, args.Version)
+	d.State.LastModifierIdentity = args.Identity
 
 	// update memo
 	return d.updateMemo(ctx)
 }
 
-func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
+func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
+	if d.State.RoutingConfig.CurrentVersion == args.Version && d.State.LastModifierIdentity == args.Identity {
+		return temporal.NewApplicationError("no change", errNoChangeType, d.State.ConflictToken)
+	}
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.ConflictToken) {
 		return temporal.NewApplicationError("conflict token mismatch", errConflictTokenMismatchType)
-	}
-	if d.State.RoutingConfig.CurrentVersion == args.Version {
-		return temporal.NewApplicationError("no change", errNoChangeType)
 	}
 	if _, ok := d.State.Versions[args.Version]; !ok && args.Version != worker_versioning.UnversionedVersionId {
 		d.logger.Info("version not found in deployment")
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
 	return nil
+}
+
+func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
+	return d.validateStateBeforeAcceptingSetCurrent(args)
 }
 
 func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentVersionArgs) (*deploymentspb.SetCurrentVersionResponse, error) {
@@ -425,6 +482,16 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
+
+	// Validating the state before starting the SetCurrent operation. This is required due to the following reason:
+	// The validator accepts/rejects updates based on the state of the deployment workflow. Theoretically, two concurrent update requests
+	// might be accepted by the validator since the state of the workflow, at that point in time, is valid for the updates to take place. Since this update handler
+	// enforces sequential updates, after the first update completes, the local state of the deployment workflow will change. The second update,
+	// now already accepted by the validator, should now not be allowed to run since the state of the workflow is different.
+	err = d.validateStateBeforeAcceptingSetCurrent(args)
+	if err != nil {
+		return nil, err
+	}
 
 	prevCurrentVersion := d.State.RoutingConfig.CurrentVersion
 	newCurrentVersion := args.Version
@@ -454,6 +521,8 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs); err != nil {
 			return nil, err
 		}
+		// Erase summary drainage status immediately (in case it was previously drained/draining)
+		d.setDrainageStatus(newCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED)
 	} else if d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId {
 		// If the new current is unversioned, and it was previously ramping, we need to tell
 		// all the task queues with unversioned ramp that they no longer have unversioned ramp.
@@ -483,6 +552,9 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs); err != nil {
 			return nil, err
 		}
+		// Set summary drainage status immediately to draining.
+		// We know prevCurrentVersion cannot have been ramping, so it must now be draining
+		d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
 	}
 	// If the previous current version was unversioned, there is nothing in the task queues
 	// to remove, because they were implicitly unversioned. We don't have to remove any
@@ -492,6 +564,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 	d.State.RoutingConfig.CurrentVersion = args.Version
 	d.State.RoutingConfig.CurrentVersionChangedTime = updateTime
 	d.State.ConflictToken, _ = updateTime.AsTime().MarshalBinary()
+	d.State.LastModifierIdentity = args.Identity
 
 	// unset ramping version if it was set to current version
 	if d.State.RoutingConfig.CurrentVersion == d.State.RoutingConfig.RampingVersion {
@@ -564,7 +637,8 @@ func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context
 
 func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 	var sortedSummaries []*deploymentspb.WorkerDeploymentVersionSummary
-	for _, s := range d.State.Versions {
+	for _, k := range workflow.DeterministicKeys(d.State.Versions) {
+		s := d.State.Versions[k]
 		sortedSummaries = append(sortedSummaries, s)
 	}
 

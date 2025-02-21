@@ -150,6 +150,7 @@ message WorkerDeploymentLocalState {
     temporal.api.deployment.v1.RoutingConfig routing_config = 2;
     map<string, WorkerDeploymentVersionSummary> versions = 3;
     bytes conflict_token = 4;
+    string last_modifier_identity = 5;
 }
 
 message WorkerDeploymentVersionSummary {
@@ -337,7 +338,7 @@ message SetRampingVersionArgs {
 // used as Worker Deployment activity input:
 message SyncVersionStateActivityArgs {
     string deployment_name = 1;
-    // <deployment_name>/<build_id> or possibly just <version_id> in the future
+    // <deployment_name>.<build_id> or possibly just <version_id> in the future
     string version = 2;
     SyncVersionStateUpdateArgs update_args = 3;
     string request_id = 4;

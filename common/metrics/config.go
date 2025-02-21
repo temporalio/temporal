@@ -77,14 +77,14 @@ type (
 		// All configs should be set to true when using opentelemetry framework to have the same behavior as tally.
 
 		// WithoutUnitSuffix controls the additional of unit suffixes to metric names.
-		// This config only takes effect when explicitly using "opentelemetry" as the framework.
+		// This config only takes effect when using opentelemetry framework.
 		WithoutUnitSuffix bool `yaml:"withoutUnitSuffix"`
 		// WithoutCounterSuffix controls the additional of _total suffixes to counter metric names.
-		// This config only takes effect when explicitly using "opentelemetry" as the framework.
+		// This config only takes effect when using opentelemetry framework.
 		WithoutCounterSuffix bool `yaml:"withoutCounterSuffix"`
 		// RecordTimerInSeconds controls if Timer metric should be emitted as number of seconds
 		// (instead of milliseconds).
-		// This config only takes effect when explicitly using "opentelemetry" as the framework.
+		// This config only takes effect when using opentelemetry framework.
 		RecordTimerInSeconds bool `yaml:"recordTimerInSeconds"`
 	}
 
@@ -113,11 +113,6 @@ type (
 
 	// PrometheusConfig is a new format for config for prometheus metrics.
 	PrometheusConfig struct {
-		// Deprecated. The underlying framework will always be OpenTelemetry.
-		// However, if the framework is not explicitly set to "opentelemetry", the
-		// behavior will be the same as tally for backward compatibility.
-		// More specifically: WithoutUnitSuffix, WithoutCounterSuffix, and RecordTimerInSeconds
-		// in ClientConfig will be set to true.
 		// Metric framework: Tally/OpenTelemetry
 		Framework string `yaml:"framework"`
 		// Address for prometheus to serve metrics from.
@@ -480,26 +475,26 @@ func newPrometheusScope(
 
 // MetricsHandlerFromConfig is used at startup to construct a MetricsHandler
 func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
-	if c == nil || c.Prometheus == nil {
+	if c == nil {
 		return NoopMetricsHandler, nil
 	}
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 
-	fatalOnListenerError := true
-	if c.Prometheus.Framework != FrameworkOpentelemetry {
-		c.ClientConfig.WithoutUnitSuffix = true
-		c.ClientConfig.WithoutCounterSuffix = true
-		c.ClientConfig.RecordTimerInSeconds = true
-		fatalOnListenerError = false
+	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
+		fatalOnListenerError := true
+		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
+		if err != nil {
+			logger.Fatal(err.Error())
+		}
+
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
 	}
 
-	otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig, fatalOnListenerError)
-	if err != nil {
-		logger.Fatal(err.Error())
-	}
-
-	return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+	return NewTallyMetricsHandler(
+		c.ClientConfig,
+		NewScope(logger, c),
+	), nil
 }
 
 func configExcludeTags(cfg ClientConfig) map[string]map[string]struct{} {

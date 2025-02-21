@@ -31,9 +31,14 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// 250 years. Maximum representable golang time.Duration is approximately 290 years (INT64_MAX * time.Nanosecond)
+const maxAllowedDuration = 250 * 365 * 24 * time.Hour
+
 var (
 	errNegativeDuration = fmt.Errorf("negative duration")
 	errMismatchedSigns  = fmt.Errorf("duration has seconds and nanos with different signs")
+
+	maxSeconds = maxAllowedDuration.Nanoseconds() / 1e9
 )
 
 func DurationValue(d *durationpb.Duration) time.Duration {
@@ -72,15 +77,17 @@ func durationMultipleOf(amt int64, mult time.Duration) *durationpb.Duration {
 	return DurationPtr(time.Duration(amt) * mult)
 }
 
-// ValidateProtoDuration checks protobuf durations for two conditions:
+// ValidateAndCapProtoDuration validates protobuf durations for two conditions:
 //  1. the seconds and nanos fields have the same sign (to avoid serialization issues)
 //  2. the golang representation of the duration is not negative
 //
+// Durations are capped to 250 years to prevent overflow and serialization errors.
+// NB: to cap durations, the proto Seconds and Nanos fields are modified!
+//
 // nil durations are considered valid because they will be treated as the zero value.
 // durationpb.CheckValid cannot be used directly because it will return an error for
-// very large durations but we are okay with truncating these. durationpb.AsDuration()
-// caps the upper bound for timers at 10,000 years to prevent overflow.
-func ValidateProtoDuration(d *durationpb.Duration) error {
+// very large durations, but we are okay with truncating these.
+func ValidateAndCapProtoDuration(d *durationpb.Duration) error {
 	if d == nil {
 		// nil durations are converted to 0 value
 		return nil
@@ -93,6 +100,11 @@ func ValidateProtoDuration(d *durationpb.Duration) error {
 	// this is a best effort conversion and will return the closest value in the event of overflow.
 	if d.AsDuration() < 0 {
 		return errNegativeDuration
+	}
+
+	if d.AsDuration() > maxAllowedDuration {
+		d.Seconds = maxSeconds
+		d.Nanos = 0 // A year is always a round number of seconds.
 	}
 
 	return nil

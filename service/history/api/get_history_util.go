@@ -33,7 +33,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -90,8 +93,15 @@ func GetRawHistory(
 		allEvents = append(allEvents, events...)
 		lastEventID = events[len(events)-1].GetEventId()
 	}
-	if err = persistence.VerifyHistoryIsComplete(
-		allEvents,
+	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
+	if len(allEvents) > 0 {
+		firstEvent = allEvents[0]
+		lastEvent = allEvents[len(allEvents)-1]
+	}
+	if err = VerifyHistoryIsComplete(
+		firstEvent,
+		lastEvent,
+		len(allEvents),
 		firstEventID,
 		nextEventID-1,
 		len(token) == 0,
@@ -147,6 +157,7 @@ func GetHistory(
 ) (*historypb.History, []byte, error) {
 
 	var size int
+	isFirstPage := len(nextPageToken) == 0
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shard.GetConfig().NumberOfShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
@@ -178,6 +189,32 @@ func GetHistory(
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
+	isLastPage := len(nextPageToken) == 0
+	var firstEvent, lastEvent *historyspb.StrippedHistoryEvent
+	if len(historyEvents) > 0 {
+		firstEvent = &historyspb.StrippedHistoryEvent{
+			EventId: historyEvents[0].GetEventId(),
+		}
+		lastEvent = &historyspb.StrippedHistoryEvent{
+			EventId: historyEvents[len(historyEvents)-1].GetEventId(),
+		}
+	}
+	if err := VerifyHistoryIsComplete(
+		firstEvent,
+		lastEvent,
+		len(historyEvents),
+		firstEventID,
+		nextEventID-1,
+		isFirstPage,
+		isLastPage,
+		int(pageSize)); err != nil {
+		metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
+		logger.Error("getHistory: incomplete history",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(execution.GetWorkflowId()),
+			tag.WorkflowRunID(execution.GetRunId()),
+			tag.Error(err))
+	}
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
@@ -191,12 +228,15 @@ func GetHistory(
 		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
 	}
 
+	ns, err := shard.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+	if err != nil {
+		return nil, nil, err
+	}
 	if err := ProcessOutgoingSearchAttributes(
-		shard.GetNamespaceRegistry(),
 		shard.GetSearchAttributesProvider(),
 		shard.GetSearchAttributesMapperProvider(),
 		historyEvents,
-		namespaceID,
+		ns,
 		persistenceVisibilityMgr); err != nil {
 		return nil, nil, err
 	}
@@ -248,12 +288,15 @@ func GetHistoryReverse(
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryReverseScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
+	ns, err := shard.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+	if err != nil {
+		return nil, nil, 0, err
+	}
 	if err := ProcessOutgoingSearchAttributes(
-		shard.GetNamespaceRegistry(),
 		shard.GetSearchAttributesProvider(),
 		shard.GetSearchAttributesMapperProvider(),
 		historyEvents,
-		namespaceID,
+		ns,
 		persistenceVisibilityMgr); err != nil {
 		return nil, nil, 0, err
 	}
@@ -273,17 +316,12 @@ func GetHistoryReverse(
 }
 
 func ProcessOutgoingSearchAttributes(
-	nsRegistry namespace.Registry,
 	saProvider searchattribute.Provider,
 	saMapperProvider searchattribute.MapperProvider,
 	events []*historypb.HistoryEvent,
-	namespaceId namespace.ID,
+	ns namespace.Name,
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) error {
-	ns, err := nsRegistry.GetNamespaceName(namespaceId)
-	if err != nil {
-		return err
-	}
 	saTypeMap, err := saProvider.GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(consts.ErrUnableToGetSearchAttributesMessage, err))
@@ -332,4 +370,182 @@ func validateTransientWorkflowTaskEvents(
 	}
 
 	return nil
+}
+
+func VerifyHistoryIsComplete(
+	firstEvent *historyspb.StrippedHistoryEvent,
+	lastEvent *historyspb.StrippedHistoryEvent,
+	eventCount int,
+	expectedFirstEventID int64,
+	expectedLastEventID int64,
+	isFirstPage bool,
+	isLastPage bool,
+	pageSize int,
+) error {
+
+	if eventCount == 0 {
+		if isLastPage {
+			// we seem to be returning a non-nil pageToken on the lastPage which
+			// in turn cases the client to call getHistory again - only to find
+			// there are no more events to consume - bail out if this is the case here
+			return nil
+		}
+		return serviceerror.NewDataLoss("History contains zero events.")
+	}
+
+	if !isFirstPage { // at least one page of history has been read previously
+		if firstEvent.GetEventId() <= expectedFirstEventID {
+			// not first page and no events have been read in the previous pages - not possible
+			return serviceerror.NewDataLoss(fmt.Sprintf("Invalid history: expected first eventID to be > %v but got %v", expectedFirstEventID, firstEvent.GetEventId()))
+		}
+		expectedFirstEventID = firstEvent.GetEventId()
+	}
+
+	if !isLastPage {
+		// estimate lastEventID based on pageSize. This is a lower bound
+		// since the persistence layer counts "batch of events" as a single page
+		expectedLastEventID = expectedFirstEventID + int64(pageSize) - 1
+	}
+
+	nExpectedEvents := expectedLastEventID - expectedFirstEventID + 1
+
+	if firstEvent.GetEventId() == expectedFirstEventID &&
+		((isLastPage && lastEvent.GetEventId() == expectedLastEventID && int64(eventCount) == nExpectedEvents) ||
+			(!isLastPage && lastEvent.GetEventId() >= expectedLastEventID && int64(eventCount) >= nExpectedEvents)) {
+		return nil
+	}
+
+	return serviceerror.NewDataLoss(fmt.Sprintf("Incomplete history: expected events [%v-%v] but got events [%v-%v] of length %v: isFirstPage=%v,isLastPage=%v,pageSize=%v",
+		expectedFirstEventID,
+		expectedLastEventID,
+		firstEvent.GetEventId(),
+		lastEvent.GetEventId(),
+		eventCount,
+		isFirstPage,
+		isLastPage,
+		pageSize))
+}
+
+// ProcessInternalRawHistory processes history in the field response.History.
+// History service can send history events in response.History.Events. In that case, process the events and move them
+// to response.Response.History. Usually this is done by history service but when history.sendRawHistoryBetweenInternalServices
+// is enabled, history service sends raw history events to frontend without any processing.
+func ProcessInternalRawHistory(
+	requestContext context.Context,
+	saProvider searchattribute.Provider,
+	saMapperProvider searchattribute.MapperProvider,
+	response *historyservice.GetWorkflowExecutionHistoryResponse,
+	visibilityManager manager.VisibilityManager,
+	versionChecker headers.VersionChecker,
+	ns namespace.Name,
+	isCloseEventOnly bool,
+) error {
+	if response == nil || response.History == nil {
+		return nil
+	}
+	response.Response.History = response.History
+	if isCloseEventOnly && len(response.Response.History.Events) > 0 {
+		response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
+	}
+	err := ProcessOutgoingSearchAttributes(
+		saProvider,
+		saMapperProvider,
+		response.Response.History.Events,
+		ns,
+		visibilityManager,
+	)
+	if err != nil {
+		return err
+	}
+	err = FixFollowEvents(requestContext, versionChecker, isCloseEventOnly, response.Response.History)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func FixFollowEvents(
+	ctx context.Context,
+	versionChecker headers.VersionChecker,
+	isCloseEventOnly bool,
+	history *historypb.History,
+) error {
+	// Backwards-compatibility fix for retry events after #1866: older SDKs don't know how to "follow"
+	// subsequent runs linked in WorkflowExecutionFailed or TimedOut events, so they'll get the wrong result
+	// when trying to "get" the result of a workflow run. (This applies to cron runs also but "get" on a cron
+	// workflow isn't really sensible.)
+	//
+	// To handle this in a backwards-compatible way, we'll pretend the completion event is actually
+	// ContinuedAsNew, if it's Failed or TimedOut. We want to do this only when the client is looking for a
+	// completion event, and not when it's getting the history to display for other purposes. The best signal
+	// for that purpose is `isCloseEventOnly`. (We can't use `isLongPoll` also because in some cases, older
+	// versions of the Java SDK don't set that flag.)
+	//
+	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
+	// Revisit this once we have an SDK deprecation policy.
+	followsNextRunId := versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID)
+	if isCloseEventOnly && !followsNextRunId && len(history.Events) > 0 {
+		lastEvent := history.Events[len(history.Events)-1]
+		fakeEvent, err := makeFakeContinuedAsNewEvent(ctx, lastEvent)
+		if err != nil {
+			return err
+		}
+		if fakeEvent != nil {
+			history.Events[len(history.Events)-1] = fakeEvent
+		}
+	}
+	return nil
+}
+
+func makeFakeContinuedAsNewEvent(
+	_ context.Context,
+	lastEvent *historypb.HistoryEvent,
+) (*historypb.HistoryEvent, error) {
+	switch lastEvent.EventType { // nolint:exhaustive
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		if lastEvent.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		if lastEvent.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		if lastEvent.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	default:
+		return nil, nil
+	}
+
+	// We need to replace the last event with a continued-as-new event that has at least the
+	// NewExecutionRunId field. We don't actually need any other fields, since that's the only one
+	// the client looks at in this case, but copy the last result or failure from the real completed
+	// event just so it's clear what the result was.
+	newAttrs := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{}
+	switch lastEvent.EventType { // nolint:exhaustive
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.LastCompletionResult = attrs.Result
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		attrs := lastEvent.GetWorkflowExecutionFailedEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.Failure = attrs.Failure
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		attrs := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.Failure = failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	}
+
+	return &historypb.HistoryEvent{
+		EventId:   lastEvent.EventId,
+		EventTime: lastEvent.EventTime,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		Version:   lastEvent.Version,
+		TaskId:    lastEvent.TaskId,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
+			WorkflowExecutionContinuedAsNewEventAttributes: newAttrs,
+		},
+	}, nil
 }

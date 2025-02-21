@@ -1328,9 +1328,9 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 				s.Error(err, "RespondWorkflowTaskCompleted should return an error contains `%v`", tc.RespondWorkflowTaskError)
 				s.Contains(err.Error(), tc.RespondWorkflowTaskError)
 
-				// When worker returns validation error, API caller got timeout error.
-				s.Error(updateResult.err)
-				s.True(common.IsContextDeadlineExceededErr(updateResult.err), updateResult.err.Error())
+				var wfNotReady *serviceerror.WorkflowNotReady
+				s.ErrorAs(updateResult.err, &wfNotReady, "API caller should get serviceerror.WorkflowNotReady, if server got a validation error while processing worker response.")
+				s.Contains(updateResult.err.Error(), "Unable to perform workflow execution update due unexpected workflow task failure.")
 				s.Nil(updateResult.response)
 			} else {
 				s.NoError(err)
@@ -2226,45 +2226,28 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 		})
 	s.Error(err)
 	s.Contains(err.Error(), "wasn't found")
-	// New normal (but transient) WT will be created but not returned.
 
-	s.waitUpdateAdmitted(tv)
-
-	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
-	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			// 2nd attempt has same updates attached to it.
-			updRequestMsg := task.Messages[0]
-			s.EqualValues(8, updRequestMsg.GetEventId())
-			// Fail WT one more time. Although 2nd attempt is normal WT, it is also transient and shouldn't appear in the history.
-			// Returning error will cause the poller to fail WT.
-			return nil, errors.New("malformed request")
-		})
-	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
-	s.NoError(err)
-
-	// Wait for UpdateWorkflowExecution to timeout.
-	// This does NOT remove update from registry
+	// Update is aborted, speculative WFT failure is recorded into the history.
 	updateResult := <-updateResultCh
-	s.Error(updateResult.err)
-	s.True(common.IsContextDeadlineExceededErr(updateResult.err), "UpdateWorkflowExecution must timeout after 2 seconds")
-	s.Nil(updateResult.response)
+	var wfNotReady *serviceerror.WorkflowNotReady
+	s.ErrorAs(updateResult.err, &wfNotReady)
+	s.Contains(updateResult.err.Error(), "Unable to perform workflow execution update due unexpected workflow task failure.")
 
-	// Try to accept update in workflow 3rd time: get error. Poller will fail WT.
-	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			// 3rd attempt UpdateWorkflowExecution call has timed out but the
-			// update is still running
-			updRequestMsg := task.Messages[0]
-			s.EqualValues(8, updRequestMsg.GetEventId())
-			// Fail WT one more time. This is transient WT and shouldn't appear in the history.
-			// Returning error will cause the poller to fail WT.
-			return nil, errors.New("malformed request")
-		})
-	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
-	s.NoError(err)
+	// New transient WFT is created, but it is not shown in the history.
+	events := s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+  7 WorkflowTaskFailed`, events)
 
-	// Complete workflow.
+	// Send Update again. It will be delivered on existing transient WFT.
+	updateResultCh = s.sendUpdate(timeoutCtx, tv)
+
+	// Try to accept 2nd update in workflow: get error. Poller will fail WFT, but the registry won't be cleared and Update won't be aborted.
 	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.EqualHistory(`
@@ -2275,21 +2258,83 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 			  5 WorkflowTaskScheduled
 			  6 WorkflowTaskStarted
 			  7 WorkflowTaskFailed
-			  8 WorkflowTaskScheduled
+			  8 WorkflowTaskScheduled // Transient WFT
+			  9 WorkflowTaskStarted`, task.History)
+
+			updRequestMsg := task.Messages[0]
+			s.EqualValues(8, updRequestMsg.GetEventId())
+			// Returning error will cause the poller to fail WFT.
+			return nil, errors.New("malformed request")
+		})
+	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
+	s.NoError(err)
+
+	// Update timed out, but stays in the registry and will be delivered again on the new transient WFT.
+	updateResult = <-updateResultCh
+	s.Error(updateResult.err)
+	s.True(common.IsContextDeadlineExceededErr(updateResult.err), "UpdateWorkflowExecution must timeout after 2 seconds")
+	s.Nil(updateResult.response)
+
+	// This WFT failure wasn't recorded because WFT was transient.
+	events = s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+  7 WorkflowTaskFailed`, events)
+
+	// Try to accept 2nd update in workflow 2nd time: get error. Poller will fail WT. Update is not aborted.
+	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			// 1st attempt UpdateWorkflowExecution call has timed out but the
+			// update is still running
+			updRequestMsg := task.Messages[0]
+			s.EqualValues(8, updRequestMsg.GetEventId())
+			// Fail WT one more time. This is transient WT and shouldn't appear in the history.
+			// Returning error will cause the poller to fail WT.
+			return nil, errors.New("malformed request")
+		})
+	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
+	s.NoError(err)
+
+	events = s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+  7 WorkflowTaskFailed`, events)
+
+	// Complete Update and workflow.
+	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.EqualHistory(`
+			  1 WorkflowExecutionStarted
+			  2 WorkflowTaskScheduled
+			  3 WorkflowTaskStarted
+			  4 WorkflowTaskCompleted
+			  5 WorkflowTaskScheduled
+			  6 WorkflowTaskStarted
+			  7 WorkflowTaskFailed
+			  8 WorkflowTaskScheduled // Transient WFT
 			  9 WorkflowTaskStarted`, task.History)
 
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
-				Commands: []*commandpb.Command{
-					{
-						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
-					},
-				},
+				Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
+				Commands: append(s.UpdateAcceptCompleteCommands(tv), &commandpb.Command{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+				}),
 			}, nil
 		})
 	s.NoError(err)
 
-	events := s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
+	events = s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -2300,8 +2345,10 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
   7 WorkflowTaskFailed
   8 WorkflowTaskScheduled
   9 WorkflowTaskStarted
- 10 WorkflowTaskCompleted
- 11 WorkflowExecutionCompleted`, events)
+ 10 WorkflowTaskCompleted // Transient WFT was completed successfully and ended up in the history.
+ 11 WorkflowExecutionUpdateAccepted
+ 12 WorkflowExecutionUpdateCompleted
+ 13 WorkflowExecutionCompleted`, events)
 }
 
 func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StartedSpeculativeWorkflowTask_ConvertToNormalBecauseOfBufferedSignal() {

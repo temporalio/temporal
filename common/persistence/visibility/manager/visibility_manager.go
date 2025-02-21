@@ -70,7 +70,7 @@ type (
 		StartTime        time.Time
 		Status           enumspb.WorkflowExecutionStatus
 		ExecutionTime    time.Time
-		TaskID           int64 // not persisted, used as condition update version for ES
+		TaskID           int64 // used as condition update version for ES and _version for SQL stores
 		ShardID          int32 // not persisted
 		Memo             *commonpb.Memo
 		TaskQueue        string

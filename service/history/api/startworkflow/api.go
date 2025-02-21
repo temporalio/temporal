@@ -731,11 +731,10 @@ func (s *Starter) generateResponse(
 	}
 
 	if err := api.ProcessOutgoingSearchAttributes(
-		shardCtx.GetNamespaceRegistry(),
 		shardCtx.GetSearchAttributesProvider(),
 		shardCtx.GetSearchAttributesMapperProvider(),
 		historyEvents,
-		s.namespace.ID(),
+		s.namespace.Name(),
 		s.visibilityManager); err != nil {
 		return nil, err
 	}

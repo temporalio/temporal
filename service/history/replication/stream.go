@@ -87,7 +87,7 @@ func WrapEventLoop(
 				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
 				metrics.ToClusterIDTag(toClusterKey.ClusterID),
 			)
-			logger.Error("ReplicationStreamError", tag.Error(err))
+			logger.Warn("ReplicationStreamError", tag.Error(err))
 		} else {
 			metrics.ReplicationServiceError.With(metricsHandler).Record(
 				int64(1),

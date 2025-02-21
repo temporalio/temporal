@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,10 +20,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package build
+package sqlplugin
 
 import (
-	_ "go.temporal.io/api/cmd/protoc-gen-go-helpers"
-	_ "go.temporal.io/api/cmd/protogen"
-	_ "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
+
+func TestDbFields_LastField_Version(t *testing.T) {
+	lastField := DbFields[len(DbFields)-1]
+	require.Equal(t, VersionColumnName, lastField)
+}

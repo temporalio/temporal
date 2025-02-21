@@ -1187,7 +1187,7 @@ func TestSQLiteTransactionContextCancellation(t *testing.T) {
 	cancel()
 
 	err = tx.Commit()
-	assert.ErrorAs(t, err, &context.Canceled)
+	assert.ErrorIs(t, err, context.Canceled)
 
 	// Check if we still have a connection to the db.
 	_, err = db.LockTaskQueues(context.Background(), sqlplugin.TaskQueuesFilter{

@@ -148,6 +148,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 		mutateRef               func(*hsm.Ref)
 		mutateNode              func(*hsm.Node)
 		assertOutcome           func(*testing.T, error)
+		clearTransitionHistory  bool
 	}{
 		{
 			name:                    "TaskGenerationStale",
@@ -251,6 +252,17 @@ func TestValidateStateMachineRef(t *testing.T) {
 			},
 		},
 		{
+			name:                    "WithTransitionHistory/TransitionHistoryCleared/Valid",
+			enableTransitionHistory: true,
+			mutateRef: func(ref *hsm.Ref) {
+			},
+			mutateNode: func(node *hsm.Node) {},
+			assertOutcome: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+			clearTransitionHistory: true,
+		},
+		{
 			name:                    "WithoutTransitionHistory/Valid",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
@@ -285,6 +297,9 @@ func TestValidateStateMachineRef(t *testing.T) {
 			tc.mutateRef(&ref)
 
 			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+			if tc.clearTransitionHistory {
+				mutableState.GetExecutionInfo().TransitionHistory = nil
+			}
 			err = exec.validateStateMachineRef(context.Background(), workflowContext, mutableState, ref, true)
 			tc.assertOutcome(t, err)
 		})

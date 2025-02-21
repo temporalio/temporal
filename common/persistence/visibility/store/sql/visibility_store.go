@@ -392,6 +392,7 @@ func (s *VisibilityStore) generateVisibilityRow(
 		ParentRunID:      request.ParentRunID,
 		RootWorkflowID:   request.RootWorkflowID,
 		RootRunID:        request.RootRunID,
+		Version:          request.TaskID,
 	}, nil
 }
 

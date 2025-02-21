@@ -116,7 +116,10 @@ ifeq ($(UNIT_TEST_DIRS),)
 UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
 endif
 
+# Pinning modernc.org/sqlite to this version until https://gitlab.com/cznic/sqlite/-/issues/196 is resolved.
 PINNED_DEPENDENCIES := \
+	modernc.org/sqlite@v1.34.1 \
+	modernc.org/libc@v1.55.3
 
 # Code coverage & test report output files.
 TEST_OUTPUT_ROOT        := ./.testoutput
@@ -221,7 +224,7 @@ $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
-STRINGER_VER := v0.21.0
+STRINGER_VER := v0.30.0
 STRINGER := $(LOCALBIN)/stringer
 $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))
@@ -413,13 +416,13 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(UNIT_TEST_DIRS) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) --packages="$(UNIT_TEST_DIRS)" -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(INTEGRATION_TEST_DIRS) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) --packages="$(INTEGRATION_TEST_DIRS)" -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_COVERPKG)
 
@@ -429,21 +432,21 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_ROOT) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) --packages="$(FUNCTIONAL_TEST_ROOT)" -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_XDC_ROOT) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) --packages="$(FUNCTIONAL_TEST_XDC_ROOT)" -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_NDC_ROOT) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) --packages="$(FUNCTIONAL_TEST_NDC_ROOT)" -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)

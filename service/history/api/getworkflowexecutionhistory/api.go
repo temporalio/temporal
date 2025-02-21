@@ -26,21 +26,25 @@ package getworkflowexecutionhistory
 
 import (
 	"context"
+	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -61,6 +65,8 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+
+	isCloseEventOnly := request.Request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 
 	// this function returns the following 7 things,
 	// 1. the current branch token (to use to retrieve history events)
@@ -92,6 +98,31 @@ func Invoke(
 			workflowConsistencyChecker,
 			eventNotifier,
 		)
+
+		var branchErr *serviceerrors.CurrentBranchChanged
+		if errors.As(err, &branchErr) && isCloseEventOnly {
+			shardContext.GetLogger().Info("Got CurrentBranchChanged, retry with empty branch token",
+				tag.WorkflowNamespaceID(namespaceUUID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err),
+			)
+			// if we are only querying for close event, and encounter CurrentBranchChanged error, then we retry with empty branch token to get the close event
+			response, err = api.GetOrPollMutableState(
+				ctx,
+				shardContext,
+				&historyservice.GetMutableStateRequest{
+					NamespaceId:         namespaceUUID.String(),
+					Execution:           execution,
+					ExpectedNextEventId: expectedNextEventID,
+					CurrentBranchToken:  nil,
+					VersionHistoryItem:  nil,
+					VersionedTransition: nil,
+				},
+				workflowConsistencyChecker,
+				eventNotifier,
+			)
+		}
 		if err != nil {
 			return nil, "", 0, 0, false, nil, nil, err
 		}
@@ -118,7 +149,6 @@ func Invoke(
 	}
 
 	isLongPoll := request.Request.GetWaitNewEvent()
-	isCloseEventOnly := request.Request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 	execution := request.Request.Execution
 	var continuationToken *tokenspb.HistoryContinuation
 
@@ -191,27 +221,52 @@ func Invoke(
 		}
 	}()
 
+	history := &historypb.History{}
+	history.Events = []*historypb.HistoryEvent{}
 	var historyBlob []*commonpb.DataBlob
+	config := shardContext.GetConfig()
+	sendRawHistoryBetweenInternalServices := config.SendRawHistoryBetweenInternalServices()
+	sendRawWorkflowHistoryForNamespace := config.SendRawWorkflowHistory(request.Request.GetNamespace())
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
-			historyBlob, _, err = api.GetRawHistory(
-				ctx,
-				shardContext,
-				namespaceID,
-				execution,
-				lastFirstEventID,
-				nextEventID,
-				request.Request.GetMaximumPageSize(),
-				nil,
-				continuationToken.TransientWorkflowTask,
-				continuationToken.BranchToken,
-			)
-			if err != nil {
-				return nil, err
+			if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
+				historyBlob, _, err = api.GetRawHistory(
+					ctx,
+					shardContext,
+					namespaceID,
+					execution,
+					lastFirstEventID,
+					nextEventID,
+					request.Request.GetMaximumPageSize(),
+					nil,
+					continuationToken.TransientWorkflowTask,
+					continuationToken.BranchToken,
+				)
+				if err != nil {
+					return nil, err
+				}
+				// since getHistory func will not return empty history, so the below is safe
+				historyBlob = historyBlob[len(historyBlob)-1:]
+			} else {
+				history, _, err = api.GetHistory(
+					ctx,
+					shardContext,
+					namespaceID,
+					execution,
+					lastFirstEventID,
+					nextEventID,
+					request.Request.GetMaximumPageSize(),
+					nil,
+					continuationToken.TransientWorkflowTask,
+					continuationToken.BranchToken,
+					persistenceVisibilityMgr,
+				)
+				if err != nil {
+					return nil, err
+				}
+				// since getHistory func will not return empty history, so the below is safe
+				history.Events = history.Events[len(history.Events)-1 : len(history.Events)]
 			}
-
-			// since getHistory func will not return empty history, so the below is safe
-			historyBlob = historyBlob[len(historyBlob)-1:]
 			continuationToken = nil
 		} else if isLongPoll {
 			// set the persistence token to be nil so next time we will query history for updates
@@ -223,22 +278,40 @@ func Invoke(
 		// return all events
 		if continuationToken.FirstEventId >= continuationToken.NextEventId {
 			// currently there is no new event
+			history.Events = []*historypb.HistoryEvent{}
 			if !isWorkflowRunning {
 				continuationToken = nil
 			}
 		} else {
-			historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
-				ctx,
-				shardContext,
-				namespaceID,
-				execution,
-				continuationToken.FirstEventId,
-				continuationToken.NextEventId,
-				request.Request.GetMaximumPageSize(),
-				continuationToken.PersistenceToken,
-				continuationToken.TransientWorkflowTask,
-				continuationToken.BranchToken,
-			)
+			if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
+				historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
+					ctx,
+					shardContext,
+					namespaceID,
+					execution,
+					continuationToken.FirstEventId,
+					continuationToken.NextEventId,
+					request.Request.GetMaximumPageSize(),
+					continuationToken.PersistenceToken,
+					continuationToken.TransientWorkflowTask,
+					continuationToken.BranchToken,
+				)
+			} else {
+				history, continuationToken.PersistenceToken, err = api.GetHistory(
+					ctx,
+					shardContext,
+					namespaceID,
+					execution,
+					continuationToken.FirstEventId,
+					continuationToken.NextEventId,
+					request.Request.GetMaximumPageSize(),
+					continuationToken.PersistenceToken,
+					continuationToken.TransientWorkflowTask,
+					continuationToken.BranchToken,
+					persistenceVisibilityMgr,
+				)
+			}
+
 			if err != nil {
 				return nil, err
 			}
@@ -257,32 +330,34 @@ func Invoke(
 		return nil, err
 	}
 
-	resp := &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
-		Response: &historyspb.GetWorkflowExecutionHistoryResponse{
-			History:       nil,
-			RawHistory:    nil,
+	// if SendRawHistoryBetweenInternalServices is enabled, we do this check in frontend service
+	if len(history.Events) > 0 {
+		err = api.FixFollowEvents(ctx, versionChecker, isCloseEventOnly, history)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var rawHistory [][]byte
+	// if sendRawHistoryBetweenInternalServices is true and SendRawWorkflowHistory is not enabled for this namespace,
+	// send history in raw format in History field of historyservice.GetWorkflowExecutionHistoryResponseWithRaw.
+	// If SendRawWorkflowHistory is enabled for this namespace, raw history will be appended to RawHistory field in
+	// workflowservice.GetWorkflowExecutionHistoryResponse.
+	if sendRawHistoryBetweenInternalServices && !sendRawWorkflowHistoryForNamespace {
+		rawHistory = make([][]byte, 0, len(historyBlob))
+		for _, blob := range historyBlob {
+			rawHistory = append(rawHistory, blob.Data)
+		}
+		historyBlob = nil
+	}
+	return &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
+		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
+			History:       history,
+			RawHistory:    historyBlob,
 			NextPageToken: nextToken,
 			Archived:      false,
 		},
-	}
-	if shardContext.GetConfig().SendRawWorkflowHistory(request.Request.GetNamespace()) {
-		resp.Response.RawHistory = historyBlob
-	} else {
-		fullHistory := make([][]byte, 0)
-		for _, blob := range historyBlob {
-			fullHistory = append(fullHistory, blob.Data)
-		}
-		// If we return an empty slice in GetWorkflowExecutionHistoryResponseWithRaw, History field in deserialized
-		// GetWorkflowExecutionHistoryResponse will be nil. This is for avoiding that.
-		if len(fullHistory) == 0 {
-			history := historypb.History{}
-			blob, err := history.Marshal()
-			if err != nil {
-				return nil, err
-			}
-			fullHistory = append(fullHistory, blob)
-		}
-		resp.Response.History = fullHistory
-	}
-	return resp, nil
+
+		History: rawHistory,
+	}, nil
 }

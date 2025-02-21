@@ -135,6 +135,7 @@ type Config struct {
 	// VisibilityArchival system protection
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
 
+	// DEPRECATED
 	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// DefaultWorkflowTaskTimeout the default workflow task timeout
@@ -213,8 +214,9 @@ type Config struct {
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
 
-	MaxNexusOperationTokenLength dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NexusRequestHeadersBlacklist *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NexusRequestHeadersBlacklist   *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	NexusOperationsMetricTagConfig *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -354,6 +356,13 @@ func NewConfig(
 					return matchNothing, nil
 				}
 				return util.WildCardStringsToRegexp(patterns)
+			},
+		),
+		NexusOperationsMetricTagConfig: dynamicconfig.NewGlobalCachedTypedValue(
+			dc,
+			nexusoperations.MetricTagConfiguration,
+			func(config nexusoperations.NexusMetricTagConfig) (*nexusoperations.NexusMetricTagConfig, error) {
+				return &config, nil
 			},
 		),
 

@@ -51,7 +51,8 @@ func newAckManager(db *taskQueueDB, logger log.Logger) ackManager {
 		logger:           logger,
 		outstandingTasks: treemap.NewWith(godsutils.Int64Comparator),
 		readLevel:        -1,
-		ackLevel:         -1}
+		ackLevel:         -1,
+	}
 }
 
 // Registers task as in-flight and moves read level to it. Tasks can be added in increasing order of taskID only.

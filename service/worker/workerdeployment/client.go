@@ -256,7 +256,7 @@ func (d *ClientImpl) DescribeVersion(
 ) (_ *deploymentpb.WorkerDeploymentVersionInfo, retErr error) {
 	v, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>/<build_id>\"", version))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version))
 	}
 	deploymentName := v.GetDeploymentName()
 	buildID := v.GetBuildId()
@@ -415,7 +415,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		return nil, nil, err
 	}
 
-	dInfo, err := d.deploymentStateToDeploymentInfo(ctx, namespaceEntry, deploymentName, queryResponse.State)
+	dInfo, err := d.deploymentStateToDeploymentInfo(deploymentName, queryResponse.State)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -437,7 +437,6 @@ func (d *ClientImpl) ListWorkerDeployments(
 		pageSize = d.visibilityMaxPageSize(namespaceEntry.Name().String())
 	}
 
-	// todo (Shivam): closed workflows should be filtered out.
 	persistenceResp, err := d.visibilityManager.ListWorkflowExecutions(
 		ctx,
 		&manager.ListWorkflowExecutionsRequestV2{
@@ -477,7 +476,6 @@ func (d *ClientImpl) SetCurrentVersion(
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), version, identity)()
 
-	requestID := uuid.New()
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
@@ -503,13 +501,16 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, err
 	}
 
+	// Generating a new updateID for each request. No-ops are handled by the worker-deployment workflow.
+	updateID := uuid.New()
+
 	outcome, err := d.update(
 		ctx,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+			Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
 		},
 	)
 	if err != nil {
@@ -519,6 +520,11 @@ func (d *ClientImpl) SetCurrentVersion(
 	var res deploymentspb.SetCurrentVersionResponse
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		res.PreviousVersion = version
+		// Returning the latest conflict token
+		details := failure.GetApplicationFailureInfo().GetDetails().GetPayloads()
+		if len(details) > 0 {
+			res.ConflictToken = details[0].GetData()
+		}
 		return &res, nil
 	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 		return nil, serviceerror.NewNotFound(errVersionNotFound)
@@ -550,7 +556,7 @@ func (d *ClientImpl) SetRampingVersion(
 ) (_ *deploymentspb.SetRampingVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SetRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
-	requestID := uuid.New()
+
 	var err error
 	if version != "" {
 		var versionObj *deploymentspb.WorkerDeploymentVersion
@@ -581,13 +587,16 @@ func (d *ClientImpl) SetRampingVersion(
 		return nil, err
 	}
 
+	// Generating a new updateID for each request. No-ops are handled by the worker-deployment workflow.
+	updateID := uuid.New()
+
 	outcome, err := d.update(
 		ctx,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetRampingVersion, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+			Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
 		},
 	)
 	if err != nil {
@@ -598,6 +607,13 @@ func (d *ClientImpl) SetRampingVersion(
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		res.PreviousVersion = version
 		res.PreviousPercentage = percentage
+
+		// Returning the latest conflict token
+		details := failure.GetApplicationFailureInfo().GetDetails().GetPayloads()
+		if len(details) > 0 {
+			res.ConflictToken = details[0].GetData()
+		}
+
 		return &res, nil
 	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 		return nil, serviceerror.NewNotFound(errVersionNotFound)
@@ -627,7 +643,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 ) (retErr error) {
 	v, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>/<build_id>\"", version))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid version string %q, expected format is \"<deployment_name>.<build_id>\"", version))
 	}
 	deploymentName := v.GetDeploymentName()
 	buildId := v.GetBuildId()
@@ -774,11 +790,6 @@ func (d *ClientImpl) StartWorkerDeployment(
 		return err
 	}
 
-	memo, err := d.buildInitialMemo(deploymentName)
-	if err != nil {
-		return err
-	}
-
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                requestID,
 		Namespace:                namespaceEntry.Name().String(),
@@ -789,7 +800,6 @@ func (d *ClientImpl) StartWorkerDeployment(
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		SearchAttributes:         d.buildSearchAttributes(),
-		Memo:                     memo,
 	}
 
 	historyStartReq := &historyservice.StartWorkflowExecutionRequest{
@@ -902,8 +912,8 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 	}
 
 	if failure := outcome.GetFailure(); failure != nil {
-		if failure.Message == errVersionNotDrained {
-			return temporal.NewNonRetryableApplicationError(errVersionNotDrained, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
+		if failure.Message == errVersionIsDraining {
+			return temporal.NewNonRetryableApplicationError(errVersionIsDraining, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
 		} else if failure.Message == errVersionHasPollers {
 			return temporal.NewNonRetryableApplicationError(errVersionHasPollers, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
 		}
@@ -1175,23 +1185,6 @@ func (d *ClientImpl) updateWithStart(
 	return outcome, err
 }
 
-func (d *ClientImpl) buildInitialMemo(deploymentName string) (*commonpb.Memo, error) {
-	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.WorkerDeploymentWorkflowMemo{
-		DeploymentName: deploymentName,
-		CreateTime:     timestamppb.Now(),
-		RoutingConfig:  &deploymentpb.RoutingConfig{},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{
-			WorkerDeploymentMemoField: pl,
-		},
-	}, nil
-}
-
 func (d *ClientImpl) buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
 	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
@@ -1259,17 +1252,17 @@ func versionStateToVersionInfo(state *deploymentspb.VersionLocalState) *deployme
 	}
 }
 
-func (d *ClientImpl) deploymentStateToDeploymentInfo(ctx context.Context, namespaceEntry *namespace.Namespace,
-	deploymentName string, state *deploymentspb.WorkerDeploymentLocalState) (*deploymentpb.WorkerDeploymentInfo, error) {
+func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, state *deploymentspb.WorkerDeploymentLocalState) (*deploymentpb.WorkerDeploymentInfo, error) {
 	if state == nil {
 		return nil, nil
 	}
 
 	var workerDeploymentInfo deploymentpb.WorkerDeploymentInfo
+
 	workerDeploymentInfo.Name = deploymentName
 	workerDeploymentInfo.CreateTime = state.CreateTime
-
 	workerDeploymentInfo.RoutingConfig = state.RoutingConfig
+	workerDeploymentInfo.LastModifierIdentity = state.LastModifierIdentity
 
 	for _, v := range state.Versions {
 		workerDeploymentInfo.VersionSummaries = append(workerDeploymentInfo.VersionSummaries, &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary{
