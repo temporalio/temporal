@@ -89,7 +89,6 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/api/getworkflowexecutionhistory"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -766,28 +765,19 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, err
 	}
 
-	// History service can send history events in response.History.Events. In that case use that directly.
-	// This happens when history.sendRawHistoryBetweenInternalServices is enabled.
-	if response.History != nil {
-		response.Response.History = response.History
-		isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
-		if isCloseEventOnly && len(response.Response.History.Events) > 0 {
-			response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
-		}
-		err = api.ProcessOutgoingSearchAttributes(
-			wh.saProvider,
-			wh.saMapperProvider,
-			response.Response.History.Events,
-			namespace.Name(request.GetNamespace()),
-			wh.visibilityMgr,
-		)
-		if err != nil {
-			return nil, err
-		}
-		err = getworkflowexecutionhistory.FixFollowEvents(ctx, wh.versionChecker, isCloseEventOnly, response.Response.History)
-		if err != nil {
-			return nil, err
-		}
+	isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
+	err = api.ProcessInternalRawHistory(
+		ctx,
+		wh.saProvider,
+		wh.saMapperProvider,
+		response,
+		wh.visibilityMgr,
+		wh.versionChecker,
+		namespace.Name(request.GetNamespace()),
+		isCloseEventOnly,
+	)
+	if err != nil {
+		return nil, err
 	}
 	return response.Response, nil
 }

@@ -154,6 +154,7 @@ type (
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
+		versionChecker                headers.VersionChecker
 		testHooks                     testhooks.TestHooks
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
@@ -260,6 +261,7 @@ func NewEngine(
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
 		config:                    config,
+		versionChecker:            headers.NewDefaultVersionChecker(),
 		testHooks:                 testHooks,
 		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
@@ -785,23 +787,20 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 
 	// History service can send history events in response.History.Events. In that case use that directly.
 	// This happens when history.sendRawHistoryBetweenInternalServices is enabled.
-	if resp.History != nil {
-		resp.Response.History = resp.History
-		ns, err := e.namespaceRegistry.GetNamespaceName(nsID)
-		if err != nil {
-			return nil, nil, err
-		}
-		err = api.ProcessOutgoingSearchAttributes(
-			e.saProvider,
-			e.saMapperProvider,
-			resp.Response.History.Events,
-			ns,
-			e.visibilityManager,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
+	ns, err := e.namespaceRegistry.GetNamespaceName(nsID)
+	if err != nil {
+		return nil, nil, err
 	}
+	err = api.ProcessInternalRawHistory(
+		ctx,
+		e.saProvider,
+		e.saMapperProvider,
+		resp,
+		e.visibilityManager,
+		e.versionChecker,
+		ns,
+		false,
+	)
 
 	hist := resp.GetResponse().GetHistory()
 	if resp.GetResponse().GetRawHistory() != nil {

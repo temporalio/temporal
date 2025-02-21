@@ -33,7 +33,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -421,4 +424,128 @@ func VerifyHistoryIsComplete(
 		isFirstPage,
 		isLastPage,
 		pageSize))
+}
+
+// ProcessInternalRawHistory processes history in the field response.History.
+// History service can send history events in response.History.Events. In that case, process the events and move them
+// to response.Response.History. Usually this is done by history service but when history.sendRawHistoryBetweenInternalServices
+// is enabled, history service sends raw history events to frontend without any processing.
+func ProcessInternalRawHistory(
+	requestContext context.Context,
+	saProvider searchattribute.Provider,
+	saMapperProvider searchattribute.MapperProvider,
+	response *historyservice.GetWorkflowExecutionHistoryResponse,
+	visibilityManager manager.VisibilityManager,
+	versionChecker headers.VersionChecker,
+	ns namespace.Name,
+	isCloseEventOnly bool,
+) error {
+	if response == nil || response.History == nil {
+		return nil
+	}
+	if isCloseEventOnly && len(response.Response.History.Events) > 0 {
+		response.Response.History.Events = response.Response.History.Events[len(response.Response.History.Events)-1:]
+	}
+	response.Response.History = response.History
+	err := ProcessOutgoingSearchAttributes(
+		saProvider,
+		saMapperProvider,
+		response.Response.History.Events,
+		ns,
+		visibilityManager,
+	)
+	if err != nil {
+		return err
+	}
+	err = FixFollowEvents(requestContext, versionChecker, isCloseEventOnly, response.Response.History)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func FixFollowEvents(
+	ctx context.Context,
+	versionChecker headers.VersionChecker,
+	isCloseEventOnly bool,
+	history *historypb.History,
+) error {
+	// Backwards-compatibility fix for retry events after #1866: older SDKs don't know how to "follow"
+	// subsequent runs linked in WorkflowExecutionFailed or TimedOut events, so they'll get the wrong result
+	// when trying to "get" the result of a workflow run. (This applies to cron runs also but "get" on a cron
+	// workflow isn't really sensible.)
+	//
+	// To handle this in a backwards-compatible way, we'll pretend the completion event is actually
+	// ContinuedAsNew, if it's Failed or TimedOut. We want to do this only when the client is looking for a
+	// completion event, and not when it's getting the history to display for other purposes. The best signal
+	// for that purpose is `isCloseEventOnly`. (We can't use `isLongPoll` also because in some cases, older
+	// versions of the Java SDK don't set that flag.)
+	//
+	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
+	// Revisit this once we have an SDK deprecation policy.
+	followsNextRunId := versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID)
+	if isCloseEventOnly && !followsNextRunId && len(history.Events) > 0 {
+		lastEvent := history.Events[len(history.Events)-1]
+		fakeEvent, err := makeFakeContinuedAsNewEvent(ctx, lastEvent)
+		if err != nil {
+			return err
+		}
+		if fakeEvent != nil {
+			history.Events[len(history.Events)-1] = fakeEvent
+		}
+	}
+	return nil
+}
+
+func makeFakeContinuedAsNewEvent(
+	_ context.Context,
+	lastEvent *historypb.HistoryEvent,
+) (*historypb.HistoryEvent, error) {
+	switch lastEvent.EventType {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		if lastEvent.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		if lastEvent.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		if lastEvent.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	default:
+		return nil, nil
+	}
+
+	// We need to replace the last event with a continued-as-new event that has at least the
+	// NewExecutionRunId field. We don't actually need any other fields, since that's the only one
+	// the client looks at in this case, but copy the last result or failure from the real completed
+	// event just so it's clear what the result was.
+	newAttrs := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{}
+	switch lastEvent.EventType {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.LastCompletionResult = attrs.Result
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		attrs := lastEvent.GetWorkflowExecutionFailedEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.Failure = attrs.Failure
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		attrs := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.Failure = failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	}
+
+	return &historypb.HistoryEvent{
+		EventId:   lastEvent.EventId,
+		EventTime: lastEvent.EventTime,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		Version:   lastEvent.Version,
+		TaskId:    lastEvent.TaskId,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
+			WorkflowExecutionContinuedAsNewEventAttributes: newAttrs,
+		},
+	}, nil
 }
