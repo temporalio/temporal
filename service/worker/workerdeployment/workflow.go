@@ -27,11 +27,11 @@ package workerdeployment
 import (
 	"bytes"
 	"fmt"
-	enumspb "go.temporal.io/api/enums/v1"
 	"slices"
 
 	"github.com/pborman/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
