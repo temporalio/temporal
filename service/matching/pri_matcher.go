@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -55,8 +54,7 @@ type priTaskMatcher struct {
 	data matcherData
 
 	// Background context used for forwarding tasks. Closed when task queue is closed.
-	matcherCtx       context.Context
-	matcherCtxCancel context.CancelFunc
+	tqCtx context.Context
 
 	// dynamicRate is the dynamic rate & burst for rate limiter
 	dynamicRateBurst quotas.MutableRateBurst
@@ -112,6 +110,7 @@ var (
 
 // newPriTaskMatcher returns a task matcher instance
 func newPriTaskMatcher(
+	tqCtx context.Context,
 	config *taskQueueConfig,
 	partition tqid.Partition,
 	fwdr *priForwarder,
@@ -136,20 +135,16 @@ func newPriTaskMatcher(
 		),
 	})
 
-	matcherCtx := headers.SetCallerInfo(context.Background(), config.CallerInfo)
-	matcherCtx, matcherCtxCancel := context.WithCancel(matcherCtx)
-
 	return &priTaskMatcher{
 		config:             config,
 		data:               newMatcherData(config, limiter),
+		tqCtx:              tqCtx,
 		dynamicRateBurst:   dynamicRateBurst,
 		dynamicRateLimiter: dynamicRateLimiter,
 		metricsHandler:     metricsHandler,
 		partition:          partition,
 		fwdr:               fwdr,
 		validator:          validator,
-		matcherCtx:         matcherCtx,
-		matcherCtxCancel:   matcherCtxCancel,
 		numPartitions:      config.NumReadPartitions,
 	}
 }
@@ -176,15 +171,15 @@ func (tm *priTaskMatcher) Start() {
 	}
 }
 
+// TODO(pri): old matcher cleanup: remove this later
 func (tm *priTaskMatcher) Stop() {
-	tm.matcherCtxCancel()
 }
 
 func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.Retrier) {
-	ctxs := []context.Context{tm.matcherCtx}
+	ctxs := []context.Context{tm.tqCtx}
 	poller := waitingPoller{isTaskForwarder: true}
 	for {
-		if lim.Wait(tm.matcherCtx) != nil {
+		if lim.Wait(tm.tqCtx) != nil {
 			return
 		}
 
@@ -198,7 +193,7 @@ func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.R
 
 		// backoff on resource exhausted errors
 		if common.IsResourceExhausted(err) {
-			util.InterruptibleSleep(tm.matcherCtx, retrier.NextBackOff(err))
+			util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(err))
 		} else {
 			retrier.Reset()
 		}
@@ -226,7 +221,7 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 
 		// Add a timeout for forwarding.
 		// Note that this does not block local match of other local backlog tasks.
-		ctx, cancel = context.WithTimeout(tm.matcherCtx, backlogTaskForwardTimeout)
+		ctx, cancel = context.WithTimeout(tm.tqCtx, backlogTaskForwardTimeout)
 		defer cancel()
 	}
 
@@ -250,10 +245,10 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 }
 
 func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier backoff.Retrier) {
-	ctxs := []context.Context{tm.matcherCtx}
+	ctxs := []context.Context{tm.tqCtx}
 	poller := &waitingPoller{isTaskForwarder: true, isTaskValidator: true}
 	for {
-		if lim.Wait(tm.matcherCtx) != nil {
+		if lim.Wait(tm.tqCtx) != nil {
 			return
 		}
 
@@ -277,14 +272,14 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 			task.finish(errReprocessTask, true)
 			// retrier's max interval is backlogTaskForwardTimeout, so for just valid tasks,
 			// this loop will essentially be limited to that interval.
-			util.InterruptibleSleep(tm.matcherCtx, retrier.NextBackOff(nil))
+			util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(nil))
 		}
 	}
 }
 
 func (tm *priTaskMatcher) forwardPolls() {
 	forwarderTask := &internalTask{isPollForwarder: true}
-	ctxs := []context.Context{tm.matcherCtx}
+	ctxs := []context.Context{tm.tqCtx}
 	for {
 		res := tm.data.EnqueueTaskAndWait(ctxs, forwarderTask)
 		if res.ctxErr != nil {
@@ -373,7 +368,7 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, 
 		return false, nil
 	}
 
-	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.matcherCtx}, task)
+	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.tqCtx}, task)
 
 	if res.ctxErr != nil {
 		return false, res.ctxErr
@@ -387,7 +382,7 @@ func (tm *priTaskMatcher) syncOfferTask(
 	task *internalTask,
 	returnNoPollerErr bool,
 ) (any, error) {
-	ctxs := []context.Context{ctx, tm.matcherCtx}
+	ctxs := []context.Context{ctx, tm.tqCtx}
 
 	if returnNoPollerErr {
 		if deadline, ok := ctx.Deadline(); ok && tm.fwdr == nil {
@@ -535,7 +530,7 @@ func (tm *priTaskMatcher) poll(
 		}
 	}()
 
-	ctxs := []context.Context{ctx, tm.matcherCtx}
+	ctxs := []context.Context{ctx, tm.tqCtx}
 	poller := &waitingPoller{
 		startTime:    start,
 		queryOnly:    queryOnly,

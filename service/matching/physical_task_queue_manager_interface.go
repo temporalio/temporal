@@ -57,7 +57,7 @@ type (
 		// up the task, this method will return error. Task will not be persisted to db
 		// TODO(pri): old matcher cleanup
 		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error
-		AddSpooledTask(ctx context.Context, task *internalTask) error
+		AddSpooledTask(task *internalTask) error
 		AddSpooledTaskToMatcher(task *internalTask)
 		UserDataChanged()
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,

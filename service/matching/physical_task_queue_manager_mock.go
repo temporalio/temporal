@@ -69,17 +69,17 @@ func (m *MockphysicalTaskQueueManager) EXPECT() *MockphysicalTaskQueueManagerMoc
 }
 
 // AddSpooledTask mocks base method.
-func (m *MockphysicalTaskQueueManager) AddSpooledTask(ctx context.Context, task *internalTask) error {
+func (m *MockphysicalTaskQueueManager) AddSpooledTask(task *internalTask) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddSpooledTask", ctx, task)
+	ret := m.ctrl.Call(m, "AddSpooledTask", task)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddSpooledTask indicates an expected call of AddSpooledTask.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTask(ctx, task any) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTask(task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AddSpooledTask), ctx, task)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).AddSpooledTask), task)
 }
 
 // AddSpooledTaskToMatcher mocks base method.
