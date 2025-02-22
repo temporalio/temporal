@@ -981,6 +981,81 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 	s.assertSameRecentActions(descResp, listResp)
 }
 
+// A schedule's memo should have an upper bound on the number of spec items stored.
+func (s *ScheduleFunctionalSuite) TestLimitMemoSpecSize() {
+	// TODO - remove when MemoSpecFieldLimit becomes the default.
+	prevTweakables := scheduler.CurrentTweakablePolicies
+	scheduler.CurrentTweakablePolicies.Version = scheduler.LimitMemoSpecSize
+	defer func() { scheduler.CurrentTweakablePolicies = prevTweakables }()
+
+	expectedLimit := scheduler.SpecFieldLengthLimit
+
+	sid := "sched-test-limit-memo-size"
+	wid := "sched-test-limit-memo-size-wf"
+	wt := "sched-test-limit-memo-size-wt"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Set up a schedule with a large number of spec items that should be trimmed in
+	// the memo block.
+	for i := 0; i < expectedLimit*2; i++ {
+		schedule.Spec.Interval = append(schedule.Spec.Interval, &schedulepb.IntervalSpec{
+			Interval: durationpb.New(time.Duration(i+1) * time.Second),
+		})
+		schedule.Spec.StructuredCalendar = append(schedule.Spec.StructuredCalendar, &schedulepb.StructuredCalendarSpec{
+			Minute: []*schedulepb.Range{
+				{
+					Start: int32(i + 1),
+					End:   int32(i + 1),
+				},
+			},
+		})
+		schedule.Spec.ExcludeStructuredCalendar = append(schedule.Spec.ExcludeStructuredCalendar, &schedulepb.StructuredCalendarSpec{
+			Second: []*schedulepb.Range{
+				{
+					Start: int32(i + 1),
+					End:   int32(i + 1),
+				},
+			},
+		})
+	}
+
+	// Create the schedule.
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	}
+	s.worker.RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	s.NoError(err)
+	s.cleanup(sid)
+
+	// Verify the memo field length limit was enforced.
+	entry := s.getScheduleEntryFomVisibility(sid, nil)
+	s.Require().NotNil(entry)
+	spec := entry.GetInfo().GetSpec()
+	s.Require().Equal(expectedLimit, len(spec.GetInterval()))
+	s.Require().Equal(expectedLimit, len(spec.GetStructuredCalendar()))
+	s.Require().Equal(expectedLimit, len(spec.GetExcludeStructuredCalendar()))
+}
+
 func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	sid := "sched-test-next-time-cache"
 	wid := "sched-test-next-time-cache-wf"
