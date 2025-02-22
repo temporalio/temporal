@@ -379,62 +379,30 @@ func CreateRecordWorkflowTaskStartedResponse(
 	identity string,
 	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	response := &historyservice.RecordWorkflowTaskStartedResponse{}
-	response.WorkflowType = ms.GetWorkflowType()
-	executionInfo := ms.GetExecutionInfo()
-	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
-		response.PreviousStartedEventId = executionInfo.LastCompletedWorkflowTaskStartedEventId
-	}
-
-	// Starting workflowTask could result in different scheduledEventID if workflowTask was transient and new events came in
-	// before it was started.
-	response.ScheduledEventId = workflowTask.ScheduledEventID
-	response.StartedEventId = workflowTask.StartedEventID
-	response.StickyExecutionEnabled = ms.IsStickyTaskQueueSet()
-	response.NextEventId = ms.GetNextEventID()
-	response.Attempt = workflowTask.Attempt
-	response.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
-		Name: executionInfo.TaskQueue,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-	response.ScheduledTime = timestamppb.New(workflowTask.ScheduledTime)
-	response.StartedTime = timestamppb.New(workflowTask.StartedTime)
-	response.Version = workflowTask.Version
-
-	// TODO (alex-update): Transient needs to be renamed to "TransientOrSpeculative"
-	response.TransientWorkflowTask = ms.GetTransientWorkflowTaskInfo(workflowTask, identity)
-
-	currentBranchToken, err := ms.GetCurrentBranchToken()
+	rawResp, err := CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, ms, updateRegistry, workflowTask, identity, wtHeartbeat)
 	if err != nil {
 		return nil, err
 	}
-	response.BranchToken = currentBranchToken
-
-	qr := ms.GetQueryRegistry()
-	bufferedQueryIDs := qr.GetBufferedIDs()
-	if len(bufferedQueryIDs) > 0 {
-		response.Queries = make(map[string]*querypb.WorkflowQuery, len(bufferedQueryIDs))
-		for _, bufferedQueryID := range bufferedQueryIDs {
-			input, err := qr.GetQueryInput(bufferedQueryID)
-			if err != nil {
-				continue
-			}
-			response.Queries[bufferedQueryID] = input
-		}
+	resp := &historyservice.RecordWorkflowTaskStartedResponse{
+		WorkflowType:               rawResp.WorkflowType,
+		PreviousStartedEventId:     rawResp.PreviousStartedEventId,
+		ScheduledEventId:           rawResp.ScheduledEventId,
+		StartedEventId:             rawResp.StartedEventId,
+		NextEventId:                rawResp.NextEventId,
+		Attempt:                    rawResp.Attempt,
+		StickyExecutionEnabled:     rawResp.StickyExecutionEnabled,
+		TransientWorkflowTask:      rawResp.TransientWorkflowTask,
+		WorkflowExecutionTaskQueue: rawResp.WorkflowExecutionTaskQueue,
+		BranchToken:                rawResp.BranchToken,
+		ScheduledTime:              rawResp.ScheduledTime,
+		StartedTime:                rawResp.StartedTime,
+		Queries:                    rawResp.Queries,
+		Clock:                      rawResp.Clock,
+		Messages:                   rawResp.Messages,
+		Version:                    rawResp.Version,
+		NextPageToken:              rawResp.NextPageToken,
 	}
-
-	// If there are updates in the registry which were already sent to worker but still
-	// are not processed and not rejected by server, it means that WT that was used to
-	// deliver those updates failed, got timed out, or got lost.
-	// Resend these updates if this is not a heartbeat WT (includeAlreadySent = !wtHeartbeat).
-	// Heartbeat WT delivers only new updates that come while this WT was running (similar to queries and buffered events).
-	response.Messages = updateRegistry.Send(ctx, !wtHeartbeat, workflowTask.StartedEventID)
-
-	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE && len(response.GetMessages()) == 0 {
-		return nil, serviceerror.NewNotFound("No messages for speculative workflow task.")
-	}
-
-	return response, nil
+	return resp, nil
 }
 
 func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
