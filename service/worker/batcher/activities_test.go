@@ -66,9 +66,9 @@ func TestActivitiesSuite(t *testing.T) {
 
 const NumTotalEvents = 10
 
-// pattern contains either c or f representing completed or failed task
+// Pattern contains either c or f representing completed or failed task.
 // Schedule events for each task has id of NumTotalEvents*i + 1 where i is the index of the character
-// eventId for each task has id of NumTotalEvents*i+NumTotalEvents where is is the index of the character
+// EventId for each task has id of NumTotalEvents*i+NumTotalEvents where i is the index of the character
 func generateEventHistory(pattern string) *historypb.History {
 	events := make([]*historypb.HistoryEvent, 0)
 	for i, char := range pattern {

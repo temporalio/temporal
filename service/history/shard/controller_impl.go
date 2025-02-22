@@ -173,7 +173,7 @@ func (c *ControllerImpl) Status() int32 {
 	return atomic.LoadInt32(&c.status)
 }
 
-// GetShardByID returns a shard context for the given namespace and workflow.
+// GetShardByNamespaceWorkflow returns a shard context for the given namespace and workflow.
 // The shard context may not have acquired a rangeid lease yet.
 // Callers can use GetEngine on the shard to block on rangeid lease acquisition.
 func (c *ControllerImpl) GetShardByNamespaceWorkflow(

@@ -84,7 +84,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipEmptyInitially() {
 	s.Empty(resp.ActiveMembers)
 }
 
-// TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
+// TestClusterMembershipUpsertCanReadAny verifies that we can UpsertClusterMembership and read our result
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 	req := &p.UpsertClusterMembershipRequest{
 		HostID:       []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
@@ -107,7 +107,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanReadAny() {
 	s.waitForPrune(5 * time.Second)
 }
 
-// TestClusterMembershipUpsertCanRead verifies that we can UpsertClusterMembership and read our result
+// TestClusterMembershipUpsertCanPageRead verifies that we can UpsertClusterMembership and read our result
 func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertCanPageRead() {
 	expectedIds := make(map[string]int, 100)
 	for i := 0; i < 100; i++ {
