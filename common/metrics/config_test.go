@@ -215,5 +215,4 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 			assert.IsType(t, c.expectedType, handler)
 		})
 	}
-
 }
