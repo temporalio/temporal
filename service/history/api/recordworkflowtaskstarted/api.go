@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -61,6 +62,7 @@ func Invoke(
 	shardContext shard.Context,
 	config *configs.Config,
 	eventNotifier events.Notifier,
+	persistenceVisibilityMgr manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
@@ -261,6 +263,7 @@ func Invoke(
 		maxHistoryPageSize,
 		workflowConsistencyChecker,
 		eventNotifier,
+		persistenceVisibilityMgr,
 		resp,
 	)
 	if err != nil {
@@ -276,6 +279,7 @@ func setHistoryForRecordWfTaskStartedResp(
 	maximumPageSize int32,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
+	persistenceVisibilityMgr manager.VisibilityManager,
 	response *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory,
 ) (retError error) {
 
@@ -303,20 +307,41 @@ func setHistoryForRecordWfTaskStartedResp(
 		}
 	}()
 
-	rawHistory, persistenceToken, err := api.GetRawHistory(
-		ctx,
-		shardContext,
-		namespace.ID(workflowKey.GetNamespaceID()),
-		&commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
-		firstEventID,
-		nextEventID,
-		maximumPageSize,
-		nil,
-		response.GetTransientWorkflowTask(),
-		response.GetBranchToken(),
-	)
-	if err != nil {
-		return err
+	isInternalRawHistoryEnabled := shardContext.GetConfig().SendRawHistoryBetweenInternalServices()
+	var rawHistory []*commonpb.DataBlob
+	var persistenceToken []byte
+	var history *historypb.History
+	var err error
+	if isInternalRawHistoryEnabled {
+		rawHistory, persistenceToken, err = api.GetRawHistory(
+			ctx,
+			shardContext,
+			namespace.ID(workflowKey.GetNamespaceID()),
+			&commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
+			firstEventID,
+			nextEventID,
+			maximumPageSize,
+			nil,
+			response.GetTransientWorkflowTask(),
+			response.GetBranchToken(),
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		history, persistenceToken, err = api.GetHistory(
+			ctx,
+			shardContext,
+			namespace.ID(workflowKey.GetNamespaceID()),
+			&commonpb.WorkflowExecution{WorkflowId: workflowKey.GetWorkflowID(), RunId: workflowKey.GetRunID()},
+			firstEventID,
+			nextEventID,
+			maximumPageSize,
+			nil,
+			response.GetTransientWorkflowTask(),
+			response.GetBranchToken(),
+			persistenceVisibilityMgr,
+		)
 	}
 
 	var continuation []byte
@@ -333,21 +358,15 @@ func setHistoryForRecordWfTaskStartedResp(
 			return err
 		}
 	}
-	historyBlobs := make([][]byte, len(rawHistory))
-	for i, blob := range rawHistory {
-		historyBlobs[i] = blob.Data
-	}
-	// If we return an empty slice in RecordWorkflowTaskStartedResponseWithRawHistory, History field in deserialized
-	// RecordWorkflowTaskStartedResponse will be nil. This is for avoiding that.
-	if len(historyBlobs) == 0 {
-		history := historypb.History{}
-		blob, err := history.Marshal()
-		if err != nil {
-			return err
+	if isInternalRawHistoryEnabled {
+		historyBlobs := make([][]byte, len(rawHistory))
+		for i, blob := range rawHistory {
+			historyBlobs[i] = blob.Data
 		}
-		historyBlobs = append(historyBlobs, blob)
+		response.RawHistory = historyBlobs
+	} else {
+		response.History = history
 	}
-	response.History = historyBlobs
 	response.NextPageToken = continuation
 	return nil
 }

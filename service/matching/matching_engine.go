@@ -2600,7 +2600,21 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		VersionDirective:    task.event.Data.VersionDirective,
 	}
 
-	return e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
+	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
+	if err != nil {
+		return nil, err
+	}
+	// History service can send history events in response.RawHistory. This happens when history.sendRawHistoryBetweenInternalServices is enabled.
+	// In that case use that directly. This is done to avoid deserializing history event blobs in history service.
+	// We need to process search attributes here since history service will not be able to do that on raw events.
+	if resp.RawHistory != nil {
+		resp.History = resp.RawHistory
+		err := api.ProcessOutgoingSearchAttributes(e.saProvider, e.saMapperProvider, resp.History.Events, task.namespace, e.visibilityManager)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return resp, nil
 }
 
 func (e *matchingEngineImpl) recordActivityTaskStarted(

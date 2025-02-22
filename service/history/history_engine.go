@@ -560,6 +560,7 @@ func (e *historyEngineImpl) RecordWorkflowTaskStarted(
 		e.shardContext,
 		e.config,
 		e.eventNotifier,
+		e.persistenceVisibilityMgr,
 		e.workflowConsistencyChecker,
 	)
 }
