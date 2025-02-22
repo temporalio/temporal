@@ -2186,6 +2186,152 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	s.Subset(snap["nexus_outbound_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartOperation", "failure_source": "_unknown_", "outcome": "handler-error:BAD_REQUEST"})
 }
 
+func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+	callerTaskQueue := testcore.RandomizeStr("caller_" + s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	handlerWorkflowID := testcore.RandomizeStr(s.T().Name())
+
+	_, err := s.SdkClient().OperatorService().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_Worker_{
+					Worker: &nexuspb.EndpointTarget_Worker{
+						Namespace: s.Namespace().String(),
+						TaskQueue: callerTaskQueue,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	w := worker.New(s.SdkClient(), callerTaskQueue, worker.Options{})
+	svc := nexus.NewService("test")
+	handlerWf := func(ctx workflow.Context, input string) (string, error) {
+		workflow.GetSignalChannel(ctx, "terminate").Receive(ctx, nil)
+		return "hello " + input, nil
+	}
+
+	op := temporalnexus.NewWorkflowRunOperation(
+		"op",
+		handlerWf,
+		func(ctx context.Context, input string, opts nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+			var conflictPolicy enumspb.WorkflowIdConflictPolicy
+			if input == "conflict-policy-use-existing" {
+				conflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			}
+			return client.StartWorkflowOptions{
+				ID:                       handlerWorkflowID,
+				WorkflowIDConflictPolicy: conflictPolicy,
+			}, nil
+		},
+	)
+	svc.MustRegister(op)
+
+	type CallerWfOutput struct {
+		CntOk  int
+		CntErr int
+	}
+
+	callerWf := func(ctx workflow.Context, input string, numCalls int) (CallerWfOutput, error) {
+		output := CallerWfOutput{}
+		var retError error
+
+		wg := workflow.NewWaitGroup(ctx)
+		execOpCh := workflow.NewChannel(ctx)
+		client := workflow.NewNexusClient(endpointName, svc.Name)
+
+		for i := 0; i < numCalls; i++ {
+			wg.Add(1)
+			workflow.Go(ctx, func(ctx workflow.Context) {
+				defer wg.Done()
+				fut := client.ExecuteOperation(ctx, op, input, workflow.NexusOperationOptions{})
+				var exec workflow.NexusOperationExecution
+				err := fut.GetNexusOperationExecution().Get(ctx, &exec)
+				execOpCh.Send(ctx, nil)
+				if err != nil {
+					output.CntErr++
+					var handlerErr *nexus.HandlerError
+					var appErr *temporal.ApplicationError
+					if !errors.As(err, &handlerErr) {
+						retError = err
+					} else if !errors.As(handlerErr, &appErr) {
+						retError = err
+					} else if appErr.Type() != "WorkflowExecutionAlreadyStarted" {
+						retError = err
+					}
+					return
+				}
+				output.CntOk++
+				var res string
+				err = fut.Get(ctx, &res)
+				if err != nil {
+					retError = err
+				} else if res != "hello "+input {
+					retError = fmt.Errorf("unexpected result from handler workflow: %q", res)
+				}
+			})
+		}
+
+		for i := 0; i < numCalls; i++ {
+			execOpCh.Receive(ctx, nil)
+		}
+
+		// signal handler workflow so it will complete
+		workflow.SignalExternalWorkflow(ctx, handlerWorkflowID, "", "terminate", nil).Get(ctx, nil)
+		wg.Wait(ctx)
+		return output, retError
+	}
+
+	w.RegisterNexusService(svc)
+	w.RegisterWorkflow(handlerWf)
+	w.RegisterWorkflowWithOptions(callerWf, workflow.RegisterOptions{Name: "caller-wf"})
+	w.Start()
+	defer w.Stop()
+
+	testCases := []struct {
+		input       string
+		checkOutput func(t *testing.T, numCalls int, res CallerWfOutput)
+	}{
+		{
+			input: "conflict-policy-fail",
+			checkOutput: func(t *testing.T, numCalls int, res CallerWfOutput) {
+				s.EqualValues(1, res.CntOk)
+				s.EqualValues(numCalls-1, res.CntErr)
+			},
+		},
+		{
+			input: "conflict-policy-use-existing",
+			checkOutput: func(t *testing.T, numCalls int, res CallerWfOutput) {
+				s.EqualValues(numCalls, res.CntOk)
+			},
+		},
+	}
+
+	// number of concurrent Nexus operation calls
+	numCalls := 5
+	for _, tc := range testCases {
+		s.Run(tc.input, func() {
+			run, err := s.SdkClient().ExecuteWorkflow(
+				ctx,
+				client.StartWorkflowOptions{
+					TaskQueue: callerTaskQueue,
+				},
+				callerWf,
+				tc.input,
+				numCalls,
+			)
+			s.NoError(err)
+			var res CallerWfOutput
+			s.NoError(run.Get(ctx, &res))
+			tc.checkOutput(s.T(), numCalls, res)
+		})
+	}
+}
+
 func (s *NexusWorkflowTestSuite) sendNexusCompletionRequest(
 	ctx context.Context,
 	t *testing.T,
