@@ -1037,7 +1037,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondWorkflowTaskFailed"),
 	); err != nil {
-		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
+		serverFailure := failure.NewServerFailure(common.TerminationReasonFailureExceedsLimit.String(), true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
 		request.Failure = serverFailure
 	}
@@ -1205,7 +1205,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: request.TaskToken,
-			Failure:   failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true),
+			Failure:   failure.NewServerFailure(common.TerminationReasonHeartbeatExceedsLimit.String(), true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.historyClient.RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1298,7 +1298,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: token,
-			Failure:   failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true),
+			Failure:   failure.NewServerFailure(common.TerminationReasonHeartbeatExceedsLimit.String(), true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.historyClient.RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1376,7 +1376,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: request.TaskToken,
-			Failure:   failure.NewServerFailure(common.FailureReasonCompleteResultExceedsLimit, true),
+			Failure:   failure.NewServerFailure(common.TerminationReasonCompleteResultExceedsLimit.String(), true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.historyClient.RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1468,7 +1468,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		// result exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: token,
-			Failure:   failure.NewServerFailure(common.FailureReasonCompleteResultExceedsLimit, true),
+			Failure:   failure.NewServerFailure(common.TerminationReasonCompleteResultExceedsLimit.String(), true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.historyClient.RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1549,7 +1549,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 			tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
 		); err != nil {
 			// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
-			response.Failures = append(response.Failures, failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true))
+			response.Failures = append(response.Failures, failure.NewServerFailure(common.TerminationReasonHeartbeatExceedsLimit.String(), true))
 
 			// do not send heartbeat to history service
 			request.LastHeartbeatDetails = nil
@@ -1567,7 +1567,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
 	); err != nil {
-		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
+		serverFailure := failure.NewServerFailure(common.TerminationReasonFailureExceedsLimit.String(), true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
 		request.Failure = serverFailure
 
@@ -1653,7 +1653,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 			tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
 		); err != nil {
 			// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
-			response.Failures = append(response.Failures, failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true))
+			response.Failures = append(response.Failures, failure.NewServerFailure(common.TerminationReasonHeartbeatExceedsLimit.String(), true))
 
 			// do not send heartbeat to history service
 			request.LastHeartbeatDetails = nil
@@ -1671,7 +1671,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
 	); err != nil {
-		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
+		serverFailure := failure.NewServerFailure(common.TerminationReasonFailureExceedsLimit.String(), true)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
 		request.Failure = serverFailure
 
@@ -1737,7 +1737,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: request.TaskToken,
-			Failure:   failure.NewServerFailure(common.FailureReasonCancelDetailsExceedsLimit, true),
+			Failure:   failure.NewServerFailure(common.TerminationReasonCancelDetailsExceedsLimit.String(), true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.historyClient.RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1828,7 +1828,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		// details exceeds blob size limit, we would record it as failure
 		failRequest := &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: token,
-			Failure:   failure.NewServerFailure(common.FailureReasonCancelDetailsExceedsLimit, true),
+			Failure:   failure.NewServerFailure(common.TerminationReasonCancelDetailsExceedsLimit.String(), true),
 			Identity:  request.Identity,
 		}
 		_, err = wh.historyClient.RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
