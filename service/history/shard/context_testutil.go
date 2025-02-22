@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -161,11 +162,12 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		lifecycleCancel:     lifecycleCancel,
 		queueMetricEmitter:  sync.Once{},
 
-		state:              contextStateAcquired,
-		engineFuture:       future.NewFuture[Engine](),
-		shardInfo:          config.ShardInfo,
-		remoteClusterInfos: make(map[string]*remoteClusterInfo),
-		handoverNamespaces: make(map[namespace.Name]*namespaceHandOverInfo),
+		state:                 contextStateAcquired,
+		engineFuture:          future.NewFuture[Engine](),
+		shardInfo:             config.ShardInfo,
+		remoteClusterInfos:    make(map[string]*remoteClusterInfo),
+		handoverNamespaces:    make(map[namespace.Name]*namespaceHandOverInfo),
+		queueLastHeatbeatTime: make(map[int]time.Time),
 
 		clusterMetadata:         clusterMetadata,
 		timeSource:              t.TimeSource,

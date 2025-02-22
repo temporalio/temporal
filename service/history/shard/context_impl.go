@@ -154,6 +154,7 @@ type (
 		rwLock                        sync.RWMutex
 		lastUpdated                   time.Time
 		tasksCompletedSinceLastUpdate int
+		queueLastHeatbeatTime         map[int]time.Time // queue categoryID -> queue state last update time
 		shardInfo                     *persistencespb.ShardInfo
 
 		// All methods of the taskKeyManager, except the completionFn returned by
@@ -393,6 +394,7 @@ func (s *ContextImpl) SetQueueState(
 		func() {
 			categoryID := category.ID()
 			s.shardInfo.QueueStates[int32(categoryID)] = state
+			s.queueLastHeatbeatTime[categoryID] = s.timeSource.Now()
 		})
 }
 
@@ -412,6 +414,7 @@ func (s *ContextImpl) UpdateReplicationQueueReaderState(
 			s.shardInfo.QueueStates[int32(categoryID)] = queueState
 		}
 		queueState.ReaderStates[readerID] = readerState
+		s.queueLastHeatbeatTime[categoryID] = s.timeSource.Now()
 	})
 }
 
@@ -1315,8 +1318,13 @@ func (s *ContextImpl) emitShardInfoMetricsLogs() {
 	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
 
 Loop:
-	for categoryID, queueState := range queueStates {
-		category, ok := s.taskCategoryRegistry.GetCategoryByID(int(categoryID))
+	for categoryID, category := range s.taskCategoryRegistry.GetCategories() {
+
+		metricsHandler = metricsHandler.WithTags(metrics.TaskCategoryTag(category.Name()))
+		metrics.ShardInfoQueueHeartbeatDuration.With(metricsHandler).
+			Record(s.timeSource.Since(s.queueLastHeatbeatTime[categoryID]))
+
+		queueState, ok := queueStates[int32(categoryID)]
 		if !ok {
 			continue Loop
 		}
@@ -1334,9 +1342,7 @@ Loop:
 					tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
 				)
 			}
-			metrics.ShardInfoImmediateQueueLagHistogram.
-				With(metricsHandler).
-				Record(lag, metrics.TaskCategoryTag(category.Name()))
+			metrics.ShardInfoImmediateQueueLagHistogram.With(metricsHandler).Record(lag)
 
 		case tasks.CategoryTypeScheduled:
 			minTaskKey := getMinTaskKey(queueState)
@@ -1350,8 +1356,7 @@ Loop:
 					tag.ShardQueueAcks(category.Name(), minTaskKey.FireTime),
 				)
 			}
-			metrics.ShardInfoScheduledQueueLagTimer.With(metricsHandler).
-				Record(lag, metrics.TaskCategoryTag(category.Name()))
+			metrics.ShardInfoScheduledQueueLagTimer.With(metricsHandler).Record(lag)
 		default:
 			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
 		}
@@ -1870,6 +1875,10 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.shardInfo = shardInfo
 	s.remoteClusterInfos = remoteClusterInfos
 	s.taskKeyManager.setTaskMinScheduledTime(taskMinScheduledTime)
+	now := s.timeSource.Now()
+	for categoryID := range taskCategories {
+		s.queueLastHeatbeatTime[categoryID] = now
+	}
 
 	return nil
 }
@@ -2134,6 +2143,7 @@ func newContext(
 		lifecycleCancel:         lifecycleCancel,
 		engineFuture:            future.NewFuture[Engine](),
 		queueMetricEmitter:      sync.Once{},
+		queueLastHeatbeatTime:   make(map[int]time.Time),
 		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,
 	}
