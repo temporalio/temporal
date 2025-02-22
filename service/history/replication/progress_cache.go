@@ -83,7 +83,7 @@ func NewProgressCache(
 		TTL: config.ReplicationProgressCacheTTL(),
 	}
 	return &progressCacheImpl{
-		cache: cache.NewWithMetrics(maxSize, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))),
+		cache: cache.NewWithMetrics(maxSize, opts, handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)), true),
 	}
 }
 
