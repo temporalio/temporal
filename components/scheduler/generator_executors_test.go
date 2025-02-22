@@ -99,9 +99,9 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 
 	// Buffering should have resulted in buffered starts being applied to the
 	// Executor.
-	executorNode, err := schedulerNode.Child([]hsm.Key{scheduler.ExecutorMachineKey})
+	executorNode, err := schedulerNode.Child([]hsm.Key{scheduler.InvokerMachineKey})
 	require.NoError(t, err)
-	executor, err := hsm.MachineData[scheduler.Executor](executorNode)
+	executor, err := hsm.MachineData[scheduler.Invoker](executorNode)
 	require.NoError(t, err)
 
 	// We expect 5 buffered starts.
@@ -114,20 +114,21 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	require.True(t, newHighWatermark.After(highWatermark))
 	require.True(t, generator.NextInvocationTime.AsTime().After(newHighWatermark))
 
-	// We should have enqueued an Execute task, and another Buffer task.
+	// We should have enqueued a ProcessBuffer task on Invoker, and another Buffer
+	// task on Generator.
 	opLog, err := root.OpLog()
 	require.NoError(t, err)
 	require.Equal(t, 2, len(opLog))
 
-	// The execute task should be scheduled immediately.
+	// The ProcessBuffer task should be scheduled immediately.
 	output, ok := opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
 	require.Equal(t, 1, len(output.Output.Tasks))
 	task := output.Output.Tasks[0]
-	require.Equal(t, scheduler.TaskTypeExecute, task.Type())
+	require.Equal(t, scheduler.TaskTypeProcessBuffer, task.Type())
 	require.Equal(t, hsm.Immediate, task.Deadline())
 
-	// The buffer task should have a deadline on our next invocation time.
+	// The Buffer task should have a deadline on our next invocation time.
 	output, ok = opLog[1].(hsm.TransitionOperation)
 	require.True(t, ok)
 	require.Equal(t, 1, len(output.Output.Tasks))
