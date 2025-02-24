@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/deployment"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -580,7 +581,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
 		"matching service", uuid.New())
 	if err != nil {
-		var errTooMany deployment.ErrMaxTaskQueuesInDeployment
+		var errTooMany workerdeployment.ErrMaxTaskQueuesInDeployment
 		if errors.As(err, &errTooMany) {
 			c.deploymentRegisterError = errTooMany
 		}
