@@ -97,6 +97,7 @@ type (
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		BacklogTaskForwardTimeout  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		MaxTaskDeleteBatchSize     dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		TaskDeleteInterval         dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -145,6 +146,7 @@ type (
 		QueryPollerUnavailableWindow func() time.Duration
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
+		BacklogTaskForwardTimeout  func() time.Duration
 		RangeSize                  int64
 		NewMatcher                 bool
 		GetTasksBatchSize          func() int
@@ -247,6 +249,7 @@ func NewConfig(
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
+		BacklogTaskForwardTimeout:                dynamicconfig.MatchingBacklogTaskForwardTimeout.Get(dc),
 		MinTaskThrottlingBurstSize:               dynamicconfig.MatchingMinTaskThrottlingBurstSize.Get(dc),
 		MaxTaskDeleteBatchSize:                   dynamicconfig.MatchingMaxTaskDeleteBatchSize.Get(dc),
 		TaskDeleteInterval:                       dynamicconfig.MatchingTaskDeleteInterval.Get(dc),
@@ -342,6 +345,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		QueryPollerUnavailableWindow: config.QueryPollerUnavailableWindow,
 		LongPollExpirationInterval: func() time.Duration {
 			return config.LongPollExpirationInterval(ns.String(), taskQueueName, taskType)
+		},
+		BacklogTaskForwardTimeout: func() time.Duration {
+			return config.BacklogTaskForwardTimeout(ns.String(), taskQueueName, taskType)
 		},
 		MaxTaskDeleteBatchSize: func() int {
 			return config.MaxTaskDeleteBatchSize(ns.String(), taskQueueName, taskType)
