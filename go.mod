@@ -57,7 +57,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.44.1
+	go.temporal.io/api v1.45.0
 	go.temporal.io/sdk v1.32.1
 	go.temporal.io/version v0.3.0
 	go.uber.org/automaxprocs v1.6.0
@@ -169,6 +169,3 @@ require (
 	modernc.org/strutil v1.2.1 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
-
-// sj-poller-scaling-test branch
-replace go.temporal.io/api => go.temporal.io/api v1.44.2-0.20250212013937-b684b9822f7e
