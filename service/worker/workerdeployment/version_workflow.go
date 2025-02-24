@@ -432,6 +432,24 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+
+	v := workflow.GetVersion(ctx, "RefactorRegisterWorker", workflow.DefaultVersion, 1)
+	if v == workflow.DefaultVersion {
+		// First try to add version to worker-deployment workflow so it rejects in case we hit the limit
+		err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
+			DeploymentName: d.VersionState.Version.GetDeploymentName(),
+			UpdateArgs: &deploymentspb.AddVersionUpdateArgs{
+				Version:    worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
+				CreateTime: d.VersionState.CreateTime,
+			},
+			RequestId: d.newUUID(ctx),
+		}).Get(ctx, nil)
+		if err != nil {
+			// TODO (carly): make sure the error message that goes to the user is informative and has the limit mentioned
+			return temporal.NewApplicationError("too many versions in this deployment", errTooManyVersions)
+		}
+	}
+
 	// sync to user data
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
