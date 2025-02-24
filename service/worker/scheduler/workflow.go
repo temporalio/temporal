@@ -118,8 +118,6 @@ const (
 	nextTimeCacheV1Size = 10
 
 	impossibleHistorySize = 1e6 // just for testing, no real history can be this long
-
-	SpecFieldLengthLimit = 10 // 10 items per spec field on the ScheduleInfo memo
 )
 
 type (
@@ -176,6 +174,7 @@ type (
 		AllowZeroSleep                    bool                     // Whether to allow a zero-length timer. Used for workflow compatibility.
 		ReuseTimer                        bool                     // Whether to reuse timer. Used for workflow compatibility.
 		NextTimeCacheV2Size               int                      // Size of next time cache (v2)
+		SpecFieldLengthLimit              int                      // item limit per spec field on the ScheduleInfo memo
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
 
@@ -225,6 +224,7 @@ var (
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
+		SpecFieldLengthLimit:              10,
 		Version:                           ActionResultIncludesStatus,
 	}
 
@@ -1044,9 +1044,10 @@ func (s *scheduler) getListInfo(inWorkflowContext bool) *schedulepb.ScheduleList
 
 	if s.hasMinVersion(LimitMemoSpecSize) {
 		// Limit the number of specs and exclusions stored on the memo.
-		spec.ExcludeStructuredCalendar = util.SliceHead(spec.ExcludeStructuredCalendar, SpecFieldLengthLimit)
-		spec.Interval = util.SliceHead(spec.Interval, SpecFieldLengthLimit)
-		spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, SpecFieldLengthLimit)
+		limit := s.tweakables.SpecFieldLengthLimit
+		spec.ExcludeStructuredCalendar = util.SliceHead(spec.ExcludeStructuredCalendar, limit)
+		spec.Interval = util.SliceHead(spec.Interval, limit)
+		spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, limit)
 	}
 
 	return &schedulepb.ScheduleListInfo{

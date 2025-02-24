@@ -988,7 +988,7 @@ func (s *ScheduleFunctionalSuite) TestLimitMemoSpecSize() {
 	scheduler.CurrentTweakablePolicies.Version = scheduler.LimitMemoSpecSize
 	defer func() { scheduler.CurrentTweakablePolicies = prevTweakables }()
 
-	expectedLimit := scheduler.SpecFieldLengthLimit
+	expectedLimit := scheduler.CurrentTweakablePolicies.SpecFieldLengthLimit
 
 	sid := "sched-test-limit-memo-size"
 	wid := "sched-test-limit-memo-size-wf"
