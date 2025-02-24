@@ -289,7 +289,7 @@ func NewConfig(
 		NexusEndpointsRefreshInterval:     dynamicconfig.MatchingNexusEndpointsRefreshInterval.Get(dc),
 
 		PollerScalingBacklogAgeScaleUp:  dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Get(dc),
-		PollerScalingSyncMatchWaitTime:  dynamicconfig.MatchingPollerScalingSyncMatchWaitTime.Get(dc),
+		PollerScalingSyncMatchWaitTime:  dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
 		PollerScalingDecisionsPerSecond: dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),

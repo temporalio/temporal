@@ -679,7 +679,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	if numPollers == 0 {
 		numPollers = 1
 	}
-	if !c.pollerScalingRateLimiter.AllowN(pollStartTime, 1e6/numPollers) {
+	if !c.pollerScalingRateLimiter.AllowN(time.Now(), 1e6/numPollers) {
 		return nil
 	}
 

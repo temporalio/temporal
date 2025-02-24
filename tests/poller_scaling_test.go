@@ -134,8 +134,9 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		})
 		assert.NoError(t, err)
-		assert.NotNil(t, resp.PollerScalingDecision)
-		assert.GreaterOrEqual(t, int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+		if assert.NotNil(t, resp.PollerScalingDecision) {
+			assert.GreaterOrEqual(t, int32(1), resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+		}
 
 		// Start enough activities / nexus tasks to ensure we will see scale up decisions
 		commands := make([]*commandpb.Command, 0, 5)
@@ -171,8 +172,20 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 		assert.NoError(t, err)
 	}, 20*time.Second, 200*time.Millisecond)
 
-	// Wait a little time to ensure add rate exceeds dispatch rate & backlog age grows
-	time.Sleep(500 * time.Millisecond) //nolint:forbidigo // can't poll in an eventually, then we'd drain the tasks
+	// Wait to ensure add rate exceeds dispatch rate & backlog age grows
+	tqtyp := enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		res, err := feClient.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:      s.Namespace().String(),
+			TaskQueue:      &taskqueuepb.TaskQueue{Name: tq},
+			ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+			TaskQueueTypes: []enumspb.TaskQueueType{tqtyp},
+			ReportStats:    true,
+		})
+		assert.NoError(t, err)
+		stats := res.GetVersionsInfo()[""].TypesInfo[int32(tqtyp)].Stats
+		assert.GreaterOrEqual(t, stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
+	}, 20*time.Second, 200*time.Millisecond)
 
 	actResp, err := feClient.PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.Namespace().String(),

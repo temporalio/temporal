@@ -74,7 +74,7 @@ type (
 		// queue based on dynamic configs.
 		ShouldEmitGauges() bool
 		// MakePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state
-		// of the task queue and the task about to be returned. Does not modify inputs.
+		// of the task queue and the task about to be returned.
 		MakePollerScalingDecision(pollStartTime time.Time) *taskqueuepb.PollerScalingDecision
 	}
 )

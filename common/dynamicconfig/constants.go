@@ -1266,17 +1266,17 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before 
 a decision to scale up the number of pollers will be issued`,
 	)
-	MatchingPollerScalingSyncMatchWaitTime = NewTaskQueueDurationSetting(
+	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
 		"matching.pollerScalingSyncMatchWaitTime",
 		1*time.Second,
-		`MatchingPollerScalingSyncMatchWaitTime is the duration a sync-matched poller must exceed before
+		`MatchingPollerScalingWaitTime is the duration a sync-matched poller must exceed before
 a decision to scale down the number of pollers will be issued`,
 	)
 	MatchingPollerScalingDecisionsPerSecond = NewTaskQueueFloatSetting(
 		"matching.pollerScalingDecisionsPerSecond",
 		10,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
-second by one partition manager`,
+second per poller by one physical queue manager`,
 	)
 
 	// keys for history
