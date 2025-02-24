@@ -1260,6 +1260,24 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		100,
 		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registered in a single worker deployment version`,
 	)
+	MatchingPollerScalingBacklogAgeScaleUp = NewTaskQueueDurationSetting(
+		"matching.pollerScalingMinimumBacklog",
+		200*time.Millisecond,
+		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before 
+a decision to scale up the number of pollers will be issued`,
+	)
+	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
+		"matching.pollerScalingSyncMatchWaitTime",
+		1*time.Second,
+		`MatchingPollerScalingWaitTime is the duration a sync-matched poller must exceed before
+a decision to scale down the number of pollers will be issued`,
+	)
+	MatchingPollerScalingDecisionsPerSecond = NewTaskQueueFloatSetting(
+		"matching.pollerScalingDecisionsPerSecond",
+		10,
+		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
+second per poller by one physical queue manager`,
+	)
 
 	// keys for history
 
