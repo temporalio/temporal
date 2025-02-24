@@ -32,8 +32,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/service/worker/workerdeployment"
-
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -54,6 +52,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/deployment"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
