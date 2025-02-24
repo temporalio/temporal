@@ -236,8 +236,10 @@ func (r *registry) getAllNamespace() []*namespace.Namespace {
 
 func (r *registry) getAllNamespaceLocked() []*namespace.Namespace {
 	result := make([]*namespace.Namespace, len(r.idToNamespace))
+	i := 0
 	for _, value := range r.idToNamespace {
-		result = append(result, value)
+		result[i] = value
+		i++
 	}
 	return result
 }
