@@ -230,7 +230,7 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 
 	// starting and updating the deployment version workflow, which in turn starts a deployment workflow.
 	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, deploymentName, buildId, &updatepb.Request{
-		Input: &updatepb.Input{Name: RegisterWorkerInDeployment, Args: updatePayload},
+		Input: &updatepb.Input{Name: RegisterWorkerInDeploymentVersion, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	}, identity, requestID)
 	if err != nil {
