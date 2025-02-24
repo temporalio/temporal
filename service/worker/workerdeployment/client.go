@@ -163,6 +163,7 @@ type Client interface {
 	) error
 
 	// Used internally by the Worker Deployment Version workflow in its AddVersionToWorkerDeployment Activity
+	// to-be-deprecated
 	AddVersionToWorkerDeployment(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -186,6 +187,15 @@ type Client interface {
 		namespaceEntry *namespace.Namespace,
 		prevCurrentVersion, newVersion string,
 	) (bool, error)
+
+	// Used internally by the Worker Deployment workflow in its RegisterWorkerInVersion Activity
+	// to register a task-queue worker in a version.
+	RegisterWorkerInVersion(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		args *deploymentspb.RegisterWorkerInVersionArgs,
+		identity string,
+	) error
 }
 
 type ErrMaxTaskQueuesInDeployment struct{ error }
@@ -219,18 +229,22 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	//revive:disable-next-line:defer
 	defer d.record("RegisterTaskQueueWorker", &retErr, taskQueueName, taskQueueType, identity)()
 
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInVersionArgs{
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
 		TaskQueueName: taskQueueName,
 		TaskQueueType: taskQueueType,
 		MaxTaskQueues: int32(d.maxTaskQueuesInDeploymentVersion(namespaceEntry.Name().String())),
+		Version: &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        buildId,
+		},
 	})
 	if err != nil {
 		return err
 	}
 
 	// starting and updating the deployment version workflow, which in turn starts a deployment workflow.
-	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, deploymentName, buildId, &updatepb.Request{
-		Input: &updatepb.Input{Name: RegisterWorkerInDeploymentVersion, Args: updatePayload},
+	outcome, err := d.updateWithStartWorkerDeployment(ctx, namespaceEntry, deploymentName, buildId, &updatepb.Request{
+		Input: &updatepb.Input{Name: RegisterWorkerInWorkerDeployment, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	}, identity, requestID)
 	if err != nil {
@@ -978,6 +992,56 @@ func (d *ClientImpl) update(
 	return outcome, err
 }
 
+func (d *ClientImpl) updateWithStartWorkerDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName, buildID string,
+	updateRequest *updatepb.Request,
+	identity string,
+	requestID string,
+) (*updatepb.Outcome, error) {
+	err := validateVersionWfParams(WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+	err = validateVersionWfParams(WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
+	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
+
+	// TODO (Carly): either max page size or default page size is 1000, so if there are > 1000 this would not catch it
+	deps, _, err := d.ListWorkerDeployments(ctx, namespaceEntry, 0, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(deps) >= d.maxDeployments(namespaceEntry.Name().String()) {
+		return nil, serviceerror.NewFailedPrecondition("maximum deployments in namespace, delete manually to continue deploying.")
+	}
+
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  namespaceEntry.Name().String(),
+		NamespaceId:    namespaceEntry.ID().String(),
+		DeploymentName: deploymentName,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return d.updateWithStart(
+		ctx,
+		namespaceEntry,
+		WorkerDeploymentWorkflowType,
+		workflowID,
+		nil,
+		input,
+		updateRequest,
+		identity,
+		requestID,
+	)
+}
+
 func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
@@ -1381,7 +1445,9 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 			Versions: &taskqueuepb.TaskQueueVersionSelection{
 				BuildIds: []string{prevCurrentVersionInfo.GetVersion()}, // pretending the version string is a build id
 			},
-			TaskQueueType: taskQueue.Type, // since request doesn't pass through frontend, this field is not automatically populated
+			// Since request doesn't pass through frontend, this field is not automatically populated.
+			// Moreover, DescribeTaskQueueEnhanced requires this field to be set to WORKFLOW type.
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			ReportStats:   true,
 		},
 	}
@@ -1423,4 +1489,45 @@ func (d *ClientImpl) checkForMissingTaskQueues(prevCurrentVersionInfo, newCurren
 	}
 
 	return missingTaskQueues, nil
+}
+
+func (d *ClientImpl) RegisterWorkerInVersion(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	args *deploymentspb.RegisterWorkerInVersionArgs,
+	identity string,
+) error {
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(args.Version)
+	if err != nil {
+		return serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
+	}
+
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInVersionArgs{
+		TaskQueueName: args.TaskQueueName,
+		TaskQueueType: args.TaskQueueType,
+		MaxTaskQueues: args.MaxTaskQueues,
+	})
+	if err != nil {
+		return err
+	}
+
+	requestID := uuid.New()
+	outcome, err := d.updateWithStartWorkerDeploymentVersion(ctx, namespaceEntry, versionObj.DeploymentName, versionObj.BuildId, &updatepb.Request{
+		Input: &updatepb.Input{Name: RegisterWorkerInDeploymentVersion, Args: updatePayload},
+		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+	}, identity, requestID)
+	if err != nil {
+		return err
+	}
+
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
+		// translate to a non-retryable error
+		return temporal.NewNonRetryableApplicationError(failure.Message, errMaxTaskQueuesInVersionType, serviceerror.NewFailedPrecondition(failure.Message))
+	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
+		return nil
+	} else if failure != nil {
+		return ErrRegister{error: errors.New(failure.Message)}
+	}
+
+	return nil
 }

@@ -53,6 +53,7 @@ const (
 	RegisterWorkerInDeploymentVersion = "register-task-queue-worker"       // for Worker Deployment Version wf
 	SyncVersionState                  = "sync-version-state"               // for Worker Deployment Version wfs
 	UpdateVersionMetadata             = "update-version-metadata"          // for Worker Deployment Version wfs
+	RegisterWorkerInWorkerDeployment  = "register-worker-in-deployment"    // for Worker Deployment wfs
 	SetCurrentVersion                 = "set-current-version"              // for Worker Deployment wfs
 	SetRampingVersion                 = "set-ramping-version"              // for Worker Deployment wfs
 	AddVersionToWorkerDeployment      = "add-version-to-worker-deployment" // for Worker Deployment wfs
