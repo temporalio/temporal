@@ -35,6 +35,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/future"
@@ -317,6 +318,31 @@ func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 
 func (c *priBacklogManagerImpl) TotalApproximateBacklogCount() int64 {
 	return c.db.getTotalApproximateBacklogCount()
+}
+
+func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
+	// TODO(pri): this is a data race, it should only be read by taskWriterLoop
+	idBlock := &taskqueuepb.TaskIdBlock{
+		StartId: c.taskWriter.taskIDBlock.start,
+		EndId:   c.taskWriter.taskIDBlock.end,
+	}
+
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	status := make([]*taskqueuespb.InternalTaskQueueStatus, len(c.subqueues))
+	for i, r := range c.subqueues {
+		readLevel, ackLevel := r.getLevels()
+		status[i] = &taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel:               readLevel,
+			AckLevel:                ackLevel,
+			TaskIdBlock:             idBlock,
+			LoadedTasks:             int64(r.getLoadedTasks()),
+			MaxReadLevel:            c.db.GetMaxReadLevel(i),
+			ApproximateBacklogCount: c.db.getApproximateBacklogCount(i),
+		}
+	}
+	return status
 }
 
 func (c *priBacklogManagerImpl) respoolTaskAfterError(task *persistencespb.TaskInfo) error {
