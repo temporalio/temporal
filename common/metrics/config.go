@@ -61,6 +61,11 @@ type (
 		// Each value in values list will white-list tag values to be reported as usual.
 		ExcludeTags map[string][]string `yaml:"excludeTags"`
 		// Prefix sets the prefix to all outgoing metrics
+		// When migrating from tally to opentelemetry and to be backward compatible with the existing metric names,
+		// if the prefix has a "_" suffix, add an additional "_" at the end.
+		// i.e. "temporal" -> "temporal", but "temporal_" -> "temporal__", "temporal__" -> "temporal___".
+		// This is because tally implementation blindly adds "_" as the separator between the prefix
+		// and the metric name, while opentelemetry implementation only adds it if it's not already there.
 		Prefix string `yaml:"prefix"`
 
 		// DefaultHistogramBoundaries defines the default histogram bucket

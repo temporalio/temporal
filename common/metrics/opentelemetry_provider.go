@@ -67,8 +67,10 @@ func NewOpenTelemetryProvider(
 	if clientConfig.WithoutCounterSuffix {
 		exporterOpts = append(exporterOpts, exporters.WithoutCounterSuffixes())
 	}
+	if clientConfig.Prefix != "" {
+		exporterOpts = append(exporterOpts, exporters.WithNamespace(clientConfig.Prefix))
+	}
 	exporter, err := exporters.New(exporterOpts...)
-
 	if err != nil {
 		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
 		return nil, err

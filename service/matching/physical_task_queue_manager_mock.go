@@ -289,20 +289,6 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) Stop(arg0 any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Stop), arg0)
 }
 
-// String mocks base method.
-func (m *MockphysicalTaskQueueManager) String() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "String")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// String indicates an expected call of String.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) String() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "String", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).String))
-}
-
 // TrySyncMatch mocks base method.
 func (m *MockphysicalTaskQueueManager) TrySyncMatch(ctx context.Context, task *internalTask) (bool, error) {
 	m.ctrl.T.Helper()

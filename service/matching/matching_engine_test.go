@@ -254,7 +254,7 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 }
 
 func (s *matchingEngineSuite) TestAckManager() {
-	backlogMgr := newBacklogMgr(s.controller, false)
+	backlogMgr := newBacklogMgr(s.T(), s.controller, false)
 	m := newAckManager(backlogMgr.db, backlogMgr.logger)
 
 	m.setAckLevel(100)
@@ -319,7 +319,7 @@ func (s *matchingEngineSuite) TestAckManager() {
 }
 
 func (s *matchingEngineSuite) TestAckManager_Sort() {
-	backlogMgr := newBacklogMgr(s.controller, false)
+	backlogMgr := newBacklogMgr(s.T(), s.controller, false)
 	m := newAckManager(backlogMgr.db, backlogMgr.logger)
 
 	const t0 = 100
@@ -2265,8 +2265,8 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 			s.Truef(-3 <= delta && delta <= 1, "remaining %d, getTaskCount %d", remaining, s.taskManager.getTaskCount(dbq))
 		}
 		// ensure full gc for the next case (twice in case one doesn't get the gc lock)
-		tlMgr.backlogMgr.taskGC.RunNow(context.Background(), tlMgr.backlogMgr.taskAckManager.getAckLevel())
-		tlMgr.backlogMgr.taskGC.RunNow(context.Background(), tlMgr.backlogMgr.taskAckManager.getAckLevel())
+		tlMgr.backlogMgr.taskGC.RunNow(tlMgr.backlogMgr.taskAckManager.getAckLevel())
+		tlMgr.backlogMgr.taskGC.RunNow(tlMgr.backlogMgr.taskAckManager.getAckLevel())
 	}
 }
 
@@ -3336,7 +3336,7 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 
 	// force GC to make sure all the acked tasks are cleaned up before validating the count
-	pgMgr.backlogMgr.taskGC.RunNow(context.Background(), pgMgr.backlogMgr.taskAckManager.getAckLevel())
+	pgMgr.backlogMgr.taskGC.RunNow(pgMgr.backlogMgr.taskAckManager.getAckLevel())
 	s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), pgMgr.backlogMgr.db.getApproximateBacklogCount())
 }
 

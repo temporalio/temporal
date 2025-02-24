@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -40,7 +39,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/internal/goro"
 )
 
 type (
@@ -66,13 +64,11 @@ type (
 
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
-		status      int32
 		backlogMgr  *backlogManagerImpl
 		config      *taskQueueConfig
 		appendCh    chan *writeTaskRequest
 		taskIDBlock taskIDBlock
 		logger      log.Logger
-		writeLoop   *goro.Handle
 		idAlloc     idBlockAllocator
 	}
 )
@@ -89,50 +85,26 @@ func newTaskWriter(
 	backlogMgr *backlogManagerImpl,
 ) *taskWriter {
 	return &taskWriter{
-		status:      common.DaemonStatusInitialized,
 		backlogMgr:  backlogMgr,
 		config:      backlogMgr.config,
 		appendCh:    make(chan *writeTaskRequest, backlogMgr.config.OutstandingTaskAppendsThreshold()),
 		taskIDBlock: noTaskIDs,
 		logger:      backlogMgr.logger,
 		idAlloc:     backlogMgr.db,
-		writeLoop:   goro.NewHandle(backlogMgr.contextInfoProvider(context.Background())),
 	}
 }
 
 // Start taskWriter background goroutine.
 func (w *taskWriter) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&w.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
-		return
-	}
-
-	w.writeLoop.Go(w.taskWriterLoop)
+	go w.taskWriterLoop()
 }
 
-// Stop stops the taskWriter.
-// Note that this does not wait until the background goroutine has exited!
-func (w *taskWriter) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&w.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
-		return
-	}
-	w.writeLoop.Cancel()
-}
-
-func (w *taskWriter) initReadWriteState(ctx context.Context) error {
+func (w *taskWriter) initReadWriteState() error {
 	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second).
 		WithMaximumInterval(10 * time.Second).
 		WithExpirationInterval(backoff.NoInterval)
 
-	state, err := w.renewLeaseWithRetry(
-		ctx, retryForever, common.IsPersistenceTransientError)
+	state, err := w.renewLeaseWithRetry(retryForever, common.IsPersistenceTransientError)
 	if err != nil {
 		return err
 	}
@@ -147,7 +119,7 @@ func (w *taskWriter) appendTask(
 ) (*persistence.CreateTasksResponse, error) {
 
 	select {
-	case <-w.writeLoop.Done():
+	case <-w.backlogMgr.tqCtx.Done():
 		return nil, errShutdown
 	default:
 		// noop
@@ -166,7 +138,7 @@ func (w *taskWriter) appendTask(
 		case r := <-ch:
 			metrics.TaskWriteLatencyPerTaskQueue.With(w.backlogMgr.metricsHandler).Record(time.Since(startTime))
 			return r.persistenceResponse, r.err
-		case <-w.writeLoop.Done():
+		case <-w.backlogMgr.tqCtx.Done():
 			// if we are shutting down, this request will never make
 			// it to cassandra, just bail out and fail this request
 			return nil, errShutdown
@@ -181,12 +153,12 @@ func (w *taskWriter) appendTask(
 	}
 }
 
-func (w *taskWriter) allocTaskIDs(ctx context.Context, count int) ([]int64, error) {
+func (w *taskWriter) allocTaskIDs(count int) ([]int64, error) {
 	result := make([]int64, count)
 	for i := 0; i < count; i++ {
 		if w.taskIDBlock.start > w.taskIDBlock.end {
 			// we ran out of current allocation block
-			newBlock, err := w.allocTaskIDBlock(ctx, w.taskIDBlock.end)
+			newBlock, err := w.allocTaskIDBlock(w.taskIDBlock.end)
 			if err != nil {
 				return nil, err
 			}
@@ -199,12 +171,11 @@ func (w *taskWriter) allocTaskIDs(ctx context.Context, count int) ([]int64, erro
 }
 
 func (w *taskWriter) appendTasks(
-	ctx context.Context,
 	taskIDs []int64,
 	reqs []*writeTaskRequest,
 ) (*persistence.CreateTasksResponse, error) {
 
-	resp, err := w.backlogMgr.db.CreateTasks(ctx, taskIDs, reqs)
+	resp, err := w.backlogMgr.db.CreateTasks(w.backlogMgr.tqCtx, taskIDs, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
 		w.logger.Error("Persistent store operation failure",
@@ -217,8 +188,8 @@ func (w *taskWriter) appendTasks(
 	return resp, nil
 }
 
-func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
-	err := w.initReadWriteState(ctx)
+func (w *taskWriter) taskWriterLoop() {
+	err := w.initReadWriteState()
 	w.backlogMgr.SetInitializedError(err)
 
 writerLoop:
@@ -230,17 +201,17 @@ writerLoop:
 			reqs = w.getWriteBatch(reqs)
 			batchSize := len(reqs)
 
-			taskIDs, err := w.allocTaskIDs(ctx, batchSize)
+			taskIDs, err := w.allocTaskIDs(batchSize)
 			if err != nil {
 				w.sendWriteResponse(reqs, nil, err)
 				continue writerLoop
 			}
 
-			resp, err := w.appendTasks(ctx, taskIDs, reqs)
+			resp, err := w.appendTasks(taskIDs, reqs)
 			w.sendWriteResponse(reqs, resp, err)
 
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-w.backlogMgr.tqCtx.Done():
+			return
 		}
 	}
 }
@@ -274,17 +245,16 @@ func (w *taskWriter) sendWriteResponse(
 }
 
 func (w *taskWriter) renewLeaseWithRetry(
-	ctx context.Context,
 	retryPolicy backoff.RetryPolicy,
 	retryErrors backoff.IsRetryable,
 ) (taskQueueState, error) {
 	var newState taskQueueState
-	op := func(context.Context) (err error) {
+	op := func(ctx context.Context) (err error) {
 		newState, err = w.idAlloc.RenewLease(ctx)
 		return
 	}
 	metrics.LeaseRequestPerTaskQueueCounter.With(w.backlogMgr.metricsHandler).Record(1)
-	err := backoff.ThrottleRetryContext(ctx, op, retryPolicy, retryErrors)
+	err := backoff.ThrottleRetryContext(w.backlogMgr.tqCtx, op, retryPolicy, retryErrors)
 	if err != nil {
 		metrics.LeaseFailurePerTaskQueueCounter.With(w.backlogMgr.metricsHandler).Record(1)
 		return newState, err
@@ -292,7 +262,7 @@ func (w *taskWriter) renewLeaseWithRetry(
 	return newState, nil
 }
 
-func (w *taskWriter) allocTaskIDBlock(ctx context.Context, prevBlockEnd int64) (taskIDBlock, error) {
+func (w *taskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
 	currBlock := rangeIDToTaskIDBlock(w.idAlloc.RangeID(), w.config.RangeSize)
 	if currBlock.end != prevBlockEnd {
 		return taskIDBlock{},
@@ -303,7 +273,7 @@ func (w *taskWriter) allocTaskIDBlock(ctx context.Context, prevBlockEnd int64) (
 				currBlock,
 			)
 	}
-	state, err := w.renewLeaseWithRetry(ctx, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	state, err := w.renewLeaseWithRetry(persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		if w.backlogMgr.signalIfFatal(err) {
 			return taskIDBlock{}, errShutdown

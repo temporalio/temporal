@@ -79,7 +79,6 @@ type (
 		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) (*matchingservice.DescribeTaskQueueResponse, error)
 		Describe(ctx context.Context, buildIds map[string]bool, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
-		String() string
 		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
 		// TimeSinceLastFanOut returns the time since the last DescribeTaskQueuePartition fan out

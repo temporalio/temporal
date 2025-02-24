@@ -88,6 +88,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -760,6 +761,21 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			NamespaceId: namespaceID.String(),
 			Request:     request,
 		})
+	if err != nil {
+		return nil, err
+	}
+
+	isCloseEventOnly := request.HistoryEventFilterType == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
+	err = api.ProcessInternalRawHistory(
+		ctx,
+		wh.saProvider,
+		wh.saMapperProvider,
+		response,
+		wh.visibilityMgr,
+		wh.versionChecker,
+		namespace.Name(request.GetNamespace()),
+		isCloseEventOnly,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -5109,7 +5125,13 @@ func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 	return nil
 }
 
-func (wh *WorkflowHandler) validateOnConflictOptions(_ *workflowpb.OnConflictOptions) error {
+func (wh *WorkflowHandler) validateOnConflictOptions(opts *workflowpb.OnConflictOptions) error {
+	if opts == nil {
+		return nil
+	}
+	if opts.AttachCompletionCallbacks && !opts.AttachRequestId {
+		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
+	}
 	return nil
 }
 

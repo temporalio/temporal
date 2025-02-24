@@ -486,7 +486,6 @@ func (d *ClientImpl) SetCurrentVersion(
 	//revive:disable-next-line:defer
 	defer d.record("SetCurrentVersion", &retErr, namespaceEntry.Name(), version, identity)()
 
-	requestID := uuid.New()
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromString(version)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
@@ -512,13 +511,16 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, err
 	}
 
+	// Generating a new updateID for each request. No-ops are handled by the worker-deployment workflow.
+	updateID := uuid.New()
+
 	outcome, err := d.update(
 		ctx,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+			Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
 		},
 	)
 	if err != nil {
@@ -528,6 +530,11 @@ func (d *ClientImpl) SetCurrentVersion(
 	var res deploymentspb.SetCurrentVersionResponse
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		res.PreviousVersion = version
+		// Returning the latest conflict token
+		details := failure.GetApplicationFailureInfo().GetDetails().GetPayloads()
+		if len(details) > 0 {
+			res.ConflictToken = details[0].GetData()
+		}
 		return &res, nil
 	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 		return nil, serviceerror.NewNotFound(errVersionNotFound)
@@ -559,7 +566,7 @@ func (d *ClientImpl) SetRampingVersion(
 ) (_ *deploymentspb.SetRampingVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.record("SetRampingVersion", &retErr, namespaceEntry.Name(), version, percentage, identity)()
-	requestID := uuid.New()
+
 	var err error
 	if version != "" {
 		var versionObj *deploymentspb.WorkerDeploymentVersion
@@ -590,13 +597,16 @@ func (d *ClientImpl) SetRampingVersion(
 		return nil, err
 	}
 
+	// Generating a new updateID for each request. No-ops are handled by the worker-deployment workflow.
+	updateID := uuid.New()
+
 	outcome, err := d.update(
 		ctx,
 		namespaceEntry,
 		workflowID,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetRampingVersion, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
+			Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
 		},
 	)
 	if err != nil {
@@ -607,6 +617,13 @@ func (d *ClientImpl) SetRampingVersion(
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		res.PreviousVersion = version
 		res.PreviousPercentage = percentage
+
+		// Returning the latest conflict token
+		details := failure.GetApplicationFailureInfo().GetDetails().GetPayloads()
+		if len(details) > 0 {
+			res.ConflictToken = details[0].GetData()
+		}
+
 		return &res, nil
 	} else if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errVersionNotFound {
 		return nil, serviceerror.NewNotFound(errVersionNotFound)
