@@ -122,7 +122,7 @@ func newPriTaskMatcher(
 ) *priTaskMatcher {
 	tm := &priTaskMatcher{
 		config:         config,
-		data:           newMatcherData(config),
+		data:           newMatcherData(config, fwdr != nil),
 		tqCtx:          tqCtx,
 		metricsHandler: metricsHandler,
 		partition:      partition,
