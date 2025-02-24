@@ -325,9 +325,6 @@ func setHistoryForRecordWfTaskStartedResp(
 			response.GetTransientWorkflowTask(),
 			response.GetBranchToken(),
 		)
-		if err != nil {
-			return err
-		}
 	} else {
 		history, persistenceToken, err = api.GetHistory(
 			ctx,
@@ -342,6 +339,9 @@ func setHistoryForRecordWfTaskStartedResp(
 			response.GetBranchToken(),
 			persistenceVisibilityMgr,
 		)
+	}
+	if err != nil {
+		return err
 	}
 
 	var continuation []byte
