@@ -528,7 +528,8 @@ func (d *matcherData) finishMatchAfterPollForward(poller *waitingPoller, task *i
 // isBacklogNegligible returns true if the age of the task backlog is less than the threshold.
 // call with lock held.
 func (d *matcherData) isBacklogNegligible() bool {
-	return d.tasks.ages.getAge() < d.config.BacklogNegligibleAge()
+	t := d.tasks.ages.oldestTime()
+	return t.IsZero() || time.Since(t) < d.config.BacklogNegligibleAge()
 }
 
 func (d *matcherData) TimeSinceLastPoll() time.Duration {

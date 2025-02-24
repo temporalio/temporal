@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 )
 
 // this retry policy is currently only used for matching persistence operations
@@ -276,12 +277,19 @@ func (c *priBacklogManagerImpl) BacklogCountHint() (total int64) {
 func (c *priBacklogManagerImpl) BacklogHeadAge() (age time.Duration) {
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
-	// TODO(pri): expose method for oldest absolute time instead of age,
-	// so we only need one call to time.Since
-	for _, r := range c.subqueues {
-		age = max(age, r.getBacklogHeadAge())
+
+	var t time.Time
+	for i, r := range c.subqueues {
+		if i == 0 {
+			t = r.getBacklogHead()
+		} else {
+			t = util.MinTime(t, r.getBacklogHead())
+		}
 	}
-	return
+	if t.IsZero() {
+		return emptyBacklogAge
+	}
+	return time.Since(t)
 }
 
 func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {

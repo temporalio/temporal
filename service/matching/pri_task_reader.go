@@ -124,10 +124,10 @@ func (tr *priTaskReader) Signal() {
 	}
 }
 
-func (tr *priTaskReader) getBacklogHeadAge() time.Duration {
+func (tr *priTaskReader) getBacklogHead() time.Time {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	return max(0, tr.backlogAge.getAge()) // return 0 instead of -1
+	return tr.backlogAge.oldestTime()
 }
 
 func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
