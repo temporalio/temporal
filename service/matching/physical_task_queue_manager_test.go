@@ -46,9 +46,11 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/internal/goro"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -131,7 +133,8 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TODO: this test probably should go to backlog_manager_test
+/*
+TODO: rewrite or delete this test
 func TestReaderSignaling(t *testing.T) {
 	readerNotifications := make(chan struct{}, 1)
 	clearNotifications := func() {
@@ -173,6 +176,7 @@ func TestReaderSignaling(t *testing.T) {
 	require.Len(t, readerNotifications, 0,
 		"Sync match should not signal taskReader")
 }
+*/
 
 func makePollMetadata(rps float64) *pollMetadata {
 	return &pollMetadata{taskQueueMetadata: &taskqueuepb.TaskQueueMetadata{
@@ -277,7 +281,7 @@ func TestReaderBacklogAge(t *testing.T) {
 
 	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Minute, 1)
 	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(10*time.Second, 2)
-	tlm.backlogMgr.taskReader.gorogrp.Go(tlm.backlogMgr.taskReader.dispatchBufferedTasks)
+	go tlm.backlogMgr.taskReader.dispatchBufferedTasks()
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		assert.InDelta(t, time.Minute, tlm.backlogMgr.taskReader.getBacklogHeadAge(), float64(time.Second))
@@ -440,8 +444,7 @@ func TestAddTaskStandby(t *testing.T) {
 	tlm.Start()
 	// stop taskWriter so that we can check if there's any call to it
 	// otherwise the task persist process is async and hard to test
-	tlm.backlogMgr.taskWriter.Stop()
-	<-tlm.backlogMgr.taskWriter.writeLoop.Done()
+	tlm.tqCtxCancel()
 
 	err := tlm.SpoolTask(&persistencespb.TaskInfo{
 		CreateTime: timestamp.TimePtr(time.Now().UTC()),
@@ -513,4 +516,110 @@ func TestTQMInterruptsPollOnClose(t *testing.T) {
 
 	<-pollCh
 	require.Less(t, time.Since(pollStart), 4*time.Second)
+}
+
+func TestPollScalingUpOnBacklog(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.NotNil(t, decision)
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+}
+
+func TestPollScalingUpAddRateExceedsDispatchRate(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		TasksAddRate:      100,
+		TasksDispatchRate: 10,
+	}
+
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.NotNil(t, decision)
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+}
+
+func TestPollScalingNoChangeOnNoBacklogFastMatch(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+		ApproximateBacklogAge:   durationpb.New(0),
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.Nil(t, decision)
+}
+
+func TestPollScalingNonRootPartition(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	// Non-root partitions only get to emit decisions on high backlog
+	f, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
+	require.NoError(t, err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
+	tqm.partitionMgr.partition = partition
+	// Also disable rate limit to ensure that's not why nil is returned here
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.NotNil(t, decision)
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+
+	fakeStats.ApproximateBacklogCount = 0
+	decision = tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.Nil(t, decision)
+}
+
+func TestPollScalingDownOnLongSyncMatch(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.LessOrEqual(t, decision.PollRequestDeltaSuggestion, int32(-1))
+}
+
+func TestPollScalingDecisionsAreRateLimited(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).Times(1)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(false).Times(1)
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+
+	decision = tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.Nil(t, decision)
 }

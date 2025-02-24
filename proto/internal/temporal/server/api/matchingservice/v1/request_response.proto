@@ -77,6 +77,7 @@ message PollWorkflowTaskQueueResponse {
     // a workflow task. Sticky query tasks will not include any history.
     temporal.api.history.v1.History history = 19;
     bytes next_page_token = 20;
+    temporal.api.taskqueue.v1.PollerScalingDecision poller_scaling_decision = 21;
 }
 
 message PollActivityTaskQueueRequest {
@@ -107,6 +108,7 @@ message PollActivityTaskQueueResponse {
     temporal.api.common.v1.WorkflowType workflow_type = 14;
     string workflow_namespace = 15;
     temporal.api.common.v1.Header header = 16;
+    temporal.api.taskqueue.v1.PollerScalingDecision poller_scaling_decision = 17;
 }
 
 message AddWorkflowTaskRequest {

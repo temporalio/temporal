@@ -326,6 +326,11 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	}
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
+
+	if task != nil {
+		task.pollerScalingDecision = dbq.MakePollerScalingDecision(pollMetadata.localPollStartTime)
+	}
+
 	return task, versionSetUsed, err
 }
 
@@ -596,10 +601,6 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	return &matchingservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: versionsInfo,
 	}, nil
-}
-
-func (pm *taskQueuePartitionManagerImpl) String() string {
-	return pm.defaultQueue.String()
 }
 
 func (pm *taskQueuePartitionManagerImpl) Partition() tqid.Partition {

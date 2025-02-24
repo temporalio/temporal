@@ -63,7 +63,7 @@ type (
 	}
 
 	taskValidatorImpl struct {
-		newIOContextFn    func() (context.Context, context.CancelFunc)
+		tqCtx             context.Context
 		clusterMetadata   cluster.Metadata
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
@@ -73,13 +73,13 @@ type (
 )
 
 func newTaskValidator(
-	newIOContextFn func() (context.Context, context.CancelFunc),
+	tqCtx context.Context,
 	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
 ) *taskValidatorImpl {
 	return &taskValidatorImpl{
-		newIOContextFn:    newIOContextFn,
+		tqCtx:             tqCtx,
 		clusterMetadata:   clusterMetadata,
 		namespaceRegistry: namespaceRegistry,
 		historyClient:     historyClient,
@@ -181,7 +181,7 @@ func (v *taskValidatorImpl) isTaskValid(
 	task *persistencespb.AllocatedTaskInfo,
 	taskType enumspb.TaskQueueType,
 ) (bool, error) {
-	ctx, cancel := v.newIOContextFn()
+	ctx, cancel := context.WithTimeout(v.tqCtx, ioTimeout)
 	defer cancel()
 
 	namespaceID := task.Data.NamespaceId

@@ -469,7 +469,7 @@ recently-current deployment can arrive in visibility.`,
 	VersionDrainageStatusVisibilityGracePeriod = NewNamespaceDurationSetting(
 		"matching.wv.VersionDrainageStatusVisibilityGracePeriod",
 		3*time.Minute,
-		`VersionDrainageStatusVisibilityGracePeriod is the time period for which non-current / non-ramping worker deployment versions 
+		`VersionDrainageStatusVisibilityGracePeriod is the time period for which non-current / non-ramping worker deployment versions
 are still considered active to account for the delay in updating the build id field in visibility.`,
 	)
 	VersionDrainageStatusRefreshInterval = NewNamespaceDurationSetting(
@@ -1259,6 +1259,24 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.maxTaskQueuesInDeploymentVersion",
 		100,
 		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registered in a single worker deployment version`,
+	)
+	MatchingPollerScalingBacklogAgeScaleUp = NewTaskQueueDurationSetting(
+		"matching.pollerScalingMinimumBacklog",
+		200*time.Millisecond,
+		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before 
+a decision to scale up the number of pollers will be issued`,
+	)
+	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
+		"matching.pollerScalingSyncMatchWaitTime",
+		1*time.Second,
+		`MatchingPollerScalingWaitTime is the duration a sync-matched poller must exceed before
+a decision to scale down the number of pollers will be issued`,
+	)
+	MatchingPollerScalingDecisionsPerSecond = NewTaskQueueFloatSetting(
+		"matching.pollerScalingDecisionsPerSecond",
+		10,
+		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
+second per poller by one physical queue manager`,
 	)
 
 	// keys for history
@@ -2086,7 +2104,7 @@ This configuration will be become the default behavior in the next release and r
 	)
 	AllowResetWithPendingChildren = NewNamespaceBoolSetting(
 		"history.allowResetWithPendingChildren",
-		false,
+		true,
 		`Allows resetting of workflows with pending children when set to true`,
 	)
 	HistoryMaxAutoResetPoints = NewNamespaceIntSetting(
@@ -2382,6 +2400,11 @@ that task will be sent to DLQ.`,
 		0.90,
 		"History service health check on persistence error ratio",
 	)
+	SendRawHistoryBetweenInternalServices = NewGlobalBoolSetting(
+		"history.sendRawHistoryBetweenInternalServices",
+		false,
+		`SendRawHistoryBetweenInternalServices is whether to send raw history events between internal temporal services`,
+	)
 
 	// keys for worker
 
@@ -2597,7 +2620,7 @@ If the service configures with archival feature enabled, update worker.historySc
 	)
 	SchedulerLocalActivitySleepLimit = NewNamespaceDurationSetting(
 		"worker.schedulerLocalActivitySleepLimit",
-		1*time.Second,
+		5*time.Second,
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
 	)

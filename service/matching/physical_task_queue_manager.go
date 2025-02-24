@@ -25,7 +25,6 @@
 package matching
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -50,6 +49,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/deployment"
@@ -79,11 +79,15 @@ type (
 	}
 	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
 	physicalTaskQueueManagerImpl struct {
-		status            int32
-		partitionMgr      *taskQueuePartitionManagerImpl
-		queue             *PhysicalTaskQueueKey
-		config            *taskQueueConfig
-		backlogMgr        *backlogManagerImpl
+		status       int32
+		partitionMgr *taskQueuePartitionManagerImpl
+		queue        *PhysicalTaskQueueKey
+		config       *taskQueueConfig
+		backlogMgr   *backlogManagerImpl
+		// This context is valid for lifetime of this physicalTaskQueueManagerImpl.
+		// It can be used to notify when the task queue is closing.
+		tqCtx             context.Context
+		tqCtxCancel       context.CancelFunc
 		liveness          *liveness
 		matcher           *TaskMatcher // for matching a task producer with a poller
 		namespaceRegistry namespace.Registry
@@ -104,6 +108,7 @@ type (
 		deploymentRegistered        bool       // TODO (Shivam): Rename after the pre-release versioning API's are removed.
 		deploymentVersionRegistered bool       // TODO (Shivam): Rename after the pre-release versioning API's are removed.
 		deploymentRegisterError     error      // last "too many ..." error we got when registering // TODO (Shivam): Rename after the pre-release versioning API's are removed.
+		pollerScalingRateLimiter    quotas.RateLimiter
 
 		firstPoll time.Time
 	}
@@ -130,19 +135,29 @@ func newPhysicalTaskQueueManager(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
 		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
 
+	tqCtx, tqCancel := context.WithCancel(partitionMgr.callerInfoContext(context.Background()))
+
+	// We multiply by a big number so that we can later divide it by the number of pollers when grabbing permits,
+	// to allow us to make more decisions per second when there are more pollers.
+	pollerScalingRateLimitFn := func() float64 {
+		return config.PollerScalingDecisionsPerSecond() * 1e6
+	}
 	pqMgr := &physicalTaskQueueManagerImpl{
 		status:                     common.DaemonStatusInitialized,
 		partitionMgr:               partitionMgr,
+		queue:                      queue,
+		config:                     config,
+		tqCtx:                      tqCtx,
+		tqCtxCancel:                tqCancel,
 		namespaceRegistry:          e.namespaceRegistry,
 		matchingClient:             e.matchingRawClient,
 		clusterMeta:                e.clusterMeta,
-		queue:                      queue,
 		logger:                     logger,
 		throttledLogger:            throttledLogger,
-		config:                     config,
 		metricsHandler:             taggedMetricsHandler,
 		tasksAddedInIntervals:      newTaskTracker(clock.NewRealTimeSource()),
 		tasksDispatchedInIntervals: newTaskTracker(clock.NewRealTimeSource()),
+		pollerScalingRateLimiter:   quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
 	}
 
 	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL())
@@ -153,8 +168,14 @@ func newPhysicalTaskQueueManager(
 		func() { pqMgr.UnloadFromPartitionManager(unloadCauseIdle) },
 	)
 
-	pqMgr.taskValidator = newTaskValidator(pqMgr.newIOContext, pqMgr.clusterMeta, pqMgr.namespaceRegistry, pqMgr.partitionMgr.engine.historyClient)
+	pqMgr.taskValidator = newTaskValidator(
+		tqCtx,
+		pqMgr.clusterMeta,
+		pqMgr.namespaceRegistry,
+		pqMgr.partitionMgr.engine.historyClient,
+	)
 	pqMgr.backlogMgr = newBacklogManager(
+		tqCtx,
 		pqMgr,
 		config,
 		e.taskManager,
@@ -162,7 +183,6 @@ func newPhysicalTaskQueueManager(
 		throttledLogger,
 		e.matchingRawClient,
 		taggedMetricsHandler,
-		partitionMgr.callerInfoContext,
 	)
 
 	var fwdr *Forwarder
@@ -206,9 +226,11 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	) {
 		return
 	}
+	// this may attempt to write one final ack update, do this before canceling tqCtx
 	c.backlogMgr.Stop()
 	c.matcher.Stop()
 	c.liveness.Stop()
+	c.tqCtxCancel()
 	c.logger.Info("Stopped physicalTaskQueueManager", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, -1)
@@ -423,18 +445,6 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() *taskqueuesp
 	}
 }
 
-func (c *physicalTaskQueueManagerImpl) String() string {
-	buf := new(bytes.Buffer)
-	if c.queue.TaskType() == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-		buf.WriteString("Activity")
-	} else {
-		buf.WriteString("Workflow")
-	}
-	_, _ = fmt.Fprintf(buf, "Backlog=%s\n", c.backlogMgr.String())
-
-	return buf.String()
-}
-
 func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (bool, error) {
 	if !task.isForwarded() {
 		// request sent by history service
@@ -637,11 +647,6 @@ func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 	return c.queue
 }
 
-func (c *physicalTaskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-	return c.partitionMgr.callerInfoContext(ctx), cancel
-}
-
 func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
 	c.partitionMgr.unloadPhysicalQueue(c, unloadCause)
 }
@@ -650,4 +655,54 @@ func (c *physicalTaskQueueManagerImpl) ShouldEmitGauges() bool {
 	return c.config.BreakdownMetricsByTaskQueue() &&
 		c.config.BreakdownMetricsByPartition() &&
 		(!c.queue.IsVersioned() || c.config.BreakdownMetricsByBuildID())
+}
+
+func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
+	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
+	return c.makePollerScalingDecisionImpl(pollStartTime, c.GetStats)
+}
+
+func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
+	pollStartTime time.Time, statsFn func() *taskqueuepb.TaskQueueStats) *taskqueuepb.PollerScalingDecision {
+	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
+	// If a poller has waited around a while, we can always suggest a decrease.
+	if pollWaitTime >= c.partitionMgr.config.PollerScalingSyncMatchWaitTime() {
+		// Decrease if any poll matched after sitting idle for some configured period
+		return &taskqueuepb.PollerScalingDecision{
+			PollRequestDeltaSuggestion: -1,
+		}
+	}
+
+	// Avoid spiking pollers crazy fast by limiting how frequently change decisions are issued. Be more permissive when
+	// there are more recent pollers.
+	numPollers := c.pollerHistory.history.Size()
+	if numPollers == 0 {
+		numPollers = 1
+	}
+	if !c.pollerScalingRateLimiter.AllowN(time.Now(), 1e6/numPollers) {
+		return nil
+	}
+
+	delta := int32(0)
+	stats := statsFn()
+	if stats.ApproximateBacklogCount > 0 &&
+		stats.ApproximateBacklogAge.AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
+		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
+		// sticky queues.
+		delta = 1
+	} else if !c.queue.Partition().IsRoot() {
+		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
+		return nil
+	} else if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
+		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
+		// since those (currently) don't get backlogged.
+		delta = 1
+	}
+
+	if delta == 0 {
+		return nil
+	}
+	return &taskqueuepb.PollerScalingDecision{
+		PollRequestDeltaSuggestion: delta,
+	}
 }

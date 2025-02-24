@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/tasktoken"
@@ -76,6 +77,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -109,6 +111,7 @@ type (
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
 		forwardedFrom             string
+		localPollStartTime        time.Time
 	}
 
 	userDataUpdate struct {
@@ -145,11 +148,14 @@ type (
 		visibilityManager             manager.VisibilityManager
 		nexusEndpointClient           *nexusEndpointClient
 		nexusEndpointsOwnershipLostCh chan struct{}
+		saMapperProvider              searchattribute.MapperProvider
+		saProvider                    searchattribute.Provider
 		metricsHandler                metrics.Handler
 		partitionsLock                sync.RWMutex // locks mutation of partitions
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
+		versionChecker                headers.VersionChecker
 		testHooks                     testhooks.TestHooks
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
 		// that QueryWorkflow() will block on. The channel is unblocked either by worker sending response through
@@ -221,6 +227,8 @@ func NewEngine(
 	visibilityManager manager.VisibilityManager,
 	nexusEndpointManager persistence.NexusEndpointManager,
 	testHooks testhooks.TestHooks,
+	saProvider searchattribute.Provider,
+	saMapperProvider searchattribute.MapperProvider,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -243,6 +251,8 @@ func NewEngine(
 		visibilityManager:             visibilityManager,
 		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
+		saProvider:                    saProvider,
+		saMapperProvider:              saMapperProvider,
 		metricsHandler:                scopedMetricsHandler,
 		partitions:                    make(map[tqid.PartitionKey]taskQueuePartitionManager),
 		gaugeMetrics: gaugeMetrics{
@@ -252,6 +262,7 @@ func NewEngine(
 			loadedPhysicalTaskQueueCount:  make(map[taskQueueCounterKey]int),
 		},
 		config:                    config,
+		versionChecker:            headers.NewDefaultVersionChecker(),
 		testHooks:                 testHooks,
 		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
@@ -367,15 +378,6 @@ func (e *matchingEngineImpl) getTaskQueuePartitions(maxCount int) (lists []taskQ
 		}
 	}
 	return
-}
-
-func (e *matchingEngineImpl) String() string {
-	// Executes taskQueue.String() on each task queue outside of lock
-	buf := new(bytes.Buffer)
-	for _, l := range e.getTaskQueuePartitions(1000) {
-		fmt.Fprintf(buf, "\n%s", l.String())
-	}
-	return buf.String()
 }
 
 // Returns taskQueuePartitionManager for a task queue. If not already cached, and create is true, tries
@@ -774,6 +776,23 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// History service can send history events in response.History.Events. In that case use that directly.
+	// This happens when history.sendRawHistoryBetweenInternalServices is enabled.
+	ns, err := e.namespaceRegistry.GetNamespaceName(nsID)
+	if err != nil {
+		return nil, nil, err
+	}
+	err = api.ProcessInternalRawHistory(
+		ctx,
+		e.saProvider,
+		e.saMapperProvider,
+		resp,
+		e.visibilityManager,
+		e.versionChecker,
+		ns,
+		false,
+	)
 
 	hist := resp.GetResponse().GetHistory()
 	if resp.GetResponse().GetRawHistory() != nil {
@@ -2078,8 +2097,9 @@ pollLoop:
 
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
-				TaskToken: serializedToken,
-				Request:   nexusReq,
+				TaskToken:             serializedToken,
+				Request:               nexusReq,
+				PollerScalingDecision: task.pollerScalingDecision,
 			},
 		}, nil
 	}
@@ -2302,6 +2322,8 @@ func (e *matchingEngineImpl) pollTask(
 		return nil, false, err
 	}
 
+	pollMetadata.localPollStartTime = e.timeSource.Now()
+
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
@@ -2498,6 +2520,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	if task.backlogCountHint != nil {
 		response.BacklogCountHint = task.backlogCountHint()
 	}
+	response.PollerScalingDecision = task.pollerScalingDecision
 	return response
 }
 
@@ -2558,6 +2581,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		HeartbeatDetails:            historyResponse.HeartbeatDetails,
 		WorkflowType:                historyResponse.WorkflowType,
 		WorkflowNamespace:           historyResponse.WorkflowNamespace,
+		PollerScalingDecision:       task.pollerScalingDecision,
 	}
 }
 

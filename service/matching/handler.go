@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/worker/deployment"
@@ -92,6 +93,8 @@ func NewHandler(
 	visibilityManager manager.VisibilityManager,
 	nexusEndpointManager persistence.NexusEndpointManager,
 	testHooks testhooks.TestHooks,
+	saProvider searchattribute.Provider,
+	saMapperProvider searchattribute.MapperProvider,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -116,6 +119,8 @@ func NewHandler(
 			visibilityManager,
 			nexusEndpointManager,
 			testHooks,
+			saProvider,
+			saMapperProvider,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}

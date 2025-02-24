@@ -722,13 +722,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().RecordChildExecutionCompleted(gomock.Any(), protomock.Eq(&historyservice.RecordChildExecutionCompletedRequest{
-		NamespaceId:            parentNamespaceID,
-		ParentExecution:        parentExecution,
-		ParentInitiatedId:      parentInitiatedID,
-		ParentInitiatedVersion: parentInitiatedVersion,
-		Clock:                  parentClock,
-		ChildExecution:         execution,
-		CompletionEvent:        event,
+		NamespaceId:              parentNamespaceID,
+		ParentExecution:          parentExecution,
+		ParentInitiatedId:        parentInitiatedID,
+		ParentInitiatedVersion:   parentInitiatedVersion,
+		ChildFirstExecutionRunId: execution.GetRunId(),
+		Clock:                    parentClock,
+		ChildExecution:           execution,
+		CompletionEvent:          event,
 	})).Return(nil, nil)
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))

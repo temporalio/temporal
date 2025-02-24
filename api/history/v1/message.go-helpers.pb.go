@@ -250,3 +250,77 @@ func (this *TaskRange) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type StrippedHistoryEvent to the protobuf v3 wire format
+func (val *StrippedHistoryEvent) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StrippedHistoryEvent from the protobuf v3 wire format
+func (val *StrippedHistoryEvent) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StrippedHistoryEvent) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StrippedHistoryEvent values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StrippedHistoryEvent) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StrippedHistoryEvent
+	switch t := that.(type) {
+	case *StrippedHistoryEvent:
+		that1 = t
+	case StrippedHistoryEvent:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type StrippedHistoryEvents to the protobuf v3 wire format
+func (val *StrippedHistoryEvents) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StrippedHistoryEvents from the protobuf v3 wire format
+func (val *StrippedHistoryEvents) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StrippedHistoryEvents) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StrippedHistoryEvents values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StrippedHistoryEvents) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StrippedHistoryEvents
+	switch t := that.(type) {
+	case *StrippedHistoryEvents:
+		that1 = t
+	case StrippedHistoryEvents:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

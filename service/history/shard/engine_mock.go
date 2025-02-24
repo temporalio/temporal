@@ -302,10 +302,10 @@ func (mr *MockEngineMockRecorder) GetReplicationTasksIter(ctx, pollingCluster, m
 }
 
 // GetWorkflowExecutionHistory mocks base method.
-func (m *MockEngine) GetWorkflowExecutionHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryRequest) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+func (m *MockEngine) GetWorkflowExecutionHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryRequest) (*historyservice.GetWorkflowExecutionHistoryResponseWithRaw, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowExecutionHistory", ctx, request)
-	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryResponse)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryResponseWithRaw)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
