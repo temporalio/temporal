@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"fmt"
 	"math"
 
@@ -625,14 +626,24 @@ func (m *sqlTaskManager) taskQueueId(
 	taskType enumspb.TaskQueueType,
 	subqueue int,
 ) []byte {
-	idBytes := make([]byte, 0, 16+len(name)+2)
+	idBytes := make([]byte, 0, 16+len(name)+1+binary.MaxVarintLen16)
 	idBytes = append(idBytes, namespaceID...)
 	idBytes = append(idBytes, []byte(name)...)
-	idBytes = append(idBytes, uint8(taskType))
+
+	// To ensure that differet names+task types+subqueue ids an never collide, we mark ids
+	// containing subqueues with an extra high bit, and then append the subqueue id.
+	// There are only a few task queue types (currently 3), so the high bits are free.
+	// (If we have more fields to append, we can use the next lower bit to mark the presence of
+	// that one, etc..)
+	const hasSubqueue = 0x80
+
 	if subqueue > 0 {
-		// FIXME: this should be done so that it's invertible
-		idBytes = append(idBytes, uint8(subqueue))
+		idBytes = append(idBytes, uint8(taskType)|hasSubqueue)
+		idBytes = binary.AppendUvarint(idBytes, uint64(subqueue))
+	} else {
+		idBytes = append(idBytes, uint8(taskType))
 	}
+
 	return idBytes
 }
 
