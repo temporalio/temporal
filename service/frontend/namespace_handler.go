@@ -688,6 +688,11 @@ func (d *namespaceHandler) DeprecateNamespace(
 func (d *namespaceHandler) CreateWorkflowRule(
 	ctx context.Context, ruleSpec *rulespb.WorkflowRuleSpec, nsName string,
 ) (*rulespb.WorkflowRule, error) {
+
+	if ruleSpec.GetId() == "" {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
+	}
+
 	metadata, err := d.metadataMgr.GetMetadata(ctx)
 	if err != nil {
 		return nil, err
@@ -700,6 +705,10 @@ func (d *namespaceHandler) CreateWorkflowRule(
 	existingNamespace := getResponse.Namespace
 
 	config := existingNamespace.Config
+
+	if config.WorkflowRules == nil {
+		config.WorkflowRules = make(map[string]*rulespb.WorkflowRule)
+	}
 
 	_, ok := config.WorkflowRules[ruleSpec.GetId()]
 	if ok {
@@ -741,6 +750,10 @@ func (d *namespaceHandler) DescribeWorkflowRule(
 		return nil, err
 	}
 
+	if getResponse.Namespace.Config.WorkflowRules == nil {
+		return nil, serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
+	}
+
 	rule, ok := getResponse.Namespace.Config.WorkflowRules[ruleID]
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
@@ -759,6 +772,9 @@ func (d *namespaceHandler) DeleteWorkflowRule(
 
 	workflowRules := getResponse.Namespace.Config.WorkflowRules
 
+	if workflowRules == nil {
+		return serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
+	}
 	_, ok := workflowRules[ruleID]
 	if !ok {
 		return serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
@@ -778,6 +794,9 @@ func (d *namespaceHandler) ListWorkflowRules(
 	}
 
 	workflowRulesMap := getResponse.Namespace.Config.WorkflowRules
+	if workflowRulesMap == nil {
+		return []*rulespb.WorkflowRule{}, nil
+	}
 
 	workflowRules := make([]*rulespb.WorkflowRule, 0, len(workflowRulesMap))
 	for _, rule := range workflowRulesMap {
