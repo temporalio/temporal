@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -153,6 +154,11 @@ func recordChildWorkflowCompleted(
 				return nil, consts.ErrChildExecutionNotFound
 			}
 
+			if ci.GetStartedRunId() != request.GetChildFirstExecutionRunId() {
+				// this can happen when parent starts another child run in different branch
+				return nil, consts.ErrChildExecutionNotFound
+			}
+
 			completionEvent := request.CompletionEvent
 			switch completionEvent.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
@@ -202,7 +208,10 @@ func recordStartedEventIfMissing(
 		// note values used here should not matter because the child info will be deleted
 		// when the response is recorded, so it should be fine e.g. that ci.Clock is nil
 		_, err = mutableState.AddChildWorkflowExecutionStartedEvent(
-			request.GetChildExecution(),
+			&commonpb.WorkflowExecution{
+				WorkflowId: request.GetChildExecution().GetWorkflowId(),
+				RunId:      request.GetChildFirstExecutionRunId(),
+			},
 			initiatedAttr.WorkflowType,
 			initiatedEvent.EventId,
 			initiatedAttr.Header,
