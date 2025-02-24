@@ -50,11 +50,6 @@ const (
 	// TODO(pri): old matcher cleanup, move to here
 	// taskReaderThrottleRetryDelay = 3 * time.Second
 
-	// Load more tasks when loaded count is <= MaxBatchSize/reloadFraction.
-	// E.g. if MaxBatchSize is 1000, then we'll load 1000, dispatch down to 200,
-	// load another batch to make 1200, down to 200, etc.
-	reloadFraction = 5 // TODO(pri): make dynamic config
-
 	concurrentAddRetries = 10
 )
 
@@ -170,7 +165,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 
 	// use == so we just signal once when we cross this threshold
 	// TODO(pri): is this safe? maybe we need to improve this
-	if tr.loadedTasks == tr.backlogMgr.config.GetTasksBatchSize()/reloadFraction {
+	if tr.loadedTasks == tr.backlogMgr.config.GetTasksReloadAt() {
 		tr.Signal()
 	}
 
@@ -191,7 +186,7 @@ Loop:
 			return
 
 		case <-tr.notifyC:
-			if tr.getLoadedTasks() > tr.backlogMgr.config.GetTasksBatchSize()/reloadFraction {
+			if tr.getLoadedTasks() > tr.backlogMgr.config.GetTasksReloadAt() {
 				// Too many loaded already, ignore this signal. We'll get another signal when
 				// loadedTasks drops low enough.
 				continue Loop

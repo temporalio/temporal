@@ -63,6 +63,7 @@ type (
 		RangeSize                                int64
 		NewMatcher                               dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		NumTaskqueueWritePartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -150,6 +151,7 @@ type (
 		RangeSize                  int64
 		NewMatcher                 bool
 		GetTasksBatchSize          func() int
+		GetTasksReloadAt           func() int
 		UpdateAckInterval          func() time.Duration
 		MaxTaskQueueIdleTime       func() time.Duration
 		MinTaskThrottlingBurstSize func() int
@@ -246,6 +248,7 @@ func NewConfig(
 		RangeSize:                                100000,
 		NewMatcher:                               dynamicconfig.MatchingUseNewMatcher.Get(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
+		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
@@ -323,6 +326,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		NewMatcher: config.NewMatcher(ns.String(), taskQueueName, taskType),
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
+		},
+		GetTasksReloadAt: func() int {
+			return config.GetTasksReloadAt(ns.String(), taskQueueName, taskType)
 		},
 		UpdateAckInterval: func() time.Duration {
 			return config.UpdateAckInterval(ns.String(), taskQueueName, taskType)

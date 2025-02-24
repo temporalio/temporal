@@ -1056,7 +1056,12 @@ See DynamicRateLimitingParams comments for more details.`,
 	MatchingGetTasksBatchSize = NewTaskQueueIntSetting(
 		"matching.getTasksBatchSize",
 		1000,
-		`MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer`,
+		`How many backlog tasks to read from persistence at once`,
+	)
+	MatchingGetTasksReloadAt = NewTaskQueueIntSetting(
+		"matching.getTasksReloadAt",
+		100,
+		`Reload a batch of tasks when there are this many remaining. Must be less than MatchingGetTasksBatchSize.`,
 	)
 	MatchingLongPollExpirationInterval = NewTaskQueueDurationSetting(
 		"matching.longPollExpirationInterval",
