@@ -1442,7 +1442,7 @@ func (d *ClientImpl) isTaskQueueExpectedInNewVersion(
 			Versions: &taskqueuepb.TaskQueueVersionSelection{
 				BuildIds: []string{prevCurrentVersionInfo.GetVersion()}, // pretending the version string is a build id
 			},
-			TaskQueueType: taskQueue.Type, // since request doesn't pass through frontend, this field is not automatically populated
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // since request doesn't pass through frontend, this field is not automatically populated
 			ReportStats:   true,
 		},
 	}
