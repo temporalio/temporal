@@ -693,7 +693,7 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, req *historyservice.Des
 		}
 	}
 
-	itemsInCacheByIDCount, itemsInCacheByNameCount := h.namespaceRegistry.GetCacheSize()
+	itemsInCacheByIDCount, itemsInCacheByNameCount := h.namespaceRegistry.GetRegistrySize()
 	ownedShardIDs := h.controller.ShardIDs()
 	resp := &historyservice.DescribeHistoryHostResponse{
 		ShardsNumber: int32(len(ownedShardIDs)),
