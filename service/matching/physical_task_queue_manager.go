@@ -666,7 +666,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	pollStartTime time.Time, statsFn func() *taskqueuepb.TaskQueueStats) *taskqueuepb.PollerScalingDecision {
 	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
 	// If a poller has waited around a while, we can always suggest a decrease.
-	if pollWaitTime >= c.partitionMgr.config.PollerScalingSyncMatchWaitTime() {
+	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() {
 		// Decrease if any poll matched after sitting idle for some configured period
 		return &taskqueuepb.PollerScalingDecision{
 			PollRequestDeltaSuggestion: -1,

@@ -1267,7 +1267,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 a decision to scale up the number of pollers will be issued`,
 	)
 	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
-		"matching.pollerScalingSyncMatchWaitTime",
+		"matching.pollerScalingWaitTime",
 		1*time.Second,
 		`MatchingPollerScalingWaitTime is the duration a sync-matched poller must exceed before
 a decision to scale down the number of pollers will be issued`,
