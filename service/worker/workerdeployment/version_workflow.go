@@ -97,6 +97,12 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		var newInfo *deploymentpb.VersionDrainageInfo
 
 		c.Receive(ctx, &newInfo)
+
+		// if the version is current or ramping, ignore drainage signal since it could have come late
+		if d.VersionState.GetRampingSinceTime() != nil || d.VersionState.GetCurrentSinceTime() != nil {
+			return
+		}
+
 		mergedInfo := &deploymentpb.VersionDrainageInfo{}
 		mergedInfo.LastCheckedTime = newInfo.LastCheckedTime
 		if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {

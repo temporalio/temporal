@@ -469,6 +469,64 @@ func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, tv *te
 	return run
 }
 
+func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRamping() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	s.startVersionWorkflow(ctx, tv1)
+
+	// Make it current
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv1.DeploymentSeries(),
+		Version:        tv1.DeploymentVersionString(),
+		ConflictToken:  nil,
+		Identity:       tv1.ClientIdentity(),
+	})
+	s.Nil(err)
+
+	// Signal it to be drained. Only do this in tests.
+	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: versionWorkflowID,
+	}
+	input := &deploymentpb.VersionDrainageInfo{
+		Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+		LastChangedTime: timestamppb.New(time.Now()),
+		LastCheckedTime: timestamppb.New(time.Now()),
+	}
+	marshaledData, err := input.Marshal()
+	s.NoError(err)
+	signalPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				Metadata: map[string][]byte{
+					"encoding": []byte("binary/protobuf"),
+				},
+				Data: marshaledData,
+			},
+		},
+	}
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
+	s.Nil(err)
+
+	// describe version and confirm that it is not drained
+	// add a 3s time requirement so that it does not succeed immediately
+	sentSignal := time.Now()
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		a.Greater(time.Since(sentSignal), 2*time.Second)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv1.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.NotEqual(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+	}, time.Second*10, time.Millisecond*1000)
+}
+
 func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
