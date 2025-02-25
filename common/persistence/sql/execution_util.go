@@ -1165,7 +1165,7 @@ func updateExecution(
 func workflowExecutionStateFromCurrentExecutionsRow(
 	row *sqlplugin.CurrentExecutionsRow,
 ) (*persistencespb.WorkflowExecutionState, error) {
-	if len(row.Data) > 0 {
+	if len(row.Data) > 0 && row.DataEncoding != "" {
 		return serialization.WorkflowExecutionStateFromBlob(row.Data, row.DataEncoding)
 	}
 
