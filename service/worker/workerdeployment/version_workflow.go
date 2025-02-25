@@ -280,15 +280,12 @@ func (d *VersionWorkflowRunner) buildSearchAttributes() temporal.SearchAttribute
 }
 
 func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
-	var terminated bool
 	if d.drainageWorkflowFuture == nil {
 		return nil
 	}
 	fut := *d.drainageWorkflowFuture
-	err := fut.SignalChildWorkflow(ctx, TerminateDrainageSignal, nil).Get(ctx, &terminated)
-	if err != nil {
-		return err
-	}
+	_ = fut.SignalChildWorkflow(ctx, TerminateDrainageSignal, nil)
+
 	d.drainageWorkflowFuture = nil
 	return nil
 }
