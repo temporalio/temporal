@@ -74,6 +74,10 @@ func (s *WorkerDeploymentSuite) SetupSuite() {
 		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
 		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Key(): 1,
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
+
+		// Make drainage happen sooner
+		dynamicconfig.VersionDrainageStatusRefreshInterval.Key():       testVersionDrainageRefreshInterval,
+		dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Key(): testVersionDrainageVisibilityGracePeriod,
 	}))
 }
 
@@ -356,7 +360,6 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 }
 
 // Testing Concurrent stale updates don't break workflow state and are caught in the update handler
-
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NonIdempotentRequests() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
@@ -432,7 +435,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NonIdemp
 
 }
 
-// Testing Concurrent identitical updates are being de-duped.
+// Testing Concurrent identical updates are being de-duped.
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_IdempotentRequests() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
@@ -516,7 +519,6 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_Idempote
 }
 
 // Testing Concurrent stale updates don't break workflow state and are caught in the update handler
-
 func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NonIdempotentRequests() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
@@ -1351,6 +1353,64 @@ func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Contex
 	s.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion())
 	s.Equal(expectedRampingVersion, tqDesc.GetVersioningInfo().GetRampingVersion())
 	s.Equal(expectedPercentage, tqDesc.GetVersioningInfo().GetRampingVersionPercentage())
+}
+
+// Test that rolling back to a drained version works
+func (s *WorkerDeploymentSuite) TestSetRampingVersion_AfterDrained() {
+	s.OverrideDynamicConfig(dynamicconfig.PollerHistoryTTL, 500*time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := testvars.New(s).WithBuildIDNumber(2)
+
+	// Start deployment workflow 1 and wait for the deployment version to exist
+	s.startVersionWorkflow(ctx, tv1)
+
+	// Set v1 as current version
+	s.setCurrentVersion(ctx, tv1, worker_versioning.UnversionedVersionId, true, "")
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv1.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+		a.Equal(tv1.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
+	}, time.Second*10, time.Millisecond*1000)
+
+	// Start deployment workflow 2 and set v2 to current so that v1 can start draining
+	s.startVersionWorkflow(ctx, tv2)
+	s.setCurrentVersion(ctx, tv2, tv1.DeploymentVersionString(), true, "")
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv2.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal(tv2.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+		a.Equal(tv2.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
+	}, time.Second*10, time.Millisecond*1000)
+
+	// wait for v1 to be drained
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv1.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
+	}, time.Second*10, time.Millisecond*1000)
+
+	// start ramping traffic back to v1
+	s.setAndVerifyRampingVersion(ctx, tv1, false, 10, false, "", &workflowservice.SetWorkerDeploymentRampingVersionResponse{
+		ConflictToken:      nil,
+		PreviousVersion:    "",
+		PreviousPercentage: 0,
+	})
 }
 
 func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
