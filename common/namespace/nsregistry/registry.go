@@ -162,7 +162,7 @@ func NewRegistry(
 }
 
 // GetRegistrySize observes the size of the by-name and by-ID maps.
-func (r *registry) GetRegistrySize() (int64, int64) {
+func (r *registry) GetRegistrySize() (idToNamespaceSize int64, nameToIDSize int64) {
 	r.nsMapsLock.RLock()
 	defer r.nsMapsLock.RUnlock()
 	return int64(len(r.idToNamespace)), int64(len(r.nameToID))
