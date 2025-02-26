@@ -63,21 +63,6 @@ func (m *MockRegistry) EXPECT() *MockRegistryMockRecorder {
 	return m.recorder
 }
 
-// GetCacheSize mocks base method.
-func (m *MockRegistry) GetCacheSize() (int64, int64) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCacheSize")
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(int64)
-	return ret0, ret1
-}
-
-// GetCacheSize indicates an expected call of GetCacheSize.
-func (mr *MockRegistryMockRecorder) GetCacheSize() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCacheSize", reflect.TypeOf((*MockRegistry)(nil).GetCacheSize))
-}
-
 // GetCustomSearchAttributesMapper mocks base method.
 func (m *MockRegistry) GetCustomSearchAttributesMapper(name Name) (CustomSearchAttributesMapper, error) {
 	m.ctrl.T.Helper()
@@ -195,6 +180,21 @@ func (m *MockRegistry) GetPingChecks() []pingable.Check {
 func (mr *MockRegistryMockRecorder) GetPingChecks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPingChecks", reflect.TypeOf((*MockRegistry)(nil).GetPingChecks))
+}
+
+// GetRegistrySize mocks base method.
+func (m *MockRegistry) GetRegistrySize() (int64, int64) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRegistrySize")
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(int64)
+	return ret0, ret1
+}
+
+// GetRegistrySize indicates an expected call of GetRegistrySize.
+func (mr *MockRegistryMockRecorder) GetRegistrySize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRegistrySize", reflect.TypeOf((*MockRegistry)(nil).GetRegistrySize))
 }
 
 // RefreshNamespaceById mocks base method.
