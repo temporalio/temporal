@@ -226,7 +226,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		SpecVersion:                       InitialSpecVersion,
+		SpecVersion:                       FixStartTimeBug,
 		Version:                           ActionResultIncludesStatus,
 	}
 
