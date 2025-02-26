@@ -170,5 +170,5 @@ func (s SpecProcessorImpl) getNextTime(scheduler Scheduler, after time.Time) (sc
 		return scheduler1.GetNextTimeResult{}, err
 	}
 
-	return spec.GetNextTime(scheduler.jitterSeed(), scheduler1.LatestSpecVersion, after), nil
+	return spec.GetNextTime(scheduler.jitterSeed(), after), nil
 }
