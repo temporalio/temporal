@@ -37,13 +37,17 @@ type (
 		// persistence *persistencespb.ChasmNode
 	}
 
+	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
+	// including the node n itself.
 	NodesMutation struct {
-		UpdatedNodes map[string]*persistencespb.ChasmNode
+		UpdatedNodes map[string]*persistencespb.ChasmNode // flattened node path -> chasm node
 		DeletedNodes map[string]struct{}
 	}
 
+	// NodesSnapshot is a snapshot for all nodes rooted at a given node n,
+	// including the node n itself.
 	NodesSnapshot struct {
-		Nodes map[string]*persistencespb.ChasmNode
+		Nodes map[string]*persistencespb.ChasmNode // flattened node path -> chasm node
 	}
 
 	NodeBackend interface {
@@ -86,7 +90,9 @@ func (n *Node) Ref(
 }
 
 // Now implements the CHASM Context interface
-func (n *Node) Now() time.Time {
+func (n *Node) Now(
+	component Component,
+) time.Time {
 	panic("not implemented")
 }
 
