@@ -73,6 +73,9 @@ const (
 	// Versions of schedule spec logic.
 	InitialSpecVersion SpecVersion = 0
 	FixStartTimeBug    SpecVersion = 1
+
+	// Versions should be checked with >=, so this is equivalent to the latest version.
+	LatestSpecVersion SpecVersion = math.MaxInt64
 )
 
 func NewSpecBuilder() *SpecBuilder {

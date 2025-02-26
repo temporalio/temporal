@@ -67,7 +67,7 @@ func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedulepb.Schedu
 	cs, err := s.specBuilder.NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
-		result := cs.GetNextTime(jitterSeed, FixStartTimeBug, start)
+		result := cs.GetNextTime(jitterSeed, LatestSpecVersion, start)
 		if exp.IsZero() {
 			s.Require().True(
 				result.Nominal.IsZero(),
@@ -408,6 +408,7 @@ func (s *specSuite) TestSpecStartTime() {
 }
 
 func (s *specSuite) TestSpecStartTimeMinusOneSecond() {
+	// This checks the bug fixed by FixStartTimeBug.
 	s.checkSequenceFull(
 		"",
 		&schedulepb.ScheduleSpec{

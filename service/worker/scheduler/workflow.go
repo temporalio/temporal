@@ -226,7 +226,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		SpecVersion:                       FixStartTimeBug,
+		SpecVersion:                       InitialSpecVersion,
 		Version:                           ActionResultIncludesStatus,
 	}
 
@@ -962,10 +962,9 @@ func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*times
 
 	// Pure version not using workflow context
 	next := func(t time.Time) time.Time {
-		// Note: use CurrentTweakablePolicies.SpecVersion since we want to pull in any spec bug
-		// fixes immediately on deployment of new code, even if a workflow task hasn't run to
-		// update s.tweakables yet.
-		return s.cspec.GetNextTime(s.jitterSeed(), CurrentTweakablePolicies.SpecVersion, t).Next
+		// Note: use LatestSpecVersion since we want to pull in any spec bug fixes immediately on
+		// deployment of new code, even if a workflow task hasn't run to update s.tweakables yet.
+		return s.cspec.GetNextTime(s.jitterSeed(), LatestSpecVersion, t).Next
 	}
 
 	if inWorkflowContext && s.hasMinVersion(NewCacheAndJitter) {
@@ -1025,7 +1024,7 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 	t1 := timestamp.TimeValue(req.StartTime)
 	for i := 0; i < maxListMatchingTimesCount; i++ {
 		// don't need to call GetNextTime in SideEffect because this is just a query
-		t1 = s.cspec.GetNextTime(s.jitterSeed(), CurrentTweakablePolicies.SpecVersion, t1).Next
+		t1 = s.cspec.GetNextTime(s.jitterSeed(), LatestSpecVersion, t1).Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {
 			break
 		}
