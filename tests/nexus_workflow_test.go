@@ -2261,7 +2261,6 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 				fut := c.ExecuteOperation(ctx, op, input, workflow.NexusOperationOptions{})
 				var exec workflow.NexusOperationExecution
 				err := fut.GetNexusOperationExecution().Get(ctx, &exec)
-				execOpCh.Send(ctx, nil)
 				if err != nil {
 					output.CntErr++
 					var handlerErr *nexus.HandlerError
@@ -2273,9 +2272,13 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 					} else if appErr.Type() != "WorkflowExecutionAlreadyStarted" {
 						retError = err
 					}
+				} else {
+					output.CntOk++
+				}
+				execOpCh.Send(ctx, nil)
+				if err != nil {
 					return
 				}
-				output.CntOk++
 				var res string
 				err = fut.Get(ctx, &res)
 				if err != nil {
@@ -2290,10 +2293,12 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 			execOpCh.Receive(ctx, nil)
 		}
 
-		// signal handler workflow so it will complete
-		err = workflow.SignalExternalWorkflow(ctx, handlerWorkflowID, "", "terminate", nil).Get(ctx, nil)
-		if err != nil {
-			return output, err
+		if output.CntOk > 0 {
+			// signal handler workflow so it will complete
+			err = workflow.SignalExternalWorkflow(ctx, handlerWorkflowID, "", "terminate", nil).Get(ctx, nil)
+			if err != nil {
+				return output, err
+			}
 		}
 		wg.Wait(ctx)
 		return output, retError
@@ -2307,19 +2312,25 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 
 	testCases := []struct {
 		input       string
-		checkOutput func(t *testing.T, numCalls int, res CallerWfOutput)
+		checkOutput func(t *testing.T, numCalls int, res CallerWfOutput, err error)
 	}{
 		{
 			input: "conflict-policy-fail",
-			checkOutput: func(t *testing.T, numCalls int, res CallerWfOutput) {
-				s.EqualValues(1, res.CntOk)
-				s.EqualValues(numCalls-1, res.CntErr)
+			checkOutput: func(t *testing.T, numCalls int, res CallerWfOutput, err error) {
+				require.NoError(t, err)
+				require.EqualValues(t, 1, res.CntOk)
+				require.EqualValues(t, numCalls-1, res.CntErr)
 			},
 		},
 		{
 			input: "conflict-policy-use-existing",
-			checkOutput: func(t *testing.T, numCalls int, res CallerWfOutput) {
-				s.EqualValues(numCalls, res.CntOk)
+			checkOutput: func(t *testing.T, numCalls int, res CallerWfOutput, err error) {
+				// TODO(rodrigozhou): The SDK is temporarily blocking this. Remove this check and uncomment
+				// the checks below after SDK unblocks this.
+				require.ErrorContains(t, err, "workflow ID conflict policy UseExisting is not supported for Nexus WorkflowRunOperation")
+				// require.NoError(t, err)
+				// require.EqualValues(t, numCalls, res.CntOk)
+				// require.EqualValues(t, 0, res.CntErr)
 			},
 		},
 	}
@@ -2339,8 +2350,8 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 			)
 			s.NoError(err)
 			var res CallerWfOutput
-			s.NoError(run.Get(ctx, &res))
-			tc.checkOutput(s.T(), numCalls, res)
+			err = run.Get(ctx, &res)
+			tc.checkOutput(s.T(), numCalls, res, err)
 		})
 	}
 }
