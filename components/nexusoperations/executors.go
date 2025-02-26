@@ -423,7 +423,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	var opFailedErr *nexus.OperationError
 
 	if errors.As(callErr, &opFailedErr) {
-		return handleUnsuccessfulOperationError(node, operation, opFailedErr)
+		return handleOperationError(node, operation, opFailedErr)
 	} else if errors.As(callErr, &handlerErr) {
 		if !handlerErr.Retryable() {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
@@ -816,7 +816,19 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 			if err != nil {
 				return nil, err
 			}
+		} else {
+			cause := handlerErr.Cause
+			if cause == nil {
+				cause = errors.New("unknown cause")
+			}
+			failure.Cause = &failurepb.Failure{
+				Message: cause.Error(),
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
+				},
+			}
 		}
+
 		return failure, nil
 	}
 

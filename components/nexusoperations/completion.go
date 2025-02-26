@@ -62,7 +62,7 @@ func handleSuccessfulOperationResult(
 	return CompletedEventDefinition{}.Apply(node.Parent, event)
 }
 
-func handleUnsuccessfulOperationError(
+func handleOperationError(
 	node *hsm.Node,
 	operation Operation,
 	opFailedError *nexus.OperationError,
@@ -184,7 +184,7 @@ func CompletionHandler(
 			return serviceerror.NewNotFound("operation not found")
 		}
 		if opFailedError != nil {
-			err = handleUnsuccessfulOperationError(node, operation, opFailedError)
+			err = handleOperationError(node, operation, opFailedError)
 		} else {
 			err = handleSuccessfulOperationResult(node, operation, result, nil)
 		}
