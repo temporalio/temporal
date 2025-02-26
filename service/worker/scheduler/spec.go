@@ -65,8 +65,6 @@ type (
 		loc *time.Location
 		err error
 	}
-
-	SpecVersion int64
 )
 
 func NewSpecBuilder() *SpecBuilder {

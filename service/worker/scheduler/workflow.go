@@ -175,7 +175,6 @@ type (
 		ReuseTimer                        bool                     // Whether to reuse timer. Used for workflow compatibility.
 		NextTimeCacheV2Size               int                      // Size of next time cache (v2)
 		SpecFieldLengthLimit              int                      // item limit per spec field on the ScheduleInfo memo
-		SpecVersion                       SpecVersion              // version for spec logic
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
 
