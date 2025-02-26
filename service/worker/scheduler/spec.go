@@ -69,15 +69,6 @@ type (
 	SpecVersion int64
 )
 
-const (
-	// Versions of schedule spec logic.
-	InitialSpecVersion SpecVersion = 0
-	FixStartTimeBug    SpecVersion = 1
-
-	// Versions should be checked with >=, so this is equivalent to the latest version.
-	LatestSpecVersion SpecVersion = math.MaxInt64
-)
-
 func NewSpecBuilder() *SpecBuilder {
 	return &SpecBuilder{
 		locationCache: cache.New(1000,
@@ -304,15 +295,11 @@ func (cs *CompiledSpec) CanonicalForm() *schedulepb.ScheduleSpec {
 // Returns the earliest time that matches the schedule spec that is after the given time.
 // Returns: Nominal is the time that matches, pre-jitter. Next is the nominal time with
 // jitter applied. If there is no matching time, Nominal and Next will be the zero time.
-func (cs *CompiledSpec) GetNextTime(jitterSeed string, ver SpecVersion, after time.Time) GetNextTimeResult {
+func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) GetNextTimeResult {
 	// If we're starting before the schedule's allowed time range, jump up to right before
 	// it (so that we can still return the first second of the range if it happens to match).
-	if ver >= FixStartTimeBug {
-		// note: AsTime returns unix epoch on nil StartTime
-		after = util.MaxTime(after, cs.spec.StartTime.AsTime().Add(-time.Second))
-	} else if cs.spec.StartTime != nil && after.Before(timestamp.TimeValue(cs.spec.StartTime)) {
-		after = cs.spec.StartTime.AsTime().Add(-time.Second)
-	}
+	// note: AsTime returns unix epoch on nil StartTime
+	after = util.MaxTime(after, cs.spec.StartTime.AsTime().Add(-time.Second))
 
 	pastEndTime := func(t time.Time) bool {
 		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime())
