@@ -46,9 +46,11 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/internal/goro"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -514,4 +516,110 @@ func TestTQMInterruptsPollOnClose(t *testing.T) {
 
 	<-pollCh
 	require.Less(t, time.Since(pollStart), 4*time.Second)
+}
+
+func TestPollScalingUpOnBacklog(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.NotNil(t, decision)
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+}
+
+func TestPollScalingUpAddRateExceedsDispatchRate(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		TasksAddRate:      100,
+		TasksDispatchRate: 10,
+	}
+
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.NotNil(t, decision)
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+}
+
+func TestPollScalingNoChangeOnNoBacklogFastMatch(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+		ApproximateBacklogAge:   durationpb.New(0),
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.Nil(t, decision)
+}
+
+func TestPollScalingNonRootPartition(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	// Non-root partitions only get to emit decisions on high backlog
+	f, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
+	require.NoError(t, err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
+	tqm.partitionMgr.partition = partition
+	// Also disable rate limit to ensure that's not why nil is returned here
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.NotNil(t, decision)
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+
+	fakeStats.ApproximateBacklogCount = 0
+	decision = tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.Nil(t, decision)
+}
+
+func TestPollScalingDownOnLongSyncMatch(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.LessOrEqual(t, decision.PollRequestDeltaSuggestion, int32(-1))
+}
+
+func TestPollScalingDecisionsAreRateLimited(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).Times(1)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(false).Times(1)
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+
+	decision = tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.Nil(t, decision)
 }

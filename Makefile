@@ -582,6 +582,9 @@ start-postgres12: temporal-server
 start-sqlite: temporal-server
 	./temporal-server --env development-sqlite --allow-no-auth start
 
+start-sqlite-file: temporal-server
+	./temporal-server --env development-sqlite-file --allow-no-auth start
+
 start-xdc-cluster-a: temporal-server
 	./temporal-server --env development-cluster-a --allow-no-auth start
 
