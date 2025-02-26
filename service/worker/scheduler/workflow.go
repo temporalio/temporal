@@ -175,6 +175,7 @@ type (
 		ReuseTimer                        bool                     // Whether to reuse timer. Used for workflow compatibility.
 		NextTimeCacheV2Size               int                      // Size of next time cache (v2)
 		SpecFieldLengthLimit              int                      // item limit per spec field on the ScheduleInfo memo
+		SpecVersion                       SpecVersion              // version for spec logic
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
 
@@ -225,6 +226,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
+		SpecVersion:                       FixStartTimeBug,
 		Version:                           ActionResultIncludesStatus,
 	}
 
@@ -491,7 +493,7 @@ func (s *scheduler) getNextTimeV1(after time.Time) GetNextTimeResult {
 	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
 		results := make(map[time.Time]GetNextTimeResult)
 		for t := after; !t.IsZero() && len(results) < nextTimeCacheV1Size; {
-			next := s.cspec.GetNextTime(s.jitterSeed(), t)
+			next := s.cspec.GetNextTime(s.jitterSeed(), s.tweakables.SpecVersion, t)
 			results[t] = next
 			t = next.Next
 		}
@@ -568,7 +570,7 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 			NominalTimes: make([]int64, 0, s.tweakables.NextTimeCacheV2Size),
 		}
 		for t := start; len(cache.NextTimes) < s.tweakables.NextTimeCacheV2Size; {
-			next := s.cspec.GetNextTime(s.jitterSeed(), t)
+			next := s.cspec.GetNextTime(s.jitterSeed(), s.tweakables.SpecVersion, t)
 			if next.Next.IsZero() {
 				cache.Completed = true
 				break
@@ -619,7 +621,7 @@ func (s *scheduler) getNextTime(after time.Time) GetNextTimeResult {
 	// existing schedule workflows.
 	var next GetNextTimeResult
 	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-		return s.cspec.GetNextTime(s.jitterSeed(), after)
+		return s.cspec.GetNextTime(s.jitterSeed(), s.tweakables.SpecVersion, after)
 	}).Get(&next))
 	return next
 }
@@ -960,7 +962,9 @@ func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*times
 
 	// Pure version not using workflow context
 	next := func(t time.Time) time.Time {
-		return s.cspec.GetNextTime(s.jitterSeed(), t).Next
+		// Note: use LatestSpecVersion since we want to pull in any spec bug fixes immediately on
+		// deployment of new code, even if a workflow task hasn't run to update s.tweakables yet.
+		return s.cspec.GetNextTime(s.jitterSeed(), LatestSpecVersion, t).Next
 	}
 
 	if inWorkflowContext && s.hasMinVersion(NewCacheAndJitter) {
@@ -1020,7 +1024,7 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 	t1 := timestamp.TimeValue(req.StartTime)
 	for i := 0; i < maxListMatchingTimesCount; i++ {
 		// don't need to call GetNextTime in SideEffect because this is just a query
-		t1 = s.cspec.GetNextTime(s.jitterSeed(), t1).Next
+		t1 = s.cspec.GetNextTime(s.jitterSeed(), LatestSpecVersion, t1).Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {
 			break
 		}
