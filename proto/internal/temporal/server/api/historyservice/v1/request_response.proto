@@ -278,7 +278,8 @@ message RecordWorkflowTaskStartedResponse {
 
 // RecordWorkflowTaskStartedResponseWithRawHistory should be wire compatible with RecordWorkflowTaskStartedResponse.
 // The only difference is that RecordWorkflowTaskStartedResponseWithRawHistory has a `history` field that contains the
-// raw history batches.
+// raw history batches. RecordWorkflowTaskStartedResponseWithRawHistory will be returned by history service.
+// History client will deserialize this message to RecordWorkflowTaskStartedResponse.
 message RecordWorkflowTaskStartedResponseWithRawHistory {
     temporal.api.common.v1.WorkflowType workflow_type = 1;
     int64 previous_started_event_id = 2;

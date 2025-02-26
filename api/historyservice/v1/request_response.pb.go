@@ -1444,7 +1444,8 @@ func (x *RecordWorkflowTaskStartedResponse) GetRawHistory() *v115.History {
 
 // RecordWorkflowTaskStartedResponseWithRawHistory should be wire compatible with RecordWorkflowTaskStartedResponse.
 // The only difference is that RecordWorkflowTaskStartedResponseWithRawHistory has a `history` field that contains the
-// raw history batches.
+// raw history batches. RecordWorkflowTaskStartedResponseWithRawHistory will be returned by history service.
+// History client will deserialize this message to RecordWorkflowTaskStartedResponse.
 type RecordWorkflowTaskStartedResponseWithRawHistory struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
