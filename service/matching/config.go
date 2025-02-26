@@ -118,6 +118,10 @@ type (
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
 		NexusEndpointsRefreshInterval     dynamicconfig.DurationPropertyFn
 
+		PollerScalingBacklogAgeScaleUp  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		PollerScalingWaitTime           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		PollerScalingDecisionsPerSecond dynamicconfig.FloatPropertyFnWithTaskQueueFilter
+
 		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
@@ -171,6 +175,11 @@ type (
 		BreakdownMetricsByBuildID   func() bool
 
 		PollerHistoryTTL func() time.Duration
+
+		// Poller scaling decisions configuration
+		PollerScalingBacklogAgeScaleUp  func() time.Duration
+		PollerScalingWaitTime           func() time.Duration
+		PollerScalingDecisionsPerSecond func() float64
 
 		loadCause loadCause
 	}
@@ -279,6 +288,10 @@ func NewConfig(
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
 		NexusEndpointsRefreshInterval:     dynamicconfig.MatchingNexusEndpointsRefreshInterval.Get(dc),
 
+		PollerScalingBacklogAgeScaleUp:  dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Get(dc),
+		PollerScalingWaitTime:           dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
+		PollerScalingDecisionsPerSecond: dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
+
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}
 }
@@ -369,6 +382,15 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		PollerHistoryTTL: func() time.Duration {
 			return config.PollerHistoryTTL(ns.String())
+		},
+		PollerScalingBacklogAgeScaleUp: func() time.Duration {
+			return config.PollerScalingBacklogAgeScaleUp(ns.String(), taskQueueName, taskType)
+		},
+		PollerScalingWaitTime: func() time.Duration {
+			return config.PollerScalingWaitTime(ns.String(), taskQueueName, taskType)
+		},
+		PollerScalingDecisionsPerSecond: func() float64 {
+			return config.PollerScalingDecisionsPerSecond(ns.String(), taskQueueName, taskType)
 		},
 	}
 }

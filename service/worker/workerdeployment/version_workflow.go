@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -96,7 +95,14 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	})
 	selector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		var newInfo *deploymentpb.VersionDrainageInfo
+
 		c.Receive(ctx, &newInfo)
+
+		// if the version is current or ramping, ignore drainage signal since it could have come late
+		if d.VersionState.GetRampingSinceTime() != nil || d.VersionState.GetCurrentSinceTime() != nil {
+			return
+		}
+
 		mergedInfo := &deploymentpb.VersionDrainageInfo{}
 		mergedInfo.LastCheckedTime = newInfo.LastCheckedTime
 		if d.VersionState.GetDrainageInfo().GetStatus() != newInfo.Status {
@@ -108,6 +114,12 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 			mergedInfo.Status = d.VersionState.DrainageInfo.Status
 			mergedInfo.LastChangedTime = d.VersionState.DrainageInfo.LastChangedTime
 			d.VersionState.DrainageInfo = mergedInfo
+		}
+
+		// If the version is now drained, the drainage workflow has completed execution as well.
+		// Update the future to be nil to indicate that the drainage workflow is no longer running.
+		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+			d.drainageWorkflowFuture = nil
 		}
 	})
 
@@ -268,15 +280,12 @@ func (d *VersionWorkflowRunner) buildSearchAttributes() temporal.SearchAttribute
 }
 
 func (d *VersionWorkflowRunner) stopDrainage(ctx workflow.Context) error {
-	var terminated bool
 	if d.drainageWorkflowFuture == nil {
 		return nil
 	}
 	fut := *d.drainageWorkflowFuture
-	err := fut.SignalChildWorkflow(ctx, TerminateDrainageSignal, nil).Get(ctx, &terminated)
-	if err != nil {
-		return err
-	}
+	_ = fut.SignalChildWorkflow(ctx, TerminateDrainageSignal, nil)
+
 	d.drainageWorkflowFuture = nil
 	return nil
 }
@@ -550,8 +559,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	state := d.GetVersionState()
 
-	// TODO (Shivam): __unversioned__
-
 	// sync to task queues
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version: state.GetVersion(),
@@ -625,13 +632,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	return &deploymentspb.SyncVersionStateResponse{
 		VersionState: state,
 	}, nil
-}
-
-func (d *VersionWorkflowRunner) dataWithTime(data *deploymentspb.DeploymentVersionData, routingUpdateTime *timestamppb.Timestamp) *deploymentspb.DeploymentVersionData {
-	data = common.CloneProto(data)
-	data.RoutingUpdateTime = routingUpdateTime
-
-	return data
 }
 
 func (d *VersionWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescribeVersionResponse, error) {
