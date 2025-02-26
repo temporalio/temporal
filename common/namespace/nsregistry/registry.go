@@ -109,7 +109,7 @@ type (
 		logger                  log.Logger
 		refreshInterval         dynamicconfig.DurationPropertyFn
 
-		// registryLock protects nameToID, idToNamespace and stateChangeCallbacks.
+		// nsMapsLock protects nameToID, idToNamespace and stateChangeCallbacks.
 
 		nsMapsLock    sync.RWMutex
 		nameToID      map[namespace.Name]namespace.ID
