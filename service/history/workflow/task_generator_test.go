@@ -746,8 +746,8 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 			transitionHistoryEnabled:    true,
 			workflowState:               enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			pendingActivityInfo:         map[int64]*persistencespb.ActivityInfo{},
-			expectedTaskTypes:           []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION},
-			expectedTaskEquivalentTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE},
+			expectedTaskTypes:           []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE},
+			expectedTaskEquivalentTypes: nil,
 		},
 		{
 			name:                     "transition history enabled, execution running",
@@ -833,7 +833,8 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 			resultTasks, _, err := taskGenerator.GenerateMigrationTasks()
 			require.NoError(t, err)
 			require.Equal(t, len(tc.expectedTaskTypes), len(resultTasks))
-			if tc.transitionHistoryEnabled {
+
+			if tc.workflowState != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && tc.transitionHistoryEnabled {
 				require.Equal(t, 1, len(resultTasks))
 				require.Equal(t, tc.expectedTaskTypes[0].String(), resultTasks[0].GetType().String())
 				syncVersionTask, ok := resultTasks[0].(*tasks.SyncVersionedTransitionTask)
