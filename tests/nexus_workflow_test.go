@@ -1721,6 +1721,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO() {
 		var opExec workflow.NexusOperationExecution
 		err := fut.GetNexusOperationExecution().Get(ctx, &opExec)
 		s.NoError(err)
+		s.NotEmpty(opExec.OperationToken)
 		return nil, fut.Get(ctx, nil)
 	}
 
