@@ -57,7 +57,7 @@ type ComponentRef struct {
 	// We only need to do this for sub-components, path for parent/ancenstor components
 	// can be inferred from the current component path.
 	componentType      string
-	componentPath      componentPath
+	componentPath      []string
 	componentInitialVT *persistencespb.VersionedTransition // this identifies a component
 	entityLastUpdateVT *persistencespb.VersionedTransition // this is consistency token
 
@@ -88,6 +88,3 @@ func (r *ComponentRef) Serialize() []byte {
 func DeserializeComponentRef(data []byte) (ComponentRef, error) {
 	panic("not implemented")
 }
-
-// we may need to export this later for partial loading
-type componentPath []string
