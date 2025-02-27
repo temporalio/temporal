@@ -282,8 +282,9 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext shard.C
 
 		// NOTE: we can't not assigned the result directly to c.MutableState like below
 		// c.MutableState, err = NewMutableStateFromDB(...)
-		// Otherwise c.MutableState itself will not be nil, but can potentially point to a nil *MutableStateImpl,
-		// and causing NPE (e.g. when calling c.Clear()) or other unexpected behavior.
+		// Otherwise c.MutableState (an interface) will not be nil, but can point to a nil *MutableStateImpl pointer
+		// returned by NewMutableStateFromDB().
+		// Thus causing NPE (e.g. when calling c.Clear()) or other unexpected behavior.
 		c.MutableState = mutableState
 	}
 
