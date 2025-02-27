@@ -328,9 +328,11 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 			}
 
 			numCallbacks := 1
+			expectedCallbacks := []*commonpb.Callback{cb1}
 			if tc.OnConflictOptions.AttachCompletionCallbacks {
 				s.ProtoElementsMatch(request.CompletionCallbacks, attributes.GetAttachedCompletionCallbacks())
 				numCallbacks += len(request.CompletionCallbacks)
+				expectedCallbacks = append(expectedCallbacks, request.CompletionCallbacks...)
 			} else {
 				s.Empty(attributes.GetAttachedCompletionCallbacks())
 			}
@@ -357,7 +359,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 			for i, cb := range descResp.Callbacks {
 				descRespCallbacks[i] = cb.Callback
 			}
-			s.ProtoElementsMatch(append(request.CompletionCallbacks, cb1), descRespCallbacks)
+			s.ProtoElementsMatch(expectedCallbacks, descRespCallbacks)
 		})
 	}
 }
