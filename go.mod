@@ -16,6 +16,7 @@ require (
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.18.0
 	github.com/go-faker/faker/v4 v4.6.0
+	github.com/go-jose/go-jose/v4 v4.0.5
 	github.com/go-sql-driver/mysql v1.9.0
 	github.com/gocql/gocql v1.7.0
 	github.com/golang-jwt/jwt/v4 v4.5.1
@@ -74,7 +75,6 @@ require (
 	google.golang.org/grpc v1.70.0
 	google.golang.org/grpc/examples v0.0.0-20250219164421-42fc25a9b496
 	google.golang.org/protobuf v1.36.5
-	gopkg.in/go-jose/go-jose.v2 v2.6.3
 	gopkg.in/validator.v2 v2.0.1
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.34.1
