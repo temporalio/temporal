@@ -154,7 +154,7 @@ func recordChildWorkflowCompleted(
 				return nil, consts.ErrChildExecutionNotFound
 			}
 
-			if ci.GetStartedRunId() != request.GetChildFirstExecutionRunId() {
+			if request.GetChildFirstExecutionRunId() != "" && ci.GetStartedRunId() != request.GetChildFirstExecutionRunId() {
 				// this can happen when parent starts another child run in different branch
 				return nil, consts.ErrChildExecutionNotFound
 			}
