@@ -80,7 +80,7 @@ type (
 		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks, this is populated
 		// based on forwardInfo.
 		redirectInfo *taskqueuespb.BuildIdRedirectInfo
-		recycleToken func()
+		recycleToken func(*internalTask)
 
 		// These fields are for use by matcherData:
 		waitableMatchResult
@@ -284,7 +284,7 @@ func (task *internalTask) finishForward(forwardRes any, forwardErr error, wasVal
 
 func (task *internalTask) finishInternal(res taskResponse, wasValid bool) {
 	if !wasValid && task.recycleToken != nil {
-		task.recycleToken()
+		task.recycleToken(task)
 	}
 
 	switch {

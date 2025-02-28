@@ -30,7 +30,6 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/util"
 )
 
@@ -89,10 +88,14 @@ func (p *pollerPQ) Pop() any {
 
 type taskPQ struct {
 	heap []*internalTask
+
 	// ages holds task create time for tasks from merged local backlogs (not forwarded).
 	// note that matcherData may get tasks from multiple versioned backlogs due to
 	// versioning redirection.
 	ages backlogAgeTracker
+
+	// rate limiter for overall queue
+	wholeQueueLimiter simpleLimiter
 }
 
 func (t *taskPQ) Add(task *internalTask) {
@@ -103,6 +106,27 @@ func (t *taskPQ) Remove(task *internalTask) {
 	heap.Remove(t, task.matchHeapIndex)
 }
 
+func (t *taskPQ) readyTimeForTask(task *internalTask) int64 {
+	// TODO(pri): after we have task-specific ready time, we can re-enable this
+	// if task.isForwarded() {
+	// 	// don't count any rate limit for forwarded tasks, it was counted on the child
+	// 	return 0
+	// }
+	return max(
+		t.wholeQueueLimiter.ready,
+		// TODO(pri): add more times here, e.g. fairness key limit, per-task backoff
+	)
+}
+
+func (t *taskPQ) consumeTokens(now int64, task *internalTask, tokens int64) {
+	if task.isForwarded() {
+		// don't count any rate limit for forwarded tasks, it was counted on the child
+		return
+	}
+
+	t.wholeQueueLimiter.consume(now, tokens)
+}
+
 // implements heap.Interface
 func (t *taskPQ) Len() int {
 	return len(t.heap)
@@ -111,9 +135,24 @@ func (t *taskPQ) Len() int {
 // implements heap.Interface, do not call directly
 func (t *taskPQ) Less(i int, j int) bool {
 	a, b := t.heap[i], t.heap[j]
+
+	// poll forwarder is always last
 	if !a.isPollForwarder && b.isPollForwarder {
 		return true
+	} else if a.isPollForwarder && !b.isPollForwarder {
+		return false
 	}
+
+	// TODO(pri): ready time is not task-specific yet, we only have whole-queue, so we don't
+	// need to consider this here yet.
+	// // ready time
+	// aready, bready := max(t.now, t.readyTimeForTask(a)), max(t.now, t.readyTimeForTask(b))
+	// if aready < bready {
+	// 	return true
+	// } else if aready > bready {
+	// 	return false
+	// }
+
 	// TODO(pri): use priority, task id, etc.
 	return false
 }
@@ -173,8 +212,7 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 }
 
 type matcherData struct {
-	config      *taskQueueConfig
-	rateLimiter quotas.RateLimiter // whole-queue rate limiter
+	config *taskQueueConfig
 
 	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
 
@@ -189,14 +227,20 @@ type matcherData struct {
 	lastPoller time.Time // most recent poll start time
 }
 
-func newMatcherData(config *taskQueueConfig, limiter quotas.RateLimiter) matcherData {
+func newMatcherData(config *taskQueueConfig) matcherData {
 	return matcherData{
-		config:      config,
-		rateLimiter: limiter,
+		config: config,
 		tasks: taskPQ{
 			ages: newBacklogAgeTracker(),
 		},
 	}
+}
+
+func (d *matcherData) UpdateRateLimit(rate float64, burst int) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	d.tasks.wholeQueueLimiter.set(rate, burst)
 }
 
 func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
@@ -395,6 +439,9 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 func (d *matcherData) match() {
 	allowForwarding := d.allowForwarding()
 
+	now := time.Now().UnixNano()
+	// TODO(pri): for task-specific ready time, we need to do a full/partial re-heapify here
+
 	for {
 		// search for highest priority match
 		task, poller := d.findMatch(allowForwarding)
@@ -404,8 +451,10 @@ func (d *matcherData) match() {
 			return
 		}
 
-		// got task, check rate limit
-		if !d.rateLimitTask(task) {
+		// check ready time
+		delay := d.tasks.readyTimeForTask(task) - now
+		d.rateLimitTimer.set(d.rematch, time.Duration(delay))
+		if delay > 0 {
 			return // not ready yet, timer will call match later
 		}
 
@@ -413,8 +462,11 @@ func (d *matcherData) match() {
 		d.tasks.Remove(task)
 		d.pollers.Remove(poller)
 
-		res := &matchResult{task: task, poller: poller}
+		// TODO(pri): maybe we can allow tasks to have costs other than 1
+		d.tasks.consumeTokens(now, task, 1)
+		task.recycleToken = d.recycleToken
 
+		res := &matchResult{task: task, poller: poller}
 		task.wake(res)
 		// for poll forwarder: skip waking poller, forwarder will call finishMatchAfterPollForward
 		if !task.isPollForwarder {
@@ -427,27 +479,13 @@ func (d *matcherData) match() {
 	}
 }
 
-// call with lock held
-// returns true if task can go now
-func (d *matcherData) rateLimitTask(task *internalTask) bool {
-	if task.recycleToken != nil {
-		// we use task.recycleToken as a signal that we've already got a token for this task,
-		// so the next time we see it we'll skip the wait.
-		return true
-	} else if task.isForwarded() {
-		// don't count rate limit for forwarded tasks, it was counted on the child
-		return true
-	}
+func (d *matcherData) recycleToken(task *internalTask) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
 
-	delay := d.rateLimiter.Reserve().Delay()
-	// TODO(pri): RecycleToken doesn't actually work since we're not using Wait
-	task.recycleToken = d.rateLimiter.RecycleToken
-
-	// TODO(pri): account for per-priority/fairness key rate limits also, e.g.
-	// delay = max(delay, perTaskDelay)
-
-	d.rateLimitTimer.set(d.rematch, delay)
-	return delay <= 0
+	now := time.Now().UnixNano()
+	d.tasks.consumeTokens(now, task, -1)
+	d.match() // another task may be ready to match now
 }
 
 // called from timer
@@ -538,6 +576,28 @@ func (rt *resettableTimer) unset() {
 		rt.timer.Stop()
 		rt.timer = nil
 	}
+}
+
+// simple limiter
+
+// simpleLimiter implements a "GCRA" limiter. The owner should read the `ready` field directly
+// and compare to the current time to decide if a task is allowed.
+type simpleLimiter struct {
+	// parameters:
+	interval int64 // nanos/task
+	burst    int64 // burst duration in nanos
+
+	// state:
+	ready int64 // unix nanos
+}
+
+func (s *simpleLimiter) set(rate float64, burst int) {
+	s.interval = int64(float64(time.Second) / rate)
+	s.burst = s.interval * int64(burst)
+}
+
+func (s *simpleLimiter) consume(now int64, tokens int64) {
+	s.ready = max(now, s.ready+s.burst) - s.burst + tokens*s.interval
 }
 
 func bugIf(cond bool, msg string) {

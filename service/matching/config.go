@@ -107,7 +107,9 @@ type (
 		ThrottledLogRPS dynamicconfig.IntPropertyFn
 
 		AdminNamespaceToPartitionDispatchRate          dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		AdminNamespaceToPartitionRateSub               dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
 		AdminNamespaceTaskqueueToPartitionDispatchRate dynamicconfig.FloatPropertyFnWithTaskQueueFilter
+		AdminNamespaceTaskqueueToPartitionRateSub      dynamicconfig.TypedSubscribableWithTaskQueueFilter[float64]
 
 		VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
 		VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
@@ -161,8 +163,10 @@ type (
 
 		// partition qps = AdminNamespaceToPartitionDispatchRate(namespace)
 		AdminNamespaceToPartitionDispatchRate func() float64
+		AdminNamespaceToPartitionRateSub      func(func(float64)) (float64, func())
 		// partition qps = AdminNamespaceTaskQueueToPartitionDispatchRate(namespace, task_queue)
 		AdminNamespaceTaskQueueToPartitionDispatchRate func() float64
+		AdminNamespaceTaskQueueToPartitionRateSub      func(func(float64)) (float64, func())
 
 		// Retry policy for fetching user data from root partition. Should retry forever.
 		GetUserDataRetryPolicy backoff.RetryPolicy
@@ -271,7 +275,9 @@ func NewConfig(
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
+		AdminNamespaceToPartitionRateSub:               dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Subscribe(dc),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate.Get(dc),
+		AdminNamespaceTaskqueueToPartitionRateSub:      dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate.Subscribe(dc),
 
 		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
 		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
@@ -353,8 +359,14 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		AdminNamespaceToPartitionDispatchRate: func() float64 {
 			return config.AdminNamespaceToPartitionDispatchRate(ns.String())
 		},
+		AdminNamespaceToPartitionRateSub: func(cb func(float64)) (float64, func()) {
+			return config.AdminNamespaceToPartitionRateSub(ns.String(), cb)
+		},
 		AdminNamespaceTaskQueueToPartitionDispatchRate: func() float64 {
 			return config.AdminNamespaceTaskqueueToPartitionDispatchRate(ns.String(), taskQueueName, taskType)
+		},
+		AdminNamespaceTaskQueueToPartitionRateSub: func(cb func(float64)) (float64, func()) {
+			return config.AdminNamespaceTaskqueueToPartitionRateSub(ns.String(), taskQueueName, taskType, cb)
 		},
 		forwarderConfig: forwarderConfig{
 			ForwarderMaxOutstandingPolls: func() int {
