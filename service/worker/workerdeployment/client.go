@@ -916,6 +916,8 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 			return temporal.NewNonRetryableApplicationError(errVersionIsDraining, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
 		} else if failure.Message == errVersionHasPollers {
 			return temporal.NewNonRetryableApplicationError(errVersionHasPollers, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
+		} else if failure.Message == errVersionIsCurrentOrRamping {
+			return temporal.NewNonRetryableApplicationError(errVersionIsCurrentOrRamping, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
