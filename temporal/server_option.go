@@ -129,6 +129,13 @@ func WithClaimMapper(claimMapper func(cfg *config.Config) authorization.ClaimMap
 	})
 }
 
+// WithInternalFrontendClaimMapper configures a role mapper for authorization for the internal frontend
+func WithInternalFrontendClaimMapper(claimMapper func(cfg *config.Config) authorization.ClaimMapper) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.internalFrontendClaimMapper = claimMapper(s.config)
+	})
+}
+
 // WithAudienceGetter configures JWT audience getter for authorization
 func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JWTAudienceMapper) ServerOption {
 	return applyFunc(func(s *serverOptions) {
