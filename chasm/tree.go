@@ -20,21 +20,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../LICENSE -package $GOPACKAGE -source $GOFILE -destination tree_mock.go
+
 package chasm
 
 import (
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock"
 )
 
 type (
+	// Node is the in-memory representation of a persisted CHASM node.
+	//
+	// Node and all its methods are NOT meant to be used by CHASM component authors.
+	// They are exported for use by the CHASM engine and underlying MutableState implementation only.
 	Node struct {
-		// TODO: add necessary fields here, e.g.
+		*nodeBase
+
+		parent      *Node
+		children    map[string]*Node
+		persistence *persistencespb.ChasmNode
+
+		// TODO: add other necessary fields here, e.g.
 		//
-		// parent   *Node
-		// children map[string]*Node
-		// persistence *persistencespb.ChasmNode
+		// key string   // key of this node in parent's children map.
+		// instance any // deserialized node state
+		// dirty    bool
 	}
 
 	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
@@ -50,25 +63,58 @@ type (
 		Nodes map[string]*persistencespb.ChasmNode // flattened node path -> chasm node
 	}
 
+	// NodeBackend is a set of methods needed from MutableState
+	//
+	// This is for breaking cycle dependency between
+	// this package and service/history/workflow package
+	// where MutableState is defined.
 	NodeBackend interface {
 		// TODO: Add methods needed from MutateState here.
-		//
-		// This is for breaking cycle dependency between
-		// this package and service/history/workflow package
-		// where MutableState is defined.
+	}
+
+	// NodePathEncoder is an interface for encoding and decoding node paths.
+	// Logic outside the chasm package should only work with encoded paths.
+	NodePathEncoder interface {
+		Encode(node *Node, path []string) (string, error)
+		Decode(encodedPath string) ([]string, error)
 	}
 )
 
-// NewTree creates a new in-memory CHASM tree from flattened persistence CHASM nodes.
-//
-// CHASM Tree and all its methods are NOT meant to be used by CHASM component authors.
-// They are exported for use by the CHASM engine and underlying MutableState implementation only.
+type (
+	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
+	nodeBase struct {
+		registry    *Registry
+		timeSource  clock.TimeSource
+		backend     NodeBackend
+		pathEncoder NodePathEncoder
+	}
+)
+
+// NewTree creates a new in-memory CHASM tree from a collection of flattened persistence CHASM nodes.
 func NewTree(
 	registry *Registry,
 	persistenceNodes map[string]*persistencespb.ChasmNode,
-	nodeBackend NodeBackend,
+	timeSource clock.TimeSource,
+	backend NodeBackend,
+	pathEncoder NodePathEncoder,
 ) (*Node, error) {
-	panic("not implemented")
+	base := &nodeBase{
+		registry:    registry,
+		timeSource:  timeSource,
+		backend:     backend,
+		pathEncoder: pathEncoder,
+	}
+
+	root := newNode(base, nil)
+	for encodedPath, pNode := range persistenceNodes {
+		nodePath, err := pathEncoder.Decode(encodedPath)
+		if err != nil {
+			return nil, err
+		}
+		root.insert(nodePath, pNode, base)
+	}
+
+	return root, nil
 }
 
 // Component retrieves a component from the tree rooted at node n
@@ -91,9 +137,10 @@ func (n *Node) Ref(
 
 // Now implements the CHASM Context interface
 func (n *Node) Now(
-	component Component,
+	_ Component,
 ) time.Time {
-	panic("not implemented")
+	// TODO: Now() could be different for components after we support Pause for CHASM components.
+	return n.timeSource.Now()
 }
 
 // AddTask implements the CHASM MutableContext interface
@@ -138,4 +185,34 @@ func (n *Node) ApplySnapshot(
 	snapshot NodesSnapshot,
 ) error {
 	panic("not implemented")
+}
+
+func (n *Node) insert(
+	nodePath []string,
+	pNode *persistencespb.ChasmNode,
+	nodeBase *nodeBase,
+) {
+	if len(nodePath) == 0 {
+		n.persistence = pNode
+		return
+	}
+
+	childName := nodePath[0]
+	childNode, ok := n.children[childName]
+	if !ok {
+		childNode = newNode(nodeBase, n)
+		n.children[childName] = childNode
+	}
+	childNode.insert(nodePath[1:], pNode, nodeBase)
+}
+
+func newNode(
+	base *nodeBase,
+	parent *Node,
+) *Node {
+	return &Node{
+		nodeBase: base,
+		parent:   parent,
+		children: make(map[string]*Node),
+	}
 }
