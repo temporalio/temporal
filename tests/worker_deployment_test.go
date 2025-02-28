@@ -267,7 +267,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted(
 
 	// waiting for 3 seconds to start the second version later.
 	startTime := time.Now()
-	waitTime := 3 * time.Second
+	waitTime := 1 * time.Millisecond
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		a.Greater(time.Since(startTime), waitTime)
@@ -319,7 +319,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_MultipleVersions_So
 
 		// waiting for 1 second to start the next version later.
 		startTime := time.Now()
-		waitTime := 1 * time.Second
+		waitTime := 1 * time.Millisecond
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			a := assert.New(t)
 			a.Greater(time.Since(startTime), waitTime)
