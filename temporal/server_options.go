@@ -43,6 +43,7 @@ type (
 		authorizer                   authorization.Authorizer
 		tlsConfigProvider            encryption.TLSConfigProvider
 		claimMapper                  authorization.ClaimMapper
+		internalFrontendClaimMapper  InternalFrontendClaimMapper
 		audienceGetter               authorization.JWTAudienceMapper
 		persistenceServiceResolver   resolver.ServiceResolver
 		elasticsearchHttpClient      *http.Client
