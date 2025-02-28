@@ -154,7 +154,7 @@ func recordChildWorkflowCompleted(
 				return nil, consts.ErrChildExecutionNotFound
 			}
 
-			if ci.GetStartedRunId() != request.GetChildFirstExecutionRunId() {
+			if request.GetChildFirstExecutionRunId() != "" && ci.GetStartedRunId() != request.GetChildFirstExecutionRunId() {
 				// this can happen when parent starts another child run in different branch
 				return nil, consts.ErrChildExecutionNotFound
 			}
@@ -205,13 +205,17 @@ func recordStartedEventIfMissing(
 			return consts.ErrChildExecutionNotFound
 		}
 		initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+		execution := &commonpb.WorkflowExecution{
+			WorkflowId: request.GetChildExecution().GetWorkflowId(),
+			RunId:      request.GetChildExecution().GetRunId(),
+		}
+		if request.GetChildFirstExecutionRunId() != "" {
+			execution.RunId = request.GetChildFirstExecutionRunId()
+		}
 		// note values used here should not matter because the child info will be deleted
 		// when the response is recorded, so it should be fine e.g. that ci.Clock is nil
 		_, err = mutableState.AddChildWorkflowExecutionStartedEvent(
-			&commonpb.WorkflowExecution{
-				WorkflowId: request.GetChildExecution().GetWorkflowId(),
-				RunId:      request.GetChildFirstExecutionRunId(),
-			},
+			execution,
 			initiatedAttr.WorkflowType,
 			initiatedEvent.EventId,
 			initiatedAttr.Header,
