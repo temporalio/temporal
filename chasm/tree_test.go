@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 )
 
 type (
