@@ -265,7 +265,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted(
 
 	go s.pollFromDeployment(ctx, firstVersion)
 
-	// waiting for 3 seconds to start the second version later.
+	// waiting for 1ms to start the second version later.
 	startTime := time.Now()
 	waitTime := 1 * time.Millisecond
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -317,7 +317,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_MultipleVersions_So
 	for i := 0; i < numVersions; i++ {
 		go s.pollFromDeployment(ctx, tv.WithBuildIDNumber(i))
 
-		// waiting for 1 second to start the next version later.
+		// waiting for 1ms to start the next version later.
 		startTime := time.Now()
 		waitTime := 1 * time.Millisecond
 		s.EventuallyWithT(func(t *assert.CollectT) {
