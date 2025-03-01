@@ -56,6 +56,9 @@ type Cache interface {
 	// Size returns current size of the Cache, the size definition is implementation of SizeGetter interface
 	// for the entry size, if the entry does not implement SizeGetter interface, the size is 1
 	Size() int
+
+	// Close releases underlying resources of the Cache, such as background workers etc.
+	Close()
 }
 
 // Options control the behavior of the cache.

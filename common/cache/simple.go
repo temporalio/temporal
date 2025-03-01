@@ -108,6 +108,10 @@ func NewSimple(opts *SimpleOptions) Cache {
 	}
 }
 
+func (c *simple) Close() {
+	// Nothing to do.
+}
+
 // Get retrieves the value stored under the given key
 func (c *simple) Get(key interface{}) interface{} {
 	c.RLock()

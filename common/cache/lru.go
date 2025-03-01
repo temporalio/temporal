@@ -190,6 +190,10 @@ func NewLRU(maxSize int, handler metrics.Handler) Cache {
 	return New(maxSize, nil)
 }
 
+func (c *lru) Close() {
+	// Nothing to do yet.
+}
+
 // Get retrieves the value stored under the given key
 func (c *lru) Get(key interface{}) interface{} {
 	if c.maxSize == 0 { //
