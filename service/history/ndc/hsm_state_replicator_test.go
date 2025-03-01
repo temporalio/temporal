@@ -758,7 +758,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 		s.T().Run(tc.name, func(t *testing.T) {
 			lastVersion := tc.versionHistory.Items[len(tc.versionHistory.Items)-1].Version
 
-			err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+			err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 				WorkflowKey:         s.workflowKey,
 				EventVersionHistory: tc.versionHistory,
 				StateMachineNode: &persistencespb.StateMachineNode{
