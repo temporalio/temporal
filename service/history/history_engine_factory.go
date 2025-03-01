@@ -25,6 +25,8 @@
 package history
 
 import (
+	"context"
+
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence"
@@ -85,6 +87,10 @@ func (f *historyEngineFactory) CreateEngine(
 		wfCache = f.WorkflowCache
 	} else {
 		wfCache = f.NewCacheFn(shard.GetConfig(), shard.GetLogger(), shard.GetMetricsHandler())
+		shard.GetFinalizer().Register("wfCache", func(ctx context.Context) error {
+			wfCache.Close()
+			return nil
+		})
 	}
 
 	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, wfCache)

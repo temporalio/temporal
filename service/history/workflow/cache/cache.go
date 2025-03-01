@@ -68,6 +68,8 @@ type (
 			execution *commonpb.WorkflowExecution,
 			lockPriority locks.Priority,
 		) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error)
+
+		Close()
 	}
 
 	cacheImpl struct {
