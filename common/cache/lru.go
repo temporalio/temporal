@@ -74,6 +74,7 @@ type (
 	entryImpl struct {
 		key        interface{}
 		createTime time.Time
+		expireTime time.Time
 		value      interface{}
 		refCount   int
 		size       int
@@ -150,6 +151,10 @@ func (entry *entryImpl) Size() int {
 
 func (entry *entryImpl) CreateTime() time.Time {
 	return entry.createTime
+}
+
+func (entry *entryImpl) ExpireTime() time.Time {
+	return entry.expireTime
 }
 
 // New creates a new cache with the given options
@@ -336,6 +341,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 				}
 				existingEntry.value = value
 				existingEntry.size = newEntrySize
+				existingEntry.createTime = c.timeSource.Now().UTC()
 				c.currSize = newCacheSize
 				metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
 				c.updateEntryTTL(existingEntry)
@@ -363,9 +369,10 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	}
 
 	entry := &entryImpl{
-		key:   key,
-		value: value,
-		size:  newEntrySize,
+		key:        key,
+		value:      value,
+		size:       newEntrySize,
+		createTime: c.timeSource.Now().UTC(),
 	}
 	c.updateEntryTTL(entry)
 	c.updateEntryRefCount(entry)
@@ -434,12 +441,12 @@ func (c *lru) tryEvictAndGetPreviousElement(entry *entryImpl, element *list.Elem
 }
 
 func (c *lru) isEntryExpired(entry *entryImpl, currentTime time.Time) bool {
-	return entry.refCount == 0 && !entry.createTime.IsZero() && currentTime.After(entry.createTime.Add(c.ttl))
+	return entry.refCount == 0 && !entry.expireTime.IsZero() && currentTime.After(entry.expireTime)
 }
 
 func (c *lru) updateEntryTTL(entry *entryImpl) {
 	if c.ttl != 0 {
-		entry.createTime = c.timeSource.Now().UTC()
+		entry.expireTime = c.timeSource.Now().UTC().Add(c.ttl)
 	}
 }
 

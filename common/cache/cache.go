@@ -110,4 +110,6 @@ type Entry interface {
 	Value() interface{}
 	// CreateTime represents the time when the entry is created
 	CreateTime() time.Time
+	// ExpireTime represent the time when emtry will be considered expired
+	ExpireTime() time.Time
 }
