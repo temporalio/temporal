@@ -73,6 +73,18 @@ type Options struct {
 	// TimeSource is an optional clock to use for time-skipping and testing. If this is nil, a real clock will be used.
 	TimeSource clock.TimeSource
 
+	// ActiveEviction creates background worker that will periodically remove expired elements from cache.
+	// Once true, caller must call Close() on cache wen it's no more used to avoid memory leaks.
+	ActiveEviction bool
+
+	// ActiveEvictionInterval sets interval between eviction runs.
+	// Defaults to [DefaultActiveEvictionInterval] if not set.
+	ActiveEvictionInterval time.Duration
+
+	// ActiveEvictionMaxElements sets maximum count of elements to be removed via single eviction iteration.
+	// Defaults to [DefaultActiveEvictionMaxElements] if not set.
+	ActiveEvictionMaxElements int
+
 	OnPut func(val any)
 
 	OnEvict func(val any)
