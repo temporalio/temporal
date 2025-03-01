@@ -222,6 +222,7 @@ func (c *lru) Get(key interface{}) interface{} {
 		return nil
 	}
 
+	c.updateEntryTTL(entry)
 	c.updateEntryRefCount(entry)
 	c.byAccess.MoveToFront(element)
 	return entry.value
