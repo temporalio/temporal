@@ -2162,6 +2162,10 @@ func newContext(
 			shardContext.contextTaggedLogger,
 			false,
 		)
+		shardContext.finalizer.Register("eventsCache", func(ctx context.Context) error {
+			shardContext.eventsCache.Close()
+			return nil
+		})
 	}
 	shardContext.initLastUpdatesTime()
 	return shardContext, nil

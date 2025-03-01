@@ -56,6 +56,7 @@ type (
 		GetEvent(ctx context.Context, shardID int32, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
 		PutEvent(key EventKey, event *historypb.HistoryEvent)
 		DeleteEvent(key EventKey)
+		Close()
 	}
 
 	CacheImpl struct {

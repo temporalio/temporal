@@ -33,7 +33,9 @@ import (
 )
 
 var Module = fx.Options(
-	fx.Provide(func(executionManager persistence.ExecutionManager, config *configs.Config, handler metrics.Handler, logger log.Logger) Cache {
-		return NewHostLevelEventsCache(executionManager, config, handler, logger, false)
+	fx.Provide(func(executionManager persistence.ExecutionManager, config *configs.Config, handler metrics.Handler, logger log.Logger, lc fx.Lifecycle) Cache {
+		cache := NewHostLevelEventsCache(executionManager, config, handler, logger, false)
+		lc.Append(fx.StopHook(cache.Close))
+		return cache
 	}),
 )
