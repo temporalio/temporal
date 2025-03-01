@@ -226,9 +226,7 @@ func convertWorkflowStateReplicationTask(
 				return nil, nil
 			}
 			workflowMutableState := mutableState.CloneToProto()
-			if err := workflow.SanitizeMutableState(workflowMutableState); err != nil {
-				return nil, err
-			}
+			workflow.SanitizeMutableState(workflowMutableState)
 			if err := common.DiscardUnknownProto(workflowMutableState); err != nil {
 				return nil, err
 			}
