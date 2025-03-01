@@ -36,7 +36,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -58,46 +57,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-// TransactionPolicy indicates whether a mutable state transaction is happening for an active namespace or passive namespace.
-type TransactionPolicy int
-
-const (
-	TransactionPolicyActive  TransactionPolicy = 0
-	TransactionPolicyPassive TransactionPolicy = 1
-	// Mutable state is a top-level state machine in the state machines framework.
-	StateMachineType = "workflow.MutableState"
-)
-
-func (policy TransactionPolicy) Ptr() *TransactionPolicy {
-	return &policy
-}
-
-var emptyTasks = []tasks.Task{}
-
-type stateMachineDefinition struct{}
-
-// TODO: Remove this implementation once transition history is fully implemented.
-func (s stateMachineDefinition) CompareState(any, any) (int, error) {
-	return 0, serviceerror.NewUnimplemented("CompareState not implemented for workflow mutable state")
-}
-
-func (stateMachineDefinition) Deserialize([]byte) (any, error) {
-	return nil, serviceerror.NewUnimplemented("workflow mutable state persistence is not supported in the HSM framework")
-}
-
-// Serialize is a noop as Deserialize is not supported.
-func (stateMachineDefinition) Serialize(any) ([]byte, error) {
-	return nil, nil
-}
-
-func (stateMachineDefinition) Type() string {
-	return StateMachineType
-}
-
-func RegisterStateMachine(reg *hsm.Registry) error {
-	return reg.RegisterMachine(stateMachineDefinition{})
-}
 
 type (
 	// TODO: This should be part of persistence layer
