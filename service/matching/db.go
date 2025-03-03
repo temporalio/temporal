@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -492,12 +493,9 @@ func (db *taskQueueDB) ensureDefaultSubqueuesLocked(
 	defKey := &persistencespb.SubqueueKey{
 		Priority: defaultPriorityLevel(db.config.PriorityLevels()),
 	}
-	hasDefault := false
-	for _, s := range subqueues {
-		if hasDefault = proto.Equal(s.Key, defKey); hasDefault {
-			break
-		}
-	}
+	hasDefault := slices.ContainsFunc(subqueues, func(s *dbSubqueue) bool {
+		return proto.Equal(s.Key, defKey)
+	})
 	if !hasDefault {
 		subqueues = append(subqueues, db.newSubqueueLocked(defKey))
 		// If we are transitioning from no-subqueues to subqueues, initialize subqueue 0 with
