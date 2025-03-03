@@ -232,22 +232,26 @@ type TaskQueueInfo struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	NamespaceId             string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Name                    string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	TaskType                v13.TaskQueueType      `protobuf:"varint,3,opt,name=task_type,json=taskType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_type,omitempty"`
-	Kind                    v13.TaskQueueKind      `protobuf:"varint,4,opt,name=kind,proto3,enum=temporal.api.enums.v1.TaskQueueKind" json:"kind,omitempty"`
-	AckLevel                int64                  `protobuf:"varint,5,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
-	ExpiryTime              *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expiry_time,json=expiryTime,proto3" json:"expiry_time,omitempty"`
-	LastUpdateTime          *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_update_time,json=lastUpdateTime,proto3" json:"last_update_time,omitempty"`
-	ApproximateBacklogCount int64                  `protobuf:"varint,8,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
+	NamespaceId string            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Name        string            `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	TaskType    v13.TaskQueueType `protobuf:"varint,3,opt,name=task_type,json=taskType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_type,omitempty"`
+	Kind        v13.TaskQueueKind `protobuf:"varint,4,opt,name=kind,proto3,enum=temporal.api.enums.v1.TaskQueueKind" json:"kind,omitempty"`
+	// After data is migrated into subqueues, this contains a copy of the ack level for subqueue 0.
+	AckLevel       int64                  `protobuf:"varint,5,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
+	ExpiryTime     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expiry_time,json=expiryTime,proto3" json:"expiry_time,omitempty"`
+	LastUpdateTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_update_time,json=lastUpdateTime,proto3" json:"last_update_time,omitempty"`
+	// After data is migrated into subqueues, this contains a copy of the count for subqueue 0.
+	ApproximateBacklogCount int64 `protobuf:"varint,8,opt,name=approximate_backlog_count,json=approximateBacklogCount,proto3" json:"approximate_backlog_count,omitempty"`
 	// Subqueues contains one entry for each subqueue in this physical task queue.
 	// Tasks are split into subqueues to implement priority and fairness.
-	// Subqueues are indexed starting from 0, the zero subqueue is always present.
+	// Subqueues are indexed starting from 0, the zero subqueue is always present
+	// and corresponds to the "main" queue before subqueues were introduced.
+	//
 	// The message at index n describes the subqueue at index n.
 	//
 	// Each subqueue has its own ack level and approx backlog count, but they share
-	// the range id. For compatibility, ack level and backlog count for subqueue 0 is copied
-	// into TaskQueueInfo.
+	// the range id. For compatibility, ack level and backlog count for subqueue 0
+	// is copied into TaskQueueInfo.
 	Subqueues []*SubqueueInfo `protobuf:"bytes,9,rep,name=subqueues,proto3" json:"subqueues,omitempty"`
 }
 
@@ -352,7 +356,7 @@ type SubqueueInfo struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Key is the information used by a splitting algorithm to decide which tasks should go in
-	// this subqueue. It should be regarded as immutable.
+	// this subqueue. It should not change after being registered in TaskQueueInfo.
 	Key *SubqueueKey `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	// The rest are mutable state for the subqueue:
 	AckLevel                int64 `protobuf:"varint,2,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`

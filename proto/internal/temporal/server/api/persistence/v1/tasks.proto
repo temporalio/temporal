@@ -83,7 +83,7 @@ message TaskQueueInfo {
 
 message SubqueueInfo {
     // Key is the information used by a splitting algorithm to decide which tasks should go in
-    // this subqueue. It should be regarded as immutable.
+    // this subqueue. It should not change after being registered in TaskQueueInfo.
     SubqueueKey key = 1;
 
     // The rest are mutable state for the subqueue:
