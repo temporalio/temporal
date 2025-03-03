@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -221,7 +221,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		// should be included in the mutation
 		13: {
 			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
-			Clock:                         &clock.VectorClock{ShardId: s.mockShard.GetShardID(), Clock: 1234},
+			Clock:                         &clockspb.VectorClock{ShardId: s.mockShard.GetShardID(), Clock: 1234},
 		},
 	})
 	mu.EXPECT().GetPendingRequestCancelExternalInfos().Return(map[int64]*persistencespb.RequestCancelInfo{
