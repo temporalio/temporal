@@ -1351,8 +1351,6 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 
 // Should see that the ramping version of the task queues in the current version is unversioned
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversioned_VersionedCurrent() {
-	s.T().Skip("skipping this test since it's flaking on Cassandra. TODO (Shivam): Fix this.")
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
