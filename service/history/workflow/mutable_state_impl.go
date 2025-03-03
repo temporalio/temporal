@@ -516,9 +516,7 @@ func NewSanitizedMutableState(
 	// Although new versions of temporal server will perform state sanitization,
 	// we have to keep the sanitization logic here as well for backward compatibility in case
 	// source cluster is running an old version and doesn't do the sanitization.
-	if err := SanitizeMutableState(mutableStateRecord); err != nil {
-		return nil, err
-	}
+	SanitizeMutableState(mutableStateRecord)
 	if err := common.DiscardUnknownProto(mutableStateRecord); err != nil {
 		return nil, err
 	}
