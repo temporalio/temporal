@@ -109,7 +109,7 @@ func newBacklogManager(
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
 	bmg.taskAckManager = newAckManager(bmg.db, logger)
-	bmg.taskGC = newTaskGC(tqCtx, bmg.db, config, 0)
+	bmg.taskGC = newTaskGC(tqCtx, bmg.db, config, subqueueZero)
 
 	return bmg
 }
@@ -208,7 +208,7 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 		ReadLevel: c.taskAckManager.getReadLevel(),
 		AckLevel:  c.taskAckManager.getAckLevel(),
 		// use getApproximateBacklogCount instead of BacklogCountHint since it's more accurate
-		BacklogCountHint: c.db.getApproximateBacklogCount(0),
+		BacklogCountHint: c.db.getApproximateBacklogCount(subqueueZero),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
 			EndId:   taskIDBlock.end,
@@ -258,7 +258,7 @@ func (c *backlogManagerImpl) completeTask(itask *internalTask, err error) {
 
 	ackLevel, numAcked := c.taskAckManager.completeTask(task.GetTaskId())
 	if numAcked > 0 {
-		c.db.updateApproximateBacklogCount(0, -numAcked)
+		c.db.updateApproximateBacklogCount(subqueueZero, -numAcked)
 	}
 	c.taskGC.Run(ackLevel)
 }

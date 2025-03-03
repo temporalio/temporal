@@ -224,7 +224,7 @@ func (tr *taskReader) getTaskBatchWithRange(
 	readLevel int64,
 	maxReadLevel int64,
 ) ([]*persistencespb.AllocatedTaskInfo, error) {
-	response, err := tr.backlogMgr.db.GetTasks(ctx, 0, readLevel+1, maxReadLevel+1, tr.backlogMgr.config.GetTasksBatchSize())
+	response, err := tr.backlogMgr.db.GetTasks(ctx, subqueueZero, readLevel+1, maxReadLevel+1, tr.backlogMgr.config.GetTasksBatchSize())
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ type getTasksBatchResponse struct {
 func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse, error) {
 	var tasks []*persistencespb.AllocatedTaskInfo
 	readLevel := tr.backlogMgr.taskAckManager.getReadLevel()
-	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(0)
+	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(subqueueZero)
 
 	// counter i is used to break and let caller check whether taskqueue is still alive and needs to resume read.
 	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {

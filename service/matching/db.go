@@ -45,6 +45,10 @@ import (
 const (
 	initialRangeID     = 1 // Id of the first range of a new task queue
 	stickyTaskQueueTTL = 24 * time.Hour
+
+	// Subqueue zero corresponds to "the queue" before migrating metadata to subqueues.
+	// For backwards compatibility, some operations only apply to subqueue zero for now.
+	subqueueZero = 0
 )
 
 type (
@@ -131,7 +135,7 @@ func (db *taskQueueDB) RenewLease(
 	}
 	return taskQueueState{
 		rangeID:   db.rangeID,
-		ackLevel:  db.subqueues[0].AckLevel, // TODO(pri): cleanup, only used by old backlog manager
+		ackLevel:  db.subqueues[subqueueZero].AckLevel, // TODO(pri): cleanup, only used by old backlog manager
 		subqueues: db.cloneSubqueues(),
 	}, nil
 }
@@ -208,9 +212,9 @@ func (db *taskQueueDB) OldUpdateState(
 	defer db.Unlock()
 
 	// Reset approximateBacklogCount to fix the count divergence issue
-	maxReadLevel := db.getMaxReadLevelLocked(0)
+	maxReadLevel := db.getMaxReadLevelLocked(subqueueZero)
 	if ackLevel == maxReadLevel {
-		db.subqueues[0].ApproximateBacklogCount = 0
+		db.subqueues[subqueueZero].ApproximateBacklogCount = 0
 	}
 
 	queueInfo := db.cachedQueueInfo()
@@ -221,7 +225,7 @@ func (db *taskQueueDB) OldUpdateState(
 		PrevRangeID:   db.rangeID,
 	})
 	if err == nil {
-		db.subqueues[0].AckLevel = ackLevel
+		db.subqueues[subqueueZero].AckLevel = ackLevel
 	}
 	db.emitBacklogGauges()
 	return err
@@ -447,10 +451,10 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		Name:                    db.queue.PersistenceName(),
 		TaskType:                db.queue.TaskType(),
 		Kind:                    db.queue.Partition().Kind(),
-		AckLevel:                db.subqueues[0].AckLevel, // backwards compatibility
+		AckLevel:                db.subqueues[subqueueZero].AckLevel, // backwards compatibility
 		ExpiryTime:              db.expiryTime(),
 		LastUpdateTime:          timestamp.TimeNowPtrUtc(),
-		ApproximateBacklogCount: db.subqueues[0].ApproximateBacklogCount, // backwards compatibility
+		ApproximateBacklogCount: db.subqueues[subqueueZero].ApproximateBacklogCount, // backwards compatibility
 		Subqueues:               infos,
 	}
 }
@@ -471,7 +475,7 @@ func (db *taskQueueDB) emitBacklogGauges() {
 
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
-		// maxReadLevel := db.GetMaxReadLevel(0)
+		// maxReadLevel := db.GetMaxReadLevel(subqueueZero)
 		// metrics.TaskLagPerTaskQueueGauge.With(db.backlogMgr.metricsHandler).Record(float64(maxReadLevel - db.subqueues[0].AckLevel))
 	}
 }

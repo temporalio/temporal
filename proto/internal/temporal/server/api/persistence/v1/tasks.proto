@@ -61,10 +61,13 @@ message TaskQueueInfo {
     string name = 2;
     temporal.api.enums.v1.TaskQueueType task_type = 3;
     temporal.api.enums.v1.TaskQueueKind kind = 4;
+    // After data is migrated into subqueues, this contains a copy of the ack level for subqueue 0.
     int64 ack_level = 5;
     google.protobuf.Timestamp expiry_time = 6;
     google.protobuf.Timestamp last_update_time = 7;
+    // After data is migrated into subqueues, this contains a copy of the count for subqueue 0.
     int64 approximate_backlog_count = 8;
+
     // Subqueues contains one entry for each subqueue in this physical task queue.
     // Tasks are split into subqueues to implement priority and fairness.
     // Subqueues are indexed starting from 0, the zero subqueue is always present

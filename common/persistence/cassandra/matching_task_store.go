@@ -164,8 +164,8 @@ const (
 
 // We steal some upper bits of the "row type" field to hold a subqueue index.
 // Subqueue 0 must be the same as rowTypeTask (before subqueues were introduced).
-// 00000000: task in subqueue 0
-// 00000001: task queue metadata
+// 00000000: task in subqueue 0 (rowTypeTask)
+// 00000001: task queue metadata (rowTypeTaskQueue)
 // xxxxxx1x: reserved
 // 00000100: task in subqueue 1
 // nnnnnn00: task in subqueue n, etc.

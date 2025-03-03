@@ -79,7 +79,7 @@ func (m *sqlTaskManager) CreateTaskQueue(
 	if err != nil {
 		return serviceerror.NewInternal(err.Error())
 	}
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, 0)
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, persistence.SubqueueZero)
 
 	row := sqlplugin.TaskQueuesRow{
 		RangeHash:    tqHash,
@@ -106,7 +106,7 @@ func (m *sqlTaskManager) GetTaskQueue(
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
 	}
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, 0)
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, persistence.SubqueueZero)
 	rows, err := m.Db.SelectFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
@@ -144,7 +144,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(
 		return nil, serviceerror.NewInternal(err.Error())
 	}
 
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, 0)
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, persistence.SubqueueZero)
 	var resp *persistence.UpdateTaskQueueResponse
 	err = m.txExecute(ctx, "UpdateTaskQueue", func(tx sqlplugin.Tx) error {
 		if err := lockTaskQueue(ctx,
@@ -317,7 +317,7 @@ func (m *sqlTaskManager) DeleteTaskQueue(
 	if err != nil {
 		return serviceerror.NewUnavailable(err.Error())
 	}
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType, 0)
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType, persistence.SubqueueZero)
 	result, err := m.Db.DeleteFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
@@ -378,7 +378,7 @@ func (m *sqlTaskManager) CreateTasks(
 			return err1
 		}
 		// Lock task queue before committing.
-		tqId, tqHash := idAndHash(0)
+		tqId, tqHash := idAndHash(persistence.SubqueueZero)
 		if err := lockTaskQueue(ctx,
 			tx,
 			tqHash,
@@ -609,32 +609,31 @@ func (m *sqlTaskManager) CountTaskQueuesByBuildId(ctx context.Context, request *
 	return m.Db.CountTaskQueuesByBuildId(ctx, &sqlplugin.CountTaskQueuesByBuildIdRequest{NamespaceID: namespaceID, BuildID: request.BuildID})
 }
 
-// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType
+// Returns the persistence task queue id and a uint32 hash for a task queue.
 func (m *sqlTaskManager) taskQueueIdAndHash(
 	namespaceID primitives.UUID,
-	name string,
+	taskQueueName string,
 	taskType enumspb.TaskQueueType,
 	subqueue int,
 ) ([]byte, uint32) {
-	id := m.taskQueueId(namespaceID, name, taskType, subqueue)
+	id := m.taskQueueId(namespaceID, taskQueueName, taskType, subqueue)
 	return id, farm.Fingerprint32(id)
 }
 
 func (m *sqlTaskManager) taskQueueId(
 	namespaceID primitives.UUID,
-	name string,
+	taskQueueName string,
 	taskType enumspb.TaskQueueType,
 	subqueue int,
 ) []byte {
-	idBytes := make([]byte, 0, 16+len(name)+1+binary.MaxVarintLen16)
+	idBytes := make([]byte, 0, 16+len(taskQueueName)+1+binary.MaxVarintLen16)
 	idBytes = append(idBytes, namespaceID...)
-	idBytes = append(idBytes, []byte(name)...)
+	idBytes = append(idBytes, []byte(taskQueueName)...)
 
-	// To ensure that differet names+task types+subqueue ids an never collide, we mark ids
-	// containing subqueues with an extra high bit, and then append the subqueue id.
-	// There are only a few task queue types (currently 3), so the high bits are free.
-	// (If we have more fields to append, we can use the next lower bit to mark the presence of
-	// that one, etc..)
+	// To ensure that different names+types+subqueue ids never collide, we mark types
+	// containing subqueues with an extra high bit, and then append the subqueue id. There are
+	// only a few task queue types (currently 3), so the high bits are free. (If we have more
+	// fields to append, we can use the next lower bit to mark the presence of that one, etc..)
 	const hasSubqueue = 0x80
 
 	if subqueue > 0 {
