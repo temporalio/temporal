@@ -110,6 +110,14 @@ func (t *taskPQ) Len() int {
 
 // implements heap.Interface, do not call directly
 func (t *taskPQ) Less(i int, j int) bool {
+	// Overall priority key will eventually look something like:
+	// - ready time: to sort all ready tasks ahead of others, or else find the earliest ready task
+	// - isPollForwarder: forwarding polls should happen only if there are no other tasks
+	// - priority key: to sort tasks by priority
+	// - fairness key pass: to arrange tasks fairly by key
+	// - ordering key: to sort tasks by ordering key
+	// - task id: last resort comparison
+
 	a, b := t.heap[i], t.heap[j]
 
 	// poll forwarder is always last

@@ -230,13 +230,14 @@ func (c *priBacklogManagerImpl) getSubqueueForPriority(priority int32) int {
 
 	c.loadSubqueuesLocked(subqueues)
 
-	// this should be here now
+	// After AllocateSubqueue added a subqueue for this priority, and we merged the result into
+	// our state with loadSubqueuesLocked, this lookup should now find a subqueue.
 	if i, ok := c.subqueuesByPriority[priority]; ok {
 		return i
 	}
 
-	// if something went wrong, return 0
-	return 0
+	// But if something went wrong, return zero.
+	return subqueueZero
 }
 
 func (c *priBacklogManagerImpl) periodicSync() {

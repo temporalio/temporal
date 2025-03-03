@@ -272,6 +272,7 @@ func (task *internalTask) getPriority() *commonpb.Priority {
 	} else if task.query != nil {
 		return task.query.request.GetPriority()
 	}
+	// nexus tasks don't have priorities for now
 	return nil
 }
 
