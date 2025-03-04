@@ -268,7 +268,7 @@ func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
 
 	task.initMatch(d)
 	d.tasks.Add(task)
-	d.match()
+	d.findAndWakeMatches()
 }
 
 func (d *matcherData) EnqueueTaskAndWait(ctxs []context.Context, task *internalTask) *matchResult {
@@ -278,7 +278,7 @@ func (d *matcherData) EnqueueTaskAndWait(ctxs []context.Context, task *internalT
 	// add and look for match
 	task.initMatch(d)
 	d.tasks.Add(task)
-	d.match()
+	d.findAndWakeMatches()
 
 	// if already matched, return
 	if task.matchResult != nil {
@@ -308,7 +308,7 @@ func (d *matcherData) ReenqueuePollerIfNotMatched(poller *waitingPoller) {
 
 	if poller.matchResult == nil {
 		d.pollers.Add(poller)
-		d.match()
+		d.findAndWakeMatches()
 	}
 }
 
@@ -322,7 +322,7 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 	// add and look for match
 	poller.initMatch(d)
 	d.pollers.Add(poller)
-	d.match()
+	d.findAndWakeMatches()
 
 	// if already matched, return
 	if poller.matchResult != nil {
@@ -365,7 +365,7 @@ func (d *matcherData) MatchNextPoller(task *internalTask) (canSyncMatch, gotSync
 
 	task.initMatch(d)
 	d.tasks.Add(task)
-	d.match()
+	d.findAndWakeMatches()
 	// don't wait, check if match() picked this one already
 	if task.matchResult != nil {
 		return true, true
@@ -450,12 +450,12 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 		return true
 	}
 	delayToForwardingAllowed := d.config.MaxWaitForPollerBeforeFwd() - time.Since(d.lastPoller)
-	d.reconsiderForwardTimer.set(d.rematch, delayToForwardingAllowed)
+	d.reconsiderForwardTimer.set(d.rematchAfterTimer, delayToForwardingAllowed)
 	return delayToForwardingAllowed <= 0
 }
 
 // call with lock held
-func (d *matcherData) match() {
+func (d *matcherData) findAndWakeMatches() {
 	allowForwarding := d.allowForwarding()
 
 	now := time.Now().UnixNano()
@@ -472,7 +472,7 @@ func (d *matcherData) match() {
 
 		// check ready time
 		delay := d.tasks.readyTimeForTask(task) - now
-		d.rateLimitTimer.set(d.rematch, time.Duration(delay))
+		d.rateLimitTimer.set(d.rematchAfterTimer, time.Duration(delay))
 		if delay > 0 {
 			return // not ready yet, timer will call match later
 		}
@@ -504,14 +504,14 @@ func (d *matcherData) recycleToken(task *internalTask) {
 
 	now := time.Now().UnixNano()
 	d.tasks.consumeTokens(now, task, -1)
-	d.match() // another task may be ready to match now
+	d.findAndWakeMatches() // another task may be ready to match now
 }
 
 // called from timer
-func (d *matcherData) rematch() {
+func (d *matcherData) rematchAfterTimer() {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	d.match()
+	d.findAndWakeMatches()
 }
 
 func (d *matcherData) finishMatchAfterPollForward(poller *waitingPoller, task *internalTask) {
