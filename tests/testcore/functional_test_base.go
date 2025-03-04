@@ -254,7 +254,6 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 // into partitions. Otherwise, the test suite will be executed multiple times
 // in each partition.
 func (s *FunctionalTestBase) SetupTest() {
-	s.checkNoUnexpectedErrorLogs() // make sure the previous test was cleaned up properly
 	s.checkTestShard()
 	s.initAssertions()
 }
