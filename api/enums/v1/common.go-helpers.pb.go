@@ -71,7 +71,6 @@ var (
 		"Unspecified": 0,
 		"Waiting":     1,
 		"Processing":  2,
-		"BackingOff":  3,
 	}
 )
 

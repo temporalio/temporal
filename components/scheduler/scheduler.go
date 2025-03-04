@@ -42,7 +42,7 @@ import (
 type (
 	// Scheduler is a top-level state machine compromised of 3 sub state machines:
 	// - Generator: buffers actions according to the schedule specification
-	// - Executor: executes buffered actions
+	// - Invoker: executes buffered actions
 	// - Backfiller: buffers actions according to requested backfills
 	//
 	// A running Scheduler will always have exactly one of each of the above sub state

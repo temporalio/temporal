@@ -103,8 +103,8 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 		)
 	}
 
-	// Transition the executor sub state machine to execute the new buffered actions.
-	executorNode, err := schedulerNode.Child([]hsm.Key{InvokerMachineKey})
+	// Transition the Invoker sub state machine to execute the new buffered actions.
+	invokerNode, err := schedulerNode.Child([]hsm.Key{InvokerMachineKey})
 	if err != nil {
 		return fmt.Errorf(
 			"%w: %w",
@@ -112,17 +112,14 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 			err,
 		)
 	}
-	err = hsm.MachineTransition(executorNode, func(e Invoker) (hsm.TransitionOutput, error) {
+	err = hsm.MachineTransition(invokerNode, func(e Invoker) (hsm.TransitionOutput, error) {
 		return TransitionEnqueue.Apply(e, EventEnqueue{
-			Node:           executorNode,
+			Node:           invokerNode,
 			BufferedStarts: res.BufferedStarts,
 		})
 	})
 	if err != nil {
-		return fmt.Errorf(
-			"unable to transition Executor to Executing state: %w",
-			err,
-		)
+		return err
 	}
 
 	// Write Generator internal state, flushing the high water mark to persistence.

@@ -94,7 +94,8 @@ func (e executeResult) Append(o executeResult) executeResult {
 type ExecuteTask struct{}
 
 // EventFinishProcessing is fired by the Invoker after executing a ProcessBufferTask,
-// updating the Invoker state.
+// updating the Invoker state, when the Invoker should return to a waiting state until
+// more actions are buffered.
 //
 // When this event is processed, BufferedStarts specified in StartWorkflows
 // will have their Attempt count set to 1, allowing ExecuteTask to begin their
@@ -106,16 +107,8 @@ type EventFinishProcessing struct {
 	processBufferResult
 }
 
-// EventWait is fired when the Invoker should return to a waiting state until
-// more actions are buffered.
-type EventWait struct {
-	Node *hsm.Node
-
-	LastProcessedTime time.Time
-}
-
 // EventRetryProcessing is fired when the Invoker should back off and retry failed
-// executions. As with EventFinish, processBufferResult can be used to update
+// executions. As with EventFinishProcessing, processBufferResult can be used to update
 // Invoker state.
 //
 // The ProcessBufferTask will be delayed based on the earliest retryable start's
@@ -128,11 +121,11 @@ type EventRetryProcessing struct {
 	processBufferResult
 }
 
-// EventCompleteExecution is fired ExecuteTask completes. The Invoker's state is
+// EventRecordExecution is fired ExecuteTask completes. The Invoker's state is
 // updated to remove completed items from the buffers, and update retry counters.
 //
 // See also EventRecordAction.
-type EventCompleteExecution struct {
+type EventRecordExecution struct {
 	Node *hsm.Node
 
 	executeResult
@@ -177,15 +170,11 @@ func (ProcessBufferTask) Validate(_ *persistencespb.StateMachineRef, node *hsm.N
 }
 
 func (i Invoker) tasks() (tasks []hsm.Task, err error) {
-	// Add ProcessBufferTask for both backoff/processing states.
-	switch i.State() { //nolint:exhaustive
-	case enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF:
+	// Add a ProcessBufferTask at the earliest possible time. If the buffer is empty,
+	// or starts are pending processing, the task will be scheduled immediately.
+	if i.State() == enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING {
 		tasks = append(tasks, ProcessBufferTask{
-			deadline: i.earliestRetryTime(),
-		})
-	case enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING:
-		tasks = append(tasks, ProcessBufferTask{
-			deadline: hsm.Immediate,
+			deadline: i.processingDeadline(),
 		})
 	}
 

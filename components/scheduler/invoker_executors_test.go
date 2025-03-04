@@ -160,7 +160,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_Basic() {
 		ExpectedBufferedStarts:   0,
 		ExpectedRunningWorkflows: 2,
 		ExpectedActionCount:      2,
-		ExpectedState:            enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
+		ExpectedState:            enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
 		ExpectedTasks: map[string]int{
 			scheduler.TaskTypeProcessBuffer: 1,
 		},
@@ -346,7 +346,7 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_BackingOff() {
 		TaskType:               scheduler.TaskTypeProcessBuffer,
 		InitialBufferedStarts:  bufferedStarts,
 		InitialState:           enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
-		ExpectedState:          enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
+		ExpectedState:          enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
 		ExpectedBufferedStarts: 2,
 		ExpectedTasks: map[string]int{
 			scheduler.TaskTypeProcessBuffer: 1,
@@ -382,7 +382,7 @@ func (e *invokerExecutorsSuite) TestProcessBufferTask_BackingOffReady() {
 		TaskType:               scheduler.TaskTypeProcessBuffer,
 		InitialBufferedStarts:  bufferedStarts,
 		InitialState:           enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
-		ExpectedState:          enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
+		ExpectedState:          enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
 		ExpectedBufferedStarts: 1,
 		ExpectedTasks: map[string]int{
 			scheduler.TaskTypeProcessBuffer: 1,
@@ -444,7 +444,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_RetryableFailure() {
 		ExpectedRunningWorkflows: 1,
 		ExpectedActionCount:      1,
 		ExpectedOverlapSkipped:   0,
-		ExpectedState:            enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
+		ExpectedState:            enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
 		ExpectedTasks: map[string]int{
 			scheduler.TaskTypeProcessBuffer: 1,
 		},
@@ -491,7 +491,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_AlreadyStarted() {
 		ExpectedBufferedStarts:   0,
 		ExpectedRunningWorkflows: 0,
 		ExpectedActionCount:      0,
-		ExpectedState:            enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
+		ExpectedState:            enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
 		ExpectedTasks: map[string]int{
 			scheduler.TaskTypeProcessBuffer: 1,
 		},
@@ -509,7 +509,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_ExceedsMaxAttempts() {
 			Manual:        false,
 			RequestId:     "req",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-			Attempt:       scheduler.ExecutorMaxStartAttempts,
+			Attempt:       scheduler.InvokerMaxStartAttempts,
 		},
 	}
 
@@ -520,7 +520,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_ExceedsMaxAttempts() {
 		ExpectedBufferedStarts:   0,
 		ExpectedRunningWorkflows: 0,
 		ExpectedActionCount:      0,
-		ExpectedState:            enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
+		ExpectedState:            enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
 		ExpectedTasks: map[string]int{
 			scheduler.TaskTypeProcessBuffer: 1,
 		},
@@ -638,7 +638,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_CancelTerminateFailure() {
 		InitialCancelWorkflows:     cancelWorkflows,
 		InitialTerminateWorkflows:  terminateWorkflows,
 		InitialState:               enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
-		ExpectedState:              enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
+		ExpectedState:              enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
 		ExpectedBufferedStarts:     0,
 		ExpectedRunningWorkflows:   0,
 		ExpectedActionCount:        0,
@@ -677,7 +677,7 @@ func (e *invokerExecutorsSuite) TestExecuteTask_CancelTerminateSucceed() {
 		InitialCancelWorkflows:     cancelWorkflows,
 		InitialTerminateWorkflows:  terminateWorkflows,
 		InitialState:               enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
-		ExpectedState:              enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
+		ExpectedState:              enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
 		ExpectedBufferedStarts:     0,
 		ExpectedRunningWorkflows:   0,
 		ExpectedActionCount:        0,
