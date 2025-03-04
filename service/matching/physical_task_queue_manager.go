@@ -78,17 +78,21 @@ type (
 		taskInfo    *persistencespb.TaskInfo
 		forwardInfo *taskqueuespb.TaskForwardInfo
 	}
-	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
+	// physicalTaskQueueManagerImpl manages a set of physical queues that comprise one logical
+	// queue, corresponding to a single versioned queue of a task queue partition.
+	// TODO(pri): rename this
 	physicalTaskQueueManagerImpl struct {
 		status       int32
 		partitionMgr *taskQueuePartitionManagerImpl
 		queue        *PhysicalTaskQueueKey
 		config       *taskQueueConfig
-		backlogMgr   *backlogManagerImpl
+
 		// This context is valid for lifetime of this physicalTaskQueueManagerImpl.
 		// It can be used to notify when the task queue is closing.
-		tqCtx             context.Context
-		tqCtxCancel       context.CancelFunc
+		tqCtx       context.Context
+		tqCtxCancel context.CancelFunc
+
+		backlogMgr        backlogManager
 		liveness          *liveness
 		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
 		priMatcher        *priTaskMatcher
@@ -190,18 +194,18 @@ func newPhysicalTaskQueueManager(
 		pqMgr.namespaceRegistry,
 		pqMgr.partitionMgr.engine.historyClient,
 	)
-	pqMgr.backlogMgr = newBacklogManager(
-		tqCtx,
-		pqMgr,
-		config,
-		e.taskManager,
-		logger,
-		throttledLogger,
-		e.matchingRawClient,
-		taggedMetricsHandler,
-	)
 
 	if config.NewMatcher {
+		pqMgr.backlogMgr = newPriBacklogManager(
+			pqMgr,
+			config,
+			tqCtx,
+			e.taskManager,
+			logger,
+			throttledLogger,
+			e.matchingRawClient,
+			taggedMetricsHandler,
+		)
 		var fwdr *priForwarder
 		var err error
 		if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
@@ -214,6 +218,16 @@ func newPhysicalTaskQueueManager(
 		pqMgr.priMatcher = newPriTaskMatcher(tqCtx, config, queue.partition, fwdr, pqMgr.taskValidator, pqMgr.metricsHandler)
 		pqMgr.matcher = pqMgr.priMatcher
 	} else {
+		pqMgr.backlogMgr = newBacklogManager(
+			tqCtx,
+			pqMgr,
+			config,
+			e.taskManager,
+			logger,
+			throttledLogger,
+			e.matchingRawClient,
+			taggedMetricsHandler,
+		)
 		var fwdr *Forwarder
 		var err error
 		if !queue.Partition().IsRoot() && queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
@@ -341,7 +355,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 
 		task.namespace = c.partitionMgr.ns.Name()
-		task.backlogCountHint = c.backlogMgr.BacklogCountHint
+		task.backlogCountHint = c.backlogCountHint
 
 		if pollMetadata.forwardedFrom == "" && // only track the original polls, not forwarded ones.
 			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
@@ -349,6 +363,10 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 		return task, nil
 	}
+}
+
+func (c *physicalTaskQueueManagerImpl) backlogCountHint() int64 {
+	return c.backlogMgr.BacklogCountHint()
 }
 
 func (c *physicalTaskQueueManagerImpl) MarkAlive() {
@@ -473,21 +491,23 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 
 func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
 	return &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: c.backlogMgr.db.getApproximateBacklogCount(),
-		ApproximateBacklogAge:   durationpb.New(c.backlogMgr.BacklogHeadAge()), // using this and not matcher's
-		// because it reports only the age of the current physical queue backlog (not including the redirected backlogs) which is consistent
-		// with the ApproximateBacklogCount metric.
-		TasksAddRate:      c.tasksAddedInIntervals.rate(),
-		TasksDispatchRate: c.tasksDispatchedInIntervals.rate(),
+		ApproximateBacklogCount: c.backlogMgr.TotalApproximateBacklogCount(),
+		// using this and not matcher's because it reports only the age of the current physical
+		// queue backlog (not including the redirected backlogs) which is consistent with the
+		// ApproximateBacklogCount metric.
+		ApproximateBacklogAge: durationpb.New(c.backlogMgr.BacklogHeadAge()),
+		TasksAddRate:          c.tasksAddedInIntervals.rate(),
+		TasksDispatchRate:     c.tasksDispatchedInIntervals.rate(),
 	}
 }
 
 func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() *taskqueuespb.InternalTaskQueueStatus {
 	return &taskqueuespb.InternalTaskQueueStatus{
-		ReadLevel:        c.backlogMgr.taskAckManager.getReadLevel(),
-		AckLevel:         c.backlogMgr.taskAckManager.getAckLevel(),
-		TaskIdBlock:      &taskqueuepb.TaskIdBlock{StartId: c.backlogMgr.taskWriter.taskIDBlock.start, EndId: c.backlogMgr.taskWriter.taskIDBlock.end},
-		ReadBufferLength: c.backlogMgr.ReadBufferLength(),
+		// TODO(pri): do something with subqueues here
+		// ReadLevel:        c.backlogMgr.taskAckManager.getReadLevel(),
+		// AckLevel:         c.backlogMgr.taskAckManager.getAckLevel(),
+		// TaskIdBlock:      &taskqueuepb.TaskIdBlock{StartId: c.backlogMgr.taskWriter.taskIDBlock.start, EndId: c.backlogMgr.taskWriter.taskIDBlock.end},
+		ReadBufferLength: c.backlogMgr.BacklogCountHint(),
 	}
 }
 
@@ -700,12 +720,6 @@ func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 
 func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
 	c.partitionMgr.unloadPhysicalQueue(c, unloadCause)
-}
-
-func (c *physicalTaskQueueManagerImpl) ShouldEmitGauges() bool {
-	return c.config.BreakdownMetricsByTaskQueue() &&
-		c.config.BreakdownMetricsByPartition() &&
-		(!c.queue.IsVersioned() || c.config.BreakdownMetricsByBuildID())
 }
 
 func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
