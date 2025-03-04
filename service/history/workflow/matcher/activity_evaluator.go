@@ -29,8 +29,8 @@ import (
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/sqlquery"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 // Supported Fields
@@ -241,7 +241,15 @@ func (m *activityMatchEvaluator) compareActivityStatus(status string, operator s
 	if m.ai.Paused {
 		return compareQueryString(status, "Paused", operator, activityStatusColName)
 	}
-	activityState := workflow.GetActivityState(m.ai)
+
+	activityState := enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+	if m.ai.CancelRequested {
+		activityState = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+	}
+	if m.ai.StartedEventId != common.EmptyEventID {
+		activityState = enumspb.PENDING_ACTIVITY_STATE_STARTED
+	}
+
 	switch activityState { //nolint:exhaustive
 	case enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED:
 		return compareQueryString(status, activityState.String(), operator, activityStatusColName)

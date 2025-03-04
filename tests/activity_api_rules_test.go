@@ -25,12 +25,14 @@ package tests
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -65,13 +67,20 @@ type internalRulesTestWorkflow struct {
 
 	startedActivityCount atomic.Int32
 	letActivitySucceed   atomic.Bool
+	activityCompleteCn   chan struct{}
+
+	testSuite *testcore.FunctionalTestBase
+	ctx       context.Context
 }
 
-func newInternalRulesTestWorkflow() *internalRulesTestWorkflow {
+func newInternalRulesTestWorkflow(ctx context.Context, testSuite *testcore.FunctionalTestBase) *internalRulesTestWorkflow {
 	wf := &internalRulesTestWorkflow{
 		initialRetryInterval:   1 * time.Second,
 		scheduleToCloseTimeout: 30 * time.Minute,
 		startToCloseTimeout:    15 * time.Minute,
+		activityCompleteCn:     make(chan struct{}),
+		testSuite:              testSuite,
+		ctx:                    ctx,
 	}
 	wf.activityRetryPolicy = &temporal.RetryPolicy{
 		InitialInterval:    wf.initialRetryInterval,
@@ -94,10 +103,12 @@ func (w *internalRulesTestWorkflow) WorkflowFunc(ctx workflow.Context) error {
 
 func (w *internalRulesTestWorkflow) ActivityFunc() (string, error) {
 	w.startedActivityCount.Add(1)
-	if w.letActivitySucceed.Load() == false {
+
+	if !w.letActivitySucceed.Load() {
 		activityErr := errors.New("bad-luck-please-retry")
 		return "", activityErr
 	}
+	w.testSuite.WaitForChannel(w.ctx, w.activityCompleteCn)
 	return "done!", nil
 }
 
@@ -131,37 +142,28 @@ func (s *ActivityApiRulesClientTestSuite) makeWorkflowFunc(activityFunction Acti
 	}
 }
 
-func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_WhileRetrying() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	var startedActivityCount atomic.Int32
-	var activityShouldPass atomic.Bool
-	activityCompleteCn := make(chan struct{})
-
-	activityFunction := func() (string, error) {
-		startedActivityCount.Add(1)
-
-		if !activityShouldPass.Load() {
-			activityErr := errors.New("bad-luck-please-retry")
-			return "", activityErr
-		}
-		s.WaitForChannel(ctx, activityCompleteCn)
-		return "done!", nil
-	}
-
-	workflowFn := s.makeWorkflowFunc(activityFunction)
-
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
-
+func (s *ActivityApiRulesClientTestSuite) createWorkflow(ctx context.Context, workflowFn WorkflowFunction) sdkclient.WorkflowRun {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: s.TaskQueue(),
 	}
-
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
+	s.NotNil(workflowRun)
+
+	return workflowRun
+}
+
+func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_WhileRetrying() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	testWorkflow := newInternalRulesTestWorkflow(ctx, &s.FunctionalTestBase)
+
+	s.Worker().RegisterWorkflow(testWorkflow.WorkflowFunc)
+	s.Worker().RegisterActivity(testWorkflow.ActivityFunc)
+
+	workflowRun := s.createWorkflow(ctx, testWorkflow.WorkflowFunc)
 
 	// wait for activity to start and fail few times
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -170,17 +172,19 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_WhileRetrying() {
 		if description.GetPendingActivities() != nil {
 			assert.Len(t, description.PendingActivities, 1)
 		}
-		assert.Less(t, int32(1), startedActivityCount.Load())
+		assert.Less(t, int32(1), testWorkflow.startedActivityCount.Load())
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// create rule to pause activity
+	ruleID := "pause-activity"
+	activityType := "ActivityFunc"
 	createRuleRequest := &workflowservice.CreateWorkflowRuleRequest{
 		Namespace: s.Namespace().String(),
 		Spec: &rulespb.WorkflowRuleSpec{
-			Id: "pause-activity",
+			Id: ruleID,
 			Trigger: &rulespb.WorkflowRuleSpec_ActivityStart{
 				ActivityStart: &rulespb.WorkflowRuleSpec_ActivityStartTrigger{
-					Predicate: "ActivityType = \"ActivityFunc\"",
+					Predicate: fmt.Sprintf("ActivityType = \"%s\"", activityType),
 				},
 			},
 			Actions: []*rulespb.Action{
@@ -198,19 +202,57 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_WhileRetrying() {
 	s.NoError(err)
 	s.NotNil(createRuleResponse)
 
+	// verify that frontend has updated namespaces
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+			Namespace: s.Namespace().String(),
+		})
+		s.NoError(err)
+		s.NotNil(nsResp)
+		s.NotNil(nsResp.Rules)
+		if nsResp.GetRules() != nil {
+			s.Len(nsResp.Rules, 1)
+			s.Equal(ruleID, nsResp.Rules[0].Spec.Id)
+		}
+	}, 5*time.Second, 200*time.Millisecond)
+
 	// wait for activity to be paused by rule
-
-	// unblock the activity
-
-	// wait long enough for activity to retry if pause is not working
-
-	// make sure activity is not completed, and was not retried
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		assert.NoError(t, err)
+		if description.GetPendingActivities() != nil {
+			assert.Len(t, description.PendingActivities, 1)
+			assert.True(t, description.PendingActivities[0].GetActivityType().GetName() == activityType)
+			assert.True(t, description.PendingActivities[0].GetPaused())
+		}
+		assert.Less(t, int32(1), testWorkflow.startedActivityCount.Load())
+	}, 5*time.Second, 200*time.Millisecond)
 
 	// unpause the activity
+	_, err = s.FrontendClient().UnpauseActivity(ctx, &workflowservice.UnpauseActivityRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowRun.GetID(),
+		},
+		Activity: &workflowservice.UnpauseActivityRequest_Type{Type: activityType},
+	})
+	s.NoError(err)
 
-	// let the workflow finish
-	activityShouldPass.Store(true)
-	activityCompleteCn <- struct{}{}
+	// wait for activity to be unpaused
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		assert.NoError(t, err)
+		if description.GetPendingActivities() != nil {
+			assert.Len(t, description.PendingActivities, 1)
+			assert.True(t, description.PendingActivities[0].GetActivityType().GetName() == activityType)
+			assert.False(t, description.PendingActivities[0].GetPaused())
+		}
+		assert.Less(t, int32(1), testWorkflow.startedActivityCount.Load())
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// unblock the activity and let the workflow finish
+	testWorkflow.letActivitySucceed.Store(true)
+	testWorkflow.activityCompleteCn <- struct{}{}
 
 	// wait for workflow to finish
 	var out string

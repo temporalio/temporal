@@ -27,9 +27,9 @@ import (
 	"time"
 
 	"github.com/temporalio/sqlparser"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/sqlquery"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 // Supported Fields
@@ -41,11 +41,17 @@ const (
 )
 
 type mutableStateMatchEvaluator struct {
-	ms workflow.MutableState
+	executionInfo  *persistencespb.WorkflowExecutionInfo
+	executionState *persistencespb.WorkflowExecutionState
 }
 
-func newMutableStateMatchEvaluator(ms workflow.MutableState) *mutableStateMatchEvaluator {
-	return &mutableStateMatchEvaluator{ms: ms}
+func newMutableStateMatchEvaluator(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState) *mutableStateMatchEvaluator {
+	return &mutableStateMatchEvaluator{
+		executionInfo:  executionInfo,
+		executionState: executionState,
+	}
 }
 
 func (m *mutableStateMatchEvaluator) Evaluate(query string) (bool, error) {
@@ -197,12 +203,12 @@ func (m *mutableStateMatchEvaluator) evaluateRange(expr *sqlparser.RangeCond) (b
 }
 
 func (m *mutableStateMatchEvaluator) compareWorkflowType(workflowType string, operation string) (bool, error) {
-	existingWorkflowType := m.ms.GetExecutionInfo().WorkflowTypeName
+	existingWorkflowType := m.executionInfo.WorkflowTypeName
 	return compareQueryString(existingWorkflowType, workflowType, operation, workflowTypeNameColName)
 }
 
 func (m *mutableStateMatchEvaluator) compareWorkflowID(workflowID string, operation string) (bool, error) {
-	existingWorkflowId := m.ms.GetExecutionInfo().WorkflowId
+	existingWorkflowId := m.executionInfo.WorkflowId
 	return compareQueryString(workflowID, existingWorkflowId, operation, workflowIDColName)
 }
 
@@ -210,7 +216,7 @@ func (m *mutableStateMatchEvaluator) compareWorkflowStatus(status string, operat
 	if len(status) == 0 {
 		return false, NewMatcherError("workflow status cannot be empty")
 	}
-	msStatus := m.ms.GetExecutionState().Status.String()
+	msStatus := m.executionState.Status.String()
 	switch operation {
 	case sqlparser.EqualStr:
 		return msStatus == status, nil
@@ -226,7 +232,7 @@ func (m *mutableStateMatchEvaluator) compareStartTime(val string, operation stri
 	if err != nil {
 		return false, err
 	}
-	startTime := m.ms.GetExecutionState().StartTime.AsTime()
+	startTime := m.executionState.StartTime.AsTime()
 	switch operation {
 	case sqlparser.GreaterEqualStr:
 		return startTime.Compare(expectedTime) >= 0, nil
@@ -246,7 +252,7 @@ func (m *mutableStateMatchEvaluator) compareStartTime(val string, operation stri
 }
 
 func (m *mutableStateMatchEvaluator) compareStartTimeBetween(fromTime time.Time, toTime time.Time) (bool, error) {
-	startTime := m.ms.GetExecutionState().StartTime.AsTime()
+	startTime := m.executionState.StartTime.AsTime()
 	lc := startTime.Compare(fromTime)
 	rc := startTime.Compare(toTime)
 	return lc >= 0 && rc <= 0, nil
