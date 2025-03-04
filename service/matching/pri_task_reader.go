@@ -59,7 +59,9 @@ const (
 type (
 	priTaskReader struct {
 		notifyC    chan struct{} // Used as signal to notify pump of new tasks
-		backlogMgr *backlogManagerImpl
+		backlogMgr *priBacklogManagerImpl
+		ackManager *ackManager
+		subqueue   int
 
 		backoffTimerLock sync.Mutex
 		backoffTimer     *time.Timer
@@ -76,9 +78,15 @@ type (
 var addErrorRetryPolicy = backoff.NewExponentialRetryPolicy(2 * time.Second).
 	WithExpirationInterval(backoff.NoInterval)
 
-func newPriTaskReader(backlogMgr *backlogManagerImpl) *priTaskReader {
+func newPriTaskReader(
+	backlogMgr *priBacklogManagerImpl,
+	subqueue int,
+	ackManager *ackManager,
+) *priTaskReader {
 	return &priTaskReader{
 		backlogMgr: backlogMgr,
+		ackManager: ackManager,
+		subqueue:   subqueue,
 		notifyC:    make(chan struct{}, 1),
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
@@ -142,18 +150,12 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	if int(loaded) == tr.backlogMgr.config.GetTasksBatchSize()/reloadFraction {
 		tr.Signal()
 	}
-	tr.backlogMgr.completeTask(task.event.AllocatedTaskInfo, err)
+	tr.backlogMgr.completeTask(task, err)
 }
 
 // nolint:revive // can simplify later
 func (tr *priTaskReader) getTasksPump() {
 	ctx := tr.backlogMgr.tqCtx
-
-	if err := tr.backlogMgr.WaitUntilInitialized(ctx); err != nil {
-		return
-	}
-
-	updateAckTicker := time.NewTicker(tr.backlogMgr.config.UpdateAckInterval())
 
 	tr.Signal() // prime pump
 Loop:
@@ -183,7 +185,7 @@ Loop:
 			tr.retrier.Reset()
 
 			if len(batch.tasks) == 0 {
-				tr.backlogMgr.taskAckManager.setReadLevelAfterGap(batch.readLevel)
+				tr.ackManager.setReadLevelAfterGap(batch.readLevel)
 				if !batch.isReadBatchDone {
 					tr.Signal()
 				}
@@ -193,18 +195,6 @@ Loop:
 			tr.addTasksToMatcher(batch.tasks)
 			// There may be more tasks.
 			tr.Signal()
-
-		case <-updateAckTicker.C:
-			err := tr.persistAckBacklogCountLevel(ctx)
-			isConditionFailed := tr.backlogMgr.signalIfFatal(err)
-			if err != nil && !isConditionFailed {
-				tr.logger().Error("Persistent store operation failure",
-					tag.StoreOperationUpdateTaskQueue,
-					tag.Error(err))
-				// keep going as saving ack is not critical
-			}
-			// TODO(pri): don't do this, or else prove that it's needed
-			tr.Signal() // periodically signal pump to check persistence for tasks
 		}
 	}
 }
@@ -220,8 +210,8 @@ Loop:
 // Also return a number that can be used to update readLevel
 // Also return a bool to indicate whether read is finished
 func (tr *priTaskReader) getTaskBatch(ctx context.Context) (getTasksBatchResponse, error) {
-	readLevel := tr.backlogMgr.taskAckManager.getReadLevel()
-	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel()
+	readLevel := tr.ackManager.getReadLevel()
+	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(tr.subqueue)
 
 	// counter i is used to break and let caller check whether taskqueue is still alive and needs to resume read.
 	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
@@ -231,6 +221,7 @@ func (tr *priTaskReader) getTaskBatch(ctx context.Context) (getTasksBatchRespons
 		}
 		response, err := tr.backlogMgr.db.GetTasks(
 			ctx,
+			tr.subqueue,
 			readLevel+1,
 			upper+1,
 			tr.backlogMgr.config.GetTasksBatchSize(),
@@ -262,16 +253,16 @@ func (tr *priTaskReader) addTasksToMatcher(tasks []*persistencespb.AllocatedTask
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
-			tr.backlogMgr.taskAckManager.setReadLevel(t.GetTaskId())
+			tr.ackManager.setReadLevel(t.GetTaskId())
 			continue
 		}
 
-		tr.backlogMgr.taskAckManager.addTask(t.GetTaskId())
+		tr.ackManager.addTask(t.GetTaskId())
 		tr.loadedTasks.Add(1)
 		tr.backlogAgeLock.Lock()
 		tr.backlogAge.record(t.Data.CreateTime, 1)
 		tr.backlogAgeLock.Unlock()
-		task := newInternalTaskFromBacklog(t, tr.completeTask)
+		task := newInternalTaskFromBacklog(t, tr.completeTask, tr.subqueue)
 
 		// After we get to this point, we must eventually call task.finish or
 		// task.finishForwarded, which will call tr.completeTask.
@@ -348,11 +339,6 @@ func (tr *priTaskReader) retryAddAfterError(task *internalTask) {
 		addErrorRetryPolicy,
 		nil,
 	)
-}
-
-func (tr *priTaskReader) persistAckBacklogCountLevel(ctx context.Context) error {
-	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
-	return tr.backlogMgr.db.UpdateState(ctx, ackLevel)
 }
 
 func (tr *priTaskReader) logger() log.Logger {
