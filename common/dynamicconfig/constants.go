@@ -1278,10 +1278,16 @@ a decision to scale down the number of pollers will be issued`,
 		10,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
 second per poller by one physical queue manager`,
+	)
 	MatchingUseNewMatcher = NewTaskQueueBoolSetting(
 		"matching.useNewMatcher",
 		false,
 		`Use priority-enabled TaskMatcher.`,
+	)
+	MatchingPriorityLevels = NewTaskQueueIntSetting(
+		"matching.priorityLevels",
+		5,
+		`Number of simple priority levels`,
 	)
 
 	// keys for history

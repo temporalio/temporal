@@ -41,7 +41,8 @@ type (
 	// genericTaskInfo contains the info for an activity or workflow task
 	genericTaskInfo struct {
 		*persistencespb.AllocatedTaskInfo
-		completionFunc func(*internalTask, taskResponse)
+		completionFunc  func(*internalTask, taskResponse)
+		backlogSubqueue int
 	}
 	// queryTaskInfo contains the info for a query task
 	queryTaskInfo struct {
@@ -133,11 +134,13 @@ func newInternalTaskForSyncMatch(
 func newInternalTaskFromBacklog(
 	info *persistencespb.AllocatedTaskInfo,
 	completionFunc func(*internalTask, taskResponse),
+	backlogSubqueue int,
 ) *internalTask {
 	return &internalTask{
 		event: &genericTaskInfo{
 			AllocatedTaskInfo: info,
 			completionFunc:    completionFunc,
+			backlogSubqueue:   backlogSubqueue,
 		},
 		source: enumsspb.TASK_SOURCE_DB_BACKLOG,
 	}
@@ -268,6 +271,16 @@ func (task *internalTask) getResponse() (taskResponse, bool) {
 		return taskResponse{}, false
 	}
 	return <-task.responseC, true
+}
+
+func (task *internalTask) getPriority() *commonpb.Priority {
+	if task.event != nil {
+		return task.event.AllocatedTaskInfo.GetData().GetPriority()
+	} else if task.query != nil {
+		return task.query.request.GetPriority()
+	}
+	// nexus tasks don't have priorities for now
+	return nil
 }
 
 // finish marks a task as finished. Should be called after a poller picks up a task

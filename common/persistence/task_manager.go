@@ -35,6 +35,12 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
+// Subqueue zero corresponds to "the queue" before migrating metadata to subqueues.
+// For SQL: metadata operations apply to subqueue zero only, while tasks are stored in
+// multiple subqueues.
+// For Cassandra: subqueues are represented in the row type.
+const SubqueueZero = 0
+
 type taskManagerImpl struct {
 	taskStore  TaskStore
 	serializer serialization.Serializer
@@ -198,6 +204,9 @@ func (m *taskManagerImpl) CreateTasks(
 			TaskId:     task.GetTaskId(),
 			ExpiryTime: task.Data.ExpiryTime,
 			Task:       taskBlob,
+		}
+		if i < len(request.Subqueues) {
+			tasks[i].Subqueue = request.Subqueues[i]
 		}
 	}
 	internalRequest := &InternalCreateTasksRequest{

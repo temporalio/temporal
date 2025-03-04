@@ -110,12 +110,36 @@ func (t *taskPQ) Len() int {
 
 // implements heap.Interface, do not call directly
 func (t *taskPQ) Less(i int, j int) bool {
+	// Overall priority key will eventually look something like:
+	// - ready time: to sort all ready tasks ahead of others, or else find the earliest ready task
+	// - isPollForwarder: forwarding polls should happen only if there are no other tasks
+	// - priority key: to sort tasks by priority
+	// - fairness key pass: to arrange tasks fairly by key
+	// - ordering key: to sort tasks by ordering key
+	// - task id: last resort comparison
+
 	a, b := t.heap[i], t.heap[j]
+
+	// poll forwarder is always last
 	if !a.isPollForwarder && b.isPollForwarder {
 		return true
+	} else if a.isPollForwarder && !b.isPollForwarder {
+		return false
 	}
-	// TODO(pri): use priority, task id, etc.
-	return false
+
+	// try priority
+	ap, bp := a.getPriority(), b.getPriority()
+	apk, bpk := ap.GetPriorityKey(), bp.GetPriorityKey()
+	if apk < bpk {
+		return true
+	} else if apk > bpk {
+		return false
+	}
+
+	// Note: sync match tasks have a fixed negative id.
+	// Query tasks will get 0 here.
+	aid, bid := a.event.GetTaskId(), b.event.GetTaskId()
+	return aid < bid
 }
 
 // implements heap.Interface, do not call directly
@@ -513,21 +537,16 @@ func (w *waitableMatchResult) waitForMatch() *matchResult {
 // resettable timer:
 
 type resettableTimer struct {
-	timer  *time.Timer // AfterFunc timer
-	target time.Time   // target time of timer
+	timer *time.Timer // AfterFunc timer
 }
 
-// set sets rt to call f after delay. If it was already set to a future time, it's reset
-// to only the sooner time. If it was already set to a sooner time, it's unchanged.
-// set to <= 0 stops the timer.
+// set sets rt to call f after delay. set to <= 0 stops the timer.
 func (rt *resettableTimer) set(f func(), delay time.Duration) {
 	if delay <= 0 {
 		rt.unset()
 	} else if rt.timer == nil {
-		rt.target = time.Now().Add(delay)
 		rt.timer = time.AfterFunc(delay, f)
-	} else if target := time.Now().Add(delay); target.Before(rt.target) {
-		rt.target = target
+	} else {
 		rt.timer.Reset(delay)
 	}
 }
