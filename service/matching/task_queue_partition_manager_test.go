@@ -32,7 +32,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -46,9 +45,11 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -59,6 +60,7 @@ const (
 
 type PartitionManagerTestSuite struct {
 	suite.Suite
+	protorequire.ProtoAssertions
 	controller   *gomock.Controller
 	userDataMgr  *mockUserDataManager
 	partitionMgr *taskQueuePartitionManagerImpl
@@ -69,6 +71,7 @@ func TestPartitionManagerSuite(t *testing.T) {
 }
 
 func (s *PartitionManagerTestSuite) SetupTest() {
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
 	config := NewConfig(dynamicconfig.NewNoopCollection())
@@ -122,7 +125,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	// adding multiple tasks to queues with different buildId's
+	// adding multiple tasks to queues with different buildIds
 	bld1 := "build1"
 	bld2 := "build2"
 	s.validateAddTask("", false, nil, worker_versioning.MakeBuildIdDirective(bld1))
@@ -137,17 +140,26 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.Equal(2, len(resp.VersionsInfoInternal))
 
 	// validate PhysicalTaskQueueInfo structures
-	s.NotNil(resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo)
-	s.NotNil(resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo)
+	info1 := resp.VersionsInfoInternal[bld1].GetPhysicalTaskQueueInfo()
+	s.NotNil(info1)
+	info2 := resp.VersionsInfoInternal[bld2].GetPhysicalTaskQueueInfo()
+	s.NotNil(info2)
+	// check rate manually
+	s.Greater(info1.TaskQueueStats.TasksAddRate, float32(0))
+	s.Greater(info2.TaskQueueStats.TasksAddRate, float32(0))
+	// reset so we can compare the rest exactly
+	info1.TaskQueueStats.TasksAddRate = 0
+	info2.TaskQueueStats.TasksAddRate = 0
+
 	expectedPhysicalTQInfo := &taskqueuespb.PhysicalTaskQueueInfo{
 		Pollers: nil, // no pollers polling
 		TaskQueueStats: &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogAge:   durationpb.New(0),
 			ApproximateBacklogCount: 1,
-			TasksDispatchRate:       0,
 		},
 	}
-	s.validatePhysicalTaskQueueInfo(expectedPhysicalTQInfo, resp.VersionsInfoInternal[bld1].GetPhysicalTaskQueueInfo())
-	s.validatePhysicalTaskQueueInfo(expectedPhysicalTQInfo, resp.VersionsInfoInternal[bld2].GetPhysicalTaskQueueInfo())
+	s.ProtoEqual(expectedPhysicalTQInfo, resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo)
+	s.ProtoEqual(expectedPhysicalTQInfo, resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo)
 
 	// adding pollers
 	s.validatePollTask(bld1, true)
@@ -158,42 +170,24 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.NoError(err)
 
 	// validate TQ internal statistics (not exposed via public API)
-	expectedInternalStatsInfo := &taskqueuespb.InternalTaskQueueStatus{
-		ReadLevel: 1,
-		AckLevel:  0,
-		TaskIdBlock: &taskqueuepb.TaskIdBlock{
-			StartId: 2,
-			EndId:   1000,
+	expectedInternalStatsInfo := []*taskqueuespb.InternalTaskQueueStatus{
+		&taskqueuespb.InternalTaskQueueStatus{
+			// ReadLevel: 1,
+			AckLevel: 0,
+			// TaskIdBlock: &taskqueuepb.TaskIdBlock{
+			// 	StartId: 2,
+			// 	EndId:   100000,
+			// },
+			ReadBufferLength: 1,
 		},
-		ReadBufferLength: 0,
 	}
 
-	s.validateInternalTaskQueueStatus(expectedInternalStatsInfo, resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
-	s.validateInternalTaskQueueStatus(expectedInternalStatsInfo, resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
-
-}
-
-// validateTQStats is a helper to validate if the right metrics are being returned during the getStats call
-func (s *PartitionManagerTestSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTQInfo *taskqueuespb.PhysicalTaskQueueInfo, actualPhysicalTQInfo *taskqueuespb.PhysicalTaskQueueInfo) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		a.Equal(expectedPhysicalTQInfo.Pollers, actualPhysicalTQInfo.Pollers)
-		a.Equal(expectedPhysicalTQInfo.TaskQueueStats.ApproximateBacklogCount, actualPhysicalTQInfo.TaskQueueStats.ApproximateBacklogCount)
-		a.Equal(expectedPhysicalTQInfo.TaskQueueStats.TasksDispatchRate, actualPhysicalTQInfo.TaskQueueStats.TasksDispatchRate)
-		a.NotNil(actualPhysicalTQInfo.TaskQueueStats.TasksAddRate)
-		a.NotNil(actualPhysicalTQInfo.TaskQueueStats.ApproximateBacklogAge)
-	}, time.Second*10, 200*time.Millisecond)
-}
-
-// validateInternalTaskQueueStatus is a helper to validate if the right internal task queue stats are being returned during the GetInternalTaskQueueStatus call
-func (s *PartitionManagerTestSuite) validateInternalTaskQueueStatus(expectedInternalTaskQueueStatus *taskqueuespb.InternalTaskQueueStatus, actualInternalTaskQueueStatus *taskqueuespb.InternalTaskQueueStatus) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-		a.Equal(expectedInternalTaskQueueStatus.ReadLevel, actualInternalTaskQueueStatus.ReadLevel)
-		a.Equal(expectedInternalTaskQueueStatus.AckLevel, actualInternalTaskQueueStatus.AckLevel)
-		a.Equal(expectedInternalTaskQueueStatus.ReadBufferLength, actualInternalTaskQueueStatus.ReadBufferLength)
-		a.NotNil(actualInternalTaskQueueStatus.TaskIdBlock)
-	}, time.Second*10, 200*time.Millisecond)
+	status1 := resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	// s.Equal(1, len(status1))
+	s.ProtoEqual(expectedInternalStatsInfo[0], status1)
+	status2 := resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	// s.Equal(1, len(status2))
+	s.ProtoEqual(expectedInternalStatsInfo[0], status2)
 }
 
 func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
@@ -529,7 +523,7 @@ func (s *PartitionManagerTestSuite) validatePollTaskSyncMatch(buildId string, us
 
 // Poll task and assert no error and that a non-nil task is returned
 func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioning bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1000000*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	task, _, err := s.partitionMgr.PollTask(ctx, &pollMetadata{

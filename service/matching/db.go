@@ -126,6 +126,13 @@ func (db *taskQueueDB) getMaxReadLevelLocked(subqueue int) int64 {
 	return db.subqueues[subqueue].maxReadLevel
 }
 
+// This is only exposed for testing!
+func (db *taskQueueDB) setMaxReadLevelForTesting(subqueue int, level int64) {
+	db.Lock()
+	defer db.Unlock()
+	db.subqueues[subqueue].maxReadLevel = level
+}
+
 // RenewLease renews the lease on a taskqueue. If there is no previous lease,
 // this method will attempt to steal taskqueue from current owner
 func (db *taskQueueDB) RenewLease(
@@ -272,10 +279,11 @@ func (db *taskQueueDB) updateAckLevelAndCount(subqueue int, ackLevel int64, delt
 }
 
 // updateApproximateBacklogCount updates the in-memory DB state with the given delta value
-func (db *taskQueueDB) updateApproximateBacklogCount(subqueue int, delta int64) {
+// TODO(pri): old matcher cleanup
+func (db *taskQueueDB) updateApproximateBacklogCount(delta int64) {
 	db.Lock()
 	defer db.Unlock()
-	db.updateApproximateBacklogCountLocked(subqueue, delta)
+	db.updateApproximateBacklogCountLocked(0, delta)
 }
 
 func (db *taskQueueDB) updateApproximateBacklogCountLocked(subqueue int, delta int64) {
