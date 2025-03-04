@@ -367,10 +367,12 @@ func (s *FunctionalTestBase) TearDownCluster() {
 	}
 }
 
+// **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
 	s.checkNoUnexpectedErrorLogs()
 }
 
+// **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
 func (s *FunctionalTestBase) TearDownSubTest() {
 	s.checkNoUnexpectedErrorLogs()
 }

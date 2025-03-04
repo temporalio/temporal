@@ -118,6 +118,7 @@ func (s *FunctionalTestSdkSuite) SetupTest() {
 }
 
 func (s *FunctionalTestSdkSuite) TearDownTest() {
+	s.FunctionalTestBase.TearDownTest()
 	if s.worker != nil {
 		s.worker.Stop()
 	}
