@@ -119,7 +119,7 @@ func newPriTaskMatcher(
 ) *priTaskMatcher {
 	tm := &priTaskMatcher{
 		config:         config,
-		data:           newMatcherData(config, fwdr != nil),
+		data:           newMatcherData(config, fwdr != nil, clock.NewRealTimeSource()),
 		tqCtx:          tqCtx,
 		metricsHandler: metricsHandler,
 		partition:      partition,
@@ -280,7 +280,7 @@ func (tm *priTaskMatcher) forwardPolls() {
 		// identity, plus the right deadline.
 		task, err := tm.fwdr.ForwardPoll(poller.forwardCtx, poller.pollMetadata)
 		if err == nil {
-			tm.data.finishMatchAfterPollForward(poller, task)
+			tm.data.FinishMatchAfterPollForward(poller, task)
 		} else {
 			// Re-enqueue to let it match again, if it hasn't gotten a context timeout already.
 			poller.forwardCtx = nil // disable forwarding next time
@@ -342,7 +342,7 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, 
 	// Fast path if we have a waiting poller (or forwarder).
 	// Forwarding happens here if we match with the task forwarding poller.
 	task.forwardCtx = ctx
-	if canMatch, gotMatch := tm.data.MatchNextPoller(task); gotMatch {
+	if canMatch, gotMatch := tm.data.MatchTaskImmediately(task); gotMatch {
 		return finish()
 	} else if !canMatch {
 		return false, nil
