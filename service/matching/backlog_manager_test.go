@@ -41,48 +41,6 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-/* TODO: I can't figure out what these tests are testing
-
-func TestDeliverBufferTasks(t *testing.T) {
-	controller := gomock.NewController(t)
-
-	tests := []func(tlm *physicalTaskQueueManagerImpl){
-		func(tlm *physicalTaskQueueManagerImpl) { close(tlm.backlogMgr.taskReader.taskBuffer) },
-		func(tlm *physicalTaskQueueManagerImpl) { tlm.tqCtxCancel() },
-		func(tlm *physicalTaskQueueManagerImpl) {
-			rps := 0.1
-			tlm.matcher.UpdateRatelimit(rps)
-			tlm.backlogMgr.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
-				Data: &persistencespb.TaskInfo{},
-			}
-			err := tlm.oldMatcher.rateLimiter.Wait(context.Background()) // consume the token
-			assert.NoError(t, err)
-			tlm.tqCtxCancel()
-		},
-	}
-	for _, test := range tests {
-		// TODO: do not create pq manager, directly create backlog manager
-		tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
-		go tlm.backlogMgr.taskReader.dispatchBufferedTasks()
-		test(tlm)
-		// dispatchBufferedTasks should stop after invocation of the test function
-	}
-}
-
-func TestDeliverBufferTasks_NoPollers(t *testing.T) {
-	controller := gomock.NewController(t)
-
-	// TODO: do not create pq manager, directly create backlog manager
-	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
-	tlm.backlogMgr.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
-		Data: &persistencespb.TaskInfo{},
-	}
-	go tlm.backlogMgr.taskReader.dispatchBufferedTasks()
-	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
-	tlm.tqCtxCancel()
-}
-*/
-
 func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	controller := gomock.NewController(t)
 

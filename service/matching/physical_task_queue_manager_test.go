@@ -76,65 +76,6 @@ func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
 	}
 }
 
-type testIDBlockAlloc struct {
-	rid   int64
-	alloc func() (taskQueueState, error)
-}
-
-func (a *testIDBlockAlloc) RangeID() int64 {
-	return a.rid
-}
-
-func (a *testIDBlockAlloc) RenewLease(_ context.Context) (taskQueueState, error) {
-	s, err := a.alloc()
-	if err == nil {
-		a.rid = s.rangeID
-	}
-	return s, err
-}
-
-func makeTestBlocAlloc(f func() (taskQueueState, error)) taskQueueManagerOpt {
-	return withIDBlockAllocator(&testIDBlockAlloc{alloc: f})
-}
-
-func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
-	return func(tqm *physicalTaskQueueManagerImpl) {
-		blm := tqm.backlogMgr.(*backlogManagerImpl)
-		blm.taskWriter.idAlloc = ibl
-	}
-}
-
-/* TODO(pri): test is too awkward to fix and low value
-func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.RangeSize = 1 // TaskID block size
-	var leaseErr error
-	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t),
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			return taskQueueState{rangeID: 1}, leaseErr
-		}))
-	tqm.Start()
-	defer tqm.Stop(unloadCauseUnspecified)
-
-	// TQM started succesfully with an ID block of size 1. Perform one send
-	// without a poller to consume the one task ID from the reserved block.
-	err := tqm.SpoolTask(&persistencespb.TaskInfo{
-		CreateTime: timestamp.TimePtr(time.Now().UTC()),
-	})
-	require.NoError(t, err)
-
-	// TQM's ID block should be empty so the next AddTask will trigger an
-	// attempt to obtain more IDs. This specific error type indicates that
-	// another service instance has become the owner of the partition
-	leaseErr = &persistence.ConditionFailedError{Msg: "should kill the tqm"}
-
-	err = tqm.SpoolTask(&persistencespb.TaskInfo{
-		CreateTime: timestamp.TimePtr(time.Now().UTC()),
-	})
-	require.NoError(t, err)
-}
-*/
-
 /*
 TODO(pri): rewrite or delete this test
 func TestReaderSignaling(t *testing.T) {
