@@ -105,6 +105,7 @@ func (s *ScheduleFunctionalSuite) SetupTest() {
 }
 
 func (s *ScheduleFunctionalSuite) TearDownTest() {
+	s.FunctionalTestBase.TearDownTest()
 	if s.worker != nil {
 		s.worker.Stop()
 	}

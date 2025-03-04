@@ -117,6 +117,7 @@ func (s *DeploymentSuite) SetupTest() {
 }
 
 func (s *DeploymentSuite) TearDownTest() {
+	s.FunctionalTestBase.TearDownTest()
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}

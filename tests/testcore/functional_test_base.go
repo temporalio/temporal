@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/environment"
 	"go.uber.org/fx"
@@ -179,6 +180,13 @@ func (s *FunctionalTestBase) SetupSuite() {
 }
 
 func (s *FunctionalTestBase) TearDownSuite() {
+	// NOTE: We can't make s.Logger a testlogger.TestLogger because of AcquireShardSuiteBase.
+	if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
+		// Before we tear down the cluster, we disable the test logger.
+		// This prevents cluster teardown errors from failing the test; and log spam.
+		tl.Close()
+	}
+
 	s.TearDownCluster()
 }
 
@@ -193,7 +201,17 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 
 	// Logger might be already set by the test suite.
 	if s.Logger == nil {
-		s.Logger = log.NewTestLogger()
+		tl := testlogger.NewTestLogger(s.T())
+
+		// Instead of failing immediately, TearDownTest will check for unexpected
+		// errors after each test completed. This is better since otherwise is would fail inside
+		// the server and not the test, creating a lot of noise and possibly stuck tests.
+		testlogger.DontFailOnError(tl)
+
+		// Fail test when an assertion fails (see `softassert` package).
+		tl.DontExpect(testlogger.Error, ".*", tag.FailedAssertion())
+
+		s.Logger = tl
 	}
 
 	// Setup test cluster.
@@ -255,6 +273,7 @@ func (s *FunctionalTestBase) initAssertions() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 	s.UpdateUtils = updateutils.New(s.T())
+	s.checkNoUnexpectedErrorLogs() // should have already been called in TearDownTest, but just in case
 }
 
 // checkTestShard supports test sharding based on environment variables.
@@ -345,6 +364,19 @@ func (s *FunctionalTestBase) TearDownCluster() {
 
 	if s.testCluster != nil {
 		s.Require().NoError(s.testCluster.TearDownCluster())
+	}
+}
+
+func (s *FunctionalTestBase) TearDownTest() {
+	s.checkNoUnexpectedErrorLogs()
+}
+
+func (s *FunctionalTestBase) checkNoUnexpectedErrorLogs() {
+	if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
+		if tl.ResetUnexpectedErrors() {
+			s.Fail(`Failing test as unexpected error logs were found.
+Look for 'Unexpected Error log encountered'.`)
+		}
 	}
 }
 

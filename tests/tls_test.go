@@ -72,6 +72,7 @@ func (s *TLSFunctionalSuite) SetupTest() {
 }
 
 func (s *TLSFunctionalSuite) TearDownTest() {
+	s.FunctionalTestBase.TearDownTest()
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
