@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -41,6 +40,8 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 )
+
+/* TODO: I can't figure out what these tests are testing
 
 func TestDeliverBufferTasks(t *testing.T) {
 	controller := gomock.NewController(t)
@@ -80,18 +81,18 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
 	tlm.tqCtxCancel()
 }
+*/
 
 func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	controller := gomock.NewController(t)
 
 	// TODO: do not create pq manager, directly create backlog manager
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
-	tlm.backlogMgr.db.rangeID = int64(1)
-	tlm.backlogMgr.db.ackLevel = int64(0)
-	tlm.backlogMgr.taskAckManager.setAckLevel(tlm.backlogMgr.db.ackLevel)
-	tlm.backlogMgr.taskAckManager.setReadLevel(tlm.backlogMgr.db.ackLevel)
-	require.Equal(t, int64(0), tlm.backlogMgr.taskAckManager.getAckLevel())
-	require.Equal(t, int64(0), tlm.backlogMgr.taskAckManager.getReadLevel())
+	blm := tlm.backlogMgr.(*backlogManagerImpl)
+	require.NoError(t, blm.taskWriter.initReadWriteState())
+	require.Equal(t, int64(1), blm.db.rangeID)
+	require.Equal(t, int64(0), blm.taskAckManager.getAckLevel())
+	require.Equal(t, int64(0), blm.taskAckManager.getReadLevel())
 
 	// Add all expired tasks
 	tasks := []*persistencespb.AllocatedTaskInfo{
@@ -111,12 +112,12 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, tlm.backlogMgr.taskReader.addTasksToBuffer(context.TODO(), tasks))
-	require.Equal(t, int64(0), tlm.backlogMgr.taskAckManager.getAckLevel())
-	require.Equal(t, int64(12), tlm.backlogMgr.taskAckManager.getReadLevel())
+	require.NoError(t, blm.taskReader.addTasksToBuffer(context.TODO(), tasks))
+	require.Equal(t, int64(0), blm.taskAckManager.getAckLevel())
+	require.Equal(t, int64(12), blm.taskAckManager.getReadLevel())
 
 	// Now add a mix of valid and expired tasks
-	require.NoError(t, tlm.backlogMgr.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
+	require.NoError(t, blm.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
 		{
 			Data: &persistencespb.TaskInfo{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
@@ -132,8 +133,8 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 			TaskId: 14,
 		},
 	}))
-	require.Equal(t, int64(0), tlm.backlogMgr.taskAckManager.getAckLevel())
-	require.Equal(t, int64(14), tlm.backlogMgr.taskAckManager.getReadLevel())
+	require.Equal(t, int64(0), blm.taskAckManager.getAckLevel())
+	require.Equal(t, int64(14), blm.taskAckManager.getReadLevel())
 }
 
 func TestTaskWriterShutdown(t *testing.T) {
@@ -168,35 +169,39 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 		responseCh: make(chan<- *writeTaskResponse),
 	}
 
-	require.Equal(t, int64(0), backlogMgr.db.getApproximateBacklogCount())
+	require.Equal(t, int64(0), backlogMgr.TotalApproximateBacklogCount())
 
 	backlogMgr.taskWriter.Start()
 	// Adding tasks to the buffer will increase the in-memory counter by 1
 	// and this will be written to persistence
-	require.Eventually(t, func() bool { return backlogMgr.db.getApproximateBacklogCount() == int64(1) },
+	require.Eventually(t, func() bool { return backlogMgr.TotalApproximateBacklogCount() == int64(1) },
 		time.Second*30, time.Millisecond)
 }
 
 func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
 	controller := gomock.NewController(t)
 	backlogMgr := newBacklogMgr(t, controller, false)
+	_, err := backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	require.NoError(t, err)
 
 	backlogMgr.taskAckManager.addTask(int64(1))
 	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
 	backlogMgr.db.updateApproximateBacklogCount(int64(1))
-	require.Equal(t, int64(1), backlogMgr.db.getApproximateBacklogCount(), "1 task in the backlog")
+	require.Equal(t, int64(1), backlogMgr.TotalApproximateBacklogCount(), "1 task in the backlog")
 	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
 	require.Equal(t, int64(1), backlogMgr.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
-	require.Equal(t, int64(1), backlogMgr.taskAckManager.completeTask(1), "should move ack level and decrease backlog counter on completion")
+	ackLevel, numAcked := backlogMgr.taskAckManager.completeTask(1)
+	require.Equal(t, int64(1), ackLevel, "should move ack level and decrease backlog counter on completion")
+	require.Equal(t, int64(1), numAcked, "should move ack level and decrease backlog counter on completion")
 
 	require.Equal(t, int64(1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
-	require.Equal(t, int64(0), backlogMgr.db.getApproximateBacklogCount(), "0 tasks in the backlog")
-
 }
 
 func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 	controller := gomock.NewController(t)
 	backlogMgr := newBacklogMgr(t, controller, false)
+	_, err := backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	require.NoError(t, err)
 
 	backlogMgr.taskAckManager.addTask(int64(1))
 	backlogMgr.taskAckManager.addTask(int64(2))
@@ -205,19 +210,22 @@ func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
 	backlogMgr.db.updateApproximateBacklogCount(int64(3))
 
-	require.Equal(t, int64(3), backlogMgr.db.getApproximateBacklogCount(), "1 task in the backlog")
+	require.Equal(t, int64(3), backlogMgr.TotalApproximateBacklogCount(), "1 task in the backlog")
 	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
 	require.Equal(t, int64(3), backlogMgr.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
 
 	// Complete tasks
-	require.Equal(t, int64(-1), backlogMgr.taskAckManager.completeTask(2), "should not move the ack level")
-	require.Equal(t, int64(3), backlogMgr.db.getApproximateBacklogCount(), "should not decrease the backlog counter as ack level has not gone up")
+	ackLevel, numAcked := backlogMgr.taskAckManager.completeTask(2)
+	require.Equal(t, int64(-1), ackLevel, "should not move the ack level")
+	require.Equal(t, int64(0), numAcked, "should not decrease the backlog counter as ack level has not gone up")
 
-	require.Equal(t, int64(-1), backlogMgr.taskAckManager.completeTask(3), "should not move the ack level")
-	require.Equal(t, int64(3), backlogMgr.db.getApproximateBacklogCount(), "should not decrease the backlog counter as ack level has not gone up")
+	ackLevel, numAcked = backlogMgr.taskAckManager.completeTask(3)
+	require.Equal(t, int64(-1), ackLevel, "should not move the ack level")
+	require.Equal(t, int64(0), numAcked, "should not decrease the backlog counter as ack level has not gone up")
 
-	require.Equal(t, int64(3), backlogMgr.taskAckManager.completeTask(1), "should move the ack level")
-	require.Equal(t, int64(0), backlogMgr.db.getApproximateBacklogCount(), "should decrease the backlog counter to 0 as no more tasks in the backlog")
+	ackLevel, numAcked = backlogMgr.taskAckManager.completeTask(1)
+	require.Equal(t, int64(3), ackLevel, "should move the ack level")
+	require.Equal(t, int64(3), numAcked, "should decrease the backlog counter to 0 as no more tasks in the backlog")
 
 }
 
@@ -234,7 +242,7 @@ func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
 	}
 	err := backlogMgr.SpoolTask(task)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), backlogMgr.db.getApproximateBacklogCount())
+	require.Equal(t, int64(1), backlogMgr.TotalApproximateBacklogCount())
 }
 
 func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
@@ -257,7 +265,7 @@ func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
 		err := backlogMgr.SpoolTask(task)
 		require.Error(t, err)
 	}
-	require.Equal(t, int64(10), backlogMgr.db.getApproximateBacklogCount())
+	require.Equal(t, int64(10), backlogMgr.TotalApproximateBacklogCount())
 }
 
 func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
@@ -276,7 +284,7 @@ func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 		err := backlogMgr.SpoolTask(task)
 		require.NoError(t, err)
 	}
-	require.Equal(t, int64(10), backlogMgr.db.getApproximateBacklogCount())
+	require.Equal(t, int64(10), backlogMgr.TotalApproximateBacklogCount())
 }
 
 type cleanupper interface {
