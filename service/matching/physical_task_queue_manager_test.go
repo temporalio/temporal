@@ -276,7 +276,7 @@ func TestReaderBacklogAge(t *testing.T) {
 	// Create queue Manager and set queue state
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
 	blm := tlm.backlogMgr.(*backlogManagerImpl)
-	blm.taskWriter.initReadWriteState()
+	require.NoError(t, blm.taskWriter.initReadWriteState())
 	require.Equal(t, int64(0), blm.taskAckManager.getAckLevel())
 	require.Equal(t, int64(0), blm.taskAckManager.getReadLevel())
 
@@ -331,7 +331,7 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	// Create queue Manager and set queue state
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
 	blm := tlm.backlogMgr.(*backlogManagerImpl)
-	blm.taskWriter.initReadWriteState()
+	require.NoError(t, blm.taskWriter.initReadWriteState())
 	require.Equal(t, int64(0), blm.taskAckManager.getAckLevel())
 	require.Equal(t, int64(0), blm.taskAckManager.getReadLevel())
 
@@ -395,7 +395,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	// Idle
 	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
 	// Active poll-er
@@ -403,7 +403,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm.Start()
 	tlm.pollerHistory.updatePollerInfo("test-poll", &pollMetadata{})
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 	tlm.Stop(unloadCauseUnspecified)
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
@@ -412,7 +412,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 	tlm.Stop(unloadCauseUnspecified)
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))

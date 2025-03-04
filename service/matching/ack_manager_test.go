@@ -48,7 +48,8 @@ func TestAckManager_CompleteTaskMovesAckLevelUpToGap(t *testing.T) {
 	t.Parallel()
 	controller := gomock.NewController(t)
 	backlogMgr := newBacklogMgr(t, controller, false)
-	backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	_, err := backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	require.NoError(t, err)
 
 	backlogMgr.taskAckManager.addTask(1)
 

@@ -255,7 +255,8 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 
 func (s *matchingEngineSuite) TestAckManager() {
 	backlogMgr := newBacklogMgr(s.T(), s.controller, false)
-	backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	_, err := backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	s.NoError(err)
 	m := backlogMgr.taskAckManager
 
 	m.setAckLevel(100)
@@ -321,7 +322,8 @@ func (s *matchingEngineSuite) TestAckManager() {
 
 func (s *matchingEngineSuite) TestAckManager_Sort() {
 	backlogMgr := newBacklogMgr(s.T(), s.controller, false)
-	backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	_, err := backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	s.NoError(err)
 	m := backlogMgr.taskAckManager
 
 	const t0 = 100

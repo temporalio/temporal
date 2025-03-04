@@ -89,7 +89,7 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	// TODO: do not create pq manager, directly create backlog manager
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
 	blm := tlm.backlogMgr.(*backlogManagerImpl)
-	blm.taskWriter.initReadWriteState()
+	require.NoError(t, blm.taskWriter.initReadWriteState())
 	require.Equal(t, int64(1), blm.db.rangeID)
 	require.Equal(t, int64(0), blm.taskAckManager.getAckLevel())
 	require.Equal(t, int64(0), blm.taskAckManager.getReadLevel())
@@ -181,7 +181,8 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
 	controller := gomock.NewController(t)
 	backlogMgr := newBacklogMgr(t, controller, false)
-	backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	_, err := backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	require.NoError(t, err)
 
 	backlogMgr.taskAckManager.addTask(int64(1))
 	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
@@ -199,7 +200,8 @@ func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
 func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 	controller := gomock.NewController(t)
 	backlogMgr := newBacklogMgr(t, controller, false)
-	backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	_, err := backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	require.NoError(t, err)
 
 	backlogMgr.taskAckManager.addTask(int64(1))
 	backlogMgr.taskAckManager.addTask(int64(2))
