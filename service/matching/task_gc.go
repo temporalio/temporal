@@ -94,7 +94,7 @@ func (tgc *taskGC) tryDeleteNextBatch(ackLevel int64, ignoreTimeCond bool) {
 	ctx, cancel := context.WithTimeout(tgc.tqCtx, ioTimeout)
 	defer cancel()
 
-	n, err := tgc.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, 0)
+	n, err := tgc.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, subqueueZero)
 	if err != nil {
 		return
 	}

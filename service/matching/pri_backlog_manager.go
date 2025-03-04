@@ -291,7 +291,7 @@ func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	// TODO(pri): needs more work for subqueues, for now just return read/ack level for subqueue 0
 	var readLevel, ackLevel int64
 	if len(c.subqueues) > 0 {
-		readLevel, ackLevel = c.subqueues[0].getLevels()
+		readLevel, ackLevel = c.subqueues[subqueueZero].getLevels()
 	}
 
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)

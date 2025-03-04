@@ -520,8 +520,8 @@ func (db *taskQueueDB) ensureDefaultSubqueuesLocked(
 		// If we are transitioning from no-subqueues to subqueues, initialize subqueue 0 with
 		// the ack level and approx count from TaskQueueInfo.
 		if len(subqueues) == 1 {
-			subqueues[0].AckLevel = initAckLevel
-			subqueues[0].ApproximateBacklogCount = initApproxCount
+			subqueues[subqueueZero].AckLevel = initAckLevel
+			subqueues[subqueueZero].ApproximateBacklogCount = initApproxCount
 		}
 	}
 	return subqueues
