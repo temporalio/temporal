@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/future"
@@ -171,6 +172,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		timeSource:              t.TimeSource,
 		namespaceRegistry:       registry,
 		stateMachineRegistry:    hsm.NewRegistry(),
+		chasmRegistry:           chasm.NewRegistry(),
 		persistenceShardManager: t.GetShardManager(),
 		clientBean:              t.GetClientBean(),
 		saProvider:              t.GetSearchAttributesProvider(),
@@ -225,6 +227,10 @@ func (s *ContextTest) SetHistoryClientForTesting(client historyservice.HistorySe
 // SetStateMachineRegistry sets the state machine registry on this shard.
 func (s *ContextTest) SetStateMachineRegistry(reg *hsm.Registry) {
 	s.stateMachineRegistry = reg
+}
+
+func (s *ContextTest) SetChasmRegistry(reg *chasm.Registry) {
+	s.chasmRegistry = reg
 }
 
 // StopForTest calls FinishStop(). In general only the controller

@@ -960,6 +960,7 @@ var (
 	MutableStateDirty                              = NewCounterDef("mutable_state_dirty")
 	MutableStateChecksumMismatch                   = NewCounterDef("mutable_state_checksum_mismatch")
 	MutableStateChecksumInvalidated                = NewCounterDef("mutable_state_checksum_invalidated")
+	MutableStateChasmLoadFailed                    = NewCounterDef("mutable_state_chasm_load_failed")
 	ClosedWorkflowBufferEventCount                 = NewCounterDef("closed_workflow_buffer_event_counter")
 	OutOfOrderBufferedEventsCounter                = NewCounterDef("out_of_order_buffered_events")
 	ShardLingerSuccess                             = NewTimerDef("shard_linger_success")

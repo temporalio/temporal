@@ -124,6 +124,18 @@ func applyWorkflowMutationBatch(
 		return err
 	}
 
+	if err := updateChasmNodes(
+		batch,
+		workflowMutation.UpsertChasmNodes,
+		workflowMutation.DeleteChasmNodes,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+	); err != nil {
+		return err
+	}
+
 	updateSignalsRequested(
 		batch,
 		workflowMutation.UpsertSignalRequestedIDs,
@@ -330,6 +342,18 @@ func applyWorkflowSnapshotBatchAsNew(
 	if err := updateSignalInfos(
 		batch,
 		workflowSnapshot.SignalInfos,
+		nil,
+		shardID,
+		namespaceID,
+		workflowID,
+		runID,
+	); err != nil {
+		return err
+	}
+
+	if err := updateChasmNodes(
+		batch,
+		workflowSnapshot.ChasmNodes,
 		nil,
 		shardID,
 		namespaceID,
@@ -938,6 +962,44 @@ func resetSignalInfos(
 		runID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
+
+	return nil
+}
+
+func updateChasmNodes(
+	batch *gocql.Batch,
+	upsertNodes map[string]*commonpb.DataBlob,
+	deleteNodes map[string]struct{},
+	shardID int32,
+	namespaceID string,
+	workflowID string,
+	runID string,
+) error {
+	for deletePath := range deleteNodes {
+		batch.Query(templateDeleteChasmNodeQuery,
+			deletePath,
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID)
+	}
+
+	for upsertPath, blob := range upsertNodes {
+		batch.Query(templateUpdateChasmNodeQuery,
+			upsertPath,
+			blob.Data,
+			blob.EncodingType.String(),
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID)
+	}
 
 	return nil
 }

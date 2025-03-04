@@ -577,6 +577,9 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		UpsertSignalInfos: make(map[int64]*commonpb.DataBlob, len(input.UpsertSignalInfos)),
 		DeleteSignalInfos: input.DeleteSignalInfos,
 
+		UpsertChasmNodes: make(map[string]*commonpb.DataBlob, len(input.UpsertChasmNodes)),
+		DeleteChasmNodes: input.DeleteChasmNodes,
+
 		UpsertSignalRequestedIDs: input.UpsertSignalRequestedIDs,
 		DeleteSignalRequestedIDs: input.DeleteSignalRequestedIDs,
 
@@ -642,6 +645,14 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		result.UpsertSignalInfos[key] = blob
 	}
 
+	for key, node := range input.UpsertChasmNodes {
+		blob, err := m.serializer.ChasmNodeToBlob(node, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.UpsertChasmNodes[key] = blob
+	}
+
 	if len(input.NewBufferedEvents) > 0 {
 		result.NewBufferedEvents, err = m.serializer.SerializeEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
@@ -680,6 +691,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		ChildExecutionInfos: make(map[int64]*commonpb.DataBlob, len(input.ChildExecutionInfos)),
 		RequestCancelInfos:  make(map[int64]*commonpb.DataBlob, len(input.RequestCancelInfos)),
 		SignalInfos:         make(map[int64]*commonpb.DataBlob, len(input.SignalInfos)),
+		ChasmNodes:          make(map[string]*commonpb.DataBlob, len(input.ChasmNodes)),
 
 		ExecutionInfo:      input.ExecutionInfo,
 		ExecutionState:     input.ExecutionState,
@@ -742,6 +754,13 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 	}
 	for key := range input.SignalRequestedIDs {
 		result.SignalRequestedIDs[key] = struct{}{}
+	}
+	for key, node := range input.ChasmNodes {
+		blob, err := m.serializer.ChasmNodeToBlob(node, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.ChasmNodes[key] = blob
 	}
 
 	result.Checksum, err = m.serializer.ChecksumToBlob(input.Checksum, enumspb.ENCODING_TYPE_PROTO3)

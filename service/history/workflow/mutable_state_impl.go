@@ -57,6 +57,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -248,6 +249,7 @@ type (
 		metricsHandler         metrics.Handler
 		stateMachineNode       *hsm.Node
 		subStateMachineDeleted bool
+		chasmNode              *chasm.Node // CHASM root node
 
 		// Tracks all events added via the AddHistoryEvent method that is used by the state machine framework.
 		currentTransactionAddedStateMachineEventTypes []enumspb.EventType
@@ -375,6 +377,7 @@ func NewMutableState(
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s, s.metricsHandler)
 
 	s.mustInitHSM()
+	s.initChasmRoot()
 
 	return s
 }
@@ -499,6 +502,13 @@ func NewMutableStateFromDB(
 		}
 	}
 
+	err := mutableState.initChasmRootFromDB(dbRecord.ChasmNodes)
+	if err != nil {
+		metrics.MutableStateChasmLoadFailed.With(mutableState.metricsHandler).Record(1)
+		mutableState.logError("error loading chasm nodes", tag.Error(err))
+		return nil, err
+	}
+
 	mutableState.mustInitHSM()
 
 	return mutableState, nil
@@ -562,6 +572,28 @@ func NewMutableStateInChain(
 	// are carried over in AddWorkflowExecutionStartedEventWithOptions. Ideally all information
 	// should be carried over here since some information is not part of the startedEvent.
 	return newMutableState, nil
+}
+
+// initChasmRoot inits a fresh CHASM tree.
+func (ms *MutableStateImpl) initChasmRoot() {
+	// TODO - need a real PathEncoder
+	ms.chasmNode = chasm.NewEmptyTree(ms.shard.ChasmRegistry(), ms.timeSource, ms, &chasm.MockNodePathEncoder{})
+}
+
+// initChasmRootFromDB inits the CHASM tree from a persisted record. An error is
+// returned if node decoding fails.
+func (ms *MutableStateImpl) initChasmRootFromDB(nodes map[string]*persistencespb.ChasmNode) error {
+	// TODO - need a real PathEncoder
+	root, err := chasm.NewTree(ms.shard.ChasmRegistry(), nodes, ms.timeSource, ms, &chasm.MockNodePathEncoder{})
+	if err != nil {
+		return err
+	}
+	ms.chasmNode = root
+	return nil
+}
+
+func (ms *MutableStateImpl) ChasmRoot() *chasm.Node {
+	return ms.chasmNode
 }
 
 func (ms *MutableStateImpl) mustInitHSM() {
@@ -5738,7 +5770,10 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 }
 
 func (ms *MutableStateImpl) IsDirty() bool {
-	return ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0 || (ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
+	return ms.hBuilder.IsDirty() ||
+		len(ms.InsertTasks) > 0 ||
+		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
+	// TODO - check chasmNode.Dirty()
 }
 
 func (ms *MutableStateImpl) isStateDirty() bool {
@@ -5762,6 +5797,7 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.executionStateUpdated ||
 		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
+	// TODO - check if ms.chasmNode is dirty
 }
 
 func (ms *MutableStateImpl) IsTransitionHistoryEnabled() bool {
@@ -6214,6 +6250,8 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 			return nil
 		})
 	}
+
+	// TODO - walk chasm nodes and reset their VTs
 }
 
 func (ms *MutableStateImpl) closeTransactionTrackTombstones(
@@ -6268,6 +6306,7 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 			}
 		}
 	}
+	// TODO - track chasm node tombstones
 
 	for scheduledEventID := range ms.deleteActivityInfos {
 		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
@@ -6515,6 +6554,8 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.stateMachineNode.ClearTransactionState()
 	// Clear out transient state machine state.
 	ms.currentTransactionAddedStateMachineEventTypes = nil
+
+	// TODO - clear dirty flag on ms.chasmNode
 
 	return nil
 }
@@ -7205,6 +7246,8 @@ func (ms *MutableStateImpl) ApplyMutation(
 		return err
 	}
 
+	// TODO - apply updates to chasm nodes
+
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
 
 	return nil
@@ -7245,6 +7288,8 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	if err != nil {
 		return err
 	}
+
+	// TODO - apply updates to chasm nodes
 
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
 	return nil
@@ -7609,6 +7654,7 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 				}
 			case *persistencespb.StateMachineTombstone_StateMachinePath:
 				err = ms.DeleteSubStateMachine(tombstone.GetStateMachinePath())
+			// TODO - handle chasm tombstones
 			default:
 				// TODO: updateID and stateMachinePath
 				err = serviceerror.NewInternal("unknown tombstone type")
