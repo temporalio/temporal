@@ -44,8 +44,7 @@ import (
 func That(logger log.Logger, condition bool, format string, args ...any) bool {
 	if !condition {
 		// By using the same prefix for all assertions, they can be reliably found in logs.
-		msg := fmt.Sprintf("failed assertion: %v", fmt.Sprintf(format, args...))
-		logger.Error(msg, tag.FailedAssertion())
+		logger.Error("failed assertion: "+fmt.Sprintf(format, args...), tag.FailedAssertion())
 	}
 	return condition
 }
