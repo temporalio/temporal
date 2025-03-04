@@ -1043,11 +1043,11 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	// is implemented.
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
-	tv2 := tv1.WithBuildIDNumber(2)
 	tv1Child := tv1.WithWorkflowIDNumber(2)
 	if crossTq {
 		tv1Child = tv1Child.WithTaskQueue("child-tq")
 	}
+	tv2 := tv1.WithBuildIDNumber(2)
 	tv2Child := tv1Child.WithBuildIDNumber(2)
 
 	sdkParentBehavior := workflow.VersioningBehaviorPinned
@@ -1065,8 +1065,10 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		panic("child should not run on v1")
 	}
 	childv2 := func(ctx workflow.Context) (string, error) {
-		fmt.Printf("shahab> child started \n")
-		s.verifyWorkflowVersioning(tv2Child, vbUnspecified, nil, nil, tv2Child.DeploymentVersionTransition())
+		s.Eventually(func() bool {
+			s.verifyWorkflowVersioning(tv2Child, vbUnspecified, nil, nil, tv2Child.DeploymentVersionTransition())
+			return true
+		}, 10*time.Second, 100*time.Millisecond)
 		return "v2", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
@@ -1079,6 +1081,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 			TaskQueue:  tv2Child.TaskQueue().GetName(),
 			WorkflowID: tv2Child.WorkflowID(),
 		}), "child")
+
 		var val1 string
 		s.NoError(fut1.Get(ctx, &val1))
 
