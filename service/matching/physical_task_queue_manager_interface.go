@@ -75,9 +75,6 @@ type (
 		GetInternalTaskQueueStatus() *taskqueuespb.InternalTaskQueueStatus
 		UnloadFromPartitionManager(unloadCause)
 		QueueKey() *PhysicalTaskQueueKey
-		// ShouldEmitGauges determines whether the gauge metrics should be emitted or not for this particular physical
-		// queue based on dynamic configs.
-		ShouldEmitGauges() bool
 		// MakePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state
 		// of the task queue and the task about to be returned.
 		MakePollerScalingDecision(pollStartTime time.Time) *taskqueuepb.PollerScalingDecision
