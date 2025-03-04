@@ -1112,6 +1112,11 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		100,
 		`MatchingMaxTaskDeleteBatchSize is the max batch size for range deletion of tasks`,
 	)
+	MatchingTaskDeleteInterval = NewTaskQueueDurationSetting(
+		"matching.taskDeleteInterval",
+		15*time.Second,
+		`MatchingTaskDeleteInterval is the minimum interval between task range deletions`,
+	)
 	MatchingThrottledLogRPS = NewGlobalIntSetting(
 		"matching.throttledLogRPS",
 		20,

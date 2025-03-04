@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -72,7 +73,7 @@ type (
 		taskWriter *priTaskWriter
 
 		subqueueLock        sync.Mutex
-		subqueues           []*backlogSubqueue
+		subqueues           []*priTaskReader
 		subqueuesByPriority map[int32]int
 
 		logger           log.Logger
@@ -83,12 +84,6 @@ type (
 		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
 		// update before unloading
 		skipFinalUpdate atomic.Bool
-	}
-
-	backlogSubqueue struct {
-		reader     *priTaskReader
-		gc         *taskGC
-		ackManager *ackManager
 	}
 )
 
@@ -182,15 +177,9 @@ func (c *priBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.S
 	// existing subqueues never changes. If we change that, this logic will need to change.
 	for i, s := range subqueues {
 		if i >= len(c.subqueues) {
-			ackManager := newAckManager(c.db, c.logger)
-			ackManager.setAckLevel(s.AckLevel)
-			bs := &backlogSubqueue{
-				reader:     newPriTaskReader(c, i, ackManager),
-				gc:         newTaskGC(c.tqCtx, c.db, c.config, i),
-				ackManager: ackManager,
-			}
-			bs.reader.Start()
-			c.subqueues = append(c.subqueues, bs)
+			r := newPriTaskReader(c, i, s.AckLevel)
+			r.Start()
+			c.subqueues = append(c.subqueues, r)
 		}
 		c.subqueuesByPriority[s.Key.Priority] = i
 	}
@@ -256,16 +245,18 @@ func (c *priBacklogManagerImpl) periodicSync() {
 
 func (c *priBacklogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
 	subqueue := c.getSubqueueForPriority(taskInfo.Priority.GetPriorityKey())
-	_, err := c.taskWriter.appendTask(subqueue, taskInfo)
+	err := c.taskWriter.appendTask(subqueue, taskInfo)
 	c.signalIfFatal(err)
 	return err
 }
 
-func (c *priBacklogManagerImpl) signalReaders(subqueues map[int]struct{}) {
+func (c *priBacklogManagerImpl) signalReaders(resp createTasksResponse) {
 	c.subqueueLock.Lock()
-	defer c.subqueueLock.Unlock()
-	for subqueue := range subqueues {
-		c.subqueues[subqueue].reader.Signal()
+	subqueues := slices.Clone(c.subqueues)
+	c.subqueueLock.Unlock()
+
+	for subqueue, subqueueResp := range resp.bySubqueue {
+		subqueues[subqueue].signalNewTasks(subqueueResp)
 	}
 }
 
@@ -276,8 +267,8 @@ func (c *priBacklogManagerImpl) addSpooledTask(task *internalTask) error {
 func (c *priBacklogManagerImpl) BacklogCountHint() (total int64) {
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
-	for _, bs := range c.subqueues {
-		total += bs.reader.getLoadedTasks()
+	for _, r := range c.subqueues {
+		total += int64(r.getLoadedTasks())
 	}
 	return
 }
@@ -287,8 +278,8 @@ func (c *priBacklogManagerImpl) BacklogHeadAge() (age time.Duration) {
 	defer c.subqueueLock.Unlock()
 	// TODO(pri): expose method for oldest absolute time instead of age,
 	// so we only need one call to time.Since
-	for _, bs := range c.subqueues {
-		age = max(age, bs.reader.getBacklogHeadAge())
+	for _, r := range c.subqueues {
+		age = max(age, r.getBacklogHeadAge())
 	}
 	return
 }
@@ -300,7 +291,7 @@ func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	// TODO(pri): needs more work for subqueues, for now just return read/ack level for subqueue 0
 	var readLevel, ackLevel int64
 	if len(c.subqueues) > 0 {
-		readLevel, ackLevel = c.subqueues[0].ackManager.getReadLevel(), c.subqueues[0].ackManager.getAckLevel()
+		readLevel, ackLevel = c.subqueues[0].getLevels()
 	}
 
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
@@ -320,47 +311,33 @@ func (c *priBacklogManagerImpl) TotalApproximateBacklogCount() int64 {
 	return c.db.getTotalApproximateBacklogCount()
 }
 
-// completeTask marks a task as processed. Only tasks created by taskReader (i.e. backlog from db) reach
-// here. As part of completion:
-//   - task is deleted from the database when err is nil
-//   - new task is created and current task is deleted when err is not nil
-func (c *priBacklogManagerImpl) completeTask(task *internalTask, err error) {
-	if err != nil {
-		// failed to start the task.
-		// We cannot just remove it from persistence because then it will be lost.
-		// We handle this by writing the task back to persistence with a higher taskID.
-		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
-		// again the underlying reason for failing to start will be resolved.
-		// Note the task may get written to a different subqueue.
-		err = backoff.ThrottleRetryContext(c.tqCtx, func(context.Context) error {
-			return c.SpoolTask(task.event.Data)
-		}, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-
-		if err != nil {
-			// OK, we also failed to write to persistence.
-			// This should only happen in very extreme cases where persistence is completely down.
-			// We still can't lose the old task, so we just unload the entire task queue.
-			// We haven't advanced the ack level past this task, so when the task queue reloads,
-			// it will see this task again.
-			c.logger.Error("Persistent store operation failure",
-				tag.StoreOperationStopTaskQueue,
-				tag.Error(err),
-				tag.WorkflowTaskQueueName(c.queueKey().PersistenceName()),
-				tag.WorkflowTaskQueueType(c.queueKey().TaskType()))
-			// Skip final update since persistence is having problems.
-			c.skipFinalUpdate.Store(true)
-			c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
-			return
-		}
+func (c *priBacklogManagerImpl) respoolTaskAfterError(task *persistencespb.TaskInfo) error {
+	// We cannot just remove it from persistence because then it will be lost.
+	// We handle this by writing the task back to persistence with a higher taskID.
+	// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
+	// again the underlying reason for failing to start will be resolved.
+	// Note the task may get written to a different subqueue than it came from.
+	err := backoff.ThrottleRetryContext(c.tqCtx, func(context.Context) error {
+		return c.SpoolTask(task)
+	}, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err == nil {
+		return nil
 	}
 
-	c.subqueueLock.Lock()
-	bs := c.subqueues[task.event.backlogSubqueue]
-	c.subqueueLock.Unlock()
-
-	ackLevel, numAcked := bs.ackManager.completeTask(task.event.GetTaskId())
-	c.db.updateAckLevelAndCount(task.event.backlogSubqueue, ackLevel, -numAcked)
-	bs.gc.Run(ackLevel)
+	// OK, we also failed to write to persistence.
+	// This should only happen in very extreme cases where persistence is completely down.
+	// We still can't lose the old task, so we just unload the entire task queue.
+	// We haven't advanced the ack level past this task, so when the task queue reloads,
+	// it will see this task again.
+	c.logger.Error("Persistent store operation failure",
+		tag.StoreOperationStopTaskQueue,
+		tag.Error(err),
+		tag.WorkflowTaskQueueName(c.queueKey().PersistenceName()),
+		tag.WorkflowTaskQueueType(c.queueKey().TaskType()))
+	// Skip final update since persistence is having problems.
+	c.skipFinalUpdate.Store(true)
+	c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
+	return err
 }
 
 // TODO(pri): old matcher cleanup: move here

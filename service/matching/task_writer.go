@@ -42,15 +42,10 @@ import (
 )
 
 type (
-	writeTaskResponse struct {
-		err                 error
-		persistenceResponse *persistence.CreateTasksResponse
-	}
-
 	writeTaskRequest struct {
 		subqueue   int // for priTaskWriter only
 		taskInfo   *persistencespb.TaskInfo
-		responseCh chan<- *writeTaskResponse
+		responseCh chan<- error
 	}
 
 	taskIDBlock struct {
@@ -117,17 +112,17 @@ func (w *taskWriter) initReadWriteState() error {
 
 func (w *taskWriter) appendTask(
 	taskInfo *persistencespb.TaskInfo,
-) (*persistence.CreateTasksResponse, error) {
+) error {
 
 	select {
 	case <-w.backlogMgr.tqCtx.Done():
-		return nil, errShutdown
+		return errShutdown
 	default:
 		// noop
 	}
 
 	startTime := time.Now().UTC()
-	ch := make(chan *writeTaskResponse)
+	ch := make(chan error)
 	req := &writeTaskRequest{
 		taskInfo:   taskInfo,
 		responseCh: ch,
@@ -136,17 +131,17 @@ func (w *taskWriter) appendTask(
 	select {
 	case w.appendCh <- req:
 		select {
-		case r := <-ch:
+		case err := <-ch:
 			metrics.TaskWriteLatencyPerTaskQueue.With(w.backlogMgr.metricsHandler).Record(time.Since(startTime))
-			return r.persistenceResponse, r.err
+			return err
 		case <-w.backlogMgr.tqCtx.Done():
 			// if we are shutting down, this request will never make
 			// it to cassandra, just bail out and fail this request
-			return nil, errShutdown
+			return errShutdown
 		}
 	default: // channel is full, throttle
 		metrics.TaskWriteThrottlePerTaskQueueCounter.With(w.backlogMgr.metricsHandler).Record(1)
-		return nil, &serviceerror.ResourceExhausted{
+		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 			Message: "Too many outstanding appends to the task queue",
@@ -174,9 +169,9 @@ func (w *taskWriter) allocTaskIDs(count int) ([]int64, error) {
 func (w *taskWriter) appendTasks(
 	taskIDs []int64,
 	reqs []*writeTaskRequest,
-) (*persistence.CreateTasksResponse, error) {
+) error {
 
-	resp, err := w.backlogMgr.db.CreateTasks(w.backlogMgr.tqCtx, taskIDs, reqs)
+	_, err := w.backlogMgr.db.CreateTasks(w.backlogMgr.tqCtx, taskIDs, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
 		w.logger.Error("Persistent store operation failure",
@@ -184,17 +179,15 @@ func (w *taskWriter) appendTasks(
 			tag.Error(err),
 			tag.WorkflowTaskQueueName(w.backlogMgr.queueKey().PersistenceName()),
 			tag.WorkflowTaskQueueType(w.backlogMgr.queueKey().TaskType()))
-		return nil, err
+		return err
 	}
-	// TODO(pri): we should signal taskreader here, not in the callers of appendTask
-	return resp, nil
+	return nil
 }
 
 func (w *taskWriter) taskWriterLoop() {
 	err := w.initReadWriteState()
 	w.backlogMgr.SetInitializedError(err)
 
-writerLoop:
 	for {
 		select {
 		case request := <-w.appendCh:
@@ -204,13 +197,12 @@ writerLoop:
 			batchSize := len(reqs)
 
 			taskIDs, err := w.allocTaskIDs(batchSize)
-			if err != nil {
-				w.sendWriteResponse(reqs, nil, err)
-				continue writerLoop
+			if err == nil {
+				err = w.appendTasks(taskIDs, reqs)
 			}
-
-			resp, err := w.appendTasks(taskIDs, reqs)
-			w.sendWriteResponse(reqs, resp, err)
+			for _, req := range reqs {
+				req.responseCh <- err
+			}
 
 		case <-w.backlogMgr.tqCtx.Done():
 			return
@@ -229,21 +221,6 @@ readLoop:
 		}
 	}
 	return reqs
-}
-
-func (w *taskWriter) sendWriteResponse(
-	reqs []*writeTaskRequest,
-	persistenceResponse *persistence.CreateTasksResponse,
-	err error,
-) {
-	for _, req := range reqs {
-		resp := &writeTaskResponse{
-			err:                 err,
-			persistenceResponse: persistenceResponse,
-		}
-
-		req.responseCh <- resp
-	}
 }
 
 func (w *taskWriter) renewLeaseWithRetry(

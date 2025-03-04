@@ -99,6 +99,7 @@ type (
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		MaxTaskDeleteBatchSize     dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		TaskDeleteInterval         dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -147,6 +148,7 @@ type (
 		MaxTaskQueueIdleTime       func() time.Duration
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
+		TaskDeleteInterval         func() time.Duration
 		PriorityLevels             func() int32
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
@@ -238,6 +240,7 @@ func NewConfig(
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
 		MinTaskThrottlingBurstSize:               dynamicconfig.MatchingMinTaskThrottlingBurstSize.Get(dc),
 		MaxTaskDeleteBatchSize:                   dynamicconfig.MatchingMaxTaskDeleteBatchSize.Get(dc),
+		TaskDeleteInterval:                       dynamicconfig.MatchingTaskDeleteInterval.Get(dc),
 		OutstandingTaskAppendsThreshold:          dynamicconfig.MatchingOutstandingTaskAppendsThreshold.Get(dc),
 		MaxTaskBatchSize:                         dynamicconfig.MatchingMaxTaskBatchSize.Get(dc),
 		ThrottledLogRPS:                          dynamicconfig.MatchingThrottledLogRPS.Get(dc),
@@ -329,6 +332,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		MaxTaskDeleteBatchSize: func() int {
 			return config.MaxTaskDeleteBatchSize(ns.String(), taskQueueName, taskType)
+		},
+		TaskDeleteInterval: func() time.Duration {
+			return config.TaskDeleteInterval(ns.String(), taskQueueName, taskType)
 		},
 		PriorityLevels: func() int32 {
 			return int32(config.PriorityLevels(ns.String(), taskQueueName, taskType))

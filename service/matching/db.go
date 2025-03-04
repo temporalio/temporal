@@ -72,6 +72,16 @@ type (
 		ackLevel  int64 // TODO(pri): old matcher cleanup, delete later
 		subqueues []persistencespb.SubqueueInfo
 	}
+
+	createTasksResponse struct {
+		bySubqueue map[int]subqueueCreateTasksResponse
+	}
+
+	subqueueCreateTasksResponse struct {
+		tasks              []*persistencespb.AllocatedTaskInfo
+		maxReadLevelBefore int64
+		maxReadLevelAfter  int64
+	}
 )
 
 // newTaskQueueDB returns an instance of an object that represents
@@ -301,58 +311,63 @@ func (db *taskQueueDB) CreateTasks(
 	ctx context.Context,
 	taskIDs []int64,
 	reqs []*writeTaskRequest,
-) (*persistence.CreateTasksResponse, error) {
+) (createTasksResponse, error) {
 	db.Lock()
 	defer db.Unlock()
 
 	if len(reqs) == 0 {
-		return &persistence.CreateTasksResponse{}, nil
+		return createTasksResponse{}, nil
 	}
 
-	type update struct{ maxReadLevel, tasks int64 }
-	updates := make(map[int]update)
-	tasks := make([]*persistencespb.AllocatedTaskInfo, len(reqs))
-	subqueues := make([]int, len(reqs))
+	updates := make(map[int]subqueueCreateTasksResponse)
+	allTasks := make([]*persistencespb.AllocatedTaskInfo, len(reqs))
+	allSubqueues := make([]int, len(reqs))
 	for i, req := range reqs {
-		tasks[i] = &persistencespb.AllocatedTaskInfo{
+		task := &persistencespb.AllocatedTaskInfo{
 			TaskId: taskIDs[i],
 			Data:   req.taskInfo,
 		}
-		subqueues[i] = req.subqueue
+		allTasks[i] = task
+		allSubqueues[i] = req.subqueue
 
 		u := updates[req.subqueue]
-		updates[req.subqueue] = update{maxReadLevel: max(u.maxReadLevel, taskIDs[i]), tasks: u.tasks + 1}
+		updates[req.subqueue] = subqueueCreateTasksResponse{
+			tasks:              append(u.tasks, task),
+			maxReadLevelBefore: db.subqueues[req.subqueue].maxReadLevel,
+			maxReadLevelAfter:  task.TaskId,
+		}
 	}
 
 	for i, update := range updates {
-		db.subqueues[i].ApproximateBacklogCount += update.tasks
+		db.subqueues[i].ApproximateBacklogCount += int64(len(update.tasks))
 	}
 
-	resp, err := db.store.CreateTasks(
+	_, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
 			TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
 				Data:    db.cachedQueueInfo(),
 				RangeID: db.rangeID,
 			},
-			Tasks:     tasks,
-			Subqueues: subqueues,
+			Tasks:     allTasks,
+			Subqueues: allSubqueues,
 		})
 
 	// Update the maxReadLevel after the writes are completed, but before we send the response,
 	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
+	// Do this even if the write fails, we won't reuse the task ids.
 	for i, update := range updates {
-		db.subqueues[i].maxReadLevel = update.maxReadLevel
+		db.subqueues[i].maxReadLevel = update.maxReadLevelAfter
 	}
 
 	if _, ok := err.(*persistence.ConditionFailedError); ok {
 		// tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
 		// In those cases we keep the count incremented, hence it may be an overestimate.
 		for i, update := range updates {
-			db.subqueues[i].ApproximateBacklogCount -= update.tasks
+			db.subqueues[i].ApproximateBacklogCount -= int64(len(update.tasks))
 		}
 	}
-	return resp, err
+	return createTasksResponse{bySubqueue: updates}, err
 }
 
 // GetTasks returns a batch of tasks between the given range
