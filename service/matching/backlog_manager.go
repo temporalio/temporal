@@ -258,7 +258,7 @@ func (c *backlogManagerImpl) completeTask(itask *internalTask, err error) {
 
 	ackLevel, numAcked := c.taskAckManager.completeTask(task.GetTaskId())
 	if numAcked > 0 {
-		c.db.updateApproximateBacklogCount(subqueueZero, -numAcked)
+		c.db.updateApproximateBacklogCount(-numAcked)
 	}
 	c.taskGC.Run(ackLevel)
 }
