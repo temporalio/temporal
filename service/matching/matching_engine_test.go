@@ -255,7 +255,8 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 
 func (s *matchingEngineSuite) TestAckManager() {
 	backlogMgr := newBacklogMgr(s.T(), s.controller, false)
-	m := newAckManager(backlogMgr.db, backlogMgr.logger)
+	backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	m := backlogMgr.taskAckManager
 
 	m.setAckLevel(100)
 	s.EqualValues(100, m.getAckLevel())
@@ -320,7 +321,8 @@ func (s *matchingEngineSuite) TestAckManager() {
 
 func (s *matchingEngineSuite) TestAckManager_Sort() {
 	backlogMgr := newBacklogMgr(s.T(), s.controller, false)
-	m := newAckManager(backlogMgr.db, backlogMgr.logger)
+	backlogMgr.db.RenewLease(backlogMgr.tqCtx)
+	m := backlogMgr.taskAckManager
 
 	const t0 = 100
 	m.setAckLevel(t0)
@@ -2062,8 +2064,10 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// wait until all tasks are read by the task pump and enqueued into the in-memory buffer
 	// at the end of this step, ackManager readLevel will also be equal to the buffer size
-	expectedBufSize := min(cap(tlMgr.backlogMgr.taskReader.taskBuffer), taskCount)
-	s.True(s.awaitCondition(func() bool { return len(tlMgr.backlogMgr.taskReader.taskBuffer) == expectedBufSize }, time.Second))
+	blm := tlMgr.backlogMgr.(*backlogManagerImpl)
+	expectedBufSize := min(cap(blm.taskReader.taskBuffer), taskCount)
+	s.Eventually(func() bool { return len(blm.taskReader.taskBuffer) == expectedBufSize },
+		time.Second, 5*time.Millisecond)
 
 	// unload the queue and stop all goroutines that read / write tasks in the background
 	// remainder of this test works with the in-memory buffer
@@ -2071,15 +2075,15 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
-	tlMgr.backlogMgr.taskAckManager.setReadLevel(tlMgr.backlogMgr.db.GetMaxReadLevel())
-	batch, err := tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
+	blm.taskAckManager.setReadLevel(blm.db.GetMaxReadLevel(0))
+	batch, err := blm.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.EqualValues(0, len(batch.tasks))
-	s.EqualValues(tlMgr.backlogMgr.db.GetMaxReadLevel(), batch.readLevel)
+	s.EqualValues(blm.db.GetMaxReadLevel(0), batch.readLevel)
 	s.True(batch.isReadBatchDone)
 
-	tlMgr.backlogMgr.taskAckManager.setReadLevel(0)
-	batch, err = tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
+	blm.taskAckManager.setReadLevel(0)
+	batch, err = blm.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.EqualValues(rangeSize, len(batch.tasks))
 	s.EqualValues(rangeSize, batch.readLevel)
@@ -2090,7 +2094,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// reset the ackManager readLevel to the buffer size and consume
 	// the in-memory tasks by calling Poll API - assert ackMgr state
 	// at the end
-	tlMgr.backlogMgr.taskAckManager.setReadLevel(int64(expectedBufSize))
+	blm.taskAckManager.setReadLevel(int64(expectedBufSize))
 
 	// complete rangeSize events
 	for i := int64(0); i < rangeSize; i++ {
@@ -2112,7 +2116,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 		}
 	}
 	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(dbq))
-	batch, err = tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
+	batch, err = blm.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.True(0 < len(batch.tasks) && len(batch.tasks) <= rangeSize)
 	s.True(batch.isReadBatchDone)
@@ -2139,16 +2143,17 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	// the following few lines get clobbered as part of the taskWriter.Start()
 	time.Sleep(100 * time.Millisecond)
 
-	tlMgr.backlogMgr.taskAckManager.setReadLevel(0)
-	tlMgr.backlogMgr.db.SetMaxReadLevel(maxReadLevel)
-	batch, err := tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
+	blm := tlMgr.backlogMgr.(*backlogManagerImpl)
+	blm.taskAckManager.setReadLevel(0)
+	blm.db.setMaxReadLevelForTesting(0, maxReadLevel)
+	batch, err := blm.taskReader.getTaskBatch(context.Background())
 	s.Empty(batch.tasks)
 	s.Equal(int64(rangeSize*10), batch.readLevel)
 	s.False(batch.isReadBatchDone)
 	s.NoError(err)
 
-	tlMgr.backlogMgr.taskAckManager.setReadLevel(batch.readLevel)
-	batch, err = tlMgr.backlogMgr.taskReader.getTaskBatch(context.Background())
+	blm.taskAckManager.setReadLevel(batch.readLevel)
+	batch, err = blm.taskReader.getTaskBatch(context.Background())
 	s.Empty(batch.tasks)
 	s.Equal(maxReadLevel, batch.readLevel)
 	s.True(batch.isReadBatchDone)
@@ -2228,11 +2233,13 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		tlMgr, ok := s.matchingEngine.partitions[dbq.Partition().Key()].(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
 		s.True(ok, "failed to load task queue")
 		s.EqualValues(taskCount, s.taskManager.getTaskCount(dbq))
+		blm := tlMgr.backlogMgr.(*backlogManagerImpl)
 
 		// wait until all tasks are loaded by into in-memory buffers by task queue manager
 		// the buffer size should be one less than expected because dispatcher will dequeue the head
 		// 1/4 should be thrown out because they are expired before they hit the buffer
-		s.True(s.awaitCondition(func() bool { return len(tlMgr.backlogMgr.taskReader.taskBuffer) >= (3*taskCount/4 - 1) }, time.Second))
+		s.Eventually(func() bool { return len(blm.taskReader.taskBuffer) >= (3*taskCount/4 - 1) },
+			time.Second, 5*time.Millisecond)
 
 		// ensure the 1/4 of tasks with small ScheduleToStartTimeout will be expired when they come out of the buffer
 		time.Sleep(300 * time.Millisecond)
@@ -2265,8 +2272,8 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 			s.Truef(-3 <= delta && delta <= 1, "remaining %d, getTaskCount %d", remaining, s.taskManager.getTaskCount(dbq))
 		}
 		// ensure full gc for the next case (twice in case one doesn't get the gc lock)
-		tlMgr.backlogMgr.taskGC.RunNow(tlMgr.backlogMgr.taskAckManager.getAckLevel())
-		tlMgr.backlogMgr.taskGC.RunNow(tlMgr.backlogMgr.taskAckManager.getAckLevel())
+		blm.taskGC.RunNow(blm.taskAckManager.getAckLevel())
+		blm.taskGC.RunNow(blm.taskAckManager.getAckLevel())
 	}
 }
 
@@ -3088,7 +3095,6 @@ func (s *matchingEngineSuite) mockHistoryWhilePolling(workflowType *commonpb.Wor
 func (s *matchingEngineSuite) createTQAndPTQForBacklogTests() (*taskqueuepb.TaskQueue, *PhysicalTaskQueueKey) {
 	tq := "approximateBacklogCounter"
 	ptq := newUnversionedRootQueueKey(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.taskManager.getQueueManagerByKey(ptq).rangeID = 1
 	s.matchingEngine.config.RangeSize = 10
 
 	taskQueue := &taskqueuepb.TaskQueue{
@@ -3099,9 +3105,11 @@ func (s *matchingEngineSuite) createTQAndPTQForBacklogTests() (*taskqueuepb.Task
 	return taskQueue, ptq
 }
 
-func (s *matchingEngineSuite) addWorkflowTask(workflowExecution *commonpb.WorkflowExecution, taskQueue *taskqueuepb.TaskQueue) {
-	var doneAdding bool
-	for !doneAdding {
+func (s *matchingEngineSuite) addWorkflowTask(
+	workflowExecution *commonpb.WorkflowExecution,
+	taskQueue *taskqueuepb.TaskQueue,
+) {
+	s.EventuallyWithT(func(c *assert.CollectT) {
 		addRequest := matchingservice.AddWorkflowTaskRequest{
 			NamespaceId:            namespaceId,
 			Execution:              workflowExecution,
@@ -3110,17 +3118,12 @@ func (s *matchingEngineSuite) addWorkflowTask(workflowExecution *commonpb.Workfl
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 		}
 		_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-		if err != nil {
-			continue
-		}
-		s.NoError(err)
-		doneAdding = true
-	}
+		require.NoError(c, err)
+	}, 10*time.Second, time.Millisecond, "failed to add workflow task")
 }
 
 func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *taskqueuepb.TaskQueue) {
-	var donePolling bool
-	for !donePolling {
+	s.EventuallyWithT(func(c *assert.CollectT) {
 		result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 			NamespaceId: namespaceId,
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -3128,21 +3131,17 @@ func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *ta
 				Identity:  "nobody",
 			},
 		}, metrics.NoopMetricsHandler)
-		if len(result.TaskToken) == 0 || result.GetAttempt() == 0 {
-			continue
-		}
-		if err != nil {
-			// DB could have failed while fetching tasks; try again
-			continue
-		}
-		s.NoError(err)
-		donePolling = true
-	}
+		require.NoError(c, err) // DB could have failed while fetching tasks; try again
+		require.NotEmpty(c, result.TaskToken)
+		require.NotZero(c, result.Attempt)
+	}, 10*time.Second, time.Millisecond, "failed to poll workflow task")
 }
 
 // addWorkflowTasks adds taskCount number of tasks for each numWorker
-func (s *matchingEngineSuite) addWorkflowTasks(concurrently bool, numWorkers int, taskCount int,
-	taskQueue *taskqueuepb.TaskQueue, workflowExecution *commonpb.WorkflowExecution, wg *sync.WaitGroup) {
+func (s *matchingEngineSuite) addWorkflowTasks(
+	concurrently bool, numWorkers int, taskCount int,
+	taskQueue *taskqueuepb.TaskQueue, workflowExecution *commonpb.WorkflowExecution, wg *sync.WaitGroup,
+) {
 	if concurrently {
 		for p := 0; p < numWorkers; p++ {
 			go func() {
@@ -3163,8 +3162,10 @@ func (s *matchingEngineSuite) addWorkflowTasks(concurrently bool, numWorkers int
 }
 
 // pollWorkflowTasks polls tasks using numWorkers
-func (s *matchingEngineSuite) pollWorkflowTasks(concurrently bool, workflowType *commonpb.WorkflowType, numPollers int, taskCount int,
-	ptq *PhysicalTaskQueueKey, taskQueue *taskqueuepb.TaskQueue, wg *sync.WaitGroup) {
+func (s *matchingEngineSuite) pollWorkflowTasks(
+	concurrently bool, workflowType *commonpb.WorkflowType, numPollers int, taskCount int,
+	ptq *PhysicalTaskQueueKey, taskQueue *taskqueuepb.TaskQueue, wg *sync.WaitGroup,
+) {
 	s.mockHistoryWhilePolling(workflowType)
 	if concurrently {
 		for p := 0; p < numPollers; p++ {
@@ -3183,7 +3184,7 @@ func (s *matchingEngineSuite) pollWorkflowTasks(concurrently bool, workflowType 
 
 			// PartitionManager could have been unloaded; fetch the latest copy
 			pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-			s.LessOrEqual(int64(taskCount-tasksPolled), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+			s.LessOrEqual(int64(taskCount-tasksPolled), pgMgr.backlogMgr.TotalApproximateBacklogCount())
 		}
 	}
 }
@@ -3205,11 +3206,11 @@ func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCoun
 
 	// Extract the pgMgr for validating approximateBacklogCounter
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-	s.EqualValues(int64(taskCount*numWorkers), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+	s.EqualValues(int64(taskCount*numWorkers), pgMgr.backlogMgr.TotalApproximateBacklogCount())
 
 	s.pollWorkflowTasks(false, workflowType, numPollers, taskCount, ptq, taskQueue, nil)
 
-	s.LessOrEqual(int64(0), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+	s.LessOrEqual(int64(0), pgMgr.backlogMgr.TotalApproximateBacklogCount())
 }
 
 func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksNoDBErrors() {
@@ -3246,17 +3247,18 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	partitionManager, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), ptq.Partition(), false, loadCauseTask)
 	s.NoError(err)
-	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	pqMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	blm := pqMgr.backlogMgr.(*backlogManagerImpl)
 
 	s.EqualValues(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
 
 	// Check the maxReadLevel with the value of task stored in db
 	maxTaskId, ok := s.taskManager.maxTaskID(ptq)
 	s.True(ok)
-	s.EqualValues(maxTaskId, pgMgr.backlogMgr.db.maxReadLevel.Load())
+	s.EqualValues(maxTaskId, blm.db.GetMaxReadLevel(0))
 
 	// validate the approximateBacklogCounter
-	s.EqualValues(taskCount*numWorkers, pgMgr.backlogMgr.db.getApproximateBacklogCount())
+	s.EqualValues(taskCount*numWorkers, blm.TotalApproximateBacklogCount())
 
 	// Unload the PQM
 	s.matchingEngine.unloadTaskQueuePartition(partitionManager, unloadCauseForce)
@@ -3280,18 +3282,19 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.pollWorkflowTasks(false, workflowType, 1, (taskCount*numWorkers)-1, ptq, taskQueue, nil)
 
 	// Update pgMgr to have the latest pgMgr
-	pgMgr = s.getPhysicalTaskQueueManagerImpl(ptq)
+	pqMgr = s.getPhysicalTaskQueueManagerImpl(ptq)
+	blm = pqMgr.backlogMgr.(*backlogManagerImpl)
 
-	// Overwrite the maxReadLevel since it could have increased if the previous taskWriter was stopped (which would not result in resetting);
-	// This should never be called and is only being done here for test purposes
-	pgMgr.backlogMgr.db.SetMaxReadLevel(maxTaskId)
+	// Overwrite the maxReadLevel since it could have increased if the previous taskWriter was
+	// stopped (which would not result in resetting).
+	blm.db.setMaxReadLevelForTesting(0, maxTaskId)
 
 	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
 	s.Eventually(func() bool {
-		return int64(0) == pgMgr.backlogMgr.db.getApproximateBacklogCount()
+		return int64(0) == blm.TotalApproximateBacklogCount()
 	}, 3*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
 
-	s.EqualValues(int64(0), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+	s.EqualValues(int64(0), blm.TotalApproximateBacklogCount())
 }
 
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
@@ -3333,11 +3336,12 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 
 	wg.Wait()
 
-	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	pqMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	blm := pqMgr.backlogMgr.(*backlogManagerImpl)
 
 	// force GC to make sure all the acked tasks are cleaned up before validating the count
-	pgMgr.backlogMgr.taskGC.RunNow(pgMgr.backlogMgr.taskAckManager.getAckLevel())
-	s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), pgMgr.backlogMgr.db.getApproximateBacklogCount())
+	blm.taskGC.RunNow(blm.taskAckManager.getAckLevel())
+	s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), blm.TotalApproximateBacklogCount())
 }
 
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
@@ -3451,17 +3455,6 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 					}),
 			}, nil
 		}).AnyTimes()
-}
-
-func (s *matchingEngineSuite) awaitCondition(cond func() bool, timeout time.Duration) bool {
-	expiry := time.Now().UTC().Add(timeout)
-	for !cond() {
-		time.Sleep(time.Millisecond * 5)
-		if time.Now().UTC().After(expiry) {
-			return false
-		}
-	}
-	return true
 }
 
 func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID int64,

@@ -48,21 +48,28 @@ func TestAckManager_CompleteTaskMovesAckLevelUpToGap(t *testing.T) {
 	t.Parallel()
 	controller := gomock.NewController(t)
 	backlogMgr := newBacklogMgr(t, controller, false)
+	backlogMgr.db.RenewLease(backlogMgr.tqCtx)
 
 	backlogMgr.taskAckManager.addTask(1)
 
 	// Increment the backlog so that we don't under-count
 	backlogMgr.db.updateApproximateBacklogCount(1)
 	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
-	require.Equal(t, int64(1), backlogMgr.taskAckManager.completeTask(1), "should move ack level on completion")
+	ackLevel, numAcked := backlogMgr.taskAckManager.completeTask(1)
+	require.Equal(t, int64(1), ackLevel, "should move ack level on completion")
+	require.Equal(t, int64(1), numAcked, "should move ack level on completion")
 
 	backlogMgr.taskAckManager.addTask(2)
 	backlogMgr.taskAckManager.addTask(3)
 	backlogMgr.taskAckManager.addTask(12)
 	backlogMgr.db.updateApproximateBacklogCount(3)
 
-	require.Equal(t, int64(1), backlogMgr.taskAckManager.completeTask(3), "task 2 is not complete, we should not move ack level")
-	require.Equal(t, int64(3), backlogMgr.taskAckManager.completeTask(2), "both tasks 2 and 3 are complete")
+	ackLevel, numAcked = backlogMgr.taskAckManager.completeTask(3)
+	require.Equal(t, int64(1), ackLevel, "task 2 is not complete, we should not move ack level")
+	require.Equal(t, int64(0), numAcked, "task 2 is not complete, we should not move ack level")
+	ackLevel, numAcked = backlogMgr.taskAckManager.completeTask(2)
+	require.Equal(t, int64(3), ackLevel, "both tasks 2 and 3 are complete")
+	require.Equal(t, int64(2), numAcked, "both tasks 2 and 3 are complete")
 }
 
 func BenchmarkAckManager_AddTask(b *testing.B) {
