@@ -89,13 +89,91 @@ func (s *nodeSuite) TestNewTree() {
 		persistenceNodes["child2/grandchild1"],
 	}
 
-	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder)
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder)
 	s.NoError(err)
 	s.NotNil(root)
 
 	preorderNodes := s.preorderAndAssertParent(root, nil)
 	s.Len(preorderNodes, 5)
 	s.Equal(expectedPreorderNodes, preorderNodes)
+}
+
+func (s *nodeSuite) TestSerializeNode_ComponentAttributes() {
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1)
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	component := TestComponent{
+		ComponentData: &persistencespb.ActivityInfo{
+			ActivityId: "22",
+		},
+		SubComponent1: NewComponentField[TestSubComponent1](nil, TestSubComponent1{
+			SubComponent1Data: &persistencespb.ActivityInfo{ // Random proto type
+				ActivityId: "22.8",
+			},
+		}),
+		SubComponent2: nil,
+		SubData1: NewDataField[*persistencespb.ActivityInfo](nil,
+			&persistencespb.ActivityInfo{
+				ActivityId: "22.78",
+			}),
+	}
+
+	node := newNode(s.nodeBase(), nil)
+	node.protoValue = &persistencespb.ChasmNode{
+		Attributes: &persistencespb.ChasmNode_ComponentAttributes{
+			ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
+		},
+	}
+	node.value = component
+
+	mutation := &NodesMutation{
+		UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
+		DeletedNodes: make(map[string]struct{}),
+	}
+
+	err := node.serializeNode(mutation, []string{})
+	s.NoError(err)
+
+	s.NotNil(node.protoValue)
+	s.NotNil(node.protoValue.GetComponentAttributes().GetData())
+	s.Equal("chasm.TestComponent", node.protoValue.GetComponentAttributes().GetType())
+
+	s.NotNil(node.children["SubComponent1"])
+	s.NotNil(node.children["SubComponent1"].value)
+	s.IsType(TestSubComponent1{}, node.children["SubComponent1"].value)
+
+	s.NotNil(node.children["SubData1"])
+	s.IsType(&persistencespb.ActivityInfo{}, node.children["SubData1"].value)
+
+	s.Nil(node.children["SubComponent2"])
+
+	s.Empty(mutation.UpdatedNodes)
+	s.Empty(mutation.DeletedNodes)
+}
+
+func (s *nodeSuite) TestSerializeNode_DataAttributes() {
+	component := &persistencespb.ActivityInfo{ // Random proto type
+		ActivityId: "22",
+	}
+
+	node := &Node{
+		nodeBase: s.nodeBase(),
+		protoValue: &persistencespb.ChasmNode{
+			Attributes: &persistencespb.ChasmNode_DataAttributes{
+				DataAttributes: &persistencespb.ChasmDataAttributes{},
+			},
+		},
+		value:    component,
+		children: make(map[string]*Node),
+	}
+
+	mutation := &NodesMutation{
+		UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
+		DeletedNodes: make(map[string]struct{}),
+	}
+
+	err := node.serializeNode(mutation, []string{})
+	s.NoError(err)
 }
 
 func (s *nodeSuite) preorderAndAssertParent(
@@ -105,7 +183,7 @@ func (s *nodeSuite) preorderAndAssertParent(
 	s.Equal(parent, n.parent)
 
 	var nodes []*persistencespb.ChasmNode
-	nodes = append(nodes, n.persistence)
+	nodes = append(nodes, n.protoValue)
 
 	childNames := make([]string, 0, len(n.children))
 	for childName := range n.children {
@@ -138,4 +216,13 @@ func (e *testNodePathEncoder) Decode(
 		return []string{}, nil
 	}
 	return strings.Split(encodedPath, "/"), nil
+}
+
+func (s *nodeSuite) nodeBase() *nodeBase {
+	return &nodeBase{
+		registry:    s.registry,
+		timeSource:  s.timeSource,
+		backend:     s.nodeBackend,
+		pathEncoder: s.nodePathEncoder,
+	}
 }

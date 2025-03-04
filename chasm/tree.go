@@ -48,10 +48,12 @@ type (
 
 		parent   *Node
 		children map[string]*Node
-		pNode    *persistencespb.ChasmNode // serialized component/data/collection
-		// TODO: what is the better name?
-		component any // deserialized component/data/collection
-		dirty     bool
+
+		// Type of attributes controls the type of the node.
+		protoValue *persistencespb.ChasmNode // serialized component | data | collection
+		value      any                       // deserialized component | data | collection
+
+		dirty bool
 
 		// TODO: add other necessary fields here, e.g.
 		//
@@ -103,7 +105,7 @@ type (
 
 // NewTree creates a new in-memory CHASM tree from a collection of flattened persistence CHASM nodes.
 func NewTree(
-	pNodes map[string]*persistencespb.ChasmNode, // This is coming from MS map[nodePath]ChasmNode.
+	serializedNodes map[string]*persistencespb.ChasmNode, // This is coming from MS map[nodePath]ChasmNode.
 
 	registry *Registry,
 	timeSource clock.TimeSource,
@@ -118,12 +120,12 @@ func NewTree(
 	}
 
 	root := newNode(base, nil)
-	for encodedPath, pNode := range pNodes {
+	for encodedPath, serializedNode := range serializedNodes {
 		nodePath, err := pathEncoder.Decode(encodedPath)
 		if err != nil {
 			return nil, err
 		}
-		root.addChild(nodePath, pNode)
+		root.addChild(nodePath, serializedNode)
 	}
 
 	return root, nil
@@ -148,10 +150,10 @@ func NewEmptyTree(
 
 func (n *Node) addChild(
 	nodePath []string,
-	pNode *persistencespb.ChasmNode,
+	serializedNode *persistencespb.ChasmNode,
 ) {
 	if len(nodePath) == 0 {
-		n.pNode = pNode
+		n.protoValue = serializedNode
 		return
 	}
 
@@ -161,7 +163,7 @@ func (n *Node) addChild(
 		childNode = newNode(n.nodeBase, n)
 		n.children[childName] = childNode
 	}
-	childNode.addChild(nodePath[1:], pNode)
+	childNode.addChild(nodePath[1:], serializedNode)
 }
 
 // TODO: this is called from CloseTransaction.
@@ -169,7 +171,7 @@ func (n *Node) serializeNode(
 	mutation *NodesMutation,
 	currentPath []string,
 ) error {
-	switch n.pNode.Attributes.(type) {
+	switch n.protoValue.Attributes.(type) {
 	case *persistencespb.ChasmNode_ComponentAttributes:
 		return n.serializeComponentNode(mutation, currentPath)
 	case *persistencespb.ChasmNode_DataAttributes:
@@ -179,7 +181,7 @@ func (n *Node) serializeNode(
 	case *persistencespb.ChasmNode_PointerAttributes:
 		panic("not implemented")
 	default:
-		return serviceerror.NewInternal("unknown pNode type")
+		return serviceerror.NewInternal("unknown protoValue type")
 	}
 }
 
@@ -187,8 +189,8 @@ func (n *Node) serializeComponentNode(
 	mutation *NodesMutation,
 	currentPath []string,
 ) error {
-	componentT := reflect.TypeOf(n.component)
-	componentV := reflect.ValueOf(n.component)
+	componentT := reflect.TypeOf(n.value)
+	componentV := reflect.ValueOf(n.value)
 	for componentT.Kind() == reflect.Ptr {
 		componentT = componentT.Elem()
 		componentV = componentV.Elem()
@@ -199,6 +201,7 @@ func (n *Node) serializeComponentNode(
 
 	protoMessageFound := false
 	processedChildren := make(map[string]struct{})
+nextField:
 	for i := 0; i < componentT.NumField(); i++ {
 		fieldV := componentV.Field(i)
 		fieldT := fieldV.Type()
@@ -208,20 +211,24 @@ func (n *Node) serializeComponentNode(
 			}
 			protoMessageFound = true
 
+			if fieldV.IsNil() {
+				continue nextField
+			}
+
 			blob, err := serialization.ProtoEncodeBlob(fieldV.Interface().(proto.Message), enums.ENCODING_TYPE_PROTO3)
 			if err != nil {
 				return err
 			}
 
-			n.pNode.GetComponentAttributes().Data = blob
-			n.pNode.GetComponentAttributes().Type = componentT.String()
-			if n.pNode.GetInitialVersionedTransition() == nil {
-				n.pNode.InitialVersionedTransition = &persistencespb.VersionedTransition{
+			n.protoValue.GetComponentAttributes().Data = blob
+			n.protoValue.GetComponentAttributes().Type = componentT.String()
+			if n.protoValue.GetInitialVersionedTransition() == nil {
+				n.protoValue.InitialVersionedTransition = &persistencespb.VersionedTransition{
 					TransitionCount:          n.backend.NextTransitionCount(),
 					NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
 				}
 			}
-			continue
+			continue nextField
 		}
 
 		// TODO: support chasm name tag on the field
@@ -229,34 +236,38 @@ func (n *Node) serializeComponentNode(
 		processedChildren[fieldName] = struct{}{}
 
 		for fieldT.Kind() == reflect.Ptr {
+			if fieldV.IsNil() {
+				continue nextField
+			}
 			fieldT = fieldT.Elem()
 			fieldV = fieldV.Elem()
 		}
 
 		if strings.HasPrefix(fieldT.String(), chasmFieldTypeName) { // not string comparison because chasm.Field is generic
+
 			internal := fieldV.FieldByName(internalFieldName).Interface().(fieldInternal)
-			if internal.treeNode != nil {
+			if internal.node != nil {
 				// this is not a new tree node, don't need to do anything
-				continue
+				continue nextField
 			}
 
 			// new node or replacing an existing node
 			switch internal.fieldType {
 			case fieldTypeData:
 				childN := newNode(n.nodeBase, n)
-				childN.pNode = &persistencespb.ChasmNode{
+				childN.protoValue = &persistencespb.ChasmNode{
 					Attributes: &persistencespb.ChasmNode_DataAttributes{},
 				}
-				childN.component = internal.component
+				childN.value = internal.value
 				n.children[fieldName] = childN
 			case fieldTypeComponent:
 				childN := newNode(n.nodeBase, n)
-				childN.pNode = &persistencespb.ChasmNode{
+				childN.protoValue = &persistencespb.ChasmNode{
 					Attributes: &persistencespb.ChasmNode_ComponentAttributes{
 						ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
 					},
 				}
-				childN.component = internal.component
+				childN.value = internal.value
 				n.children[fieldName] = childN
 			case fieldTypeComponentPointer:
 			case fieldTypeCollection:
@@ -266,7 +277,7 @@ func (n *Node) serializeComponentNode(
 		}
 
 		if strings.HasPrefix(fieldT.String(), chasmCollectionTypeName) {
-			continue
+			continue nextField
 		}
 	}
 
@@ -288,7 +299,7 @@ func (n *Node) serializeComponentNode(
 }
 
 func (n *Node) serializeDataNode() error {
-	componentProto, ok := n.component.(proto.Message)
+	componentProto, ok := n.value.(proto.Message)
 	if !ok {
 		return serviceerror.NewInternal("only support proto.Message as chasm data")
 	}
@@ -298,14 +309,14 @@ func (n *Node) serializeDataNode() error {
 		return err
 	}
 
-	n.pNode.GetDataAttributes().Data = blob
+	n.protoValue.GetDataAttributes().Data = blob
 	return nil
 }
 
 func (n *Node) deserializeNode(
 	instanceT reflect.Type,
 ) error {
-	switch n.pNode.Attributes.(type) {
+	switch n.protoValue.Attributes.(type) {
 	case *persistencespb.ChasmNode_ComponentAttributes:
 		return n.deserializeComponentNode(instanceT)
 	case *persistencespb.ChasmNode_DataAttributes:
@@ -324,7 +335,7 @@ func (n *Node) deserializeComponentNode(
 		return serviceerror.NewInternal("only struct is supported for component")
 	}
 
-	attr := n.pNode.GetComponentAttributes()
+	attr := n.protoValue.GetComponentAttributes()
 
 	instanceV := reflect.New(instanceT).Elem()
 	protoMessageFound := false
@@ -358,7 +369,7 @@ func (n *Node) deserializeComponentNode(
 
 			if childNode, found := n.children[fieldName]; found {
 				internalValue := reflect.ValueOf(fieldInternal{
-					treeNode: childNode,
+					node: childNode,
 				})
 				chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
 			}
@@ -381,7 +392,7 @@ func (n *Node) deserializeComponentNode(
 		return serviceerror.NewInternal("no proto field found in component")
 	}
 
-	n.component = instanceV.Interface()
+	n.value = instanceV.Interface()
 
 	return nil
 }
@@ -389,12 +400,12 @@ func (n *Node) deserializeComponentNode(
 func (n *Node) deserializeDataNode(
 	instanceType reflect.Type,
 ) error {
-	value, err := n.unmarshalProto(n.pNode.GetDataAttributes().GetData(), instanceType)
+	value, err := n.unmarshalProto(n.protoValue.GetDataAttributes().GetData(), instanceType)
 	if err != nil {
 		return err
 	}
 
-	n.component = value.Interface()
+	n.value = value.Interface()
 	return nil
 }
 

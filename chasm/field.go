@@ -25,8 +25,6 @@
 package chasm
 
 import (
-	"reflect"
-
 	"google.golang.org/protobuf/proto"
 )
 
@@ -52,9 +50,9 @@ const (
 
 type fieldInternal struct {
 	fieldType fieldType
-	component reflect.Value
+	value     any // Component | Data | Collection
 
-	treeNode *Node
+	node *Node
 }
 
 func (d *Field[T]) Get(Context) (T, error) {
@@ -75,7 +73,12 @@ func NewDataField[D proto.Message](
 	ctx MutableContext,
 	d D,
 ) *Field[D] {
-	return &Field[D]{}
+	return &Field[D]{
+		Internal: fieldInternal{
+			fieldType: fieldTypeData,
+			value:     d,
+		},
+	}
 }
 
 type componentFieldOptions struct {
@@ -97,7 +100,8 @@ func NewComponentField[C Component](
 ) *Field[C] {
 	return &Field[C]{
 		Internal: fieldInternal{
-			component: reflect.ValueOf(c),
+			fieldType: fieldTypeComponent,
+			value:     c,
 		},
 	}
 }
