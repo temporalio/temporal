@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -57,19 +56,14 @@ type (
 	// 	end   int64
 	// }
 
-	// idBlockAllocator interface {
-	// 	RenewLease(context.Context) (taskQueueState, error)
-	// 	RangeID() int64
-	// }
-
 	// priTaskWriter writes tasks persistence split among subqueues
 	priTaskWriter struct {
 		backlogMgr  *priBacklogManagerImpl
 		config      *taskQueueConfig
+		db          *taskQueueDB
+		logger      log.Logger
 		appendCh    chan *writeTaskRequest
 		taskIDBlock taskIDBlock
-		logger      log.Logger
-		idAlloc     idBlockAllocator
 	}
 )
 
@@ -87,10 +81,10 @@ func newPriTaskWriter(
 	return &priTaskWriter{
 		backlogMgr:  backlogMgr,
 		config:      backlogMgr.config,
+		db:          backlogMgr.db,
+		logger:      backlogMgr.logger,
 		appendCh:    make(chan *writeTaskRequest, backlogMgr.config.OutstandingTaskAppendsThreshold()),
 		taskIDBlock: noTaskIDs,
-		logger:      backlogMgr.logger,
-		idAlloc:     backlogMgr.db,
 	}
 }
 
@@ -162,7 +156,7 @@ func (w *priTaskWriter) appendTasks(
 	reqs []*writeTaskRequest,
 ) (*persistence.CreateTasksResponse, error) {
 
-	resp, err := w.backlogMgr.db.CreateTasks(w.backlogMgr.tqCtx, taskIDs, reqs)
+	resp, err := w.db.CreateTasks(w.backlogMgr.tqCtx, taskIDs, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
 		w.logger.Error("Persistent store operation failure",
@@ -252,7 +246,7 @@ func (w *priTaskWriter) renewLeaseWithRetry(
 ) (taskQueueState, error) {
 	var newState taskQueueState
 	op := func(ctx context.Context) (err error) {
-		newState, err = w.idAlloc.RenewLease(ctx)
+		newState, err = w.db.RenewLease(ctx)
 		return
 	}
 	metrics.LeaseRequestPerTaskQueueCounter.With(w.backlogMgr.metricsHandler).Record(1)
@@ -265,15 +259,9 @@ func (w *priTaskWriter) renewLeaseWithRetry(
 }
 
 func (w *priTaskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
-	currBlock := rangeIDToTaskIDBlock(w.idAlloc.RangeID(), w.config.RangeSize)
+	currBlock := rangeIDToTaskIDBlock(w.db.RangeID(), w.config.RangeSize)
 	if currBlock.end != prevBlockEnd {
-		return taskIDBlock{},
-			fmt.Errorf(
-				"%w: allocTaskIDBlock: invalid state: prevBlockEnd:%v != currTaskIDBlock:%+v",
-				errNonContiguousBlocks,
-				prevBlockEnd,
-				currBlock,
-			)
+		return taskIDBlock{}, errNonContiguousBlocks
 	}
 	state, err := w.renewLeaseWithRetry(persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
