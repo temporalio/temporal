@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -93,6 +92,11 @@ const (
 
 	// TODO(pri): make dynamic config
 	backlogTaskForwardTimeout = 60 * time.Second
+
+	// How much rate limit a task queue can use up in an instant. E.g., for a rate of
+	// 100/second and burst duration of 2 seconds, the capacity of a bucket-type limiting
+	// algorithm would be 200.
+	burstDuration = time.Second
 )
 
 var (
@@ -508,9 +512,8 @@ func (tm *priTaskMatcher) setLimitLocked() {
 		tm.adminNsRate,
 		tm.adminTqRate,
 	)
-	burst := max(1, int(math.Ceil(rate)))
 
-	tm.data.UpdateRateLimit(rate, burst)
+	tm.data.UpdateRateLimit(rate, burstDuration)
 }
 
 // Rate returns the current dynamic rate setting

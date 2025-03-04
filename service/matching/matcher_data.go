@@ -255,11 +255,11 @@ func newMatcherData(config *taskQueueConfig) matcherData {
 	}
 }
 
-func (d *matcherData) UpdateRateLimit(rate float64, burst int) {
+func (d *matcherData) UpdateRateLimit(rate float64, burstDuration time.Duration) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	d.tasks.wholeQueueLimiter.set(rate, burst)
+	d.tasks.wholeQueueLimiter.set(rate, burstDuration)
 }
 
 func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
@@ -598,21 +598,39 @@ func (rt *resettableTimer) unset() {
 // and compare to the current time to decide if a task is allowed.
 type simpleLimiter struct {
 	// parameters:
-	interval int64 // nanos/task
-	burst    int64 // burst duration in nanos
+	interval time.Duration // ideal task spacing interval
+	burst    time.Duration // burst duration
 
 	// state:
 	ready int64 // unix nanos
 }
 
-func (s *simpleLimiter) set(rate float64, burst int) {
-	s.interval = int64(float64(time.Second) / rate)
-	s.burst = s.interval * int64(burst)
+func (s *simpleLimiter) set(rate float64, burstDuration time.Duration) {
+	s.interval = time.Duration(float64(time.Second) / rate)
+	s.burst = burstDuration
 }
 
 func (s *simpleLimiter) consume(now int64, tokens int64) {
-	s.ready = max(now, s.ready+s.burst) - s.burst + tokens*s.interval
+	// This is a slight variation of the normal GCRA: instead of tracking the end of the
+	// allowed interval (the theoretical arrival time), ready tracks the beginning of it, and
+	// the end is ready + burst. To find the next ready time:
+	// - Add ready+burst to find the next theoretical arrival time.
+	// - If that's in the past, clip it at the current time.
+	// - Subtract burst to turn it back into a ready time.
+	// - Finally add the tokens we used.
+	//
+	// For intuition, consider that if if now is > ready by only a tiny amount, i.e. we're
+	// bursting, then the max takes ready+burst and we push up the ready time by the full
+	// interval. We can do this burst/interval times before it catches up and we're no longer
+	// ready.
+	//
+	// Alternatively, if now is > ready by more than burst, then we end up subtracting the full
+	// burst from now and adding one interval.
+	s.ready = max(now, s.ready+s.burst.Nanoseconds()) - s.burst.Nanoseconds() + tokens*s.interval.Nanoseconds()
 }
+
+// simple assertions
+// TODO(pri): replace by something that doesn't panic
 
 func bugIf(cond bool, msg string) {
 	if cond {
