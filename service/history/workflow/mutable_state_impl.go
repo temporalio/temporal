@@ -136,6 +136,8 @@ var (
 	timeZeroUTC = time.Unix(0, 0).UTC()
 )
 
+var emptyTasks = []tasks.Task{}
+
 type (
 	MutableStateImpl struct {
 		pendingActivityTimerHeartbeats map[int64]time.Time                    // Scheduled Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
