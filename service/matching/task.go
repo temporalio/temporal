@@ -85,7 +85,7 @@ type (
 		// pollerScalingDecision is assigned when the queue has advice to give to the poller about whether
 		// it should adjust its poller count
 		pollerScalingDecision *taskqueuepb.PollerScalingDecision
-		recycleToken          func()
+		recycleToken          func(*internalTask)
 
 		// These fields are for use by matcherData:
 		waitableMatchResult
@@ -304,7 +304,7 @@ func (task *internalTask) finishForward(forwardRes any, forwardErr error, wasVal
 
 func (task *internalTask) finishInternal(res taskResponse, wasValid bool) {
 	if !wasValid && task.recycleToken != nil {
-		task.recycleToken()
+		task.recycleToken(task)
 	}
 
 	switch {

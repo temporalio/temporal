@@ -128,6 +128,10 @@ func (tm *TaskMatcher) Stop() {
 	close(tm.closeC)
 }
 
+func (tm *TaskMatcher) recycleToken(*internalTask) {
+	tm.rateLimiter.RecycleToken()
+}
+
 // Offer offers a task to a potential consumer (poller)
 // If the task is successfully matched with a consumer, this
 // method will return true and no error. If the task is matched
@@ -176,7 +180,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 		// attach the rate limiter's RecycleToken func to the task
 		// so that if the task is later determined to be invalid,
 		// we can recycle the token it used.
-		task.recycleToken = tm.rateLimiter.RecycleToken
+		task.recycleToken = tm.recycleToken
 	}
 
 	select {
@@ -328,7 +332,7 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interr
 	// attach the rate limiter's RecycleToken func to the task
 	// so that if the task is later determined to be invalid,
 	// we can recycle the token it used.
-	task.recycleToken = tm.rateLimiter.RecycleToken
+	task.recycleToken = tm.recycleToken
 
 	// attempt a match with local poller first. When that
 	// doesn't succeed, try both local match and remote match

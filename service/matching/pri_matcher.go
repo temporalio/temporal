@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -56,18 +55,18 @@ type priTaskMatcher struct {
 	// Background context used for forwarding tasks. Closed when task queue is closed.
 	tqCtx context.Context
 
-	// dynamicRate is the dynamic rate & burst for rate limiter
-	dynamicRateBurst quotas.MutableRateBurst
-	// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
-	dynamicRateLimiter *quotas.DynamicRateLimiterImpl
-	// forceRefreshRateOnce is used to force refresh rate limit for first time
-	forceRefreshRateOnce sync.Once
-
 	partition      tqid.Partition
 	fwdr           *priForwarder
 	validator      taskValidator
 	metricsHandler metrics.Handler // namespace metric scope
 	numPartitions  func() int      // number of task queue partitions
+
+	limiterLock sync.Mutex
+	adminNsRate float64
+	adminTqRate float64
+	dynamicRate float64
+
+	cancel1, cancel2 func()
 }
 
 type waitingPoller struct {
@@ -89,11 +88,15 @@ type matchResult struct {
 
 const (
 	// TODO(pri): old matcher cleanup, move to here
-	// defaultTaskDispatchRPS    = 100000.0
-	// defaultTaskDispatchRPSTTL = time.Minute
+	// defaultTaskDispatchRPS = 100000.0
 
 	// TODO(pri): make dynamic config
 	backlogTaskForwardTimeout = 60 * time.Second
+
+	// How much rate limit a task queue can use up in an instant. E.g., for a rate of
+	// 100/second and burst duration of 2 seconds, the capacity of a bucket-type limiting
+	// algorithm would be 200.
+	burstDuration = time.Second
 )
 
 var (
@@ -117,36 +120,23 @@ func newPriTaskMatcher(
 	validator taskValidator,
 	metricsHandler metrics.Handler,
 ) *priTaskMatcher {
-	dynamicRateBurst := quotas.NewMutableRateBurst(
-		defaultTaskDispatchRPS,
-		int(defaultTaskDispatchRPS),
-	)
-	dynamicRateLimiter := quotas.NewDynamicRateLimiter(
-		dynamicRateBurst,
-		defaultTaskDispatchRPSTTL,
-	)
-	limiter := quotas.NewMultiRateLimiter([]quotas.RateLimiter{
-		dynamicRateLimiter,
-		quotas.NewDefaultOutgoingRateLimiter(
-			config.AdminNamespaceTaskQueueToPartitionDispatchRate,
-		),
-		quotas.NewDefaultOutgoingRateLimiter(
-			config.AdminNamespaceToPartitionDispatchRate,
-		),
-	})
-
-	return &priTaskMatcher{
-		config:             config,
-		data:               newMatcherData(config, limiter),
-		tqCtx:              tqCtx,
-		dynamicRateBurst:   dynamicRateBurst,
-		dynamicRateLimiter: dynamicRateLimiter,
-		metricsHandler:     metricsHandler,
-		partition:          partition,
-		fwdr:               fwdr,
-		validator:          validator,
-		numPartitions:      config.NumReadPartitions,
+	tm := &priTaskMatcher{
+		config:         config,
+		data:           newMatcherData(config),
+		tqCtx:          tqCtx,
+		metricsHandler: metricsHandler,
+		partition:      partition,
+		fwdr:           fwdr,
+		validator:      validator,
+		numPartitions:  config.NumReadPartitions,
+		dynamicRate:    defaultTaskDispatchRPS,
 	}
+
+	tm.adminNsRate, tm.cancel1 = config.AdminNamespaceToPartitionRateSub(tm.setAdminNsRate)
+	tm.adminTqRate, tm.cancel2 = config.AdminNamespaceTaskQueueToPartitionRateSub(tm.setAdminTqRate)
+	tm.setLimitLocked()
+
+	return tm
 }
 
 func (tm *priTaskMatcher) Start() {
@@ -171,8 +161,9 @@ func (tm *priTaskMatcher) Start() {
 	}
 }
 
-// TODO(pri): old matcher cleanup: remove this later
 func (tm *priTaskMatcher) Stop() {
+	tm.cancel1()
+	tm.cancel2()
 }
 
 func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.Retrier) {
@@ -488,31 +479,48 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 
 // UpdateRatelimit updates the task dispatch rate
 func (tm *priTaskMatcher) UpdateRatelimit(rps float64) {
-	nPartitions := float64(tm.numPartitions())
-	if nPartitions > 0 {
-		// divide the rate equally across all partitions
-		rps = rps / nPartitions
-	}
-	burst := int(math.Ceil(rps))
-
-	minTaskThrottlingBurstSize := tm.config.MinTaskThrottlingBurstSize()
-	if burst < minTaskThrottlingBurstSize {
-		burst = minTaskThrottlingBurstSize
-	}
-
-	tm.dynamicRateBurst.SetRPS(rps)
-	tm.dynamicRateBurst.SetBurst(burst)
-	tm.forceRefreshRateOnce.Do(func() {
-		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
-		// which is 10K and is too large in most cases. We need to force refresh for the first time this rate is set
-		// by poller. Only need to do that once. If the rate change later, it will be refresh in 1m.
-		tm.dynamicRateLimiter.Refresh()
-	})
+	tm.limiterLock.Lock()
+	defer tm.limiterLock.Unlock()
+	tm.dynamicRate = rps
+	tm.setLimitLocked()
 }
 
-// Rate returns the current rate at which tasks are dispatched
+func (tm *priTaskMatcher) setAdminNsRate(rps float64) {
+	tm.limiterLock.Lock()
+	defer tm.limiterLock.Unlock()
+	tm.adminNsRate = rps
+	tm.setLimitLocked()
+}
+
+func (tm *priTaskMatcher) setAdminTqRate(rps float64) {
+	tm.limiterLock.Lock()
+	defer tm.limiterLock.Unlock()
+	tm.adminTqRate = rps
+	tm.setLimitLocked()
+}
+
+func (tm *priTaskMatcher) setLimitLocked() {
+	perPartitionDynamicRate := tm.dynamicRate
+
+	if n := tm.numPartitions(); n > 0 {
+		// divide the rate equally across all partitions
+		perPartitionDynamicRate /= float64(n)
+	}
+
+	rate := min(
+		perPartitionDynamicRate,
+		tm.adminNsRate,
+		tm.adminTqRate,
+	)
+
+	tm.data.UpdateRateLimit(rate, burstDuration)
+}
+
+// Rate returns the current dynamic rate setting
 func (tm *priTaskMatcher) Rate() float64 {
-	return tm.data.rateLimiter.Rate()
+	tm.limiterLock.Lock()
+	defer tm.limiterLock.Unlock()
+	return tm.dynamicRate
 }
 
 func (tm *priTaskMatcher) poll(

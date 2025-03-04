@@ -30,7 +30,6 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/util"
 )
 
@@ -89,10 +88,14 @@ func (p *pollerPQ) Pop() any {
 
 type taskPQ struct {
 	heap []*internalTask
+
 	// ages holds task create time for tasks from merged local backlogs (not forwarded).
 	// note that matcherData may get tasks from multiple versioned backlogs due to
 	// versioning redirection.
 	ages backlogAgeTracker
+
+	// rate limiter for overall queue
+	wholeQueueLimiter simpleLimiter
 }
 
 func (t *taskPQ) Add(task *internalTask) {
@@ -101,6 +104,27 @@ func (t *taskPQ) Add(task *internalTask) {
 
 func (t *taskPQ) Remove(task *internalTask) {
 	heap.Remove(t, task.matchHeapIndex)
+}
+
+func (t *taskPQ) readyTimeForTask(task *internalTask) int64 {
+	// TODO(pri): after we have task-specific ready time, we can re-enable this
+	// if task.isForwarded() {
+	// 	// don't count any rate limit for forwarded tasks, it was counted on the child
+	// 	return 0
+	// }
+	return max(
+		t.wholeQueueLimiter.ready,
+		// TODO(pri): add more times here, e.g. fairness key limit, per-task backoff
+	)
+}
+
+func (t *taskPQ) consumeTokens(now int64, task *internalTask, tokens int64) {
+	if task.isForwarded() {
+		// don't count any rate limit for forwarded tasks, it was counted on the child
+		return
+	}
+
+	t.wholeQueueLimiter.consume(now, tokens)
 }
 
 // implements heap.Interface
@@ -119,6 +143,16 @@ func (t *taskPQ) Less(i int, j int) bool {
 	// - task id: last resort comparison
 
 	a, b := t.heap[i], t.heap[j]
+
+	// TODO(pri): ready time is not task-specific yet, we only have whole-queue, so we don't
+	// need to consider this here yet.
+	// // ready time
+	// aready, bready := max(t.now, t.readyTimeForTask(a)), max(t.now, t.readyTimeForTask(b))
+	// if aready < bready {
+	// 	return true
+	// } else if aready > bready {
+	// 	return false
+	// }
 
 	// poll forwarder is always last
 	if !a.isPollForwarder && b.isPollForwarder {
@@ -197,8 +231,7 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 }
 
 type matcherData struct {
-	config      *taskQueueConfig
-	rateLimiter quotas.RateLimiter // whole-queue rate limiter
+	config *taskQueueConfig
 
 	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
 
@@ -213,14 +246,20 @@ type matcherData struct {
 	lastPoller time.Time // most recent poll start time
 }
 
-func newMatcherData(config *taskQueueConfig, limiter quotas.RateLimiter) matcherData {
+func newMatcherData(config *taskQueueConfig) matcherData {
 	return matcherData{
-		config:      config,
-		rateLimiter: limiter,
+		config: config,
 		tasks: taskPQ{
 			ages: newBacklogAgeTracker(),
 		},
 	}
+}
+
+func (d *matcherData) UpdateRateLimit(rate float64, burstDuration time.Duration) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	d.tasks.wholeQueueLimiter.set(rate, burstDuration)
 }
 
 func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
@@ -229,7 +268,7 @@ func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
 
 	task.initMatch(d)
 	d.tasks.Add(task)
-	d.match()
+	d.findAndWakeMatches()
 }
 
 func (d *matcherData) EnqueueTaskAndWait(ctxs []context.Context, task *internalTask) *matchResult {
@@ -239,7 +278,7 @@ func (d *matcherData) EnqueueTaskAndWait(ctxs []context.Context, task *internalT
 	// add and look for match
 	task.initMatch(d)
 	d.tasks.Add(task)
-	d.match()
+	d.findAndWakeMatches()
 
 	// if already matched, return
 	if task.matchResult != nil {
@@ -269,7 +308,7 @@ func (d *matcherData) ReenqueuePollerIfNotMatched(poller *waitingPoller) {
 
 	if poller.matchResult == nil {
 		d.pollers.Add(poller)
-		d.match()
+		d.findAndWakeMatches()
 	}
 }
 
@@ -283,7 +322,7 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 	// add and look for match
 	poller.initMatch(d)
 	d.pollers.Add(poller)
-	d.match()
+	d.findAndWakeMatches()
 
 	// if already matched, return
 	if poller.matchResult != nil {
@@ -326,7 +365,7 @@ func (d *matcherData) MatchNextPoller(task *internalTask) (canSyncMatch, gotSync
 
 	task.initMatch(d)
 	d.tasks.Add(task)
-	d.match()
+	d.findAndWakeMatches()
 	// don't wait, check if match() picked this one already
 	if task.matchResult != nil {
 		return true, true
@@ -411,13 +450,16 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 		return true
 	}
 	delayToForwardingAllowed := d.config.MaxWaitForPollerBeforeFwd() - time.Since(d.lastPoller)
-	d.reconsiderForwardTimer.set(d.rematch, delayToForwardingAllowed)
+	d.reconsiderForwardTimer.set(d.rematchAfterTimer, delayToForwardingAllowed)
 	return delayToForwardingAllowed <= 0
 }
 
 // call with lock held
-func (d *matcherData) match() {
+func (d *matcherData) findAndWakeMatches() {
 	allowForwarding := d.allowForwarding()
+
+	now := time.Now().UnixNano()
+	// TODO(pri): for task-specific ready time, we need to do a full/partial re-heapify here
 
 	for {
 		// search for highest priority match
@@ -428,8 +470,10 @@ func (d *matcherData) match() {
 			return
 		}
 
-		// got task, check rate limit
-		if !d.rateLimitTask(task) {
+		// check ready time
+		delay := d.tasks.readyTimeForTask(task) - now
+		d.rateLimitTimer.set(d.rematchAfterTimer, time.Duration(delay))
+		if delay > 0 {
 			return // not ready yet, timer will call match later
 		}
 
@@ -437,8 +481,11 @@ func (d *matcherData) match() {
 		d.tasks.Remove(task)
 		d.pollers.Remove(poller)
 
-		res := &matchResult{task: task, poller: poller}
+		// TODO(pri): maybe we can allow tasks to have costs other than 1
+		d.tasks.consumeTokens(now, task, 1)
+		task.recycleToken = d.recycleToken
 
+		res := &matchResult{task: task, poller: poller}
 		task.wake(res)
 		// for poll forwarder: skip waking poller, forwarder will call finishMatchAfterPollForward
 		if !task.isPollForwarder {
@@ -451,34 +498,20 @@ func (d *matcherData) match() {
 	}
 }
 
-// call with lock held
-// returns true if task can go now
-func (d *matcherData) rateLimitTask(task *internalTask) bool {
-	if task.recycleToken != nil {
-		// we use task.recycleToken as a signal that we've already got a token for this task,
-		// so the next time we see it we'll skip the wait.
-		return true
-	} else if task.isForwarded() {
-		// don't count rate limit for forwarded tasks, it was counted on the child
-		return true
-	}
+func (d *matcherData) recycleToken(task *internalTask) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
 
-	delay := d.rateLimiter.Reserve().Delay()
-	// TODO(pri): RecycleToken doesn't actually work since we're not using Wait
-	task.recycleToken = d.rateLimiter.RecycleToken
-
-	// TODO(pri): account for per-priority/fairness key rate limits also, e.g.
-	// delay = max(delay, perTaskDelay)
-
-	d.rateLimitTimer.set(d.rematch, delay)
-	return delay <= 0
+	now := time.Now().UnixNano()
+	d.tasks.consumeTokens(now, task, -1)
+	d.findAndWakeMatches() // another task may be ready to match now
 }
 
 // called from timer
-func (d *matcherData) rematch() {
+func (d *matcherData) rematchAfterTimer() {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	d.match()
+	d.findAndWakeMatches()
 }
 
 func (d *matcherData) finishMatchAfterPollForward(poller *waitingPoller, task *internalTask) {
@@ -558,6 +591,46 @@ func (rt *resettableTimer) unset() {
 		rt.timer = nil
 	}
 }
+
+// simple limiter
+
+// simpleLimiter implements a "GCRA" limiter. The owner should read the `ready` field directly
+// and compare to the current time to decide if a task is allowed.
+type simpleLimiter struct {
+	// parameters:
+	interval time.Duration // ideal task spacing interval
+	burst    time.Duration // burst duration
+
+	// state:
+	ready int64 // unix nanos
+}
+
+func (s *simpleLimiter) set(rate float64, burstDuration time.Duration) {
+	s.interval = time.Duration(float64(time.Second) / rate)
+	s.burst = burstDuration
+}
+
+func (s *simpleLimiter) consume(now int64, tokens int64) {
+	// This is a slight variation of the normal GCRA: instead of tracking the end of the
+	// allowed interval (the theoretical arrival time), ready tracks the beginning of it, and
+	// the end is ready + burst. To find the next ready time:
+	// - Add ready+burst to find the next theoretical arrival time.
+	// - If that's in the past, clip it at the current time.
+	// - Subtract burst to turn it back into a ready time.
+	// - Finally add the tokens we used.
+	//
+	// For intuition, consider that if if now is > ready by only a tiny amount, i.e. we're
+	// bursting, then the max takes ready+burst and we push up the ready time by the full
+	// interval. We can do this burst/interval times before it catches up and we're no longer
+	// ready.
+	//
+	// Alternatively, if now is > ready by more than burst, then we end up subtracting the full
+	// burst from now and adding one interval.
+	s.ready = max(now, s.ready+s.burst.Nanoseconds()) - s.burst.Nanoseconds() + tokens*s.interval.Nanoseconds()
+}
+
+// simple assertions
+// TODO(pri): replace by something that doesn't panic
 
 func bugIf(cond bool, msg string) {
 	if cond {
