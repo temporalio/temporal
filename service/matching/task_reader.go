@@ -120,7 +120,7 @@ dispatchLoop:
 			if !ok { // Task queue getTasks pump is shutdown
 				break dispatchLoop
 			}
-			task := newInternalTaskFromBacklog(taskInfo, tr.completeTask)
+			task := newInternalTaskFromBacklog(taskInfo, tr.completeTask, 0)
 			for ctx.Err() == nil {
 				tr.updateBacklogAge(task)
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
@@ -148,7 +148,7 @@ dispatchLoop:
 }
 
 func (tr *taskReader) completeTask(task *internalTask, res taskResponse) {
-	tr.backlogMgr.completeTask(task.event.AllocatedTaskInfo, res.startErr)
+	tr.backlogMgr.completeTask(task, res.startErr)
 }
 
 // nolint:revive // can improve this later
@@ -224,7 +224,7 @@ func (tr *taskReader) getTaskBatchWithRange(
 	readLevel int64,
 	maxReadLevel int64,
 ) ([]*persistencespb.AllocatedTaskInfo, error) {
-	response, err := tr.backlogMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.backlogMgr.config.GetTasksBatchSize())
+	response, err := tr.backlogMgr.db.GetTasks(ctx, subqueueZero, readLevel+1, maxReadLevel+1, tr.backlogMgr.config.GetTasksBatchSize())
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ type getTasksBatchResponse struct {
 func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse, error) {
 	var tasks []*persistencespb.AllocatedTaskInfo
 	readLevel := tr.backlogMgr.taskAckManager.getReadLevel()
-	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel()
+	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(subqueueZero)
 
 	// counter i is used to break and let caller check whether taskqueue is still alive and needs to resume read.
 	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
@@ -306,7 +306,7 @@ func (tr *taskReader) addSingleTaskToBuffer(
 
 func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
 	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
-	return tr.backlogMgr.db.UpdateState(ctx, ackLevel)
+	return tr.backlogMgr.db.OldUpdateState(ctx, ackLevel)
 }
 
 func (tr *taskReader) logger() log.Logger {

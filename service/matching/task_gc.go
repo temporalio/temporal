@@ -33,9 +33,10 @@ import (
 )
 
 type taskGC struct {
-	tqCtx  context.Context
-	db     *taskQueueDB
-	config *taskQueueConfig
+	tqCtx    context.Context
+	db       *taskQueueDB
+	config   *taskQueueConfig
+	subqueue int
 
 	lock           int64
 	ackLevel       int64
@@ -59,11 +60,13 @@ func newTaskGC(
 	tqCtx context.Context,
 	db *taskQueueDB,
 	config *taskQueueConfig,
+	subqueue int,
 ) *taskGC {
 	return &taskGC{
-		tqCtx:  tqCtx,
-		db:     db,
-		config: config,
+		tqCtx:    tqCtx,
+		db:       db,
+		config:   config,
+		subqueue: subqueue,
 	}
 }
 
@@ -94,7 +97,7 @@ func (tgc *taskGC) tryDeleteNextBatch(ackLevel int64, ignoreTimeCond bool) {
 	ctx, cancel := context.WithTimeout(tgc.tqCtx, ioTimeout)
 	defer cancel()
 
-	n, err := tgc.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize)
+	n, err := tgc.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, tgc.subqueue)
 	if err != nil {
 		return
 	}
