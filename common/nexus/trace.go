@@ -123,6 +123,7 @@ func (p *LoggedHTTPClientTraceProvider) NewForwardingTrace(logger log.Logger) *h
 	return p.newClientTrace(logger, config.Hooks)
 }
 
+//nolint:revive // cognitive complexity (> 25 max) but is just adding a logging function for each method in the list.
 func (p *LoggedHTTPClientTraceProvider) newClientTrace(logger log.Logger, hooks []string) *httptrace.ClientTrace {
 	clientTrace := &httptrace.ClientTrace{}
 	for _, h := range hooks {
