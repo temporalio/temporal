@@ -115,23 +115,10 @@ type (
 			updateWorkflowTransactionPolicy TransactionPolicy,
 			newWorkflowTransactionPolicy *TransactionPolicy,
 		) error
-		// SetWorkflowExecution is an alias to SubmitClosedWorkflowSnapshot with TransactionPolicyPassive.
+		// SetWorkflowExecution = SnapshotWorkflowExecutionAsPassive
 		SetWorkflowExecution(
 			ctx context.Context,
 			shardContext ShardContext,
-		) error
-		// SubmitClosedWorkflowSnapshot closes the current mutable state transaction with the given
-		// transactionPolicy and updates the workflow execution record in the DB. Does not check the "current"
-		// run status for the execution.
-		// Closes the transaction as snapshot, which errors out if there are any buffered events that need
-		// flushing and generally does not expect new history events to be generated (expected for closed
-		// workflows).
-		// NOTE: in the future, we'd like to have the ability to close the transaction as mutation to avoid the
-		// overhead of overwriting the entire DB record.
-		SubmitClosedWorkflowSnapshot(
-			ctx context.Context,
-			shardContext ShardContext,
-			transactionPolicy TransactionPolicy,
 		) error
 		// TODO (alex-update): move this from workflow context.
 		UpdateRegistry(ctx context.Context) update.Registry

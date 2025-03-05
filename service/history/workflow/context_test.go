@@ -546,10 +546,15 @@ func (s *contextSuite) TestRefreshTask() {
 				return base
 			},
 			setupMock: func(mockShard *shard.ContextTest) {
-				mockShard.Resource.ExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error) {
-						s.NotEmpty(request.SetWorkflowSnapshot.Tasks)
-						return &persistence.SetWorkflowExecutionResponse{}, nil
+				mockShard.Resource.ExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
+						s.Equal(persistence.UpdateWorkflowModeSkipCurrent, request.Mode)
+						return &persistence.UpdateWorkflowExecutionResponse{
+							UpdateMutableStateStats: persistence.MutableStateStatistics{
+								HistoryStatistics: &persistence.HistoryStatistics{},
+							},
+						}, nil
 					}).Times(1)
 			},
 		},
@@ -574,10 +579,15 @@ func (s *contextSuite) TestRefreshTask() {
 					Version:    common.EmptyVersion,
 					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{},
 				}, nil).Times(2)
-				mockShard.Resource.ExecutionMgr.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error) {
-						s.NotEmpty(request.SetWorkflowSnapshot.Tasks)
-						return &persistence.SetWorkflowExecutionResponse{}, nil
+				mockShard.Resource.ExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
+						s.Equal(persistence.UpdateWorkflowModeBypassCurrent, request.Mode)
+						return &persistence.UpdateWorkflowExecutionResponse{
+							UpdateMutableStateStats: persistence.MutableStateStatistics{
+								HistoryStatistics: &persistence.HistoryStatistics{},
+							},
+						}, nil
 					}).Times(1)
 			},
 		},
