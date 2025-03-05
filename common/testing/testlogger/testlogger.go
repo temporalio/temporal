@@ -198,7 +198,19 @@ func WrapLogger(l log.Logger) LoggerOption {
 	}
 }
 
+func LogLevel(level zapcore.Level) LoggerOption {
+	return func(t *TestLogger) {
+		t.state.level = level
+	}
+}
+
 func WithoutCaller() LoggerOption {
+	return func(t *TestLogger) {
+		t.state.logCaller = false
+	}
+}
+
+func LogCaller() LoggerOption {
 	return func(t *TestLogger) {
 		t.state.logCaller = false
 	}

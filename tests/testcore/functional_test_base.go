@@ -199,14 +199,17 @@ func (s *FunctionalTestBase) SetupSuiteWithDefaultCluster(options ...TestCluster
 func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, options ...TestClusterOption) {
 	params := ApplyTestClusterOptions(options)
 
-	tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
-	// Instead of panic'ing immediately, TearDownTest will check if the test logger failed
-	// after each test completed. This is better since otherwise is would fail inside
-	// the server and not the test, creating a lot of noise and possibly stuck tests.
-	testlogger.DontPanicOnError(tl)
-	// Fail test when an assertion fails (see `softassert` package).
-	tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
-	s.Logger = tl
+	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
+	if s.Logger == nil {
+		tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+		// Instead of panic'ing immediately, TearDownTest will check if the test logger failed
+		// after each test completed. This is better since otherwise is would fail inside
+		// the server and not the test, creating a lot of noise and possibly stuck tests.
+		testlogger.DontPanicOnError(tl)
+		// Fail test when an assertion fails (see `softassert` package).
+		tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
+		s.Logger = tl
+	}
 
 	// Setup test cluster.
 	var err error
