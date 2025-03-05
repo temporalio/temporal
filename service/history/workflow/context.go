@@ -897,7 +897,7 @@ func (c *ContextImpl) ReapplyEvents(
 
 		for _, e := range events.Events {
 			event := e
-			if ShouldReapplyEvent(shardContext.StateMachineRegistry(), event) {
+			if shouldReapplyEvent(shardContext.StateMachineRegistry(), event) {
 				reapplyEvents = append(reapplyEvents, event)
 			}
 		}

@@ -26,6 +26,7 @@ package ndc
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -1168,13 +1169,13 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 			s.NoError(err)
 			ms.EXPECT().HSM().Return(root).AnyTimes()
 
-			var eventsToApply []*historypb.HistoryEvent
 			for _, event := range events {
-				if !workflow.ShouldReapplyEvent(smReg, event) {
+				expected := slices.ContainsFunc(tc.expected, func(e *historypb.HistoryEvent) bool {
+					return e.GetEventId() == event.GetEventId()
+				})
+				if !expected {
 					continue
 				}
-				eventsToApply = append(eventsToApply, event)
-
 				switch event.GetEventType() { // nolint:exhaustive
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
 					attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
@@ -1239,7 +1240,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				}
 			}
 
-			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, eventsToApply, nil, "", tc.isReset)
+			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "", tc.isReset)
 			s.NoError(err)
 
 			s.Equal(tc.expected, appliedEvents)
