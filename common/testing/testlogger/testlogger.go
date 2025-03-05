@@ -82,7 +82,7 @@ type Expectation struct {
 }
 
 // Forget removes a previously registered expectation.
-// It will no longer be used to determine if a log message is expected or unexpected.
+// A forgotten expectation will no longer be evaluated when errors are encountered.
 func (e *Expectation) Forget() {
 	e.testLogger.Forget(e)
 }
