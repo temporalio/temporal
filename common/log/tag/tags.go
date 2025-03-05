@@ -1013,3 +1013,7 @@ func UserDataVersion(v int64) ZapTag {
 func Cause(cause string) ZapTag {
 	return NewStringTag("cause", cause)
 }
+
+func NexusOperation(operation string) ZapTag {
+	return NewStringTag("nexus-operation", operation)
+}

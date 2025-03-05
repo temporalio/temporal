@@ -206,9 +206,10 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
+			tag.Operation("StartOperation"),
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.RequestID(args.requestID),
-			tag.Operation(args.operation),
+			tag.NexusOperation(args.operation),
 			tag.Endpoint(args.endpointName),
 			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
 			tag.WorkflowRunID(ref.WorkflowKey.RunID),
@@ -576,9 +577,10 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 
 	if e.HTTPTraceProvider != nil {
 		traceLogger := log.With(e.Logger,
+			tag.Operation("CancelOperation"),
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.RequestID(args.requestID),
-			tag.Operation(args.operation),
+			tag.NexusOperation(args.operation),
 			tag.Endpoint(args.endpointName),
 			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
 			tag.WorkflowRunID(ref.WorkflowKey.RunID),

@@ -38,6 +38,9 @@ type HTTPClientTraceProvider interface {
 	// be invoked. The provided logger should already be tagged with relevant request information
 	// e.g. using log.With(logger, tag.RequestID(id), tag.Operation(op), ...).
 	NewTrace(attempt int32, logger log.Logger) *httptrace.ClientTrace
+	// NewForwardingTrace functions the same as NewTrace but forwarded requests do not have an associated attempt count,
+	// so all forwarded requests will be traced if enabled.
+	NewForwardingTrace(logger log.Logger) *httptrace.ClientTrace
 }
 
 // HTTPTraceConfig is the dynamic config for controlling Nexus HTTP request tracing behavior.
@@ -47,12 +50,14 @@ var HTTPTraceConfig = dynamicconfig.NewGlobalTypedSettingWithConverter(
 	"system.nexusHTTPTraceConfig",
 	func(a any) (any, error) { return a, nil },
 	nil,
-	`Configuration options for controlling additional tracing for Nexus HTTP requests. Fields: Enabled, MinAttempt, MaxAttempt, Hooks. See HTTPClientTraceConfig comments for more detail.`,
+	`Configuration options for controlling additional tracing for Nexus HTTP requests. Fields: Enabled, ForwardingEnabled, MinAttempt, MaxAttempt, Hooks. See HTTPClientTraceConfig comments for more detail.`,
 )
 
 type HTTPClientTraceConfig struct {
 	// Enabled controls whether any additional tracing will be invoked. Default false.
 	Enabled bool
+	// ForwardingEnabled controls whether any additional tracing will be invoked for forwarded requests. Default false. Forwarded requests do not have an attempt count, so MinAttempt and MaxAttempt are ignored for these requests.
+	ForwardingEnabled bool
 	// MinAttempt is the first operation attempt to include additional tracing. Default 2. Setting to 0 or 1 will add tracing to all requests and may be expensive.
 	MinAttempt int32
 	// MaxAttempt is the maximum operation attempt to include additional tracing. Default 2. Setting to 0 means no maximum.
@@ -63,9 +68,10 @@ type HTTPClientTraceConfig struct {
 }
 
 var defaultHTTPClientTraceConfig = HTTPClientTraceConfig{
-	Enabled:    false,
-	MinAttempt: 2,
-	MaxAttempt: 2,
+	Enabled:           false,
+	ForwardingEnabled: false,
+	MinAttempt:        2,
+	MaxAttempt:        2,
 	// Set to nil here because of dynamic config conversion limitations.
 	Hooks: []string(nil),
 }
@@ -93,7 +99,6 @@ func NewLoggedHTTPClientTraceProvider(dc *dynamicconfig.Collection) HTTPClientTr
 	}
 }
 
-//nolint:revive // cognitive complexity (> 25 max) but is just adding a logging function for each method in the list.
 func (p *LoggedHTTPClientTraceProvider) NewTrace(attempt int32, logger log.Logger) *httptrace.ClientTrace {
 	config := p.Config.Get()
 	if !config.Enabled {
@@ -106,8 +111,21 @@ func (p *LoggedHTTPClientTraceProvider) NewTrace(attempt int32, logger log.Logge
 		return nil
 	}
 
+	return p.newClientTrace(logger, config.Hooks)
+}
+
+func (p *LoggedHTTPClientTraceProvider) NewForwardingTrace(logger log.Logger) *httptrace.ClientTrace {
+	config := p.Config.Get()
+	if !config.Enabled || !config.ForwardingEnabled {
+		return nil
+	}
+
+	return p.newClientTrace(logger, config.Hooks)
+}
+
+func (p *LoggedHTTPClientTraceProvider) newClientTrace(logger log.Logger, hooks []string) *httptrace.ClientTrace {
 	clientTrace := &httptrace.ClientTrace{}
-	for _, h := range config.Hooks {
+	for _, h := range hooks {
 		switch h {
 		case "GetConn":
 			clientTrace.GetConn = func(hostPort string) {
