@@ -36,15 +36,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 )
 
 type (
-	// writeTaskResponse struct {
-	// 	err                 error
-	// 	persistenceResponse *persistence.CreateTasksResponse
-	// }
-
 	// writeTaskRequest struct {
 	// 	subqueue   int
 	// 	taskInfo   *persistencespb.TaskInfo
@@ -96,17 +90,17 @@ func (w *priTaskWriter) Start() {
 func (w *priTaskWriter) appendTask(
 	subqueue int,
 	taskInfo *persistencespb.TaskInfo,
-) (*persistence.CreateTasksResponse, error) {
+) error {
 
 	select {
 	case <-w.backlogMgr.tqCtx.Done():
-		return nil, errShutdown
+		return errShutdown
 	default:
 		// noop
 	}
 
 	startTime := time.Now().UTC()
-	ch := make(chan *writeTaskResponse)
+	ch := make(chan error)
 	req := &writeTaskRequest{
 		taskInfo:   taskInfo,
 		responseCh: ch,
@@ -116,17 +110,17 @@ func (w *priTaskWriter) appendTask(
 	select {
 	case w.appendCh <- req:
 		select {
-		case r := <-ch:
+		case err := <-ch:
 			metrics.TaskWriteLatencyPerTaskQueue.With(w.backlogMgr.metricsHandler).Record(time.Since(startTime))
-			return r.persistenceResponse, r.err
+			return err
 		case <-w.backlogMgr.tqCtx.Done():
 			// if we are shutting down, this request will never make
 			// it to cassandra, just bail out and fail this request
-			return nil, errShutdown
+			return errShutdown
 		}
 	default: // channel is full, throttle
 		metrics.TaskWriteThrottlePerTaskQueueCounter.With(w.backlogMgr.metricsHandler).Record(1)
-		return nil, &serviceerror.ResourceExhausted{
+		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 			Message: "Too many outstanding appends to the task queue",
@@ -136,7 +130,7 @@ func (w *priTaskWriter) appendTask(
 
 func (w *priTaskWriter) allocTaskIDs(count int) ([]int64, error) {
 	result := make([]int64, count)
-	for i := 0; i < count; i++ {
+	for i := range result {
 		if w.taskIDBlock.start > w.taskIDBlock.end {
 			// we ran out of current allocation block
 			newBlock, err := w.allocTaskIDBlock(w.taskIDBlock.end)
@@ -154,8 +148,7 @@ func (w *priTaskWriter) allocTaskIDs(count int) ([]int64, error) {
 func (w *priTaskWriter) appendTasks(
 	taskIDs []int64,
 	reqs []*writeTaskRequest,
-) (*persistence.CreateTasksResponse, error) {
-
+) error {
 	resp, err := w.db.CreateTasks(w.backlogMgr.tqCtx, taskIDs, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
@@ -164,16 +157,11 @@ func (w *priTaskWriter) appendTasks(
 			tag.Error(err),
 			tag.WorkflowTaskQueueName(w.backlogMgr.queueKey().PersistenceName()),
 			tag.WorkflowTaskQueueType(w.backlogMgr.queueKey().TaskType()))
-		return nil, err
+		return err
 	}
 
-	signals := make(map[int]struct{})
-	for _, req := range reqs {
-		signals[req.subqueue] = struct{}{}
-	}
-	w.backlogMgr.signalReaders(signals)
-
-	return resp, nil
+	w.backlogMgr.signalReaders(resp)
+	return nil
 }
 
 func (w *priTaskWriter) taskWriterLoop() {
@@ -188,23 +176,21 @@ func (w *priTaskWriter) taskWriterLoop() {
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
 	w.backlogMgr.initState(state, nil)
 
-writerLoop:
+	var reqs []*writeTaskRequest
 	for {
 		select {
 		case request := <-w.appendCh:
 			// read a batch of requests from the channel
-			reqs := []*writeTaskRequest{request}
+			reqs = append(reqs[:0], request)
 			reqs = w.getWriteBatch(reqs)
-			batchSize := len(reqs)
 
-			taskIDs, err := w.allocTaskIDs(batchSize)
-			if err != nil {
-				w.sendWriteResponse(reqs, nil, err)
-				continue writerLoop
+			taskIDs, err := w.allocTaskIDs(len(reqs))
+			if err == nil {
+				err = w.appendTasks(taskIDs, reqs)
 			}
-
-			resp, err := w.appendTasks(taskIDs, reqs)
-			w.sendWriteResponse(reqs, resp, err)
+			for _, req := range reqs {
+				req.responseCh <- err
+			}
 
 		case <-w.backlogMgr.tqCtx.Done():
 			return
@@ -213,31 +199,15 @@ writerLoop:
 }
 
 func (w *priTaskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskRequest {
-readLoop:
-	for i := 0; i < w.config.MaxTaskBatchSize(); i++ {
+	for range w.config.MaxTaskBatchSize() - 1 {
 		select {
 		case req := <-w.appendCh:
 			reqs = append(reqs, req)
 		default: // channel is empty, don't block
-			break readLoop
+			return reqs
 		}
 	}
 	return reqs
-}
-
-func (w *priTaskWriter) sendWriteResponse(
-	reqs []*writeTaskRequest,
-	persistenceResponse *persistence.CreateTasksResponse,
-	err error,
-) {
-	for _, req := range reqs {
-		resp := &writeTaskResponse{
-			err:                 err,
-			persistenceResponse: persistenceResponse,
-		}
-
-		req.responseCh <- resp
-	}
 }
 
 func (w *priTaskWriter) renewLeaseWithRetry(

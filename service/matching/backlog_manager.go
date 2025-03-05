@@ -109,7 +109,7 @@ func newBacklogManager(
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
 	bmg.taskAckManager = newAckManager(bmg.db, logger)
-	bmg.taskGC = newTaskGC(tqCtx, bmg.db, config, subqueueZero)
+	bmg.taskGC = newTaskGC(tqCtx, bmg.db, config)
 
 	return bmg
 }
@@ -170,7 +170,7 @@ func (c *backlogManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 }
 
 func (c *backlogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
-	_, err := c.taskWriter.appendTask(taskInfo)
+	err := c.taskWriter.appendTask(taskInfo)
 	c.signalIfFatal(err)
 	if err == nil {
 		c.taskReader.Signal()
@@ -233,8 +233,7 @@ func (c *backlogManagerImpl) completeTask(itask *internalTask, err error) {
 		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
 		// again the underlying reason for failing to start will be resolved.
 		err = executeWithRetry(context.Background(), func(_ context.Context) error {
-			_, err := c.taskWriter.appendTask(task.Data)
-			return err
+			return c.taskWriter.appendTask(task.Data)
 		})
 
 		if err != nil {

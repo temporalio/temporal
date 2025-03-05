@@ -80,7 +80,7 @@ func (t *ForwarderTestSuite) TearDownTest() {
 func (t *ForwarderTestSuite) TestForwardTaskError() {
 	task := newInternalTaskFromBacklog(&persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{},
-	}, nil, 0)
+	}, nil)
 	t.Equal(tqid.ErrNoParent, t.fwdr.ForwardTask(context.Background(), task))
 }
 
@@ -95,7 +95,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTaskFromBacklog(taskInfo, nil, 0)
+	task := newInternalTaskFromBacklog(taskInfo, nil)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
@@ -153,7 +153,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTaskFromBacklog(taskInfo, nil, 0)
+	task := newInternalTaskFromBacklog(taskInfo, nil)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
@@ -181,7 +181,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask_WithBuildId() {
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTaskFromBacklog(taskInfo, nil, 0)
+	task := newInternalTaskFromBacklog(taskInfo, nil)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
@@ -202,7 +202,7 @@ func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
 	rps := 2
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(rps)
 	taskInfo := randomTaskInfo()
-	task := newInternalTaskFromBacklog(taskInfo, nil, 0)
+	task := newInternalTaskFromBacklog(taskInfo, nil)
 	for i := 0; i < rps; i++ {
 		t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	}

@@ -41,8 +41,7 @@ type (
 	// genericTaskInfo contains the info for an activity or workflow task
 	genericTaskInfo struct {
 		*persistencespb.AllocatedTaskInfo
-		completionFunc  func(*internalTask, taskResponse)
-		backlogSubqueue int
+		completionFunc func(*internalTask, taskResponse)
 	}
 	// queryTaskInfo contains the info for a query task
 	queryTaskInfo struct {
@@ -134,13 +133,11 @@ func newInternalTaskForSyncMatch(
 func newInternalTaskFromBacklog(
 	info *persistencespb.AllocatedTaskInfo,
 	completionFunc func(*internalTask, taskResponse),
-	backlogSubqueue int,
 ) *internalTask {
 	return &internalTask{
 		event: &genericTaskInfo{
 			AllocatedTaskInfo: info,
 			completionFunc:    completionFunc,
-			backlogSubqueue:   backlogSubqueue,
 		},
 		source: enumsspb.TASK_SOURCE_DB_BACKLOG,
 	}

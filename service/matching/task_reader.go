@@ -120,7 +120,7 @@ dispatchLoop:
 			if !ok { // Task queue getTasks pump is shutdown
 				break dispatchLoop
 			}
-			task := newInternalTaskFromBacklog(taskInfo, tr.completeTask, 0)
+			task := newInternalTaskFromBacklog(taskInfo, tr.completeTask)
 			for ctx.Err() == nil {
 				tr.updateBacklogAge(task)
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
