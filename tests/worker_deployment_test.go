@@ -451,7 +451,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NonIdemp
 
 	// To allow the first go-routine to start before the second one.
 	//nolint:forbidigo
-	time.Sleep(1 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	go func() {
 		defer wg.Done()
@@ -611,7 +611,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NonIdemp
 
 	// To allow the first go-routine to start before the second one.
 	//nolint:forbidigo
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	go func() {
 		defer wg.Done()
@@ -621,7 +621,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NonIdemp
 			Version:        tv.DeploymentVersionString(),
 			Percentage:     5,
 			ConflictToken:  cT,
-			Identity:       tv.Any().String(), // note: different identity
+			Identity:       tv.Any().String(), // note: different identity making the requests non-idempotent
 		})
 	}()
 
@@ -681,13 +681,14 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_Idempote
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
 			Identity:       tv.ClientIdentity(),
+			Percentage:     5,
 			ConflictToken:  cT,
 		})
 	}()
 
 	// To allow the first go-routine to start before the second one.
 	//nolint:forbidigo
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	go func() {
 		defer wg.Done()
@@ -696,7 +697,8 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_Idempote
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
 			Identity:       tv.ClientIdentity(),
-			ConflictToken:  []byte{}, // note: different conflict token
+			Percentage:     5,
+			ConflictToken:  cT,
 		})
 	}()
 
