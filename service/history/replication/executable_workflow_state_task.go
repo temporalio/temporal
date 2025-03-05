@@ -147,6 +147,35 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 		return nil
 	}
 	switch retryErr := err.(type) {
+	case *serviceerrors.SyncState:
+		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemPreemptableCallerInfo,
+		), e.NamespaceID)
+		if nsError != nil {
+			return err
+		}
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		defer cancel()
+
+		if doContinue, syncStateErr := e.SyncState(
+			ctx,
+			retryErr,
+			ResendAttempt,
+		); syncStateErr != nil || !doContinue {
+			if syncStateErr != nil {
+				e.Logger.Error("VerifyVersionedTransition replication task encountered error during sync state",
+					tag.WorkflowNamespaceID(e.NamespaceID),
+					tag.WorkflowID(e.WorkflowID),
+					tag.WorkflowRunID(e.RunID),
+					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.Error(syncStateErr),
+				)
+				return err
+			}
+			return nil
+		}
+		return nil
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
