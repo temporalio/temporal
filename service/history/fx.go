@@ -26,6 +26,7 @@ package history
 
 import (
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -70,6 +71,7 @@ import (
 var Module = fx.Options(
 	resource.Module,
 	fx.Provide(hsm.NewRegistry),
+	fx.Provide(chasm.NewRegistry),
 	workflow.Module,
 	shard.Module,
 	events.Module,
