@@ -130,7 +130,7 @@ const (
 	FailureReasonMutableStateSizeExceedsLimit = "Workflow mutable state size exceeds limit."
 	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
 	FailureReasonTransactionSizeExceedsLimit = "Transaction size exceeds limit."
-
+	// FailureReasonWorkflowTerminationDueToVersionConflict is the failureReason for when workflow is terminated due to version conflict
 	FailureReasonWorkflowTerminationDueToVersionConflict = "Terminate Workflow Due To Version Conflict."
 )
 
