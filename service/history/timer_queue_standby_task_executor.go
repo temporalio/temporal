@@ -34,7 +34,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -526,15 +525,6 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 			return nil, nil
 		}
 
-		if mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
-			// and we are operating on a closed workflow.
-			return nil, wfContext.SubmitClosedWorkflowSnapshot(
-				ctx,
-				t.shardContext,
-				workflow.TransactionPolicyPassive,
-			)
-		}
 		return nil, wfContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
 	}
 

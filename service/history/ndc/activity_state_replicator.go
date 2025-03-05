@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -176,20 +175,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		return err
 	}
 
-	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
-	if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		updateMode = persistence.UpdateWorkflowModeBypassCurrent
-	}
-
-	return executionContext.UpdateWorkflowExecutionWithNew(
-		ctx,
-		r.shardContext,
-		updateMode,
-		nil, // no new workflow
-		nil, // no new workflow
-		workflow.TransactionPolicyPassive,
-		nil,
-	)
+	return executionContext.UpdateWorkflowExecutionAsPassive(ctx, r.shardContext)
 }
 
 func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
@@ -262,20 +248,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
 		return err
 	}
 
-	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
-	if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		updateMode = persistence.UpdateWorkflowModeBypassCurrent
-	}
-
-	return executionContext.UpdateWorkflowExecutionWithNew(
-		ctx,
-		r.shardContext,
-		updateMode,
-		nil, // no new workflow
-		nil, // no new workflow
-		workflow.TransactionPolicyPassive,
-		nil,
-	)
+	return executionContext.UpdateWorkflowExecutionAsPassive(ctx, r.shardContext)
 }
 
 func (r *ActivityStateReplicatorImpl) syncSingleActivityState(

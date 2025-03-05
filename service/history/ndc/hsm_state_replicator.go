@@ -30,14 +30,12 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
@@ -127,29 +125,7 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 		return consts.ErrDuplicate
 	}
 
-	state, _ := mutableState.GetWorkflowStateStatus()
-	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		return workflowContext.SubmitClosedWorkflowSnapshot(
-			ctx,
-			r.shardContext,
-			workflow.TransactionPolicyPassive,
-		)
-	}
-
-	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
-	if state == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		updateMode = persistence.UpdateWorkflowModeBypassCurrent
-	}
-
-	return workflowContext.UpdateWorkflowExecutionWithNew(
-		ctx,
-		r.shardContext,
-		updateMode,
-		nil, // no new workflow
-		nil, // no new workflow
-		workflow.TransactionPolicyPassive,
-		nil,
-	)
+	return workflowContext.UpdateWorkflowExecutionAsPassive(ctx, r.shardContext)
 }
 
 func (r *HSMStateReplicatorImpl) syncHSMNode(

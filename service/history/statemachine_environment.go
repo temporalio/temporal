@@ -395,11 +395,6 @@ func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, acces
 		return nil
 	}
 
-	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on closed
-		// workflows.
-		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, e.shardContext, workflow.TransactionPolicyActive)
-	}
 	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, e.shardContext)
 }
 
