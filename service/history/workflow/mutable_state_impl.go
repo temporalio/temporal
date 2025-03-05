@@ -7783,7 +7783,7 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 }
 
 func (ms *MutableStateImpl) AddReapplyCandidateEvent(event *historypb.HistoryEvent) {
-	if shouldReapplyEvent(ms.shard.StateMachineRegistry(), event) {
+	if ShouldReapplyEvent(ms.shard.StateMachineRegistry(), event) {
 		ms.reapplyEventsCandidate = append(ms.reapplyEventsCandidate, event)
 	}
 }

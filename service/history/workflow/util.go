@@ -253,16 +253,18 @@ func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecution
 	return versioningInfo.GetBehavior()
 }
 
-// shouldReapplyEvent returns true if the event should be reapplied to the workflow execution.
-func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
+// ShouldReapplyEvent returns true if the event should be reapplied to the workflow execution.
+func ShouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.HistoryEvent) bool {
 	switch event.GetEventType() { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
 		return true
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+		attr := event.GetWorkflowExecutionTerminatedEventAttributes()
+		return attr.GetIdentity() != consts.IdentityHistoryService && attr.GetIdentity() != consts.IdentityResetter
 	}
 
 	// events registered in the hsm framework that are potentially cherry-pickable
