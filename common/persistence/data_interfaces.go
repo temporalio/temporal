@@ -736,7 +736,6 @@ type (
 		BufferedEventsCount    int
 		TaskCountByCategory    map[string]int
 		UpdateInfoCount        int
-		ChasmSizeByPath        map[string]int // size of each individual CHASM node by path
 
 		// Total item count for various information captured within mutable state
 		TotalActivityCount              int64
@@ -746,7 +745,6 @@ type (
 		TotalSignalExternalCount        int64
 		TotalSignalCount                int64
 		TotalUpdateCount                int64
-		TotalChasmNodeCount             int64
 	}
 
 	HistoryStatistics struct {

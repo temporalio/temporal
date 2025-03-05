@@ -1029,6 +1029,7 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 		ChildExecutionInfos: make(map[int64]*persistencespb.ChildExecutionInfo),
 		RequestCancelInfos:  make(map[int64]*persistencespb.RequestCancelInfo),
 		SignalInfos:         make(map[int64]*persistencespb.SignalInfo),
+		ChasmNodes:          make(map[string]*persistencespb.ChasmNode),
 		SignalRequestedIds:  internState.SignalRequestedIDs,
 		NextEventId:         internState.NextEventID,
 		BufferedEvents:      make([]*historypb.HistoryEvent, len(internState.BufferedEvents)),
@@ -1067,6 +1068,13 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 			return nil, err
 		}
 		state.SignalInfos[key] = info
+	}
+	for key, blob := range internState.ChasmNodes {
+		node, err := m.serializer.ChasmNodeFromBlob(blob)
+		if err != nil {
+			return nil, err
+		}
+		state.ChasmNodes[key] = node
 	}
 	var err error
 	state.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoFromBlob(internState.ExecutionInfo)
