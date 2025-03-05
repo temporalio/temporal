@@ -1590,6 +1590,20 @@ func (mr *MockMutableStateMockRecorder) ApplyWorkflowTaskTimedOutEvent(arg0 any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowTaskTimedOutEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowTaskTimedOutEvent), arg0)
 }
 
+// ChasmTree mocks base method.
+func (m *MockMutableState) ChasmTree() ChasmTree {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmTree")
+	ret0, _ := ret[0].(ChasmTree)
+	return ret0
+}
+
+// ChasmTree indicates an expected call of ChasmTree.
+func (mr *MockMutableStateMockRecorder) ChasmTree() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmTree", reflect.TypeOf((*MockMutableState)(nil).ChasmTree))
+}
+
 // CheckResettable mocks base method.
 func (m *MockMutableState) CheckResettable() error {
 	m.ctrl.T.Helper()
