@@ -458,7 +458,7 @@ func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
 		if minId == nil || !acked.(bool) {
 			break
 		}
-		tr.ackLevel = minId.(int64)
+		tr.ackLevel = minId.(int64) // nolint:revive
 		tr.outstandingTasks.Remove(minId)
 		numAcked += 1
 	}
