@@ -70,7 +70,7 @@ func RandomSnapshot(
 	branchToken []byte,
 ) (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
 	// TODO - remove this branching when other persistence implementations land for CHASM
-	var chasmNodes map[string]*persistencespb.ChasmNode = nil
+	var chasmNodes map[string]*persistencespb.ChasmNode
 	if strings.HasPrefix(t.Name(), "TestCassandra") {
 		chasmNodes = RandomChasmNodeMap()
 	}
@@ -123,7 +123,7 @@ func RandomMutation(
 	branchToken []byte,
 ) (*p.WorkflowMutation, []*p.WorkflowEvents) {
 	// TODO - remove this branching when other persistence implementations land for CHASM
-	var chasmNodes map[string]*persistencespb.ChasmNode = nil
+	var chasmNodes map[string]*persistencespb.ChasmNode
 	if strings.HasPrefix(t.Name(), "TestCassandra") {
 		chasmNodes = RandomChasmNodeMap()
 	}
