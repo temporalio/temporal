@@ -23,8 +23,6 @@
 package softassert
 
 import (
-	"fmt"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -34,17 +32,17 @@ import (
 // Returns true if the condition is met, otherwise false.
 //
 // Example:
-// softassert.That(logger, object.state == "ready", "object is not ready: %v", object.state)
+// softassert.That(logger, object.state == "ready", "object is not ready")
 //
 // Best practices:
 // - Use it to check for programming errors and invariants.
 // - Use it to communicate assumptions about the code.
 // - Use it to abort or recover from an unexpected state.
 // - Never use it as a substitute for regular error handling, validation, or control flow.
-func That(logger log.Logger, condition bool, format string, args ...any) bool {
+func That(logger log.Logger, condition bool, msg string) bool {
 	if !condition {
 		// By using the same prefix for all assertions, they can be reliably found in logs.
-		logger.Error("failed assertion: "+fmt.Sprintf(format, args...), tag.FailedAssertion)
+		logger.Error("failed assertion: "+msg, tag.FailedAssertion)
 	}
 	return condition
 }
