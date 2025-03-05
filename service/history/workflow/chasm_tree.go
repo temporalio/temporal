@@ -42,22 +42,22 @@ type ChasmTree interface {
 
 type noopChasmTree struct{}
 
-func (_ *noopChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
+func (*noopChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
 	return chasm.NodesMutation{}, nil
 }
 
-func (_ *noopChasmTree) Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot {
+func (*noopChasmTree) Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot {
 	return chasm.NodesSnapshot{}
 }
 
-func (_ *noopChasmTree) ApplyMutation(chasm.NodesMutation) error {
+func (*noopChasmTree) ApplyMutation(chasm.NodesMutation) error {
 	return nil
 }
 
-func (_ *noopChasmTree) ApplySnapshot(chasm.NodesSnapshot) error {
+func (*noopChasmTree) ApplySnapshot(chasm.NodesSnapshot) error {
 	return nil
 }
 
-func (_ *noopChasmTree) IsDirty() bool {
+func (*noopChasmTree) IsDirty() bool {
 	return false
 }
