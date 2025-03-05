@@ -1065,7 +1065,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		panic("child should not run on v1")
 	}
 	childv2 := func(ctx workflow.Context) (string, error) {
-		s.verifyWorkflowVersioning(tv2Child, vbUnspecified, nil, nil, tv2Child.DeploymentVersionTransition())
 		return "v2", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
@@ -1096,11 +1095,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		var val1 string
 		s.NoError(fut1.Get(ctx, &val1))
 
-		// Sleeping to ensure that the SDK calls RespondWorkflowTaskCompleted and updates the versioning info in mutable state,
-		// which is required for the subsequent verification.
-		//nolint:errcheck
-		workflow.Sleep(ctx, 1*time.Second)
-		s.verifyWorkflowVersioning(tv1, parentBehavior, tv2.Deployment(), nil, nil)
 		return val1, nil
 	}
 
@@ -1196,6 +1190,13 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("v2", out)
+
+	if parentBehavior == vbPinned {
+		s.verifyWorkflowVersioning(tv1, parentBehavior, tv1.Deployment(), nil, nil)
+	} else {
+		s.verifyWorkflowVersioning(tv1, parentBehavior, tv2.Deployment(), nil, nil)
+	}
+	s.verifyWorkflowVersioning(tv2Child, vbPinned, tv2Child.Deployment(), nil, nil)
 }
 
 func (s *Versioning3Suite) TestPinnedCaN() {
