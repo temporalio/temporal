@@ -1098,6 +1098,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 
 		// Sleeping to ensure that the SDK calls RespondWorkflowTaskCompleted and updates the versioning info in mutable state,
 		// which is required for the subsequent verification.
+		//nolint:errcheck
 		workflow.Sleep(ctx, 1*time.Second)
 		s.verifyWorkflowVersioning(tv1, parentBehavior, tv2.Deployment(), nil, nil)
 		return val1, nil
