@@ -6174,6 +6174,7 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 	}
 
 	// LastUpdateVersionTransition for HSM nodes already updated when transitioning the nodes.
+	// LastUpdateVersionTransition for CHASM nodes already updated when closing the chasm tree transaction.
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {

@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -1700,6 +1701,18 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		"signal_request_id_1",
 	}
 
+	chasmNodes := map[string]*persistencespb.ChasmNode{
+		"component-path": {
+			InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
+			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 90},
+			Attributes: &persistencespb.ChasmNode_ComponentAttributes{
+				ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+					Data: &commonpb.DataBlob{Data: []byte("test-data")},
+				},
+			},
+		},
+	}
+
 	bufferedEvents := []*historypb.HistoryEvent{
 		{
 			EventId:   common.BufferedEventID,
@@ -1721,6 +1734,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		ChildExecutionInfos: childInfos,
 		RequestCancelInfos:  requestCancelInfo,
 		SignalInfos:         signalInfos,
+		ChasmNodes:          chasmNodes,
 		SignalRequestedIds:  signalRequestIDs,
 		BufferedEvents:      bufferedEvents,
 	}
@@ -2437,23 +2451,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			versionedTransitionUpdated: true,
 		},
 		{
-			name: "CloseTransactionAsSnapshot",
-			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
-				dbState.BufferedEvents = nil
-			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
-				completWorkflowTaskFn(ms)
-
-				mutation, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
-				if err != nil {
-					return nil, err
-				}
-				return mutation.ExecutionInfo, err
-			},
-			versionedTransitionUpdated: true,
-		},
-		{
-			name: "SignalWorkflow",
+			name: "CloseTransactionAsMutation_SignalWorkflow",
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
@@ -2471,6 +2469,53 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				}
 
 				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
+		{
+			name: "CloseTransactionAsMutation_ChasmTree",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				mockChasmTree := NewMockChasmTree(s.controller)
+				gomock.InOrder(
+					mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes(),
+					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
+						UpdatedNodes: map[string]*persistencespb.ChasmNode{
+							"node-path": {
+								Attributes: &persistencespb.ChasmNode_DataAttributes{
+									DataAttributes: &persistencespb.ChasmDataAttributes{
+										Data: &commonpb.DataBlob{Data: []byte("test-data")},
+									},
+								},
+							},
+						},
+					}, nil),
+				)
+				ms.(*MutableStateImpl).chasmTree = mockChasmTree
+
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
+		{
+			name: "CloseTransactionAsSnapshot",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				completWorkflowTaskFn(ms)
+
+				mutation, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -3832,6 +3877,28 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 				}, err
 			},
 		},
+		{
+			name: "CHASM",
+			tombstoneFn: func(mutableState MutableState) (*persistencespb.StateMachineTombstone, error) {
+				deletedNodePath := "deleted-node-path"
+				tombstone := &persistencespb.StateMachineTombstone{
+					StateMachineKey: &persistencespb.StateMachineTombstone_ChasmNodePath{
+						ChasmNodePath: deletedNodePath,
+					},
+				}
+
+				mockChasmTree := NewMockChasmTree(s.controller)
+				gomock.InOrder(
+					mockChasmTree.EXPECT().IsDirty().Return(true).AnyTimes(),
+					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
+						DeletedNodes: map[string]struct{}{deletedNodePath: {}},
+					}, nil),
+				)
+				mutableState.(*MutableStateImpl).chasmTree = mockChasmTree
+
+				return tombstone, nil
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -4282,6 +4349,7 @@ func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistences
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
 			},
 		},
+		ChasmNodes:         state.chasmTree.Snapshot(nil).Nodes,
 		SignalRequestedIds: []string{"signal_request_id_1", "signal_requested_id_2"},
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 			NamespaceId:                             "deadbeef-0123-4567-890a-bcdef0123456",
@@ -4331,11 +4399,18 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 	state := s.buildWorkflowMutableState()
 	s.addChangesForStateReplication(state)
 
+	chasmNodesSnapshot := chasm.NodesSnapshot{
+		Nodes: state.ChasmNodes,
+	}
+
 	originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
 	s.NoError(err)
 
 	currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
 	s.NoError(err)
+	currentMockChasmTree := NewMockChasmTree(s.controller)
+	currentMockChasmTree.EXPECT().ApplySnapshot(chasmNodesSnapshot).Return(nil).Times(1)
+	currentMS.chasmTree = currentMockChasmTree
 
 	state = s.buildWorkflowMutableState()
 	state.ActivityInfos[91] = &persistencespb.ActivityInfo{
@@ -4357,6 +4432,9 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 
 	targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
 	s.NoError(err)
+	targetMockChasmTree := NewMockChasmTree(s.controller)
+	targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasmNodesSnapshot).Times(1)
+	targetMS.chasmTree = targetMockChasmTree
 
 	targetMS.GetExecutionInfo().TransitionHistory = UpdatedTransitionHistory(targetMS.GetExecutionInfo().TransitionHistory, targetMS.GetCurrentVersion())
 
@@ -4382,18 +4460,22 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 	s.verifyMutableState(currentMS, targetMS, originMS)
 }
 
-func (s *mutableStateSuite) buildMutation(state *MutableStateImpl, tombstones []*persistencespb.StateMachineTombstoneBatch) *persistencespb.WorkflowMutableStateMutation {
-	stateClone := state.CloneToProto()
-	stateClone.ExecutionInfo.SubStateMachineTombstoneBatches = nil
+func (s *mutableStateSuite) buildMutation(
+	state *MutableStateImpl,
+	tombstones []*persistencespb.StateMachineTombstoneBatch,
+) *persistencespb.WorkflowMutableStateMutation {
+	executionInfoClone := common.CloneProto(state.executionInfo)
+	executionInfoClone.SubStateMachineTombstoneBatches = nil
 	mutation := &persistencespb.WorkflowMutableStateMutation{
 		UpdatedActivityInfos:            state.pendingActivityInfoIDs,
 		UpdatedTimerInfos:               state.pendingTimerInfoIDs,
 		UpdatedChildExecutionInfos:      state.pendingChildExecutionInfoIDs,
 		UpdatedRequestCancelInfos:       state.pendingRequestCancelInfoIDs,
 		UpdatedSignalInfos:              state.pendingSignalInfoIDs,
+		UpdatedChasmNodes:               state.chasmTree.Snapshot(nil).Nodes,
 		SignalRequestedIds:              state.GetPendingSignalRequestedIds(),
 		SubStateMachineTombstoneBatches: tombstones,
-		ExecutionInfo:                   stateClone.ExecutionInfo,
+		ExecutionInfo:                   executionInfoClone,
 		ExecutionState:                  state.executionState,
 	}
 	return mutation
@@ -4421,12 +4503,32 @@ func (s *mutableStateSuite) TestApplyMutation() {
 
 	currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
 	s.NoError(err)
+	currentMockChasmTree := NewMockChasmTree(s.controller)
+	currentMS.chasmTree = currentMockChasmTree
+
 	currentMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
 
 	state = s.buildWorkflowMutableState()
 
 	targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
 	s.NoError(err)
+
+	targetMockChasmTree := NewMockChasmTree(s.controller)
+	updateChasmNodes := map[string]*persistencespb.ChasmNode{
+		"node-path": {
+			InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+			Attributes: &persistencespb.ChasmNode_DataAttributes{
+				DataAttributes: &persistencespb.ChasmDataAttributes{
+					Data: &commonpb.DataBlob{Data: []byte("test-data")},
+				},
+			},
+		},
+	}
+	targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasm.NodesSnapshot{
+		Nodes: updateChasmNodes,
+	})
+	targetMS.chasmTree = targetMockChasmTree
 
 	transitionHistory := targetMS.executionInfo.TransitionHistory
 	failoverVersion := transitionhistory.LastVersionedTransition(transitionHistory).NamespaceFailoverVersion
@@ -4502,12 +4604,25 @@ func (s *mutableStateSuite) TestApplyMutation() {
 						SignalExternalInitiatedEventId: 9996, // not exist
 					},
 				},
+				{
+					StateMachineKey: &persistencespb.StateMachineTombstone_ChasmNodePath{
+						ChasmNodePath: "deleted-node-path",
+					},
+				},
 			},
 		},
 	}
 	targetMS.GetExecutionInfo().SubStateMachineTombstoneBatches = append(tombstones, tombstonesToAdd...)
 	targetMS.totalTombstones = len(tombstones[0].StateMachineTombstones) + len(tombstonesToAdd[0].StateMachineTombstones)
 	mutation := s.buildMutation(targetMS, tombstonesToAdd)
+
+	currentMockChasmTree.EXPECT().ApplyMutation(chasm.NodesMutation{
+		DeletedNodes: map[string]struct{}{"deleted-node-path": {}},
+	}).Return(nil).Times(1)
+	currentMockChasmTree.EXPECT().ApplyMutation(chasm.NodesMutation{
+		UpdatedNodes: updateChasmNodes,
+	}).Return(nil).Times(1)
+
 	err = currentMS.ApplyMutation(mutation)
 	s.NoError(err)
 	s.verifyMutableState(currentMS, targetMS, originMS)

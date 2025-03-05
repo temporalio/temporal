@@ -105,5 +105,10 @@ func newMutableStateChecksumPayload(ms MutableState) *checksumspb.MutableStateCh
 	requestCancelIDs := expmaps.Keys(ms.GetPendingRequestCancelExternalInfos())
 	util.SortSlice(requestCancelIDs)
 	payload.PendingReqCancelInitiatedEventIds = requestCancelIDs
+
+	chasmNodePaths := expmaps.Keys(ms.ChasmTree().Snapshot(nil).Nodes)
+	util.SortSlice(chasmNodePaths)
+	payload.PendingChasmNodePaths = chasmNodePaths
+
 	return payload
 }
