@@ -48,6 +48,17 @@ const (
 	Error Level = "error"
 )
 
+type Mode string
+
+const (
+	// FailOnAnyUnexpectedError mode will fail if any unexpected error is encountered,
+	// like an allowlist. Use TestLogger.Expect to add an error to the allowlist.
+	FailOnAnyUnexpectedError Mode = "fail-on-unexpected-errors"
+	// FailOnExpectedErrorOnly mode will only fail if an expected error is encountered,
+	// like a blocklist. Use TestLogger.Expect to add an error to the blocklist.
+	FailOnExpectedErrorOnly = "fail-on-expected-errors"
+)
+
 // This is a subset of the testing.T interface that we use in this package that is
 // also shared with *rapid.T.
 type TestingT interface {
@@ -78,7 +89,6 @@ type Expectation struct {
 	e          *list.Element
 	testLogger *TestLogger
 	lvl        Level
-	unexpected bool
 }
 
 // Forget removes a previously registered expectation.
@@ -134,16 +144,17 @@ func (m matcher) Matches(msg string, tags []tag.Tag) bool {
 	return remainingMatches == 0
 }
 
-type SharedTestLoggerState struct {
-	failOnDPanic atomic.Bool
-	failOnError  atomic.Bool
-	t            TestingT
-	mu           struct {
+type sharedTestLoggerState struct {
+	panicOnDPanic atomic.Bool
+	panicOnError  atomic.Bool
+	t             TestingT
+	mu            struct {
 		sync.RWMutex
-		expectations   map[Level]*list.List // Map[Level]List[matcher]
-		closed         bool
-		unexpectedErrs bool
+		expectations map[Level]*list.List // Map[Level]List[matcher]
+		closed       bool
+		failed       bool
 	}
+	mode            Mode
 	logExpectations bool
 	logCaller       bool
 	level           zapcore.Level
@@ -153,19 +164,19 @@ type SharedTestLoggerState struct {
 // _but_ will fail the test if log levels _above_ Warn are present
 type TestLogger struct {
 	wrapped log.Logger
-	state   *SharedTestLoggerState
+	state   *sharedTestLoggerState
 	tags    []tag.Tag
 }
 
 type LoggerOption func(*TestLogger)
 
-func DontFailOnError(t *TestLogger) *TestLogger {
-	t.state.failOnError.Store(false)
+func DontPanicOnError(t *TestLogger) *TestLogger {
+	t.state.panicOnError.Store(false)
 	return t
 }
 
-func DontFailOnDPanic(t *TestLogger) *TestLogger {
-	t.state.failOnDPanic.Store(false)
+func DontPanicOnDPanic(t *TestLogger) *TestLogger {
+	t.state.panicOnDPanic.Store(false)
 	return t
 }
 
@@ -209,18 +220,19 @@ func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 var _ log.Logger = (*TestLogger)(nil)
 
 // NewTestLogger creates a new TestLogger that logs to the provided testing.T.
-// By default it will fail the test if Error, or DPanic is called.
-func NewTestLogger(t TestingT, opts ...LoggerOption) *TestLogger {
+// Mode controls the behavior of the logger for when an expected or unexpected error is encountered.
+func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 	tl := &TestLogger{
-		state: &SharedTestLoggerState{
+		state: &sharedTestLoggerState{
 			t:               t,
 			logExpectations: false,
 			level:           zapcore.DebugLevel,
 			logCaller:       true,
+			mode:            mode,
 		},
 	}
-	tl.state.failOnError.Store(true)
-	tl.state.failOnDPanic.Store(true)
+	tl.state.panicOnError.Store(true)
+	tl.state.panicOnDPanic.Store(true)
 	tl.state.mu.expectations = map[Level]*list.List{
 		Debug: list.New(),
 		Info:  list.New(),
@@ -251,42 +263,29 @@ func NewTestLogger(t TestingT, opts ...LoggerOption) *TestLogger {
 	return tl
 }
 
-// ResetUnexpectedErrors resets the unexpected error state, returning the previous value.
-func (tl *TestLogger) ResetUnexpectedErrors() bool {
+// ResetFailureStatus resets the failure state, returning the previous value.
+// This is useful to verify that no unexpected errors were logged after the test
+// completed (together with DontPanicOnError and/or DontPanicOnDPanic).
+func (tl *TestLogger) ResetFailureStatus() bool {
 	tl.state.mu.Lock()
 	defer tl.state.mu.Unlock()
-	prevUnexpectedLogs := tl.state.mu.unexpectedErrs
-	tl.state.mu.unexpectedErrs = false
-	return prevUnexpectedLogs
+	prevFailed := tl.state.mu.failed
+	tl.state.mu.failed = false
+	return prevFailed
 }
 
 // Expect instructs the logger to expect certain errors, as specified by the msg and tag arguments.
-// This is useful for ignoring certain errors that are expected.
+// Depending on the Mode of the test logger, the expectation either acts as an entry in a
+// blocklist (FailOnExpectedErrorOnly) or an allowlist (FailOnAnyUnexpectedError).
 func (tl *TestLogger) Expect(level Level, msg string, tags ...tag.Tag) *Expectation {
 	tl.state.mu.Lock()
 	defer tl.state.mu.Unlock()
 	if tl.state.logExpectations {
 		tl.wrapped.Info(fmt.Sprintf("(%p) TestLogger::Expecting: '%s'\n", tl, msg))
 	}
-	return tl.addExpectationLocked(false, level, msg, tags...)
-}
-
-// DontExpect instructs the logger to _not_ expect certain errors, as specified by the msg and tag arguments.
-// This is useful for ensuring that certain errors _do not_ occur during a test.
-func (tl *TestLogger) DontExpect(level Level, msg string, tags ...tag.Tag) *Expectation {
-	tl.state.mu.Lock()
-	defer tl.state.mu.Unlock()
-	if tl.state.logExpectations {
-		tl.wrapped.Info(fmt.Sprintf("(%p) TestLogger::NotExpecting: '%s'\n", tl, msg))
-	}
-	return tl.addExpectationLocked(true, level, msg, tags...)
-}
-
-func (tl *TestLogger) addExpectationLocked(unexpected bool, level Level, msg string, tags ...tag.Tag) *Expectation {
 	e := &Expectation{
 		testLogger: tl,
 		lvl:        level,
-		unexpected: unexpected,
 	}
 	m := newMatcher(msg, tags, e)
 	e.e = tl.state.mu.expectations[level].PushBack(m)
@@ -294,7 +293,7 @@ func (tl *TestLogger) addExpectationLocked(unexpected bool, level Level, msg str
 }
 
 // Forget removes a previously registered expectation.
-// It will no longer be used to determine if a log message is expected or unexpected.
+// A forgotten expectation will no longer be evaluated when errors are encountered.
 func (tl *TestLogger) Forget(e *Expectation) {
 	tl.state.mu.Lock()
 	defer tl.state.mu.Unlock()
@@ -309,16 +308,16 @@ func (tl *TestLogger) shouldFailTest(level Level, msg string, tags []tag.Tag) bo
 			tl.state.t.Fatalf("Bug in TestLogger: invalid %T value in matcher list", e.Value)
 		}
 		if m.Matches(msg, tags) {
-			return m.expectation.unexpected
+			return tl.state.mode == FailOnExpectedErrorOnly
 		}
 	}
-	return false
+	return tl.state.mode == FailOnAnyUnexpectedError
 }
 
-// FailOnError overrides the behavior of this logger. It returns the previous value
+// PanicOnError overrides the behavior of this logger. It returns the previous value
 // so that it can be restored later.
-func (tl *TestLogger) FailOnError(v bool) bool {
-	return tl.state.failOnError.Swap(v)
+func (tl *TestLogger) PanicOnError(v bool) bool {
+	return tl.state.panicOnError.Swap(v)
 }
 
 // DPanic implements log.Logger.
@@ -333,7 +332,7 @@ func (tl *TestLogger) DPanic(msg string, tags ...tag.Tag) {
 	}
 	// note, actual panic'ing in wrapped is turned off so we can control.
 	tl.wrapped.DPanic(msg, tags...)
-	if tl.state.failOnDPanic.Load() && tl.shouldFailTest(Error, msg, tags) {
+	if tl.state.panicOnDPanic.Load() && tl.shouldFailTest(Error, msg, tags) {
 		tl.state.t.Helper()
 		panic(failureMessage("DPanic", msg, tags))
 	}
@@ -370,16 +369,18 @@ func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
 	}
 	tl.state.mu.RUnlock()
 
-	if tl.state.failOnError.Load() {
+	if tl.state.panicOnError.Load() {
 		tl.state.t.Helper()
 		tl.wrapped.Error(msg, tags...)
 		panic(failureMessage("Error", msg, tags))
 	}
 
-	// Labeling the error as unexpected; so it can be found later.
+	// Labeling the error as unexpected; so it can easily be identified later.
 	tl.wrapped.Error(errorMessage("Error", msg), tags...)
+
+	// Not panic'ing, so marking the test as failed.
 	tl.state.mu.Lock()
-	tl.state.mu.unexpectedErrs = true
+	tl.state.mu.failed = true
 	tl.state.mu.Unlock()
 }
 
