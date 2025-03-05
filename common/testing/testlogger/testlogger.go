@@ -131,10 +131,7 @@ func (m matcher) Matches(msg string, tags []tag.Tag) bool {
 			remainingMatches--
 		}
 	}
-	if remainingMatches == 0 {
-		return true
-	}
-	return false
+	return remainingMatches == 0
 }
 
 type SharedTestLoggerState struct {
