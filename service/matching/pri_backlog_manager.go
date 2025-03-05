@@ -288,7 +288,9 @@ func (c *priBacklogManagerImpl) BacklogHeadAge() (age time.Duration) {
 		}
 	}
 	if t.IsZero() {
-		return emptyBacklogAge
+		// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
+		// be more appropriate in the future.
+		return time.Duration(0)
 	}
 	return time.Since(t)
 }
