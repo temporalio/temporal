@@ -160,11 +160,6 @@ func WorkflowBinaryChecksum(cs string) ZapTag {
 	return NewStringTag("wf-binary-checksum", cs)
 }
 
-// FailedAssertion returns tag for marking a message as a failed assertion.
-func FailedAssertion() ZapTag {
-	return NewBoolTag("failed-assertion", true)
-}
-
 // WorkflowActivityID returns tag for WorkflowActivityID
 func WorkflowActivityID(id string) ZapTag {
 	return NewStringTag("wf-activity-id", id)
@@ -572,6 +567,9 @@ func CertThumbprint(thumbprint string) ZapTag {
 func WorkerComponent(v interface{}) ZapTag {
 	return NewStringTag("worker-component", fmt.Sprintf("%T", v))
 }
+
+// FailedAssertion returns tag for marking a message as a failed assertion.
+var FailedAssertion = NewBoolTag("failed-assertion", true)
 
 // history engine shard
 

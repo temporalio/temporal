@@ -205,7 +205,7 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 	// the server and not the test, creating a lot of noise and possibly stuck tests.
 	testlogger.DontFailOnError(tl)
 	// Fail test when an assertion fails (see `softassert` package).
-	tl.DontExpect(testlogger.Error, ".*", tag.FailedAssertion())
+	tl.DontExpect(testlogger.Error, ".*", tag.FailedAssertion)
 	s.Logger = tl
 
 	// Setup test cluster.
@@ -373,7 +373,7 @@ func (s *FunctionalTestBase) TearDownSubTest() {
 
 func (s *FunctionalTestBase) checkNoUnexpectedErrorLogs() {
 	if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
-		if tl.ResetUnexpectedErrors() {
+		if tl.ResetFailureStatus() {
 			s.Fail(`Failing test as unexpected error logs were found.
 Look for 'Unexpected Error log encountered'.`)
 		}
