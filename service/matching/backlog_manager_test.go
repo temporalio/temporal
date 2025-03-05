@@ -124,7 +124,7 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
 		},
-		responseCh: make(chan<- *writeTaskResponse),
+		responseCh: make(chan<- error),
 	}
 
 	require.Equal(t, int64(0), backlogMgr.TotalApproximateBacklogCount())
