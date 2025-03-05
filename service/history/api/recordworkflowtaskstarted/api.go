@@ -27,7 +27,6 @@ package recordworkflowtaskstarted
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -208,7 +207,6 @@ func Invoke(
 					// Dispatching to a different deployment. Try starting a transition. Starting the
 					// transition AFTER applying the start event because we don't want this pending
 					// wft to be rescheduled by StartDeploymentTransition.
-					fmt.Printf("Effective wfBehavior: %v, wfDeployment: %v, pollerDeployment: %v\n", wfBehavior, wfDeployment, pollerDeployment)
 					if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
 						if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 							// This must be a task from a time that the workflow was unpinned, but it's

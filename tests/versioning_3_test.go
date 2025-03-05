@@ -1096,7 +1096,8 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		var val1 string
 		s.NoError(fut1.Get(ctx, &val1))
 
-		// failing here actually.
+		// Sleeping to ensure that the SDK calls RespondWorkflowTaskCompleted and updates the versioning info in mutable state,
+		// which is required for the subsequent verification.
 		workflow.Sleep(ctx, 1*time.Second)
 		s.verifyWorkflowVersioning(tv1, parentBehavior, tv2.Deployment(), nil, nil)
 		return val1, nil
@@ -1192,7 +1193,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	currentChanged <- struct{}{}
 
 	var out string
-	s.NoError(run.Get(ctx, &out)) // sometimes context deadline exceeded errors here.
+	s.NoError(run.Get(ctx, &out))
 	s.Equal("v2", out)
 }
 
