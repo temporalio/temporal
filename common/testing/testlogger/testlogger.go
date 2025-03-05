@@ -301,7 +301,7 @@ func (tl *TestLogger) Forget(e *Expectation) {
 	tl.state.mu.expectations[e.lvl].Remove(e.e)
 }
 
-func (tl *TestLogger) isUnexpected(level Level, msg string, tags []tag.Tag) bool {
+func (tl *TestLogger) shouldFailTest(level Level, msg string, tags []tag.Tag) bool {
 	expectations := tl.state.mu.expectations[level]
 	for e := expectations.Front(); e != nil; e = e.Next() {
 		m, ok := e.Value.(matcher)
@@ -333,7 +333,7 @@ func (tl *TestLogger) DPanic(msg string, tags ...tag.Tag) {
 	}
 	// note, actual panic'ing in wrapped is turned off so we can control.
 	tl.wrapped.DPanic(msg, tags...)
-	if tl.state.failOnDPanic.Load() && tl.isUnexpected(Error, msg, tags) {
+	if tl.state.failOnDPanic.Load() && tl.shouldFailTest(Error, msg, tags) {
 		tl.state.t.Helper()
 		panic(failureMessage("DPanic", msg, tags))
 	}
@@ -349,7 +349,7 @@ func (tl *TestLogger) Debug(msg string, tags ...tag.Tag) {
 	if tl.tags != nil {
 		tags = append(tags, tl.tags...)
 	}
-	_ = tl.isUnexpected(Debug, msg, tags)
+	_ = tl.shouldFailTest(Debug, msg, tags)
 	tl.wrapped.Debug(msg, append(tags, tl.tags...)...)
 }
 
@@ -363,7 +363,7 @@ func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
 	if tl.tags != nil {
 		tags = append(tags, tl.tags...)
 	}
-	if !tl.isUnexpected(Error, msg, tags) {
+	if !tl.shouldFailTest(Error, msg, tags) {
 		tl.wrapped.Error(msg, tags...)
 		tl.state.mu.RUnlock()
 		return
@@ -407,7 +407,7 @@ func (tl *TestLogger) Info(msg string, tags ...tag.Tag) {
 	if tl.tags != nil {
 		tags = append(tags, tl.tags...)
 	}
-	_ = tl.isUnexpected(Info, msg, tags)
+	_ = tl.shouldFailTest(Info, msg, tags)
 	tl.wrapped.Info(msg, tags...)
 }
 
@@ -435,7 +435,7 @@ func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
 	if tl.tags != nil {
 		tags = append(tags, tl.tags...)
 	}
-	_ = tl.isUnexpected(Warn, msg, tags)
+	_ = tl.shouldFailTest(Warn, msg, tags)
 	tl.wrapped.Warn(msg, tags...)
 }
 
