@@ -502,7 +502,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 // running simultaneously and the initial starting point.
 func NewQPSQueue(concurrentActivityCount int) QPSQueue {
 	return QPSQueue{
-		Data:    make([]QPSData, 0, concurrentActivityCount+1),
+		Data:    make([]QPSData, 0, max(0, 2*concurrentActivityCount+1)),
 		MaxSize: concurrentActivityCount + 1,
 	}
 }
