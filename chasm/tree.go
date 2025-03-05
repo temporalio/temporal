@@ -173,8 +173,8 @@ func (n *Node) Snapshot(
 // ApplyMutation is used by replication stack to apply node
 // mutations from the source cluster.
 //
-// NOTE: The behavior is undefined if UpdatedNodes and DeletedNodes have overlapping keys,
-// as the CHASM tree does not have enough information to known if the deletion happen
+// NOTE: It will be an error if UpdatedNodes and DeletedNodes have overlapping keys,
+// as the CHASM tree does not have enough information to tell if the deletion happens
 // before or after the update.
 func (n *Node) ApplyMutation(
 	mutation NodesMutation,
