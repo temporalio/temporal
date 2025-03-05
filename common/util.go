@@ -58,6 +58,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+type WorkflowTerminationReason int
+
 const (
 	persistenceClientRetryInitialInterval = 50 * time.Millisecond
 	persistenceClientRetryMaxAttempts     = 2
@@ -113,23 +115,25 @@ const (
 	sdkClientFactoryRetryExpirationInterval = time.Minute
 
 	contextExpireThreshold = 10 * time.Millisecond
+)
 
-	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
-	FailureReasonCompleteResultExceedsLimit = "Complete result exceeds size limit."
-	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
-	FailureReasonFailureExceedsLimit = "Failure exceeds size limit."
-	// FailureReasonCancelDetailsExceedsLimit is failureReason for cancel details exceeds limit
-	FailureReasonCancelDetailsExceedsLimit = "Cancel details exceed size limit."
-	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
-	FailureReasonHeartbeatExceedsLimit = "Heartbeat details exceed size limit."
-	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size exceeds limit
-	FailureReasonHistorySizeExceedsLimit = "Workflow history size exceeds limit."
-	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history count exceeds limit
-	FailureReasonHistoryCountExceedsLimit = "Workflow history count exceeds limit."
-	// FailureReasonMutableStateSizeExceedsLimit is reason to fail workflow when mutable state size exceeds limit
-	FailureReasonMutableStateSizeExceedsLimit = "Workflow mutable state size exceeds limit."
-	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
-	FailureReasonTransactionSizeExceedsLimit = "Transaction size exceeds limit."
+const (
+	// TerminationReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
+	TerminationReasonCompleteResultExceedsLimit WorkflowTerminationReason = iota
+	// TerminationReasonFailureExceedsLimit is failureReason for failure details exceeds limit
+	TerminationReasonFailureExceedsLimit
+	// TerminationReasonCancelDetailsExceedsLimit is failureReason for cancel details exceeds limit
+	TerminationReasonCancelDetailsExceedsLimit
+	// TerminationReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
+	TerminationReasonHeartbeatExceedsLimit
+	// TerminationReasonHistorySizeExceedsLimit is reason to fail workflow when history size exceeds limit
+	TerminationReasonHistorySizeExceedsLimit
+	// TerminationReasonHistoryCountExceedsLimit is reason to fail workflow when history count exceeds limit
+	TerminationReasonHistoryCountExceedsLimit
+	// TerminationReasonMutableStateSizeExceedsLimit is reason to fail workflow when mutable state size exceeds limit
+	TerminationReasonMutableStateSizeExceedsLimit
+	// TerminationReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
+	TerminationReasonTransactionSizeExceedsLimit
 )
 
 var (
@@ -147,6 +151,54 @@ var (
 	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
 	ErrNamespaceHandover = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
 )
+
+// String returns a short tag value for the given WorkflowTerminationReason.
+func (r WorkflowTerminationReason) String() string {
+	switch r {
+	case TerminationReasonCompleteResultExceedsLimit:
+		return "Complete result exceeds size limit."
+	case TerminationReasonFailureExceedsLimit:
+		return "Failure exceeds size limit."
+	case TerminationReasonCancelDetailsExceedsLimit:
+		return "Cancel details exceed size limit."
+	case TerminationReasonHeartbeatExceedsLimit:
+		return "Heartbeat details exceed size limit."
+	case TerminationReasonHistorySizeExceedsLimit:
+		return "Workflow history size exceeds limit."
+	case TerminationReasonHistoryCountExceedsLimit:
+		return "Workflow history count exceeds limit."
+	case TerminationReasonMutableStateSizeExceedsLimit:
+		return "Workflow mutable state size exceeds limit."
+	case TerminationReasonTransactionSizeExceedsLimit:
+		return "Transaction size exceeds limit."
+	default:
+		return "Unknown failure."
+	}
+}
+
+// MetricsTag returns a Reason tag for the given WorkflowTerminationReason.
+func (r WorkflowTerminationReason) MetricsTag() metrics.Tag {
+	switch r {
+	case TerminationReasonCompleteResultExceedsLimit:
+		return metrics.ReasonTag("complete_result_exceeds_limit")
+	case TerminationReasonFailureExceedsLimit:
+		return metrics.ReasonTag("failure_exceeds_limit")
+	case TerminationReasonCancelDetailsExceedsLimit:
+		return metrics.ReasonTag("cancel_details_exceeds_limit")
+	case TerminationReasonHeartbeatExceedsLimit:
+		return metrics.ReasonTag("heartbeat_exceeds_limit")
+	case TerminationReasonHistorySizeExceedsLimit:
+		return metrics.ReasonTag("history_size_exceeds_limit")
+	case TerminationReasonHistoryCountExceedsLimit:
+		return metrics.ReasonTag("history_count_exceeds_limit")
+	case TerminationReasonMutableStateSizeExceedsLimit:
+		return metrics.ReasonTag("ms_size_exceeds_limit")
+	case TerminationReasonTransactionSizeExceedsLimit:
+		return metrics.ReasonTag("transaction_size_exceeds_limit")
+	default:
+		return metrics.ReasonTag("unknown_failure")
+	}
+}
 
 // AwaitWaitGroup calls Wait on the given wait
 // Returns true if the Wait() call succeeded before the timeout
