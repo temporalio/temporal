@@ -7736,6 +7736,9 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 		Version: worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(deployment)),
 	}
 
+	// The error seems to be that when the test works, versioningInfo.Version is not set (why?)
+	fmt.Printf("Version transition: %v\n", ms.GetExecutionInfo().GetVersioningInfo())
+
 	// Because deployment is changed, we clear sticky queue to make sure the next wf task does not
 	// go to the old deployment.
 	ms.ClearStickyTaskQueue()

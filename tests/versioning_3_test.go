@@ -1065,10 +1065,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		panic("child should not run on v1")
 	}
 	childv2 := func(ctx workflow.Context) (string, error) {
-		s.Eventually(func() bool {
-			s.verifyWorkflowVersioning(tv2Child, vbUnspecified, nil, nil, tv2Child.DeploymentVersionTransition())
-			return true
-		}, 10*time.Second, 100*time.Millisecond)
+		s.verifyWorkflowVersioning(tv2Child, vbUnspecified, nil, nil, tv2Child.DeploymentVersionTransition())
 		return "v2", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
@@ -1099,6 +1096,8 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		var val1 string
 		s.NoError(fut1.Get(ctx, &val1))
 
+		// failing here actually.
+		workflow.Sleep(ctx, 1*time.Second)
 		s.verifyWorkflowVersioning(tv1, parentBehavior, tv2.Deployment(), nil, nil)
 		return val1, nil
 	}
@@ -1193,7 +1192,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	currentChanged <- struct{}{}
 
 	var out string
-	s.NoError(run.Get(ctx, &out))
+	s.NoError(run.Get(ctx, &out)) // sometimes context deadline exceeded errors here.
 	s.Equal("v2", out)
 }
 

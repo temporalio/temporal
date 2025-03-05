@@ -1173,6 +1173,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 		versioningInfo.Deployment = nil
 		versioningInfo.Version = worker_versioning.WorkerDeploymentVersionToString(worker_versioning.DeploymentVersionFromDeployment(wftDeployment))
+		fmt.Printf("New version info: %v\n", versioningInfo)
 	}
 
 	// Deployment and behavior after applying the data came from the completed wft.
