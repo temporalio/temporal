@@ -105,13 +105,13 @@ func (s *ScheduleFunctionalSuite) SetupTest() {
 }
 
 func (s *ScheduleFunctionalSuite) TearDownTest() {
-	s.FunctionalTestBase.TearDownTest()
 	if s.worker != nil {
 		s.worker.Stop()
 	}
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
+	s.FunctionalTestBase.TearDownTest()
 }
 
 func (s *ScheduleFunctionalSuite) TestBasics() {

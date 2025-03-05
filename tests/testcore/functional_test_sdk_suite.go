@@ -118,13 +118,13 @@ func (s *FunctionalTestSdkSuite) SetupTest() {
 }
 
 func (s *FunctionalTestSdkSuite) TearDownTest() {
-	s.FunctionalTestBase.TearDownTest()
 	if s.worker != nil {
 		s.worker.Stop()
 	}
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
+	s.FunctionalTestBase.TearDownTest()
 }
 
 func (s *FunctionalTestSdkSuite) EventuallySucceeds(ctx context.Context, operationCtx backoff.OperationCtx) {

@@ -138,10 +138,10 @@ func (s *VersioningIntegSuite) SetupTest() {
 }
 
 func (s *VersioningIntegSuite) TearDownTest() {
-	s.FunctionalTestBase.TearDownTest()
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
+	s.FunctionalTestBase.TearDownTest()
 }
 
 func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
