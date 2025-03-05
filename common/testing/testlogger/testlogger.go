@@ -360,7 +360,6 @@ func (tl *TestLogger) Debug(msg string, tags ...tag.Tag) {
 	if tl.tags != nil {
 		tags = append(tags, tl.tags...)
 	}
-	_ = tl.shouldFailTest(Debug, msg, tags)
 	tl.wrapped.Debug(msg, append(tags, tl.tags...)...)
 }
 
@@ -420,7 +419,6 @@ func (tl *TestLogger) Info(msg string, tags ...tag.Tag) {
 	if tl.tags != nil {
 		tags = append(tags, tl.tags...)
 	}
-	_ = tl.shouldFailTest(Info, msg, tags)
 	tl.wrapped.Info(msg, tags...)
 }
 
@@ -448,7 +446,6 @@ func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
 	if tl.tags != nil {
 		tags = append(tags, tl.tags...)
 	}
-	_ = tl.shouldFailTest(Warn, msg, tags)
 	tl.wrapped.Warn(msg, tags...)
 }
 
