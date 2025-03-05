@@ -25,7 +25,6 @@
 package shard
 
 import (
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -81,7 +80,6 @@ type (
 		EventsCache                 events.Cache
 
 		StateMachineRegistry *hsm.Registry
-		ChasmRegistry        *chasm.Registry
 	}
 
 	contextFactoryImpl struct {
@@ -123,7 +121,6 @@ func (c *contextFactoryImpl) CreateContext(
 		c.TaskCategoryRegistry,
 		c.EventsCache,
 		c.StateMachineRegistry,
-		c.ChasmRegistry,
 	)
 	if err != nil {
 		return nil, err

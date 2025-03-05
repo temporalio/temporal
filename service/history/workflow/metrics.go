@@ -87,8 +87,6 @@ func emitMutableStateStatus(
 	metrics.BufferedEventsSize.With(batchHandler).Record(int64(stats.BufferedEventsSize))
 	metrics.BufferedEventsCount.With(batchHandler).Record(int64(stats.BufferedEventsCount))
 
-	// TODO - emit CHASM metrics
-
 	if stats.HistoryStatistics != nil {
 		metrics.HistorySize.With(batchHandler).Record(int64(stats.HistoryStatistics.SizeDiff))
 		metrics.HistoryCount.With(batchHandler).Record(int64(stats.HistoryStatistics.CountDiff))
