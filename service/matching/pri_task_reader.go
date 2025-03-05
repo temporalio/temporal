@@ -75,7 +75,7 @@ type (
 
 		// ack manager state
 		outstandingTasks *treemap.Map // TaskID->acked
-		unackedTasks     int
+		loadedTasks      int
 		readLevel        int64 // Maximum TaskID inserted into outstandingTasks
 		ackLevel         int64 // Maximum TaskID below which all tasks are acked
 
@@ -170,7 +170,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 
 	// use == so we just signal once when we cross this threshold
 	// TODO(pri): is this safe? maybe we need to improve this
-	if tr.unackedTasks == tr.backlogMgr.config.GetTasksBatchSize()/reloadFraction {
+	if tr.loadedTasks == tr.backlogMgr.config.GetTasksBatchSize()/reloadFraction {
 		tr.Signal()
 	}
 
@@ -295,20 +295,20 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 
 // To add tasks to the matcher: call recordNewTasksLocked with tr.lock held, then release the
 // lock and call addNewTasks. We call addTaskToMatcher outside tr.lock since it may take other
-// locks to redirect the task
+// locks to redirect the task.
 func (tr *priTaskReader) recordNewTasksLocked(tasks []*persistencespb.AllocatedTaskInfo) {
 	// After we get to this point, we must eventually call task.finish or
 	// task.finishForwarded, which will call tr.completeTask.
 	for _, t := range tasks {
 		tr.outstandingTasks.Put(t.TaskId, false)
-		tr.unackedTasks++
+		tr.loadedTasks++
 		tr.backlogAge.record(t.Data.CreateTime, 1)
 	}
 }
 
 // To add tasks to the matcher: call recordNewTasksLocked with tr.lock held, then release the
 // lock and call addNewTasks. We call addTaskToMatcher outside tr.lock since it may take other
-// locks to redirect the task
+// locks to redirect the task.
 func (tr *priTaskReader) addNewTasks(tasks []*persistencespb.AllocatedTaskInfo) {
 	for _, t := range tasks {
 		task := newInternalTaskFromBacklog(t, tr.completeTask)
@@ -396,7 +396,7 @@ func (tr *priTaskReader) signalNewTasks(resp subqueueCreateTasksResponse) {
 	// queue), and then we set it to the max read level as of CreateTasks.
 	// We also check that there's room in memory.
 	canAddDirect := tr.readLevel == resp.maxReadLevelBefore &&
-		(tr.unackedTasks+len(resp.tasks)) <= tr.backlogMgr.config.GetTasksBatchSize()
+		(tr.loadedTasks+len(resp.tasks)) <= tr.backlogMgr.config.GetTasksBatchSize()
 
 	if !canAddDirect {
 		tr.lock.Unlock()
@@ -440,7 +440,7 @@ func (tr *priTaskReader) backoffSignal(duration time.Duration) {
 func (tr *priTaskReader) getLoadedTasks() int {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-	return tr.unackedTasks
+	return tr.loadedTasks
 }
 
 func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
@@ -449,7 +449,7 @@ func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
 	bugIf(wasAlreadyAcked.(bool), "bug: completed task was already acked")
 
 	tr.outstandingTasks.Put(taskId, true)
-	tr.unackedTasks--
+	tr.loadedTasks--
 
 	// Adjust the ack level as far as we can
 	var numAcked int64

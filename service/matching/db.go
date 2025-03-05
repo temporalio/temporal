@@ -342,7 +342,7 @@ func (db *taskQueueDB) CreateTasks(
 		updates[req.subqueue] = subqueueCreateTasksResponse{
 			tasks:              append(u.tasks, task),
 			maxReadLevelBefore: db.subqueues[req.subqueue].maxReadLevel,
-			maxReadLevelAfter:  task.TaskId,
+			maxReadLevelAfter:  task.TaskId, // task ids are in order so this is the max
 		}
 	}
 
