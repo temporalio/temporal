@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"sync/atomic"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -865,6 +866,8 @@ type SpanExporterInputs struct {
 	Config     *config.Config `optional:"true"`
 }
 
+var tracingReady atomic.Bool
+
 // TraceExportModule holds process-global telemetry fx state defining the set of
 // OTEL trace/span exporters used by tracing instrumentation. The following
 // types can be overriden/augmented with fx.Replace/fx.Decorate:
@@ -872,11 +875,11 @@ type SpanExporterInputs struct {
 // - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
 var TraceExportModule = fx.Options(
 	fx.Invoke(func(log log.Logger) {
-		otel.SetErrorHandler(otel.ErrorHandlerFunc(
-			func(err error) {
+		otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+			if tracingReady.Load() {
 				log.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
-			}),
-		)
+			}
+		}))
 	}),
 
 	fx.Provide(func(inputs SpanExporterInputs) ([]otelsdktrace.SpanExporter, error) {
@@ -967,9 +970,11 @@ var ServiceTracingModule = fx.Options(
 			opts = append(opts, otelsdktrace.WithSpanProcessor(sp))
 		}
 		tp := otelsdktrace.NewTracerProvider(opts...)
-		lc.Append(fx.Hook{OnStop: func(ctx context.Context) error {
-			return tp.Shutdown(ctx)
-		}})
+		lc.Append(fx.Hook{
+			OnStop: func(ctx context.Context) error {
+				tracingReady.Store(false)
+				return tp.Shutdown(ctx)
+			}})
 		return tp
 	}),
 	// Haven't had use for baggage propagation yet
@@ -989,12 +994,14 @@ func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) e
 				}
 			}
 		}
+		tracingReady.Store(true)
 		return nil
 	}
 }
 
 func shutdownAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
+		tracingReady.Store(false)
 		for _, e := range exporters {
 			err := e.Shutdown(ctx)
 			if err != nil {
