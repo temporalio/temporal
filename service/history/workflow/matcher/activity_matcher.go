@@ -58,3 +58,31 @@ func MatchActivity(ai *persistencespb.ActivityInfo, query string) (bool, error) 
 	evaluator := newActivityMatchEvaluator(ai)
 	return evaluator.Evaluate(query)
 }
+
+/*
+func MatchWorfklowRules(ai *persistencespb.ActivityInfo, namespaceEntry *namespace.Namespace) (bool, error) {
+	workflowRules := namespaceEntry.GetWorkflowRules()
+	for _, rule := range workflowRules {
+		match, err := workflow.MatchWorkflowRule(ms, ai, rule.GetSpec())
+		if err != nil {
+			ms.logError("error matching workflow rule", tag.Error(err))
+			continue
+		}
+		if !match {
+			continue
+		}
+
+		// activity matched
+		for _, action := range rule.GetSpec().Actions {
+			switch action.Variant.(type) {
+			case *rulespb.Action_Pause:
+				// pause the activity
+				if !ai.Paused {
+					if err = PauseActivity(ms, ai.ActivityId); err != nil {
+						ms.logError("error pausing activity", tag.Error(err))
+					}
+				}
+			}
+		}
+	}
+}*/

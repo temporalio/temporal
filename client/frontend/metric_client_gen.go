@@ -61,6 +61,20 @@ func (c *metricClient) CreateSchedule(
 	return c.client.CreateSchedule(ctx, request, opts...)
 }
 
+func (c *metricClient) CreateWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.CreateWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.CreateWorkflowRuleResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientCreateWorkflowRule")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CreateWorkflowRule(ctx, request, opts...)
+}
+
 func (c *metricClient) DeleteSchedule(
 	ctx context.Context,
 	request *workflowservice.DeleteScheduleRequest,
@@ -115,6 +129,20 @@ func (c *metricClient) DeleteWorkflowExecution(
 	}()
 
 	return c.client.DeleteWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) DeleteWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DeleteWorkflowRuleResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDeleteWorkflowRule")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeleteWorkflowRule(ctx, request, opts...)
 }
 
 func (c *metricClient) DeprecateNamespace(
@@ -241,6 +269,20 @@ func (c *metricClient) DescribeWorkflowExecution(
 	}()
 
 	return c.client.DescribeWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) DescribeWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DescribeWorkflowRuleResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDescribeWorkflowRule")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeWorkflowRule(ctx, request, opts...)
 }
 
 func (c *metricClient) ExecuteMultiOperation(
@@ -549,6 +591,20 @@ func (c *metricClient) ListWorkflowExecutions(
 	}()
 
 	return c.client.ListWorkflowExecutions(ctx, request, opts...)
+}
+
+func (c *metricClient) ListWorkflowRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkflowRulesRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.ListWorkflowRulesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientListWorkflowRules")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListWorkflowRules(ctx, request, opts...)
 }
 
 func (c *metricClient) PatchSchedule(
