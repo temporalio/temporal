@@ -568,6 +568,9 @@ func WorkerComponent(v interface{}) ZapTag {
 	return NewStringTag("worker-component", fmt.Sprintf("%T", v))
 }
 
+// FailedAssertion is a tag for marking a message as a failed assertion.
+var FailedAssertion = NewBoolTag("failed-assertion", true)
+
 // history engine shard
 
 // ShardID returns tag for ShardID
