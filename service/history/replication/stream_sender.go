@@ -525,9 +525,10 @@ Loop:
 		var attempt int64
 		operation := func() error {
 			attempt++
+			startTime := time.Now().UTC()
 			defer func() {
 				metrics.ReplicationTaskGenerationLatency.With(s.metrics).Record(
-					time.Since(item.GetVisibilityTime()),
+					time.Since(startTime),
 					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 					metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 					metrics.OperationTag(TaskOperationTagFromProto(item.GetType())),
@@ -576,6 +577,13 @@ Loop:
 		err = backoff.ThrottleRetry(operation, retryPolicy, IsRetryableError)
 		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
 			attempt,
+			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+			metrics.OperationTag(TaskOperationTagFromProto(item.GetType())),
+			metrics.ReplicationTaskPriorityTag(priority),
+		)
+		metrics.ReplicationTaskSendLatency.With(s.metrics).Record(
+			time.Since(item.GetVisibilityTime()),
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTagFromProto(item.GetType())),

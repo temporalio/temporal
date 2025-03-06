@@ -6392,7 +6392,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 		switch transactionPolicy {
 		case TransactionPolicyActive:
 			if ms.generateReplicationTask() {
-				now := ms.timeSource.Now()
+				now := time.Now().UTC()
 				workflowKey := definition.NewWorkflowKey(
 					ms.executionInfo.NamespaceId,
 					ms.executionInfo.WorkflowId,
