@@ -23,6 +23,7 @@
 package testlogger
 
 import (
+	"cmp"
 	"container/list"
 	"fmt"
 	"os"
@@ -156,7 +157,6 @@ type sharedTestLoggerState struct {
 	}
 	mode            Mode
 	logExpectations bool
-	logCaller       bool
 	level           zapcore.Level
 }
 
@@ -204,18 +204,6 @@ func LogLevel(level zapcore.Level) LoggerOption {
 	}
 }
 
-func WithoutCaller() LoggerOption {
-	return func(t *TestLogger) {
-		t.state.logCaller = false
-	}
-}
-
-func LogCaller() LoggerOption {
-	return func(t *TestLogger) {
-		t.state.logCaller = false
-	}
-}
-
 // SetLogLevel overrides the temporal test log level during this test.
 func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 	return func(t *TestLogger) {
@@ -239,7 +227,6 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 			t:               t,
 			logExpectations: false,
 			level:           zapcore.DebugLevel,
-			logCaller:       true,
 			mode:            mode,
 		},
 	}
@@ -255,14 +242,16 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 		opt(tl)
 	}
 	if tl.wrapped == nil {
-		ztl := zaptest.NewLogger(t,
-			zaptest.Level(tl.state.level),
-			zaptest.WrapOptions(
-				zap.AddStacktrace(zap.ErrorLevel),
-				zap.WithCaller(tl.state.logCaller),
-			),
-		)
-		tl.wrapped = log.NewZapLogger(ztl).Skip(1)
+		tl.wrapped = log.NewZapLogger(
+			log.BuildZapLogger(
+				log.Config{
+					Level:  cmp.Or(os.Getenv(log.TestLogLevelEnvVar), tl.state.level.String()),
+					Format: cmp.Or(os.Getenv(log.TestLogFormatEnvVar), "console"),
+				}).
+				WithOptions(
+					zap.AddStacktrace(zap.ErrorLevel), // only include stack traces for logs with level error and above
+				)).
+			Skip(1)
 	}
 
 	// Only possible with a *testing.T until *rapid.T supports `Cleanup`
