@@ -7619,6 +7619,7 @@ func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*pers
 	return nil
 }
 
+//revive:disable-next-line:cognitive-complexity
 func (ms *MutableStateImpl) applyTombstones(
 	tombstoneBatches []*persistencespb.StateMachineTombstoneBatch,
 	currentVersionedTransition *persistencespb.VersionedTransition,

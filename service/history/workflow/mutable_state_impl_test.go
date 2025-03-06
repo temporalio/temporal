@@ -206,9 +206,7 @@ func (s *mutableStateSuite) SetupTest() {
 	reg := hsm.NewRegistry()
 	s.Require().NoError(RegisterStateMachine(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
-	// set the checksum probabilities to 100% for exercising during test
-	s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
-	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
+
 	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
 	s.mockConfig.MutableStateActivityFailureSizeLimitError = func(namespace string) int { return 2 * 1024 }
 	s.mockConfig.EnableTransitionHistory = func() bool { return true }
@@ -1030,6 +1028,10 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 }
 
 func (s *mutableStateSuite) TestChecksum() {
+	// set the checksum probabilities to 100% for exercising during test
+	s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
+	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
+
 	testCases := []struct {
 		name                 string
 		enableBufferedEvents bool
