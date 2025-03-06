@@ -38,9 +38,10 @@ import (
 const (
 	skipForZapLogger = 3
 	// we put a default message when it is empty so that the log can be searchable/filterable
-	defaultMsgForEmpty  = "none"
-	testLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // set to "json" for json logs in tests
-	testLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // set to "debug" for debug level logs in tests
+	defaultMsgForEmpty = "none"
+	// TODO: once `NewTestLogger` has been removed, move these vars into testlogger.TestLogger
+	TestLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // set to "json" for json logs in tests
+	TestLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // set to "debug" for debug level logs in tests
 )
 
 type (
@@ -55,13 +56,13 @@ var _ Logger = (*zapLogger)(nil)
 
 // NewTestLogger returns a logger for tests
 func NewTestLogger() *zapLogger {
-	format := os.Getenv(testLogFormatEnvVar)
+	format := os.Getenv(TestLogFormatEnvVar)
 	if format == "" {
 		format = "console"
 	}
 
 	logger := BuildZapLogger(Config{
-		Level:       os.Getenv(testLogLevelEnvVar),
+		Level:       os.Getenv(TestLogLevelEnvVar),
 		Format:      format,
 		Development: true,
 	})
