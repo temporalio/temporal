@@ -241,13 +241,9 @@ func TestBasicMutableStateMatchEvaluator(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	ms := historyi.NewMockMutableState(controller)
-	ms.EXPECT().GetExecutionState().Return(ws).AnyTimes()
-	ms.EXPECT().GetExecutionInfo().Return(we).AnyTimes()
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			match, err := MatchMutableState(ms, tt.query)
+			match, err := MatchMutableState(we, ws, tt.query)
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
@@ -323,13 +319,9 @@ func TestAdvancedMutableStateMatchEvaluator(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	ms := historyi.NewMockMutableState(controller)
-	ms.EXPECT().GetExecutionState().Return(ws).AnyTimes()
-	ms.EXPECT().GetExecutionInfo().Return(we).AnyTimes()
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			match, err := MatchMutableState(ms, tt.query)
+			match, err := MatchMutableState(we, ws, tt.query)
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {

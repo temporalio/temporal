@@ -92,13 +92,9 @@ func TestMatchMutableState(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	ms := historyi.NewMockMutableState(controller)
-	ms.EXPECT().GetExecutionState().Return(ws).AnyTimes()
-	ms.EXPECT().GetExecutionInfo().Return(we).AnyTimes()
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			match, err := MatchMutableState(ms, tt.query)
+			match, err := MatchMutableState(we, ws, tt.query)
 			assert.Equal(t, tt.expectedMatch, match)
 			if tt.expectedError {
 				assert.Error(t, err)

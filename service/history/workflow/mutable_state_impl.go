@@ -5442,6 +5442,11 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, nil
 	}
 
+	// check workflow rules
+	if !ai.Paused {
+		MatchWorkflowRules(ms, ai)
+	}
+
 	// if activity is paused
 	if ai.Paused {
 		// need to update activity
