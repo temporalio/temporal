@@ -79,14 +79,6 @@ type (
 		) error
 	}
 
-	WorkflowStateReplicatorProvider func(
-		shard.Context,
-		wcache.Cache,
-		EventsReapplier,
-		serialization.Serializer,
-		log.Logger,
-	) WorkflowStateReplicator
-
 	WorkflowStateReplicatorImpl struct {
 		shardContext      shard.Context
 		namespaceRegistry namespace.Registry
