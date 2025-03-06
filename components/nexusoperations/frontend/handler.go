@@ -31,6 +31,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"runtime/debug"
 	"strconv"
@@ -97,6 +98,7 @@ type HandlerOptions struct {
 	AuthInterceptor                      *authorization.Interceptor
 	RedirectionInterceptor               *interceptor.Redirection
 	ForwardingClients                    *cluster.FrontendHTTPClientCache
+	HTTPTraceProvider                    commonnexus.HTTPClientTraceProvider
 }
 
 type completionHandler struct {
@@ -270,6 +272,19 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 	if err != nil {
 		h.Logger.Error("failed to construct forwarding request URL", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.TargetCluster(rCtx.namespace.ActiveClusterName()))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	}
+
+	if h.HTTPTraceProvider != nil {
+		traceLogger := log.With(h.Logger,
+			tag.Operation(apiName),
+			tag.WorkflowNamespace(rCtx.namespace.Name().String()),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()),
+			tag.TargetCluster(rCtx.namespace.ActiveClusterName()),
+		)
+		if trace := h.HTTPTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
+			ctx = httptrace.WithClientTrace(ctx, trace)
+		}
 	}
 
 	forwardReq, err := http.NewRequestWithContext(ctx, r.HTTPRequest.Method, forwardURL, r.HTTPRequest.Body)

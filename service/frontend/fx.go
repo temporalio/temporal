@@ -762,6 +762,7 @@ func RegisterNexusHTTPHandler(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 	router *mux.Router,
+	httpTraceProvider nexus.HTTPClientTraceProvider,
 ) {
 	h := NewNexusHTTPHandler(
 		serviceConfig,
@@ -779,6 +780,7 @@ func RegisterNexusHTTPHandler(
 		namespaceCountLimiterInterceptor,
 		rateLimitInterceptor,
 		logger,
+		httpTraceProvider,
 	)
 	h.RegisterRoutes(router)
 }

@@ -962,6 +962,9 @@ func reapplyEvents(
 				continue
 			}
 			attr := event.GetWorkflowExecutionTerminatedEventAttributes()
+			if attr.GetIdentity() == consts.IdentityHistoryService || attr.GetIdentity() == consts.IdentityResetter {
+				continue
+			}
 			if err := workflow.TerminateWorkflow(
 				mutableState,
 				attr.GetReason(),
