@@ -205,11 +205,11 @@ func (s *BiDirectionStreamImpl[Req, Resp]) notifyRecvChannel(response Resp, err 
 
 	select {
 	case s.channel <- resp:
+		return
 	default:
 		s.logger.Warn("no enough worker on bi-direction receiving stream")
+		s.channel <- resp
 	}
-
-	s.channel <- resp
 }
 
 func (e *StreamError) Error() string {
