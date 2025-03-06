@@ -272,7 +272,11 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		}
 	}
 
+	fmt.Println("In PollTask!")
+
+	fmt.Println("dynamic config enabled", c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()))
 	if c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
+
 		if err = c.ensureRegisteredInDeploymentVersion(ctx, namespaceEntry, pollMetadata); err != nil {
 			return nil, err
 		}
@@ -548,6 +552,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	pollMetadata *pollMetadata,
 ) error {
 	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities, pollMetadata.deploymentOptions)
+	fmt.Println("workerDeployment", workerDeployment)
 	if workerDeployment == nil {
 		return nil
 	}
@@ -584,6 +589,8 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 
 	// we need to update the deployment workflow to tell it about this task queue
 	// TODO: add some backoff here if we got an error last time
+
+	fmt.Println(".........")
 
 	err = c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
 		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),

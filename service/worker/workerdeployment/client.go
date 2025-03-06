@@ -242,6 +242,8 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 		return err
 	}
 
+	fmt.Println("GOING TO START WORKER DEPLOYMENT WORKFLOW!")
+
 	// starting and updating the deployment version workflow, which in turn starts a deployment workflow.
 	outcome, err := d.updateWithStartWorkerDeployment(ctx, namespaceEntry, deploymentName, buildId, &updatepb.Request{
 		Input: &updatepb.Input{Name: RegisterWorkerInWorkerDeployment, Args: updatePayload},
