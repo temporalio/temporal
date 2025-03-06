@@ -166,7 +166,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		return err
 	}
 	if !applied {
-		return nil
+		return consts.ErrDuplicate
 	}
 
 	// passive logic need to explicitly call create timer
