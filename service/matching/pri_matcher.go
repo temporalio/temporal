@@ -36,9 +36,11 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 )
@@ -59,7 +61,8 @@ type priTaskMatcher struct {
 	fwdr           *priForwarder
 	validator      taskValidator
 	metricsHandler metrics.Handler // namespace metric scope
-	numPartitions  func() int      // number of task queue partitions
+	logger         log.Logger
+	numPartitions  func() int // number of task queue partitions
 
 	limiterLock sync.Mutex
 	adminNsRate float64
@@ -115,12 +118,14 @@ func newPriTaskMatcher(
 	partition tqid.Partition,
 	fwdr *priForwarder,
 	validator taskValidator,
+	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *priTaskMatcher {
 	tm := &priTaskMatcher{
 		config:         config,
-		data:           newMatcherData(config, fwdr != nil),
+		data:           newMatcherData(config, logger, fwdr != nil),
 		tqCtx:          tqCtx,
+		logger:         logger,
 		metricsHandler: metricsHandler,
 		partition:      partition,
 		fwdr:           fwdr,
@@ -175,7 +180,7 @@ func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.R
 		if res.ctxErr != nil {
 			return // task queue closing
 		}
-		bugIf(res.task == nil, "bug: bad match result in forwardTasks")
+		softassert.That(tm.logger, res.task != nil, "expected a task from match")
 
 		err := tm.forwardTask(res.task)
 
@@ -244,11 +249,13 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 		if res.ctxErr != nil {
 			return // task queue closing
 		}
-		bugIf(res.task == nil, "bug: bad match result in validateTasksOnRoot")
+		softassert.That(tm.logger, res.task != nil, "expected a task from match")
 
 		task := res.task
-		bugIf(task.forwardCtx != nil || task.isSyncMatchTask() || task.source != enumsspb.TASK_SOURCE_DB_BACKLOG,
-			"bug: validator got a sync task")
+		softassert.That(tm.logger, task.forwardCtx == nil, "expected non-forwarded task")
+		softassert.That(tm.logger, !task.isSyncMatchTask(), "expected non-sync match task")
+		softassert.That(tm.logger, task.source == enumsspb.TASK_SOURCE_DB_BACKLOG, "expected backlog task")
+
 		maybeValid := tm.validator == nil || tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.partition.TaskType())
 		if !maybeValid {
 			// We found an invalid one, complete it and go back for another immediately.
@@ -273,7 +280,7 @@ func (tm *priTaskMatcher) forwardPolls() {
 		if res.ctxErr != nil {
 			return // task queue closing
 		}
-		bugIf(res.poller == nil, "bug: bad match result in forwardPolls")
+		softassert.That(tm.logger, res.poller != nil, "expected a poller from match")
 
 		poller := res.poller
 		// We need to use the real source poller context since it has the poller id and
@@ -321,7 +328,7 @@ func (tm *priTaskMatcher) forwardPolls() {
 func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
 	finish := func() (bool, error) {
 		res, ok := task.getResponse()
-		bugIf(!ok, "Offer must be given a sync match task")
+		softassert.That(tm.logger, ok, "expected a sync match task")
 		if res.forwarded {
 			if res.forwardErr == nil {
 				// task was remotely sync matched on the parent partition
@@ -361,7 +368,7 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, 
 	if res.ctxErr != nil {
 		return false, res.ctxErr
 	}
-	bugIf(res.poller == nil, "bug: bad match result in Offer")
+	softassert.That(tm.logger, res.poller != nil, "expeced poller from match")
 	return finish()
 }
 
@@ -400,9 +407,9 @@ again:
 		}
 		return nil, res.ctxErr
 	}
-	bugIf(res.poller == nil, "bug: bad match result in syncOfferTask")
+	softassert.That(tm.logger, res.poller != nil, "expected poller from match")
 	response, ok := task.getResponse()
-	bugIf(!ok, "OfferQuery/OfferNexusTask must be given a sync match task")
+	softassert.That(tm.logger, ok, "expected a sync match task")
 	// Note: if task was not forwarded, this will just be the zero value and nil.
 	// That's intended: the query/nexus handler in matchingEngine will wait for the real
 	// result separately.
@@ -550,7 +557,7 @@ func (tm *priTaskMatcher) poll(
 		}
 		return nil, errNoTasks
 	}
-	bugIf(res.task == nil, "bug: bad match result in poll")
+	softassert.That(tm.logger, res.task != nil, "expected task from match")
 
 	task := res.task
 	pollWasForwarded = task.isStarted()
