@@ -101,6 +101,10 @@ func (s *Versioning3Suite) SetupSuite() {
 		// this is overridden for tests using RunTestWithMatchingBehavior
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
+
+		// Overriding the number of deployments that can be registered in a single namespace. Done only for this test suite
+		// since it creates a large number of unique deployments in the test suite's namespace.
+		dynamicconfig.MatchingMaxDeployments.Key(): 1000,
 	}
 	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
