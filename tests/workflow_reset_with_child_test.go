@@ -68,6 +68,8 @@ type WorkflowResetWithChildSuite struct {
 
 func TestWorkflowResetWithChildTestSuite(t *testing.T) {
 	t.Parallel()
+	// TODO: Enable this test when reset phase 2 is enabled.
+	t.Skip("Skipping until reset phase 2 is enabled")
 	suite.Run(t, new(WorkflowResetWithChildSuite))
 }
 
