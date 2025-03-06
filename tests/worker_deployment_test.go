@@ -621,7 +621,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NonIdemp
 			Version:        tv.DeploymentVersionString(),
 			Percentage:     5,
 			ConflictToken:  cT,
-			Identity:       tv.Any().String(), // note: different identity making the requests non-idempotent
+			Identity:       tv.Any().String(), // note: different identity making this request different from the first one.
 		})
 	}()
 
