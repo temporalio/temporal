@@ -31,12 +31,15 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	rulespb "go.temporal.io/api/rules/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow/matcher"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -395,4 +398,54 @@ func needRegenerateRetryTask(ai *persistencespb.ActivityInfo, scheduleNewRun boo
 	// activity is running, scheduleNewRun flag is NOT provided
 	// in this case we don't need to do anything
 	return false
+}
+
+func MatchWorkflowRule(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	ai *persistencespb.ActivityInfo,
+	rule *rulespb.WorkflowRuleSpec,
+) (bool, error) {
+	// match visibility query
+	visibilityQuery := rule.GetVisibilityQuery()
+	if visibilityQuery != "" {
+		match, err := matcher.MatchMutableState(executionInfo, executionState, rule.GetVisibilityQuery())
+		if err != nil || !match {
+			return false, err
+		}
+	}
+
+	// match activity query
+	activityTrigger := rule.GetActivityStart()
+	if activityTrigger == nil {
+		return false, nil
+	}
+	return matcher.MatchActivity(ai, activityTrigger.GetPredicate())
+}
+
+func MatchWorkflowRules(ms *MutableStateImpl, ai *persistencespb.ActivityInfo) {
+	workflowRules := ms.namespaceEntry.GetWorkflowRules()
+	for _, rule := range workflowRules {
+		match, err := MatchWorkflowRule(ms.GetExecutionInfo(), ms.GetExecutionState(), ai, rule.GetSpec())
+		if err != nil {
+			ms.logError("error matching workflow rule", tag.Error(err))
+			continue
+		}
+		if !match {
+			continue
+		}
+
+		// activity matched
+		for _, action := range rule.GetSpec().Actions {
+			switch action.Variant.(type) {
+			case *rulespb.Action_Pause:
+				// pause the activity
+				if !ai.Paused {
+					if err = PauseActivity(ms, ai.ActivityId); err != nil {
+						ms.logError("error pausing activity", tag.Error(err))
+					}
+				}
+			}
+		}
+	}
 }
