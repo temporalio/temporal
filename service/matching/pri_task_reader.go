@@ -407,10 +407,10 @@ func (tr *priTaskReader) signalNewTasks(resp subqueueCreateTasksResponse) {
 
 	// Because we checked readLevel above, we know that getTasksPump can't have beat us to
 	// adding these tasks to outstandingTasks. So they should definitely not be there.
-	for _, t := range resp.tasks {
+	resp.tasks = slices.DeleteFunc(resp.tasks, func(t *persistencespb.AllocatedTaskInfo) bool {
 		_, found := tr.outstandingTasks.Get(t.TaskId)
-		softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks")
-	}
+		return !softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks")
+	})
 
 	tr.recordNewTasksLocked(resp.tasks)
 
@@ -444,8 +444,12 @@ func (tr *priTaskReader) getLoadedTasks() int {
 
 func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
 	wasAlreadyAcked, found := tr.outstandingTasks.Get(taskId)
-	softassert.That(tr.logger, found, "completed task not found in oustandingTasks")
-	softassert.That(tr.logger, !wasAlreadyAcked.(bool), "completed task was already acked")
+	if !softassert.That(tr.logger, found, "completed task not found in oustandingTasks") {
+		return 0
+	}
+	if !softassert.That(tr.logger, !wasAlreadyAcked.(bool), "completed task was already acked") {
+		return 0
+	}
 
 	tr.outstandingTasks.Put(taskId, true)
 	tr.loadedTasks--

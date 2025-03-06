@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"sync"
 	"time"
@@ -180,7 +181,9 @@ func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.R
 		if res.ctxErr != nil {
 			return // task queue closing
 		}
-		softassert.That(tm.logger, res.task != nil, "expected a task from match")
+		if !softassert.That(tm.logger, res.task != nil, "expected a task from match") {
+			continue
+		}
 
 		err := tm.forwardTask(res.task)
 
@@ -249,12 +252,16 @@ func (tm *priTaskMatcher) validateTasksOnRoot(lim quotas.RateLimiter, retrier ba
 		if res.ctxErr != nil {
 			return // task queue closing
 		}
-		softassert.That(tm.logger, res.task != nil, "expected a task from match")
+		if !softassert.That(tm.logger, res.task != nil, "expected a task from match") {
+			continue
+		}
 
 		task := res.task
-		softassert.That(tm.logger, task.forwardCtx == nil, "expected non-forwarded task")
-		softassert.That(tm.logger, !task.isSyncMatchTask(), "expected non-sync match task")
-		softassert.That(tm.logger, task.source == enumsspb.TASK_SOURCE_DB_BACKLOG, "expected backlog task")
+		if !softassert.That(tm.logger, task.forwardCtx == nil, "expected non-forwarded task") ||
+			!softassert.That(tm.logger, !task.isSyncMatchTask(), "expected non-sync match task") ||
+			!softassert.That(tm.logger, task.source == enumsspb.TASK_SOURCE_DB_BACKLOG, "expected backlog task") {
+			continue
+		}
 
 		maybeValid := tm.validator == nil || tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.partition.TaskType())
 		if !maybeValid {
@@ -280,7 +287,9 @@ func (tm *priTaskMatcher) forwardPolls() {
 		if res.ctxErr != nil {
 			return // task queue closing
 		}
-		softassert.That(tm.logger, res.poller != nil, "expected a poller from match")
+		if !softassert.That(tm.logger, res.poller != nil, "expected a poller from match") {
+			continue
+		}
 
 		poller := res.poller
 		// We need to use the real source poller context since it has the poller id and
@@ -328,7 +337,9 @@ func (tm *priTaskMatcher) forwardPolls() {
 func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
 	finish := func() (bool, error) {
 		res, ok := task.getResponse()
-		softassert.That(tm.logger, ok, "expected a sync match task")
+		if !softassert.That(tm.logger, ok, "expected a sync match task") {
+			return false, nil
+		}
 		if res.forwarded {
 			if res.forwardErr == nil {
 				// task was remotely sync matched on the parent partition
@@ -364,11 +375,13 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, 
 	}
 
 	res := tm.data.EnqueueTaskAndWait([]context.Context{ctx, tm.tqCtx}, task)
-
 	if res.ctxErr != nil {
 		return false, res.ctxErr
 	}
-	softassert.That(tm.logger, res.poller != nil, "expeced poller from match")
+	if !softassert.That(tm.logger, res.poller != nil, "expeced poller from match") {
+		return false, nil
+	}
+
 	return finish()
 }
 
@@ -407,9 +420,13 @@ again:
 		}
 		return nil, res.ctxErr
 	}
-	softassert.That(tm.logger, res.poller != nil, "expected poller from match")
+	if !softassert.That(tm.logger, res.poller != nil, "expected poller from match") {
+		return nil, errors.New("internal error: no poller found on sync match")
+	}
 	response, ok := task.getResponse()
-	softassert.That(tm.logger, ok, "expected a sync match task")
+	if !softassert.That(tm.logger, ok, "expected a sync match task") {
+		return nil, errors.New("internal error: no task found on sync match")
+	}
 	// Note: if task was not forwarded, this will just be the zero value and nil.
 	// That's intended: the query/nexus handler in matchingEngine will wait for the real
 	// result separately.
@@ -557,7 +574,9 @@ func (tm *priTaskMatcher) poll(
 		}
 		return nil, errNoTasks
 	}
-	softassert.That(tm.logger, res.task != nil, "expected task from match")
+	if !softassert.That(tm.logger, res.task != nil, "expected task from match") {
+		return nil, errors.New("internal error: no task found after match")
+	}
 
 	task := res.task
 	pollWasForwarded = task.isStarted()
