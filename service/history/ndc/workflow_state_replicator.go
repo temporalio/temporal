@@ -61,6 +61,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/historybuilder"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -193,7 +194,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		}
 
 		// we don't care about activity state here as activity can't run after workflow is closed.
-		return engine.SyncHSM(ctx, &shard.SyncHSMRequest{
+		return engine.SyncHSM(ctx, &historyi.SyncHSMRequest{
 			WorkflowKey: ms.GetWorkflowKey(),
 			StateMachineNode: &persistencespb.StateMachineNode{
 				Children: executionInfo.SubStateMachinesByType,
@@ -584,7 +585,7 @@ func (r *WorkflowStateReplicatorImpl) backFillEvents(
 		}
 		newRunID = newRunInfo.RunId
 	}
-	return engine.BackfillHistoryEvents(ctx, &shard.BackfillHistoryEventsRequest{
+	return engine.BackfillHistoryEvents(ctx, &historyi.BackfillHistoryEventsRequest{
 		WorkflowKey:         definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 		SourceClusterName:   sourceClusterName,
 		VersionedHistory:    destinationVersionedTransition,

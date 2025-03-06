@@ -89,6 +89,11 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 		return nil, nil
 	}
 
+	if !ms.IsWorkflowExecutionRunning() {
+		// workflow is closed after reapplying events, no need to schedule workflow task
+		return reappliedEvents, nil
+	}
+
 	// After reapply event, checking if we should schedule a workflow task
 	if ms.IsWorkflowPendingOnWorkflowTaskBackoff() {
 		// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet

@@ -101,6 +101,10 @@ func (s *Versioning3Suite) SetupSuite() {
 		// this is overridden for tests using RunTestWithMatchingBehavior
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
+
+		// Overriding the number of deployments that can be registered in a single namespace. Done only for this test suite
+		// since it creates a large number of unique deployments in the test suite's namespace.
+		dynamicconfig.MatchingMaxDeployments.Key(): 1000,
 	}
 	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -1043,11 +1047,11 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	// is implemented.
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1).WithWorkflowIDNumber(1)
-	tv2 := tv1.WithBuildIDNumber(2)
 	tv1Child := tv1.WithWorkflowIDNumber(2)
 	if crossTq {
 		tv1Child = tv1Child.WithTaskQueue("child-tq")
 	}
+	tv2 := tv1.WithBuildIDNumber(2)
 	tv2Child := tv1Child.WithBuildIDNumber(2)
 
 	sdkParentBehavior := workflow.VersioningBehaviorPinned
@@ -1065,8 +1069,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		panic("child should not run on v1")
 	}
 	childv2 := func(ctx workflow.Context) (string, error) {
-		fmt.Printf("shahab> child started \n")
-		s.verifyWorkflowVersioning(tv2Child, vbUnspecified, nil, nil, tv2Child.DeploymentVersionTransition())
 		return "v2", nil
 	}
 	wf1 := func(ctx workflow.Context) (string, error) {
@@ -1079,6 +1081,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 			TaskQueue:  tv2Child.TaskQueue().GetName(),
 			WorkflowID: tv2Child.WorkflowID(),
 		}), "child")
+
 		var val1 string
 		s.NoError(fut1.Get(ctx, &val1))
 
@@ -1096,7 +1099,6 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 		var val1 string
 		s.NoError(fut1.Get(ctx, &val1))
 
-		s.verifyWorkflowVersioning(tv1, parentBehavior, tv2.Deployment(), nil, nil)
 		return val1, nil
 	}
 
@@ -1192,6 +1194,13 @@ func (s *Versioning3Suite) testChildWorkflowInheritance_ExpectNoInherit(crossTq 
 	var out string
 	s.NoError(run.Get(ctx, &out))
 	s.Equal("v2", out)
+
+	if parentBehavior == vbPinned {
+		s.verifyWorkflowVersioning(tv1, parentBehavior, tv1.Deployment(), nil, nil)
+	} else {
+		s.verifyWorkflowVersioning(tv1, parentBehavior, tv2.Deployment(), nil, nil)
+	}
+	s.verifyWorkflowVersioning(tv2Child, vbPinned, tv2Child.Deployment(), nil, nil)
 }
 
 func (s *Versioning3Suite) TestPinnedCaN() {

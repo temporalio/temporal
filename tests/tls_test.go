@@ -75,6 +75,7 @@ func (s *TLSFunctionalSuite) TearDownTest() {
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
+	s.FunctionalTestBase.TearDownTest()
 }
 
 func (s *TLSFunctionalSuite) TestGRPCMTLS() {

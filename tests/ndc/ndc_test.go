@@ -64,7 +64,7 @@ import (
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
-	"go.temporal.io/server/service/history/ndc"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -2492,6 +2492,6 @@ func (s *NDCFunctionalTestSuite) IsForceTerminated(
 		return false
 	}
 	terminationEventAttr := lastEvent.GetWorkflowExecutionTerminatedEventAttributes()
-	return terminationEventAttr.Reason == ndc.WorkflowTerminationReason &&
-		terminationEventAttr.Identity == ndc.WorkflowTerminationIdentity
+	return terminationEventAttr.Reason == common.FailureReasonWorkflowTerminationDueToVersionConflict &&
+		terminationEventAttr.Identity == consts.IdentityHistoryService
 }

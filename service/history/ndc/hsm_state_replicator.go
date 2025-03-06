@@ -42,6 +42,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -51,7 +52,7 @@ type (
 	HSMStateReplicator interface {
 		SyncHSMState(
 			ctx context.Context,
-			request *shard.SyncHSMRequest,
+			request *historyi.SyncHSMRequest,
 		) error
 	}
 
@@ -77,7 +78,7 @@ func NewHSMStateReplicator(
 
 func (r *HSMStateReplicatorImpl) SyncHSMState(
 	ctx context.Context,
-	request *shard.SyncHSMRequest,
+	request *historyi.SyncHSMRequest,
 ) (retError error) {
 	namespaceID := namespace.ID(request.WorkflowKey.GetNamespaceID())
 	execution := &commonpb.WorkflowExecution{
@@ -154,7 +155,7 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 
 func (r *HSMStateReplicatorImpl) syncHSMNode(
 	mutableState workflow.MutableState,
-	request *shard.SyncHSMRequest,
+	request *historyi.SyncHSMRequest,
 ) (bool, error) {
 
 	shouldSync, err := r.compareVersionHistory(mutableState, request.EventVersionHistory)
