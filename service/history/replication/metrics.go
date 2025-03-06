@@ -47,7 +47,34 @@ func TaskOperationTag(
 		return metrics.SyncWorkflowStateTaskScope
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		return metrics.HistoryReplicationTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK:
+		return metrics.SyncHSMTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
+		return metrics.SyncVersionedTransitionTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK:
+		return metrics.BackfillHistoryEventsTaskScope
+	case enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
+		return metrics.VerifyVersionedTransitionTaskScope
 	default:
 		return metrics.NoopTaskScope
+	}
+}
+
+func TaskOperationTagFromProto(
+	taskType enumsspb.TaskType,
+) string {
+	switch taskType {
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM:
+		return metrics.SyncHSMTaskScope
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION:
+		return metrics.SyncVersionedTransitionTaskScope
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
+		return metrics.SyncActivityTaskScope
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
+		return metrics.SyncWorkflowStateTaskScope
+	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
+		return metrics.HistoryReplicationTaskScope
+	default:
+		return "__unknown__"
 	}
 }

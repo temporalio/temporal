@@ -922,6 +922,10 @@ var (
 	ReplicationServiceError               = NewCounterDef("replication_service_error")
 	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
+	ReplicationTaskSendAttempt            = NewDimensionlessHistogramDef("replication_task_send_attempt")
+	ReplicationTaskSendError              = NewCounterDef("replication_task_send_error")
+	ReplicationTaskGenerationLatency      = NewTimerDef("replication_task_generation_latency")
+	ReplicationTaskLoadLatency            = NewTimerDef("replication_task_load_latency")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
 	ReplicationTasksSkipped               = NewCounterDef("replication_tasks_skipped")
@@ -933,6 +937,7 @@ var (
 	// ReplicationTasksFetched records the number of tasks fetched by the poller.
 	ReplicationTasksFetched                        = NewDimensionlessHistogramDef("replication_tasks_fetched")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
+	ReplicationTaskProcessingLatency               = NewTimerDef("replication_task_processing_latency")
 	ReplicationTaskTransmissionLatency             = NewTimerDef("replication_task_transmission_latency")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
