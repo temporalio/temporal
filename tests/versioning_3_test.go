@@ -1300,7 +1300,6 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: "__unversioned__", RampingVersion: tv.DeploymentVersionString(), RampingVersionPercentage: 20, UpdateTime: timestamp.TimePtr(t1)}, wfInfo.GetVersioningInfo())
 
 	s.syncTaskQueueDeploymentData(tv, true, 0, false, t1, tqTypeAct)
-	s.waitForDeploymentDataPropagation(tv, false, tqTypeAct)
 
 	actInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace().String(),
@@ -2040,9 +2039,8 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 				if unversionedRamp {
 					if perTypes[int32(pt.tp)].GetDeploymentData().GetUnversionedRampData() != nil {
 						delete(remaining, pt)
-					} else {
-						continue
 					}
+					continue
 				}
 				versions := perTypes[int32(pt.tp)].GetDeploymentData().GetVersions()
 				for _, d := range versions {
