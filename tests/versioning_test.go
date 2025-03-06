@@ -141,6 +141,7 @@ func (s *VersioningIntegSuite) TearDownTest() {
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
+	s.FunctionalTestBase.TearDownTest()
 }
 
 func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
