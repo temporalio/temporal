@@ -55,6 +55,7 @@ type (
 var _ Logger = (*zapLogger)(nil)
 
 // NewTestLogger returns a logger for tests
+// Deprecated: Use testlogger.TestLogger instead.
 func NewTestLogger() *zapLogger {
 	format := os.Getenv(TestLogFormatEnvVar)
 	if format == "" {
