@@ -26,6 +26,7 @@ package ndc
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -1115,103 +1116,135 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 			},
 		},
 	}
-	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6, event7, event8, event9, event10}
+	// This event is not reapplied
+	event11 := &historypb.HistoryEvent{
+		EventId:   111,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
+			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{
+				Reason:   testRequestReason,
+				Details:  payloads.EncodeString("test details"),
+				Identity: consts.IdentityHistoryService,
+			},
+		},
+	}
+	// This event is not reapplied
+	event12 := &historypb.HistoryEvent{
+		EventId:   112,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
+			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{
+				Reason:   testRequestReason,
+				Details:  payloads.EncodeString("test details"),
+				Identity: consts.IdentityResetter,
+			},
+		},
+	}
+	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6, event7, event8, event9, event10, event11, event12}
 
 	testcases := []struct {
-		name    string
-		isReset bool
+		name     string
+		isReset  bool
+		expected []*historypb.HistoryEvent
 	}{
 		{
-			name:    "reset",
-			isReset: true,
+			name:     "reset",
+			isReset:  true,
+			expected: []*historypb.HistoryEvent{event1, event3, event4, event5, event10},
 		},
 		{
-			name:    "not reset",
-			isReset: false,
+			name:     "not reset",
+			isReset:  false,
+			expected: []*historypb.HistoryEvent{event1, event3, event4, event5, event7, event8, event9, event10},
 		},
 	}
 
 	ms := workflow.NewMockMutableState(s.controller)
 
 	for _, tc := range testcases {
-		for _, event := range events {
-			switch event.GetEventType() { // nolint:exhaustive
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
-				attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
-				ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
-					attr.GetVersioningOverride(),
-					attr.GetUnsetVersioningOverride(),
-					attr.GetAttachedRequestId(),
-					attr.GetAttachedCompletionCallbacks(),
-					event.Links,
-				).Return(&historypb.HistoryEvent{}, nil)
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
-				attr := event.GetWorkflowExecutionSignaledEventAttributes()
-				ms.EXPECT().AddWorkflowExecutionSignaled(
-					attr.GetSignalName(),
-					attr.GetInput(),
-					attr.GetIdentity(),
-					attr.GetHeader(),
-					event.Links,
-				).Return(&historypb.HistoryEvent{}, nil)
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
-				attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
-				ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
-					attr.GetRequest(),
-					enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
-				).Return(&historypb.HistoryEvent{}, nil)
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
-				attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
-				ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
-					attr.GetAcceptedRequest(),
-					enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
-				).Return(&historypb.HistoryEvent{}, nil)
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
-				if !tc.isReset {
-					attr := event.GetWorkflowExecutionCancelRequestedEventAttributes()
-					ms.EXPECT().IsCancelRequested().Return(false)
-					ms.EXPECT().AddWorkflowExecutionCancelRequestedEvent(
-						&historyservice.RequestCancelWorkflowExecutionRequest{
-							CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-								Reason:   attr.GetCause(),
-								Identity: attr.GetIdentity(),
-								Links:    event.Links,
-							},
-							ExternalInitiatedEventId:  attr.GetExternalInitiatedEventId(),
-							ExternalWorkflowExecution: attr.GetExternalWorkflowExecution(),
-						},
-					).Return(&historypb.HistoryEvent{}, nil)
+		s.Run(tc.name, func() {
+			smReg := hsm.NewRegistry()
+			s.NoError(workflow.RegisterStateMachine(smReg))
+			root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+			s.NoError(err)
+			ms.EXPECT().HSM().Return(root).AnyTimes()
+
+			for _, event := range events {
+				expected := slices.ContainsFunc(tc.expected, func(e *historypb.HistoryEvent) bool {
+					return e.GetEventId() == event.GetEventId()
+				})
+				if !expected {
+					continue
 				}
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-				if !tc.isReset {
-					ms.EXPECT().GetNextEventID().Return(event.GetEventId() + 1)
-					ms.EXPECT().GetStartedWorkflowTask().Return(nil)
-					attr := event.GetWorkflowExecutionTerminatedEventAttributes()
-					ms.EXPECT().AddWorkflowExecutionTerminatedEvent(
-						event.GetEventId()+1,
-						attr.GetReason(),
-						attr.GetDetails(),
-						attr.GetIdentity(),
-						false,
+				switch event.GetEventType() { // nolint:exhaustive
+				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+					attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+					ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+						attr.GetVersioningOverride(),
+						attr.GetUnsetVersioningOverride(),
+						attr.GetAttachedRequestId(),
+						attr.GetAttachedCompletionCallbacks(),
 						event.Links,
 					).Return(&historypb.HistoryEvent{}, nil)
+				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
+					attr := event.GetWorkflowExecutionSignaledEventAttributes()
+					ms.EXPECT().AddWorkflowExecutionSignaled(
+						attr.GetSignalName(),
+						attr.GetInput(),
+						attr.GetIdentity(),
+						attr.GetHeader(),
+						event.Links,
+					).Return(&historypb.HistoryEvent{}, nil)
+				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
+					attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+					ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
+						attr.GetRequest(),
+						enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
+					).Return(&historypb.HistoryEvent{}, nil)
+				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
+					attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+					ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
+						attr.GetAcceptedRequest(),
+						enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
+					).Return(&historypb.HistoryEvent{}, nil)
+				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+					if !tc.isReset {
+						attr := event.GetWorkflowExecutionCancelRequestedEventAttributes()
+						ms.EXPECT().IsCancelRequested().Return(false)
+						ms.EXPECT().AddWorkflowExecutionCancelRequestedEvent(
+							&historyservice.RequestCancelWorkflowExecutionRequest{
+								CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+									Reason:   attr.GetCause(),
+									Identity: attr.GetIdentity(),
+									Links:    event.Links,
+								},
+								ExternalInitiatedEventId:  attr.GetExternalInitiatedEventId(),
+								ExternalWorkflowExecution: attr.GetExternalWorkflowExecution(),
+							},
+						).Return(&historypb.HistoryEvent{}, nil)
+					}
+				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+					if !tc.isReset {
+						ms.EXPECT().GetNextEventID().Return(event.GetEventId() + 1)
+						ms.EXPECT().GetStartedWorkflowTask().Return(nil)
+						attr := event.GetWorkflowExecutionTerminatedEventAttributes()
+						ms.EXPECT().AddWorkflowExecutionTerminatedEvent(
+							event.GetEventId()+1,
+							attr.GetReason(),
+							attr.GetDetails(),
+							attr.GetIdentity(),
+							false,
+							event.Links,
+						).Return(&historypb.HistoryEvent{}, nil)
+					}
 				}
 			}
-		}
 
-		events = append(events, event8)
-		if !tc.isReset {
-			ms.EXPECT().IsCancelRequested().Return(true)
-		}
+			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "", tc.isReset)
+			s.NoError(err)
 
-		smReg := hsm.NewRegistry()
-		s.NoError(workflow.RegisterStateMachine(smReg))
-		root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
-		s.NoError(err)
-		ms.EXPECT().HSM().Return(root).AnyTimes()
-
-		_, err = reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "", tc.isReset)
-		s.NoError(err)
+			s.Equal(tc.expected, appliedEvents)
+		})
 	}
 }
 
