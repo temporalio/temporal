@@ -40,10 +40,10 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -363,7 +363,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 	task tasks.Task,
 	namespaceEntry *namespace.Namespace,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 ) *manager.VisibilityRequestBase {
 	var (
 		executionInfo    = mutableState.GetExecutionInfo()

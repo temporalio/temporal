@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -66,7 +67,7 @@ type (
 		mockShard           *shard.ContextTest
 		mockNamespaceCache  *namespace.MockRegistry
 		mockClusterMetadata *cluster.MockMetadata
-		mockMutableState    *workflow.MockMutableState
+		mockMutableState    *historyi.MockMutableState
 
 		mockExecutionMgr *persistence.MockExecutionManager
 
@@ -94,7 +95,7 @@ func (s *activityReplicatorStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -1038,9 +1039,9 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 		s.mockShard,
 		persistence.UpdateWorkflowModeBypassCurrent,
 		workflow.Context(nil),
-		workflow.MutableState(nil),
-		workflow.TransactionPolicyPassive,
-		(*workflow.TransactionPolicy)(nil),
+		historyi.MutableState(nil),
+		historyi.TransactionPolicyPassive,
+		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
@@ -1151,9 +1152,9 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 		s.mockShard,
 		persistence.UpdateWorkflowModeBypassCurrent,
 		workflow.Context(nil),
-		workflow.MutableState(nil),
-		workflow.TransactionPolicyPassive,
-		(*workflow.TransactionPolicy)(nil),
+		historyi.MutableState(nil),
+		historyi.TransactionPolicyPassive,
+		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
@@ -1260,9 +1261,9 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 		s.mockShard,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		workflow.Context(nil),
-		workflow.MutableState(nil),
-		workflow.TransactionPolicyPassive,
-		(*workflow.TransactionPolicy)(nil),
+		historyi.MutableState(nil),
+		historyi.TransactionPolicyPassive,
+		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
@@ -1373,9 +1374,9 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 		s.mockShard,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		workflow.Context(nil),
-		workflow.MutableState(nil),
-		workflow.TransactionPolicyPassive,
-		(*workflow.TransactionPolicy)(nil),
+		historyi.MutableState(nil),
+		historyi.TransactionPolicyPassive,
+		(*historyi.TransactionPolicy)(nil),
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(

@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -68,7 +69,7 @@ type (
 		executionMgr      persistence.ExecutionManager
 
 		context      workflow.Context
-		mutableState workflow.MutableState
+		mutableState historyi.MutableState
 		logger       log.Logger
 	}
 )
@@ -78,7 +79,7 @@ var _ BranchMgr = (*BranchMgrImpl)(nil)
 func NewBranchMgr(
 	shard shard.Context,
 	context workflow.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	logger log.Logger,
 ) *BranchMgrImpl {
 

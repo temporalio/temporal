@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -58,7 +59,7 @@ type (
 	Context interface {
 		GetWorkflowKey() definition.WorkflowKey
 
-		LoadMutableState(ctx context.Context, shardContext shard.Context) (MutableState, error)
+		LoadMutableState(ctx context.Context, shardContext shard.Context) (historyi.MutableState, error)
 		LoadExecutionStats(ctx context.Context, shardContext shard.Context) (*persistencespb.ExecutionStats, error)
 		Clear()
 
@@ -87,7 +88,7 @@ type (
 			createMode persistence.CreateWorkflowMode,
 			prevRunID string,
 			prevLastWriteVersion int64,
-			newMutableState MutableState,
+			newMutableState historyi.MutableState,
 			newWorkflow *persistence.WorkflowSnapshot,
 			newWorkflowEvents []*persistence.WorkflowEvents,
 		) error
@@ -95,14 +96,14 @@ type (
 			ctx context.Context,
 			shardContext shard.Context,
 			conflictResolveMode persistence.ConflictResolveWorkflowMode,
-			resetMutableState MutableState,
+			resetMutableState historyi.MutableState,
 			newContext Context,
-			newMutableState MutableState,
+			newMutableState historyi.MutableState,
 			currentContext Context,
-			currentMutableState MutableState,
-			resetWorkflowTransactionPolicy TransactionPolicy,
-			newWorkflowTransactionPolicy *TransactionPolicy,
-			currentTransactionPolicy *TransactionPolicy,
+			currentMutableState historyi.MutableState,
+			resetWorkflowTransactionPolicy historyi.TransactionPolicy,
+			newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+			currentTransactionPolicy *historyi.TransactionPolicy,
 		) error
 		UpdateWorkflowExecutionAsActive(
 			ctx context.Context,
@@ -112,7 +113,7 @@ type (
 			ctx context.Context,
 			shardContext shard.Context,
 			newContext Context,
-			newMutableState MutableState,
+			newMutableState historyi.MutableState,
 		) error
 		UpdateWorkflowExecutionAsPassive(
 			ctx context.Context,
@@ -122,16 +123,16 @@ type (
 			ctx context.Context,
 			shardContext shard.Context,
 			newContext Context,
-			newMutableState MutableState,
+			newMutableState historyi.MutableState,
 		) error
 		UpdateWorkflowExecutionWithNew(
 			ctx context.Context,
 			shardContext shard.Context,
 			updateMode persistence.UpdateWorkflowMode,
 			newContext Context,
-			newMutableState MutableState,
-			updateWorkflowTransactionPolicy TransactionPolicy,
-			newWorkflowTransactionPolicy *TransactionPolicy,
+			newMutableState historyi.MutableState,
+			updateWorkflowTransactionPolicy historyi.TransactionPolicy,
+			newWorkflowTransactionPolicy *historyi.TransactionPolicy,
 		) error
 		// SetWorkflowExecution is an alias to SubmitClosedWorkflowSnapshot with TransactionPolicyPassive.
 		SetWorkflowExecution(
@@ -149,7 +150,7 @@ type (
 		SubmitClosedWorkflowSnapshot(
 			ctx context.Context,
 			shardContext shard.Context,
-			transactionPolicy TransactionPolicy,
+			transactionPolicy historyi.TransactionPolicy,
 		) error
 		// TODO (alex-update): move this from workflow context.
 		UpdateRegistry(ctx context.Context) update.Registry
@@ -165,7 +166,7 @@ type (
 		config          *configs.Config
 
 		lock           locks.PrioritySemaphore
-		MutableState   MutableState
+		MutableState   historyi.MutableState
 		updateRegistry update.Registry
 	}
 )
@@ -249,7 +250,7 @@ func (c *ContextImpl) LoadExecutionStats(ctx context.Context, shardContext shard
 	return c.MutableState.GetExecutionInfo().ExecutionStats, nil
 }
 
-func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext shard.Context) (MutableState, error) {
+func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext shard.Context) (historyi.MutableState, error) {
 	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(c.workflowKey.NamespaceID),
 	)
@@ -328,7 +329,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	createMode persistence.CreateWorkflowMode,
 	prevRunID string,
 	prevLastWriteVersion int64,
-	newMutableState MutableState,
+	newMutableState historyi.MutableState,
 	newWorkflow *persistence.WorkflowSnapshot,
 	newWorkflowEvents []*persistence.WorkflowEvents,
 ) (retError error) {
@@ -374,14 +375,14 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	shardContext shard.Context,
 	conflictResolveMode persistence.ConflictResolveWorkflowMode,
-	resetMutableState MutableState,
+	resetMutableState historyi.MutableState,
 	newContext Context,
-	newMutableState MutableState,
+	newMutableState historyi.MutableState,
 	currentContext Context,
-	currentMutableState MutableState,
-	resetWorkflowTransactionPolicy TransactionPolicy,
-	newWorkflowTransactionPolicy *TransactionPolicy,
-	currentTransactionPolicy *TransactionPolicy,
+	currentMutableState historyi.MutableState,
+	resetWorkflowTransactionPolicy historyi.TransactionPolicy,
+	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+	currentTransactionPolicy *historyi.TransactionPolicy,
 ) (retError error) {
 
 	defer func() {
@@ -512,7 +513,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
-		TransactionPolicyActive,
+		historyi.TransactionPolicyActive,
 		nil,
 	)
 	if err != nil {
@@ -539,7 +540,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsActive(
 	ctx context.Context,
 	shardContext shard.Context,
 	newContext Context,
-	newMutableState MutableState,
+	newMutableState historyi.MutableState,
 ) error {
 
 	return c.UpdateWorkflowExecutionWithNew(
@@ -548,8 +549,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsActive(
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		newContext,
 		newMutableState,
-		TransactionPolicyActive,
-		TransactionPolicyActive.Ptr(),
+		historyi.TransactionPolicyActive,
+		historyi.TransactionPolicyActive.Ptr(),
 	)
 }
 
@@ -564,7 +565,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
-		TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 		nil,
 	)
 }
@@ -573,7 +574,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsPassive(
 	ctx context.Context,
 	shardContext shard.Context,
 	newContext Context,
-	newMutableState MutableState,
+	newMutableState historyi.MutableState,
 ) error {
 
 	return c.UpdateWorkflowExecutionWithNew(
@@ -582,8 +583,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsPassive(
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		newContext,
 		newMutableState,
-		TransactionPolicyPassive,
-		TransactionPolicyPassive.Ptr(),
+		historyi.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive.Ptr(),
 	)
 }
 
@@ -592,9 +593,9 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	shardContext shard.Context,
 	updateMode persistence.UpdateWorkflowMode,
 	newContext Context,
-	newMutableState MutableState,
-	updateWorkflowTransactionPolicy TransactionPolicy,
-	newWorkflowTransactionPolicy *TransactionPolicy,
+	newMutableState historyi.MutableState,
+	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
+	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
 ) (retError error) {
 
 	defer func() {
@@ -691,13 +692,13 @@ func (c *ContextImpl) SetWorkflowExecution(
 	ctx context.Context,
 	shardContext shard.Context,
 ) (retError error) {
-	return c.SubmitClosedWorkflowSnapshot(ctx, shardContext, TransactionPolicyPassive)
+	return c.SubmitClosedWorkflowSnapshot(ctx, shardContext, historyi.TransactionPolicyPassive)
 }
 
 func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 	ctx context.Context,
 	shardContext shard.Context,
-	transactionPolicy TransactionPolicy,
+	transactionPolicy historyi.TransactionPolicy,
 ) (retError error) {
 	defer func() {
 		if retError != nil {
@@ -980,7 +981,7 @@ func (c *ContextImpl) RefreshTasks(
 	if !mutableState.IsWorkflowExecutionRunning() {
 		// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
 		// and we are operating on a closed workflow.
-		return c.SubmitClosedWorkflowSnapshot(ctx, shardContext, TransactionPolicyPassive)
+		return c.SubmitClosedWorkflowSnapshot(ctx, shardContext, historyi.TransactionPolicyPassive)
 	}
 	return c.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
 }
@@ -1190,7 +1191,7 @@ func (c *ContextImpl) CacheSize() int {
 func emitStateTransitionCount(
 	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) {
 	if mutableState == nil {
 		return
@@ -1233,7 +1234,7 @@ func namespaceState(
 }
 
 func MutableStateFailoverVersion(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) *int64 {
 	if mutableState == nil {
 		return nil

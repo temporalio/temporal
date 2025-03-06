@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/events"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -111,12 +112,12 @@ func TestGlobalMutableState(
 }
 
 func TestCloneToProto(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) *persistencespb.WorkflowMutableState {
 	if mutableState.HasBufferedEvents() {
-		_, _, _ = mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+		_, _, _ = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	} else {
-		_, _, _ = mutableState.CloseTransactionAsSnapshot(TransactionPolicyActive)
+		_, _, _ = mutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 	}
 	return mutableState.CloneToProto()
 }

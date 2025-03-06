@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -126,7 +127,7 @@ func (u *Updater) Invoke(
 func (u *Updater) ApplyRequest(
 	ctx context.Context,
 	updateReg update.Registry,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 ) (*api.UpdateWorkflowAction, error) {
 	if u.req.GetRequest().GetFirstExecutionRunId() != "" &&
 		ms.GetExecutionInfo().GetFirstExecutionRunId() != u.req.GetRequest().GetFirstExecutionRunId() {

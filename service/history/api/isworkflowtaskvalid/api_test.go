@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/api"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 )
@@ -45,7 +46,7 @@ type (
 		controller      *gomock.Controller
 		workflowLease   api.WorkflowLease
 		workflowContext *workflow.MockContext
-		mutableState    *workflow.MockMutableState
+		mutableState    *historyi.MockMutableState
 	}
 )
 
@@ -59,7 +60,7 @@ func (s *apiSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.workflowContext = workflow.NewMockContext(s.controller)
-	s.mutableState = workflow.NewMockMutableState(s.controller)
+	s.mutableState = historyi.NewMockMutableState(s.controller)
 	s.workflowLease = api.NewWorkflowLease(
 		s.workflowContext,
 		func(err error) {},
@@ -82,7 +83,7 @@ func (s *apiSuite) TestWorkflowCompleted() {
 func (s *apiSuite) TestWorkflowRunning_WorkflowTaskNotStarted() {
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	workflowTaskScheduleEventID := rand.Int63()
-	s.mutableState.EXPECT().GetWorkflowTaskByID(workflowTaskScheduleEventID).Return(&workflow.WorkflowTaskInfo{
+	s.mutableState.EXPECT().GetWorkflowTaskByID(workflowTaskScheduleEventID).Return(&historyi.WorkflowTaskInfo{
 		ScheduledEventID: workflowTaskScheduleEventID,
 		StartedEventID:   common.EmptyEventID,
 	})
@@ -95,7 +96,7 @@ func (s *apiSuite) TestWorkflowRunning_WorkflowTaskNotStarted() {
 func (s *apiSuite) TestWorkflowRunning_WorkflowTaskStarted() {
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	workflowTaskScheduleEventID := rand.Int63()
-	s.mutableState.EXPECT().GetWorkflowTaskByID(workflowTaskScheduleEventID).Return(&workflow.WorkflowTaskInfo{
+	s.mutableState.EXPECT().GetWorkflowTaskByID(workflowTaskScheduleEventID).Return(&historyi.WorkflowTaskInfo{
 		ScheduledEventID: workflowTaskScheduleEventID,
 		StartedEventID:   workflowTaskScheduleEventID + 10,
 	})

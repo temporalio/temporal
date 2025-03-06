@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -55,7 +56,7 @@ type (
 			baseLastEventVersion int64,
 			incomingFirstEventID int64,
 			incomingFirstEventVersion int64,
-		) (workflow.MutableState, error)
+		) (historyi.MutableState, error)
 	}
 
 	resetterImpl struct {
@@ -109,7 +110,7 @@ func (r *resetterImpl) resetWorkflow(
 	baseLastEventVersion int64,
 	incomingFirstEventID int64,
 	incomingFirstEventVersion int64,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 
 	baseBranchToken, err := r.getBaseBranchToken(
 		ctx,

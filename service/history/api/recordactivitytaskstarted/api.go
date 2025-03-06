@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -106,7 +107,7 @@ func Invoke(
 func recordActivityTaskStarted(
 	ctx context.Context,
 	shardContext shard.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	request *historyservice.RecordActivityTaskStartedRequest,
 	matchingClient matchingservice.MatchingServiceClient,
 ) (*historyservice.RecordActivityTaskStartedResponse, bool, error) {

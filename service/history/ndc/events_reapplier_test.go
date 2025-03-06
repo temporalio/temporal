@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
@@ -122,7 +123,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 	}
 	attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
 
-	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent := historyi.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(msCurrent)
@@ -177,7 +178,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
-	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent := historyi.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(msCurrent)
@@ -228,7 +229,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 		},
 	} {
 
-		msCurrent := workflow.NewMockMutableState(s.controller)
+		msCurrent := historyi.NewMockMutableState(s.controller)
 		msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 		msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 		updateRegistry := update.NewRegistry(msCurrent)
@@ -277,7 +278,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 		}},
 	}
 
-	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent := historyi.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(msCurrent)
@@ -321,7 +322,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	}
 	attr1 := event1.GetWorkflowExecutionSignaledEventAttributes()
 
-	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent := historyi.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(msCurrent)
@@ -368,7 +369,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
-	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent := historyi.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(msCurrent)
@@ -407,7 +408,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Termination(
 			Identity: "test",
 		}},
 	}
-	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent := historyi.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(msCurrent)
@@ -467,7 +468,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_NoPendingWor
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
-	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent := historyi.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().VisitUpdates(gomock.Any()).Return()
 	msCurrent.EXPECT().GetCurrentVersion().Return(int64(0))
 	updateRegistry := update.NewRegistry(msCurrent)

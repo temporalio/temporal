@@ -75,6 +75,7 @@ import (
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -112,7 +113,7 @@ var (
 		Data: []byte("random data"),
 	}
 	testPayloads                 = &commonpb.Payloads{Payloads: []*commonpb.Payload{testPayload}}
-	workflowTaskCompletionLimits = WorkflowTaskCompletionLimits{
+	workflowTaskCompletionLimits = historyi.WorkflowTaskCompletionLimits{
 		MaxResetPoints:              10,
 		MaxSearchAttributeValueSize: 1024,
 	}
@@ -1037,7 +1038,7 @@ func (s *mutableStateSuite) TestChecksum() {
 		{
 			name: "closeTransactionAsSnapshot",
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				snapshot, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyPassive)
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -1048,7 +1049,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			name:                 "closeTransactionAsMutation",
 			enableBufferedEvents: true,
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyPassive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -1571,7 +1572,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		newWorkflowTaskScheduleEvent,
 		newWorkflowTaskStartedEvent,
 	}))
-	_, _, err = s.mutableState.CloseTransactionAsMutation(TransactionPolicyPassive)
+	_, _, err = s.mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyPassive)
 	s.NoError(err)
 
 	return newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent
@@ -1810,7 +1811,7 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	mutation, _, err := s.mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+	mutation, _, err := s.mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.Len(mutation.ExecutionInfo.UpdateInfos, 2,
 		"expected 1 completed update + 1 accepted in mutation")
@@ -1998,7 +1999,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	s.NoError(err)
 
 	mutation, _, err := s.mutableState.CloseTransactionAsMutation(
-		TransactionPolicyActive,
+		historyi.TransactionPolicyActive,
 	)
 	s.NoError(err)
 
@@ -2020,7 +2021,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 		{
 			name: "CloseTransactionAsSnapshot",
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.WorkflowExecutionInfo, error) {
-				snapshot, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2031,7 +2032,7 @@ func (s *mutableStateSuite) TestSpeculativeWorkflowTaskNotPersisted() {
 			name:                 "CloseTransactionAsMutation",
 			enableBufferedEvents: true,
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.WorkflowExecutionInfo, error) {
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2338,7 +2339,7 @@ func (s *mutableStateSuite) TestRolloverAutoResetPointsWithExpiringTime() {
 func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 	namespaceEntry := tests.GlobalNamespaceEntry
 
-	completWorkflowTaskFn := func(ms MutableState) {
+	completWorkflowTaskFn := func(ms historyi.MutableState) {
 		workflowTaskInfo := ms.GetStartedWorkflowTask()
 		_, err := ms.AddWorkflowTaskCompletedEvent(
 			workflowTaskInfo,
@@ -2351,7 +2352,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 	testCases := []struct {
 		name                       string
 		dbStateMutationFn          func(dbState *persistencespb.WorkflowMutableState)
-		txFunc                     func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error)
+		txFunc                     func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error)
 		versionedTransitionUpdated bool
 	}{
 		{
@@ -2359,10 +2360,10 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				completWorkflowTaskFn(ms)
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2375,7 +2376,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				var activityScheduleEventID int64
 				for activityScheduleEventID = range s.mutableState.GetPendingActivityInfos() {
 					break
@@ -2388,7 +2389,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				)
 				s.NoError(err)
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2401,13 +2402,13 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				for _, ai := range ms.GetPendingActivityInfos() {
 					ms.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{})
 					break
 				}
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2420,7 +2421,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				root := ms.HSM()
 				err := hsm.MachineTransition(root, func(*MutableStateImpl) (hsm.TransitionOutput, error) {
 					return hsm.TransitionOutput{}, nil
@@ -2428,7 +2429,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				s.NoError(err)
 				s.True(root.Dirty())
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2441,10 +2442,10 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				completWorkflowTaskFn(ms)
 
-				mutation, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2457,7 +2458,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				_, err := ms.AddWorkflowExecutionSignaledEvent(
 					"signalName",
 					&commonpb.Payloads{},
@@ -2470,7 +2471,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 					return nil, err
 				}
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2483,12 +2484,12 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				ms.GetExecutionInfo().PreviousTransitionHistory = ms.GetExecutionInfo().TransitionHistory
 				ms.GetExecutionInfo().TransitionHistory = nil
 				completWorkflowTaskFn(ms)
 
-				mutation, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2544,7 +2545,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
 	s.NoError(err)
 
-	completWorkflowTaskFn := func(ms MutableState) *historypb.HistoryEvent {
+	completWorkflowTaskFn := func(ms historyi.MutableState) *historypb.HistoryEvent {
 		workflowTaskInfo := ms.GetStartedWorkflowTask()
 		completedEvent, err := ms.AddWorkflowTaskCompletedEvent(
 			workflowTaskInfo,
@@ -2555,7 +2556,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		return completedEvent
 	}
 
-	buildHSMFn := func(ms MutableState) {
+	buildHSMFn := func(ms historyi.MutableState) {
 		hsmRoot := ms.HSM()
 		child1, err := hsmRoot.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
 		s.NoError(err)
@@ -2567,11 +2568,11 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 
 	testCases := []struct {
 		name   string
-		testFn func(ms MutableState)
+		testFn func(ms historyi.MutableState)
 	}{
 		{
 			name: "Activity",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				scheduledEvent, _, err := ms.AddActivityTaskScheduledEvent(
 					completedEvent.GetEventId(),
@@ -2580,7 +2581,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2597,7 +2598,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "UserTimer",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				newTimerID := "new-timer-id"
 				_, _, err := ms.AddTimerStartedEvent(
@@ -2608,7 +2609,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2625,7 +2626,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "ChildExecution",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				initiatedEvent, _, err := ms.AddStartChildWorkflowExecutionInitiatedEvent(
 					completedEvent.GetEventId(),
@@ -2635,7 +2636,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2652,7 +2653,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "RequestCancelExternal",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				initiatedEvent, _, err := ms.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 					completedEvent.GetEventId(),
@@ -2662,7 +2663,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2679,7 +2680,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "SignalExternal",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				initiatedEvent, _, err := ms.AddSignalExternalWorkflowExecutionInitiatedEvent(
 					completedEvent.GetEventId(),
@@ -2694,7 +2695,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2711,10 +2712,10 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "SignalRequestedID",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				ms.AddSignalRequested(uuid.New())
 
-				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2723,7 +2724,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "UpdateInfo",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				updateID := "test-updateId"
 				_, err := ms.AddWorkflowExecutionUpdateAcceptedEvent(
 					updateID,
@@ -2733,7 +2734,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2743,10 +2744,10 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "WorkflowTask/Completed",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completWorkflowTaskFn(ms)
 
-				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				s.Nil(ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition)
@@ -2754,12 +2755,12 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "WorkflowTask/Scheduled",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completWorkflowTaskFn(ms)
 				_, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2768,7 +2769,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "Visibility",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				_, err := ms.AddUpsertWorkflowSearchAttributesEvent(
 					completedEvent.EventId,
@@ -2776,7 +2777,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2785,7 +2786,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "ExecutionState",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completedEvent := completWorkflowTaskFn(ms)
 				_, err := ms.AddCompletedWorkflowEvent(
 					completedEvent.EventId,
@@ -2794,7 +2795,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 				)
 				s.NoError(err)
 
-				_, _, err = ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err = ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2803,11 +2804,11 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "HSM/CloseAsMutation",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completWorkflowTaskFn(ms)
 				buildHSMFn(ms)
 
-				_, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				_, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2824,11 +2825,11 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		},
 		{
 			name: "HSM/CloseAsSnapshot",
-			testFn: func(ms MutableState) {
+			testFn: func(ms historyi.MutableState) {
 				completWorkflowTaskFn(ms)
 				buildHSMFn(ms)
 
-				_, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				_, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 				s.NoError(err)
 
 				currentVersionedTransition := ms.CurrentVersionedTransition()
@@ -2871,12 +2872,12 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition() {
 	namespaceEntry := tests.GlobalNamespaceEntry
 
-	completWorkflowTaskFn := func(ms MutableState) {
+	completWorkflowTaskFn := func(ms historyi.MutableState) {
 		workflowTaskInfo := ms.GetStartedWorkflowTask()
 		_, err := ms.AddWorkflowTaskCompletedEvent(
 			workflowTaskInfo,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{},
-			WorkflowTaskCompletionLimits{
+			historyi.WorkflowTaskCompletionLimits{
 				MaxResetPoints:              10,
 				MaxSearchAttributeValueSize: 1024,
 			},
@@ -2887,17 +2888,17 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 	testCases := []struct {
 		name              string
 		dbStateMutationFn func(dbState *persistencespb.WorkflowMutableState)
-		txFunc            func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error)
+		txFunc            func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error)
 	}{
 		{
 			name: "CloseTransactionAsPassive", // this scenario simulate the case to clear the transition history (non state-based transition happened at passive side)
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				completWorkflowTaskFn(ms)
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyPassive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -2909,10 +2910,10 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				completWorkflowTaskFn(ms)
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2924,7 +2925,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				var activityScheduleEventID int64
 				for activityScheduleEventID = range s.mutableState.GetPendingActivityInfos() {
 					break
@@ -2937,7 +2938,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 				)
 				s.NoError(err)
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2949,13 +2950,13 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				for _, ai := range ms.GetPendingActivityInfos() {
 					ms.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{})
 					break
 				}
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2967,7 +2968,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				root := ms.HSM()
 				err := hsm.MachineTransition(root, func(*MutableStateImpl) (hsm.TransitionOutput, error) {
 					return hsm.TransitionOutput{}, nil
@@ -2975,7 +2976,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 				s.NoError(err)
 				s.True(root.Dirty())
 
-				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -2987,10 +2988,10 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
 				dbState.BufferedEvents = nil
 			},
-			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+			txFunc: func(ms historyi.MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
 				completWorkflowTaskFn(ms)
 
-				mutation, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				mutation, _, err := ms.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 				if err != nil {
 					return nil, err
 				}
@@ -3221,7 +3222,7 @@ func (s *mutableStateSuite) TestGetCloseVersion() {
 	s.NoError(err)
 	_, err = s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
-	_, _, err = s.mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+	_, _, err = s.mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 
 	_, err = s.mutableState.GetCloseVersion()
@@ -3242,7 +3243,7 @@ func (s *mutableStateSuite) TestGetCloseVersion() {
 	s.NoError(err)
 	s.Equal(expectedVersion, closeVersion)
 
-	_, _, err = s.mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+	_, _, err = s.mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 
 	// get close version after workflow is closed
@@ -3341,7 +3342,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_HistoryT
 					return
 				}
 				ms.InsertTasks[tasks.CategoryReplication] = []tasks.Task{}
-				err := ms.closeTransactionPrepareReplicationTasks(TransactionPolicyActive, eventBatches, false)
+				err := ms.closeTransactionPrepareReplicationTasks(historyi.TransactionPolicyActive, eventBatches, false)
 				if err != nil {
 					s.Fail("closeTransactionPrepareReplicationTasks failed", err)
 				}
@@ -3409,7 +3410,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVers
 		},
 	}
 	ms.executionInfo.TransitionHistory = transitionHistory
-	err := ms.closeTransactionPrepareReplicationTasks(TransactionPolicyActive, eventBatches, false)
+	err := ms.closeTransactionPrepareReplicationTasks(historyi.TransactionPolicyActive, eventBatches, false)
 	s.NoError(err)
 	replicationTasks := ms.InsertTasks[tasks.CategoryReplication]
 	s.Equal(1, len(replicationTasks))
@@ -3492,7 +3493,7 @@ func (s *mutableStateSuite) TestMaxAllowedTimer() {
 			)
 			s.NoError(err)
 
-			snapshot, _, err := s.mutableState.CloseTransactionAsSnapshot(TransactionPolicyActive)
+			snapshot, _, err := s.mutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyActive)
 			s.NoError(err)
 
 			timerTasks := snapshot.Tasks[tasks.CategoryTimer]
@@ -3605,7 +3606,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMT
 					}
 				}
 				s.mutableState.transitionHistoryEnabled = false
-				err := s.mutableState.closeTransactionPrepareReplicationTasks(TransactionPolicyActive, tc.eventBatches, tc.clearBufferEvents)
+				err := s.mutableState.closeTransactionPrepareReplicationTasks(historyi.TransactionPolicyActive, tc.eventBatches, tc.clearBufferEvents)
 				s.NoError(err)
 
 				repicationTasks := s.mutableState.PopTasks()[tasks.CategoryReplication]
@@ -3673,7 +3674,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncActi
 
 			ms.UpdateActivityProgress(ms.pendingActivityInfoIDs[100], &workflowservice.RecordActivityTaskHeartbeatRequest{})
 
-			repicationTasks := ms.syncActivityToReplicationTask(TransactionPolicyActive)
+			repicationTasks := ms.syncActivityToReplicationTask(historyi.TransactionPolicyActive)
 			s.Len(repicationTasks, len(tc.expectedReplicationTask))
 			sort.Slice(repicationTasks, func(i, j int) bool {
 				return repicationTasks[i].(*tasks.SyncActivityTask).ScheduledEventID < repicationTasks[j].(*tasks.SyncActivityTask).ScheduledEventID
@@ -3716,11 +3717,11 @@ func (s *mutableStateSuite) TestVersionedTransitionInDB() {
 func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 	testCases := []struct {
 		name        string
-		tombstoneFn func(ms MutableState) (*persistencespb.StateMachineTombstone, error)
+		tombstoneFn func(ms historyi.MutableState) (*persistencespb.StateMachineTombstone, error)
 	}{
 		{
 			name: "Activity",
-			tombstoneFn: func(mutableState MutableState) (*persistencespb.StateMachineTombstone, error) {
+			tombstoneFn: func(mutableState historyi.MutableState) (*persistencespb.StateMachineTombstone, error) {
 				var activityScheduleEventID int64
 				for activityScheduleEventID = range mutableState.GetPendingActivityInfos() {
 					break
@@ -3740,7 +3741,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 		},
 		{
 			name: "UserTimer",
-			tombstoneFn: func(mutableState MutableState) (*persistencespb.StateMachineTombstone, error) {
+			tombstoneFn: func(mutableState historyi.MutableState) (*persistencespb.StateMachineTombstone, error) {
 				var timerID string
 				for timerID = range mutableState.GetPendingTimerInfos() {
 					break
@@ -3755,7 +3756,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 		},
 		{
 			name: "ChildWorkflow",
-			tombstoneFn: func(mutableState MutableState) (*persistencespb.StateMachineTombstone, error) {
+			tombstoneFn: func(mutableState historyi.MutableState) (*persistencespb.StateMachineTombstone, error) {
 				var initiatedEventId int64
 				var ci *persistencespb.ChildExecutionInfo
 				for initiatedEventId, ci = range mutableState.GetPendingChildExecutionInfos() {
@@ -3789,7 +3790,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 		},
 		{
 			name: "RequestCancelExternal",
-			tombstoneFn: func(mutableState MutableState) (*persistencespb.StateMachineTombstone, error) {
+			tombstoneFn: func(mutableState historyi.MutableState) (*persistencespb.StateMachineTombstone, error) {
 				var initiatedEventId int64
 				for initiatedEventId = range mutableState.GetPendingRequestCancelExternalInfos() {
 					break
@@ -3811,7 +3812,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 		},
 		{
 			name: "SignalExternal",
-			tombstoneFn: func(mutableState MutableState) (*persistencespb.StateMachineTombstone, error) {
+			tombstoneFn: func(mutableState historyi.MutableState) (*persistencespb.StateMachineTombstone, error) {
 				var initiatedEventId int64
 				for initiatedEventId = range mutableState.GetPendingSignalExternalInfos() {
 					break
@@ -3851,7 +3852,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 			expectedTombstone, err := tc.tombstoneFn(mutableState)
 			s.NoError(err)
 
-			_, _, err = mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+			_, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 			s.NoError(err)
 
 			tombstoneBatches := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
@@ -3919,7 +3920,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_CapIfLargerThanL
 		s.NoError(err)
 	}
 
-	_, _, err = mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+	_, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 
 	tombstoneBatches := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
@@ -3947,7 +3948,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEm
 	_, err = mutableState.StartTransaction(s.namespaceEntry)
 	s.NoError(err)
 
-	_, _, err = mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+	_, _, err = mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.NoError(err)
 
 	tombstoneBatches := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
@@ -4373,7 +4374,7 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
 	targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
 	targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
-	targetMS.closeTransactionTrackLastUpdateVersionedTransition(TransactionPolicyActive)
+	targetMS.closeTransactionTrackLastUpdateVersionedTransition(historyi.TransactionPolicyActive)
 
 	snapshot := s.buildSnapshot(targetMS)
 	err = currentMS.ApplySnapshot(snapshot)
@@ -4445,7 +4446,7 @@ func (s *mutableStateSuite) TestApplyMutation() {
 	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
 	targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
 	targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
-	targetMS.closeTransactionTrackLastUpdateVersionedTransition(TransactionPolicyActive)
+	targetMS.closeTransactionTrackLastUpdateVersionedTransition(historyi.TransactionPolicyActive)
 
 	tombstonesToAdd := []*persistencespb.StateMachineTombstoneBatch{
 		{

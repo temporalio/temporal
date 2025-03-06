@@ -33,14 +33,14 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func ValidateSignal(
 	ctx context.Context,
 	shard shard.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	signalPayloadSize int,
 	operation string,
 ) error {

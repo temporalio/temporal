@@ -476,7 +476,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend()
 		RunId:      s.runID,
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -557,7 +557,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_SyncHSM(
 		RunId:      s.runID,
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -667,7 +667,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		},
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -756,7 +756,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		},
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -842,7 +842,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		},
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -934,7 +934,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 		},
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -1039,7 +1039,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	s.NoError(err)
 	tailBlobs, err := serializer.SerializeEvents(tailEvents, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: localVersionHistoryies,
 		TransitionHistory: []*persistencespb.VersionedTransition{
@@ -1186,7 +1186,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 		},
 	}
 
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      namespaceID,
 		WorkflowId:       s.workflowID,

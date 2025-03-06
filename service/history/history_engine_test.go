@@ -83,6 +83,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -752,7 +753,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 		buffered := qr.GetBufferedIDs()
 		for _, id := range buffered {
 			resultType := enumspb.QUERY_RESULT_TYPE_ANSWERED
-			succeededCompletionState := &workflow.QueryCompletionState{
+			succeededCompletionState := &historyi.QueryCompletionState{
 				Type: workflow.QueryCompletionTypeSucceeded,
 				Result: &querypb.WorkflowQueryResult{
 					ResultType: resultType,
@@ -823,7 +824,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 		qr := ms1.GetQueryRegistry()
 		buffered := qr.GetBufferedIDs()
 		for _, id := range buffered {
-			s.NoError(qr.SetCompletionState(id, &workflow.QueryCompletionState{Type: workflow.QueryCompletionTypeUnblocked}))
+			s.NoError(qr.SetCompletionState(id, &historyi.QueryCompletionState{Type: workflow.QueryCompletionTypeUnblocked}))
 			state, err := qr.GetCompletionState(id)
 			s.NoError(err)
 			s.Equal(workflow.QueryCompletionTypeUnblocked, state.Type)
@@ -3256,7 +3257,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
-	failure := failure.NewServerFailure("fail reason", true)
+	serverFailure := failure.NewServerFailure("fail reason", true)
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
 		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
@@ -3266,7 +3267,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(ms, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
 	activityStartedEvent := addActivityTaskStartedEvent(ms, activityScheduledEvent.EventId, identity)
-	addActivityTaskFailedEvent(ms, activityScheduledEvent.EventId, activityStartedEvent.EventId, failure, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, identity)
+	addActivityTaskFailedEvent(ms, activityScheduledEvent.EventId, activityStartedEvent.EventId, serverFailure, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, identity)
 	addWorkflowTaskScheduledEvent(ms)
 
 	wfMs := workflow.TestCloneToProto(ms)
@@ -3278,7 +3279,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 		NamespaceId: tests.NamespaceID.String(),
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
-			Failure:   failure,
+			Failure:   serverFailure,
 			Identity:  identity,
 		},
 	})
@@ -3394,7 +3395,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
-	failure := failure.NewServerFailure("failed", false)
+	serverFailure := failure.NewServerFailure("failed", false)
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
 		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
@@ -3415,7 +3416,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 		NamespaceId: tests.NamespaceID.String(),
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
-			Failure:   failure,
+			Failure:   serverFailure,
 			Identity:  identity,
 		},
 	})
@@ -3452,7 +3453,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedWithHeartbeatSuccess() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
-	failure := failure.NewServerFailure("failed", false)
+	serverFailure := failure.NewServerFailure("failed", false)
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache,
 		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
@@ -3478,7 +3479,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedWithHeartbeatSuccess() {
 		NamespaceId: tests.NamespaceID.String(),
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken:            taskToken,
-			Failure:              failure,
+			Failure:              serverFailure,
 			Identity:             identity,
 			LastHeartbeatDetails: details,
 		},
@@ -3511,7 +3512,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
-	failure := failure.NewServerFailure("failed", false)
+	serverFailure := failure.NewServerFailure("failed", false)
 	tt := &tokenspb.Task{
 		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
@@ -3542,7 +3543,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 		NamespaceId: tests.NamespaceID.String(),
 		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
 			TaskToken: taskToken,
-			Failure:   failure,
+			Failure:   serverFailure,
 			Identity:  identity,
 		},
 	})
@@ -4846,7 +4847,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 	wt2 := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt2.ScheduledEventID, tl, identity)
 	addTimerFiredEvent(ms, timerID)
-	_, _, err := ms.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
+	_, _, err := ms.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 	s.Nil(err)
 
 	wfMs := workflow.TestCloneToProto(ms)
@@ -6369,7 +6370,7 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonC
 	s.NoError(err)
 }
 
-func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we *commonpb.WorkflowExecution) workflow.MutableState {
+func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we *commonpb.WorkflowExecution) historyi.MutableState {
 	context, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
@@ -6386,14 +6387,14 @@ func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we *commonpb
 }
 
 func (s *engineSuite) getActivityScheduledEvent(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	scheduledEventID int64,
 ) *historypb.HistoryEvent {
 	event, _ := ms.GetActivityScheduledEvent(context.Background(), scheduledEventID)
 	return event
 }
 
-func addWorkflowExecutionStartedEventWithParent(ms workflow.MutableState, workflowExecution *commonpb.WorkflowExecution,
+func addWorkflowExecutionStartedEventWithParent(ms historyi.MutableState, workflowExecution *commonpb.WorkflowExecution,
 	workflowType, taskQueue string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout time.Duration,
 	parentInfo *workflowspb.ParentExecutionInfo, identity string) *historypb.HistoryEvent {
 
@@ -6421,24 +6422,24 @@ func addWorkflowExecutionStartedEventWithParent(ms workflow.MutableState, workfl
 	return event
 }
 
-func addWorkflowExecutionStartedEvent(ms workflow.MutableState, workflowExecution *commonpb.WorkflowExecution,
+func addWorkflowExecutionStartedEvent(ms historyi.MutableState, workflowExecution *commonpb.WorkflowExecution,
 	workflowType, taskQueue string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout time.Duration,
 	identity string) *historypb.HistoryEvent {
 	return addWorkflowExecutionStartedEventWithParent(ms, workflowExecution, workflowType, taskQueue, input,
 		executionTimeout, runTimeout, taskTimeout, nil, identity)
 }
 
-func addWorkflowTaskScheduledEvent(ms workflow.MutableState) *workflow.WorkflowTaskInfo {
+func addWorkflowTaskScheduledEvent(ms historyi.MutableState) *historyi.WorkflowTaskInfo {
 	workflowTask, _ := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	return workflowTask
 }
 
-func addWorkflowTaskStartedEvent(ms workflow.MutableState, scheduledEventID int64, taskQueue,
+func addWorkflowTaskStartedEvent(ms historyi.MutableState, scheduledEventID int64, taskQueue,
 	identity string) *historypb.HistoryEvent {
 	return addWorkflowTaskStartedEventWithRequestID(ms, scheduledEventID, tests.RunID, taskQueue, identity)
 }
 
-func addWorkflowTaskStartedEventWithRequestID(ms workflow.MutableState, scheduledEventID int64, requestID string,
+func addWorkflowTaskStartedEventWithRequestID(ms historyi.MutableState, scheduledEventID int64, requestID string,
 	taskQueue, identity string) *historypb.HistoryEvent {
 	event, _, _ := ms.AddWorkflowTaskStartedEvent(
 		scheduledEventID,
@@ -6454,7 +6455,7 @@ func addWorkflowTaskStartedEventWithRequestID(ms workflow.MutableState, schedule
 	return event
 }
 
-func addWorkflowTaskCompletedEvent(s *suite.Suite, ms workflow.MutableState, scheduledEventID, startedEventID int64, identity string) *historypb.HistoryEvent {
+func addWorkflowTaskCompletedEvent(s *suite.Suite, ms historyi.MutableState, scheduledEventID, startedEventID int64, identity string) *historypb.HistoryEvent {
 	workflowTask := ms.GetWorkflowTaskByID(scheduledEventID)
 	s.NotNil(workflowTask)
 	s.Equal(startedEventID, workflowTask.StartedEventID)
@@ -6469,7 +6470,7 @@ func addWorkflowTaskCompletedEvent(s *suite.Suite, ms workflow.MutableState, sch
 }
 
 func addActivityTaskScheduledEvent(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	workflowTaskCompletedID int64,
 	activityID, activityType,
 	taskQueue string,
@@ -6496,7 +6497,7 @@ func addActivityTaskScheduledEvent(
 }
 
 func addActivityTaskScheduledEventWithRetry(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	workflowTaskCompletedID int64,
 	activityID, activityType,
 	taskQueue string,
@@ -6523,7 +6524,7 @@ func addActivityTaskScheduledEventWithRetry(
 	return event, ai
 }
 
-func addActivityTaskStartedEvent(ms workflow.MutableState, scheduledEventID int64, identity string) *historypb.HistoryEvent {
+func addActivityTaskStartedEvent(ms historyi.MutableState, scheduledEventID int64, identity string) *historypb.HistoryEvent {
 	ai, _ := ms.GetActivityInfo(scheduledEventID)
 	event, _ := ms.AddActivityTaskStartedEvent(
 		ai,
@@ -6537,7 +6538,7 @@ func addActivityTaskStartedEvent(ms workflow.MutableState, scheduledEventID int6
 	return event
 }
 
-func addActivityTaskCompletedEvent(ms workflow.MutableState, scheduledEventID, startedEventID int64, result *commonpb.Payloads,
+func addActivityTaskCompletedEvent(ms historyi.MutableState, scheduledEventID, startedEventID int64, result *commonpb.Payloads,
 	identity string) *historypb.HistoryEvent {
 	event, _ := ms.AddActivityTaskCompletedEvent(scheduledEventID, startedEventID, &workflowservice.RespondActivityTaskCompletedRequest{
 		Result:   result,
@@ -6547,12 +6548,12 @@ func addActivityTaskCompletedEvent(ms workflow.MutableState, scheduledEventID, s
 	return event
 }
 
-func addActivityTaskFailedEvent(ms workflow.MutableState, scheduledEventID, startedEventID int64, failure *failurepb.Failure, retryState enumspb.RetryState, identity string) *historypb.HistoryEvent {
+func addActivityTaskFailedEvent(ms historyi.MutableState, scheduledEventID, startedEventID int64, failure *failurepb.Failure, retryState enumspb.RetryState, identity string) *historypb.HistoryEvent {
 	event, _ := ms.AddActivityTaskFailedEvent(scheduledEventID, startedEventID, failure, retryState, identity, nil)
 	return event
 }
 
-func addTimerStartedEvent(ms workflow.MutableState, workflowTaskCompletedEventID int64, timerID string,
+func addTimerStartedEvent(ms historyi.MutableState, workflowTaskCompletedEventID int64, timerID string,
 	timeout time.Duration) (*historypb.HistoryEvent, *persistencespb.TimerInfo) {
 	event, ti, _ := ms.AddTimerStartedEvent(workflowTaskCompletedEventID,
 		&commandpb.StartTimerCommandAttributes{
@@ -6562,12 +6563,12 @@ func addTimerStartedEvent(ms workflow.MutableState, workflowTaskCompletedEventID
 	return event, ti
 }
 
-func addTimerFiredEvent(ms workflow.MutableState, timerID string) *historypb.HistoryEvent {
+func addTimerFiredEvent(ms historyi.MutableState, timerID string) *historypb.HistoryEvent {
 	event, _ := ms.AddTimerFiredEvent(timerID)
 	return event
 }
 
-func addRequestCancelInitiatedEvent(ms workflow.MutableState, workflowTaskCompletedEventID int64,
+func addRequestCancelInitiatedEvent(ms historyi.MutableState, workflowTaskCompletedEventID int64,
 	cancelRequestID string, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo) {
 	event, rci, _ := ms.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID,
 		cancelRequestID, &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
@@ -6581,12 +6582,12 @@ func addRequestCancelInitiatedEvent(ms workflow.MutableState, workflowTaskComple
 	return event, rci
 }
 
-func addCancelRequestedEvent(ms workflow.MutableState, initiatedID int64, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string) *historypb.HistoryEvent {
+func addCancelRequestedEvent(ms historyi.MutableState, initiatedID int64, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string) *historypb.HistoryEvent {
 	event, _ := ms.AddExternalWorkflowExecutionCancelRequested(initiatedID, namespace, namespaceID, workflowID, runID)
 	return event
 }
 
-func addRequestSignalInitiatedEvent(ms workflow.MutableState, workflowTaskCompletedEventID int64,
+func addRequestSignalInitiatedEvent(ms historyi.MutableState, workflowTaskCompletedEventID int64,
 	signalRequestID string, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID, signalName string, input *commonpb.Payloads,
 	control string, header *commonpb.Header) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
 	event, si, _ := ms.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, signalRequestID,
@@ -6605,13 +6606,13 @@ func addRequestSignalInitiatedEvent(ms workflow.MutableState, workflowTaskComple
 	return event, si
 }
 
-func addSignaledEvent(ms workflow.MutableState, initiatedID int64, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string, control string) *historypb.HistoryEvent {
+func addSignaledEvent(ms historyi.MutableState, initiatedID int64, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string, control string) *historypb.HistoryEvent {
 	event, _ := ms.AddExternalWorkflowExecutionSignaled(initiatedID, namespace, namespaceID, workflowID, runID, control)
 	return event
 }
 
 func addStartChildWorkflowExecutionInitiatedEvent(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	workflowTaskCompletedID int64,
 	createRequestID string,
 	namespace namespace.Name,
@@ -6638,7 +6639,7 @@ func addStartChildWorkflowExecutionInitiatedEvent(
 	return event, cei
 }
 
-func addChildWorkflowExecutionStartedEvent(ms workflow.MutableState, initiatedID int64, workflowID, runID string,
+func addChildWorkflowExecutionStartedEvent(ms historyi.MutableState, initiatedID int64, workflowID, runID string,
 	workflowType string, clock *clockspb.VectorClock) *historypb.HistoryEvent {
 	event, _ := ms.AddChildWorkflowExecutionStartedEvent(
 		&commonpb.WorkflowExecution{
@@ -6653,13 +6654,13 @@ func addChildWorkflowExecutionStartedEvent(ms workflow.MutableState, initiatedID
 	return event
 }
 
-func addChildWorkflowExecutionCompletedEvent(ms workflow.MutableState, initiatedID int64, childExecution *commonpb.WorkflowExecution,
+func addChildWorkflowExecutionCompletedEvent(ms historyi.MutableState, initiatedID int64, childExecution *commonpb.WorkflowExecution,
 	attributes *historypb.WorkflowExecutionCompletedEventAttributes) *historypb.HistoryEvent {
 	event, _ := ms.AddChildWorkflowExecutionCompletedEvent(initiatedID, childExecution, attributes)
 	return event
 }
 
-func addCompleteWorkflowEvent(ms workflow.MutableState, workflowTaskCompletedEventID int64,
+func addCompleteWorkflowEvent(ms historyi.MutableState, workflowTaskCompletedEventID int64,
 	result *commonpb.Payloads) *historypb.HistoryEvent {
 	event, _ := ms.AddCompletedWorkflowEvent(
 		workflowTaskCompletedEventID,
@@ -6671,7 +6672,7 @@ func addCompleteWorkflowEvent(ms workflow.MutableState, workflowTaskCompletedEve
 }
 
 func addFailWorkflowEvent(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	workflowTaskCompletedEventID int64,
 	failure *failurepb.Failure,
 	retryState enumspb.RetryState,

@@ -133,7 +133,7 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 		return workflowContext.SubmitClosedWorkflowSnapshot(
 			ctx,
 			r.shardContext,
-			workflow.TransactionPolicyPassive,
+			historyi.TransactionPolicyPassive,
 		)
 	}
 
@@ -148,13 +148,13 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow
-		workflow.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 		nil,
 	)
 }
 
 func (r *HSMStateReplicatorImpl) syncHSMNode(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	request *historyi.SyncHSMRequest,
 ) (bool, error) {
 
@@ -233,7 +233,7 @@ func (r *HSMStateReplicatorImpl) shouldSyncNode(
 }
 
 func (r *HSMStateReplicatorImpl) compareVersionHistory(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	incomingVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(

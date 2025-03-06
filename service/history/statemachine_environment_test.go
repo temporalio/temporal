@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -279,7 +280,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			t.Parallel()
 			s := newStateMachineEnvTestContext(t, tc.enableTransitionHistory)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
-			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
+			snapshot, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 			require.NoError(t, err)
 			task := snapshot.Tasks[tasks.CategoryOutbound][0]
 			exec := stateMachineEnvironment{
@@ -394,7 +395,7 @@ func TestAccess(t *testing.T) {
 			s := newStateMachineEnvTestContext(t, true)
 			mutableState := s.prepareMutableStateWithTriggeredNexusCompletionCallback()
 			mutableState.GetExecutionState().State = tc.workflowState
-			snapshot, _, err := mutableState.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
+			snapshot, _, err := mutableState.CloseTransactionAsMutation(historyi.TransactionPolicyActive)
 			require.NoError(t, err)
 			persistenceMutableState := workflow.TestCloneToProto(mutableState)
 			em := s.mockShard.GetExecutionManager().(*persistence.MockExecutionManager)
@@ -511,7 +512,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 				tests.NewDynamicConfig(),
 			)
 
-			mockMutableState := workflow.NewMockMutableState(controller)
+			mockMutableState := historyi.NewMockMutableState(controller)
 			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(tc.currentRunRunning).Times(1)
 
 			mockWorkflowContext := workflow.NewMockContext(controller)

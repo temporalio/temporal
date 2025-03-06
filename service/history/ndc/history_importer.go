@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -90,27 +91,27 @@ func NewHistoryImporter(
 			shardContext,
 			func(
 				wfContext workflow.Context,
-				mutableState workflow.MutableState,
+				mutableState historyi.MutableState,
 				logger log.Logger,
 			) BufferEventFlusher {
 				return NewBufferEventFlusher(shardContext, wfContext, mutableState, logger)
 			},
 			func(
 				wfContext workflow.Context,
-				mutableState workflow.MutableState,
+				mutableState historyi.MutableState,
 				logger log.Logger,
 			) BranchMgr {
 				return NewBranchMgr(shardContext, wfContext, mutableState, logger)
 			},
 			func(
 				wfContext workflow.Context,
-				mutableState workflow.MutableState,
+				mutableState historyi.MutableState,
 				logger log.Logger,
 			) ConflictResolver {
 				return NewConflictResolver(shardContext, wfContext, mutableState, logger)
 			},
 			func(
-				state workflow.MutableState,
+				state historyi.MutableState,
 				logger log.Logger,
 			) workflow.MutableStateRebuilder {
 				return workflow.NewMutableStateRebuilder(
@@ -142,7 +143,7 @@ func (r *HistoryImporterImpl) ImportWorkflow(
 	defer func() {
 		// it is ok to clear everytime this function is invoked
 		// mutable state will be at most initialized once from shard mutable state cache
-		// mutable state will be usually initialized from input token
+		// mutable state will usually be initialized from input token
 		ndcWorkflow.GetContext().Clear()
 		ndcWorkflow.GetReleaseFn()(retError)
 	}()
@@ -222,7 +223,7 @@ func (r *HistoryImporterImpl) applyEvents(
 func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 	ctx context.Context,
 	wfContext workflow.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 	task replicationTask,
 ) ([]byte, bool, error) {
@@ -248,7 +249,7 @@ func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 func (r *HistoryImporterImpl) applyNonStartEventsAndSerialize(
 	ctx context.Context,
 	wfContext workflow.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 	task replicationTask,
 	createNewBranch bool,
@@ -300,11 +301,11 @@ func (r *HistoryImporterImpl) applyNonStartEventsAndSerialize(
 
 func (r *HistoryImporterImpl) persistHistoryAndSerializeMutableState(
 	ctx context.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 ) ([]byte, error) {
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return nil, err

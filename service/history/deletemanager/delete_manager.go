@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -49,14 +50,14 @@ type (
 			ctx context.Context,
 			nsID namespace.ID,
 			we *commonpb.WorkflowExecution,
-			ms workflow.MutableState,
+			ms historyi.MutableState,
 		) error
 		DeleteWorkflowExecution(
 			ctx context.Context,
 			nsID namespace.ID,
 			we *commonpb.WorkflowExecution,
 			weCtx workflow.Context,
-			ms workflow.MutableState,
+			ms historyi.MutableState,
 			forceDeleteFromOpenVisibility bool,
 			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
@@ -65,7 +66,7 @@ type (
 			nsID namespace.ID,
 			we *commonpb.WorkflowExecution,
 			weCtx workflow.Context,
-			ms workflow.MutableState,
+			ms historyi.MutableState,
 			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
 	}
@@ -105,7 +106,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ctx context.Context,
 	nsID namespace.ID,
 	we *commonpb.WorkflowExecution,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 ) error {
 
 	taskGenerator := workflow.GetTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
@@ -133,7 +134,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	nsID namespace.ID,
 	we *commonpb.WorkflowExecution,
 	weCtx workflow.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	forceDeleteFromOpenVisibility bool,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
@@ -146,7 +147,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	nsID namespace.ID,
 	we *commonpb.WorkflowExecution,
 	weCtx workflow.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
@@ -158,7 +159,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	namespaceID namespace.ID,
 	we *commonpb.WorkflowExecution,
 	weCtx workflow.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	forceDeleteFromOpenVisibility bool, //revive:disable-line:flag-parameter
 	stage *tasks.DeleteWorkflowExecutionStage,
 	metricsHandler metrics.Handler,

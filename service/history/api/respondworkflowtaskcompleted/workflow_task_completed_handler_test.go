@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -64,7 +65,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 	t.Parallel()
 
 	type testconf struct {
-		ms      *workflow.MockMutableState
+		ms      *historyi.MockMutableState
 		updates update.Registry
 		handler *workflowTaskCompletedHandler
 	}
@@ -86,7 +87,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		shardCtx := shard.NewMockContext(gomock.NewController(t))
 		logger := log.NewNoopLogger()
 		metricsHandler := metrics.NoopMetricsHandler
-		out.ms = workflow.NewMockMutableState(gomock.NewController(t))
+		out.ms = historyi.NewMockMutableState(gomock.NewController(t))
 		out.ms.EXPECT().VisitUpdates(gomock.Any())
 		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion())

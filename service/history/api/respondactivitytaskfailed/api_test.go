@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -70,7 +71,7 @@ type (
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 
 		workflowContext     *workflow.MockContext
-		currentMutableState *workflow.MockMutableState
+		currentMutableState *historyi.MockMutableState
 
 		activityInfo *persistencespb.ActivityInfo
 	}
@@ -429,7 +430,7 @@ func (s *workflowSuite) newRespondActivityTaskFailedRequest(uc UsecaseConfig) *h
 	return request
 }
 
-func (s *workflowSuite) setupWorkflowContext(mutableState *workflow.MockMutableState) *workflow.MockContext {
+func (s *workflowSuite) setupWorkflowContext(mutableState *historyi.MockMutableState) *workflow.MockContext {
 	workflowContext := workflow.NewMockContext(s.controller)
 	workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(mutableState, nil).AnyTimes()
 	return workflowContext
@@ -515,8 +516,8 @@ func (s *workflowSuite) setupNamespaceRegistry(uc UsecaseConfig) *namespace.Mock
 	return namespaceRegistry
 }
 
-func (s *workflowSuite) setupMutableState(uc UsecaseConfig, ai *persistencespb.ActivityInfo) *workflow.MockMutableState {
-	currentMutableState := workflow.NewMockMutableState(s.controller)
+func (s *workflowSuite) setupMutableState(uc UsecaseConfig, ai *persistencespb.ActivityInfo) *historyi.MockMutableState {
+	currentMutableState := historyi.NewMockMutableState(s.controller)
 	currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: tests.WorkflowID,

@@ -476,7 +476,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {
 		return results
 	}
 
-	constructQueryRegistry := func(numQueries int) workflow.QueryRegistry {
+	constructQueryRegistry := func(numQueries int) historyi.QueryRegistry {
 		queryRegistry := workflow.NewQueryRegistry()
 		for i := 0; i < numQueries; i++ {
 			queryRegistry.BufferQuery(&querypb.WorkflowQuery{})
@@ -484,16 +484,16 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {
 		return queryRegistry
 	}
 
-	assertQueryCounts := func(queryRegistry workflow.QueryRegistry, buffered, completed, unblocked, failed int) {
+	assertQueryCounts := func(queryRegistry historyi.QueryRegistry, buffered, completed, unblocked, failed int) {
 		s.Len(queryRegistry.GetBufferedIDs(), buffered)
 		s.Len(queryRegistry.GetCompletedIDs(), completed)
 		s.Len(queryRegistry.GetUnblockedIDs(), unblocked)
 		s.Len(queryRegistry.GetFailedIDs(), failed)
 	}
 
-	setupBufferedQueriesMocks := func() (workflow.QueryRegistry, *workflow.MockMutableState) {
+	setupBufferedQueriesMocks := func() (historyi.QueryRegistry, *historyi.MockMutableState) {
 		queryRegistry := constructQueryRegistry(10)
-		mockMutableState := workflow.NewMockMutableState(s.controller)
+		mockMutableState := historyi.NewMockMutableState(s.controller)
 		mockMutableState.EXPECT().GetQueryRegistry().Return(queryRegistry)
 		mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 			WorkflowId: tests.WorkflowID,

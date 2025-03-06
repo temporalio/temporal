@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -222,7 +223,7 @@ func startAndSignalWithCurrentWorkflow(
 		ctx,
 		currentWorkflowLease,
 		currentWorkflowUpdateAction,
-		func() (workflow.Context, workflow.MutableState, error) {
+		func() (workflow.Context, historyi.MutableState, error) {
 			return newWorkflowLease.GetContext(), newWorkflowLease.GetMutableState(), nil
 		},
 	)
@@ -241,7 +242,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	requestID string,
 ) (string, bool, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyActive,
+		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
 		return "", false, err

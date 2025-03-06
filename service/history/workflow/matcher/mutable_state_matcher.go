@@ -23,7 +23,7 @@
 package matcher
 
 import (
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 /*
@@ -52,7 +52,7 @@ Different fields can support different operators:
 
 Returns true if the query matches the mutable state, false otherwise, or error if the query is invalid.
 */
-func MatchMutableState(ms workflow.MutableState, query string) (bool, error) {
+func MatchMutableState(ms historyi.MutableState, query string) (bool, error) {
 	evaluator := newMutableStateMatchEvaluator(ms)
 	return evaluator.Evaluate(query)
 }

@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -172,7 +173,7 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 }
 
 func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	task tasks.Task,
 	expirationTime *timestamppb.Timestamp,
 ) bool {
@@ -188,7 +189,7 @@ func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 }
 
 func (t *timerQueueTaskExecutorBase) isValidWorkflowRunTimeoutTask(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	task *tasks.WorkflowRunTimeoutTask,
 ) bool {
 	executionInfo := mutableState.GetExecutionInfo()
@@ -199,7 +200,7 @@ func (t *timerQueueTaskExecutorBase) isValidWorkflowRunTimeoutTask(
 }
 
 func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	task *tasks.WorkflowExecutionTimeoutTask,
 ) bool {
 
@@ -218,13 +219,13 @@ func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
 	// and the start version in the first run. However, failover & conflict resolution will never change
 	// the first event of a workflowID (the history tree model we are using always share at least one node),
 	// meaning start version check will always pass.
-	// Also there's no way we can perform version check before first run may already be deleted due to retention
+	// Also, there's no way we can perform version check before first run may already be deleted due to retention
 }
 
 func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	ctx context.Context,
 	workflowContext workflow.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	deadline time.Time,
 	timer *persistencespb.StateMachineTaskInfo,
 	execute func(node *hsm.Node, task hsm.Task) error,
@@ -270,7 +271,7 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	ctx context.Context,
 	workflowContext workflow.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	task *tasks.StateMachineTimerTask,
 	execute func(node *hsm.Node, task hsm.Task) error,
 ) (int, error) {

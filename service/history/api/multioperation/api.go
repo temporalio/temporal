@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -185,7 +186,7 @@ func (mo *multiOp) workflowLeaseCallback(
 	return func(
 		existingLease api.WorkflowLease,
 		shardContext shard.Context,
-		ms workflow.MutableState,
+		ms historyi.MutableState,
 	) (api.WorkflowLease, error) {
 		var res api.WorkflowLease
 

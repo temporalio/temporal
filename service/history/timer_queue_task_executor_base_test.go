@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/deletemanager"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -127,7 +128,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 	}
 
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 
 	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.testShardContext, tests.NamespaceID, we, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
@@ -173,7 +174,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 	}
 
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 
 	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.testShardContext, tests.NamespaceID, we, locks.PriorityLow).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 
@@ -243,7 +244,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeoutTask() {
 				mutableStateFirstRunID = uuid.New()
 			}
 
-			mockMutableState := workflow.NewMockMutableState(s.controller)
+			mockMutableState := historyi.NewMockMutableState(s.controller)
 			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 				FirstExecutionRunId: mutableStateFirstRunID,
 			}).AnyTimes()
@@ -267,7 +268,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeouts() {
 		FirstRunID:  uuid.New(),
 		TaskID:      100,
 	}
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
 	testCases := []struct {
