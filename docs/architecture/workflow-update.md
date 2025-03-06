@@ -321,13 +321,19 @@ lock while waiting for Update to be processed because `RespondWorkflowTaskComple
 to process the Update response from the worker at the same time.
 
 ### Limits
-There are currently two limits: 
-- `history.maxInFlightUpdates`: maximum in-flight Updates (i.e., not completed Updates)
+There are these limits: 
 - `history.maxTotalUpdates`: maximum total Updates per Workflow run (excludes rejections)
+- `history.maxInFlightUpdates`: maximum in-flight Updates (i.e., not completed Updates)
+- `history.maxInFlightUpdatePayloads`: maximum total payload size of in-flight Updates (in bytes)
 
 There are two exceptions when the `maxInFlightUpdates` limit is ignored and can be exceeded:
 1. Update is resurrected (see "Update Resurrection" below).
 2. Update is reapplied (see "Reapply Updates" below). All reapplied Updates become in-flight.
+
+Furthermore, to prevent a workflow from reaching the `maxTotalUpdates` limit, the server will
+annotate the next `WorkflowTaskStarted` event with `SuggestContinueAsNew: true` when 90% of the
+limit is reached. This will instruct the SDK to consider Continue-As-New. This threshold can be
+configured with `history.maxTotalUpdates.suggestContinueAsNewThreshold`.
 
 ## Processing Updates in `RespondWorkflowTaskCompleted`
 The Server receives the Update `updatepb.Acceptance` and `updatepb.Response`
