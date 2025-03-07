@@ -1061,7 +1061,7 @@ See DynamicRateLimitingParams comments for more details.`,
 	MatchingGetTasksReloadAt = NewTaskQueueIntSetting(
 		"matching.getTasksReloadAt",
 		100,
-		`Reload a batch of tasks when there are this many remaining. Must be less than MatchingGetTasksBatchSize.`,
+		`Reload a batch of tasks when there are this many remaining. Must be less than MatchingGetTasksBatchSize. (Requires new matcher.)`,
 	)
 	MatchingLongPollExpirationInterval = NewTaskQueueDurationSetting(
 		"matching.longPollExpirationInterval",
