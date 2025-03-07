@@ -224,11 +224,12 @@ func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueS
 			ReadLevel: c.taskAckManager.getReadLevel(),
 			AckLevel:  c.taskAckManager.getAckLevel(),
 			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				// TODO(pri): this is a data race, it should only be read by taskWriterLoop
 				StartId: c.taskWriter.taskIDBlock.start,
 				EndId:   c.taskWriter.taskIDBlock.end,
 			},
 			LoadedTasks:  c.taskAckManager.getBacklogCountHint(),
-			MaxReadLevel: c.db.GetMaxReadLevel(0),
+			MaxReadLevel: c.db.GetMaxReadLevel(subqueueZero),
 		},
 	}
 }

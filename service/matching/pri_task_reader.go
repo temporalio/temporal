@@ -124,7 +124,7 @@ func (tr *priTaskReader) Signal() {
 	}
 }
 
-func (tr *priTaskReader) getBacklogHead() time.Time {
+func (tr *priTaskReader) getOldestBacklogTime() time.Time {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	return tr.backlogAge.oldestTime()

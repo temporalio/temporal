@@ -275,24 +275,24 @@ func (c *priBacklogManagerImpl) BacklogCountHint() (total int64) {
 	return
 }
 
-func (c *priBacklogManagerImpl) BacklogHeadAge() (age time.Duration) {
+func (c *priBacklogManagerImpl) BacklogHeadAge() time.Duration {
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
 
-	var t time.Time
+	var oldestTime time.Time
 	for i, r := range c.subqueues {
 		if i == 0 {
-			t = r.getBacklogHead()
+			oldestTime = r.getOldestBacklogTime()
 		} else {
-			t = util.MinTime(t, r.getBacklogHead())
+			oldestTime = util.MinTime(oldestTime, r.getOldestBacklogTime())
 		}
 	}
-	if t.IsZero() {
+	if oldestTime.IsZero() {
 		// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
 		// be more appropriate in the future.
 		return time.Duration(0)
 	}
-	return time.Since(t)
+	return time.Since(oldestTime)
 }
 
 func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
