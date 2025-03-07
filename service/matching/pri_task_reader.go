@@ -50,11 +50,6 @@ const (
 	// TODO(pri): old matcher cleanup, move to here
 	// taskReaderThrottleRetryDelay = 3 * time.Second
 
-	// Load more tasks when loaded count is <= MaxBatchSize/reloadFraction.
-	// E.g. if MaxBatchSize is 1000, then we'll load 1000, dispatch down to 200,
-	// load another batch to make 1200, down to 200, etc.
-	reloadFraction = 5 // TODO(pri): make dynamic config
-
 	concurrentAddRetries = 10
 )
 
@@ -117,7 +112,7 @@ func (tr *priTaskReader) Start() {
 	go tr.getTasksPump()
 }
 
-func (tr *priTaskReader) Signal() {
+func (tr *priTaskReader) SignalTaskLoading() {
 	select {
 	case tr.notifyC <- struct{}{}:
 	default: // channel already has an event, don't block
@@ -170,8 +165,8 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 
 	// use == so we just signal once when we cross this threshold
 	// TODO(pri): is this safe? maybe we need to improve this
-	if tr.loadedTasks == tr.backlogMgr.config.GetTasksBatchSize()/reloadFraction {
-		tr.Signal()
+	if tr.loadedTasks == tr.backlogMgr.config.GetTasksReloadAt() {
+		tr.SignalTaskLoading()
 	}
 
 	tr.lock.Unlock()
@@ -183,7 +178,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 func (tr *priTaskReader) getTasksPump() {
 	ctx := tr.backlogMgr.tqCtx
 
-	tr.Signal() // prime pump
+	tr.SignalTaskLoading() // prime pump
 Loop:
 	for {
 		select {
@@ -191,7 +186,7 @@ Loop:
 			return
 
 		case <-tr.notifyC:
-			if tr.getLoadedTasks() > tr.backlogMgr.config.GetTasksBatchSize()/reloadFraction {
+			if tr.getLoadedTasks() > tr.backlogMgr.config.GetTasksReloadAt() {
 				// Too many loaded already, ignore this signal. We'll get another signal when
 				// loadedTasks drops low enough.
 				continue Loop
@@ -213,14 +208,14 @@ Loop:
 			if len(batch.tasks) == 0 {
 				tr.setReadLevelAfterGap(batch.readLevel)
 				if !batch.isReadBatchDone {
-					tr.Signal()
+					tr.SignalTaskLoading()
 				}
 				continue Loop
 			}
 
 			tr.processTaskBatch(batch.tasks)
 			// There may be more tasks.
-			tr.Signal()
+			tr.SignalTaskLoading()
 		}
 	}
 }
@@ -400,7 +395,7 @@ func (tr *priTaskReader) signalNewTasks(resp subqueueCreateTasksResponse) {
 
 	if !canAddDirect {
 		tr.lock.Unlock()
-		tr.Signal()
+		tr.SignalTaskLoading()
 		return
 	}
 
@@ -429,7 +424,7 @@ func (tr *priTaskReader) backoffSignal(duration time.Duration) {
 			tr.lock.Lock()
 			defer tr.lock.Unlock()
 
-			tr.Signal() // re-enqueue the event
+			tr.SignalTaskLoading() // re-enqueue the event
 			tr.backoffTimer = nil
 		})
 	}
