@@ -501,14 +501,8 @@ func (c *physicalTaskQueueManagerImpl) GetStats() *taskqueuepb.TaskQueueStats {
 	}
 }
 
-func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() *taskqueuespb.InternalTaskQueueStatus {
-	return &taskqueuespb.InternalTaskQueueStatus{
-		// TODO(pri): do something with subqueues here
-		// ReadLevel:        c.backlogMgr.taskAckManager.getReadLevel(),
-		// AckLevel:         c.backlogMgr.taskAckManager.getAckLevel(),
-		// TaskIdBlock:      &taskqueuepb.TaskIdBlock{StartId: c.backlogMgr.taskWriter.taskIDBlock.start, EndId: c.backlogMgr.taskWriter.taskIDBlock.end},
-		ReadBufferLength: c.backlogMgr.BacklogCountHint(),
-	}
+func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus {
+	return c.backlogMgr.InternalStatus()
 }
 
 func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (bool, error) {
