@@ -1056,7 +1056,12 @@ See DynamicRateLimitingParams comments for more details.`,
 	MatchingGetTasksBatchSize = NewTaskQueueIntSetting(
 		"matching.getTasksBatchSize",
 		1000,
-		`MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer`,
+		`How many backlog tasks to read from persistence at once`,
+	)
+	MatchingGetTasksReloadAt = NewTaskQueueIntSetting(
+		"matching.getTasksReloadAt",
+		100,
+		`Reload a batch of tasks when there are this many remaining. Must be less than MatchingGetTasksBatchSize. (Requires new matcher.)`,
 	)
 	MatchingLongPollExpirationInterval = NewTaskQueueDurationSetting(
 		"matching.longPollExpirationInterval",
@@ -1287,12 +1292,17 @@ second per poller by one physical queue manager`,
 	MatchingUseNewMatcher = NewTaskQueueBoolSetting(
 		"matching.useNewMatcher",
 		false,
-		`Use priority-enabled TaskMatcher.`,
+		`Use priority-enabled TaskMatcher`,
 	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
 		5,
-		`Number of simple priority levels`,
+		`Number of simple priority levels (requires new matcher)`,
+	)
+	MatchingBacklogTaskForwardTimeout = NewTaskQueueDurationSetting(
+		"matching.backlogTaskForwardTimeout",
+		60*time.Second,
+		`Timeout for forwarded backlog task (requires new matcher)`,
 	)
 
 	// keys for history
