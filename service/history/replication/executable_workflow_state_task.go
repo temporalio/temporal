@@ -164,7 +164,7 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 			ResendAttempt,
 		); syncStateErr != nil || !doContinue {
 			if syncStateErr != nil {
-				e.Logger.Error("VerifyVersionedTransition replication task encountered error during sync state",
+				e.Logger.Error("SyncWorkflowState replication task encountered error during sync state",
 					tag.WorkflowNamespaceID(e.NamespaceID),
 					tag.WorkflowID(e.WorkflowID),
 					tag.WorkflowRunID(e.RunID),
