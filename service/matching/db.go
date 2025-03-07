@@ -63,7 +63,7 @@ type (
 
 		// used to avoid unnecessary metadata writes:
 		lastChange time.Time // updated when metadata is changed in memory
-		lastWrite  time.Time // udpated when metadata is successfully written to db
+		lastWrite  time.Time // updated when metadata is successfully written to db
 	}
 
 	dbSubqueue struct {
