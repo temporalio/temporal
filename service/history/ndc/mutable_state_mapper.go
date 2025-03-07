@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -44,7 +43,7 @@ type (
 	) (historyi.MutableState, Output, error)
 
 	MutableStateMapperImpl struct {
-		shardContext             shard.Context
+		shardContext             historyi.ShardContext
 		newBufferEventFlusher    bufferEventFlusherProvider
 		newBranchMgr             branchMgrProvider
 		newConflictResolver      conflictResolverProvider
@@ -70,7 +69,7 @@ var _ MutableStateMapper[GetOrRebuildMutableStateIn, bool] = (*MutableStateMappe
 var _ MutableStateMapper[replicationTask, historyi.MutableState] = (*MutableStateMapperImpl)(nil).ApplyEvents
 
 func NewMutableStateMapping(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	newBufferEventFlusher bufferEventFlusherProvider,
 	newBranchMgr branchMgrProvider,
 	newConflictResolver conflictResolverProvider,

@@ -36,6 +36,7 @@ package shard
 import (
 	reflect "reflect"
 
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -63,10 +64,10 @@ func (m *MockContextFactory) EXPECT() *MockContextFactoryMockRecorder {
 }
 
 // CreateContext mocks base method.
-func (m *MockContextFactory) CreateContext(shardID int32, closeCallback CloseCallback) (ControllableContext, error) {
+func (m *MockContextFactory) CreateContext(shardID int32, closeCallback CloseCallback) (interfaces.ControllableContext, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateContext", shardID, closeCallback)
-	ret0, _ := ret[0].(ControllableContext)
+	ret0, _ := ret[0].(interfaces.ControllableContext)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

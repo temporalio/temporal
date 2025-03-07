@@ -294,7 +294,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 	mutableState historyi.MutableState,
 	err error,
 ) {
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,

@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -76,7 +75,7 @@ const (
 
 // Starter starts a new workflow execution.
 type Starter struct {
-	shardContext                                  shard.Context
+	shardContext                                  historyi.ShardContext
 	workflowConsistencyChecker                    api.WorkflowConsistencyChecker
 	tokenSerializer                               *tasktoken.Serializer
 	visibilityManager                             manager.VisibilityManager
@@ -107,7 +106,7 @@ type mutableStateInfo struct {
 
 // NewStarter creates a new starter, fails if getting the active namespace fails.
 func NewStarter(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
 	visibilityManager manager.VisibilityManager,

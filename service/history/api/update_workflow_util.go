@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 )
@@ -43,7 +42,7 @@ func GetAndUpdateWorkflowWithNew(
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
 	newWorkflowFn func() (workflow.Context, historyi.MutableState, error),
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
@@ -67,7 +66,7 @@ func GetAndUpdateWorkflowWithConsistencyCheck(
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
 	newWorkflowFn func() (workflow.Context, historyi.MutableState, error),
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
@@ -86,7 +85,7 @@ func GetAndUpdateWorkflowWithConsistencyCheck(
 }
 
 func UpdateWorkflowWithNew(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	ctx context.Context,
 	workflowLease WorkflowLease,
 	action UpdateWorkflowActionFunc,

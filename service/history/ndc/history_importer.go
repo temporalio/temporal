@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -56,7 +55,7 @@ type (
 	}
 
 	HistoryImporterImpl struct {
-		shardContext   shard.Context
+		shardContext   historyi.ShardContext
 		namespaceCache namespace.Registry
 		workflowCache  wcache.Cache
 		taskRefresher  workflow.TaskRefresher
@@ -69,7 +68,7 @@ type (
 )
 
 func NewHistoryImporter(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *HistoryImporterImpl {

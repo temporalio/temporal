@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
@@ -51,7 +50,7 @@ type (
 
 		controller         *gomock.Controller
 		mockTransactionMgr *MockTransactionManager
-		mockShard          *shard.MockContext
+		mockShard          *historyi.MockShardContext
 
 		createMgr *nDCTransactionMgrForNewWorkflowImpl
 	}
@@ -67,7 +66,7 @@ func (s *transactionMgrForNewWorkflowSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTransactionMgr = NewMockTransactionManager(s.controller)
-	s.mockShard = shard.NewMockContext(s.controller)
+	s.mockShard = historyi.NewMockShardContext(s.controller)
 
 	s.createMgr = newTransactionMgrForNewWorkflow(s.mockShard, s.mockTransactionMgr, false)
 }

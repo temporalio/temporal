@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -45,7 +44,7 @@ type (
 	}
 
 	BufferEventFlusherImpl struct {
-		shardContext    shard.Context
+		shardContext    historyi.ShardContext
 		clusterMetadata cluster.Metadata
 
 		wfContext    workflow.Context
@@ -57,7 +56,7 @@ type (
 var _ BufferEventFlusher = (*BufferEventFlusherImpl)(nil)
 
 func NewBufferEventFlusher(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	wfContext workflow.Context,
 	mutableState historyi.MutableState,
 	logger log.Logger,

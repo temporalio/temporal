@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/historybuilder"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -62,7 +61,7 @@ type (
 	}
 
 	MutableStateRebuilderImpl struct {
-		shard             shard.Context
+		shard             historyi.ShardContext
 		clusterMetadata   cluster.Metadata
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
@@ -79,7 +78,7 @@ const (
 var _ MutableStateRebuilder = (*MutableStateRebuilderImpl)(nil)
 
 func NewMutableStateRebuilder(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	logger log.Logger,
 	mutableState historyi.MutableState,
 ) *MutableStateRebuilderImpl {

@@ -45,13 +45,12 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 func GetOrPollMutableState(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	request *historyservice.GetMutableStateRequest,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
@@ -278,7 +277,7 @@ func GetOrPollMutableState(
 
 func GetMutableState(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
@@ -309,7 +308,7 @@ func GetMutableState(
 
 func GetMutableStateWithConsistencyCheck(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
 	currentVersion int64,
 	currentEventID int64,

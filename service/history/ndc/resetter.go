@@ -39,7 +39,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -60,7 +59,7 @@ type (
 	}
 
 	resetterImpl struct {
-		shard          shard.Context
+		shard          historyi.ShardContext
 		transactionMgr TransactionManager
 		executionMgr   persistence.ExecutionManager
 		stateRebuilder StateRebuilder
@@ -78,7 +77,7 @@ type (
 var _ resetter = (*resetterImpl)(nil)
 
 func NewResetter(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	transactionMgr TransactionManager,
 	namespaceID namespace.ID,
 	workflowID string,

@@ -52,7 +52,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -121,7 +120,7 @@ type (
 	}
 
 	HistoryReplicatorImpl struct {
-		shardContext      shard.Context
+		shardContext      historyi.ShardContext
 		clusterMetadata   cluster.Metadata
 		historySerializer serialization.Serializer
 		metricsHandler    metrics.Handler
@@ -144,7 +143,7 @@ type (
 var errPanic = serviceerror.NewInternal("encountered panic")
 
 func NewHistoryReplicator(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	eventSerializer serialization.Serializer,

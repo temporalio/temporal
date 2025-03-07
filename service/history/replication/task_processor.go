@@ -82,7 +82,7 @@ type (
 
 		sourceCluster           string
 		sourceShardID           int32
-		shard                   shard.Context
+		shard                   historyi.ShardContext
 		historyEngine           historyi.Engine
 		historySerializer       serialization.Serializer
 		config                  *configs.Config
@@ -116,7 +116,7 @@ type (
 // NewTaskProcessor creates a new replication task processor.
 func NewTaskProcessor(
 	sourceShardID int32,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	historyEngine historyi.Engine,
 	config *configs.Config,
 	metricsHandler metrics.Handler,
@@ -125,7 +125,7 @@ func NewTaskProcessor(
 	eventSerializer serialization.Serializer,
 	dlqWriter DLQWriter,
 ) TaskProcessor {
-	shardID := shard.GetShardID()
+	shardID := shardContext.GetShardID()
 	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID)).
 		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID)).
 		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID)).
@@ -143,12 +143,12 @@ func NewTaskProcessor(
 		status:                  common.DaemonStatusInitialized,
 		sourceShardID:           sourceShardID,
 		sourceCluster:           replicationTaskFetcher.getSourceCluster(),
-		shard:                   shard,
+		shard:                   shardContext,
 		historyEngine:           historyEngine,
 		historySerializer:       eventSerializer,
 		config:                  config,
 		metricsHandler:          metricsHandler,
-		logger:                  shard.GetLogger(),
+		logger:                  shardContext.GetLogger(),
 		replicationTaskExecutor: replicationTaskExecutor,
 		dlqWriter:               dlqWriter,
 		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{

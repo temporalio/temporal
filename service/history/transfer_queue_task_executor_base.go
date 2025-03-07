@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/service/history/deletemanager"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
@@ -69,7 +68,7 @@ var (
 type (
 	transferQueueTaskExecutorBase struct {
 		currentClusterName       string
-		shardContext             shard.Context
+		shardContext             historyi.ShardContext
 		registry                 namespace.Registry
 		cache                    wcache.Cache
 		logger                   log.Logger
@@ -84,7 +83,7 @@ type (
 )
 
 func newTransferQueueTaskExecutorBase(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 	metricHandler metrics.Handler,

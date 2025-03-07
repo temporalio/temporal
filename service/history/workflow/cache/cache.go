@@ -47,7 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -61,7 +61,7 @@ type (
 	Cache interface {
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
-			shardContext shard.Context,
+			shardContext historyi.ShardContext,
 			namespaceID namespace.ID,
 			workflowID string,
 			lockPriority locks.Priority,
@@ -69,7 +69,7 @@ type (
 
 		GetOrCreateWorkflowExecution(
 			ctx context.Context,
-			shardContext shard.Context,
+			shardContext historyi.ShardContext,
 			namespaceID namespace.ID,
 			execution *commonpb.WorkflowExecution,
 			lockPriority locks.Priority,
@@ -203,7 +203,7 @@ func newCache(
 
 func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	workflowID string,
 	lockPriority locks.Priority,
@@ -246,7 +246,7 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 
 func (c *cacheImpl) GetOrCreateWorkflowExecution(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	lockPriority locks.Priority,
@@ -283,7 +283,7 @@ func (c *cacheImpl) GetOrCreateWorkflowExecution(
 
 func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	handler metrics.Handler,
@@ -366,7 +366,7 @@ func (c *cacheImpl) lockWorkflowExecution(
 
 func (c *cacheImpl) makeReleaseFunc(
 	cacheKey Key,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	context workflow.Context,
 	forceClearContext bool,
 	handler metrics.Handler,
@@ -414,7 +414,7 @@ func (c *cacheImpl) makeReleaseFunc(
 
 func (c *cacheImpl) validateWorkflowExecutionInfo(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	lockPriority locks.Priority,
@@ -462,7 +462,7 @@ func (c *cacheImpl) validateWorkflowID(
 
 func GetCurrentRunID(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache Cache,
 	namespaceID string,
 	workflowID string,

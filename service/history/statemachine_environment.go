@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -52,7 +51,7 @@ func taskWorkflowKey(task tasks.Task) definition.WorkflowKey {
 
 func getWorkflowExecutionContextForTask(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	task tasks.Task,
 ) (workflow.Context, wcache.ReleaseCacheFunc, error) {
@@ -67,7 +66,7 @@ func getWorkflowExecutionContextForTask(
 
 func getWorkflowExecutionContext(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	key definition.WorkflowKey,
 	lockPriority locks.Priority,
@@ -106,7 +105,7 @@ func getWorkflowExecutionContext(
 
 func getCurrentWorkflowExecutionContext(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	namespaceID string,
 	workflowID string,
@@ -173,7 +172,7 @@ func getCurrentWorkflowExecutionContext(
 
 // stateMachineEnvironment provides basic functionality for state machine task execution and handling of API requests.
 type stateMachineEnvironment struct {
-	shardContext   shard.Context
+	shardContext   historyi.ShardContext
 	cache          wcache.Cache
 	metricsHandler metrics.Handler
 	logger         log.Logger

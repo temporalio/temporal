@@ -34,12 +34,11 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 )
 
 func ValidateSignal(
 	ctx context.Context,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	mutableState historyi.MutableState,
 	signalPayloadSize int,
 	operation string,

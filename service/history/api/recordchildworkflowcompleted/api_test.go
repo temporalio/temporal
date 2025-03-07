@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
@@ -81,7 +80,7 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
 	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("")
-	shardContext := shard.NewMockContext(ctrl)
+	shardContext := historyi.NewMockShardContext(ctrl)
 	shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistery)
 	shardContext.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
 
@@ -152,7 +151,7 @@ func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
 	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
 	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("")
-	shardContext := shard.NewMockContext(ctrl)
+	shardContext := historyi.NewMockShardContext(ctrl)
 	shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistery)
 	shardContext.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
 

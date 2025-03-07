@@ -37,13 +37,12 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 )
 
 func TestLocalMutableState(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	eventsCache events.Cache,
 	ns *namespace.Namespace,
 	workflowID string,
@@ -95,7 +94,7 @@ func NewMapEventCache(
 }
 
 func TestGlobalMutableState(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	eventsCache events.Cache,
 	logger log.Logger,
 	version int64,

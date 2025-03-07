@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -60,7 +59,7 @@ import (
 func Invoke(
 	ctx context.Context,
 	req *historyservice.RecordWorkflowTaskStartedRequest,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	config *configs.Config,
 	eventNotifier events.Notifier,
 	persistenceVisibilityMgr manager.VisibilityManager,
@@ -275,7 +274,7 @@ func Invoke(
 
 func setHistoryForRecordWfTaskStartedResp(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
 	maximumPageSize int32,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,

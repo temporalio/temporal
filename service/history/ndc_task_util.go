@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
@@ -53,7 +52,7 @@ type (
 
 // CheckTaskVersion will return an error if task version check fails
 func CheckTaskVersion(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	logger log.Logger,
 	namespace *namespace.Namespace,
 	version int64,
@@ -81,7 +80,7 @@ func CheckTaskVersion(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTransferTask(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	wfContext workflow.Context,
 	transferTask tasks.Task,
 	metricsHandler metrics.Handler,
@@ -129,7 +128,7 @@ func loadMutableStateForTransferTask(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	wfContext workflow.Context,
 	timerTask tasks.Task,
 	metricsHandler metrics.Handler,
@@ -151,7 +150,7 @@ func loadMutableStateForTimerTask(
 
 func loadMutableStateForTask(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	wfContext workflow.Context,
 	task tasks.Task,
 	getEventID taskEventIDGetter,
@@ -223,7 +222,7 @@ func loadMutableStateForTask(
 }
 
 func validateTaskByClock(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	task tasks.Task,
 ) error {
 	shardID := shardContext.GetShardID()
@@ -250,7 +249,7 @@ func validateTaskByClock(
 
 func validateTaskGeneration(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowContext workflow.Context,
 	mutableState historyi.MutableState,
 	taskID int64,

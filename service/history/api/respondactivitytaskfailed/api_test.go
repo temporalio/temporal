@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -64,7 +63,7 @@ type (
 		*require.Assertions
 
 		controller        *gomock.Controller
-		shardContext      *shard.MockContext
+		shardContext      *historyi.MockShardContext
 		namespaceRegistry *namespace.MockRegistry
 
 		workflowCache              *wcache.MockCache
@@ -444,8 +443,8 @@ func (s *workflowSuite) setupCache() *wcache.MockCache {
 	return workflowCache
 }
 
-func (s *workflowSuite) setupShardContext(registry namespace.Registry) *shard.MockContext {
-	shardContext := shard.NewMockContext(s.controller)
+func (s *workflowSuite) setupShardContext(registry namespace.Registry) *historyi.MockShardContext {
+	shardContext := historyi.NewMockShardContext(s.controller)
 	shardContext.EXPECT().GetNamespaceRegistry().Return(registry).AnyTimes()
 	shardContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
 	shardContext.EXPECT().GetLogger().Return(log.NewTestLogger()).AnyTimes()
@@ -461,7 +460,7 @@ func (s *workflowSuite) setupShardContext(registry namespace.Registry) *shard.Mo
 	return shardContext
 }
 
-func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContext *shard.MockContext) {
+func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContext *historyi.MockShardContext) {
 	timer := metrics.NewMockTimerIface(s.controller)
 	tags := []metrics.Tag{
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
@@ -481,7 +480,7 @@ func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContex
 	shardContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
 }
 
-func (s *workflowSuite) expectCounterRecorded(shardContext *shard.MockContext) *shard.MockContext {
+func (s *workflowSuite) expectCounterRecorded(shardContext *historyi.MockShardContext) *historyi.MockShardContext {
 	counter := metrics.NewMockCounterIface(s.controller)
 	counter.EXPECT().Record(int64(1), metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope))
 

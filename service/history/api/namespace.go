@@ -28,11 +28,11 @@ import (
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func GetActiveNamespace(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	namespaceUUID namespace.ID,
 ) (*namespace.Namespace, error) {
 

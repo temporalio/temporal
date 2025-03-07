@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 )
@@ -48,7 +47,7 @@ type (
 
 		controller         *gomock.Controller
 		logger             log.Logger
-		shardContext       shard.MockContext
+		shardContext       historyi.MockShardContext
 		branchMgrProvider  branchMgrProvider
 		mockBranchMgr      *MockBranchMgr
 		mutableStateMapper *MutableStateMapperImpl

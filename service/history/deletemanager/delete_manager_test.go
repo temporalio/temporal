@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -56,7 +55,7 @@ type (
 
 		controller            *gomock.Controller
 		mockCache             *wcache.MockCache
-		mockShardContext      *shard.MockContext
+		mockShardContext      *historyi.MockShardContext
 		mockClock             *clock.EventTimeSource
 		mockNamespaceRegistry *namespace.MockRegistry
 		mockMetadata          *cluster.MockMetadata
@@ -91,7 +90,7 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 	s.mockVisibilityManager.EXPECT().GetIndexName().Return("").AnyTimes()
 
 	config := tests.NewDynamicConfig()
-	s.mockShardContext = shard.NewMockContext(s.controller)
+	s.mockShardContext = historyi.NewMockShardContext(s.controller)
 	s.mockShardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 	s.mockShardContext.EXPECT().GetNamespaceRegistry().Return(s.mockNamespaceRegistry).AnyTimes()
 	s.mockShardContext.EXPECT().GetClusterMetadata().Return(s.mockMetadata).AnyTimes()

@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -84,7 +83,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 	}
 
 	setup := func(t *testing.T, out *testconf, blobSizeLimit int) {
-		shardCtx := shard.NewMockContext(gomock.NewController(t))
+		shardCtx := historyi.NewMockShardContext(gomock.NewController(t))
 		logger := log.NewNoopLogger()
 		metricsHandler := metrics.NoopMetricsHandler
 		out.ms = historyi.NewMockMutableState(gomock.NewController(t))

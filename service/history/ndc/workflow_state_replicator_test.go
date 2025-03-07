@@ -1064,7 +1064,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	sourceClusterName := "test-cluster"
-	mockShard := shard.NewMockContext(s.controller)
+	mockShard := historyi.NewMockShardContext(s.controller)
 	taskId1 := int64(46)
 	taskId2 := int64(47)
 	taskId3 := int64(48)
