@@ -465,7 +465,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	runID string,
 	wfCtx workflow.Context,
 	releaseFn wcache.ReleaseCacheFunc,
-	localMutableState workflow.MutableState,
+	localMutableState historyi.MutableState,
 	sourceMutableState *persistencespb.WorkflowMutableState,
 	eventBlobs []*commonpb.DataBlob,
 	newRunInfo *replicationspb.NewRunInfo,
