@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"sync"
 	"time"
@@ -109,7 +108,8 @@ var (
 	// - after validateTasksOnRoot maybe-validates a task (only local backlog)
 	// - when userdata changes, on in-mem tasks (may be either sync or local backlog)
 	// This must be an error type that taskReader will treat as transient and re-enqueue the task.
-	errReprocessTask = serviceerror.NewCanceled("reprocess task")
+	errReprocessTask      = serviceerror.NewCanceled("reprocess task")
+	errInternalMatchError = serviceerror.NewInternal("internal matcher error")
 )
 
 // newPriTaskMatcher returns a task matcher instance
@@ -421,11 +421,11 @@ again:
 		return nil, res.ctxErr
 	}
 	if !softassert.That(tm.logger, res.poller != nil, "expected poller from match") {
-		return nil, errors.New("internal error: no poller found on sync match")
+		return nil, errInternalMatchError
 	}
 	response, ok := task.getResponse()
 	if !softassert.That(tm.logger, ok, "expected a sync match task") {
-		return nil, errors.New("internal error: no task found on sync match")
+		return nil, errInternalMatchError
 	}
 	// Note: if task was not forwarded, this will just be the zero value and nil.
 	// That's intended: the query/nexus handler in matchingEngine will wait for the real
@@ -575,7 +575,7 @@ func (tm *priTaskMatcher) poll(
 		return nil, errNoTasks
 	}
 	if !softassert.That(tm.logger, res.task != nil, "expected task from match") {
-		return nil, errors.New("internal error: no task found after match")
+		return nil, errInternalMatchError
 	}
 
 	task := res.task
