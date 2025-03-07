@@ -382,6 +382,7 @@ func (s *SyncStateRetrieverImpl) getMutation(
 		UpdatedRequestCancelInfos:       getUpdatedInfo(mutableState.GetPendingRequestCancelExternalInfos(), versionedTransition),
 		UpdatedSignalInfos:              getUpdatedInfo(mutableState.GetPendingSignalExternalInfos(), versionedTransition),
 		UpdatedUpdateInfos:              getUpdatedInfo(executionInfo.UpdateInfos, versionedTransition),
+		UpdatedChasmNodes:               mutableState.ChasmTree().Snapshot(versionedTransition).Nodes,
 		UpdatedSubStateMachines:         updatedStateMachine,
 		SubStateMachineTombstoneBatches: tombstones,
 		SignalRequestedIds:              signalRequestedIds,
