@@ -75,7 +75,6 @@ func TaskOperationTagFromTask(
 		return metrics.SyncWorkflowStateTaskScope
 	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
 		return metrics.HistoryReplicationTaskScope
-	default:
-		return "__unknown__"
 	}
+	return metrics.UnknownTaskScope
 }
