@@ -462,7 +462,7 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	executionInfo.Memo = nil
 	executionInfo.SearchAttributes = nil
 	executionInfo.RelocatableAttributesRemoved = true
-	return weContext.SetWorkflowExecution(ctx, t.shardContext)
+	return weContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
 }
 
 func getWorkflowMemo(

@@ -133,23 +133,10 @@ type (
 			updateWorkflowTransactionPolicy TransactionPolicy,
 			newWorkflowTransactionPolicy *TransactionPolicy,
 		) error
-		// SetWorkflowExecution is an alias to SubmitClosedWorkflowSnapshot with TransactionPolicyPassive.
+		// SetWorkflowExecution = SnapshotWorkflowExecutionAsPassive
 		SetWorkflowExecution(
 			ctx context.Context,
 			shardContext shard.Context,
-		) error
-		// SubmitClosedWorkflowSnapshot closes the current mutable state transaction with the given
-		// transactionPolicy and updates the workflow execution record in the DB. Does not check the "current"
-		// run status for the execution.
-		// Closes the transaction as snapshot, which errors out if there are any buffered events that need
-		// flushing and generally does not expect new history events to be generated (expected for closed
-		// workflows).
-		// NOTE: in the future, we'd like to have the ability to close the transaction as mutation to avoid the
-		// overhead of overwriting the entire DB record.
-		SubmitClosedWorkflowSnapshot(
-			ctx context.Context,
-			shardContext shard.Context,
-			transactionPolicy TransactionPolicy,
 		) error
 		// TODO (alex-update): move this from workflow context.
 		UpdateRegistry(ctx context.Context) update.Registry
@@ -506,10 +493,18 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		}
 	}
 
+	updateMode := persistence.UpdateWorkflowModeSkipCurrent
+	if c.MutableState.IsCurrentWorkflowGuaranteed() {
+		updateMode = persistence.UpdateWorkflowModeUpdateCurrent
+	}
+	if c.MutableState.IsNonCurrentWorkflowGuaranteed() {
+		updateMode = persistence.UpdateWorkflowModeBypassCurrent
+	}
+
 	err = c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
-		persistence.UpdateWorkflowModeUpdateCurrent,
+		updateMode,
 		nil,
 		nil,
 		TransactionPolicyActive,
@@ -558,10 +553,18 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 	shardContext shard.Context,
 ) error {
 
+	updateMode := persistence.UpdateWorkflowModeSkipCurrent
+	if c.MutableState.IsCurrentWorkflowGuaranteed() {
+		updateMode = persistence.UpdateWorkflowModeUpdateCurrent
+	}
+	if c.MutableState.IsNonCurrentWorkflowGuaranteed() {
+		updateMode = persistence.UpdateWorkflowModeBypassCurrent
+	}
+
 	return c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
-		persistence.UpdateWorkflowModeUpdateCurrent,
+		updateMode,
 		nil,
 		nil,
 		TransactionPolicyPassive,
@@ -691,14 +694,6 @@ func (c *ContextImpl) SetWorkflowExecution(
 	ctx context.Context,
 	shardContext shard.Context,
 ) (retError error) {
-	return c.SubmitClosedWorkflowSnapshot(ctx, shardContext, TransactionPolicyPassive)
-}
-
-func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
-	ctx context.Context,
-	shardContext shard.Context,
-	transactionPolicy TransactionPolicy,
-) (retError error) {
 	defer func() {
 		if retError != nil {
 			c.Clear()
@@ -706,7 +701,7 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 	}()
 
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
-		transactionPolicy,
+		TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
@@ -843,6 +838,12 @@ func (c *ContextImpl) updateWorkflowExecutionEventReapply(
 	eventBatch1 []*persistence.WorkflowEvents,
 	eventBatch2 []*persistence.WorkflowEvents,
 ) error {
+	if updateMode == persistence.UpdateWorkflowModeSkipCurrent {
+		if len(eventBatch1) != 0 || len(eventBatch2) != 0 {
+			return serviceerror.NewInternal("encountered events reapplication without knowing if workflow is current. Events generated for a close workflow?")
+		}
+		return nil
+	}
 
 	if updateMode != persistence.UpdateWorkflowModeBypassCurrent {
 		return nil
@@ -977,11 +978,6 @@ func (c *ContextImpl) RefreshTasks(
 		return err
 	}
 
-	if !mutableState.IsWorkflowExecutionRunning() {
-		// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
-		// and we are operating on a closed workflow.
-		return c.SubmitClosedWorkflowSnapshot(ctx, shardContext, TransactionPolicyPassive)
-	}
 	return c.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
 }
 

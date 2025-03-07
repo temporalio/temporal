@@ -821,11 +821,6 @@ func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
 		return nil
 	}
 
-	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
-		// closed workflow.
-		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, workflow.TransactionPolicyActive)
-	}
 	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 }
 
