@@ -90,9 +90,6 @@ const (
 	// TODO(pri): old matcher cleanup, move to here
 	// defaultTaskDispatchRPS = 100000.0
 
-	// TODO(pri): make dynamic config
-	backlogTaskForwardTimeout = 60 * time.Second
-
 	// How much rate limit a task queue can use up in an instant. E.g., for a rate of
 	// 100/second and burst duration of 2 seconds, the capacity of a bucket-type limiting
 	// algorithm would be 200.
@@ -141,7 +138,7 @@ func newPriTaskMatcher(
 
 func (tm *priTaskMatcher) Start() {
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
-		WithMaximumInterval(backlogTaskForwardTimeout).
+		WithMaximumInterval(tm.config.BacklogTaskForwardTimeout()).
 		WithExpirationInterval(backoff.NoInterval)
 	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
@@ -201,7 +198,7 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 	} else {
 		// Task is from local backlog.
 
-		// Before we forward, ask task validator. This will happen every backlogTaskForwardTimeout
+		// Before we forward, ask task validator. This will happen every BacklogTaskForwardTimeout
 		// to the head of the backlog, which is what taskValidator expects.
 		maybeValid := tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.fwdr.partition.TaskType())
 		if !maybeValid {
@@ -212,7 +209,7 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) error {
 
 		// Add a timeout for forwarding.
 		// Note that this does not block local match of other local backlog tasks.
-		ctx, cancel = context.WithTimeout(tm.tqCtx, backlogTaskForwardTimeout)
+		ctx, cancel = context.WithTimeout(tm.tqCtx, tm.config.BacklogTaskForwardTimeout())
 		defer cancel()
 	}
 
