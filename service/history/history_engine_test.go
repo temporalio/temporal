@@ -6548,8 +6548,14 @@ func addActivityTaskCompletedEvent(ms historyi.MutableState, scheduledEventID, s
 	return event
 }
 
-func addActivityTaskFailedEvent(ms historyi.MutableState, scheduledEventID, startedEventID int64, failure *failurepb.Failure, retryState enumspb.RetryState, identity string) *historypb.HistoryEvent {
-	event, _ := ms.AddActivityTaskFailedEvent(scheduledEventID, startedEventID, failure, retryState, identity, nil)
+func addActivityTaskFailedEvent(
+	ms historyi.MutableState,
+	scheduledEventID, startedEventID int64,
+	failureInfo *failurepb.Failure,
+	retryState enumspb.RetryState,
+	identity string,
+) *historypb.HistoryEvent {
+	event, _ := ms.AddActivityTaskFailedEvent(scheduledEventID, startedEventID, failureInfo, retryState, identity, nil)
 	return event
 }
 
@@ -6582,8 +6588,15 @@ func addRequestCancelInitiatedEvent(ms historyi.MutableState, workflowTaskComple
 	return event, rci
 }
 
-func addCancelRequestedEvent(ms historyi.MutableState, initiatedID int64, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string) *historypb.HistoryEvent {
-	event, _ := ms.AddExternalWorkflowExecutionCancelRequested(initiatedID, namespace, namespaceID, workflowID, runID)
+func addCancelRequestedEvent(
+	ms historyi.MutableState,
+	initiatedID int64,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	workflowID,
+	runID string,
+) *historypb.HistoryEvent {
+	event, _ := ms.AddExternalWorkflowExecutionCancelRequested(initiatedID, namespaceName, namespaceID, workflowID, runID)
 	return event
 }
 
@@ -6606,8 +6619,16 @@ func addRequestSignalInitiatedEvent(ms historyi.MutableState, workflowTaskComple
 	return event, si
 }
 
-func addSignaledEvent(ms historyi.MutableState, initiatedID int64, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string, control string) *historypb.HistoryEvent {
-	event, _ := ms.AddExternalWorkflowExecutionSignaled(initiatedID, namespace, namespaceID, workflowID, runID, control)
+func addSignaledEvent(
+	ms historyi.MutableState,
+	initiatedID int64,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	workflowID,
+	runID string,
+	control string,
+) *historypb.HistoryEvent {
+	event, _ := ms.AddExternalWorkflowExecutionSignaled(initiatedID, namespaceName, namespaceID, workflowID, runID, control)
 	return event
 }
 

@@ -89,7 +89,11 @@ func (q *queryImpl) GetCompletionState() (*historyi.QueryCompletionState, error)
 	if ts == nil {
 		return nil, errQueryNotInCompletionState
 	}
-	return ts.(*historyi.QueryCompletionState), nil
+	queryState, ok := ts.(*historyi.QueryCompletionState)
+	if !ok {
+		return nil, errCompletionStateInvalid
+	}
+	return queryState, nil
 }
 
 func (q *queryImpl) setCompletionState(completionState *historyi.QueryCompletionState) error {
