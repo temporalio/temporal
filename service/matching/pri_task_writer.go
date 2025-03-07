@@ -164,17 +164,24 @@ func (w *priTaskWriter) appendTasks(
 	return nil
 }
 
-func (w *priTaskWriter) taskWriterLoop() {
+func (w *priTaskWriter) initState() error {
 	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second).
 		WithMaximumInterval(10 * time.Second).
 		WithExpirationInterval(backoff.NoInterval)
 	state, err := w.renewLeaseWithRetry(retryForever, common.IsPersistenceTransientError)
 	if err != nil {
 		w.backlogMgr.initState(taskQueueState{}, err)
-		return
+		return err
 	}
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
 	w.backlogMgr.initState(state, nil)
+	return nil
+}
+
+func (w *priTaskWriter) taskWriterLoop() {
+	if w.initState() != nil {
+		return
+	}
 
 	var reqs []*writeTaskRequest
 	for {

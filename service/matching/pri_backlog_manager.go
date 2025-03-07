@@ -35,6 +35,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/future"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 )
 
 // this retry policy is currently only used for matching persistence operations
@@ -273,15 +275,24 @@ func (c *priBacklogManagerImpl) BacklogCountHint() (total int64) {
 	return
 }
 
-func (c *priBacklogManagerImpl) BacklogHeadAge() (age time.Duration) {
+func (c *priBacklogManagerImpl) BacklogHeadAge() time.Duration {
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
-	// TODO(pri): expose method for oldest absolute time instead of age,
-	// so we only need one call to time.Since
-	for _, r := range c.subqueues {
-		age = max(age, r.getBacklogHeadAge())
+
+	var oldestTime time.Time
+	for i, r := range c.subqueues {
+		if i == 0 {
+			oldestTime = r.getOldestBacklogTime()
+		} else {
+			oldestTime = util.MinTime(oldestTime, r.getOldestBacklogTime())
+		}
 	}
-	return
+	if oldestTime.IsZero() {
+		// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
+		// be more appropriate in the future.
+		return time.Duration(0)
+	}
+	return time.Since(oldestTime)
 }
 
 func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
@@ -309,6 +320,31 @@ func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 
 func (c *priBacklogManagerImpl) TotalApproximateBacklogCount() int64 {
 	return c.db.getTotalApproximateBacklogCount()
+}
+
+func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
+	// TODO(pri): this is a data race, it should only be read by taskWriterLoop
+	idBlock := &taskqueuepb.TaskIdBlock{
+		StartId: c.taskWriter.taskIDBlock.start,
+		EndId:   c.taskWriter.taskIDBlock.end,
+	}
+
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	status := make([]*taskqueuespb.InternalTaskQueueStatus, len(c.subqueues))
+	for i, r := range c.subqueues {
+		readLevel, ackLevel := r.getLevels()
+		status[i] = &taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel:               readLevel,
+			AckLevel:                ackLevel,
+			TaskIdBlock:             idBlock,
+			LoadedTasks:             int64(r.getLoadedTasks()),
+			MaxReadLevel:            c.db.GetMaxReadLevel(i),
+			ApproximateBacklogCount: c.db.getApproximateBacklogCount(i),
+		}
+	}
+	return status
 }
 
 func (c *priBacklogManagerImpl) respoolTaskAfterError(task *persistencespb.TaskInfo) error {
