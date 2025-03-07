@@ -409,8 +409,8 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	}, time.Second*10, time.Millisecond*1000)
 }
 
-// Testing Concurrent stale updates don't break workflow state and are caught in the update handler
-func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NonIdempotentRequests() {
+// Testing Concurrent non-identical updates don't break workflow state.
+func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NonIdenticalRequests_StaleConflictToken() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
@@ -433,6 +433,8 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NonIdemp
 	s.ensureCreateVersionInDeployment(tv)
 
 	// Simulate two concurrent updates with the same updateID but with different identities.
+	// Note: A request, in this context, is idempotent if the version and the identity are the same.
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -449,10 +451,6 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NonIdemp
 		})
 	}()
 
-	// To allow the first go-routine to start before the second one.
-	//nolint:forbidigo
-	time.Sleep(10 * time.Millisecond)
-
 	go func() {
 		defer wg.Done()
 		_, err2 = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -460,33 +458,50 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_NonIdemp
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
 			ConflictToken:  cT,
-			Identity:       tv.Any().String(), // note: different identity
+			Identity:       tv.ClientIdentity() + "-other", // note: different identity to make both the requests non-identical.
 		})
 	}()
 
 	wg.Wait()
 
-	s.NoError(err1)
-	// Since the first update completed successfully, the second update will be rejected inside the update handler due to a conflict token mismatch. This happens
-	// since the first update changes the conflict token of the worker-deployment workflow.
-	s.Error(err2)
+	// Since the go scheduler might pick either of the go-routines to run first, we need to check both the error objects to
+	// determine which request completed successfully.
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+	if err1 == nil {
+		// This would mean that the first request completed successfully and updated the conflict token.
+		// The second request will be rejected due to a stale conflict token. The last modifier identity would be the one from the first request.
+		s.Error(err2)
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := assert.New(t)
 
-		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
-		})
-		a.NoError(err)
-		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
-		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
-	}, time.Second*10, time.Millisecond*1000)
+			resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv.DeploymentSeries(),
+			})
+			a.NoError(err)
+			a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+			a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
+		}, time.Second*10, time.Millisecond*1000)
+	} else {
+		// This would mean that the second request completed successfully and updated the conflict token.
+		// The first request will be rejected due to stale conflict token. The last modifier identity would be the one from the second request.
+		s.Error(err1)
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := assert.New(t)
 
+			resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv.DeploymentSeries(),
+			})
+			a.NoError(err)
+			a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+			a.Equal(tv.ClientIdentity()+"-other", resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
+		}, time.Second*10, time.Millisecond*1000)
+	}
 }
 
 // Testing Concurrent identical updates are being de-duped.
-func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_IdempotentRequests() {
+func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_IdenticalRequests() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
@@ -514,6 +529,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_Idempote
 
 	var err1, err2 error
 	var resp1, resp2 *workflowservice.SetWorkerDeploymentCurrentVersionResponse
+
 	go func() {
 		defer wg.Done()
 		resp1, err1 = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -525,10 +541,6 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_Idempote
 		})
 	}()
 
-	// To allow the first go-routine to start before the second one.
-	//nolint:forbidigo
-	time.Sleep(2 * time.Millisecond)
-
 	go func() {
 		defer wg.Done()
 		resp2, err2 = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
@@ -536,7 +548,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_Idempote
 			DeploymentName: tv.DeploymentSeries(),
 			Version:        tv.DeploymentVersionString(),
 			Identity:       tv.ClientIdentity(),
-			ConflictToken:  []byte{}, // note: different conflict token
+			ConflictToken:  cT,
 		})
 	}()
 
@@ -554,22 +566,17 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_ConcurrentUpdates_Idempote
 		})
 		a.NoError(err)
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
-		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity()) // note: the last modifier identity should be the one from the first update
+		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
 	}, time.Second*10, time.Millisecond*1000)
 
-	// Since both the updates are accepted, the response objects will be different.
-
-	// Since the first update completes successfully, the previous version will be __unversioned__
-	s.Equal(worker_versioning.UnversionedVersionId, resp1.GetPreviousVersion())
-	// Since the second update was de-duped in the update handler, the previous version will be the current version which is the version from the first update
-	s.Equal(tv.DeploymentVersionString(), resp2.GetPreviousVersion())
-
-	// The conflict token should be the same as the one set from the first update
-	s.Equal(resp1.GetConflictToken(), resp2.GetConflictToken())
+	// Since there is no guarantee which request will complete first, we need to check if the response objects have one of
+	// two possible values.
+	s.Contains([]string{worker_versioning.UnversionedVersionId, tv.DeploymentVersionString()}, resp1.GetPreviousVersion())
+	s.Contains([]string{worker_versioning.UnversionedVersionId, tv.DeploymentVersionString()}, resp2.GetPreviousVersion())
 }
 
-// Testing Concurrent stale updates don't break workflow state and are caught in the update handler
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NonIdempotentRequests() {
+// Testing Concurrent non-identical updates don't break workflow state.
+func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NonIdenticalRequests_StaleConflictToken() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
@@ -592,6 +599,8 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NonIdemp
 	s.ensureCreateVersionInDeployment(tv)
 
 	// Simulate two concurrent updates with the same updateID but with different identities.
+	// Note: A request, in this context, is idempotent if the version and the identity are the same.
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -609,10 +618,6 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NonIdemp
 		})
 	}()
 
-	// To allow the first go-routine to start before the second one.
-	//nolint:forbidigo
-	time.Sleep(10 * time.Millisecond)
-
 	go func() {
 		defer wg.Done()
 		_, err2 = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
@@ -621,29 +626,43 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_NonIdemp
 			Version:        tv.DeploymentVersionString(),
 			Percentage:     5,
 			ConflictToken:  cT,
-			Identity:       tv.Any().String(), // note: different identity making this request different from the first one.
+			Identity:       tv.ClientIdentity() + "-other", // note: different identity making this request different from the first one.
 		})
 	}()
 
 	wg.Wait()
 
-	s.NoError(err1)
-	// Since the first update completed successfully, the second update will be rejected inside the update handler due to a conflict token mismatch. This happens
-	// since the first update changes the conflict token of the worker-deployment workflow.
-	s.Error(err2)
+	if err1 == nil {
+		// This would mean that the first request completed successfully and updated the conflict token.
+		// The second request will be rejected due to a stale conflict token. The last modifier identity would be the one from the first request.
+		s.Error(err2)
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := assert.New(t)
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
+			resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv.DeploymentSeries(),
+			})
+			a.NoError(err)
+			a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+			a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
+		}, time.Second*10, time.Millisecond*1000)
+	} else {
+		// This would mean that the second request completed successfully and updated the conflict token.
+		// The first request will be rejected due to stale conflict token. The last modifier identity would be the one from the second request.
+		s.Error(err1)
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := assert.New(t)
 
-		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
-		})
-		a.NoError(err)
-		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
-		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
-	}, time.Second*10, time.Millisecond*1000)
-
+			resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: tv.DeploymentSeries(),
+			})
+			a.NoError(err)
+			a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+			a.Equal(tv.ClientIdentity()+"-other", resp.GetWorkerDeploymentInfo().GetLastModifierIdentity())
+		}, time.Second*10, time.Millisecond*1000)
+	}
 }
 
 func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_IdempotentRequests() {
@@ -686,10 +705,6 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_Idempote
 		})
 	}()
 
-	// To allow the first go-routine to start before the second one.
-	//nolint:forbidigo
-	time.Sleep(10 * time.Millisecond)
-
 	go func() {
 		defer wg.Done()
 		resp2, err2 = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
@@ -719,13 +734,10 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_ConcurrentUpdates_Idempote
 		a.Equal(tv.ClientIdentity(), resp.GetWorkerDeploymentInfo().GetLastModifierIdentity()) // note: the last modifier identity should be the one from the first update
 	}, time.Second*10, time.Millisecond*1000)
 
-	// Since the first update completes successfully, the previous version will be ""
-	s.Equal("", resp1.GetPreviousVersion())
-	// Since the second update was de-duped in the update handler, the previous version will be the current ramping version which is the version from the first update
-	s.Equal(tv.DeploymentVersionString(), resp2.GetPreviousVersion())
-
-	// The conflict token should be the same as the one set from the first update
-	s.Equal(resp1.GetConflictToken(), resp2.GetConflictToken())
+	// Since there is no guarantee which request will complete first, we need to check if the response objects have one of
+	// two possible values.
+	s.Contains([]string{"", tv.DeploymentVersionString()}, resp1.GetPreviousVersion())
+	s.Contains([]string{"", tv.DeploymentVersionString()}, resp2.GetPreviousVersion())
 }
 
 // Testing ConflictToken
