@@ -234,7 +234,7 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 
 type matcherData struct {
 	config     *taskQueueConfig
-	logger log.Logger
+	logger     log.Logger
 	canForward bool
 
 	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
@@ -252,8 +252,8 @@ type matcherData struct {
 
 func newMatcherData(config *taskQueueConfig, logger log.Logger, canForward bool) matcherData {
 	return matcherData{
-		config: config,
-		logger: logger,
+		config:     config,
+		logger:     logger,
 		canForward: canForward,
 		tasks: taskPQ{
 			ages: newBacklogAgeTracker(),
