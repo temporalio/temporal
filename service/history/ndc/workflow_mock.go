@@ -37,7 +37,6 @@ import (
 	reflect "reflect"
 
 	interfaces "go.temporal.io/server/service/history/interfaces"
-	workflow "go.temporal.io/server/service/history/workflow"
 	cache "go.temporal.io/server/service/history/workflow/cache"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -80,10 +79,10 @@ func (mr *MockWorkflowMockRecorder) FlushBufferedEvents() *gomock.Call {
 }
 
 // GetContext mocks base method.
-func (m *MockWorkflow) GetContext() workflow.Context {
+func (m *MockWorkflow) GetContext() interfaces.WorkflowContext {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetContext")
-	ret0, _ := ret[0].(workflow.Context)
+	ret0, _ := ret[0].(interfaces.WorkflowContext)
 	return ret0
 }
 

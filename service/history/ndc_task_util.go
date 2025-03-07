@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -81,7 +80,7 @@ func CheckTaskVersion(
 func loadMutableStateForTransferTask(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	transferTask tasks.Task,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -129,7 +128,7 @@ func loadMutableStateForTransferTask(
 func loadMutableStateForTimerTask(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	timerTask tasks.Task,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -151,7 +150,7 @@ func loadMutableStateForTimerTask(
 func loadMutableStateForTask(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	task tasks.Task,
 	getEventID taskEventIDGetter,
 	canMutableStateBeStale mutableStateStaleChecker,
@@ -250,7 +249,7 @@ func validateTaskByClock(
 func validateTaskGeneration(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	workflowContext workflow.Context,
+	workflowContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	taskID int64,
 ) error {
@@ -336,10 +335,10 @@ func getNamespaceTagAndReplicationStateByID(
 	registry namespace.Registry,
 	namespaceID string,
 ) (metrics.Tag, enumspb.ReplicationState) {
-	namespace, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
+	namespaceName, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
 	if err != nil {
 		return metrics.NamespaceUnknownTag(), enumspb.REPLICATION_STATE_UNSPECIFIED
 	}
 
-	return metrics.NamespaceTag(namespace.Name().String()), namespace.ReplicationState()
+	return metrics.NamespaceTag(namespaceName.Name().String()), namespaceName.ReplicationState()
 }

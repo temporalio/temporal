@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
-
 package workflow
 
 import (
@@ -55,108 +53,6 @@ import (
 )
 
 type (
-	Context interface {
-		GetWorkflowKey() definition.WorkflowKey
-
-		LoadMutableState(ctx context.Context, shardContext historyi.ShardContext) (historyi.MutableState, error)
-		LoadExecutionStats(ctx context.Context, shardContext historyi.ShardContext) (*persistencespb.ExecutionStats, error)
-		Clear()
-
-		Lock(ctx context.Context, lockPriority locks.Priority) error
-		Unlock()
-
-		IsDirty() bool
-
-		RefreshTasks(ctx context.Context, shardContext historyi.ShardContext) error
-
-		ReapplyEvents(
-			ctx context.Context,
-			shardContext historyi.ShardContext,
-			eventBatches []*persistence.WorkflowEvents,
-		) error
-
-		PersistWorkflowEvents(
-			ctx context.Context,
-			shardContext historyi.ShardContext,
-			workflowEventsSlice ...*persistence.WorkflowEvents,
-		) (int64, error)
-
-		CreateWorkflowExecution(
-			ctx context.Context,
-			shardContext historyi.ShardContext,
-			createMode persistence.CreateWorkflowMode,
-			prevRunID string,
-			prevLastWriteVersion int64,
-			newMutableState historyi.MutableState,
-			newWorkflow *persistence.WorkflowSnapshot,
-			newWorkflowEvents []*persistence.WorkflowEvents,
-		) error
-		ConflictResolveWorkflowExecution(
-			ctx context.Context,
-			shardContext historyi.ShardContext,
-			conflictResolveMode persistence.ConflictResolveWorkflowMode,
-			resetMutableState historyi.MutableState,
-			newContext Context,
-			newMutableState historyi.MutableState,
-			currentContext Context,
-			currentMutableState historyi.MutableState,
-			resetWorkflowTransactionPolicy historyi.TransactionPolicy,
-			newWorkflowTransactionPolicy *historyi.TransactionPolicy,
-			currentTransactionPolicy *historyi.TransactionPolicy,
-		) error
-		UpdateWorkflowExecutionAsActive(
-			ctx context.Context,
-			shardContext historyi.ShardContext,
-		) error
-		UpdateWorkflowExecutionWithNewAsActive(
-			ctx context.Context,
-			shardContext historyi.ShardContext,
-			newContext Context,
-			newMutableState historyi.MutableState,
-		) error
-		UpdateWorkflowExecutionAsPassive(
-			ctx context.Context,
-			shardContext historyi.ShardContext,
-		) error
-		UpdateWorkflowExecutionWithNewAsPassive(
-			ctx context.Context,
-			shardContext historyi.ShardContext,
-			newContext Context,
-			newMutableState historyi.MutableState,
-		) error
-		UpdateWorkflowExecutionWithNew(
-			ctx context.Context,
-			shardContext historyi.ShardContext,
-			updateMode persistence.UpdateWorkflowMode,
-			newContext Context,
-			newMutableState historyi.MutableState,
-			updateWorkflowTransactionPolicy historyi.TransactionPolicy,
-			newWorkflowTransactionPolicy *historyi.TransactionPolicy,
-		) error
-		// SetWorkflowExecution is an alias to SubmitClosedWorkflowSnapshot with TransactionPolicyPassive.
-		SetWorkflowExecution(
-			ctx context.Context,
-			shardContext historyi.ShardContext,
-		) error
-		// SubmitClosedWorkflowSnapshot closes the current mutable state transaction with the given
-		// transactionPolicy and updates the workflow execution record in the DB. Does not check the "current"
-		// run status for the execution.
-		// Closes the transaction as snapshot, which errors out if there are any buffered events that need
-		// flushing and generally does not expect new history events to be generated (expected for closed
-		// workflows).
-		// NOTE: in the future, we'd like to have the ability to close the transaction as mutation to avoid the
-		// overhead of overwriting the entire DB record.
-		SubmitClosedWorkflowSnapshot(
-			ctx context.Context,
-			shardContext historyi.ShardContext,
-			transactionPolicy historyi.TransactionPolicy,
-		) error
-		// TODO (alex-update): move this from workflow context.
-		UpdateRegistry(ctx context.Context) update.Registry
-	}
-)
-
-type (
 	ContextImpl struct {
 		workflowKey     definition.WorkflowKey
 		logger          log.Logger
@@ -170,7 +66,7 @@ type (
 	}
 )
 
-var _ Context = (*ContextImpl)(nil)
+var _ historyi.WorkflowContext = (*ContextImpl)(nil)
 
 func NewContext(
 	config *configs.Config,
@@ -375,9 +271,9 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	shardContext historyi.ShardContext,
 	conflictResolveMode persistence.ConflictResolveWorkflowMode,
 	resetMutableState historyi.MutableState,
-	newContext Context,
+	newContext historyi.WorkflowContext,
 	newMutableState historyi.MutableState,
-	currentContext Context,
+	currentContext historyi.WorkflowContext,
 	currentMutableState historyi.MutableState,
 	resetWorkflowTransactionPolicy historyi.TransactionPolicy,
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
@@ -538,7 +434,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsActive(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	newContext Context,
+	newContext historyi.WorkflowContext,
 	newMutableState historyi.MutableState,
 ) error {
 
@@ -572,7 +468,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsPassive(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	newContext Context,
+	newContext historyi.WorkflowContext,
 	newMutableState historyi.MutableState,
 ) error {
 
@@ -591,7 +487,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	updateMode persistence.UpdateWorkflowMode,
-	newContext Context,
+	newContext historyi.WorkflowContext,
 	newMutableState historyi.MutableState,
 	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,

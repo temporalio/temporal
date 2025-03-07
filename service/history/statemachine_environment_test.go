@@ -515,7 +515,7 @@ func TestGetCurrentWorkflowExecutionContext(t *testing.T) {
 			mockMutableState := historyi.NewMockMutableState(controller)
 			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(tc.currentRunRunning).Times(1)
 
-			mockWorkflowContext := workflow.NewMockContext(controller)
+			mockWorkflowContext := historyi.NewMockWorkflowContext(controller)
 			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), mockShard).Return(mockMutableState, nil).Times(1)
 			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(namespaceID.String(), workflowID, currentRunID)).AnyTimes()
 

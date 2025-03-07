@@ -73,19 +73,19 @@ type (
 			namespaceID namespace.ID,
 			execution *commonpb.WorkflowExecution,
 			lockPriority locks.Priority,
-		) (workflow.Context, ReleaseCacheFunc, error)
+		) (historyi.WorkflowContext, ReleaseCacheFunc, error)
 	}
 
 	cacheImpl struct {
 		cache.Cache
 
-		onPut                     func(wfContext *workflow.Context)
-		onEvict                   func(wfContext *workflow.Context)
+		onPut                     func(wfContext *historyi.WorkflowContext)
+		onEvict                   func(wfContext *historyi.WorkflowContext)
 		nonUserContextLockTimeout time.Duration
 	}
 	cacheItem struct {
 		shardId   int32
-		wfContext workflow.Context
+		wfContext historyi.WorkflowContext
 		finalizer *finalizer.Finalizer
 	}
 
@@ -250,7 +250,7 @@ func (c *cacheImpl) GetOrCreateWorkflowExecution(
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	lockPriority locks.Priority,
-) (workflow.Context, ReleaseCacheFunc, error) {
+) (historyi.WorkflowContext, ReleaseCacheFunc, error) {
 
 	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, execution, lockPriority); err != nil {
 		return nil, nil, err
@@ -289,13 +289,13 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	handler metrics.Handler,
 	forceClearContext bool,
 	lockPriority locks.Priority,
-) (workflow.Context, ReleaseCacheFunc, error) {
+) (historyi.WorkflowContext, ReleaseCacheFunc, error) {
 	cacheKey := Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 		ShardUUID:   shardContext.GetOwner(),
 	}
 	item, cacheHit := c.Get(cacheKey).(*cacheItem)
-	var workflowCtx workflow.Context
+	var workflowCtx historyi.WorkflowContext
 	if cacheHit {
 		workflowCtx = item.wfContext
 	} else {
@@ -334,7 +334,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 
 func (c *cacheImpl) lockWorkflowExecution(
 	ctx context.Context,
-	workflowCtx workflow.Context,
+	workflowCtx historyi.WorkflowContext,
 	cacheKey Key,
 	lockPriority locks.Priority,
 ) error {
@@ -367,7 +367,7 @@ func (c *cacheImpl) lockWorkflowExecution(
 func (c *cacheImpl) makeReleaseFunc(
 	cacheKey Key,
 	shardContext historyi.ShardContext,
-	context workflow.Context,
+	wfContext historyi.WorkflowContext,
 	forceClearContext bool,
 	handler metrics.Handler,
 	acquireTime time.Time,
@@ -380,28 +380,28 @@ func (c *cacheImpl) makeReleaseFunc(
 				metrics.HistoryWorkflowExecutionCacheLockHoldDuration.With(handler).Record(time.Since(acquireTime))
 			}()
 			if rec := recover(); rec != nil {
-				context.Clear()
-				context.Unlock()
+				wfContext.Clear()
+				wfContext.Unlock()
 				c.Release(cacheKey)
 				panic(rec)
 			} else {
 				if err != nil || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
-					context.Clear()
-					context.Unlock()
+					wfContext.Clear()
+					wfContext.Unlock()
 					c.Release(cacheKey)
 				} else {
-					isDirty := context.IsDirty()
+					isDirty := wfContext.IsDirty()
 					if isDirty {
-						context.Clear()
+						wfContext.Clear()
 						logger := log.With(shardContext.GetLogger(), tag.ComponentHistoryCache)
 						logger.Error("Cache encountered dirty mutable state transaction",
-							tag.WorkflowNamespaceID(context.GetWorkflowKey().NamespaceID),
-							tag.WorkflowID(context.GetWorkflowKey().WorkflowID),
-							tag.WorkflowRunID(context.GetWorkflowKey().RunID),
+							tag.WorkflowNamespaceID(wfContext.GetWorkflowKey().NamespaceID),
+							tag.WorkflowID(wfContext.GetWorkflowKey().WorkflowID),
+							tag.WorkflowRunID(wfContext.GetWorkflowKey().RunID),
 						)
 					}
-					context.Unlock()
+					wfContext.Unlock()
 					c.Release(cacheKey)
 					if isDirty {
 						panic("Cache encountered dirty mutable state transaction")

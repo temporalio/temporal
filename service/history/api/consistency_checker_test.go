@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -104,7 +103,7 @@ func (s *workflowConsistencyCheckerSuite) TearDownTest() {
 func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck_Success_PassCheck() {
 	ctx := context.Background()
 
-	wfContext := workflow.NewMockContext(s.controller)
+	wfContext := historyi.NewMockWorkflowContext(s.controller)
 	mutableState := historyi.NewMockMutableState(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }

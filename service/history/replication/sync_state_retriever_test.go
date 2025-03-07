@@ -50,7 +50,6 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -65,8 +64,8 @@ type (
 		mockShard                  *shard.ContextTest
 		controller                 *gomock.Controller
 		releaseFunc                func(err error)
-		workflowContext            *workflow.MockContext
-		newRunWorkflowContext      *workflow.MockContext
+		workflowContext            *historyi.MockWorkflowContext
+		newRunWorkflowContext      *historyi.MockWorkflowContext
 		namespaceID                string
 		execution                  *commonpb.WorkflowExecution
 		newRunId                   string
@@ -85,8 +84,8 @@ func (s *syncWorkflowStateSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.workflowContext = workflow.NewMockContext(s.controller)
-	s.newRunWorkflowContext = workflow.NewMockContext(s.controller)
+	s.workflowContext = historyi.NewMockWorkflowContext(s.controller)
+	s.newRunWorkflowContext = historyi.NewMockWorkflowContext(s.controller)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{

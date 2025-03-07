@@ -837,7 +837,7 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	ctx context.Context,
-	context workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	scheduleNewWorkflowTask bool,
 ) error {
@@ -849,7 +849,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 			return err
 		}
 	}
-	return context.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	return wfContext.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 }
 
 func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(

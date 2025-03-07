@@ -688,7 +688,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	}
 
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
-		var wfCtx workflow.Context
+		var wfCtx historyi.WorkflowContext
 		var err error
 
 		if runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {

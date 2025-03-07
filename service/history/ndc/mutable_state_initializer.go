@@ -214,7 +214,7 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 
 func (r *MutableStateInitializerImpl) flushBufferEvents(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 ) (historyi.MutableState, error) {
 	flusher := NewBufferEventFlusher(r.shardContext, wfContext, mutableState, r.logger)

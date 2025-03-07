@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func SignalWithStartWorkflow(
@@ -222,7 +221,7 @@ func startAndSignalWithCurrentWorkflow(
 		ctx,
 		currentWorkflowLease,
 		currentWorkflowUpdateAction,
-		func() (workflow.Context, historyi.MutableState, error) {
+		func() (historyi.WorkflowContext, historyi.MutableState, error) {
 			return newWorkflowLease.GetContext(), newWorkflowLease.GetMutableState(), nil
 		},
 	)

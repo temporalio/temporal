@@ -51,7 +51,6 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -299,7 +298,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
 	).Return(shardContext, nil)
-	wfCtx := workflow.NewMockContext(s.controller)
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
 	if err == nil {
 		wfCtx.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(mutableState, err)
 	}

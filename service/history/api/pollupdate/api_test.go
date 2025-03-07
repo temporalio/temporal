@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/service/history/api/pollupdate"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
@@ -67,7 +66,7 @@ type (
 
 	mockWorkflowLeaseCtx struct {
 		api.WorkflowLease
-		GetContextFn   func() workflow.Context
+		GetContextFn   func() historyi.WorkflowContext
 		GetReleaseFnFn func() wcache.ReleaseCacheFunc
 	}
 
@@ -98,7 +97,7 @@ func (m mockWorkflowLeaseCtx) GetReleaseFn() wcache.ReleaseCacheFunc {
 	return m.GetReleaseFnFn()
 }
 
-func (m mockWorkflowLeaseCtx) GetContext() workflow.Context {
+func (m mockWorkflowLeaseCtx) GetContext() historyi.WorkflowContext {
 	return m.GetContextFn()
 }
 
@@ -115,13 +114,13 @@ func TestPollOutcome(t *testing.T) {
 
 	mockController := gomock.NewController(t)
 
-	wfCtx := workflow.NewMockContext(mockController)
+	wfCtx := historyi.NewMockWorkflowContext(mockController)
 	wfCtx.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}).AnyTimes()
 	wfCtx.EXPECT().UpdateRegistry(gomock.Any()).Return(reg).AnyTimes()
 
 	apiCtx := mockWorkflowLeaseCtx{
 		GetReleaseFnFn: func() wcache.ReleaseCacheFunc { return func(error) {} },
-		GetContextFn: func() workflow.Context {
+		GetContextFn: func() historyi.WorkflowContext {
 			return wfCtx
 		},
 	}

@@ -1004,7 +1004,7 @@ func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
 func failWorkflowTask(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	workflowTask *historyi.WorkflowTaskInfo,
 	wtFailedCause *workflowTaskFailedCause,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
@@ -1046,7 +1046,7 @@ func failWorkflowTask(
 	return mutableState, wtFailedEventID, nil
 }
 
-func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Context, wfContext workflow.Context) error {
+func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Context, wfContext historyi.WorkflowContext) error {
 
 	// Clear all changes in the workflow context that was made already.
 	wfContext.Clear()

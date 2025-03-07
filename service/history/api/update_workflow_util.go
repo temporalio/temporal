@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
@@ -41,7 +40,7 @@ func GetAndUpdateWorkflowWithNew(
 	reqClock *clockspb.VectorClock,
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, historyi.MutableState, error),
+	newWorkflowFn func() (historyi.WorkflowContext, historyi.MutableState, error),
 	shard historyi.ShardContext,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
@@ -65,7 +64,7 @@ func GetAndUpdateWorkflowWithConsistencyCheck(
 	consistencyCheckFn MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, historyi.MutableState, error),
+	newWorkflowFn func() (historyi.WorkflowContext, historyi.MutableState, error),
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
@@ -89,7 +88,7 @@ func UpdateWorkflowWithNew(
 	ctx context.Context,
 	workflowLease WorkflowLease,
 	action UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, historyi.MutableState, error),
+	newWorkflowFn func() (historyi.WorkflowContext, historyi.MutableState, error),
 ) (retError error) {
 
 	// conduct caller action

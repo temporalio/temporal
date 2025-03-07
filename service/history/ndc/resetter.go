@@ -39,7 +39,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 const (
@@ -67,7 +66,7 @@ type (
 		namespaceID namespace.ID
 		workflowID  string
 		baseRunID   string
-		newContext  workflow.Context
+		newContext  historyi.WorkflowContext
 		newRunID    string
 
 		logger log.Logger
@@ -82,7 +81,7 @@ func NewResetter(
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
-	newContext workflow.Context,
+	newContext historyi.WorkflowContext,
 	newRunID string,
 	logger log.Logger,
 ) *resetterImpl {

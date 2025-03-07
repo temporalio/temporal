@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -40,14 +39,14 @@ type (
 	BufferEventFlusher interface {
 		flush(
 			ctx context.Context,
-		) (workflow.Context, historyi.MutableState, error)
+		) (historyi.WorkflowContext, historyi.MutableState, error)
 	}
 
 	BufferEventFlusherImpl struct {
 		shardContext    historyi.ShardContext
 		clusterMetadata cluster.Metadata
 
-		wfContext    workflow.Context
+		wfContext    historyi.WorkflowContext
 		mutableState historyi.MutableState
 		logger       log.Logger
 	}
@@ -57,7 +56,7 @@ var _ BufferEventFlusher = (*BufferEventFlusherImpl)(nil)
 
 func NewBufferEventFlusher(
 	shardContext historyi.ShardContext,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	logger log.Logger,
 ) *BufferEventFlusherImpl {
@@ -74,7 +73,7 @@ func NewBufferEventFlusher(
 
 func (r *BufferEventFlusherImpl) flush(
 	ctx context.Context,
-) (workflow.Context, historyi.MutableState, error) {
+) (historyi.WorkflowContext, historyi.MutableState, error) {
 	// check whether there are buffered events, if so, flush it
 	// NOTE: buffered events does not show in version history or next event id
 	if !r.mutableState.HasBufferedEvents() {

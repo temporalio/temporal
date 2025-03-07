@@ -452,7 +452,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		nil,
 		workflowKey,
 		currentExecutionUpdateAction,
-		func() (workflow.Context, historyi.MutableState, error) {
+		func() (historyi.WorkflowContext, historyi.MutableState, error) {
 			newMutableState, err := api.NewWorkflowWithSignal(
 				s.shardContext,
 				s.namespace,

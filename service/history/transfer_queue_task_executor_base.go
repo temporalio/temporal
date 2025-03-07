@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -301,7 +300,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	)
 }
 
-func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms historyi.MutableState, weCtx workflow.Context) bool {
+func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms historyi.MutableState, weCtx historyi.WorkflowContext) bool {
 	closeTransferTaskId := ms.GetExecutionInfo().CloseTransferTaskId
 	// taskID == 0 if workflow closed before this field was added (v1.17).
 	if closeTransferTaskId == 0 {

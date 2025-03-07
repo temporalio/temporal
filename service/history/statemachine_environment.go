@@ -54,7 +54,7 @@ func getWorkflowExecutionContextForTask(
 	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	task tasks.Task,
-) (workflow.Context, wcache.ReleaseCacheFunc, error) {
+) (historyi.WorkflowContext, wcache.ReleaseCacheFunc, error) {
 	return getWorkflowExecutionContext(
 		ctx,
 		shardContext,
@@ -70,7 +70,7 @@ func getWorkflowExecutionContext(
 	workflowCache wcache.Cache,
 	key definition.WorkflowKey,
 	lockPriority locks.Priority,
-) (workflow.Context, wcache.ReleaseCacheFunc, error) {
+) (historyi.WorkflowContext, wcache.ReleaseCacheFunc, error) {
 	if key.GetRunID() == "" {
 		return getCurrentWorkflowExecutionContext(
 			ctx,
@@ -110,7 +110,7 @@ func getCurrentWorkflowExecutionContext(
 	namespaceID string,
 	workflowID string,
 	lockPriority locks.Priority,
-) (workflow.Context, wcache.ReleaseCacheFunc, error) {
+) (historyi.WorkflowContext, wcache.ReleaseCacheFunc, error) {
 	currentRunID, err := wcache.GetCurrentRunID(
 		ctx,
 		shardContext,
@@ -184,8 +184,8 @@ type stateMachineEnvironment struct {
 // [loadAndValidateMutableState] instead.
 func (e *stateMachineEnvironment) loadAndValidateMutableStateNoReload(
 	ctx context.Context,
-	wfCtx workflow.Context,
-	validate func(workflowContext workflow.Context, ms historyi.MutableState, potentialStaleState bool) error,
+	wfCtx historyi.WorkflowContext,
+	validate func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error,
 	potentialStaleState bool,
 ) (historyi.MutableState, error) {
 	mutableState, err := wfCtx.LoadMutableState(ctx, e.shardContext)
@@ -201,8 +201,8 @@ func (e *stateMachineEnvironment) loadAndValidateMutableStateNoReload(
 // Reloads mutable state and retries if validator returns a [queues.StaleStateError].
 func (e *stateMachineEnvironment) loadAndValidateMutableState(
 	ctx context.Context,
-	wfCtx workflow.Context,
-	validate func(workflowContext workflow.Context, ms historyi.MutableState, potentialStaleState bool) error,
+	wfCtx historyi.WorkflowContext,
+	validate func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error,
 ) (historyi.MutableState, error) {
 	mutableState, err := e.loadAndValidateMutableStateNoReload(ctx, wfCtx, validate, true)
 	if err == nil {
@@ -221,7 +221,7 @@ func (e *stateMachineEnvironment) loadAndValidateMutableState(
 // validateStateMachineRef compares the ref and associated state machine's version and transition count to detect staleness.
 func (e *stateMachineEnvironment) validateStateMachineRef(
 	ctx context.Context,
-	workflowContext workflow.Context,
+	workflowContext historyi.WorkflowContext,
 	ms historyi.MutableState,
 	ref hsm.Ref,
 	potentialStaleState bool,
@@ -328,8 +328,8 @@ func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistor
 func (e *stateMachineEnvironment) getValidatedMutableState(
 	ctx context.Context,
 	key definition.WorkflowKey,
-	validate func(workflowContext workflow.Context, ms historyi.MutableState, potentialStaleState bool) error,
-) (workflow.Context, wcache.ReleaseCacheFunc, historyi.MutableState, error) {
+	validate func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error,
+) (historyi.WorkflowContext, wcache.ReleaseCacheFunc, historyi.MutableState, error) {
 	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, locks.PriorityLow)
 	if err != nil {
 		return nil, nil, nil, err
@@ -361,7 +361,7 @@ func (e *stateMachineEnvironment) validateNotZombieWorkflow(
 
 func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) (retErr error) {
 	wfCtx, release, ms, err := e.getValidatedMutableState(
-		ctx, ref.WorkflowKey, func(workflowContext workflow.Context, ms historyi.MutableState, potentialStaleState bool) error {
+		ctx, ref.WorkflowKey, func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error {
 			// For task references we never want to access a zombie workflow, even if the machine is accessed for read.
 			if ref.TaskID != 0 {
 				accessType = hsm.AccessWrite

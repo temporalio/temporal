@@ -48,7 +48,6 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -223,7 +222,7 @@ func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
 
 func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	ctx context.Context,
-	workflowContext workflow.Context,
+	workflowContext historyi.WorkflowContext,
 	ms historyi.MutableState,
 	deadline time.Time,
 	timer *persistencespb.StateMachineTaskInfo,
@@ -269,7 +268,7 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 // and return a slice of unprocessed timers.
 func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	ctx context.Context,
-	workflowContext workflow.Context,
+	workflowContext historyi.WorkflowContext,
 	ms historyi.MutableState,
 	task *tasks.StateMachineTimerTask,
 	execute func(node *hsm.Node, task hsm.Task) error,

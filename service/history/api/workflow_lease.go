@@ -26,18 +26,17 @@ package api
 
 import (
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type WorkflowLease interface {
-	GetContext() workflow.Context
+	GetContext() historyi.WorkflowContext
 	GetMutableState() historyi.MutableState
 	GetReleaseFn() wcache.ReleaseCacheFunc
 }
 
 type workflowLease struct {
-	context      workflow.Context
+	context      historyi.WorkflowContext
 	mutableState historyi.MutableState
 	releaseFn    wcache.ReleaseCacheFunc
 }
@@ -67,18 +66,18 @@ type UpdateWorkflowActionFunc func(WorkflowLease) (*UpdateWorkflowAction, error)
 var _ WorkflowLease = (*workflowLease)(nil)
 
 func NewWorkflowLease(
-	context workflow.Context,
+	wfContext historyi.WorkflowContext,
 	releaseFn wcache.ReleaseCacheFunc,
 	mutableState historyi.MutableState,
 ) WorkflowLease {
 	return &workflowLease{
-		context:      context,
+		context:      wfContext,
 		releaseFn:    releaseFn,
 		mutableState: mutableState,
 	}
 }
 
-func (w *workflowLease) GetContext() workflow.Context {
+func (w *workflowLease) GetContext() historyi.WorkflowContext {
 	return w.context
 }
 

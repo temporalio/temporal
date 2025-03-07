@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -62,7 +61,7 @@ type (
 		workflowCache              *wcache.MockCache
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 
-		currentContext      *workflow.MockContext
+		currentContext      *historyi.MockWorkflowContext
 		currentMutableState *historyi.MockMutableState
 	}
 )
@@ -103,7 +102,7 @@ func (s *signalWorkflowSuite) SetupTest() {
 		RunId: tests.RunID,
 	}).AnyTimes()
 
-	s.currentContext = workflow.NewMockContext(s.controller)
+	s.currentContext = historyi.NewMockWorkflowContext(s.controller)
 	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil).AnyTimes()
 
 	s.workflowCache = wcache.NewMockCache(s.controller)

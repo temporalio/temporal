@@ -89,21 +89,21 @@ func NewHistoryImporter(
 		mutableStateMapper: NewMutableStateMapping(
 			shardContext,
 			func(
-				wfContext workflow.Context,
+				wfContext historyi.WorkflowContext,
 				mutableState historyi.MutableState,
 				logger log.Logger,
 			) BufferEventFlusher {
 				return NewBufferEventFlusher(shardContext, wfContext, mutableState, logger)
 			},
 			func(
-				wfContext workflow.Context,
+				wfContext historyi.WorkflowContext,
 				mutableState historyi.MutableState,
 				logger log.Logger,
 			) BranchMgr {
 				return NewBranchMgr(shardContext, wfContext, mutableState, logger)
 			},
 			func(
-				wfContext workflow.Context,
+				wfContext historyi.WorkflowContext,
 				mutableState historyi.MutableState,
 				logger log.Logger,
 			) ConflictResolver {
@@ -221,7 +221,7 @@ func (r *HistoryImporterImpl) applyEvents(
 
 func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 	task replicationTask,
@@ -247,7 +247,7 @@ func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 
 func (r *HistoryImporterImpl) applyNonStartEventsAndSerialize(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 	task replicationTask,

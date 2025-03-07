@@ -350,7 +350,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			task := p.Task
 			shardContext := historyi.NewMockShardContext(p.Controller)
 			workflowCache := cache.NewMockCache(p.Controller)
-			workflowContext := workflow.NewMockContext(p.Controller)
+			workflowContext := historyi.NewMockWorkflowContext(p.Controller)
 			branchToken := []byte{42}
 			logger := log.NewNoopLogger()
 			timeSource := clock.NewRealTimeSource()
