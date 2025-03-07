@@ -61,7 +61,7 @@ type (
 		// task queue configuration
 
 		RangeSize                                int64
-		NewMatcher                               dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		NewMatcher                               dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -149,7 +149,7 @@ type (
 		LongPollExpirationInterval func() time.Duration
 		BacklogTaskForwardTimeout  func() time.Duration
 		RangeSize                  int64
-		NewMatcher                 bool
+		NewMatcher                 func(func(bool)) (bool, func())
 		GetTasksBatchSize          func() int
 		GetTasksReloadAt           func() int
 		UpdateAckInterval          func() time.Duration
@@ -223,6 +223,7 @@ const (
 	unloadCauseConflict   // reactive unload due to other node stealing ownership
 	unloadCauseShuttingDown
 	unloadCauseForce
+	unloadCauseConfigChange
 	unloadCauseOtherError
 )
 
@@ -246,7 +247,7 @@ func NewConfig(
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
-		NewMatcher:                               dynamicconfig.MatchingUseNewMatcher.Get(dc),
+		NewMatcher:                               dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
@@ -322,8 +323,10 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 	taskType := tq.TaskType()
 
 	return &taskQueueConfig{
-		RangeSize:  config.RangeSize,
-		NewMatcher: config.NewMatcher(ns.String(), taskQueueName, taskType),
+		RangeSize: config.RangeSize,
+		NewMatcher: func(cb func(bool)) (bool, func()) {
+			return config.NewMatcher(ns.String(), taskQueueName, taskType, cb)
+		},
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
 		},
