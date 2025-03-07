@@ -231,7 +231,8 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 }
 
 type matcherData struct {
-	config *taskQueueConfig
+	config     *taskQueueConfig
+	canForward bool
 
 	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
 
@@ -246,9 +247,10 @@ type matcherData struct {
 	lastPoller time.Time // most recent poll start time
 }
 
-func newMatcherData(config *taskQueueConfig) matcherData {
+func newMatcherData(config *taskQueueConfig, canForward bool) matcherData {
 	return matcherData{
-		config: config,
+		config:     config,
+		canForward: canForward,
 		tasks: taskPQ{
 			ages: newBacklogAgeTracker(),
 		},
@@ -456,7 +458,7 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 
 // call with lock held
 func (d *matcherData) findAndWakeMatches() {
-	allowForwarding := d.allowForwarding()
+	allowForwarding := d.canForward && d.allowForwarding()
 
 	now := time.Now().UnixNano()
 	// TODO(pri): for task-specific ready time, we need to do a full/partial re-heapify here
@@ -526,7 +528,8 @@ func (d *matcherData) finishMatchAfterPollForward(poller *waitingPoller, task *i
 // isBacklogNegligible returns true if the age of the task backlog is less than the threshold.
 // call with lock held.
 func (d *matcherData) isBacklogNegligible() bool {
-	return d.tasks.ages.getAge() < d.config.BacklogNegligibleAge()
+	t := d.tasks.ages.oldestTime()
+	return t.IsZero() || time.Since(t) < d.config.BacklogNegligibleAge()
 }
 
 func (d *matcherData) TimeSinceLastPoll() time.Duration {
