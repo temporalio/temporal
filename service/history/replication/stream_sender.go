@@ -518,7 +518,7 @@ Loop:
 			time.Since(item.GetVisibilityTime()),
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-			metrics.OperationTag(TaskOperationTagFromProto(item.GetType())),
+			metrics.OperationTag(TaskOperationTagFromTask(item)),
 			metrics.ReplicationTaskPriorityTag(priority),
 		)
 
@@ -531,7 +531,7 @@ Loop:
 					time.Since(startTime),
 					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 					metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-					metrics.OperationTag(TaskOperationTagFromProto(item.GetType())),
+					metrics.OperationTag(TaskOperationTagFromTask(item)),
 					metrics.ReplicationTaskPriorityTag(priority),
 				)
 			}()
@@ -579,14 +579,14 @@ Loop:
 			attempt,
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-			metrics.OperationTag(TaskOperationTagFromProto(item.GetType())),
+			metrics.OperationTag(TaskOperationTagFromTask(item)),
 			metrics.ReplicationTaskPriorityTag(priority),
 		)
 		metrics.ReplicationTaskSendLatency.With(s.metrics).Record(
 			time.Since(item.GetVisibilityTime()),
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-			metrics.OperationTag(TaskOperationTagFromProto(item.GetType())),
+			metrics.OperationTag(TaskOperationTagFromTask(item)),
 			metrics.ReplicationTaskPriorityTag(priority),
 		)
 		if err != nil {
@@ -594,7 +594,7 @@ Loop:
 				int64(1),
 				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-				metrics.OperationTag(TaskOperationTagFromProto(item.GetType())),
+				metrics.OperationTag(TaskOperationTagFromTask(item)),
 				metrics.ReplicationTaskPriorityTag(priority),
 			)
 			return fmt.Errorf("failed to send task: %v, cause: %w", item, err)

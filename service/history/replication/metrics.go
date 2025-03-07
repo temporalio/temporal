@@ -28,6 +28,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 func TaskOperationTag(
@@ -60,10 +61,10 @@ func TaskOperationTag(
 	}
 }
 
-func TaskOperationTagFromProto(
-	taskType enumsspb.TaskType,
+func TaskOperationTagFromTask(
+	item tasks.Task,
 ) string {
-	switch taskType {
+	switch item.GetType() {
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM:
 		return metrics.SyncHSMTaskScope
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION:
