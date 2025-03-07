@@ -37,8 +37,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 // maxResetRedirectCount is the number of times we follow the reset run ID to forward the request to the new parent.
@@ -99,7 +99,7 @@ func recordChildWorkflowCompleted(
 	err := api.GetAndUpdateWorkflowWithConsistencyCheck(
 		ctx,
 		request.Clock,
-		func(mutableState workflow.MutableState) bool {
+		func(mutableState historyi.MutableState) bool {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// current branch already closed, we won't perform any operation, pass the check
 				return true
@@ -194,7 +194,7 @@ func recordChildWorkflowCompleted(
 
 func recordStartedEventIfMissing(
 	ctx context.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	request *historyservice.RecordChildExecutionCompletedRequest,
 	ci *persistencespb.ChildExecutionInfo,
 ) error {

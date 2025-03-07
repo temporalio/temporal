@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -44,13 +45,13 @@ import (
 type (
 	Workflow interface {
 		GetContext() workflow.Context
-		GetMutableState() workflow.MutableState
+		GetMutableState() historyi.MutableState
 		GetReleaseFn() wcache.ReleaseCacheFunc
 		GetVectorClock() (int64, int64, error)
 
 		HappensAfter(that Workflow) (bool, error)
 		Revive() error
-		SuppressBy(incomingWorkflow Workflow) (workflow.TransactionPolicy, error)
+		SuppressBy(incomingWorkflow Workflow) (historyi.TransactionPolicy, error)
 		FlushBufferedEvents() error
 	}
 
@@ -58,7 +59,7 @@ type (
 		clusterMetadata cluster.Metadata
 
 		context      workflow.Context
-		mutableState workflow.MutableState
+		mutableState historyi.MutableState
 		releaseFn    wcache.ReleaseCacheFunc
 	}
 )
@@ -66,7 +67,7 @@ type (
 func NewWorkflow(
 	clusterMetadata cluster.Metadata,
 	context workflow.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	releaseFn wcache.ReleaseCacheFunc,
 ) *WorkflowImpl {
 
@@ -83,7 +84,7 @@ func (r *WorkflowImpl) GetContext() workflow.Context {
 	return r.context
 }
 
-func (r *WorkflowImpl) GetMutableState() workflow.MutableState {
+func (r *WorkflowImpl) GetMutableState() historyi.MutableState {
 	return r.mutableState
 }
 
@@ -155,7 +156,7 @@ func (r *WorkflowImpl) Revive() error {
 
 func (r *WorkflowImpl) SuppressBy(
 	incomingWorkflow Workflow,
-) (workflow.TransactionPolicy, error) {
+) (historyi.TransactionPolicy, error) {
 
 	// NOTE: READ BEFORE MODIFICATION
 	//
@@ -166,11 +167,11 @@ func (r *WorkflowImpl) SuppressBy(
 
 	lastWriteVersion, lastEventTaskID, err := r.GetVectorClock()
 	if err != nil {
-		return workflow.TransactionPolicyActive, err
+		return historyi.TransactionPolicyActive, err
 	}
 	incomingLastWriteVersion, incomingLastEventTaskID, err := incomingWorkflow.GetVectorClock()
 	if err != nil {
-		return workflow.TransactionPolicyActive, err
+		return historyi.TransactionPolicyActive, err
 	}
 
 	if WorkflowHappensAfter(
@@ -179,21 +180,21 @@ func (r *WorkflowImpl) SuppressBy(
 		incomingLastWriteVersion,
 		incomingLastEventTaskID,
 	) {
-		return workflow.TransactionPolicyActive, serviceerror.NewInternal("Workflow cannot suppress workflow by older workflow")
+		return historyi.TransactionPolicyActive, serviceerror.NewInternal("Workflow cannot suppress workflow by older workflow")
 	}
 
 	// if workflow is in zombie or finished state, keep as is
 	if !r.mutableState.IsWorkflowExecutionRunning() {
-		return workflow.TransactionPolicyPassive, nil
+		return historyi.TransactionPolicyPassive, nil
 	}
 
 	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster == lastWriteCluster {
-		return workflow.TransactionPolicyActive, r.terminateWorkflow(lastWriteVersion, incomingLastWriteVersion)
+		return historyi.TransactionPolicyActive, r.terminateWorkflow(lastWriteVersion, incomingLastWriteVersion)
 	}
-	return workflow.TransactionPolicyPassive, r.mutableState.UpdateWorkflowStateStatus(
+	return historyi.TransactionPolicyPassive, r.mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)

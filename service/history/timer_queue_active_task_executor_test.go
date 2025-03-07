@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -1739,7 +1740,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowExecutionTimeout_Fire() 
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
-	var mutableState workflow.MutableState
+	var mutableState historyi.MutableState
 	mutableState = workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	startedEvent, err := mutableState.AddWorkflowExecutionStartedEventWithOptions(
 		execution,
@@ -1911,7 +1912,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 		RunId:      tests.RunID,
 	}
 
-	ms := workflow.NewMockMutableState(s.controller)
+	ms := historyi.NewMockMutableState(s.controller)
 	info := &persistencespb.WorkflowExecutionInfo{}
 	root, err := hsm.NewRoot(
 		reg,
@@ -2008,7 +2009,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) createPersistenceMutableState(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	lastEventID int64,
 	lastEventVersion int64,
 ) *persistencespb.WorkflowMutableState {
@@ -2023,7 +2024,7 @@ func (s *timerQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 
 func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(
 	workflowKey definition.WorkflowKey,
-) workflow.MutableState {
+) historyi.MutableState {
 	key := wcache.Key{
 		WorkflowKey: workflowKey,
 		ShardUUID:   s.mockShard.GetOwner(),
@@ -2066,7 +2067,7 @@ func (s *timerQueueActiveTaskExecutorSuite) mustGenerateTaskID() int64 {
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask() {
-	ms := workflow.NewMockMutableState(s.controller)
+	ms := historyi.NewMockMutableState(s.controller)
 
 	testCases := []struct {
 		name                         string

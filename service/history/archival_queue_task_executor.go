@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/archival"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -281,7 +282,7 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 type lockedMutableState struct {
 	// MutableState is the mutable state that is being wrapped. You may call any method on this object safely since
 	// the state is locked.
-	workflow.MutableState
+	historyi.MutableState
 	// CloseVersion is the namespace failover when the workflow is closed. We store this here so that we don't have to
 	// call GetCloseVersion() on the mutable state object again.
 	CloseVersion int64
@@ -293,7 +294,7 @@ type lockedMutableState struct {
 // newLockedMutableState returns a new lockedMutableState with the given mutable state,
 // last write version and release function
 func newLockedMutableState(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	closeVersion int64,
 	releaseFunc cache.ReleaseCacheFunc,
 ) *lockedMutableState {

@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -76,7 +77,7 @@ type (
 			ctx context.Context,
 			namespaceID string,
 			execution *commonpb.WorkflowExecution,
-			mutableState workflow.MutableState,
+			mutableState historyi.MutableState,
 			targetVersionedTransition *persistencespb.VersionedTransition,
 			targetVersionHistories [][]*historyspb.VersionHistoryItem,
 			releaseFunc wcache.ReleaseCacheFunc,
@@ -121,7 +122,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	wfLease, err := s.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
 		nil,
-		func(mutableState workflow.MutableState) bool {
+		func(mutableState historyi.MutableState) bool {
 			if targetCurrentVersionedTransition == nil {
 				return true
 			}
@@ -170,7 +171,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableState(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
-	mu workflow.MutableState,
+	mu historyi.MutableState,
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories [][]*historyspb.VersionHistoryItem,
 	releaseFunc wcache.ReleaseCacheFunc,
@@ -182,7 +183,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories [][]*historyspb.VersionHistoryItem,
 	cacheReleaseFunc wcache.ReleaseCacheFunc,
@@ -351,7 +352,7 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 }
 
 func (s *SyncStateRetrieverImpl) getMutation(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	versionedTransition *persistencespb.VersionedTransition,
 ) (*persistencespb.WorkflowMutableStateMutation, error) {
 	rootNode := mutableState.HSM()
@@ -401,7 +402,7 @@ func (s *SyncStateRetrieverImpl) getMutation(
 	return mutation, nil
 }
 
-func (s *SyncStateRetrieverImpl) getSnapshot(mutableState workflow.MutableState) (*persistencespb.WorkflowMutableState, error) {
+func (s *SyncStateRetrieverImpl) getSnapshot(mutableState historyi.MutableState) (*persistencespb.WorkflowMutableState, error) {
 	mutableStateProto := mutableState.CloneToProto()
 	workflow.SanitizeMutableState(mutableStateProto)
 	if err := common.DiscardUnknownProto(mutableStateProto); err != nil {

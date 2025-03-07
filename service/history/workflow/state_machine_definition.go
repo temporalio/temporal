@@ -30,18 +30,11 @@ import (
 )
 
 // TransactionPolicy indicates whether a mutable state transaction is happening for an active namespace or passive namespace.
-type TransactionPolicy int
 
 const (
-	TransactionPolicyActive  TransactionPolicy = 0
-	TransactionPolicyPassive TransactionPolicy = 1
 	// Mutable state is a top-level state machine in the state machines framework.
 	StateMachineType = "workflow.MutableState"
 )
-
-func (policy TransactionPolicy) Ptr() *TransactionPolicy {
-	return &policy
-}
 
 type stateMachineDefinition struct{}
 

@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -46,11 +47,11 @@ type (
 			ctx context.Context,
 			branchIndex int32,
 			incomingVersion int64,
-		) (workflow.MutableState, bool, error)
+		) (historyi.MutableState, bool, error)
 		GetOrRebuildMutableState(
 			ctx context.Context,
 			branchIndex int32,
-		) (workflow.MutableState, bool, error)
+		) (historyi.MutableState, bool, error)
 	}
 
 	ConflictResolverImpl struct {
@@ -58,7 +59,7 @@ type (
 		stateRebuilder StateRebuilder
 
 		context      workflow.Context
-		mutableState workflow.MutableState
+		mutableState historyi.MutableState
 		logger       log.Logger
 	}
 )
@@ -68,7 +69,7 @@ var _ ConflictResolver = (*ConflictResolverImpl)(nil)
 func NewConflictResolver(
 	shard shard.Context,
 	context workflow.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	logger log.Logger,
 ) *ConflictResolverImpl {
 
@@ -86,7 +87,7 @@ func (r *ConflictResolverImpl) GetOrRebuildCurrentMutableState(
 	ctx context.Context,
 	branchIndex int32,
 	incomingVersion int64,
-) (workflow.MutableState, bool, error) {
+) (historyi.MutableState, bool, error) {
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
 	currentVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, currentVersionHistoryIndex)
@@ -112,14 +113,14 @@ func (r *ConflictResolverImpl) GetOrRebuildCurrentMutableState(
 func (r *ConflictResolverImpl) GetOrRebuildMutableState(
 	ctx context.Context,
 	branchIndex int32,
-) (workflow.MutableState, bool, error) {
+) (historyi.MutableState, bool, error) {
 	return r.getOrRebuildMutableStateByIndex(ctx, branchIndex)
 }
 
 func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
 	ctx context.Context,
 	branchIndex int32,
-) (workflow.MutableState, bool, error) {
+) (historyi.MutableState, bool, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
@@ -143,7 +144,7 @@ func (r *ConflictResolverImpl) rebuild(
 	ctx context.Context,
 	branchIndex int32,
 	requestID string,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	replayVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, branchIndex)

@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 // RelocatableAttributesFetcher is used to fetch the relocatable attributes from the mutable state.
@@ -38,7 +39,7 @@ import (
 type RelocatableAttributesFetcher interface {
 	Fetch(
 		ctx context.Context,
-		mutableState MutableState,
+		mutableState historyi.MutableState,
 	) (*RelocatableAttributes, error)
 }
 
@@ -81,7 +82,7 @@ type relocatableAttributesFetcher struct {
 // are fetched from the persistence backend. Otherwise, the relocatable attributes are fetched from the mutable state.
 func (f *relocatableAttributesFetcher) Fetch(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) (*RelocatableAttributes, error) {
 	executionInfo := mutableState.GetExecutionInfo()
 	// If the relocatable attributes were not removed from mutable state, then we can fetch the memo

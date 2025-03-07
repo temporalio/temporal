@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -91,7 +92,7 @@ func Invoke(
 
 func processActivityOptionsRequest(
 	validator *api.CommandAttrValidator,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	request *historyservice.UpdateActivityOptionsRequest,
 ) (*historyservice.UpdateActivityOptionsResponse, error) {
 	if !mutableState.IsWorkflowExecutionRunning() {
@@ -150,7 +151,7 @@ func processActivityOptionsRequest(
 
 func updateActivityOptions(
 	validator *api.CommandAttrValidator,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	request *historyservice.UpdateActivityOptionsRequest,
 	ai *persistencespb.ActivityInfo,
 	mergeFrom *activitypb.ActivityOptions,
@@ -184,7 +185,7 @@ func updateActivityOptions(
 		return nil, err
 	}
 
-	if err = mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) error {
+	if err = mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 		// update activity info with new options
 		activityInfo.TaskQueue = adjustedOptions.TaskQueue.Name
 		activityInfo.ScheduleToCloseTimeout = adjustedOptions.ScheduleToCloseTimeout

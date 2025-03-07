@@ -38,11 +38,12 @@ import (
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func failWorkflowTask(
-	mutableState MutableState,
-	workflowTask *WorkflowTaskInfo,
+	mutableState historyi.MutableState,
+	workflowTask *historyi.WorkflowTaskInfo,
 	workflowTaskFailureCause enumspb.WorkflowTaskFailedCause,
 ) (*historypb.HistoryEvent, error) {
 
@@ -67,7 +68,7 @@ func failWorkflowTask(
 }
 
 func ScheduleWorkflowTask(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) error {
 
 	if mutableState.HasPendingWorkflowTask() {
@@ -82,7 +83,7 @@ func ScheduleWorkflowTask(
 }
 
 func TimeoutWorkflow(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	retryState enumspb.RetryState,
 	continuedRunID string,
 ) error {
@@ -116,7 +117,7 @@ func TimeoutWorkflow(
 // event must fall within an existing event batch (for example, if you've already
 // failed a workflow task via `failWorkflowTask` and have an event batch ID).
 func TerminateWorkflow(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	terminateReason string,
 	terminateDetails *commonpb.Payloads,
 	terminateIdentity string,
@@ -182,7 +183,7 @@ func FindAutoResetPoint(
 	return "", nil
 }
 
-func WithEffects(effects effect.Controller, ms MutableState) MutableStateWithEffects {
+func WithEffects(effects effect.Controller, ms historyi.MutableState) MutableStateWithEffects {
 	return MutableStateWithEffects{
 		MutableState: ms,
 		Controller:   effects,
@@ -190,7 +191,7 @@ func WithEffects(effects effect.Controller, ms MutableState) MutableStateWithEff
 }
 
 type MutableStateWithEffects struct {
-	MutableState
+	historyi.MutableState
 	effect.Controller
 }
 

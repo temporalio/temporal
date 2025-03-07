@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/events"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -60,7 +61,7 @@ type (
 			targetWorkflowIdentifier definition.WorkflowKey,
 			targetBranchToken []byte,
 			requestID string,
-		) (workflow.MutableState, int64, error)
+		) (historyi.MutableState, int64, error)
 	}
 
 	StateRebuilderImpl struct {
@@ -110,7 +111,7 @@ func (r *StateRebuilderImpl) Rebuild(
 	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
 	requestID string,
-) (workflow.MutableState, int64, error) {
+) (historyi.MutableState, int64, error) {
 	iter := collection.NewPagingIterator(r.getPaginationFn(
 		ctx,
 		common.FirstEventID,
@@ -181,7 +182,7 @@ func (r *StateRebuilderImpl) Rebuild(
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(workflow.TransactionPolicyPassive)
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(historyi.TransactionPolicyPassive)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -203,7 +204,7 @@ func (r *StateRebuilderImpl) initializeBuilders(
 	namespaceEntry *namespace.Namespace,
 	workflowIdentifier definition.WorkflowKey,
 	now time.Time,
-) (workflow.MutableState, workflow.MutableStateRebuilder) {
+) (historyi.MutableState, workflow.MutableStateRebuilder) {
 	resetMutableState := workflow.NewMutableState(
 		r.shard,
 		r.shard.GetEventsCache(),

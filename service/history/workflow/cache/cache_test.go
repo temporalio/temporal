@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -107,7 +108,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
-	mockMS1 := workflow.NewMockMutableState(s.controller)
+	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
@@ -154,7 +155,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
-	mockMS1 := workflow.NewMockMutableState(s.controller)
+	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(true).AnyTimes()
 	mockMS1.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
 	mockMS1.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
@@ -265,7 +266,7 @@ func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	s.NoError(err)
 	// since we are just testing whether the release function will clear the cache
 	// all we need is a fake MutableState
-	mock := workflow.NewMockMutableState(s.controller)
+	mock := historyi.NewMockMutableState(s.controller)
 	mock.EXPECT().IsDirty().Return(false).AnyTimes()
 	mock.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
 	ctx.(*workflow.ContextImpl).MutableState = mock
@@ -337,7 +338,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 		s.Nil(ctx.(*workflow.ContextImpl).MutableState)
 		// since we are just testing whether the release function will clear the cache
 		// all we need is a fake MutableState
-		mock := workflow.NewMockMutableState(s.controller)
+		mock := historyi.NewMockMutableState(s.controller)
 		mock.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry())
 		mock.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask()
 		ctx.(*workflow.ContextImpl).MutableState = mock
@@ -597,7 +598,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
-	mockMS1 := workflow.NewMockMutableState(s.controller)
+	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
 	ctx, release1, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
@@ -662,7 +663,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
-	mockMS1 := workflow.NewMockMutableState(s.controller)
+	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
 
 	ctx, release1, err := s.cache.GetOrCreateWorkflowExecution(
@@ -693,7 +694,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
-	mockMS2 := workflow.NewMockMutableState(s.controller)
+	mockMS2 := historyi.NewMockMutableState(s.controller)
 	mockMS2.EXPECT().IsDirty().Return(false).AnyTimes()
 	ctx, release2, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
@@ -721,7 +722,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
-	mockMS3 := workflow.NewMockMutableState(s.controller)
+	mockMS3 := historyi.NewMockMutableState(s.controller)
 	mockMS3.EXPECT().IsDirty().Return(false).AnyTimes()
 	_, _, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
@@ -800,7 +801,7 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
-	mockMS1 := workflow.NewMockMutableState(s.controller)
+	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
 	ctx, release1, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),

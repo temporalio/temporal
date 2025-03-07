@@ -343,7 +343,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	workflowID string,
 	runID string,
 	wfCtx workflow.Context,
-	localMutableState workflow.MutableState,
+	localMutableState historyi.MutableState,
 	releaseFn wcache.ReleaseCacheFunc,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
@@ -432,7 +432,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	runID string,
 	wfCtx workflow.Context,
 	releaseFn wcache.ReleaseCacheFunc,
-	localMutableState workflow.MutableState,
+	localMutableState historyi.MutableState,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
 ) error {
@@ -465,7 +465,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	runID string,
 	wfCtx workflow.Context,
 	releaseFn wcache.ReleaseCacheFunc,
-	localMutableState workflow.MutableState,
+	localMutableState historyi.MutableState,
 	sourceMutableState *persistencespb.WorkflowMutableState,
 	eventBlobs []*commonpb.DataBlob,
 	newRunInfo *replicationspb.NewRunInfo,
@@ -619,7 +619,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunWorkflow(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
-	originalMutableState workflow.MutableState,
+	originalMutableState historyi.MutableState,
 	newRunInfo *replicationspb.NewRunInfo,
 ) (Workflow, error) {
 	// TODO: Refactor. Copied from mutableStateRebuilder.applyNewRunHistory
@@ -654,10 +654,10 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 	namespaceID namespace.ID,
 	workflowID string,
 	newRunID string,
-	originalMutableState workflow.MutableState,
+	originalMutableState historyi.MutableState,
 	newRunEventsBlob *commonpb.DataBlob,
 	isStateBased bool,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 	newRunHistory, err := r.historySerializer.DeserializeEvents(newRunEventsBlob)
 	if err != nil {
 		return nil, err
@@ -669,7 +669,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 		sameWorkflowChain = newRunFirstRunID == originalMutableState.GetExecutionInfo().FirstExecutionRunId
 	}
 
-	var newRunMutableState workflow.MutableState
+	var newRunMutableState historyi.MutableState
 	if sameWorkflowChain {
 		newRunMutableState, err = workflow.NewMutableStateInChain(
 			r.shardContext,
@@ -734,7 +734,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	runID string,
 	sourceClusterName string,
 	wfCtx workflow.Context,
-	localMutableState workflow.MutableState,
+	localMutableState historyi.MutableState,
 	sourceVersionHistories *historyspb.VersionHistories,
 	eventBlobs []*commonpb.DataBlob,
 ) error {
@@ -1050,7 +1050,7 @@ func (r *WorkflowStateReplicatorImpl) createNewRunWorkflow(
 	namespaceID namespace.ID,
 	workflowID string,
 	newRunInfo *replicationspb.NewRunInfo,
-	originalMutableState workflow.MutableState,
+	originalMutableState historyi.MutableState,
 	isStateBased bool,
 ) error {
 	newRunWfContext, newRunReleaseFn, newRunErr := r.workflowCache.GetOrCreateWorkflowExecution(

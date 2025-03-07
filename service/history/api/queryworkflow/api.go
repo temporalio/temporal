@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -252,7 +253,7 @@ func Invoke(
 }
 
 func queryWillTimeoutsBeforeFirstWorkflowTaskStart(
-	ctx context.Context, mutableState workflow.MutableState,
+	ctx context.Context, mutableState historyi.MutableState,
 ) (bool, error) {
 	startEvent, err := mutableState.GetStartEvent(ctx)
 	if err != nil {

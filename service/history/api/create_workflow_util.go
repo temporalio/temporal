@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/worker_versioning"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -63,7 +64,7 @@ type (
 	CreateOrUpdateLeaseFunc func(
 		WorkflowLease,
 		shard.Context,
-		workflow.MutableState,
+		historyi.MutableState,
 	) (WorkflowLease, error)
 )
 
@@ -74,7 +75,7 @@ func NewWorkflowWithSignal(
 	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 	newMutableState, err := CreateMutableState(
 		shard,
 		namespaceEntry,
@@ -152,7 +153,7 @@ func NewWorkflowWithSignal(
 func NewWorkflowLeaseAndContext(
 	existingLease WorkflowLease,
 	shardCtx shard.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 ) (WorkflowLease, error) {
 	// TODO(stephanos): remove this hack
 	if existingLease != nil {
@@ -182,7 +183,7 @@ func CreateMutableState(
 	runTimeout *durationpb.Duration,
 	workflowID string,
 	runID string,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
 		shard,
 		shard.GetEventsCache(),
@@ -199,7 +200,7 @@ func CreateMutableState(
 }
 
 func GenerateFirstWorkflowTask(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	parentInfo *workflowspb.ParentExecutionInfo,
 	startEvent *historypb.HistoryEvent,
 	bypassTaskGeneration bool,
@@ -214,7 +215,7 @@ func GenerateFirstWorkflowTask(
 func NewWorkflowVersionCheck(
 	shard shard.Context,
 	prevLastWriteVersion int64,
-	newMutableState workflow.MutableState,
+	newMutableState historyi.MutableState,
 ) error {
 	if prevLastWriteVersion == common.EmptyVersion {
 		return nil

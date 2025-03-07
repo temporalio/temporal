@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -63,7 +64,7 @@ type (
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 
 		currentContext      *workflow.MockContext
-		currentMutableState *workflow.MockMutableState
+		currentMutableState *historyi.MockMutableState
 	}
 )
 
@@ -94,7 +95,7 @@ func (s *signalWorkflowSuite) SetupTest() {
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(s.namespaceRegistry).AnyTimes()
 	s.shardContext.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
 
-	s.currentMutableState = workflow.NewMockMutableState(s.controller)
+	s.currentMutableState = historyi.NewMockMutableState(s.controller)
 	s.currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: tests.WorkflowID,

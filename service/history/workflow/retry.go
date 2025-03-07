@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/worker_versioning"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -183,8 +184,8 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 
 func SetupNewWorkflowForRetryOrCron(
 	ctx context.Context,
-	previousMutableState MutableState,
-	newMutableState MutableState,
+	previousMutableState historyi.MutableState,
+	newMutableState historyi.MutableState,
 	newRunID string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
 	lastCompletionResult *commonpb.Payloads,

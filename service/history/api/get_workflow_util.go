@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -325,7 +326,7 @@ func GetMutableStateWithConsistencyCheck(
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
 		nil,
-		func(mutableState workflow.MutableState) bool {
+		func(mutableState historyi.MutableState) bool {
 			transitionHistory := mutableState.GetExecutionInfo().GetTransitionHistory()
 			if len(transitionHistory) != 0 && versionedTransition != nil {
 				return workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition) == nil
@@ -361,7 +362,7 @@ func GetMutableStateWithConsistencyCheck(
 }
 
 func MutableStateToGetResponse(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 ) (*historyservice.GetMutableStateResponse, error) {
 	// NOTE: fields of GetMutableStateResponse (returned value of this func)
 	// are accessed outside of workflow lock, and, therefore,
