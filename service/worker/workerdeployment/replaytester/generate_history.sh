@@ -18,7 +18,8 @@ echo "Running the Go program..."
 timeout 10s go run "$(dirname "$0")/worker/worker.go"
 
 # Download the history for the worker deployment workflow...
-temporal workflow show -w "temporal-sys-worker-deployment:$deploymentName" --output json > "$(dirname "$0")/testdata/replay_worker_deployment_wf_new.json"
+now=$(date +%s)
+temporal workflow show -w "temporal-sys-worker-deployment:$deploymentName" --output json | gzip -9c > "$(dirname "$0")/testdata/replay_worker_deployment_wf_$now.json.gz"
 
 # Download the history for the worker deployment version workflow...
-temporal workflow show -w "temporal-sys-worker-deployment-version:$deploymentName.$version" --output json > "$(dirname "$0")/testdata/replay_worker_deployment_version_wf_new.json"
+temporal workflow show -w "temporal-sys-worker-deployment-version:$deploymentName.$version" --output json | gzip -9c > "$(dirname "$0")/testdata/replay_worker_deployment_version_wf_$now.json.gz"

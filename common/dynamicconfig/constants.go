@@ -852,7 +852,7 @@ and deployment interaction in matching and history.`,
 	)
 	EnableDeploymentVersions = NewNamespaceBoolSetting(
 		"system.enableDeploymentVersions",
-		true,
+		false,
 		`EnableDeploymentVersions enables deployment versions (versioning v3) in all services,
 including deployment-related RPCs in the frontend, deployment version entity workflows in the worker,
 and deployment interaction in matching and history.`,
