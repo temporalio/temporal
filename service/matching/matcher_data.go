@@ -252,7 +252,7 @@ type matcherData struct {
 
 func newMatcherData(config *taskQueueConfig, logger log.Logger, canForward bool) matcherData {
 	return matcherData{
-		config:     config,
+		config: config,
 		logger: logger,
 		canForward: canForward,
 		tasks: taskPQ{
