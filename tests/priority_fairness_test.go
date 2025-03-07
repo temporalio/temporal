@@ -25,6 +25,7 @@ package tests
 import (
 	"context"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -126,6 +127,82 @@ func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
 	w := wrongorderness(runs)
 	s.T().Log("wrongorderness:", w)
 	s.Less(w, 0.15)
+}
+
+func (s *PriorityFairnessSuite) TestSubqueue_Migration() {
+	actq := testcore.RandomizeStr("actq")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// start with old matcher
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
+
+	var activitiesCompleted atomic.Int64
+	unblockActivities := make(chan struct{})
+
+	act1 := func(ctx context.Context, wfidx int) error {
+		if activitiesCompleted.Load() == 100 || activitiesCompleted.Load() == 200 {
+			<-unblockActivities
+		}
+		activitiesCompleted.Add(1)
+		return nil
+	}
+
+	wf1 := func(ctx workflow.Context, wfidx int) error {
+		var futures []workflow.Future
+		for range 3 {
+			actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				TaskQueue:              actq,
+				ScheduleToCloseTimeout: 60 * time.Second,
+			})
+			f := workflow.ExecuteActivity(actCtx, act1, wfidx)
+			futures = append(futures, f)
+		}
+		for _, f := range futures {
+			s.NoError(f.Get(ctx, nil))
+		}
+		return nil
+	}
+	s.Worker().RegisterWorkflow(wf1)
+
+	wfopts := client.StartWorkflowOptions{TaskQueue: s.TaskQueue()}
+	for wfidx := range 100 {
+		_, err := s.SdkClient().ExecuteWorkflow(ctx, wfopts, wf1, wfidx)
+		s.NoError(err)
+	}
+
+	s.T().Log("waiting for backlog")
+	s.waitForBacklog(ctx, actq, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 300)
+
+	s.T().Log("starting worker")
+	actw := worker.New(s.SdkClient(), actq, worker.Options{
+		MaxConcurrentActivityExecutionSize: 1, // serialize activities
+	})
+	actw.RegisterActivity(act1)
+	actw.Start()
+	defer actw.Stop()
+
+	s.T().Log("waiting for first 100 activities")
+	s.Eventually(func() bool { return activitiesCompleted.Load() == 100 }, 10*time.Second, 10*time.Millisecond)
+
+	s.T().Log("switching to new matcher")
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true)
+
+	s.T().Log("unblocking activities")
+	unblockActivities <- struct{}{}
+
+	s.T().Log("waiting for next 100 activities")
+	s.Eventually(func() bool { return activitiesCompleted.Load() == 200 }, 10*time.Second, 10*time.Millisecond)
+
+	s.T().Log("switching back to old matcher")
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
+
+	s.T().Log("unblocking activities")
+	unblockActivities <- struct{}{}
+
+	s.T().Log("waiting for last 100 activites")
+	s.Eventually(func() bool { return activitiesCompleted.Load() == 300 }, 10*time.Second, 10*time.Millisecond)
 }
 
 func (s *PriorityFairnessSuite) waitForBacklog(ctx context.Context, tq string, tp enumspb.TaskQueueType, n int) {

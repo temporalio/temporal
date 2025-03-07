@@ -91,6 +91,7 @@ type (
 		tqCtx       context.Context
 		tqCtxCancel context.CancelFunc
 
+		cancelSub         func()
 		backlogMgr        backlogManager
 		liveness          *liveness
 		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
@@ -194,7 +195,13 @@ func newPhysicalTaskQueueManager(
 		pqMgr.partitionMgr.engine.historyClient,
 	)
 
-	if config.NewMatcher {
+	newMatcher, cancelSub := config.NewMatcher(func(bool) {
+		// unload on change to NewMatcher so that we can reload with the new setting:
+		pqMgr.UnloadFromPartitionManager(unloadCauseConfigChange)
+	})
+	pqMgr.cancelSub = cancelSub
+
+	if newMatcher {
 		pqMgr.backlogMgr = newPriBacklogManager(
 			pqMgr,
 			config,
@@ -271,6 +278,7 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	) {
 		return
 	}
+	c.cancelSub()
 	// this may attempt to write one final ack update, do this before canceling tqCtx
 	c.backlogMgr.Stop()
 	c.matcher.Stop()
