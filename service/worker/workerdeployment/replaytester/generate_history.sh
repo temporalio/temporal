@@ -5,7 +5,7 @@
 # To use it, run a local server (any backend) with the dynamic config for worker-versioning 3
 # (system.enableDeploymentVersions=true) enabled and run this script.
 #
-# Note: this requires temporal cli >= 0.12
+# Note: this requires temporal cli >= 0.12 and sdk >= v1.33.0
 
 deploymentName="foo"
 version="1.0"
