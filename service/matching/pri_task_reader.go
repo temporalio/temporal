@@ -112,7 +112,7 @@ func (tr *priTaskReader) Start() {
 	go tr.getTasksPump()
 }
 
-func (tr *priTaskReader) Signal() {
+func (tr *priTaskReader) SignalTaskLoading() {
 	select {
 	case tr.notifyC <- struct{}{}:
 	default: // channel already has an event, don't block
@@ -166,7 +166,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	// use == so we just signal once when we cross this threshold
 	// TODO(pri): is this safe? maybe we need to improve this
 	if tr.loadedTasks == tr.backlogMgr.config.GetTasksReloadAt() {
-		tr.Signal()
+		tr.SignalTaskLoading()
 	}
 
 	tr.lock.Unlock()
@@ -178,7 +178,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 func (tr *priTaskReader) getTasksPump() {
 	ctx := tr.backlogMgr.tqCtx
 
-	tr.Signal() // prime pump
+	tr.SignalTaskLoading() // prime pump
 Loop:
 	for {
 		select {
@@ -208,14 +208,14 @@ Loop:
 			if len(batch.tasks) == 0 {
 				tr.setReadLevelAfterGap(batch.readLevel)
 				if !batch.isReadBatchDone {
-					tr.Signal()
+					tr.SignalTaskLoading()
 				}
 				continue Loop
 			}
 
 			tr.processTaskBatch(batch.tasks)
 			// There may be more tasks.
-			tr.Signal()
+			tr.SignalTaskLoading()
 		}
 	}
 }
@@ -395,7 +395,7 @@ func (tr *priTaskReader) signalNewTasks(resp subqueueCreateTasksResponse) {
 
 	if !canAddDirect {
 		tr.lock.Unlock()
-		tr.Signal()
+		tr.SignalTaskLoading()
 		return
 	}
 
@@ -424,7 +424,7 @@ func (tr *priTaskReader) backoffSignal(duration time.Duration) {
 			tr.lock.Lock()
 			defer tr.lock.Unlock()
 
-			tr.Signal() // re-enqueue the event
+			tr.SignalTaskLoading() // re-enqueue the event
 			tr.backoffTimer = nil
 		})
 	}
