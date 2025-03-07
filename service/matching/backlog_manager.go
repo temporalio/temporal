@@ -58,8 +58,12 @@ type (
 		Stop()
 		WaitUntilInitialized(context.Context) error
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
+		// BacklogCountHint returns the number of backlog tasks loaded in memory now.
+		// It's returned as a hint to the SDK to influence polling behavior (sticky vs normal).
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
+		// TotalApproximateBacklogCount returns an estimate of the total size of the backlog in
+		// persistence. It may be off in either direction.
 		TotalApproximateBacklogCount() int64
 		BacklogHeadAge() time.Duration
 		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
