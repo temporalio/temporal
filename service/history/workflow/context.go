@@ -422,14 +422,17 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 
 	eventsToReapply := resetWorkflowEventsSeq
 	if len(resetWorkflowEventsSeq) == 0 {
-		eventsToReapply = []*persistence.WorkflowEvents{
-			{
-				NamespaceID: c.workflowKey.NamespaceID,
-				WorkflowID:  c.workflowKey.WorkflowID,
-				RunID:       c.workflowKey.RunID,
-				Events:      resetMutableState.GetReapplyCandidateEvents(),
-			},
+		if reapplyCandidateEvents := resetMutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
+			eventsToReapply = []*persistence.WorkflowEvents{
+				{
+					NamespaceID: c.workflowKey.NamespaceID,
+					WorkflowID:  c.workflowKey.WorkflowID,
+					RunID:       c.workflowKey.RunID,
+					Events:      reapplyCandidateEvents,
+				},
+			}
 		}
+
 	}
 
 	if err := c.conflictResolveEventReapply(
@@ -639,13 +642,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 
 	eventsToReapply := updateWorkflowEventsSeq
 	if len(updateWorkflowEventsSeq) == 0 {
-		eventsToReapply = []*persistence.WorkflowEvents{
-			{
-				NamespaceID: c.workflowKey.NamespaceID,
-				WorkflowID:  c.workflowKey.WorkflowID,
-				RunID:       c.workflowKey.RunID,
-				Events:      c.MutableState.GetReapplyCandidateEvents(),
-			},
+		if reapplyCandidateEvents := c.MutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
+			eventsToReapply = []*persistence.WorkflowEvents{
+				{
+					NamespaceID: c.workflowKey.NamespaceID,
+					WorkflowID:  c.workflowKey.WorkflowID,
+					RunID:       c.workflowKey.RunID,
+					Events:      reapplyCandidateEvents,
+				},
+			}
 		}
 	}
 
