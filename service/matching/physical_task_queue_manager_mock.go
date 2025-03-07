@@ -153,10 +153,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetAllPollerInfo() *gomock.C
 }
 
 // GetInternalTaskQueueStatus mocks base method.
-func (m *MockphysicalTaskQueueManager) GetInternalTaskQueueStatus() *taskqueue0.InternalTaskQueueStatus {
+func (m *MockphysicalTaskQueueManager) GetInternalTaskQueueStatus() []*taskqueue0.InternalTaskQueueStatus {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetInternalTaskQueueStatus")
-	ret0, _ := ret[0].(*taskqueue0.InternalTaskQueueStatus)
+	ret0, _ := ret[0].([]*taskqueue0.InternalTaskQueueStatus)
 	return ret0
 }
 

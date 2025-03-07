@@ -33,6 +33,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/future"
@@ -57,10 +58,15 @@ type (
 		Stop()
 		WaitUntilInitialized(context.Context) error
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
+		// BacklogCountHint returns the number of backlog tasks loaded in memory now.
+		// It's returned as a hint to the SDK to influence polling behavior (sticky vs normal).
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
+		// TotalApproximateBacklogCount returns an estimate of the total size of the backlog in
+		// persistence. It may be off in either direction.
 		TotalApproximateBacklogCount() int64
 		BacklogHeadAge() time.Duration
+		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
 	}
 
 	backlogManagerImpl struct {
@@ -198,10 +204,6 @@ func (c *backlogManagerImpl) BacklogHeadAge() time.Duration {
 	return c.taskReader.getBacklogHeadAge()
 }
 
-func (c *backlogManagerImpl) ReadBufferLength() int64 {
-	return int64(len(c.taskReader.taskBuffer))
-}
-
 func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
 	return &taskqueuepb.TaskQueueStatus{
@@ -218,6 +220,22 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 
 func (c *backlogManagerImpl) TotalApproximateBacklogCount() int64 {
 	return c.db.getTotalApproximateBacklogCount()
+}
+
+func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
+	return []*taskqueuespb.InternalTaskQueueStatus{
+		&taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel: c.taskAckManager.getReadLevel(),
+			AckLevel:  c.taskAckManager.getAckLevel(),
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				// TODO(pri): this is a data race, it should only be read by taskWriterLoop
+				StartId: c.taskWriter.taskIDBlock.start,
+				EndId:   c.taskWriter.taskIDBlock.end,
+			},
+			LoadedTasks:  c.taskAckManager.getBacklogCountHint(),
+			MaxReadLevel: c.db.GetMaxReadLevel(subqueueZero),
+		},
+	}
 }
 
 // completeTask marks a task as processed. Only tasks created by taskReader (i.e. backlog from db) reach

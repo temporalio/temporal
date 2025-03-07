@@ -59,13 +59,12 @@ func (b backlogAgeTracker) record(ts *timestamppb.Timestamp, delta int) {
 	}
 }
 
-// getBacklogAge returns the largest age in this backlog (age of oldest task),
-// or emptyBacklogAge if empty.
-func (b backlogAgeTracker) getAge() time.Duration {
+// oldestTime returns the time of the oldest task in this backlog, or
+// the zero Time if empty.
+func (b backlogAgeTracker) oldestTime() time.Time {
 	if b.tree.Empty() {
-		return emptyBacklogAge
+		return time.Time{}
 	}
 	k, _ := b.tree.Min()
-	oldest := k.(int64) // nolint:revive
-	return time.Since(time.Unix(0, oldest))
+	return time.Unix(0, k.(int64)) // nolint:revive
 }
