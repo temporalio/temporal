@@ -172,22 +172,23 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	// validate TQ internal statistics (not exposed via public API)
 	expectedInternalStatsInfo := []*taskqueuespb.InternalTaskQueueStatus{
 		&taskqueuespb.InternalTaskQueueStatus{
-			// ReadLevel: 1,
-			AckLevel: 0,
-			// TaskIdBlock: &taskqueuepb.TaskIdBlock{
-			// 	StartId: 2,
-			// 	EndId:   100000,
-			// },
-			ReadBufferLength: 1,
+			ReadLevel: 1,
+			AckLevel:  0,
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				StartId: 2,
+				EndId:   100000,
+			},
+			LoadedTasks:  1,
+			MaxReadLevel: 1,
 		},
 	}
 
 	status1 := resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
-	// s.Equal(1, len(status1))
-	s.ProtoEqual(expectedInternalStatsInfo[0], status1)
+	s.Equal(1, len(status1))
+	s.ProtoEqual(expectedInternalStatsInfo[0], status1[0])
 	status2 := resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
-	// s.Equal(1, len(status2))
-	s.ProtoEqual(expectedInternalStatsInfo[0], status2)
+	s.Equal(1, len(status2))
+	s.ProtoEqual(expectedInternalStatsInfo[0], status2[0])
 }
 
 func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
