@@ -155,6 +155,9 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	case *serviceerror.NotFound:
 		// no-op, continue to replicate workflow state
 	case nil:
+		if len(request.WorkflowState.ExecutionInfo.TransitionHistory) != 0 {
+			return r.applySnapshotWhenWorkflowExist(ctx, namespaceID, wid, rid, wfCtx, releaseFn, ms, request.WorkflowState, nil, nil, request.RemoteCluster)
+		}
 		// workflow exists, do resend if version histories are not match.
 		localVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
 		if err != nil {
@@ -452,13 +455,29 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	if localMutableState == nil {
 		return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, snapshot, sourceClusterName, versionedTransition.NewRunInfo, true)
 	}
+	return r.applySnapshotWhenWorkflowExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, localMutableState, snapshot, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName)
+}
+
+func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	wfCtx workflow.Context,
+	releaseFn wcache.ReleaseCacheFunc,
+	localMutableState workflow.MutableState,
+	sourceMutableState *persistencespb.WorkflowMutableState,
+	eventBlobs []*commonpb.DataBlob,
+	newRunInfo *replicationspb.NewRunInfo,
+	sourceClusterName string,
+) error {
 	var isBranchSwitched bool
 	var localTransitionHistory []*persistencespb.VersionedTransition
 	var localVersionedTransition *persistencespb.VersionedTransition
 	if len(localMutableState.GetExecutionInfo().TransitionHistory) != 0 {
 		localTransitionHistory = transitionhistory.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
 		localVersionedTransition = transitionhistory.LastVersionedTransition(localTransitionHistory)
-		sourceTransitionHistory := snapshot.ExecutionInfo.TransitionHistory
+		sourceTransitionHistory := sourceMutableState.ExecutionInfo.TransitionHistory
 		err := workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localVersionedTransition)
 		switch {
 		case err == nil:
@@ -483,7 +502,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 		if err != nil {
 			return err
 		}
-		sourceCurrentHistory, err := versionhistory.GetCurrentVersionHistory(snapshot.ExecutionInfo.VersionHistories)
+		sourceCurrentHistory, err := versionhistory.GetCurrentVersionHistory(sourceMutableState.ExecutionInfo.VersionHistories)
 		if err != nil {
 			return err
 		}
@@ -500,21 +519,21 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 		sourceClusterName,
 		wfCtx,
 		localMutableState,
-		snapshot.ExecutionInfo.VersionHistories,
-		versionedTransition.EventBatches,
+		sourceMutableState.ExecutionInfo.VersionHistories,
+		eventBlobs,
 	)
 	if err != nil {
 		return err
 	}
 
-	err = localMutableState.ApplySnapshot(snapshot)
+	err = localMutableState.ApplySnapshot(sourceMutableState)
 	if err != nil {
 		return err
 	}
 
 	var newRunWorkflow Workflow
-	if versionedTransition.NewRunInfo != nil {
-		newRunWorkflow, err = r.getNewRunWorkflow(ctx, namespaceID, workflowID, localMutableState, versionedTransition.NewRunInfo)
+	if newRunInfo != nil {
+		newRunWorkflow, err = r.getNewRunWorkflow(ctx, namespaceID, workflowID, localMutableState, newRunInfo)
 		if err != nil {
 			return err
 		}
