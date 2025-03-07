@@ -395,17 +395,13 @@ func (tr *priTaskReader) signalNewTasks(resp subqueueCreateTasksResponse) {
 	// queue), and then we set it to the max read level as of CreateTasks.
 	// We also check that there's room in memory.
 	canAddDirect := tr.readLevel == resp.maxReadLevelBefore &&
-		(tr.loadedTasks+len(resp.tasks)) <= tr.backlogMgr.config.GetTasksBatchSize()
-
-	// Because we checked readLevel above, we know that getTasksPump can't have beat us to
-	// adding these tasks to outstandingTasks. So they should definitely not be there.
-	for _, t := range resp.tasks {
-		_, found := tr.outstandingTasks.Get(t.TaskId)
-		if !softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks") {
-			canAddDirect = false
-			break
-		}
-	}
+		(tr.loadedTasks+len(resp.tasks)) <= tr.backlogMgr.config.GetTasksBatchSize() &&
+		!slices.ContainsFunc(resp.tasks, func(t *persistencespb.AllocatedTaskInfo) bool {
+			// Because we checked readLevel, we know that getTasksPump can't have beat us to
+			// adding these tasks to outstandingTasks. So they should definitely not be there.
+			_, found := tr.outstandingTasks.Get(t.TaskId)
+			return softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks")
+		})
 
 	if !canAddDirect {
 		tr.lock.Unlock()
