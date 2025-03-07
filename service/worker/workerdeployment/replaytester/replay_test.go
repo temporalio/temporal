@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/log"
-	workerdeployment "go.temporal.io/server/service/worker/workerdeployment"
+	"go.temporal.io/server/service/worker/workerdeployment"
 )
 
 // TestReplays tests workflow logic backwards compatibility from previous versions.
