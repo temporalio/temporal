@@ -33,16 +33,12 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-)
-
-var (
-	WorkflowTerminationReason   = "Terminate Workflow Due To Version Conflict."
-	WorkflowTerminationIdentity = "history-service"
 )
 
 type (
@@ -296,9 +292,9 @@ func (r *WorkflowImpl) terminateWorkflow(
 
 	_, err = r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		eventBatchFirstEventID,
-		WorkflowTerminationReason,
+		common.FailureReasonWorkflowTerminationDueToVersionConflict,
 		payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
-		WorkflowTerminationIdentity,
+		consts.IdentityHistoryService,
 		false,
 		nil, // No links necessary.
 	)

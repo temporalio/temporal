@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -366,7 +367,7 @@ func (s *executableTaskSuite) TestResend_NotFound() {
 		resendErr.EndEventVersion,
 	).Return(serviceerror.NewNotFound(""))
 	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(resendErr.NamespaceId),
 		resendErr.WorkflowId,
@@ -741,14 +742,14 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 		endEventVersion,
 	).Return(fetcher)
 	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(workflowKey.NamespaceID),
 		workflowKey.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
 	engine.EXPECT().BackfillHistoryEvents(
-		gomock.Any(), protomock.Eq(&shard.BackfillHistoryEventsRequest{
+		gomock.Any(), protomock.Eq(&historyi.BackfillHistoryEventsRequest{
 			WorkflowKey:         workflowKey,
 			SourceClusterName:   s.sourceCluster,
 			VersionedHistory:    s.task.replicationTask.VersionedTransition,
@@ -756,7 +757,7 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 			Events:              [][]*historypb.HistoryEvent{eventBatchOriginal1},
 		})).Return(nil)
 	engine.EXPECT().BackfillHistoryEvents(
-		gomock.Any(), protomock.Eq(&shard.BackfillHistoryEventsRequest{
+		gomock.Any(), protomock.Eq(&historyi.BackfillHistoryEventsRequest{
 			WorkflowKey:         workflowKey,
 			SourceClusterName:   s.sourceCluster,
 			VersionedHistory:    s.task.replicationTask.VersionedTransition,
@@ -1154,7 +1155,7 @@ func (s *executableTaskSuite) TestSyncState() {
 	}, nil).Times(1)
 
 	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(syncStateErr.NamespaceId),
 		syncStateErr.WorkflowId,

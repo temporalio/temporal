@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/events"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -566,7 +567,7 @@ func setWorkflowExecution(
 }
 
 func NotifyWorkflowSnapshotTasks(
-	engine shard.Engine,
+	engine historyi.Engine,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 ) {
 	if workflowSnapshot == nil {
@@ -576,7 +577,7 @@ func NotifyWorkflowSnapshotTasks(
 }
 
 func NotifyWorkflowMutationTasks(
-	engine shard.Engine,
+	engine historyi.Engine,
 	workflowMutation *persistence.WorkflowMutation,
 ) {
 	if workflowMutation == nil {
@@ -586,7 +587,7 @@ func NotifyWorkflowMutationTasks(
 }
 
 func NotifyNewHistorySnapshotEvent(
-	engine shard.Engine,
+	engine historyi.Engine,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
@@ -626,7 +627,7 @@ func NotifyNewHistorySnapshotEvent(
 }
 
 func NotifyNewHistoryMutationEvent(
-	engine shard.Engine,
+	engine historyi.Engine,
 	workflowMutation *persistence.WorkflowMutation,
 ) error {
 

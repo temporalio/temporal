@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -205,14 +206,34 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
 			},
 		},
-		VersionHistories: versionHistories,
+		VersionHistories:    versionHistories,
+		LastFirstEventTxnId: 1234, // some state that should be sanitized
 	}
 	mu.EXPECT().HasBufferedEvents().Return(false)
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
-		ExecutionInfo: executionInfo,
+	mu.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{})
+	mu.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
+	mu.EXPECT().GetPendingTimerInfos().Return(map[string]*persistencespb.TimerInfo{
+		// should not be included in the mutation
+		"timerID": {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 8}},
+	})
+	mu.EXPECT().GetPendingChildExecutionInfos().Return(map[int64]*persistencespb.ChildExecutionInfo{
+		// should be included in the mutation
+		13: {
+			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
+			Clock:                         &clockspb.VectorClock{ShardId: s.mockShard.GetShardID(), Clock: 1234},
+		},
+	})
+	mu.EXPECT().GetPendingRequestCancelExternalInfos().Return(map[int64]*persistencespb.RequestCancelInfo{
+		// should not be included in the mutation
+		5: {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 5}},
+	})
+	mu.EXPECT().GetPendingSignalExternalInfos().Return(map[int64]*persistencespb.SignalInfo{
+		// should be included in the mutation
+		15: {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 15}},
 	})
 	mu.EXPECT().HSM().Return(nil)
+
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
 		context.Background(),
 		s.namespaceID,
@@ -224,7 +245,23 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		versionHistories)
 	s.NoError(err)
 	s.NotNil(result)
+	syncAttributes := result.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes()
 	s.NotNil(result.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes())
+
+	mutation := syncAttributes.StateMutation
+	// ensure it's a copy by checking the pointers are pointing to different memory addresses
+	s.True(executionInfo != mutation.ExecutionInfo)
+	s.Nil(mutation.ExecutionInfo.UpdateInfos)
+	s.Nil(mutation.ExecutionInfo.SubStateMachinesByType)
+	s.Nil(mutation.ExecutionInfo.SubStateMachineTombstoneBatches)
+	s.Zero(mutation.ExecutionInfo.LastFirstEventTxnId) // field should be sanitized
+	s.Empty(mutation.UpdatedActivityInfos)
+	s.Len(mutation.UpdatedTimerInfos, 0)
+	s.Len(mutation.UpdatedChildExecutionInfos, 1)
+	s.Len(mutation.UpdatedRequestCancelInfos, 0)
+	s.Len(mutation.UpdatedSignalInfos, 1)
+	s.Nil(mutation.UpdatedChildExecutionInfos[13].Clock) // field should be sanitized
+
 	s.Nil(result.VersionedTransitionArtifact.EventBatches)
 	s.Nil(result.VersionedTransitionArtifact.NewRunInfo)
 }

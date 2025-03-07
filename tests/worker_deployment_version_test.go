@@ -113,6 +113,7 @@ func (s *DeploymentVersionSuite) TearDownTest() {
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
+	s.FunctionalTestBase.TearDownTest()
 }
 
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
@@ -535,7 +536,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 	// Create a deployment version
 	s.startVersionWorkflow(ctx, tv1)
 
-	// set version as current
+	// Set version as current
 	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv1.DeploymentSeries(),
@@ -545,20 +546,32 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 	})
 	s.Nil(err)
 
-	// deleting this version should fail since the version is current
+	// Deleting this version should fail since the version is current
 	s.tryDeleteVersion(ctx, tv1, false, false)
+
+	// Verifying workflow is not in a locked state after an invalid delete request such as the one above. If the workflow were in a locked
+	// state, the passed context would have timed out making the following operation fail.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv1.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+	}, time.Second*5, time.Millisecond*200)
 
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
 	// Create a deployment version
 	s.startVersionWorkflow(ctx, tv1)
 
-	// set version as ramping
+	// Set version as ramping
 	_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv1.DeploymentSeries(),
@@ -568,8 +581,20 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 	})
 	s.Nil(err)
 
-	// deleting this version should fail since the version is ramping
+	// Deleting this version should fail since the version is ramping
 	s.tryDeleteVersion(ctx, tv1, false, false)
+
+	// Verifying workflow is not in a locked state after an invalid delete request such as the one above. If the workflow were in a locked
+	// state, the passed context would have timed out making the following operation fail.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv1.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+	}, time.Second*5, time.Millisecond*200)
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_NoWfs() {

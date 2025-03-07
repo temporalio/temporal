@@ -407,6 +407,21 @@ func (s *specSuite) TestSpecStartTime() {
 	)
 }
 
+func (s *specSuite) TestSpecStartTimeMinusOneSecond() {
+	// This checks the bug fixed by FixStartTimeBug.
+	s.checkSequenceFull(
+		"",
+		&schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(time.Hour)},
+			},
+			StartTime: timestamppb.New(time.Date(2022, 3, 23, 12, 0, 0, 456000000, time.UTC)),
+		},
+		time.Date(2022, 3, 23, 12, 00, 0, 123000000, time.UTC),
+		time.Date(2022, 3, 23, 13, 00, 0, 0, time.UTC),
+	)
+}
+
 func (s *specSuite) TestSpecEndTime() {
 	s.checkSequenceFull(
 		"",

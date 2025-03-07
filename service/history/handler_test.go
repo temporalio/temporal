@@ -86,7 +86,7 @@ func TestDescribeHistoryHost(t *testing.T) {
 	)
 	controller.EXPECT().GetShardByID(int32(2)).Return(mockShard2, nil)
 	controller.EXPECT().ShardIDs().Return([]int32{2})
-	namespaceRegistry.EXPECT().GetCacheSize().Return(int64(0), int64(0))
+	namespaceRegistry.EXPECT().GetRegistrySize().Return(int64(0), int64(0))
 	hostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("0.0.0.0"))
 	_, err = h.DescribeHistoryHost(context.Background(), &historyservice.DescribeHistoryHostRequest{
 		ShardId: 2,

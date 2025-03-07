@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -932,6 +933,8 @@ func (d *ClientImpl) DeleteVersionFromWorkerDeployment(
 			return temporal.NewNonRetryableApplicationError(errVersionIsDraining, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
 		} else if failure.Message == errVersionHasPollers {
 			return temporal.NewNonRetryableApplicationError(errVersionHasPollers, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
+		} else if failure.Message == errVersionIsCurrentOrRamping {
+			return temporal.NewNonRetryableApplicationError(errVersionIsCurrentOrRamping, "Delete on version failed", nil) // non-retryable error to stop multiple activity attempts
 		}
 		return serviceerror.NewInternal(failure.Message)
 	}
@@ -1337,6 +1340,11 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 			DrainageStatus: v.GetDrainageStatus(),
 		})
 	}
+
+	// Sort by create time, with the latest version first.
+	sort.Slice(workerDeploymentInfo.VersionSummaries, func(i, j int) bool {
+		return workerDeploymentInfo.VersionSummaries[i].CreateTime.AsTime().After(workerDeploymentInfo.VersionSummaries[j].CreateTime.AsTime())
+	})
 
 	return &workerDeploymentInfo, nil
 }

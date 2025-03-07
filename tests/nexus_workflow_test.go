@@ -1721,7 +1721,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO() {
 		var opExec workflow.NexusOperationExecution
 		err := fut.GetNexusOperationExecution().Get(ctx, &opExec)
 		s.NoError(err)
-		s.Equal(handlerWorkflowID, opExec.OperationID)
+		s.NotEmpty(opExec.OperationToken)
 		return nil, fut.Get(ctx, nil)
 	}
 
@@ -1891,7 +1891,7 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 		},
 		{
 			outcome:        "fail-operation-app-error",
-			metricsOutcome: "operation-unsuccessful:failed",
+			metricsOutcome: "handler-error:INTERNAL",
 			checkWorkflowError: func(t *testing.T, wfErr error) {
 				var opErr *temporal.NexusOperationError
 				require.ErrorAs(t, wfErr, &opErr)
@@ -1941,7 +1941,16 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 
 			snap := capture.Snapshot()
 			require.Len(t, snap["nexus_outbound_requests"], 1)
-			require.Subset(t, snap["nexus_outbound_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartOperation", "failure_source": "worker", "outcome": tc.metricsOutcome})
+			require.Subset(
+				t,
+				snap["nexus_outbound_requests"][0].Tags,
+				map[string]string{
+					"namespace":      s.Namespace().String(),
+					"method":         "StartOperation",
+					"failure_source": "worker",
+					"outcome":        tc.metricsOutcome,
+				},
+			)
 		})
 
 	}
@@ -1953,6 +1962,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration() {
 	testCtx := ctx
 	taskQueue := testcore.RandomizeStr("caller_" + s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	handlerWorkflowID := testcore.RandomizeStr(s.T().Name())
 
 	_, err := s.SdkClient().OperatorService().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
@@ -1993,7 +2003,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration() {
 		if outcome == "timeout" {
 			workflowExecutionTimeout = time.Second
 		}
-		return client.StartWorkflowOptions{ID: soo.RequestID, WorkflowExecutionTimeout: workflowExecutionTimeout}, nil
+		return client.StartWorkflowOptions{ID: handlerWorkflowID, WorkflowExecutionTimeout: workflowExecutionTimeout}, nil
 	})
 	s.NoError(svc.Register(op))
 
@@ -2010,7 +2020,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration() {
 		case "terminate":
 			// Lazy man's version of a local activity, don't try this at home.
 			workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-				err := s.SdkClient().TerminateWorkflow(testCtx, exec.OperationID, "", "")
+				err := s.SdkClient().TerminateWorkflow(testCtx, handlerWorkflowID, "", "")
 				if err != nil {
 					panic(err)
 				}
@@ -2184,6 +2194,162 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	s.Len(snap["nexus_outbound_requests"], 1)
 	// Confirming that requests which do not go through our frontend are not tagged with `failure_source`
 	s.Subset(snap["nexus_outbound_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartOperation", "failure_source": "_unknown_", "outcome": "handler-error:BAD_REQUEST"})
+}
+
+func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+	callerTaskQueue := testcore.RandomizeStr("caller_" + s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	handlerWorkflowID := testcore.RandomizeStr(s.T().Name())
+
+	// number of concurrent Nexus operation calls
+	numCalls := 5
+
+	_, err := s.SdkClient().OperatorService().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_Worker_{
+					Worker: &nexuspb.EndpointTarget_Worker{
+						Namespace: s.Namespace().String(),
+						TaskQueue: callerTaskQueue,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	w := worker.New(s.SdkClient(), callerTaskQueue, worker.Options{})
+	svc := nexus.NewService("test")
+	handlerWf := func(ctx workflow.Context, input string) (string, error) {
+		workflow.GetSignalChannel(ctx, "terminate").Receive(ctx, nil)
+		return "hello " + input, nil
+	}
+
+	op := temporalnexus.NewWorkflowRunOperation(
+		"op",
+		handlerWf,
+		func(ctx context.Context, input string, opts nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+			var conflictPolicy enumspb.WorkflowIdConflictPolicy
+			if input == "conflict-policy-use-existing" {
+				conflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			}
+			return client.StartWorkflowOptions{
+				ID:                       handlerWorkflowID,
+				WorkflowIDConflictPolicy: conflictPolicy,
+			}, nil
+		},
+	)
+	svc.MustRegister(op)
+
+	type CallerWfOutput struct {
+		CntOk  int
+		CntErr int
+	}
+
+	callerWf := func(ctx workflow.Context, input string) (CallerWfOutput, error) {
+		output := CallerWfOutput{}
+		var retError error
+
+		c := workflow.NewNexusClient(endpointName, svc.Name)
+
+		nexusFutures := []workflow.NexusOperationFuture{}
+		for i := 0; i < numCalls; i++ {
+			fut := c.ExecuteOperation(ctx, op, input, workflow.NexusOperationOptions{})
+			nexusFutures = append(nexusFutures, fut)
+		}
+
+		nexusOpStartedFutures := []workflow.NexusOperationFuture{}
+		for _, fut := range nexusFutures {
+			var exec workflow.NexusOperationExecution
+			err := fut.GetNexusOperationExecution().Get(ctx, &exec)
+			if err == nil {
+				output.CntOk++
+				nexusOpStartedFutures = append(nexusOpStartedFutures, fut)
+				continue
+			}
+			output.CntErr++
+			var handlerErr *nexus.HandlerError
+			var appErr *temporal.ApplicationError
+			if !errors.As(err, &handlerErr) {
+				retError = err
+			} else if !errors.As(handlerErr, &appErr) {
+				retError = err
+			} else if appErr.Type() != "WorkflowExecutionAlreadyStarted" {
+				retError = err
+			}
+		}
+
+		if output.CntOk > 0 {
+			// signal handler workflow so it will complete
+			err = workflow.SignalExternalWorkflow(ctx, handlerWorkflowID, "", "terminate", nil).Get(ctx, nil)
+			if err != nil {
+				return output, err
+			}
+		}
+
+		for _, fut := range nexusOpStartedFutures {
+			var res string
+			err := fut.Get(ctx, &res)
+			if err != nil {
+				retError = err
+			} else if res != "hello "+input {
+				retError = fmt.Errorf("unexpected result from handler workflow: %q", res)
+			}
+		}
+
+		return output, retError
+	}
+
+	w.RegisterNexusService(svc)
+	w.RegisterWorkflow(handlerWf)
+	w.RegisterWorkflowWithOptions(callerWf, workflow.RegisterOptions{Name: "caller-wf"})
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	testCases := []struct {
+		input       string
+		checkOutput func(t *testing.T, res CallerWfOutput, err error)
+	}{
+		{
+			input: "conflict-policy-fail",
+			checkOutput: func(t *testing.T, res CallerWfOutput, err error) {
+				require.NoError(t, err)
+				require.EqualValues(t, 1, res.CntOk)
+				require.EqualValues(t, numCalls-1, res.CntErr)
+			},
+		},
+		{
+			input: "conflict-policy-use-existing",
+			checkOutput: func(t *testing.T, res CallerWfOutput, err error) {
+				// TODO(rodrigozhou): The SDK is temporarily blocking this. Remove this check and uncomment
+				// the checks below after SDK unblocks this.
+				require.ErrorContains(t, err, "workflow ID conflict policy UseExisting is not supported for Nexus WorkflowRunOperation")
+				// require.NoError(t, err)
+				// require.EqualValues(t, numCalls, res.CntOk)
+				// require.EqualValues(t, 0, res.CntErr)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.input, func() {
+			run, err := s.SdkClient().ExecuteWorkflow(
+				ctx,
+				client.StartWorkflowOptions{
+					TaskQueue: callerTaskQueue,
+				},
+				callerWf,
+				tc.input,
+			)
+			s.NoError(err)
+			var res CallerWfOutput
+			err = run.Get(ctx, &res)
+			tc.checkOutput(s.T(), res, err)
+		})
+	}
 }
 
 func (s *NexusWorkflowTestSuite) sendNexusCompletionRequest(

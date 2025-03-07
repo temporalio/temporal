@@ -111,6 +111,7 @@ func (s *ScheduleFunctionalSuite) TearDownTest() {
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
+	s.FunctionalTestBase.TearDownTest()
 }
 
 func (s *ScheduleFunctionalSuite) TestBasics() {

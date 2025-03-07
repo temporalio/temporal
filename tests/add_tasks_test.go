@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -102,7 +103,7 @@ func (c *faultyShardController) GetShardByID(shardID int32) (shard.Context, erro
 	return &faultyShardContext{Context: ctx, suite: c.s}, nil
 }
 
-func (c *faultyShardContext) GetEngine(ctx context.Context) (shard.Engine, error) {
+func (c *faultyShardContext) GetEngine(ctx context.Context) (historyi.Engine, error) {
 	err := c.suite.getEngineErr.Load()
 	if err != nil && *err != nil {
 		return nil, *err

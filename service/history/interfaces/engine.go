@@ -24,7 +24,7 @@
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination engine_mock.go
 
-package shard
+package interfaces
 
 import (
 	"context"
@@ -37,7 +37,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -55,7 +54,7 @@ type (
 		DescribeMutableState(ctx context.Context, request *historyservice.DescribeMutableStateRequest) (*historyservice.DescribeMutableStateResponse, error)
 		ResetStickyTaskQueue(ctx context.Context, resetRequest *historyservice.ResetStickyTaskQueueRequest) (*historyservice.ResetStickyTaskQueueResponse, error)
 		DescribeWorkflowExecution(ctx context.Context, request *historyservice.DescribeWorkflowExecutionRequest) (*historyservice.DescribeWorkflowExecutionResponse, error)
-		RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error)
+		RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error)
 		RecordActivityTaskStarted(ctx context.Context, request *historyservice.RecordActivityTaskStartedRequest) (*historyservice.RecordActivityTaskStartedResponse, error)
 		RespondWorkflowTaskCompleted(ctx context.Context, request *historyservice.RespondWorkflowTaskCompletedRequest) (*historyservice.RespondWorkflowTaskCompletedResponse, error)
 		RespondWorkflowTaskFailed(ctx context.Context, request *historyservice.RespondWorkflowTaskFailedRequest) error
@@ -129,23 +128,6 @@ type (
 		ReplicationStream
 		Start()
 		Stop()
-	}
-
-	ReplicationStream interface {
-		SubscribeReplicationNotification() (<-chan struct{}, string)
-		UnsubscribeReplicationNotification(string)
-		ConvertReplicationTask(
-			ctx context.Context,
-			task tasks.Task,
-			clusterID int32,
-		) (*replicationspb.ReplicationTask, error)
-		GetReplicationTasksIter(
-			ctx context.Context,
-			pollingCluster string,
-			minInclusiveTaskID int64,
-			maxExclusiveTaskID int64,
-		) (collection.Iterator[tasks.Task], error)
-		GetMaxReplicationTaskInfo() (int64, time.Time)
 	}
 )
 

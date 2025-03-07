@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -49,7 +50,7 @@ type (
 
 		controller         *gomock.Controller
 		mockShard          *shard.MockContext
-		mockEngine         *shard.MockEngine
+		mockEngine         *historyi.MockEngine
 		mockNamespaceCache *namespace.MockRegistry
 
 		logger log.Logger
@@ -68,7 +69,7 @@ func (s *transactionSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockShard = shard.NewMockContext(s.controller)
-	s.mockEngine = shard.NewMockEngine(s.controller)
+	s.mockEngine = historyi.NewMockEngine(s.controller)
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 	s.logger = log.NewTestLogger()
 

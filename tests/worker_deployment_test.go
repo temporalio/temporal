@@ -254,7 +254,7 @@ func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	s.pollFromDeploymentExpectFail(ctx, tv.WithDeploymentSeriesNumber(2))
 }
 
-func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions() {
+func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)
@@ -264,6 +264,15 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions() {
 	secondVersion := tv.WithBuildIDNumber(2)
 
 	go s.pollFromDeployment(ctx, firstVersion)
+
+	// waiting for 1ms to start the second version later.
+	startTime := time.Now()
+	waitTime := 1 * time.Millisecond
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		a.Greater(time.Since(startTime), waitTime)
+	}, 10*time.Second, 1000*time.Millisecond)
+
 	go s.pollFromDeployment(ctx, secondVersion)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -283,20 +292,61 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions() {
 		if len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()) < 2 {
 			return
 		}
-		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion())
-		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetVersion())
+		// Verify that the version summaries are non-nil and sorted.
+		versionSummaries := resp.GetWorkerDeploymentInfo().GetVersionSummaries()
 
-		versions := []string{
-			resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion(),
-			resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetVersion(),
-		}
-		a.Contains(versions, firstVersion.DeploymentVersionString())
-		a.Contains(versions, secondVersion.DeploymentVersionString())
+		a.NotNil(versionSummaries[0].GetVersion())
+		a.NotNil(versionSummaries[1].GetVersion())
+		a.Equal(versionSummaries[0].GetVersion(), secondVersion.DeploymentVersionString())
+		a.Equal(versionSummaries[1].GetVersion(), firstVersion.DeploymentVersionString())
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetCreateTime())
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries()[1].GetCreateTime())
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetCreateTime())
+	}, time.Second*10, time.Millisecond*1000)
+}
+
+func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_MultipleVersions_Sorted() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s)
+
+	numVersions := 10
+
+	for i := 0; i < numVersions; i++ {
+		go s.pollFromDeployment(ctx, tv.WithBuildIDNumber(i))
+
+		// waiting for 1ms to start the next version later.
+		startTime := time.Now()
+		waitTime := 1 * time.Millisecond
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := assert.New(t)
+			a.Greater(time.Since(startTime), waitTime)
+		}, 10*time.Second, 1000*time.Millisecond)
+	}
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+
+		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries())
+		a.Equal(numVersions, len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()))
+
+		if len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()) < numVersions {
+			return
+		}
+
+		// Verify that the version summaries are sorted.
+		versionSummaries := resp.GetWorkerDeploymentInfo().GetVersionSummaries()
+		for i := 0; i < numVersions-1; i++ {
+			a.Less(versionSummaries[i+1].GetCreateTime().AsTime(), versionSummaries[i].GetCreateTime().AsTime())
+		}
 	}, time.Second*10, time.Millisecond*1000)
 }
 
@@ -1301,8 +1351,6 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 
 // Should see that the ramping version of the task queues in the current version is unversioned
 func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversioned_VersionedCurrent() {
-	s.T().Skip("skipping this test since it's flaking on Cassandra. TODO (Shivam): Fix this.")
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 	tv := testvars.New(s)

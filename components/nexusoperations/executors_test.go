@@ -380,6 +380,8 @@ func TestProcessInvocationTask(t *testing.T) {
 				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
 				require.NotNil(t, failure.GetNexusHandlerFailureInfo())
 				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", failure.Message)
+				require.NotNil(t, failure.Cause.GetApplicationFailureInfo())
+				require.Equal(t, "endpoint not registered", failure.Cause.Message)
 			},
 		},
 		{

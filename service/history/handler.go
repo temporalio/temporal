@@ -351,7 +351,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 }
 
 // RecordWorkflowTaskStarted - Record Workflow Task started.
-func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponse, retError error) {
+func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
@@ -693,14 +693,14 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, req *historyservice.Des
 		}
 	}
 
-	itemsInCacheByIDCount, itemsInCacheByNameCount := h.namespaceRegistry.GetCacheSize()
+	itemsInRegistryByIDCount, itemsInRegistryByNameCount := h.namespaceRegistry.GetRegistrySize()
 	ownedShardIDs := h.controller.ShardIDs()
 	resp := &historyservice.DescribeHistoryHostResponse{
 		ShardsNumber: int32(len(ownedShardIDs)),
 		ShardIds:     ownedShardIDs,
 		NamespaceCache: &namespacespb.NamespaceCacheInfo{
-			ItemsInCacheByIdCount:   itemsInCacheByIDCount,
-			ItemsInCacheByNameCount: itemsInCacheByNameCount,
+			ItemsInCacheByIdCount:   itemsInRegistryByIDCount,
+			ItemsInCacheByNameCount: itemsInRegistryByNameCount,
 		},
 		Address: h.hostInfoProvider.HostInfo().GetAddress(),
 	}
