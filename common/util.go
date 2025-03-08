@@ -340,7 +340,7 @@ func IsServiceClientTransientError(err error) bool {
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
-	if err.Error() == ErrNamespaceHandover.Error() {
+	if IsNamespaceHandoverError(err) {
 		return false
 	}
 
@@ -357,6 +357,10 @@ func IsServiceHandlerRetryableError(err error) bool {
 	}
 
 	return false
+}
+
+func IsNamespaceHandoverError(err error) bool {
+	return err.Error() == ErrNamespaceHandover.Error()
 }
 
 func IsStickyWorkerUnavailable(err error) bool {

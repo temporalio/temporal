@@ -699,6 +699,7 @@ var (
 	)
 	HostRPSLimit          = NewGaugeDef("host_rps_limit")
 	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
+	HandoverWaitLatency   = NewTimerDef("handover_wait_latency")
 
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")

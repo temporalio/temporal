@@ -79,20 +79,33 @@ var (
 
 	// DO NOT allow workflow data read during namespace handover to prevent read-after-write inconsistency.
 	allowedMethodsDuringHandover = map[string]struct{}{
-		"DescribeNamespace":                {},
-		"UpdateNamespace":                  {},
+		// System
+		"GetSystemInfo":       {},
+		"GetSearchAttributes": {},
+		"GetClusterInfo":      {},
+		// Namespace APIs
+		"DeprecateNamespace": {},
+		"DescribeNamespace":  {},
+		"UpdateNamespace":    {},
+		"ListNamespaces":     {},
+		"RegisterNamespace":  {},
+		// Replication APIs
 		"GetReplicationMessages":           {},
 		"ReplicateEventsV2":                {},
 		"GetWorkflowExecutionRawHistory":   {},
-		"GetWorkflowExecutionRawHistoryV2": {}, // This is only internal usage.
-		"ListOpenWorkflowExecutions":       {},
-		"ListClosedWorkflowExecutions":     {},
-		"ListWorkflowExecutions":           {},
-		"ListArchivedWorkflowExecutions":   {},
-		"ScanWorkflowExecutions":           {},
-		"CountWorkflowExecutions":          {},
-		"ListSchedules":                    {},
-		"ListBatchOperations":              {},
+		"GetWorkflowExecutionRawHistoryV2": {},
+		// Visibility APIs
+		"ListTaskQueuePartitions":        {},
+		"ListOpenWorkflowExecutions":     {},
+		"ListClosedWorkflowExecutions":   {},
+		"ListWorkflowExecutions":         {},
+		"ListArchivedWorkflowExecutions": {},
+		"ScanWorkflowExecutions":         {},
+		"CountWorkflowExecutions":        {},
+		"ListSchedules":                  {},
+		"ListBatchOperations":            {},
+		// Matching
+		"ShutdownWorker": {},
 	}
 )
 

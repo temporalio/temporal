@@ -99,6 +99,7 @@ var Module = fx.Options(
 	fx.Provide(MuxRouterProvider),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
+	fx.Provide(NamespaceHandoverInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
@@ -218,6 +219,7 @@ func GrpcServerOptionsProvider(
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
+	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
@@ -266,6 +268,9 @@ func GrpcServerOptionsProvider(
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		authInterceptor.Intercept,
+		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
+		// And retry cannot be performed before customInterceptors.
+		namespaceHandoverInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		telemetryInterceptor.UnaryIntercept,
 		healthInterceptor.Intercept,
@@ -349,6 +354,22 @@ func RedirectionInterceptorProvider(
 		metricsHandler,
 		timeSource,
 		clusterMetadata,
+	)
+}
+
+func NamespaceHandoverInterceptorProvider(
+	dc *dynamicconfig.Collection,
+	namespaceCache namespace.Registry,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
+) *interceptor.NamespaceHandoverInterceptor {
+	return interceptor.NewNamespaceHandoverInterceptor(
+		dc,
+		namespaceCache,
+		metricsHandler,
+		logger,
+		timeSource,
 	)
 }
 
