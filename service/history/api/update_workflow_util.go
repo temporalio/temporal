@@ -32,8 +32,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
@@ -42,8 +40,8 @@ func GetAndUpdateWorkflowWithNew(
 	reqClock *clockspb.VectorClock,
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, historyi.MutableState, error),
-	shard shard.Context,
+	newWorkflowFn func() (historyi.WorkflowContext, historyi.MutableState, error),
+	shard historyi.ShardContext,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
@@ -66,8 +64,8 @@ func GetAndUpdateWorkflowWithConsistencyCheck(
 	consistencyCheckFn MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, historyi.MutableState, error),
-	shardContext shard.Context,
+	newWorkflowFn func() (historyi.WorkflowContext, historyi.MutableState, error),
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
@@ -86,11 +84,11 @@ func GetAndUpdateWorkflowWithConsistencyCheck(
 }
 
 func UpdateWorkflowWithNew(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	ctx context.Context,
 	workflowLease WorkflowLease,
 	action UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, historyi.MutableState, error),
+	newWorkflowFn func() (historyi.WorkflowContext, historyi.MutableState, error),
 ) (retError error) {
 
 	// conduct caller action

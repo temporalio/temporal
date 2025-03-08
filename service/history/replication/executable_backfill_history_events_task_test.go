@@ -202,7 +202,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Process() {
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
@@ -261,7 +261,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Success(
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),

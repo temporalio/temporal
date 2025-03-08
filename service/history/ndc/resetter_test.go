@@ -68,7 +68,7 @@ type (
 		namespace   namespace.Name
 		workflowID  string
 		baseRunID   string
-		newContext  workflow.Context
+		newContext  historyi.WorkflowContext
 		newRunID    string
 
 		workflowResetter *resetterImpl

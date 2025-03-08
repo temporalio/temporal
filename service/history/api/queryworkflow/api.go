@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -57,7 +56,7 @@ const failQueryWorkflowTaskAttemptCount = 3
 func Invoke(
 	ctx context.Context,
 	request *historyservice.QueryWorkflowRequest,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -281,7 +280,7 @@ func queryDirectlyThroughMatching(
 	msResp *historyservice.GetMutableStateResponse,
 	namespaceID string,
 	queryRequest *workflowservice.QueryWorkflowRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,

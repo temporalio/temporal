@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package shard
+package interfaces
 
 import (
 	"context"
@@ -49,15 +49,14 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
-	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination shard_context_mock.go
 
 type (
-	// Context represents a history engine shard
-	Context interface {
+	// ShardContext represents a history engine shard
+	ShardContext interface {
 		GetShardID() int32
 		GetRangeID() int64
 		GetOwner() string
@@ -79,7 +78,7 @@ type (
 		GetSearchAttributesMapperProvider() searchattribute.MapperProvider
 		GetArchivalMetadata() archiver.ArchivalMetadata
 
-		GetEngine(ctx context.Context) (historyi.Engine, error)
+		GetEngine(ctx context.Context) (Engine, error)
 
 		AssertOwnership(ctx context.Context) error
 		NewVectorClock() (*clockspb.VectorClock, error)
@@ -132,7 +131,7 @@ type (
 	// A ControllableContext is a Context plus other methods needed by
 	// the Controller.
 	ControllableContext interface {
-		Context
+		ShardContext
 		pingable.Pingable
 
 		IsValid() bool

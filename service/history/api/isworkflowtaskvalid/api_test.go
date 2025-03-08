@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 )
 
@@ -45,7 +44,7 @@ type (
 
 		controller      *gomock.Controller
 		workflowLease   api.WorkflowLease
-		workflowContext *workflow.MockContext
+		workflowContext *historyi.MockWorkflowContext
 		mutableState    *historyi.MockMutableState
 	}
 )
@@ -59,7 +58,7 @@ func (s *apiSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.workflowContext = workflow.NewMockContext(s.controller)
+	s.workflowContext = historyi.NewMockWorkflowContext(s.controller)
 	s.mutableState = historyi.NewMockMutableState(s.controller)
 	s.workflowLease = api.NewWorkflowLease(
 		s.workflowContext,

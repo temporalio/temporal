@@ -35,8 +35,8 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
 )
@@ -107,7 +107,7 @@ func (f *memoryScheduledQueueFactory) Stop() {
 }
 
 func (f *memoryScheduledQueueFactory) CreateQueue(
-	shardCtx shard.Context,
+	shardCtx historyi.ShardContext,
 	workflowCache wcache.Cache,
 ) queues.Queue {
 

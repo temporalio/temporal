@@ -43,11 +43,10 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
-	standbyActionFn     func(context.Context, workflow.Context, historyi.MutableState) (interface{}, error)
+	standbyActionFn     func(context.Context, historyi.WorkflowContext, historyi.MutableState) (interface{}, error)
 	standbyPostActionFn func(context.Context, tasks.Task, interface{}, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time

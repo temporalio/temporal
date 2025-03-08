@@ -31,13 +31,13 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func Invoke(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (retError error) {
 	err := api.ValidateNamespaceUUID(namespace.ID(workflowKey.NamespaceID))
@@ -56,5 +56,5 @@ func Invoke(
 	}
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	return workflowLease.GetContext().RefreshTasks(ctx, shard)
+	return workflowLease.GetContext().RefreshTasks(ctx, shardContext)
 }

@@ -61,7 +61,7 @@ type (
 
 		controller    *gomock.Controller
 		server        *historyservicemock.MockHistoryService_StreamWorkflowReplicationMessagesServer
-		shardContext  *shard.MockContext
+		shardContext  *historyi.MockShardContext
 		historyEngine *historyi.MockEngine
 		taskConverter *MockSourceTaskConverter
 
@@ -90,7 +90,7 @@ func (s *streamSenderSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.server = historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesServer(s.controller)
-	s.shardContext = shard.NewMockContext(s.controller)
+	s.shardContext = historyi.NewMockShardContext(s.controller)
 	s.historyEngine = historyi.NewMockEngine(s.controller)
 	s.taskConverter = NewMockSourceTaskConverter(s.controller)
 	s.config = tests.NewDynamicConfig()

@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 )
@@ -84,14 +85,14 @@ func (s *ownershipSuite) TestAcquireViaMembershipUpdate() {
 	s.config.NumberOfShards = 1
 	shardID := int32(1)
 
-	shard := NewMockControllableContext(s.controller)
+	shard := historyi.NewMockControllableContext(s.controller)
 	shard.EXPECT().GetEngine(gomock.Any()).Return(nil, nil).AnyTimes()
 	shard.EXPECT().AssertOwnership(gomock.Any()).Return(nil).AnyTimes()
 	shard.EXPECT().IsValid().Return(true).AnyTimes()
 
 	cf := NewMockContextFactory(s.controller)
 	cf.EXPECT().CreateContext(shardID, gomock.Any()).
-		DoAndReturn(func(_ int32, _ CloseCallback) (ControllableContext, error) {
+		DoAndReturn(func(_ int32, _ CloseCallback) (historyi.ControllableContext, error) {
 			return shard, nil
 		})
 
@@ -127,7 +128,7 @@ func (s *ownershipSuite) TestAcquireOnDemand() {
 	s.config.NumberOfShards = 1
 	shardID := int32(1)
 
-	shard := NewMockControllableContext(s.controller)
+	shard := historyi.NewMockControllableContext(s.controller)
 	cf := NewMockContextFactory(s.controller)
 	cf.EXPECT().CreateContext(shardID, gomock.Any()).Return(shard, nil).Times(1)
 
@@ -161,7 +162,7 @@ func (s *ownershipSuite) TestAcquireViaTicker() {
 
 	shardID := int32(1)
 
-	shard := NewMockControllableContext(s.controller)
+	shard := historyi.NewMockControllableContext(s.controller)
 	shard.EXPECT().GetEngine(gomock.Any()).Return(nil, nil).AnyTimes()
 	shard.EXPECT().AssertOwnership(gomock.Any()).Return(nil).AnyTimes()
 	shard.EXPECT().IsValid().Return(true).AnyTimes()

@@ -497,8 +497,8 @@ func (s *streamReceiverMonitorSuite) TestGenerateStatusMap_Success() {
 	inboundKeys[key1] = struct{}{}
 	inboundKeys[key2] = struct{}{}
 	inboundKeys[key3] = struct{}{}
-	ctx1 := shard.NewMockContext(s.controller)
-	ctx2 := shard.NewMockContext(s.controller)
+	ctx1 := historyi.NewMockShardContext(s.controller)
+	ctx2 := historyi.NewMockShardContext(s.controller)
 	engine1 := historyi.NewMockEngine(s.controller)
 	engine2 := historyi.NewMockEngine(s.controller)
 	engine1.EXPECT().GetMaxReplicationTaskInfo().Return(int64(1000), time.Now())

@@ -532,7 +532,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {
 	})
 }
 
-func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.TestVars) workflow.Context {
+func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.TestVars) historyi.WorkflowContext {
 	ms := workflow.TestLocalMutableState(s.workflowTaskCompletedHandler.shardContext, s.mockEventsCache, tv.Namespace(),
 		tv.WorkflowID(), tv.RunID(), log.NewTestLogger())
 
@@ -581,7 +581,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.T
 	return wfContext
 }
 
-func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVars, wfContext workflow.Context) (*protocolpb.Message, *update.Update, []byte) {
+func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVars, wfContext historyi.WorkflowContext) (*protocolpb.Message, *update.Update, []byte) {
 	ctx := context.Background()
 
 	ms, err := wfContext.LoadMutableState(ctx, s.workflowTaskCompletedHandler.shardContext)

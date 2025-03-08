@@ -35,14 +35,14 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	workflowDeleteManager deletemanager.DeleteManager,
 ) (_ *historyservice.DeleteWorkflowExecutionResponse, retError error) {
@@ -76,14 +76,14 @@ func Invoke(
 			// skip delete open workflow
 			return &historyservice.DeleteWorkflowExecutionResponse{}, nil
 		}
-		ns, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+		ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 		if err != nil {
 			return nil, err
 		}
-		if ns.ActiveInCluster(shard.GetClusterMetadata().GetCurrentClusterName()) {
+		if ns.ActiveInCluster(shardContext.GetClusterMetadata().GetCurrentClusterName()) {
 			// If workflow execution is running and in active cluster.
 			if err := api.UpdateWorkflowWithNew(
-				shard,
+				shardContext,
 				ctx,
 				workflowLease,
 				func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {

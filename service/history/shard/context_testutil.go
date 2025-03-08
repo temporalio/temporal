@@ -58,7 +58,7 @@ type ContextTest struct {
 	MockEventsCache *events.MockCache
 }
 
-var _ Context = (*ContextTest)(nil)
+var _ historyi.ShardContext = (*ContextTest)(nil)
 
 func NewTestContextWithTimeSource(
 	ctrl *gomock.Controller,

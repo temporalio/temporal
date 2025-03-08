@@ -116,7 +116,7 @@ func replicationTaskConverterFactoryProvider(
 ) SourceTaskConverterProvider {
 	return func(
 		historyEngine historyi.Engine,
-		shardContext shard.Context,
+		shardContext historyi.ShardContext,
 		clientClusterName string,
 		serializer serialization.Serializer,
 	) SourceTaskConverter {

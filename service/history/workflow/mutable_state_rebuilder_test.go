@@ -2173,7 +2173,7 @@ func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
 }
 
 func (p *testTaskGeneratorProvider) NewTaskGenerator(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 ) TaskGenerator {
 	if mutableState == p.mockMutableState {

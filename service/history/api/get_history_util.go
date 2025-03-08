@@ -46,12 +46,12 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func GetRawHistory(
 	ctx context.Context,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	firstEventID int64,
@@ -61,10 +61,10 @@ func GetRawHistory(
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 ) ([]*commonpb.DataBlob, []byte, error) {
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shard.GetConfig().NumberOfShards)
-	logger := shard.GetLogger()
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shardContext.GetConfig().NumberOfShards)
+	logger := shardContext.GetLogger()
 	rawHistory, size, nextToken, err := persistence.ReadFullPageRawEvents(
-		ctx, shard.GetExecutionManager(),
+		ctx, shardContext.GetExecutionManager(),
 		&persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
 			MinEventID:    firstEventID,
@@ -82,7 +82,7 @@ func GetRawHistory(
 	allEvents := make([]*historyspb.StrippedHistoryEvent, 0)
 	var lastEventID int64
 	for _, blob := range rawHistory {
-		events, err := shard.GetPayloadSerializer().DeserializeStrippedEvents(blob)
+		events, err := shardContext.GetPayloadSerializer().DeserializeStrippedEvents(blob)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -115,12 +115,12 @@ func GetRawHistory(
 			tag.Error(err))
 	}
 
-	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shard.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
+	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shardContext.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
 	if len(nextToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			logger := shard.GetLogger()
+			logger := shardContext.GetLogger()
 			metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetRawHistoryScope))
 			metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 			logger.Error("getHistory error",
@@ -132,7 +132,7 @@ func GetRawHistory(
 		}
 
 		if len(transientWorkflowTaskInfo.HistorySuffix) > 0 {
-			blob, err := shard.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.HistorySuffix, enumspb.ENCODING_TYPE_PROTO3)
+			blob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.HistorySuffix, enumspb.ENCODING_TYPE_PROTO3)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -144,7 +144,7 @@ func GetRawHistory(
 
 func GetHistory(
 	ctx context.Context,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	firstEventID int64,
@@ -158,10 +158,10 @@ func GetHistory(
 
 	var size int
 	isFirstPage := len(nextPageToken) == 0
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shard.GetConfig().NumberOfShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shardContext.GetConfig().NumberOfShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(ctx, shard.GetExecutionManager(), &persistence.ReadHistoryBranchRequest{
+	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(ctx, shardContext.GetExecutionManager(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -174,7 +174,7 @@ func GetHistory(
 		// noop
 	case *serviceerror.DataLoss, *serialization.DeserializationError, *serialization.SerializationError:
 		// log event
-		shard.GetLogger().Error("encountered data corruption event",
+		shardContext.GetLogger().Error("encountered data corruption event",
 			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.WorkflowID(execution.GetWorkflowId()),
 			tag.WorkflowRunID(execution.GetRunId()),
@@ -185,7 +185,7 @@ func GetHistory(
 		return nil, nil, err
 	}
 
-	logger := shard.GetLogger()
+	logger := shardContext.GetLogger()
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
@@ -228,13 +228,13 @@ func GetHistory(
 		historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
 	}
 
-	ns, err := shard.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
 	if err != nil {
 		return nil, nil, err
 	}
 	if err := ProcessOutgoingSearchAttributes(
-		shard.GetSearchAttributesProvider(),
-		shard.GetSearchAttributesMapperProvider(),
+		shardContext.GetSearchAttributesProvider(),
+		shardContext.GetSearchAttributesMapperProvider(),
 		historyEvents,
 		ns,
 		persistenceVisibilityMgr); err != nil {
@@ -249,7 +249,7 @@ func GetHistory(
 
 func GetHistoryReverse(
 	ctx context.Context,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	nextEventID int64,
@@ -260,11 +260,11 @@ func GetHistoryReverse(
 	persistenceVisibilityMgr manager.VisibilityManager,
 ) (*historypb.History, []byte, int64, error) {
 	var size int
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shard.GetConfig().NumberOfShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), shardContext.GetConfig().NumberOfShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
 
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, shard.GetExecutionManager(), &persistence.ReadHistoryBranchReverseRequest{
+	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, shardContext.GetExecutionManager(), &persistence.ReadHistoryBranchReverseRequest{
 		BranchToken:            branchToken,
 		MaxEventID:             nextEventID,
 		LastFirstTransactionID: lastFirstTxnID,
@@ -273,7 +273,7 @@ func GetHistoryReverse(
 		ShardID:                shardID,
 	})
 
-	logger := shard.GetLogger()
+	logger := shardContext.GetLogger()
 	switch err.(type) {
 	case nil:
 		// noop
@@ -288,13 +288,13 @@ func GetHistoryReverse(
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryReverseScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
-	ns, err := shard.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
 	if err != nil {
 		return nil, nil, 0, err
 	}
 	if err := ProcessOutgoingSearchAttributes(
-		shard.GetSearchAttributesProvider(),
-		shard.GetSearchAttributesMapperProvider(),
+		shardContext.GetSearchAttributesProvider(),
+		shardContext.GetSearchAttributesMapperProvider(),
 		historyEvents,
 		ns,
 		persistenceVisibilityMgr); err != nil {

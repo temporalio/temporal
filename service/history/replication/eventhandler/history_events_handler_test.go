@@ -122,7 +122,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_RemoteOnly() {
 		WorkflowID:  workflowId,
 		RunID:       runId,
 	}
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(namespaceId),
@@ -200,7 +200,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalAndRemote_Handle
 		WorkflowID:  workflowId,
 		RunID:       runId,
 	}
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(namespaceId),
@@ -263,7 +263,7 @@ func (s *historyEventHandlerSuite) TestHandleLocalHistoryEvents_AlreadyExist() {
 		WorkflowID:  workflowId,
 		RunID:       runId,
 	}
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(namespaceId),
@@ -318,7 +318,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ImportAllLo
 		RunID:       runId,
 	}
 
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(namespaceId),
@@ -375,7 +375,7 @@ func (s *historyEventHandlerSuite) TestHandleHistoryEvents_LocalOnly_ExistButNot
 		RunID:       runId,
 	}
 
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(namespaceId),

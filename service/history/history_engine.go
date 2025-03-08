@@ -112,7 +112,6 @@ import (
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -122,7 +121,7 @@ type (
 	historyEngineImpl struct {
 		status                     int32
 		currentClusterName         string
-		shardContext               shard.Context
+		shardContext               historyi.ShardContext
 		timeSource                 clock.TimeSource
 		clusterMetadata            cluster.Metadata
 		executionManager           persistence.ExecutionManager
@@ -166,7 +165,7 @@ type (
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,

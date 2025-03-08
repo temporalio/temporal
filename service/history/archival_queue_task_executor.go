@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/service/history/archival"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
@@ -54,7 +53,7 @@ import (
 // serious problem because the archival queue retries tasks forever.
 func NewArchivalQueueTaskExecutor(
 	archiver archival.Archiver,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache cache.Cache,
 	relocatableAttributesFetcher workflow.RelocatableAttributesFetcher,
 	metricsHandler metrics.Handler,
@@ -73,7 +72,7 @@ func NewArchivalQueueTaskExecutor(
 // archivalQueueTaskExecutor is an implementation of queues.Executor for the archival queue.
 type archivalQueueTaskExecutor struct {
 	archiver                     archival.Archiver
-	shardContext                 shard.Context
+	shardContext                 historyi.ShardContext
 	workflowCache                cache.Cache
 	metricsHandler               metrics.Handler
 	logger                       log.Logger

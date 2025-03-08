@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -47,7 +46,7 @@ type (
 	}
 
 	nDCTransactionMgrForNewWorkflowImpl struct {
-		shardContext                shard.Context
+		shardContext                historyi.ShardContext
 		transactionMgr              TransactionManager
 		bypassVersionSemanticsCheck bool
 	}
@@ -56,7 +55,7 @@ type (
 var _ transactionMgrForNewWorkflow = (*nDCTransactionMgrForNewWorkflowImpl)(nil)
 
 func newTransactionMgrForNewWorkflow(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	transactionMgr TransactionManager,
 	bypassVersionSemanticsCheck bool,
 ) *nDCTransactionMgrForNewWorkflowImpl {

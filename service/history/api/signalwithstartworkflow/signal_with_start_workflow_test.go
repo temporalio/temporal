@@ -41,9 +41,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -54,12 +52,12 @@ type (
 		*require.Assertions
 
 		controller   *gomock.Controller
-		shardContext *shard.MockContext
+		shardContext *historyi.MockShardContext
 
 		namespaceID string
 		workflowID  string
 
-		currentContext      *workflow.MockContext
+		currentContext      *historyi.MockWorkflowContext
 		currentMutableState *historyi.MockMutableState
 		currentRunID        string
 	}
@@ -80,12 +78,12 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.shardContext = shard.NewMockContext(s.controller)
+	s.shardContext = historyi.NewMockShardContext(s.controller)
 
 	s.namespaceID = uuid.New().String()
 	s.workflowID = uuid.New().String()
 
-	s.currentContext = workflow.NewMockContext(s.controller)
+	s.currentContext = historyi.NewMockWorkflowContext(s.controller)
 	s.currentMutableState = historyi.NewMockMutableState(s.controller)
 	s.currentRunID = uuid.New().String()
 

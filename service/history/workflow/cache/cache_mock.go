@@ -40,8 +40,7 @@ import (
 	common "go.temporal.io/api/common/v1"
 	locks "go.temporal.io/server/common/locks"
 	namespace "go.temporal.io/server/common/namespace"
-	shard "go.temporal.io/server/service/history/shard"
-	workflow "go.temporal.io/server/service/history/workflow"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -69,7 +68,7 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 }
 
 // GetOrCreateCurrentWorkflowExecution mocks base method.
-func (m *MockCache) GetOrCreateCurrentWorkflowExecution(ctx context.Context, shardContext shard.Context, namespaceID namespace.ID, workflowID string, lockPriority locks.Priority) (ReleaseCacheFunc, error) {
+func (m *MockCache) GetOrCreateCurrentWorkflowExecution(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, workflowID string, lockPriority locks.Priority) (ReleaseCacheFunc, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrCreateCurrentWorkflowExecution", ctx, shardContext, namespaceID, workflowID, lockPriority)
 	ret0, _ := ret[0].(ReleaseCacheFunc)
@@ -84,10 +83,10 @@ func (mr *MockCacheMockRecorder) GetOrCreateCurrentWorkflowExecution(ctx, shardC
 }
 
 // GetOrCreateWorkflowExecution mocks base method.
-func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, shardContext shard.Context, namespaceID namespace.ID, execution *common.WorkflowExecution, lockPriority locks.Priority) (workflow.Context, ReleaseCacheFunc, error) {
+func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, execution *common.WorkflowExecution, lockPriority locks.Priority) (interfaces.WorkflowContext, ReleaseCacheFunc, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrCreateWorkflowExecution", ctx, shardContext, namespaceID, execution, lockPriority)
-	ret0, _ := ret[0].(workflow.Context)
+	ret0, _ := ret[0].(interfaces.WorkflowContext)
 	ret1, _ := ret[1].(ReleaseCacheFunc)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

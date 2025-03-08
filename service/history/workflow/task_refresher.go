@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -62,7 +61,7 @@ type (
 	}
 
 	TaskRefresherImpl struct {
-		shard shard.Context
+		shard historyi.ShardContext
 
 		// this defaults to the global taskGeneratorProvider
 		// for testing purposes, it can be overridden to use a mock task generator
@@ -71,7 +70,7 @@ type (
 )
 
 func NewTaskRefresher(
-	shard shard.Context,
+	shard historyi.ShardContext,
 ) *TaskRefresherImpl {
 
 	return &TaskRefresherImpl{

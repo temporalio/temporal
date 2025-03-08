@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -79,7 +78,7 @@ type (
 )
 
 func (f *historyEngineFactory) CreateEngine(
-	shard shard.Context,
+	shard historyi.ShardContext,
 ) historyi.Engine {
 	var wfCache wcache.Cache
 	if shard.GetConfig().EnableHostLevelHistoryCache() {

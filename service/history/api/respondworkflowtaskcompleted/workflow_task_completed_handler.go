@@ -58,7 +58,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/proto"
@@ -95,7 +94,7 @@ type (
 		namespaceRegistry      namespace.Registry
 		metricsHandler         metrics.Handler
 		config                 *configs.Config
-		shard                  shard.Context
+		shard                  historyi.ShardContext
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 	}
@@ -132,7 +131,7 @@ func newWorkflowTaskCompletedHandler(
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	config *configs.Config,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,

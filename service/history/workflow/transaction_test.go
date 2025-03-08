@@ -49,7 +49,7 @@ type (
 		*require.Assertions
 
 		controller         *gomock.Controller
-		mockShard          *shard.MockContext
+		mockShard          *historyi.MockShardContext
 		mockEngine         *historyi.MockEngine
 		mockNamespaceCache *namespace.MockRegistry
 
@@ -68,7 +68,7 @@ func (s *transactionSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = shard.NewMockContext(s.controller)
+	s.mockShard = historyi.NewMockShardContext(s.controller)
 	s.mockEngine = historyi.NewMockEngine(s.controller)
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 	s.logger = log.NewTestLogger()

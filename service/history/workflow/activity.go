@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -84,7 +83,7 @@ func UpdateActivityInfoForRetries(
 
 func GetPendingActivityInfo(
 	ctx context.Context, // only used as a passthrough to GetActivityType
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 ) (*workflowpb.PendingActivityInfo, error) {
@@ -203,7 +202,7 @@ func PauseActivity(mutableState historyi.MutableState, activityId string) error 
 }
 
 func ResetActivity(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	activityId string,
 	resetHeartbeats bool,
@@ -255,7 +254,7 @@ func ResetActivity(
 }
 
 func UnpauseActivity(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	resetAttempts bool,
@@ -295,7 +294,7 @@ func UnpauseActivity(
 }
 
 func UnpauseActivityWithResume(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
@@ -321,7 +320,7 @@ func UnpauseActivityWithResume(
 }
 
 func UnpauseActivityWithReset(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
@@ -358,7 +357,7 @@ func regenerateActivityRetryTask(
 	scheduleNewRun bool,
 	jitter time.Duration,
 	ms historyi.MutableState,
-	shardContext shard.Context) error {
+	shardContext historyi.ShardContext) error {
 	scheduleTime := activityInfo.ScheduledTime.AsTime()
 	if scheduleNewRun {
 		scheduleTime = shardContext.GetTimeSource().Now().UTC()

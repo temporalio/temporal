@@ -31,20 +31,18 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
 	MutableStateMapper[Input any, Output any] func(
 		ctx context.Context,
-		wfContext workflow.Context,
+		wfContext historyi.WorkflowContext,
 		mutableState historyi.MutableState,
 		input Input,
 	) (historyi.MutableState, Output, error)
 
 	MutableStateMapperImpl struct {
-		shardContext             shard.Context
+		shardContext             historyi.ShardContext
 		newBufferEventFlusher    bufferEventFlusherProvider
 		newBranchMgr             branchMgrProvider
 		newConflictResolver      conflictResolverProvider
@@ -70,7 +68,7 @@ var _ MutableStateMapper[GetOrRebuildMutableStateIn, bool] = (*MutableStateMappe
 var _ MutableStateMapper[replicationTask, historyi.MutableState] = (*MutableStateMapperImpl)(nil).ApplyEvents
 
 func NewMutableStateMapping(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	newBufferEventFlusher bufferEventFlusherProvider,
 	newBranchMgr branchMgrProvider,
 	newConflictResolver conflictResolverProvider,
@@ -87,7 +85,7 @@ func NewMutableStateMapping(
 
 func (m *MutableStateMapperImpl) FlushBufferEvents(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	task replicationTask,
 ) (historyi.MutableState, struct{}, error) {
@@ -105,7 +103,7 @@ func (m *MutableStateMapperImpl) FlushBufferEvents(
 
 func (m *MutableStateMapperImpl) GetOrCreateHistoryBranch(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	task replicationTask,
 ) (historyi.MutableState, PrepareHistoryBranchOut, error) {
@@ -154,7 +152,7 @@ func (m *MutableStateMapperImpl) GetOrCreateHistoryBranch(
 
 func (m *MutableStateMapperImpl) CreateHistoryBranch(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	task replicationTask,
 ) (historyi.MutableState, PrepareHistoryBranchOut, error) {
@@ -187,7 +185,7 @@ func (m *MutableStateMapperImpl) CreateHistoryBranch(
 
 func (m *MutableStateMapperImpl) GetOrRebuildCurrentMutableState(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	task GetOrRebuildMutableStateIn,
 ) (historyi.MutableState, bool, error) {
@@ -209,7 +207,7 @@ func (m *MutableStateMapperImpl) GetOrRebuildCurrentMutableState(
 
 func (m *MutableStateMapperImpl) GetOrRebuildMutableState(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	task GetOrRebuildMutableStateIn,
 ) (historyi.MutableState, bool, error) {
@@ -229,7 +227,7 @@ func (m *MutableStateMapperImpl) GetOrRebuildMutableState(
 
 func (m *MutableStateMapperImpl) ApplyEvents(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	task replicationTask,
 ) (historyi.MutableState, historyi.MutableState, error) {

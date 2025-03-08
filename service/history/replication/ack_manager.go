@@ -47,7 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -81,7 +81,7 @@ type (
 
 	ackMgrImpl struct {
 		currentClusterName                   string
-		shardContext                         shard.Context
+		shardContext                         historyi.ShardContext
 		config                               *configs.Config
 		workflowCache                        wcache.Cache
 		eventBlobCache                       persistence.XDCCache
@@ -111,7 +111,7 @@ var (
 )
 
 func NewAckManager(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	eventBlobCache persistence.XDCCache,
 	replicationProgressCache ProgressCache,

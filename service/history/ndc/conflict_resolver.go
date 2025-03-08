@@ -37,8 +37,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -55,10 +53,10 @@ type (
 	}
 
 	ConflictResolverImpl struct {
-		shard          shard.Context
+		shard          historyi.ShardContext
 		stateRebuilder StateRebuilder
 
-		context      workflow.Context
+		context      historyi.WorkflowContext
 		mutableState historyi.MutableState
 		logger       log.Logger
 	}
@@ -67,8 +65,8 @@ type (
 var _ ConflictResolver = (*ConflictResolverImpl)(nil)
 
 func NewConflictResolver(
-	shard shard.Context,
-	context workflow.Context,
+	shard historyi.ShardContext,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	logger log.Logger,
 ) *ConflictResolverImpl {
@@ -77,7 +75,7 @@ func NewConflictResolver(
 		shard:          shard,
 		stateRebuilder: NewStateRebuilder(shard, logger),
 
-		context:      context,
+		context:      wfContext,
 		mutableState: mutableState,
 		logger:       logger,
 	}

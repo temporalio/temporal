@@ -43,7 +43,6 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 )
 
@@ -54,7 +53,7 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
-		mockContext         *workflow.MockContext
+		mockContext         *historyi.MockWorkflowContext
 		mockMutableState    *historyi.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
@@ -77,7 +76,7 @@ func (s *bufferEventFlusherSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockContext = workflow.NewMockContext(s.controller)
+	s.mockContext = historyi.NewMockWorkflowContext(s.controller)
 	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 
 	s.mockShard = shard.NewTestContext(

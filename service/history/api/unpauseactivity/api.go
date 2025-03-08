@@ -31,14 +31,13 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
 	ctx context.Context,
 	request *historyservice.UnpauseActivityRequest,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.UnpauseActivityResponse, retError error) {
 	var response *historyservice.UnpauseActivityResponse
@@ -76,7 +75,7 @@ func Invoke(
 }
 
 func processUnpauseActivityRequest(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	request *historyservice.UnpauseActivityRequest,
 ) (*historyservice.UnpauseActivityResponse, error) {

@@ -1666,7 +1666,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	futureDeadline := s.mockShard.GetTimeSource().Now().Add(time.Hour)
 	workflow.TrackStateMachineTimer(ms, futureDeadline, staleTask)
 
-	wfCtx := workflow.NewMockContext(s.controller)
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
 	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
 	wfCtx.EXPECT().UpdateWorkflowExecutionAsPassive(gomock.Any(), gomock.Any())
 
@@ -1774,7 +1774,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 		Type: dummy.TaskTypeTimer,
 	})
 
-	wfCtx := workflow.NewMockContext(s.controller)
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
 	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
 
 	mockCache := wcache.NewMockCache(s.controller)
@@ -1876,7 +1876,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	// Future deadline, new task should be scheduled.
 	workflow.TrackStateMachineTimer(ms, s.mockShard.GetTimeSource().Now().Add(time.Hour), validTask)
 
-	wfCtx := workflow.NewMockContext(s.controller)
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
 	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
 
 	mockCache := wcache.NewMockCache(s.controller)

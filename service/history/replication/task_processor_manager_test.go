@@ -56,7 +56,7 @@ type (
 		*require.Assertions
 
 		controller                        *gomock.Controller
-		mockShard                         *shard.MockContext
+		mockShard                         *historyi.MockShardContext
 		mockEngine                        *historyi.MockEngine
 		mockClientBean                    *client.MockBean
 		mockClusterMetadata               *cluster.MockMetadata
@@ -95,7 +95,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 
 	s.shardID = rand.Int31()
 	s.shardOwner = "test-shard-owner"
-	s.mockShard = shard.NewMockContext(s.controller)
+	s.mockShard = historyi.NewMockShardContext(s.controller)
 	s.mockEngine = historyi.NewMockEngine(s.controller)
 	s.mockClientBean = client.NewMockBean(s.controller)
 

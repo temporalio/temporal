@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -46,7 +45,7 @@ import (
 func Invoke(
 	ctx context.Context,
 	request *historyservice.UpdateWorkflowExecutionOptionsRequest,
-	shardCtx shard.Context,
+	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
 	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()))
