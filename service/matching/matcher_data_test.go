@@ -40,7 +40,9 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -64,7 +66,7 @@ func (s *MatcherDataSuite) SetupTest() {
 	)
 	s.ts = clock.NewEventTimeSource().Update(time.Now())
 	s.ts.UseAsyncTimers(true)
-	s.md = newMatcherData(cfg, true, s.ts)
+	s.md = newMatcherData(cfg, log.NewTestLogger(), s.ts, true)
 }
 
 func (s *MatcherDataSuite) now() time.Time {
@@ -579,7 +581,7 @@ func FuzzMatcherData(f *testing.F) {
 		)
 		ts := clock.NewEventTimeSource()
 		ts.UseAsyncTimers(true)
-		md := newMatcherData(cfg, true, ts)
+		md := newMatcherData(cfg, log.NewTestLogger(), ts, true)
 		_ = md
 
 		next := func() int {
@@ -658,7 +660,7 @@ func FuzzMatcherData(f *testing.F) {
 				go func() {
 					defer pollForwarders.Add(-1)
 					res := md.EnqueueTaskAndWait(nil, &internalTask{isPollForwarder: true})
-					bugIf(res.ctxErr != nil || res.poller == nil, "")
+					softassert.That(md.logger, res.ctxErr == nil && res.poller != nil, "")
 					ts.Sleep(sleepTime)
 					t := &persistencespb.TaskInfo{
 						CreateTime: timestamppb.New(ts.Now()),
@@ -675,7 +677,7 @@ func FuzzMatcherData(f *testing.F) {
 				go func() {
 					defer taskForwarders.Add(-1)
 					res := md.EnqueuePollerAndWait(nil, &waitingPoller{isTaskForwarder: true})
-					bugIf(res.ctxErr != nil || res.task == nil, "")
+					softassert.That(md.logger, res.ctxErr == nil && res.task != nil, "")
 					ts.Sleep(sleepTime)
 					res.task.finishForward(nil, nil, true)
 				}()
