@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/softassert"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -203,8 +204,8 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		db.lastWrite = time.Now()
 		// In this case, ensureDefaultSubqueuesLocked already initialized subqueue 0 to have
 		// ackLevel and maxReadLevel 0, so we don't need to initialize them.
-		bugIf(db.subqueues[0].maxReadLevel != 0, "bug: should have maxReadLevel 0 here")
-		bugIf(db.subqueues[0].AckLevel != 0, "bug: should have ackLevel 0 here")
+		softassert.That(db.logger, db.subqueues[0].maxReadLevel == 0, "should have maxReadLevel 0 here")
+		softassert.That(db.logger, db.subqueues[0].AckLevel == 0, "should have ackLevel 0 here")
 		return nil
 
 	default:
