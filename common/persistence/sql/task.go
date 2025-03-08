@@ -387,7 +387,7 @@ func (m *sqlTaskManager) CreateTasks(
 		); err != nil {
 			return err
 		}
-		resp = &persistence.CreateTasksResponse{}
+		resp = &persistence.CreateTasksResponse{UpdatedMetadata: false}
 		return nil
 	})
 	return resp, err

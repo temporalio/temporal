@@ -60,6 +60,10 @@ type (
 		store     persistence.TaskManager
 		logger    log.Logger
 		subqueues []*dbSubqueue
+
+		// used to avoid unnecessary metadata writes:
+		lastChange time.Time // updated when metadata is changed in memory
+		lastWrite  time.Time // updated when metadata is successfully written to db
 	}
 
 	dbSubqueue struct {
@@ -146,7 +150,7 @@ func (db *taskQueueDB) RenewLease(
 			return taskQueueState{}, err
 		}
 	} else {
-		if err := db.renewTaskQueueLocked(ctx, db.rangeID+1); err != nil {
+		if err := db.updateTaskQueueLocked(ctx, true); err != nil {
 			return taskQueueState{}, err
 		}
 	}
@@ -167,34 +171,40 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 	})
 	switch err.(type) {
 	case nil:
-		response.TaskQueueInfo.Kind = db.queue.Partition().Kind()
-		response.TaskQueueInfo.ExpiryTime = db.expiryTime()
-		response.TaskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
-		if _, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
-			RangeID:       response.RangeID + 1,
-			TaskQueueInfo: response.TaskQueueInfo,
-			PrevRangeID:   response.RangeID,
-		}); err != nil {
-			return err
-		}
-		db.rangeID = response.RangeID + 1
+		db.rangeID = response.RangeID
 		db.subqueues = db.ensureDefaultSubqueuesLocked(
 			response.TaskQueueInfo.Subqueues,
 			response.TaskQueueInfo.AckLevel,
 			response.TaskQueueInfo.ApproximateBacklogCount,
 		)
+		err := db.updateTaskQueueLocked(ctx, true)
+		if err != nil {
+			db.rangeID = 0
+			return err
+		}
+		// We took over the task queue and are not sure what tasks may have been written
+		// before. Set max read level of all subqueues to just before our new block.
+		maxReadLevel := rangeIDToTaskIDBlock(db.rangeID, db.config.RangeSize).start - 1
+		for _, s := range db.subqueues {
+			s.maxReadLevel = maxReadLevel
+		}
 		return nil
 
 	case *serviceerror.NotFound:
 		db.rangeID = initialRangeID
 		db.subqueues = db.ensureDefaultSubqueuesLocked(nil, 0, 0)
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
-			RangeID:       initialRangeID,
+			RangeID:       db.rangeID,
 			TaskQueueInfo: db.cachedQueueInfo(),
 		}); err != nil {
 			db.rangeID = 0
 			return err
 		}
+		db.lastWrite = time.Now()
+		// In this case, ensureDefaultSubqueuesLocked already initialized subqueue 0 to have
+		// ackLevel and maxReadLevel 0, so we don't need to initialize them.
+		bugIf(db.subqueues[0].maxReadLevel != 0, "bug: should have maxReadLevel 0 here")
+		bugIf(db.subqueues[0].AckLevel != 0, "bug: should have ackLevel 0 here")
 		return nil
 
 	default:
@@ -202,19 +212,20 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 	}
 }
 
-func (db *taskQueueDB) renewTaskQueueLocked(
-	ctx context.Context,
-	rangeID int64,
-) error {
+func (db *taskQueueDB) updateTaskQueueLocked(ctx context.Context, incrementRangeId bool) error {
+	newRangeID := db.rangeID
+	if incrementRangeId {
+		newRangeID++
+	}
 	if _, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
-		RangeID:       rangeID,
+		RangeID:       newRangeID,
 		TaskQueueInfo: db.cachedQueueInfo(),
 		PrevRangeID:   db.rangeID,
 	}); err != nil {
 		return err
 	}
-
-	db.rangeID = rangeID
+	db.lastWrite = time.Now()
+	db.rangeID = newRangeID
 	return nil
 }
 
@@ -227,6 +238,8 @@ func (db *taskQueueDB) OldUpdateState(
 ) error {
 	db.Lock()
 	defer db.Unlock()
+	// We don't need to update lastWrite/lastChange in here since this function is only used by
+	// the old backlog manager and those fields are only used by the new backlog manager.
 
 	// Reset approximateBacklogCount to fix the count divergence issue
 	maxReadLevel := db.getMaxReadLevelLocked(subqueueZero)
@@ -251,20 +264,24 @@ func (db *taskQueueDB) OldUpdateState(
 func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	db.Lock()
 	defer db.Unlock()
+	defer db.emitBacklogGauges()
 
-	_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
-		RangeID:       db.rangeID,
-		TaskQueueInfo: db.cachedQueueInfo(),
-		PrevRangeID:   db.rangeID,
-	})
-	db.emitBacklogGauges()
-	return err
+	// We only need to write if something changed, or if we're past half of the sticky queue TTL.
+	// Note that we use the same threshold for non-sticky queues even though they don't have a
+	// persistence TTL, since the scavenger looks for metadata that hasn't been updated in 48 hours.
+	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > stickyTaskQueueTTL/2
+	if !needWrite {
+		return nil
+	}
+
+	return db.updateTaskQueueLocked(ctx, false)
 }
 
 func (db *taskQueueDB) updateAckLevelAndCount(subqueue int, ackLevel int64, delta int64) {
 	db.Lock()
 	defer db.Unlock()
 
+	db.lastChange = time.Now()
 	if ackLevel < db.subqueues[subqueue].AckLevel {
 		db.logger.DPanic("bug: ack level should not move backwards!")
 	}
@@ -283,6 +300,7 @@ func (db *taskQueueDB) updateAckLevelAndCount(subqueue int, ackLevel int64, delt
 func (db *taskQueueDB) updateApproximateBacklogCount(delta int64) {
 	db.Lock()
 	defer db.Unlock()
+	db.lastChange = time.Now()
 	db.updateApproximateBacklogCountLocked(0, delta)
 }
 
@@ -350,7 +368,7 @@ func (db *taskQueueDB) CreateTasks(
 		db.subqueues[i].ApproximateBacklogCount += int64(len(update.tasks))
 	}
 
-	_, err := db.store.CreateTasks(
+	resp, err := db.store.CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
 			TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
@@ -368,7 +386,12 @@ func (db *taskQueueDB) CreateTasks(
 		db.subqueues[i].maxReadLevel = update.maxReadLevelAfter
 	}
 
-	if _, ok := err.(*persistence.ConditionFailedError); ok {
+	if err == nil {
+		// Only update lastWrite for persistence implementations that update metadata on CreateTasks.
+		if resp.UpdatedMetadata {
+			db.lastWrite = time.Now()
+		}
+	} else if _, ok := err.(*persistence.ConditionFailedError); ok {
 		// tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
 		// In those cases we keep the count incremented, hence it may be an overestimate.
 		for i, update := range updates {
@@ -437,11 +460,8 @@ func (db *taskQueueDB) AllocateSubqueue(
 	db.subqueues = append(db.subqueues, newSubqueue)
 
 	// ensure written to metadata before returning
-	if _, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
-		RangeID:       db.rangeID,
-		TaskQueueInfo: db.cachedQueueInfo(),
-		PrevRangeID:   db.rangeID,
-	}); err != nil {
+	err := db.updateTaskQueueLocked(ctx, false)
+	if err != nil {
 		// If this was a conflict, caller will shut down partition. Otherwise, we don't know
 		// for sure if this write made it to persistence or not. We should forget about the new
 		// subqueue and let a future call to AllocateSubqueue add it again. If we crash and
@@ -458,7 +478,7 @@ func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
 	case enumspb.TASK_QUEUE_KIND_NORMAL:
 		return nil
 	case enumspb.TASK_QUEUE_KIND_STICKY:
-		return timestamppb.New(time.Now().UTC().Add(stickyTaskQueueTTL))
+		return timestamppb.New(time.Now().Add(stickyTaskQueueTTL))
 	default:
 		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", db.queue.Partition().Kind()))
 	}
@@ -510,9 +530,8 @@ func (db *taskQueueDB) ensureDefaultSubqueuesLocked(
 ) []*dbSubqueue {
 	// convert+copy protos to []*dbSubqueue
 	subqueues := make([]*dbSubqueue, len(infos))
-	initMaxReadLevel := rangeIDToTaskIDBlock(db.rangeID, db.config.RangeSize).start - 1
 	for i, info := range infos {
-		subqueues[i] = &dbSubqueue{maxReadLevel: initMaxReadLevel}
+		subqueues[i] = &dbSubqueue{}
 		proto.Merge(&subqueues[i].SubqueueInfo, info)
 	}
 
