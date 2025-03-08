@@ -606,6 +606,7 @@ type (
 
 	// CreateTasksResponse is the response to CreateTasksRequest
 	CreateTasksResponse struct {
+		UpdatedMetadata bool
 	}
 
 	PersistedTaskQueueInfo struct {
