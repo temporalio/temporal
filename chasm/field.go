@@ -30,17 +30,31 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Used by reflection.
+const chasmFieldTypeName = "chasm.Field"
+
 // This struct needs to be create via reflection
 // but reflection can't set prviate fields...
 type Field[T any] struct {
 	Internal fieldInternal
 }
 
+const internalFieldName = "Internal"
+
+type fieldType int
+
+const (
+	fieldTypeComponent fieldType = iota + 1
+	fieldTypeComponentPointer
+	fieldTypeData
+	fieldTypeCollection
+)
+
 type fieldInternal struct {
-	fieldType int // data, component, componentPointer
+	fieldType fieldType
 	component reflect.Value
 
-	// backingNode *nodeInfo
+	treeNode *Node
 }
 
 func (d *Field[T]) Get(Context) (T, error) {
@@ -101,5 +115,8 @@ func NewDataPointerField[D proto.Message](
 ) *Field[D] {
 	panic("not implemented")
 }
+
+// Used by reflection.
+const chasmCollectionTypeName = "chasm.Collection"
 
 type Collection[T any] map[string]*Field[T]
