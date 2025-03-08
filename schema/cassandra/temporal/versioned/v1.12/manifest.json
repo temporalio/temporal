@@ -1,0 +1,6 @@
+{
+  "CurrVersion": "1.12",
+  "MinCompatibleVersion": "1.0",
+  "Description": "Add the chasm_node_map to the executions table",
+  "SchemaUpdateCqlFiles": ["chasm_node_map.cql"]
+}

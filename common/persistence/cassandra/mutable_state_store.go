@@ -80,6 +80,7 @@ const (
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
 		`child_executions_map, child_executions_map_encoding, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
+		`chasm_node_map, chasm_node_map_encoding, ` +
 		`checksum, checksum_encoding, db_record_version ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -232,6 +233,26 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
+	templateResetChasmNodeQuery = `UPDATE executions ` +
+		`SET chasm_node_map = ?, chasm_node_map_encoding = ? ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
+	templateUpdateChasmNodeQuery = `UPDATE executions ` +
+		`SET chasm_node_map[ ? ] = ?, chasm_node_map_encoding = ? ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
 	templateResetSignalInfoQuery = `UPDATE executions ` +
 		`SET signal_map = ?, signal_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
@@ -323,6 +344,16 @@ const (
 		`and task_id = ? `
 
 	templateDeleteSignalInfoQuery = `DELETE signal_map[ ? ] ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
+	templateDeleteChasmNodeQuery = `DELETE chasm_node_map[ ? ] ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -540,6 +571,20 @@ func (d *MutableStateStore) GetWorkflowExecution(
 	}
 	state.SignalInfos = signalInfos
 	state.SignalRequestedIDs = gocql.UUIDsToStringSlice(result["signal_requested"])
+
+	chasmNodeBlobs := make(map[string]*commonpb.DataBlob)
+	chasmNodeEncoding, ok := result["chasm_node_map_encoding"].(string)
+	if !ok {
+		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map_encoding type")
+	}
+	chasmNodeBytes, ok := result["chasm_node_map"].(map[string][]byte)
+	if !ok {
+		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map type")
+	}
+	for key, value := range chasmNodeBytes {
+		chasmNodeBlobs[key] = p.NewDataBlob(value, chasmNodeEncoding)
+	}
+	state.ChasmNodes = chasmNodeBlobs
 
 	eList := result["buffered_events_list"].([]map[string]interface{})
 	bufferedEventsBlobs := make([]*commonpb.DataBlob, 0, len(eList))

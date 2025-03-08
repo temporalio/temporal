@@ -893,6 +893,7 @@ var (
 	SignalInfoSize                        = NewBytesHistogramDef("signal_info_size")
 	SignalRequestIDSize                   = NewBytesHistogramDef("signal_request_id_size")
 	BufferedEventsSize                    = NewBytesHistogramDef("buffered_events_size")
+	ChasmTotalSize                        = NewBytesHistogramDef("chasm_total_size")
 	ActivityInfoCount                     = NewDimensionlessHistogramDef("activity_info_count")
 	TimerInfoCount                        = NewDimensionlessHistogramDef("timer_info_count")
 	ChildInfoCount                        = NewDimensionlessHistogramDef("child_info_count")
