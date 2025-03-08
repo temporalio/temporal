@@ -30,6 +30,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
@@ -51,10 +52,10 @@ func (p *pollerPQ) Less(i int, j int) bool {
 	a, b := p.heap[i], p.heap[j]
 	if !(a.isTaskForwarder || a.isTaskValidator) && (b.isTaskForwarder || b.isTaskValidator) {
 		return true
-	} else if a.startTime.Before(b.startTime) {
-		return true
+	} else if (a.isTaskForwarder || a.isTaskValidator) && !(b.isTaskForwarder || b.isTaskValidator) {
+		return false
 	}
-	return false
+	return a.startTime.Before(b.startTime)
 }
 
 func (p *pollerPQ) Add(poller *waitingPoller) {
@@ -174,7 +175,13 @@ func (t *taskPQ) Less(i int, j int) bool {
 
 	// Note: sync match tasks have a fixed negative id.
 	// Query tasks will get 0 here.
-	aid, bid := a.event.GetTaskId(), b.event.GetTaskId()
+	var aid, bid int64
+	if a.event != nil && a.event.AllocatedTaskInfo != nil {
+		aid = a.event.AllocatedTaskInfo.TaskId
+	}
+	if b.event != nil && b.event.AllocatedTaskInfo != nil {
+		bid = b.event.AllocatedTaskInfo.TaskId
+	}
 	return aid < bid
 }
 
@@ -235,6 +242,7 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 type matcherData struct {
 	config     *taskQueueConfig
 	logger     log.Logger
+	timeSource clock.TimeSource
 	canForward bool
 
 	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
@@ -250,10 +258,11 @@ type matcherData struct {
 	lastPoller time.Time // most recent poll start time
 }
 
-func newMatcherData(config *taskQueueConfig, logger log.Logger, canForward bool) matcherData {
+func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock.TimeSource, canForward bool) matcherData {
 	return matcherData{
 		config:     config,
 		logger:     logger,
+		timeSource: timeSource,
 		canForward: canForward,
 		tasks: taskPQ{
 			ages: newBacklogAgeTracker(),
@@ -356,7 +365,7 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 	return poller.waitForMatch()
 }
 
-func (d *matcherData) MatchNextPoller(task *internalTask) (canSyncMatch, gotSyncMatch bool) {
+func (d *matcherData) MatchTaskImmediately(task *internalTask) (canSyncMatch, gotSyncMatch bool) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -456,7 +465,7 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 		return true
 	}
 	delayToForwardingAllowed := d.config.MaxWaitForPollerBeforeFwd() - time.Since(d.lastPoller)
-	d.reconsiderForwardTimer.set(d.rematchAfterTimer, delayToForwardingAllowed)
+	d.reconsiderForwardTimer.set(d.timeSource, d.rematchAfterTimer, delayToForwardingAllowed)
 	return delayToForwardingAllowed <= 0
 }
 
@@ -464,7 +473,7 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 func (d *matcherData) findAndWakeMatches() {
 	allowForwarding := d.canForward && d.allowForwarding()
 
-	now := time.Now().UnixNano()
+	now := d.timeSource.Now().UnixNano()
 	// TODO(pri): for task-specific ready time, we need to do a full/partial re-heapify here
 
 	for {
@@ -478,7 +487,7 @@ func (d *matcherData) findAndWakeMatches() {
 
 		// check ready time
 		delay := d.tasks.readyTimeForTask(task) - now
-		d.rateLimitTimer.set(d.rematchAfterTimer, time.Duration(delay))
+		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, time.Duration(delay))
 		if delay > 0 {
 			return // not ready yet, timer will call match later
 		}
@@ -508,7 +517,7 @@ func (d *matcherData) recycleToken(task *internalTask) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	now := time.Now().UnixNano()
+	now := d.timeSource.Now().UnixNano()
 	d.tasks.consumeTokens(now, task, -1)
 	d.findAndWakeMatches() // another task may be ready to match now
 }
@@ -520,7 +529,7 @@ func (d *matcherData) rematchAfterTimer() {
 	d.findAndWakeMatches()
 }
 
-func (d *matcherData) finishMatchAfterPollForward(poller *waitingPoller, task *internalTask) {
+func (d *matcherData) FinishMatchAfterPollForward(poller *waitingPoller, task *internalTask) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -577,15 +586,15 @@ func (w *waitableMatchResult) waitForMatch() *matchResult {
 // resettable timer:
 
 type resettableTimer struct {
-	timer *time.Timer // AfterFunc timer
+	timer clock.Timer // AfterFunc timer
 }
 
 // set sets rt to call f after delay. set to <= 0 stops the timer.
-func (rt *resettableTimer) set(f func(), delay time.Duration) {
+func (rt *resettableTimer) set(ts clock.TimeSource, f func(), delay time.Duration) {
 	if delay <= 0 {
 		rt.unset()
 	} else if rt.timer == nil {
-		rt.timer = time.AfterFunc(delay, f)
+		rt.timer = ts.AfterFunc(delay, f)
 	} else {
 		rt.timer.Reset(delay)
 	}
