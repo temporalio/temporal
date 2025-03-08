@@ -60,6 +60,11 @@ linters-settings:
       # internal server pbs have their own suffix to avoid naming conflicts
       - pkg: go.temporal.io/server/api/(\w+)/v1
         alias: ${1}spb
+  exhaustive:
+    # Presence of "default" case in switch statements satisfies exhaustiveness,
+    # even if all enum members are not listed.
+    # Default: false
+    default-signifies-exhaustive: true
   revive:
     severity: error
     confidence: 0.8

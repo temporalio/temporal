@@ -515,7 +515,27 @@ Loop:
 			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
 			continue Loop
 		}
+		metrics.ReplicationTaskLoadLatency.With(s.metrics).Record(
+			time.Since(item.GetVisibilityTime()),
+			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+			metrics.ReplicationTaskPriorityTag(priority),
+		)
+
+		var attempt int64
 		operation := func() error {
+			attempt++
+			startTime := time.Now().UTC()
+			defer func() {
+				metrics.ReplicationTaskGenerationLatency.With(s.metrics).Record(
+					time.Since(startTime),
+					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+					metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+					metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+					metrics.ReplicationTaskPriorityTag(priority),
+				)
+			}()
 			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID)
 			if err != nil {
 				return err
@@ -555,7 +575,29 @@ Loop:
 			WithMaximumAttempts(80).
 			WithExpirationInterval(3 * time.Minute)
 
-		if err := backoff.ThrottleRetry(operation, retryPolicy, IsRetryableError); err != nil {
+		err = backoff.ThrottleRetry(operation, retryPolicy, IsRetryableError)
+		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
+			attempt,
+			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+			metrics.ReplicationTaskPriorityTag(priority),
+		)
+		metrics.ReplicationTaskSendLatency.With(s.metrics).Record(
+			time.Since(item.GetVisibilityTime()),
+			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+			metrics.ReplicationTaskPriorityTag(priority),
+		)
+		if err != nil {
+			metrics.ReplicationTaskSendError.With(s.metrics).Record(
+				int64(1),
+				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+				metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+				metrics.ReplicationTaskPriorityTag(priority),
+			)
 			return fmt.Errorf("failed to send task: %v, cause: %w", item, err)
 		}
 	}

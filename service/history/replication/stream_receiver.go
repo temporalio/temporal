@@ -195,7 +195,6 @@ func (r *StreamReceiverImpl) sendEventLoop() error {
 	for {
 		select {
 		case <-timer.C:
-			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
 			watermark, err := r.ackMessage(r.stream)
 			if err != nil {
 				return err
@@ -360,7 +359,11 @@ func (r *StreamReceiverImpl) processMessages(
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
 		}, convertedTasks...) {
-			taskScheduler.Submit(task)
+			if submitted := taskScheduler.TrySubmit(task); !submitted {
+				r.logger.Warn("no enough worker to process replication tasks")
+				taskScheduler.Submit(task)
+			}
+
 		}
 	}
 	return nil

@@ -62,7 +62,8 @@ const (
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
 	// See server.api.enums.v1.ReplicationTaskType
-	replicationTaskType = "replicationTaskType"
+	replicationTaskType     = "replicationTaskType"
+	replicationTaskPriority = "replicationTaskPriority"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -392,6 +393,11 @@ func ReasonTag(value ReasonString) Tag {
 // ReplicationTaskTypeTag returns a new replication task type tag.
 func ReplicationTaskTypeTag(value enumsspb.ReplicationTaskType) Tag {
 	return &tagImpl{key: replicationTaskType, value: value.String()}
+}
+
+// ReplicationTaskPriorityTag returns a replication task priority tag.
+func ReplicationTaskPriorityTag(value enumsspb.TaskPriority) Tag {
+	return &tagImpl{key: replicationTaskPriority, value: value.String()}
 }
 
 // DestinationTag is a tag for metrics emitted by outbound task executors for the task's destination.
