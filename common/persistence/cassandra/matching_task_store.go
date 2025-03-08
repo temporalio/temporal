@@ -413,7 +413,7 @@ func (d *MatchingTaskStore) CreateTasks(
 		}
 	}
 
-	return &p.CreateTasksResponse{}, nil
+	return &p.CreateTasksResponse{UpdatedMetadata: true}, nil
 }
 
 func GetTaskTTL(expireTime *timestamppb.Timestamp) int64 {
