@@ -91,7 +91,7 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 	methodName string,
 ) (waitTime *time.Duration, retErr error) {
 	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
-		return
+		return nil, nil
 	}
 
 	startTime := i.timeSource.Now()
