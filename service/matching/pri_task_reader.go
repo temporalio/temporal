@@ -38,10 +38,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"golang.org/x/sync/semaphore"
 )
@@ -58,6 +60,7 @@ type (
 		backlogMgr *priBacklogManagerImpl
 		subqueue   int
 		notifyC    chan struct{} // Used as signal to notify pump of new tasks
+		logger     log.Logger
 
 		lock sync.Mutex
 
@@ -93,6 +96,7 @@ func newPriTaskReader(
 		backlogMgr: backlogMgr,
 		subqueue:   subqueue,
 		notifyC:    make(chan struct{}, 1),
+		logger:     backlogMgr.logger,
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
 			clock.NewRealTimeSource(),
@@ -391,7 +395,13 @@ func (tr *priTaskReader) signalNewTasks(resp subqueueCreateTasksResponse) {
 	// queue), and then we set it to the max read level as of CreateTasks.
 	// We also check that there's room in memory.
 	canAddDirect := tr.readLevel == resp.maxReadLevelBefore &&
-		(tr.loadedTasks+len(resp.tasks)) <= tr.backlogMgr.config.GetTasksBatchSize()
+		(tr.loadedTasks+len(resp.tasks)) <= tr.backlogMgr.config.GetTasksBatchSize() &&
+		!slices.ContainsFunc(resp.tasks, func(t *persistencespb.AllocatedTaskInfo) bool {
+			// Because we checked readLevel, we know that getTasksPump can't have beat us to
+			// adding these tasks to outstandingTasks. So they should definitely not be there.
+			_, found := tr.outstandingTasks.Get(t.TaskId)
+			return softassert.That(tr.logger, !found, "newly-written task already present in outstanding tasks")
+		})
 
 	if !canAddDirect {
 		tr.lock.Unlock()
@@ -400,13 +410,6 @@ func (tr *priTaskReader) signalNewTasks(resp subqueueCreateTasksResponse) {
 	}
 
 	tr.readLevel = resp.maxReadLevelAfter
-
-	// Because we checked readLevel above, we know that getTasksPump can't have beat us to
-	// adding these tasks to outstandingTasks. So they should definitely not be there.
-	for _, t := range resp.tasks {
-		_, found := tr.outstandingTasks.Get(t.TaskId)
-		bugIf(found, "bug: newly-written task already present in outstanding tasks")
-	}
 
 	tr.recordNewTasksLocked(resp.tasks)
 
@@ -440,8 +443,12 @@ func (tr *priTaskReader) getLoadedTasks() int {
 
 func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
 	wasAlreadyAcked, found := tr.outstandingTasks.Get(taskId)
-	bugIf(!found, "bug: completed task not found in outstandingTasks")
-	bugIf(wasAlreadyAcked.(bool), "bug: completed task was already acked")
+	if !softassert.That(tr.logger, found, "completed task not found in oustandingTasks") {
+		return 0
+	}
+	if !softassert.That(tr.logger, !wasAlreadyAcked.(bool), "completed task was already acked") {
+		return 0
+	}
 
 	tr.outstandingTasks.Put(taskId, true)
 	tr.loadedTasks--
