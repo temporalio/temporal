@@ -33,7 +33,7 @@ import (
 
 var (
 	registryClearedErr  = errors.New("update registry was cleared")
-	workflowTaskFailErr = serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due unexpected workflow task failure.")
+	workflowTaskFailErr = serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to unexpected workflow task failure.")
 )
 
 var (
