@@ -222,7 +222,15 @@ func newPhysicalTaskQueueManager(
 				return nil, err
 			}
 		}
-		pqMgr.priMatcher = newPriTaskMatcher(tqCtx, config, queue.partition, fwdr, pqMgr.taskValidator, pqMgr.metricsHandler)
+		pqMgr.priMatcher = newPriTaskMatcher(
+			tqCtx,
+			config,
+			queue.partition,
+			fwdr,
+			pqMgr.taskValidator,
+			logger,
+			pqMgr.metricsHandler,
+		)
 		pqMgr.matcher = pqMgr.priMatcher
 	} else {
 		pqMgr.backlogMgr = newBacklogManager(
