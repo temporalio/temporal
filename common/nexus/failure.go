@@ -23,9 +23,11 @@
 package nexus
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -36,6 +38,37 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 )
+
+const (
+	// FailureSourceHeaderName is the header used to indicate from where the Nexus failure originated.
+	FailureSourceHeaderName = "Temporal-Nexus-Failure-Source"
+	// FailureSourceWorker indicates the failure originated from outside the server (e.g. bad request or on the Nexus worker).
+	FailureSourceWorker = "worker"
+)
+
+type failureSourceContextKeyType struct{}
+
+var FailureSourceContextKey = failureSourceContextKeyType{}
+
+func SetFailureSourceOnContext(ctx context.Context, response *http.Response) {
+	if response == nil || response.Header == nil {
+		return
+	}
+
+	failureSourceHeader := response.Header.Get(FailureSourceHeaderName)
+	if failureSourceHeader == "" {
+		return
+	}
+
+	failureSourceContext := ctx.Value(FailureSourceContextKey)
+	if failureSourceContext == nil {
+		return
+	}
+
+	if val, ok := failureSourceContext.(*atomic.Value); ok {
+		val.Store(failureSourceHeader)
+	}
+}
 
 var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
 
@@ -110,7 +143,7 @@ func NexusFailureToAPIFailure(failure nexus.Failure, retryable bool) (*failurepb
 	return apiFailure, nil
 }
 
-func UnsuccessfulOperationErrorToTemporalFailure(opErr *nexus.UnsuccessfulOperationError) (*failurepb.Failure, error) {
+func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
 	var nexusFailure nexus.Failure
 	failureErr, ok := opErr.Cause.(*nexus.FailureError)
 	if ok {
@@ -198,59 +231,92 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 		if !exposeDetails {
 			errMessage = "bad request"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeBadRequest,
+			Cause: errors.New(errMessage),
+		}
 	case codes.Aborted, codes.Unavailable:
 		if !exposeDetails {
 			errMessage = "service unavailable"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeUnavailable,
+			Cause: errors.New(errMessage),
+		}
 	case codes.Canceled:
 		// TODO: This should have a different status code (e.g. 499 which is semi standard but not supported by nexus).
 		// The important thing is that the request is retryable, internal serves that purpose.
 		if !exposeDetails {
 			errMessage = "canceled"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeInternal,
+			Cause: errors.New(errMessage),
+		}
 	case codes.DataLoss, codes.Internal, codes.Unknown:
 		if !exposeDetails {
 			errMessage = "internal error"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeInternal,
+			Cause: errors.New(errMessage),
+		}
 	case codes.Unauthenticated:
 		if !exposeDetails {
 			errMessage = "authentication failed"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeUnauthenticated,
+			Cause: errors.New(errMessage),
+		}
 	case codes.PermissionDenied:
 		if !exposeDetails {
 			errMessage = "permission denied"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeUnauthorized,
+			Cause: errors.New(errMessage),
+		}
 	case codes.NotFound:
 		if !exposeDetails {
 			errMessage = "not found"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeNotFound,
+			Cause: errors.New(errMessage),
+		}
 	case codes.ResourceExhausted:
 		if !exposeDetails {
 			errMessage = "resource exhausted"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeResourceExhausted, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeResourceExhausted,
+			Cause: errors.New(errMessage),
+		}
 	case codes.Unimplemented:
 		if !exposeDetails {
 			errMessage = "not implemented"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotImplemented, errMessage)
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeNotImplemented,
+			Cause: errors.New(errMessage),
+		}
 	case codes.DeadlineExceeded:
 		if !exposeDetails {
 			errMessage = "request timeout"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, errMessage) //nolint:govet
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeUpstreamTimeout,
+			Cause: errors.New(errMessage),
+		}
 	case codes.OK:
 		return nil
 	}
 	if !exposeDetails {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+		return &nexus.HandlerError{
+			Type:  nexus.HandlerErrorTypeInternal,
+			Cause: errors.New("internal error"),
+		}
 	}
 	// Let the nexus SDK handle this for us (log and convert to an internal error).
 	return err

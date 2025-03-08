@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/internal/goro"
 )
@@ -53,7 +54,7 @@ type (
 	Replicator struct {
 		status                           int32
 		clusterMetadata                  cluster.Metadata
-		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		clientBean                       client.Bean
 		logger                           log.Logger
 		metricsHandler                   metrics.Handler
@@ -82,7 +83,7 @@ func NewReplicator(
 	hostInfo membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-	namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor,
+	namespaceReplicationTaskExecutor nsreplication.TaskExecutor,
 	matchingClient matchingservice.MatchingServiceClient,
 	namespaceRegistry namespace.Registry,
 ) *Replicator {

@@ -26,6 +26,7 @@ package workflow
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -35,6 +36,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -60,20 +62,6 @@ func makeBackoffAlgorithm(requestedDelay *time.Duration) BackoffCalculatorAlgori
 	}
 }
 
-func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
-	var delay *time.Duration
-	afi, ok := failure.GetFailureInfo().(*failurepb.Failure_ApplicationFailureInfo)
-	if !ok {
-		return delay
-	}
-	p := afi.ApplicationFailureInfo.GetNextRetryDelay()
-	if p != nil {
-		d := p.AsDuration()
-		delay = &d
-	}
-	return delay
-}
-
 func UpdateActivityInfoForRetries(
 	ai *persistencespb.ActivityInfo,
 	version int64,
@@ -97,14 +85,14 @@ func UpdateActivityInfoForRetries(
 func GetPendingActivityInfo(
 	ctx context.Context, // only used as a passthrough to GetActivityType
 	shardContext shard.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 ) (*workflowpb.PendingActivityInfo, error) {
 	now := shardContext.GetTimeSource().Now().UTC()
 
 	p := &workflowpb.PendingActivityInfo{
-		ActivityId:     ai.ActivityId,
-		LastDeployment: ai.LastStartedDeployment,
+		ActivityId:                  ai.ActivityId,
+		LastWorkerDeploymentVersion: ai.LastWorkerDeploymentVersion,
 	}
 	if ai.GetUseWorkflowBuildIdInfo() != nil {
 		p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
@@ -187,7 +175,7 @@ func GetNextScheduledTime(ai *persistencespb.ActivityInfo) time.Time {
 	return nextScheduledTime
 }
 
-func PauseActivityById(mutableState MutableState, activityId string) error {
+func PauseActivity(mutableState historyi.MutableState, activityId string) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
 	}
@@ -203,7 +191,7 @@ func PauseActivityById(mutableState MutableState, activityId string) error {
 		return nil
 	}
 
-	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ MutableState) error {
+	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 		// note - we are not increasing the stamp of the activity if it is running.
 		// this is because if activity is actually running we should let it finish
 		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
@@ -214,12 +202,13 @@ func PauseActivityById(mutableState MutableState, activityId string) error {
 	})
 }
 
-func ResetActivityById(
+func ResetActivity(
 	shardContext shard.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	activityId string,
-	scheduleNewRun bool,
 	resetHeartbeats bool,
+	keepPaused bool,
+	jitter time.Duration,
 ) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
@@ -230,47 +219,96 @@ func ResetActivityById(
 		return consts.ErrActivityNotFound
 	}
 
-	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		// reset the number of attempts
 		ai.Attempt = 1
-
-		if needRegenerateRetryTask(ai, scheduleNewRun) {
-			// we need to change the Stamp every time if we need to regenerate retry task
-			// * to make sure the stale retry is not processed
-			// * to prevent the current running activity from finishing if scheduleNewRun is provided
-			ai.Stamp++
-			if err := ms.RegenerateActivityRetryTask(ai, shardContext.GetTimeSource().Now()); err != nil {
-				return err
-			}
-		}
 
 		if resetHeartbeats {
 			activityInfo.LastHeartbeatDetails = nil
 			activityInfo.LastHeartbeatUpdateTime = nil
 		}
 
+		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
+		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_STARTED || (ai.Paused && keepPaused) {
+			return nil
+		}
+
+		ai.Stamp++
+		if ai.Paused && !keepPaused {
+			ai.Paused = false
+		}
+
+		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
+		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			scheduleTime := shardContext.GetTimeSource().Now().UTC()
+			if jitter != 0 {
+				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
+				scheduleTime = scheduleTime.Add(randomOffset)
+			}
+			if err := ms.RegenerateActivityRetryTask(ai, scheduleTime); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 }
 
+func UnpauseActivity(
+	shardContext shard.Context,
+	mutableState historyi.MutableState,
+	ai *persistencespb.ActivityInfo,
+	resetAttempts bool,
+	resetHeartbeat bool,
+	jitter time.Duration,
+) error {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
+		activityInfo.Paused = false
+		activityInfo.Stamp++
+
+		if resetAttempts {
+			activityInfo.Attempt = 1
+		}
+		if resetHeartbeat {
+			activityInfo.LastHeartbeatDetails = nil
+			activityInfo.LastHeartbeatUpdateTime = nil
+		}
+
+		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
+		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			scheduleTime := shardContext.GetTimeSource().Now().UTC()
+			if jitter != 0 {
+				randomOffset := time.Duration(rand.Int63n(int64(jitter)))
+				scheduleTime = scheduleTime.Add(randomOffset)
+			}
+			if err := ms.RegenerateActivityRetryTask(ai, scheduleTime); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func UnpauseActivityWithResume(
 	shardContext shard.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
+	jitter time.Duration,
 ) (*historyservice.UnpauseActivityResponse, error) {
 
-	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		activityInfo.Stamp++
 		activityInfo.Paused = false
 
 		// regenerate the retry task if needed
 		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-			scheduleTime := activityInfo.ScheduledTime.AsTime()
-			if scheduleNewRun {
-				scheduleTime = shardContext.GetTimeSource().Now().UTC()
-			}
-			if err := ms.RegenerateActivityRetryTask(activityInfo, scheduleTime); err != nil {
+			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms, shardContext); err != nil {
 				return err
 			}
 		}
@@ -284,12 +322,13 @@ func UnpauseActivityWithResume(
 
 func UnpauseActivityWithReset(
 	shardContext shard.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	scheduleNewRun bool,
 	resetHeartbeats bool,
+	jitter time.Duration,
 ) (*historyservice.UnpauseActivityResponse, error) {
-	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms MutableState) error {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		activityInfo.Paused = false
 		activityInfo.Stamp++
 
@@ -297,11 +336,7 @@ func UnpauseActivityWithReset(
 		activityInfo.Attempt = 1
 
 		if needRegenerateRetryTask(activityInfo, scheduleNewRun) {
-			scheduleTime := activityInfo.ScheduledTime.AsTime()
-			if scheduleNewRun {
-				scheduleTime = shardContext.GetTimeSource().Now().UTC()
-			}
-			if err := ms.RegenerateActivityRetryTask(activityInfo, scheduleTime); err != nil {
+			if err := regenerateActivityRetryTask(activityInfo, scheduleNewRun, jitter, ms, shardContext); err != nil {
 				return err
 			}
 		}
@@ -316,6 +351,23 @@ func UnpauseActivityWithReset(
 	}
 
 	return &historyservice.UnpauseActivityResponse{}, nil
+}
+
+func regenerateActivityRetryTask(
+	activityInfo *persistencespb.ActivityInfo,
+	scheduleNewRun bool,
+	jitter time.Duration,
+	ms historyi.MutableState,
+	shardContext shard.Context) error {
+	scheduleTime := activityInfo.ScheduledTime.AsTime()
+	if scheduleNewRun {
+		scheduleTime = shardContext.GetTimeSource().Now().UTC()
+		if jitter != 0 {
+			randomOffset := time.Duration(rand.Int63n(int64(jitter)))
+			scheduleTime = scheduleTime.Add(randomOffset)
+		}
+	}
+	return ms.RegenerateActivityRetryTask(activityInfo, scheduleTime)
 }
 
 func needRegenerateRetryTask(ai *persistencespb.ActivityInfo, scheduleNewRun bool) bool {

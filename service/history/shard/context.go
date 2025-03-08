@@ -33,6 +33,7 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -77,7 +79,7 @@ type (
 		GetSearchAttributesMapperProvider() searchattribute.MapperProvider
 		GetArchivalMetadata() archiver.ArchivalMetadata
 
-		GetEngine(ctx context.Context) (Engine, error)
+		GetEngine(ctx context.Context) (historyi.Engine, error)
 
 		AssertOwnership(ctx context.Context) error
 		NewVectorClock() (*clockspb.VectorClock, error)
@@ -108,6 +110,7 @@ type (
 
 		AddTasks(ctx context.Context, request *persistence.AddHistoryTasksRequest) error
 		AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error
+		GetHistoryTasks(ctx context.Context, request *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error)
 		CreateWorkflowExecution(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(ctx context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ConflictResolveWorkflowExecution(ctx context.Context, request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error)
@@ -122,6 +125,8 @@ type (
 
 		StateMachineRegistry() *hsm.Registry
 		GetFinalizer() *finalizer.Finalizer
+
+		ChasmRegistry() *chasm.Registry
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

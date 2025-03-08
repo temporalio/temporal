@@ -76,7 +76,7 @@ func NewImmediateQueue(
 				NextPageToken:       paginationToken,
 			}
 
-			resp, err := shard.GetExecutionManager().GetHistoryTasks(ctx, request)
+			resp, err := shard.GetHistoryTasks(ctx, request)
 			if err != nil {
 				return nil, nil, err
 			}

@@ -63,6 +63,7 @@ type Config struct {
 	EmitShardLagLog            dynamicconfig.BoolPropertyFn
 	ThrottledLogRPS            dynamicconfig.IntPropertyFn
 	EnableStickyQuery          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	AlignMembershipChange      dynamicconfig.DurationPropertyFn
 	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
 	StartupMembershipJoinDelay dynamicconfig.DurationPropertyFn
 
@@ -84,6 +85,7 @@ type Config struct {
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
+	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// EventsCache settings
 	// Change of these configs require shard restart
@@ -349,6 +351,8 @@ type Config struct {
 	EnableEagerWorkflowStart      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
 
+	FollowReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
+
 	// ArchivalQueueProcessor settings
 	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
 	ArchivalProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
@@ -363,10 +367,13 @@ type Config struct {
 	ArchivalBackendMaxRPS                               dynamicconfig.FloatPropertyFn
 	ArchivalQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 
-	WorkflowExecutionMaxInFlightUpdates dynamicconfig.IntPropertyFnWithNamespaceFilter
-	WorkflowExecutionMaxTotalUpdates    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxInFlightUpdates                           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxInFlightUpdatePayloads                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxTotalUpdates                              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold dynamicconfig.FloatPropertyFnWithNamespaceFilter
 
-	SendRawWorkflowHistory dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SendRawHistoryBetweenInternalServices dynamicconfig.BoolPropertyFn
+	SendRawWorkflowHistory                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -400,6 +407,7 @@ func NewConfig(
 		PersistencePerShardNamespaceMaxQPS:   dynamicconfig.HistoryPersistencePerShardNamespaceMaxQPS.Get(dc),
 		PersistenceDynamicRateLimitingParams: dynamicconfig.HistoryPersistenceDynamicRateLimitingParams.Get(dc),
 		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
+		AlignMembershipChange:                dynamicconfig.HistoryAlignMembershipChange.Get(dc),
 		ShutdownDrainDuration:                dynamicconfig.HistoryShutdownDrainDuration.Get(dc),
 		StartupMembershipJoinDelay:           dynamicconfig.HistoryStartupMembershipJoinDelay.Get(dc),
 		AllowResetWithPendingChildren:        dynamicconfig.AllowResetWithPendingChildren.Get(dc),
@@ -431,6 +439,7 @@ func NewConfig(
 		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
+		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB
@@ -546,6 +555,8 @@ func NewConfig(
 		ReplicationResendMaxBatchCount:                      dynamicconfig.ReplicationResendMaxBatchCount.Get(dc),
 		ReplicationProgressCacheMaxSize:                     dynamicconfig.ReplicationProgressCacheMaxSize.Get(dc),
 		ReplicationProgressCacheTTL:                         dynamicconfig.ReplicationProgressCacheTTL.Get(dc),
+
+		FollowReusePolicyAfterConflictPolicyTerminate: dynamicconfig.FollowReusePolicyAfterConflictPolicyTerminate.Get(dc),
 
 		MaximumBufferedEventsBatch:       dynamicconfig.MaximumBufferedEventsBatch.Get(dc),
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
@@ -674,9 +685,12 @@ func NewConfig(
 		ArchivalQueueMaxReaderCount:                         dynamicconfig.ArchivalQueueMaxReaderCount.Get(dc),
 
 		// workflow update related
-		WorkflowExecutionMaxInFlightUpdates: dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
-		WorkflowExecutionMaxTotalUpdates:    dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
+		WorkflowExecutionMaxInFlightUpdates:                           dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
+		WorkflowExecutionMaxInFlightUpdatePayloads:                    dynamicconfig.WorkflowExecutionMaxInFlightUpdatePayloads.Get(dc),
+		WorkflowExecutionMaxTotalUpdates:                              dynamicconfig.WorkflowExecutionMaxTotalUpdates.Get(dc),
+		WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold: dynamicconfig.WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold.Get(dc),
 
+		SendRawHistoryBetweenInternalServices:    dynamicconfig.SendRawHistoryBetweenInternalServices.Get(dc),
 		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),

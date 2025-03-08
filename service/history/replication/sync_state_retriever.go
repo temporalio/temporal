@@ -43,10 +43,12 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -75,7 +77,7 @@ type (
 			ctx context.Context,
 			namespaceID string,
 			execution *commonpb.WorkflowExecution,
-			mutableState workflow.MutableState,
+			mutableState historyi.MutableState,
 			targetVersionedTransition *persistencespb.VersionedTransition,
 			targetVersionHistories [][]*historyspb.VersionHistoryItem,
 			releaseFunc wcache.ReleaseCacheFunc,
@@ -120,7 +122,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	wfLease, err := s.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
 		nil,
-		func(mutableState workflow.MutableState) bool {
+		func(mutableState historyi.MutableState) bool {
 			if targetCurrentVersionedTransition == nil {
 				return true
 			}
@@ -169,7 +171,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableState(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
-	mu workflow.MutableState,
+	mu historyi.MutableState,
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories [][]*historyspb.VersionHistoryItem,
 	releaseFunc wcache.ReleaseCacheFunc,
@@ -181,7 +183,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories [][]*historyspb.VersionHistoryItem,
 	cacheReleaseFunc wcache.ReleaseCacheFunc,
@@ -240,7 +242,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 
 	newRunId := mutableState.GetExecutionInfo().NewExecutionRunId
 	sourceVersionHistories := versionhistory.CopyVersionHistories(mutableState.GetExecutionInfo().VersionHistories)
-	sourceTransitionHistory := workflow.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory)
+	sourceTransitionHistory := transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory)
 	if cacheReleaseFunc != nil {
 		cacheReleaseFunc(nil)
 	}
@@ -349,21 +351,18 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	}, nil
 }
 
-func (s *SyncStateRetrieverImpl) getMutation(mutableState workflow.MutableState, versionedTransition *persistencespb.VersionedTransition) (*persistencespb.WorkflowMutableStateMutation, error) {
+func (s *SyncStateRetrieverImpl) getMutation(
+	mutableState historyi.MutableState,
+	versionedTransition *persistencespb.VersionedTransition,
+) (*persistencespb.WorkflowMutableStateMutation, error) {
 	rootNode := mutableState.HSM()
 	updatedStateMachine, err := s.getUpdatedSubStateMachine(rootNode, versionedTransition)
 	if err != nil {
 		return nil, err
 	}
-	mutableStateClone := mutableState.CloneToProto()
-	err = workflow.SanitizeMutableState(mutableStateClone)
-	if err != nil {
-		return nil, err
-	}
-	if err := common.DiscardUnknownProto(mutableStateClone); err != nil {
-		return nil, err
-	}
-	tombstoneBatch := mutableStateClone.GetExecutionInfo().SubStateMachineTombstoneBatches
+
+	executionInfo := mutableState.GetExecutionInfo()
+	tombstoneBatch := executionInfo.SubStateMachineTombstoneBatches
 	var tombstones []*persistencespb.StateMachineTombstoneBatch
 	for i, tombstone := range tombstoneBatch {
 		if workflow.CompareVersionedTransition(tombstone.VersionedTransition, versionedTransition) > 0 {
@@ -373,34 +372,39 @@ func (s *SyncStateRetrieverImpl) getMutation(mutableState workflow.MutableState,
 	}
 
 	var signalRequestedIds []string
-	if workflow.CompareVersionedTransition(mutableStateClone.ExecutionInfo.SignalRequestIdsLastUpdateVersionedTransition, versionedTransition) > 0 {
-		signalRequestedIds = mutableStateClone.SignalRequestedIds
+	if workflow.CompareVersionedTransition(executionInfo.SignalRequestIdsLastUpdateVersionedTransition, versionedTransition) > 0 {
+		signalRequestedIds = mutableState.GetPendingSignalRequestedIds()
 	}
+
 	mutation := &persistencespb.WorkflowMutableStateMutation{
-		UpdatedActivityInfos:            getUpdatedInfo(mutableStateClone.ActivityInfos, versionedTransition),
-		UpdatedTimerInfos:               getUpdatedInfo(mutableStateClone.TimerInfos, versionedTransition),
-		UpdatedChildExecutionInfos:      getUpdatedInfo(mutableStateClone.ChildExecutionInfos, versionedTransition),
-		UpdatedRequestCancelInfos:       getUpdatedInfo(mutableStateClone.RequestCancelInfos, versionedTransition),
-		UpdatedSignalInfos:              getUpdatedInfo(mutableStateClone.SignalInfos, versionedTransition),
-		UpdatedUpdateInfos:              getUpdatedInfo(mutableStateClone.ExecutionInfo.UpdateInfos, versionedTransition),
+		UpdatedActivityInfos:            getUpdatedInfo(mutableState.GetPendingActivityInfos(), versionedTransition),
+		UpdatedTimerInfos:               getUpdatedInfo(mutableState.GetPendingTimerInfos(), versionedTransition),
+		UpdatedChildExecutionInfos:      getUpdatedInfo(mutableState.GetPendingChildExecutionInfos(), versionedTransition),
+		UpdatedRequestCancelInfos:       getUpdatedInfo(mutableState.GetPendingRequestCancelExternalInfos(), versionedTransition),
+		UpdatedSignalInfos:              getUpdatedInfo(mutableState.GetPendingSignalExternalInfos(), versionedTransition),
+		UpdatedUpdateInfos:              getUpdatedInfo(executionInfo.UpdateInfos, versionedTransition),
 		UpdatedSubStateMachines:         updatedStateMachine,
 		SubStateMachineTombstoneBatches: tombstones,
 		SignalRequestedIds:              signalRequestedIds,
-		ExecutionInfo:                   mutableStateClone.ExecutionInfo,
-		ExecutionState:                  mutableStateClone.ExecutionState,
+		ExecutionInfo:                   executionInfo,
+		ExecutionState:                  mutableState.GetExecutionState(),
 	}
-	mutableStateClone.ExecutionInfo.UpdateInfos = nil
-	mutableStateClone.ExecutionInfo.SubStateMachinesByType = nil
-	mutableStateClone.ExecutionInfo.SubStateMachineTombstoneBatches = nil
+
+	mutation = common.CloneProto(mutation)
+	workflow.SanitizeMutableStateMutation(mutation)
+	if err := common.DiscardUnknownProto(mutation); err != nil {
+		return nil, err
+	}
+
+	mutation.ExecutionInfo.UpdateInfos = nil
+	mutation.ExecutionInfo.SubStateMachinesByType = nil
+	mutation.ExecutionInfo.SubStateMachineTombstoneBatches = nil
 	return mutation, nil
 }
 
-func (s *SyncStateRetrieverImpl) getSnapshot(mutableState workflow.MutableState) (*persistencespb.WorkflowMutableState, error) {
+func (s *SyncStateRetrieverImpl) getSnapshot(mutableState historyi.MutableState) (*persistencespb.WorkflowMutableState, error) {
 	mutableStateProto := mutableState.CloneToProto()
-	err := workflow.SanitizeMutableState(mutableStateProto)
-	if err != nil {
-		return nil, err
-	}
+	workflow.SanitizeMutableState(mutableStateProto)
 	if err := common.DiscardUnknownProto(mutableStateProto); err != nil {
 		return nil, err
 	}

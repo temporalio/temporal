@@ -86,6 +86,11 @@ func Timestamp(timestamp time.Time) ZapTag {
 	return NewTimeTag("timestamp", timestamp)
 }
 
+// RequestID returns tag for RequestID
+func RequestID(requestID string) ZapTag {
+	return NewStringTag("request-id", requestID)
+}
+
 // ==========  Workflow tags defined here: ( wf is short for workflow) ==========
 
 // WorkflowAction returns tag for WorkflowAction
@@ -563,6 +568,9 @@ func WorkerComponent(v interface{}) ZapTag {
 	return NewStringTag("worker-component", fmt.Sprintf("%T", v))
 }
 
+// FailedAssertion is a tag for marking a message as a failed assertion.
+var FailedAssertion = NewBoolTag("failed-assertion", true)
+
 // history engine shard
 
 // ShardID returns tag for ShardID
@@ -1004,4 +1012,8 @@ func UserDataVersion(v int64) ZapTag {
 
 func Cause(cause string) ZapTag {
 	return NewStringTag("cause", cause)
+}
+
+func NexusOperation(operation string) ZapTag {
+	return NewStringTag("nexus-operation", operation)
 }

@@ -26,6 +26,7 @@ package history
 
 import (
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
@@ -46,6 +47,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
@@ -68,6 +70,7 @@ import (
 var Module = fx.Options(
 	resource.Module,
 	fx.Provide(hsm.NewRegistry),
+	fx.Provide(chasm.NewRegistry),
 	workflow.Module,
 	shard.Module,
 	events.Module,
@@ -113,7 +116,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 	handler := &Handler{
 		status:                       common.DaemonStatusInitialized,
 		config:                       args.Config,
-		tokenSerializer:              common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:              tasktoken.NewSerializer(),
 		logger:                       args.Logger,
 		throttledLogger:              args.ThrottledLogger,
 		persistenceExecutionManager:  args.PersistenceExecutionManager,

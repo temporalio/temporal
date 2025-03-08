@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.uber.org/mock/gomock"
 )
 
@@ -113,7 +113,7 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 	} {
 		t.Run(c.Name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			mutableState := workflow.NewMockMutableState(ctrl)
+			mutableState := historyi.NewMockMutableState(ctrl)
 			logger := log.NewMockLogger(ctrl)
 			metricsHandler := metrics.NewMockHandler(ctrl)
 

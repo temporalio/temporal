@@ -257,7 +257,7 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(
 			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: currentClusterName,
-				Clusters:          GetOrUseDefaultClusters(currentClusterName, nil),
+				Clusters:          []string{currentClusterName},
 			},
 			FailoverVersion:             common.EmptyVersion,
 			FailoverNotificationVersion: -1,

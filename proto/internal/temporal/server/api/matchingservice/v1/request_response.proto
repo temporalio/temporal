@@ -77,6 +77,7 @@ message PollWorkflowTaskQueueResponse {
     // a workflow task. Sticky query tasks will not include any history.
     temporal.api.history.v1.History history = 19;
     bytes next_page_token = 20;
+    temporal.api.taskqueue.v1.PollerScalingDecision poller_scaling_decision = 21;
 }
 
 message PollActivityTaskQueueRequest {
@@ -107,6 +108,7 @@ message PollActivityTaskQueueResponse {
     temporal.api.common.v1.WorkflowType workflow_type = 14;
     string workflow_namespace = 15;
     temporal.api.common.v1.Header header = 16;
+    temporal.api.taskqueue.v1.PollerScalingDecision poller_scaling_decision = 17;
 }
 
 message AddWorkflowTaskRequest {
@@ -325,12 +327,23 @@ message SyncDeploymentUserDataRequest {
     string task_queue = 2;
     // Note: this is the task queue type being modified, but this field should not be used for
     // routing, the user data is owned by the WORKFLOW task queue.
+    // Deprecated. Use `task_queue_types`.
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    repeated temporal.api.enums.v1.TaskQueueType task_queue_types = 8;
 
     // This is the deployment being modified.
+    // Deprecated.
     temporal.api.deployment.v1.Deployment deployment = 4;
     // Data for this deployment.
+    // Deprecated.
     temporal.server.api.deployment.v1.TaskQueueData data = 5;
+
+    oneof operation {
+        // The deployment version and its data that is being updated.
+        temporal.server.api.deployment.v1.DeploymentVersionData update_version_data = 6;
+        // The version whose data should be cleaned from the task queue.
+        temporal.server.api.deployment.v1.WorkerDeploymentVersion forget_version = 7;
+    }
 }
 
 message SyncDeploymentUserDataResponse {

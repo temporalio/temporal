@@ -32,10 +32,12 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -68,6 +70,7 @@ type (
 		ReplicationDLQWriter            replication.DLQWriter
 		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		TestHooks                       testhooks.TestHooks
 	}
 
 	historyEngineFactory struct {
@@ -77,7 +80,7 @@ type (
 
 func (f *historyEngineFactory) CreateEngine(
 	shard shard.Context,
-) shard.Engine {
+) historyi.Engine {
 	var wfCache wcache.Cache
 	if shard.GetConfig().EnableHostLevelHistoryCache() {
 		wfCache = f.WorkflowCache
@@ -108,5 +111,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.ReplicationDLQWriter,
 		f.CommandHandlerRegistry,
 		f.OutboundQueueCBPool,
+		f.TestHooks,
 	)
 }

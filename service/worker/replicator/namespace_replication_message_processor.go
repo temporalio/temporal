@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 )
@@ -62,7 +63,7 @@ func newNamespaceReplicationMessageProcessor(
 	logger log.Logger,
 	remotePeer adminservice.AdminServiceClient,
 	metricsHandler metrics.Handler,
-	namespaceTaskExecutor namespace.ReplicationTaskExecutor,
+	namespaceTaskExecutor nsreplication.TaskExecutor,
 	hostInfo membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
@@ -102,7 +103,7 @@ type (
 		sourceCluster             string
 		logger                    log.Logger
 		remotePeer                adminservice.AdminServiceClient
-		namespaceTaskExecutor     namespace.ReplicationTaskExecutor
+		namespaceTaskExecutor     nsreplication.TaskExecutor
 		metricsHandler            metrics.Handler
 		retryPolicy               backoff.RetryPolicy
 		lastProcessedMessageID    int64

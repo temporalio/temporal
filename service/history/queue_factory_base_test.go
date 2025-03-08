@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/replication/eventhandler"
@@ -154,6 +156,7 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 		lazyLoadedOwnershipBasedQuotaScaler,
 		fx.Annotate(serializer, fx.As(new(serialization.Serializer))),
 		fx.Annotate(historyFetcher, fx.As(new(eventhandler.HistoryPaginatedFetcher))),
+		fx.Annotate(telemetry.NoopTracerProvider, fx.As(new(trace.TracerProvider))),
 	)
 }
 

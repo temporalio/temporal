@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/worker_versioning"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -79,6 +80,20 @@ func getBackoffInterval(
 		return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, makeBackoffAlgorithm(delayedRetryDuration))
 	}
 	return nextBackoffInterval(now, currentAttempt, maxAttempts, initInterval, maxInterval, expirationTime, backoffCoefficient, ExponentialBackoffAlgorithm)
+}
+
+func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
+	var delay *time.Duration
+	afi, ok := failure.GetFailureInfo().(*failurepb.Failure_ApplicationFailureInfo)
+	if !ok {
+		return delay
+	}
+	p := afi.ApplicationFailureInfo.GetNextRetryDelay()
+	if p != nil {
+		d := p.AsDuration()
+		delay = &d
+	}
+	return delay
 }
 
 func nextBackoffInterval(
@@ -169,8 +184,8 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 
 func SetupNewWorkflowForRetryOrCron(
 	ctx context.Context,
-	previousMutableState MutableState,
-	newMutableState MutableState,
+	previousMutableState historyi.MutableState,
+	newMutableState historyi.MutableState,
 	newRunID string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
 	lastCompletionResult *commonpb.Payloads,
@@ -256,6 +271,7 @@ func SetupNewWorkflowForRetryOrCron(
 		CronSchedule:             startAttr.CronSchedule,
 		Memo:                     startAttr.Memo,
 		SearchAttributes:         startAttr.SearchAttributes,
+		CompletionCallbacks:      startAttr.CompletionCallbacks,
 	}
 
 	attempt := int32(1)

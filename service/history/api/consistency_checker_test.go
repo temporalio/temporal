@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -105,7 +106,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	ctx := context.Background()
 
 	wfContext := workflow.NewMockContext(s.controller)
-	mutableState := workflow.NewMockMutableState(s.controller)
+	mutableState := historyi.NewMockMutableState(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
 

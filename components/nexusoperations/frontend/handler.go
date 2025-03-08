@@ -31,6 +31,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"runtime/debug"
 	"strconv"
@@ -74,6 +75,7 @@ const (
 
 type Config struct {
 	Enabled                       dynamicconfig.BoolPropertyFn
+	MaxOperationTokenLength       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PayloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ForwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
@@ -96,6 +98,7 @@ type HandlerOptions struct {
 	AuthInterceptor                      *authorization.Interceptor
 	RedirectionInterceptor               *interceptor.Redirection
 	ForwardingClients                    *cluster.FrontendHTTPClientCache
+	HTTPTraceProvider                    commonnexus.HTTPClientTraceProvider
 }
 
 type completionHandler struct {
@@ -150,6 +153,10 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		}
 		return err
 	}
+	tokenLimit := h.Config.MaxOperationTokenLength(ns.Name().String())
+	if len(r.OperationToken) > tokenLimit {
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
+	}
 
 	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
 	if err != nil {
@@ -203,11 +210,11 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		}
 	}
 	hr := &historyservice.CompleteNexusOperationRequest{
-		Completion:  completion,
-		State:       string(r.State),
-		OperationId: r.OperationID,
-		StartTime:   timestamppb.New(r.StartTime),
-		Links:       links,
+		Completion:     completion,
+		State:          string(r.State),
+		OperationToken: r.OperationToken,
+		StartTime:      timestamppb.New(r.StartTime),
+		Links:          links,
 	}
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
@@ -265,6 +272,19 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 	if err != nil {
 		h.Logger.Error("failed to construct forwarding request URL", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.TargetCluster(rCtx.namespace.ActiveClusterName()))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	}
+
+	if h.HTTPTraceProvider != nil {
+		traceLogger := log.With(h.Logger,
+			tag.Operation(apiName),
+			tag.WorkflowNamespace(rCtx.namespace.Name().String()),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()),
+			tag.TargetCluster(rCtx.namespace.ActiveClusterName()),
+		)
+		if trace := h.HTTPTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
+			ctx = httptrace.WithClientTrace(ctx, trace)
+		}
 	}
 
 	forwardReq, err := http.NewRequestWithContext(ctx, r.HTTPRequest.Method, forwardURL, r.HTTPRequest.Body)

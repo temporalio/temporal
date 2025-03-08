@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/timer"
+	"go.temporal.io/server/common/util"
 	hshard "go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -91,7 +92,7 @@ func NewScheduledQueue(
 				NextPageToken: paginationToken,
 			}
 
-			resp, err := shard.GetExecutionManager().GetHistoryTasks(ctx, request)
+			resp, err := shard.GetHistoryTasks(ctx, request)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -274,7 +275,7 @@ func (p *scheduledQueue) lookAheadTask() {
 		BatchSize:           1,
 		NextPageToken:       nil,
 	}
-	response, err := p.shard.GetExecutionManager().GetHistoryTasks(ctx, request)
+	response, err := p.shard.GetHistoryTasks(ctx, request)
 	if err != nil {
 		p.logger.Error("Failed to load look ahead task", tag.Error(err))
 		if common.IsResourceExhausted(err) {
@@ -302,11 +303,23 @@ func (p *scheduledQueue) lookAheadTask() {
 
 // IsTimeExpired checks if the testing time is equal or before
 // the reference time. The precision of the comparison is millisecond.
+// This function takes task as input and uses task's fire time (scheduled time)
+// as the minimal reference time to handle clock skew issue.
+// This check is only meaning for tasks with CategoryTypeScheduled and always
+// return false for immediate tasks as they can be executed at any time.
 func IsTimeExpired(
+	task tasks.Task,
 	referenceTime time.Time,
 	testingTime time.Time,
 ) bool {
-	referenceTime = referenceTime.Truncate(persistence.ScheduledTaskMinPrecision)
+	if task.GetCategory().Type() == tasks.CategoryTypeImmediate {
+		return false
+	}
+
+	// NOTE: Persistence layer may lose precision when persisting the task, which essentially moves
+	// task fire time backward. But we are already performing truncation here, so doesn't need to
+	// account for that.
+	referenceTime = util.MaxTime(referenceTime, task.GetKey().FireTime).Truncate(persistence.ScheduledTaskMinPrecision)
 	testingTime = testingTime.Truncate(persistence.ScheduledTaskMinPrecision)
 	return !testingTime.After(referenceTime)
 }

@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
@@ -67,7 +68,7 @@ func (s *mutableStateMapperSuite) SetupSuite() {
 	s.mockBranchMgr = NewMockBranchMgr(s.controller)
 	s.branchMgrProvider = func(
 		wfContext workflow.Context,
-		mutableState workflow.MutableState,
+		mutableState historyi.MutableState,
 		logger log.Logger) BranchMgr {
 		return s.mockBranchMgr
 	}

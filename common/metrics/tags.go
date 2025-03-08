@@ -246,6 +246,13 @@ func FailureTag(value string) Tag {
 	return &tagImpl{key: FailureTagName, value: value}
 }
 
+func FailureSourceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{key: FailureSourceTagName, value: value}
+}
+
 func TaskCategoryTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
@@ -325,6 +332,14 @@ func NexusEndpointTag(value string) Tag {
 		value = unknownValue
 	}
 	return &tagImpl{key: nexusEndpointTagName, value: value}
+}
+
+func NexusServiceTag(value string) Tag {
+	return &tagImpl{key: nexusServiceTagName, value: value}
+}
+
+func NexusOperationTag(value string) Tag {
+	return &tagImpl{key: nexusOperationTagName, value: value}
 }
 
 // HttpStatusTag returns a new httpStatusTag.

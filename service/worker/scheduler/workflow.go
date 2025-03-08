@@ -44,12 +44,10 @@ import (
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -86,6 +84,8 @@ const (
 	AccurateFutureActionTimes = 9
 	// include WorkflowExecutionStatus in ScheduleActionResult
 	ActionResultIncludesStatus = 10
+	// limit the ScheduleSpec specs and exclusions to only 10 entries
+	LimitMemoSpecSize = 11
 )
 
 const (
@@ -174,6 +174,7 @@ type (
 		AllowZeroSleep                    bool                     // Whether to allow a zero-length timer. Used for workflow compatibility.
 		ReuseTimer                        bool                     // Whether to reuse timer. Used for workflow compatibility.
 		NextTimeCacheV2Size               int                      // Size of next time cache (v2)
+		SpecFieldLengthLimit              int                      // item limit per spec field on the ScheduleInfo memo
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
 
@@ -223,7 +224,8 @@ var (
 		AllowZeroSleep:                    true,
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
-		Version:                           UseLastAction,
+		SpecFieldLengthLimit:              10,
+		Version:                           ActionResultIncludesStatus,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -1040,6 +1042,14 @@ func (s *scheduler) getListInfo(inWorkflowContext bool) *schedulepb.ScheduleList
 	// clear fields that are too large/not useful for the list view
 	spec.TimezoneData = nil
 
+	if s.hasMinVersion(LimitMemoSpecSize) {
+		// Limit the number of specs and exclusions stored on the memo.
+		limit := s.tweakables.SpecFieldLengthLimit
+		spec.ExcludeStructuredCalendar = util.SliceHead(spec.ExcludeStructuredCalendar, limit)
+		spec.Interval = util.SliceHead(spec.Interval, limit)
+		spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, limit)
+	}
+
 	return &schedulepb.ScheduleListInfo{
 		Spec:              spec,
 		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
@@ -1109,7 +1119,6 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 		currentInfo.Unmarshal(currentInfoBytes) != nil ||
 		!proto.Equal(&currentInfo, newInfo) {
 		// marshal manually to get proto encoding (default dataconverter will use json)
-		s.logUTF8ValidationErrors(&currentInfo, newInfo)
 		newInfoBytes, err := newInfo.Marshal()
 		if err == nil {
 			err = workflow.UpsertMemo(s.ctx, map[string]interface{}{
@@ -1132,18 +1141,6 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 		if err != nil {
 			s.logger.Error("error updating search attributes", "error", err)
 		}
-	}
-}
-
-func (s *scheduler) logUTF8ValidationErrors(msgs ...proto.Message) {
-	for _, msg := range msgs {
-		// log errors only, don't affect control flow
-		_ = utf8validator.Validate(
-			msg,
-			utf8validator.SourcePersistence,
-			tag.WorkflowNamespace(s.State.Namespace),
-			tag.ScheduleID(s.State.ScheduleId),
-		)
 	}
 }
 

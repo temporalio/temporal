@@ -26,9 +26,11 @@
 
 package shard
 
+import historyi "go.temporal.io/server/service/history/interfaces"
+
 type (
 	// EngineFactory is used to create an instance of sharded history engine
 	EngineFactory interface {
-		CreateEngine(context Context) Engine
+		CreateEngine(context Context) historyi.Engine
 	}
 )

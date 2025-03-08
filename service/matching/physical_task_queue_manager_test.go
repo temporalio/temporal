@@ -36,20 +36,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/internal/goro"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 var rpsInf = math.Inf(1)
@@ -101,58 +104,6 @@ func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	}
 }
 
-// addTasks is a helper which adds numberOfTasks to a taskTracker
-func trackTasksHelper(tr *taskTracker, numberOfTasks int) {
-	for i := 0; i < numberOfTasks; i++ {
-		// adding a bunch of tasks
-		tr.incrementTaskCount()
-	}
-}
-
-func TestAddTasksRate(t *testing.T) {
-	// define a fake clock and it's time for testing
-	timeSource := clock.NewEventTimeSource()
-	currentTime := time.Now()
-	timeSource.Update(currentTime)
-
-	tr := newTaskTracker(timeSource)
-
-	// mini windows will have the following format : (start time, end time)
-	// (0 - 4), (5 - 9), (10 - 14), (15 - 19), (20 - 24), (25 - 29), (30 - 34), ...
-
-	// rate should be zero when no time is passed
-	require.Equal(t, float32(0), tr.rate()) // time: 0
-	trackTasksHelper(tr, 100)
-	require.Equal(t, float32(0), tr.rate()) // still zero because no time is passed
-
-	// tasks should be placed in the first mini-window
-	timeSource.Advance(1 * time.Second)                  // time: 1 second
-	require.InEpsilon(t, float32(100), tr.rate(), 0.001) // 100 tasks added in 1 second = 100 / 1 = 100
-
-	// tasks should be placed in the second mini-window with 6 total seconds elapsed
-	timeSource.Advance(5 * time.Second)
-	trackTasksHelper(tr, 200)                           // time: 6 second
-	require.InEpsilon(t, float32(50), tr.rate(), 0.001) // (100 + 200) tasks added in 6 seconds = 300/6 = 50
-
-	timeSource.Advance(24 * time.Second) // time: 30 second
-	trackTasksHelper(tr, 300)
-	require.InEpsilon(t, float32(20), tr.rate(), 0.001) // (100 + 200 + 300) tasks added in (30 + 0 (current window)) seconds = 600/30 = 20
-
-	// this should clear out the first mini-window of 100 tasks
-	timeSource.Advance(5 * time.Second) // time: 35 second
-	trackTasksHelper(tr, 10)
-	require.InEpsilon(t, float32(17), tr.rate(), 0.001) // (10 + 200 + 300) tasks added in (30 + 0 (current window)) seconds = 510/30 = 17
-
-	// this should clear out the second and third mini-windows
-	timeSource.Advance(15 * time.Second) // time: 50 second
-	trackTasksHelper(tr, 10)
-	require.InEpsilon(t, float32(10.666667), tr.rate(), 0.001) // (10 + 10 + 300) tasks added in (30 + 0 (current window)) seconds = 320/30 = 10.66
-
-	// a minute passes and no tasks are added
-	timeSource.Advance(60 * time.Second)
-	require.Equal(t, float32(0), tr.rate()) // 0 tasks have been added in the last 30 seconds
-}
-
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.RangeSize = 1 // TaskID block size
@@ -182,7 +133,8 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TODO: this test probably should go to backlog_manager_test
+/*
+TODO: rewrite or delete this test
 func TestReaderSignaling(t *testing.T) {
 	readerNotifications := make(chan struct{}, 1)
 	clearNotifications := func() {
@@ -224,13 +176,22 @@ func TestReaderSignaling(t *testing.T) {
 	require.Len(t, readerNotifications, 0,
 		"Sync match should not signal taskReader")
 }
+*/
+
+func makePollMetadata(rps float64) *pollMetadata {
+	return &pollMetadata{taskQueueMetadata: &taskqueuepb.TaskQueueMetadata{
+		MaxTasksPerSecond: &wrapperspb.DoubleValue{
+			Value: rps,
+		},
+	}}
+}
 
 // runOneShotPoller spawns a goroutine to call tqm.PollTask on the provided tqm.
 // The second return value is a channel of either error or *internalTask.
 func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.Handle, chan interface{}) {
 	out := make(chan interface{}, 1)
 	handle := goro.NewHandle(ctx).Go(func(ctx context.Context) error {
-		task, err := tqm.PollTask(ctx, &pollMetadata{ratePerSecond: &rpsInf})
+		task, err := tqm.PollTask(ctx, makePollMetadata(rpsInf))
 		if task == nil {
 			out <- err
 			return nil
@@ -320,20 +281,20 @@ func TestReaderBacklogAge(t *testing.T) {
 
 	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Minute, 1)
 	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(10*time.Second, 2)
-	tlm.backlogMgr.taskReader.gorogrp.Go(tlm.backlogMgr.taskReader.dispatchBufferedTasks)
+	go tlm.backlogMgr.taskReader.dispatchBufferedTasks()
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		assert.InDelta(t, time.Minute, tlm.backlogMgr.taskReader.getBacklogHeadAge(), float64(time.Second))
 	}, time.Second, 10*time.Millisecond)
 
-	_, err := tlm.backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
+	_, err := tlm.backlogMgr.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		assert.InDelta(t, 10*time.Second, tlm.backlogMgr.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
 	}, time.Second, 10*time.Millisecond)
 
-	_, err = tlm.backlogMgr.pqMgr.PollTask(context.Background(), &pollMetadata{ratePerSecond: &rpsInf})
+	_, err = tlm.backlogMgr.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
@@ -407,7 +368,7 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	require.NotEmpty(t, descResp.DescResponse.Pollers[0].GetLastAccessTime())
 
 	rps := 5.0
-	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &pollMetadata{ratePerSecond: &rps})
+	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), makePollMetadata(rps))
 	descResp = tlm.LegacyDescribeTaskQueue(includeTaskStatus)
 	require.Equal(t, 1, len(descResp.DescResponse.GetPollers()))
 	require.Equal(t, PollerIdentity, descResp.DescResponse.Pollers[0].GetIdentity())
@@ -483,8 +444,7 @@ func TestAddTaskStandby(t *testing.T) {
 	tlm.Start()
 	// stop taskWriter so that we can check if there's any call to it
 	// otherwise the task persist process is async and hard to test
-	tlm.backlogMgr.taskWriter.Stop()
-	<-tlm.backlogMgr.taskWriter.writeLoop.Done()
+	tlm.tqCtxCancel()
 
 	err := tlm.SpoolTask(&persistencespb.TaskInfo{
 		CreateTime: timestamp.TimePtr(time.Now().UTC()),
@@ -530,7 +490,7 @@ func TestTQMDoesNotDoFinalUpdateOnOwnershipLost(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// simulate ownership lost
-	ttm := tm.getQueueManager(tqCfg.dbq)
+	ttm := tm.getQueueManagerByKey(tqCfg.dbq)
 	ttm.Lock()
 	ttm.rangeID++
 	ttm.Unlock()
@@ -556,4 +516,110 @@ func TestTQMInterruptsPollOnClose(t *testing.T) {
 
 	<-pollCh
 	require.Less(t, time.Since(pollStart), 4*time.Second)
+}
+
+func TestPollScalingUpOnBacklog(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.NotNil(t, decision)
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+}
+
+func TestPollScalingUpAddRateExceedsDispatchRate(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		TasksAddRate:      100,
+		TasksDispatchRate: 10,
+	}
+
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.NotNil(t, decision)
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+}
+
+func TestPollScalingNoChangeOnNoBacklogFastMatch(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+		ApproximateBacklogAge:   durationpb.New(0),
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.Nil(t, decision)
+}
+
+func TestPollScalingNonRootPartition(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	// Non-root partitions only get to emit decisions on high backlog
+	f, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
+	require.NoError(t, err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
+	tqm.partitionMgr.partition = partition
+	// Also disable rate limit to ensure that's not why nil is returned here
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.NotNil(t, decision)
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+
+	fakeStats.ApproximateBacklogCount = 0
+	decision = tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.Nil(t, decision)
+}
+
+func TestPollScalingDownOnLongSyncMatch(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.LessOrEqual(t, decision.PollRequestDeltaSuggestion, int32(-1))
+}
+
+func TestPollScalingDecisionsAreRateLimited(t *testing.T) {
+	controller := gomock.NewController(t)
+	tqm := mustCreateTestPhysicalTaskQueueManager(t, controller)
+
+	rl := quotas.NewMockRateLimiter(controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).Times(1)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(false).Times(1)
+	tqm.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+	decision := tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.GreaterOrEqual(t, decision.PollRequestDeltaSuggestion, int32(1))
+
+	decision = tqm.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	require.Nil(t, decision)
 }

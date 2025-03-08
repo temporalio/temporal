@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/utf8validator"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -100,6 +100,10 @@ type (
 
 		// FailoverVersion of a Mutable State at the time of Registry creation.
 		FailoverVersion() int64
+
+		// SuggestContinueAsNew returns true if the Registry is reaching its limit.
+		// Note that this does not apply to in-flight limits, as these are transient.
+		SuggestContinueAsNew() bool
 	}
 
 	registry struct {
@@ -108,13 +112,16 @@ type (
 		updates map[string]*Update
 		// A store from which Registry is constructed with NewRegistry function,
 		// and completed Updates are loaded. Practically it is a Mutable State.
-		store UpdateStore
-
-		instrumentation instrumentation
-		maxInFlight     func() int
-		maxTotal        func() int
+		store           UpdateStore
 		completedCount  int
 		failoverVersion int64
+		instrumentation instrumentation
+
+		maxTotal                              func() int
+		maxInFlightUpdateCount                func() int
+		maxInFlightUpdateSize                 func() int
+		maxTotalSuggestContinueAsNew          func() int
+		maxTotalSuggestContinueAsNewThreshold func() float64
 	}
 
 	Option func(*registry)
@@ -126,7 +133,15 @@ var _ Registry = (*registry)(nil)
 // Updates that a Registry instance will allow.
 func WithInFlightLimit(f func() int) Option {
 	return func(r *registry) {
-		r.maxInFlight = f
+		r.maxInFlightUpdateCount = f
+	}
+}
+
+// WithInFlightSizeLimit provides an optional limit to the total payload size of incomplete
+// Updates that a Registry instance will allow.
+func WithInFlightSizeLimit(f func() int) Option {
+	return func(r *registry) {
+		r.maxInFlightUpdateSize = f
 	}
 }
 
@@ -134,6 +149,14 @@ func WithInFlightLimit(f func() int) Option {
 func WithTotalLimit(f func() int) Option {
 	return func(r *registry) {
 		r.maxTotal = f
+	}
+}
+
+// WithTotalLimitSuggestCAN provides an optional threshold for suggesting ContinueAsNew
+// when the total number of Updates reaches a certain percentage of the total limit.
+func WithTotalLimitSuggestCAN(f func() float64) Option {
+	return func(r *registry) {
+		r.maxTotalSuggestContinueAsNewThreshold = f
 	}
 }
 
@@ -155,7 +178,7 @@ func WithMetrics(m metrics.Handler) Option {
 // trace.Tracer) to be used by Registry and its Updates.
 func WithTracerProvider(t trace.TracerProvider) Option {
 	return func(r *registry) {
-		r.instrumentation.tracer = t.Tracer(libraryName)
+		r.instrumentation.tracer = t.Tracer(telemetry.ComponentUpdateRegistry)
 	}
 }
 
@@ -164,12 +187,17 @@ func NewRegistry(
 	opts ...Option,
 ) Registry {
 	r := &registry{
-		updates:         make(map[string]*Update),
-		store:           store,
-		instrumentation: noopInstrumentation,
-		maxInFlight:     func() int { return math.MaxInt },
-		maxTotal:        func() int { return math.MaxInt },
-		failoverVersion: store.GetCurrentVersion(),
+		updates:                               make(map[string]*Update),
+		store:                                 store,
+		instrumentation:                       noopInstrumentation,
+		failoverVersion:                       store.GetCurrentVersion(),
+		maxTotal:                              func() int { return 0 },     // ie disabled
+		maxInFlightUpdateSize:                 func() int { return 0 },     // ie disabled
+		maxInFlightUpdateCount:                func() int { return 0 },     // ie disabled
+		maxTotalSuggestContinueAsNewThreshold: func() float64 { return 0 }, // ie disabled
+	}
+	r.maxTotalSuggestContinueAsNew = func() int {
+		return int(math.Ceil(float64(r.maxTotal()) * r.maxTotalSuggestContinueAsNewThreshold()))
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -219,7 +247,7 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	if err := r.checkLimits(); err != nil {
 		return nil, false, err
 	}
-	upd := New(id, r.remover(id), withInstrumentation(&r.instrumentation))
+	upd := New(id, r.remover(id), r.payloadSizeLimiter(), withInstrumentation(&r.instrumentation))
 	r.updates[id] = upd
 	return upd, false, nil
 }
@@ -238,11 +266,6 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 	body, err := acptOrRejMsg.Body.UnmarshalNew()
 	if err != nil {
 		return nil, invalidArgf("unable to unmarshal request: %v", err)
-	}
-
-	err = utf8validator.Validate(body, utf8validator.SourceRPCRequest)
-	if err != nil {
-		return nil, invalidArgf("unable to validate utf-8 request: %v", err)
 	}
 
 	var reqMsg *updatepb.Request
@@ -383,23 +406,63 @@ func (r *registry) remover(id string) updateOpt {
 }
 
 func (r *registry) checkLimits() error {
-	if len(r.updates) >= r.maxInFlight() {
-		r.instrumentation.countRateLimited()
-		return &serviceerror.ResourceExhausted{
-			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", r.maxInFlight()),
-		}
+	if err := r.checkInFlightLimit(); err != nil {
+		return err
 	}
 	return r.checkTotalLimit()
 }
 
+func (r *registry) checkInFlightLimit() error {
+	maxInFlight := r.maxInFlightUpdateCount()
+	if maxInFlight == 0 {
+		// limit is disabled
+		return nil
+	}
+	if r.inFlightCount() >= maxInFlight {
+		r.instrumentation.countRateLimited()
+		return &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: fmt.Sprintf("limit on number of concurrent in-flight updates has been reached (%v)", maxInFlight),
+		}
+	}
+	return nil
+}
+
+func (r *registry) payloadSizeLimiter() updateOpt {
+	return withLimitChecker(
+		func(req *updatepb.Request) error {
+			maxInFlightUpdateSize := r.maxInFlightUpdateSize()
+			if maxInFlightUpdateSize == 0 {
+				// limit is disabled
+				return nil
+			}
+			registrySize := r.GetSize()
+			payloadBytes := req.Size()
+			if registrySize+payloadBytes >= maxInFlightUpdateSize {
+				r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes)
+				return &serviceerror.ResourceExhausted{
+					Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+					Message: fmt.Sprintf("limit on total payload size of in-flight updates has been reached (%v bytes)", maxInFlightUpdateSize),
+				}
+			}
+			return nil
+		},
+	)
+}
+
 func (r *registry) checkTotalLimit() error {
-	if len(r.updates)+r.completedCount >= r.maxTotal() {
+	maxTotal := r.maxTotal()
+	if maxTotal == 0 {
+		// limit is disabled
+		return nil
+	}
+	if len(r.updates)+r.completedCount >= maxTotal {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("The limit on the total number of distinct updates in this workflow has been reached (%v). "+
-				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process", r.maxTotal()),
+				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process", maxTotal),
 		)
 	}
 	return nil
@@ -444,4 +507,21 @@ func (r *registry) GetSize() int {
 
 func (r *registry) FailoverVersion() int64 {
 	return r.failoverVersion
+}
+
+func (r *registry) SuggestContinueAsNew() bool {
+	suggestContinueAsNewThreshold := r.maxTotalSuggestContinueAsNew()
+	if suggestContinueAsNewThreshold == 0 {
+		// suggestion is disabled
+		return false
+	}
+	if r.inFlightCount()+r.completedCount >= suggestContinueAsNewThreshold {
+		r.instrumentation.countContinueAsNewSuggestions()
+		return true
+	}
+	return false
+}
+
+func (r *registry) inFlightCount() int {
+	return len(r.updates)
 }

@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
@@ -66,6 +67,7 @@ type TaskExecutorOptions struct {
 	MetricsHandler     metrics.Handler
 	Logger             log.Logger
 	HTTPCallerProvider HTTPCallerProvider
+	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
 }
 
@@ -143,7 +145,7 @@ func (e taskExecutor) executeInvocationTask(
 	defer cancel()
 
 	result := invokable.Invoke(callCtx, ns, e, task)
-	saveErr := e.saveResult(callCtx, env, ref, result)
+	saveErr := e.saveResult(ctx, env, ref, result)
 	return invokable.WrapError(result, saveErr)
 }
 
@@ -168,6 +170,9 @@ func (e taskExecutor) loadInvocationArgs(
 			nexusInvokable := nexusInvocation{}
 			nexusInvokable.nexus = variant.Nexus
 			nexusInvokable.completion, err = target.GetNexusCompletion(ctx)
+			nexusInvokable.workflowID = ref.WorkflowKey.WorkflowID
+			nexusInvokable.runID = ref.WorkflowKey.RunID
+			nexusInvokable.attempt = callback.Attempt
 			invokable = nexusInvokable
 			if err != nil {
 				return err

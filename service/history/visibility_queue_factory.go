@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -81,6 +82,7 @@ func NewVisibilityQueueFactory(
 				),
 				int64(params.Config.VisibilityQueueMaxReaderCount()),
 			),
+			Tracer: params.TracerProvider.Tracer(telemetry.ComponentQueueVisibility),
 		},
 	}
 }
@@ -140,6 +142,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		shard.GetClusterMetadata(),
 		logger,
 		metricsHandler,
+		f.Tracer,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,

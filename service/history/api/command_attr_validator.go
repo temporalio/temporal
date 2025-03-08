@@ -140,16 +140,16 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 	}
 
 	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
-	if err := timestamp.ValidateProtoDuration(attributes.GetScheduleToCloseTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetScheduleToCloseTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ScheduleToCloseTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType))
 	}
-	if err := timestamp.ValidateProtoDuration(attributes.GetScheduleToStartTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetScheduleToStartTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ScheduleToStartTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType))
 	}
-	if err := timestamp.ValidateProtoDuration(attributes.GetStartToCloseTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetStartToCloseTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid StartToCloseTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType))
 	}
-	if err := timestamp.ValidateProtoDuration(attributes.GetHeartbeatTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetHeartbeatTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid HeartbeatTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType))
 	}
 
@@ -222,7 +222,7 @@ func (v *CommandAttrValidator) ValidateTimerScheduleAttributes(
 	if err := common.ValidateUTF8String("TimerId", timerID); err != nil {
 		return failedCause, err
 	}
-	if err := timestamp.ValidateProtoDuration(attributes.GetStartToFireTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetStartToFireTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("An invalid StartToFireTimeout is set on StartTimerCommand: %v. TimerId=%s", err, timerID))
 	}
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
@@ -483,15 +483,15 @@ func (v *CommandAttrValidator) ValidateContinueAsNewWorkflowExecutionAttributes(
 		return failedCause, fmt.Errorf("error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
 	}
 
-	if err := timestamp.ValidateProtoDuration(attributes.GetWorkflowRunTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetWorkflowRunTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowRunTimeout on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue))
 	}
 
-	if err := timestamp.ValidateProtoDuration(attributes.GetWorkflowTaskTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetWorkflowTaskTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowTaskTimeout on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue))
 	}
 
-	if err := timestamp.ValidateProtoDuration(attributes.GetBackoffStartInterval()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetBackoffStartInterval()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid BackoffStartInterval on ContinueAsNewWorkflowExecutionCommand: %v. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue))
 	}
 
@@ -503,9 +503,9 @@ func (v *CommandAttrValidator) ValidateContinueAsNewWorkflowExecutionAttributes(
 		attributes.WorkflowTaskTimeout = executionInfo.DefaultWorkflowTaskTimeout
 	}
 
-	attributes.WorkflowRunTimeout = durationpb.New(common.OverrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), executionInfo.GetWorkflowExecutionTimeout().AsDuration()))
+	attributes.WorkflowRunTimeout = durationpb.New(overrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), executionInfo.GetWorkflowExecutionTimeout().AsDuration()))
 
-	attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(namespaceName.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), v.config.DefaultWorkflowTaskTimeout))
+	attributes.WorkflowTaskTimeout = durationpb.New(overrideWorkflowTaskTimeout(namespaceName, attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), v.config.DefaultWorkflowTaskTimeout))
 
 	if err := v.validateWorkflowRetryPolicy(namespaceName, attributes.RetryPolicy); err != nil {
 		return failedCause, fmt.Errorf("invalid WorkflowRetryPolicy on ContinueAsNewWorkflowExecutionCommand: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
@@ -574,15 +574,15 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 		return failedCause, err
 	}
 
-	if err := timestamp.ValidateProtoDuration(attributes.GetWorkflowExecutionTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetWorkflowExecutionTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowExecutionTimeout on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns))
 	}
 
-	if err := timestamp.ValidateProtoDuration(attributes.GetWorkflowRunTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetWorkflowRunTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowRunTimeout on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns))
 	}
 
-	if err := timestamp.ValidateProtoDuration(attributes.GetWorkflowTaskTimeout()); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetWorkflowTaskTimeout()); err != nil {
 		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowTaskTimeout on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns))
 	}
 
@@ -611,9 +611,9 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
 
-	attributes.WorkflowRunTimeout = durationpb.New(common.OverrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), attributes.GetWorkflowExecutionTimeout().AsDuration()))
+	attributes.WorkflowRunTimeout = durationpb.New(overrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), attributes.GetWorkflowExecutionTimeout().AsDuration()))
 
-	attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(targetNamespace.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), defaultWorkflowTaskTimeoutFn))
+	attributes.WorkflowTaskTimeout = durationpb.New(overrideWorkflowTaskTimeout(targetNamespace, attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), defaultWorkflowTaskTimeoutFn))
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }

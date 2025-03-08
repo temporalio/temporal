@@ -37,6 +37,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -118,7 +119,7 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 			namespaceEntry := tests.GlobalNamespaceEntry
 			ctrl := gomock.NewController(t)
 			visibilityManager := manager.NewMockVisibilityManager(ctrl)
-			mutableState := NewMockMutableState(ctrl)
+			mutableState := historyi.NewMockMutableState(ctrl)
 			mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 			mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 			mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()

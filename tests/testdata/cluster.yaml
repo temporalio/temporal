@@ -1,9 +1,0 @@
-enablearchival: true
-enablemetricscapture: true
-clusterno: 0
-historyconfig:
-  numhistoryshards: 4
-  numhistoryhosts: 1
-workerconfig:
-  enablearchiver: true
-  enablereplicator: true

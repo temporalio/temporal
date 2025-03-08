@@ -25,10 +25,8 @@
 package matching
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -61,23 +59,22 @@ type (
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
-		String() string
 	}
 
 	backlogManagerImpl struct {
-		pqMgr               physicalTaskQueueManager
-		db                  *taskQueueDB
-		taskWriter          *taskWriter
-		taskReader          *taskReader // reads tasks from db and async matches it with poller
-		taskGC              *taskGC
-		taskAckManager      ackManager // tracks ackLevel for delivered messages
-		config              *taskQueueConfig
-		logger              log.Logger
-		throttledLogger     log.ThrottledLogger
-		matchingClient      matchingservice.MatchingServiceClient
-		metricsHandler      metrics.Handler
-		contextInfoProvider func(ctx context.Context) context.Context
-		initializedError    *future.FutureImpl[struct{}]
+		pqMgr            physicalTaskQueueManager
+		tqCtx            context.Context
+		db               *taskQueueDB
+		taskWriter       *taskWriter
+		taskReader       *taskReader // reads tasks from db and async matches it with poller
+		taskGC           *taskGC
+		taskAckManager   ackManager // tracks ackLevel for delivered messages
+		config           *taskQueueConfig
+		logger           log.Logger
+		throttledLogger  log.ThrottledLogger
+		matchingClient   matchingservice.MatchingServiceClient
+		metricsHandler   metrics.Handler
+		initializedError *future.FutureImpl[struct{}]
 		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
 		// update before unloading
 		skipFinalUpdate atomic.Bool
@@ -87,6 +84,7 @@ type (
 var _ backlogManager = (*backlogManagerImpl)(nil)
 
 func newBacklogManager(
+	tqCtx context.Context,
 	pqMgr physicalTaskQueueManager,
 	config *taskQueueConfig,
 	taskManager persistence.TaskManager,
@@ -94,23 +92,22 @@ func newBacklogManager(
 	throttledLogger log.ThrottledLogger,
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
-	contextInfoProvider func(ctx context.Context) context.Context,
 ) *backlogManagerImpl {
 	bmg := &backlogManagerImpl{
-		pqMgr:               pqMgr,
-		matchingClient:      matchingClient,
-		metricsHandler:      metricsHandler,
-		logger:              logger,
-		throttledLogger:     throttledLogger,
-		config:              config,
-		contextInfoProvider: contextInfoProvider,
-		initializedError:    future.NewFuture[struct{}](),
+		pqMgr:            pqMgr,
+		tqCtx:            tqCtx,
+		matchingClient:   matchingClient,
+		metricsHandler:   metricsHandler,
+		logger:           logger,
+		throttledLogger:  throttledLogger,
+		config:           config,
+		initializedError: future.NewFuture[struct{}](),
 	}
 	bmg.db = newTaskQueueDB(bmg, taskManager, pqMgr.QueueKey(), logger)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
-	bmg.taskAckManager = newAckManager(bmg)
-	bmg.taskGC = newTaskGC(bmg.db, config)
+	bmg.taskAckManager = newAckManager(bmg.db, logger)
+	bmg.taskGC = newTaskGC(tqCtx, bmg.db, bmg.config)
 
 	return bmg
 }
@@ -147,14 +144,12 @@ func (c *backlogManagerImpl) Stop() {
 	// tasks, the next owner will just read over an empty range.
 	ackLevel := c.taskAckManager.getAckLevel()
 	if ackLevel >= 0 && !c.skipFinalUpdate.Load() {
-		ctx, cancel := c.newIOContext()
+		ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 		defer cancel()
 
 		_ = c.db.UpdateState(ctx, ackLevel)
-		c.taskGC.RunNow(ctx, ackLevel)
+		c.taskGC.RunNow(ackLevel)
 	}
-	c.taskWriter.Stop()
-	c.taskReader.Stop()
 }
 
 func (c *backlogManagerImpl) SetInitializedError(err error) {
@@ -205,17 +200,6 @@ func (c *backlogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	}
 }
 
-func (c *backlogManagerImpl) String() string {
-	buf := new(bytes.Buffer)
-	rangeID := c.db.RangeID()
-	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
-	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", rangeIDToTaskIDBlock(rangeID, c.config.RangeSize))
-	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
-	_, _ = fmt.Fprintf(buf, "MaxTaskID=%v\n", c.taskAckManager.getReadLevel())
-
-	return buf.String()
-}
-
 // completeTask marks a task as processed. Only tasks created by taskReader (i.e. backlog from db) reach
 // here. As part of completion:
 //   - task is deleted from the database when err is nil
@@ -227,8 +211,6 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 		// We handle this by writing the task back to persistence with a higher taskID.
 		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
 		// again the underlying reason for failing to start will be resolved.
-		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
-		// re-written to persistence frequently.
 		err = executeWithRetry(context.Background(), func(_ context.Context) error {
 			_, err := c.taskWriter.appendTask(task.Data)
 			return err
@@ -237,7 +219,9 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 		if err != nil {
 			// OK, we also failed to write to persistence.
 			// This should only happen in very extreme cases where persistence is completely down.
-			// We still can't lose the old task, so we just unload the entire task queue
+			// We still can't lose the old task, so we just unload the entire task queue.
+			// We haven't advanced the ack level past this task, so when the task queue reloads,
+			// it will see this task again.
 			c.logger.Error("Persistent store operation failure",
 				tag.StoreOperationStopTaskQueue,
 				tag.Error(err),
@@ -252,11 +236,7 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 	}
 
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
-
-	// TODO: completeTaskFunc and task.finish() should take in a context
-	ctx, cancel := c.newIOContext()
-	defer cancel()
-	c.taskGC.Run(ctx, ackLevel)
+	c.taskGC.Run(ackLevel)
 }
 
 func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
@@ -280,11 +260,6 @@ func executeWithRetry(
 		}
 		return common.IsPersistenceTransientError(err)
 	})
-}
-
-func (c *backlogManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-	return c.contextInfoProvider(ctx), cancel
 }
 
 func (c *backlogManagerImpl) queueKey() *PhysicalTaskQueueKey {

@@ -155,6 +155,16 @@ func Invoke(
 			FirstRunId:                   executionInfo.FirstExecutionRunId,
 			VersioningInfo:               executionInfo.VersioningInfo,
 		},
+		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
+			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
+			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
+			OriginalStartTime:       startEvent.EventTime,
+			CancelRequested:         executionInfo.CancelRequested,
+		},
+	}
+
+	if mutableState.IsResetRun() {
+		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
 	}
 
 	if executionInfo.ParentRunId != "" {
@@ -422,10 +432,12 @@ func buildPendingNexusOperationInfo(
 	}
 
 	return &workflowpb.PendingNexusOperationInfo{
-		Endpoint:                op.Endpoint,
-		Service:                 op.Service,
-		Operation:               op.Operation,
-		OperationId:             op.OperationId,
+		Endpoint:  op.Endpoint,
+		Service:   op.Service,
+		Operation: op.Operation,
+		// TODO(bergundy): Remove this fallback after the 1.27 release.
+		OperationId:             op.OperationToken,
+		OperationToken:          op.OperationToken,
 		ScheduledEventId:        scheduledEventID,
 		ScheduleToCloseTimeout:  op.ScheduleToCloseTimeout,
 		ScheduledTime:           op.ScheduledTime,

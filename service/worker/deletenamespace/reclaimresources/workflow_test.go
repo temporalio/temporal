@@ -34,8 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -63,6 +63,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
+		TotalExecutionsCount: 10,
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
 	}).Return(deleteexecutions.DeleteExecutionsResult{
@@ -70,6 +71,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 		ErrorCount:   0,
 	}, nil).Once()
 
+	env.OnActivity(la.GetNamespaceCacheRefreshInterval, mock.Anything).Return(10*time.Second, nil).Once()
 	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).Return(nil).Once()
 
@@ -113,6 +115,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
+		TotalExecutionsCount: 10,
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
 	}).Return(deleteexecutions.DeleteExecutionsResult{
@@ -120,6 +123,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 		ErrorCount:   0,
 	}, nil).Once()
 
+	env.OnActivity(la.GetNamespaceCacheRefreshInterval, mock.Anything).Return(10*time.Second, nil).Once()
 	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
 		Return(stderrors.New("specific_error_from_activity")).
@@ -138,8 +142,9 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 	require.True(t, env.IsWorkflowCompleted())
 	err := env.GetWorkflowError()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unable to execute activity: EnsureNoExecutionsActivity")
-	require.Contains(t, err.Error(), "specific_error_from_activity")
+	require.Equal(t,
+		err.Error(),
+		"workflow execution error (type: ReclaimResourcesWorkflow, workflowID: default-test-workflow-id, runID: default-test-run-id): activity error (type: EnsureNoExecutionsAdvVisibilityActivity, scheduledEventID: 0, startedEventID: 0, identity: ): specific_error_from_activity")
 }
 
 func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExist(t *testing.T) {
@@ -160,6 +165,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
+		TotalExecutionsCount: 10,
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
 	}).Return(deleteexecutions.DeleteExecutionsResult{
@@ -167,9 +173,10 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 		ErrorCount:   0,
 	}, nil).Once()
 
+	env.OnActivity(la.GetNamespaceCacheRefreshInterval, mock.Anything).Return(10*time.Second, nil).Once()
 	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
-		Return(errors.NewExecutionsStillExistError(1)).
+		Return(errors.NewExecutionsStillExist(1)).
 		Times(10) // GoSDK defaultMaximumAttemptsForUnitTest value.
 
 	env.ExecuteWorkflow(ReclaimResourcesWorkflow, ReclaimResourcesParams{
@@ -232,16 +239,17 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewTestLogger(),
 	}
 	la := &LocalActivities{
-		visibilityManager: visibilityManager,
-		metadataManager:   metadataManager,
-		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewTestLogger(),
+		visibilityManager:             visibilityManager,
+		metadataManager:               metadataManager,
+		namespaceCacheRefreshInterval: dynamicconfig.GetDurationPropertyFn(10 * time.Second),
+
+		logger: log.NewTestLogger(),
 	}
 
+	env.RegisterActivity(la.GetNamespaceCacheRefreshInterval)
 	env.RegisterActivity(la.CountExecutionsAdvVisibilityActivity)
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 	env.RegisterActivity(la.DeleteNamespaceActivity)
@@ -256,6 +264,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
+		TotalExecutionsCount: 1,
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
 	}).Return(deleteexecutions.DeleteExecutionsResult{
@@ -311,15 +320,15 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewTestLogger(),
 	}
 	la := &LocalActivities{
-		visibilityManager: visibilityManager,
-		metricsHandler:    metrics.NoopMetricsHandler,
-		logger:            log.NewTestLogger(),
+		visibilityManager:             visibilityManager,
+		namespaceCacheRefreshInterval: dynamicconfig.GetDurationPropertyFn(10 * time.Second),
+		logger:                        log.NewTestLogger(),
 	}
 
+	env.RegisterActivity(la.GetNamespaceCacheRefreshInterval)
 	env.RegisterActivity(la.CountExecutionsAdvVisibilityActivity)
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 
@@ -333,6 +342,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
+		TotalExecutionsCount: 1,
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
 	}).Return(deleteexecutions.DeleteExecutionsResult{
@@ -372,6 +382,7 @@ func Test_ReclaimResourcesWorkflow_UpdateDeleteDelay(t *testing.T) {
 		ErrorCount:   0,
 	}, nil).Once()
 
+	env.OnActivity(la.GetNamespaceCacheRefreshInterval, mock.Anything).Return(10*time.Second, nil).Once()
 	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).Return(nil).Once()
 

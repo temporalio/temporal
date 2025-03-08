@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -185,9 +186,9 @@ type stateMachineEnvironment struct {
 func (e *stateMachineEnvironment) loadAndValidateMutableStateNoReload(
 	ctx context.Context,
 	wfCtx workflow.Context,
-	validate func(workflowContext workflow.Context, ms workflow.MutableState, potentialStaleState bool) error,
+	validate func(workflowContext workflow.Context, ms historyi.MutableState, potentialStaleState bool) error,
 	potentialStaleState bool,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 	mutableState, err := wfCtx.LoadMutableState(ctx, e.shardContext)
 	if err != nil {
 		return nil, err
@@ -202,8 +203,8 @@ func (e *stateMachineEnvironment) loadAndValidateMutableStateNoReload(
 func (e *stateMachineEnvironment) loadAndValidateMutableState(
 	ctx context.Context,
 	wfCtx workflow.Context,
-	validate func(workflowContext workflow.Context, ms workflow.MutableState, potentialStaleState bool) error,
-) (workflow.MutableState, error) {
+	validate func(workflowContext workflow.Context, ms historyi.MutableState, potentialStaleState bool) error,
+) (historyi.MutableState, error) {
 	mutableState, err := e.loadAndValidateMutableStateNoReload(ctx, wfCtx, validate, true)
 	if err == nil {
 		return mutableState, nil
@@ -222,7 +223,7 @@ func (e *stateMachineEnvironment) loadAndValidateMutableState(
 func (e *stateMachineEnvironment) validateStateMachineRef(
 	ctx context.Context,
 	workflowContext workflow.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	ref hsm.Ref,
 	potentialStaleState bool,
 ) error {
@@ -233,7 +234,8 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 	if ref.StateMachineRef.MutableStateVersionedTransition == nil ||
 		ref.StateMachineRef.MachineInitialVersionedTransition.TransitionCount == 0 ||
 		(ref.StateMachineRef.MachineLastUpdateVersionedTransition != nil &&
-			ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount == 0) {
+			ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount == 0) ||
+		len(ms.GetExecutionInfo().TransitionHistory) == 0 {
 		// Transtion history was disabled when the ref is generated,
 		// fallback to the old validation logic.
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
@@ -286,7 +288,7 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 	return ref.Validate(ref.StateMachineRef, node)
 }
 
-func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistory(ms workflow.MutableState, ref hsm.Ref, potentialStaleState bool) error {
+func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistory(ms historyi.MutableState, ref hsm.Ref, potentialStaleState bool) error {
 	// Ignore potentialStaleState if the reference cannot reference stale state (e.g if it came from task executor and
 	// not an API request).
 	potentialStaleState = potentialStaleState && ref.TaskID == 0
@@ -327,8 +329,8 @@ func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistor
 func (e *stateMachineEnvironment) getValidatedMutableState(
 	ctx context.Context,
 	key definition.WorkflowKey,
-	validate func(workflowContext workflow.Context, ms workflow.MutableState, potentialStaleState bool) error,
-) (workflow.Context, wcache.ReleaseCacheFunc, workflow.MutableState, error) {
+	validate func(workflowContext workflow.Context, ms historyi.MutableState, potentialStaleState bool) error,
+) (workflow.Context, wcache.ReleaseCacheFunc, historyi.MutableState, error) {
 	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, locks.PriorityLow)
 	if err != nil {
 		return nil, nil, nil, err
@@ -345,7 +347,7 @@ func (e *stateMachineEnvironment) getValidatedMutableState(
 }
 
 func (e *stateMachineEnvironment) validateNotZombieWorkflow(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	accessType hsm.AccessType,
 ) error {
 	// need to specifically check for zombie workflows here instead of workflow running
@@ -360,7 +362,7 @@ func (e *stateMachineEnvironment) validateNotZombieWorkflow(
 
 func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) (retErr error) {
 	wfCtx, release, ms, err := e.getValidatedMutableState(
-		ctx, ref.WorkflowKey, func(workflowContext workflow.Context, ms workflow.MutableState, potentialStaleState bool) error {
+		ctx, ref.WorkflowKey, func(workflowContext workflow.Context, ms historyi.MutableState, potentialStaleState bool) error {
 			// For task references we never want to access a zombie workflow, even if the machine is accessed for read.
 			if ref.TaskID != 0 {
 				accessType = hsm.AccessWrite
@@ -397,7 +399,7 @@ func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, acces
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on closed
 		// workflows.
-		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, e.shardContext, workflow.TransactionPolicyActive)
+		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, e.shardContext, historyi.TransactionPolicyActive)
 	}
 	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, e.shardContext)
 }

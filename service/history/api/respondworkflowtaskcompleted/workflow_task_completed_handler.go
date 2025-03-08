@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/internal/protocol"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -78,9 +79,9 @@ type (
 		hasBufferedEventsOrMessages     bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
-		newMutableState                 workflow.MutableState
+		newMutableState                 historyi.MutableState
 		stopProcessing                  bool // should stop processing any more commands
-		mutableState                    workflow.MutableState
+		mutableState                    historyi.MutableState
 		effects                         effect.Controller
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
 		updateRegistry                  update.Registry
@@ -95,7 +96,7 @@ type (
 		metricsHandler         metrics.Handler
 		config                 *configs.Config
 		shard                  shard.Context
-		tokenSerializer        common.TaskTokenSerializer
+		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 	}
 
@@ -122,7 +123,7 @@ type (
 func newWorkflowTaskCompletedHandler(
 	identity string,
 	workflowTaskCompletedID int64,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	updateRegistry update.Registry,
 	effects effect.Controller,
 	attrValidator *api.CommandAttrValidator,
@@ -164,7 +165,7 @@ func newWorkflowTaskCompletedHandler(
 		),
 		config:                 config,
 		shard:                  shard,
-		tokenSerializer:        common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
 	}
 }
@@ -478,7 +479,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 
 	// TODO: versioning 3 allows eager activity dispatch for both pinned and unpinned workflows, no
 	// special consideration is need. Remove the versioning logic from here. [cleanup-old-wv]
-	oldVersioningUsed := handler.mutableState.GetMostRecentWorkerVersionStamp().GetUseVersioning()
+	oldVersioningUsed := handler.mutableState.GetMostRecentWorkerVersionStamp().GetUseVersioning() &&
+		// for V3 versioning it's ok to dispatch eager activities
+		handler.mutableState.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	newVersioningUsed := handler.mutableState.GetExecutionInfo().GetAssignedBuildId() != ""
 	versioningUsed := oldVersioningUsed || newVersioningUsed
 

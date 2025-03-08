@@ -67,7 +67,7 @@ func jsonPayload(data string) *commonpb.Payloads {
 }
 
 type HttpApiTestSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestHttpApiTestSuite(t *testing.T) {
@@ -113,7 +113,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest(
 
 	// Start
 	workflowID := testcore.RandomizeStr("wf")
-	_, respBody := s.httpPost(http.StatusOK, "/namespaces/"+s.Namespace()+"/workflows/"+workflowID, contentType, startWFRequestBody())
+	_, respBody := s.httpPost(http.StatusOK, "/namespaces/"+s.Namespace().String()+"/workflows/"+workflowID, contentType, startWFRequestBody())
 	var startResp struct {
 		RunID string `json:"runId"`
 	}
@@ -126,7 +126,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest(
 	for _, metric := range capture.Snapshot()[metrics.HTTPServiceRequests.Name()] {
 		found =
 			metric.Tags[metrics.OperationTagName] == "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution" &&
-				metric.Tags["namespace"] == s.Namespace() &&
+				metric.Tags["namespace"] == s.Namespace().String() &&
 				metric.Value == int64(1)
 		if found {
 			break
@@ -135,7 +135,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest(
 	s.Require().True(found)
 
 	// Confirm already exists error with details and proper code
-	_, respBody = s.httpPost(http.StatusConflict, "/namespaces/"+s.Namespace()+"/workflows/"+workflowID, contentType, startWFRequestBody())
+	_, respBody = s.httpPost(http.StatusConflict, "/namespaces/"+s.Namespace().String()+"/workflows/"+workflowID, contentType, startWFRequestBody())
 	var errResp struct {
 		Message string `json:"message"`
 		Details []struct {
@@ -149,7 +149,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest(
 	// Query
 	_, respBody = s.httpPost(
 		http.StatusOK,
-		"/namespaces/"+s.Namespace()+"/workflows/"+workflowID+"/query/some-query",
+		"/namespaces/"+s.Namespace().String()+"/workflows/"+workflowID+"/query/some-query",
 		contentType,
 		queryBody(),
 	)
@@ -158,7 +158,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest(
 	// Signal which also completes the workflow
 	s.httpPost(
 		http.StatusOK,
-		"/namespaces/"+s.Namespace()+"/workflows/"+workflowID+"/signal/some-signal",
+		"/namespaces/"+s.Namespace().String()+"/workflows/"+workflowID+"/signal/some-signal",
 		contentType,
 		signalBody(),
 	)
@@ -167,7 +167,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest(
 	_, respBody = s.httpGet(
 		http.StatusOK,
 		// Our version of gRPC gateway only supports integer enums in queries :-(
-		"/namespaces/"+s.Namespace()+"/workflows/"+workflowID+"/history?historyEventFilterType=2",
+		"/namespaces/"+s.Namespace().String()+"/workflows/"+workflowID+"/history?historyEventFilterType=2",
 		contentType,
 	)
 	verifyHistory(s, respBody)
@@ -309,7 +309,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Shorthand(contentType string, pr
 }
 
 func (s *HttpApiTestSuite) TestHTTPHostValidation() {
-	s.GetTestCluster().OverrideDynamicConfig(s.T(), dynamicconfig.FrontendHTTPAllowedHosts, []string{"allowed"})
+	s.OverrideDynamicConfig(dynamicconfig.FrontendHTTPAllowedHosts, []string{"allowed"})
 	{
 		req, err := http.NewRequest("GET", "/system-info", nil)
 		s.Require().NoError(err)
@@ -358,7 +358,7 @@ func (s *HttpApiTestSuite) TestHTTPAPIHeaders() {
 	})
 
 	// Make a simple list call that we don't care about the result
-	req, err := http.NewRequest("GET", "/namespaces/"+s.Namespace()+"/workflows", nil)
+	req, err := http.NewRequest("GET", "/namespaces/"+s.Namespace().String()+"/workflows", nil)
 	s.Require().NoError(err)
 	req.Header.Set("Authorization", "my-auth-token")
 	req.Header.Set("X-Forwarded-For", "1.2.3.4:5678")
@@ -436,7 +436,7 @@ func (s *HttpApiTestSuite) httpRequest(expectedStatus int, req *http.Request) (*
 func (s *HttpApiTestSuite) TestHTTPAPI_OperatorService_ListSearchAttributes() {
 	_, respBody := s.httpGet(
 		http.StatusOK,
-		"/cluster/namespaces/"+s.Namespace()+"/search-attributes",
+		"/cluster/namespaces/"+s.Namespace().String()+"/search-attributes",
 		"application/json",
 	)
 	s.T().Log(string(respBody))

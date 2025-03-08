@@ -42,8 +42,11 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/worker/deployment"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -51,7 +54,7 @@ import (
 type (
 	// Handler - gRPC handler interface for matchingservice
 	Handler struct {
-		matchingservice.UnsafeMatchingServiceServer
+		matchingservice.UnimplementedMatchingServiceServer
 
 		engine            Engine
 		config            *Config
@@ -80,6 +83,7 @@ func NewHandler(
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
 	deploymentStoreClient deployment.DeploymentStoreClient,
+	workerDeploymentClient workerdeployment.Client,
 	hostInfoProvider membership.HostInfoProvider,
 	matchingServiceResolver membership.ServiceResolver,
 	metricsHandler metrics.Handler,
@@ -88,6 +92,9 @@ func NewHandler(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
 	nexusEndpointManager persistence.NexusEndpointManager,
+	testHooks testhooks.TestHooks,
+	saProvider searchattribute.Provider,
+	saMapperProvider searchattribute.MapperProvider,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -99,6 +106,7 @@ func NewHandler(
 			historyClient,
 			matchingRawClient, // Use non retry client inside matching
 			deploymentStoreClient,
+			workerDeploymentClient,
 			config,
 			logger,
 			throttledLogger,
@@ -110,6 +118,9 @@ func NewHandler(
 			namespaceReplicationQueue,
 			visibilityManager,
 			nexusEndpointManager,
+			testHooks,
+			saProvider,
+			saMapperProvider,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}

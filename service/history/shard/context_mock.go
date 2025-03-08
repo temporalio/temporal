@@ -43,6 +43,7 @@ import (
 	clock "go.temporal.io/server/api/clock/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
+	chasm "go.temporal.io/server/chasm"
 	archiver "go.temporal.io/server/common/archiver"
 	clock0 "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
@@ -58,6 +59,7 @@ import (
 	configs "go.temporal.io/server/service/history/configs"
 	events "go.temporal.io/server/service/history/events"
 	hsm "go.temporal.io/server/service/history/hsm"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -140,6 +142,20 @@ func (m *MockContext) AssertOwnership(ctx context.Context) error {
 func (mr *MockContextMockRecorder) AssertOwnership(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssertOwnership", reflect.TypeOf((*MockContext)(nil).AssertOwnership), ctx)
+}
+
+// ChasmRegistry mocks base method.
+func (m *MockContext) ChasmRegistry() *chasm.Registry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmRegistry")
+	ret0, _ := ret[0].(*chasm.Registry)
+	return ret0
+}
+
+// ChasmRegistry indicates an expected call of ChasmRegistry.
+func (mr *MockContextMockRecorder) ChasmRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmRegistry", reflect.TypeOf((*MockContext)(nil).ChasmRegistry))
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
@@ -302,10 +318,10 @@ func (mr *MockContextMockRecorder) GetCurrentTime(cluster any) *gomock.Call {
 }
 
 // GetEngine mocks base method.
-func (m *MockContext) GetEngine(ctx context.Context) (Engine, error) {
+func (m *MockContext) GetEngine(ctx context.Context) (interfaces.Engine, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEngine", ctx)
-	ret0, _ := ret[0].(Engine)
+	ret0, _ := ret[0].(interfaces.Engine)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -370,6 +386,21 @@ func (m *MockContext) GetHistoryClient() historyservice.HistoryServiceClient {
 func (mr *MockContextMockRecorder) GetHistoryClient() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockContext)(nil).GetHistoryClient))
+}
+
+// GetHistoryTasks mocks base method.
+func (m *MockContext) GetHistoryTasks(ctx context.Context, request *persistence0.GetHistoryTasksRequest) (*persistence0.GetHistoryTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHistoryTasks", ctx, request)
+	ret0, _ := ret[0].(*persistence0.GetHistoryTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHistoryTasks indicates an expected call of GetHistoryTasks.
+func (mr *MockContextMockRecorder) GetHistoryTasks(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockContext)(nil).GetHistoryTasks), ctx, request)
 }
 
 // GetLogger mocks base method.
@@ -858,6 +889,20 @@ func (mr *MockControllableContextMockRecorder) AssertOwnership(ctx any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssertOwnership", reflect.TypeOf((*MockControllableContext)(nil).AssertOwnership), ctx)
 }
 
+// ChasmRegistry mocks base method.
+func (m *MockControllableContext) ChasmRegistry() *chasm.Registry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChasmRegistry")
+	ret0, _ := ret[0].(*chasm.Registry)
+	return ret0
+}
+
+// ChasmRegistry indicates an expected call of ChasmRegistry.
+func (mr *MockControllableContextMockRecorder) ChasmRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmRegistry", reflect.TypeOf((*MockControllableContext)(nil).ChasmRegistry))
+}
+
 // ConflictResolveWorkflowExecution mocks base method.
 func (m *MockControllableContext) ConflictResolveWorkflowExecution(ctx context.Context, request *persistence0.ConflictResolveWorkflowExecutionRequest) (*persistence0.ConflictResolveWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1030,10 +1075,10 @@ func (mr *MockControllableContextMockRecorder) GetCurrentTime(cluster any) *gomo
 }
 
 // GetEngine mocks base method.
-func (m *MockControllableContext) GetEngine(ctx context.Context) (Engine, error) {
+func (m *MockControllableContext) GetEngine(ctx context.Context) (interfaces.Engine, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEngine", ctx)
-	ret0, _ := ret[0].(Engine)
+	ret0, _ := ret[0].(interfaces.Engine)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1098,6 +1143,21 @@ func (m *MockControllableContext) GetHistoryClient() historyservice.HistoryServi
 func (mr *MockControllableContextMockRecorder) GetHistoryClient() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockControllableContext)(nil).GetHistoryClient))
+}
+
+// GetHistoryTasks mocks base method.
+func (m *MockControllableContext) GetHistoryTasks(ctx context.Context, request *persistence0.GetHistoryTasksRequest) (*persistence0.GetHistoryTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHistoryTasks", ctx, request)
+	ret0, _ := ret[0].(*persistence0.GetHistoryTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHistoryTasks indicates an expected call of GetHistoryTasks.
+func (mr *MockControllableContextMockRecorder) GetHistoryTasks(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockControllableContext)(nil).GetHistoryTasks), ctx, request)
 }
 
 // GetLogger mocks base method.

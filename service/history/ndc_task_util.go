@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -85,7 +86,7 @@ func loadMutableStateForTransferTask(
 	transferTask tasks.Task,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 	logger = tasks.InitializeLogger(transferTask, logger)
 	mutableState, err := loadMutableStateForTask(
 		ctx,
@@ -133,7 +134,7 @@ func loadMutableStateForTimerTask(
 	timerTask tasks.Task,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 	logger = tasks.InitializeLogger(timerTask, logger)
 	return loadMutableStateForTask(
 		ctx,
@@ -158,7 +159,7 @@ func loadMutableStateForTask(
 	metricsHandler metrics.Handler,
 	taskTypeTag string,
 	logger log.Logger,
-) (workflow.MutableState, error) {
+) (historyi.MutableState, error) {
 
 	if err := validateTaskByClock(shardContext, task); err != nil {
 		return nil, err
@@ -251,7 +252,7 @@ func validateTaskGeneration(
 	ctx context.Context,
 	shardContext shard.Context,
 	workflowContext workflow.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	taskID int64,
 ) error {
 	tgClock := mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp

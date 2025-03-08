@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
@@ -116,6 +117,7 @@ func newQueueFactoryBase(params ArchivalQueueFactoryParams) QueueFactoryBase {
 			),
 			int64(params.Config.ArchivalQueueMaxReaderCount()),
 		),
+		Tracer: params.TracerProvider.Tracer(telemetry.ComponentQueueArchival),
 	}
 }
 
@@ -182,6 +184,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 		shard.GetClusterMetadata(),
 		logger,
 		metricsHandler,
+		f.Tracer,
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,

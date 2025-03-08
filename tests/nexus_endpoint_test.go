@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -40,7 +39,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -61,27 +59,7 @@ func TestNexusEndpointsFunctionalSuite(t *testing.T) {
 }
 
 type NexusEndpointFunctionalSuite struct {
-	testcore.FunctionalTestBase
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-	// not merely log an error
-	*require.Assertions
-	protorequire.ProtoAssertions
-}
-
-func (s *NexusEndpointFunctionalSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
-
-func (s *NexusEndpointFunctionalSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *NexusEndpointFunctionalSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
-	s.ProtoAssertions = protorequire.New(s.T())
+	testcore.FunctionalTestSuite
 }
 
 type CommonSuite struct {
@@ -174,7 +152,7 @@ func (s *MatchingSuite) TestCreate() {
 	s.NotNil(entry.Endpoint.CreatedTime)
 	s.NotEmpty(entry.Id)
 	s.Equal(entry.Endpoint.Spec.Name, endpointName)
-	s.Equal(entry.Endpoint.Spec.Target.GetWorker().NamespaceId, s.GetNamespaceID(s.Namespace()))
+	s.Equal(entry.Endpoint.Spec.Target.GetWorker().NamespaceId, s.NamespaceID().String())
 
 	_, err := s.GetTestCluster().MatchingClient().CreateNexusEndpoint(testcore.NewContext(), &matchingservice.CreateNexusEndpointRequest{
 		Spec: &persistencespb.NexusEndpointSpec{
@@ -182,7 +160,7 @@ func (s *MatchingSuite) TestCreate() {
 			Target: &persistencespb.NexusEndpointTarget{
 				Variant: &persistencespb.NexusEndpointTarget_Worker_{
 					Worker: &persistencespb.NexusEndpointTarget_Worker{
-						NamespaceId: s.GetNamespaceID(s.Namespace()),
+						NamespaceId: s.NamespaceID().String(),
 						TaskQueue:   "dont-care",
 					},
 				},
@@ -213,7 +191,7 @@ func (s *MatchingSuite) TestUpdate() {
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
-								NamespaceId: s.GetNamespaceID(s.Namespace()),
+								NamespaceId: s.NamespaceID().String(),
 								TaskQueue:   s.defaultTaskQueue().Name,
 							},
 						},
@@ -238,7 +216,7 @@ func (s *MatchingSuite) TestUpdate() {
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
-								NamespaceId: s.GetNamespaceID(s.Namespace()),
+								NamespaceId: s.NamespaceID().String(),
 								TaskQueue:   s.defaultTaskQueue().Name,
 							},
 						},
@@ -260,7 +238,7 @@ func (s *MatchingSuite) TestUpdate() {
 					Target: &persistencespb.NexusEndpointTarget{
 						Variant: &persistencespb.NexusEndpointTarget_Worker_{
 							Worker: &persistencespb.NexusEndpointTarget_Worker{
-								NamespaceId: s.GetNamespaceID(s.Namespace()),
+								NamespaceId: s.NamespaceID().String(),
 								TaskQueue:   s.defaultTaskQueue().Name,
 							},
 						},
@@ -484,7 +462,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -499,7 +477,7 @@ func (s *OperatorSuite) TestCreate() {
 				s.NotNil(resp.Endpoint.CreatedTime)
 				s.NotEmpty(resp.Endpoint.Id)
 				s.Equal(resp.Endpoint.Spec.Name, endpointName)
-				s.Equal(resp.Endpoint.Spec.Target.GetWorker().Namespace, s.Namespace())
+				s.Equal(resp.Endpoint.Spec.Target.GetWorker().Namespace, s.Namespace().String())
 				s.Equal("/"+commonnexus.RouteDispatchNexusTaskByEndpoint.Path(resp.Endpoint.Id), resp.Endpoint.UrlPrefix)
 			},
 		},
@@ -511,7 +489,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -530,7 +508,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -550,7 +528,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -570,7 +548,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -629,7 +607,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+								Namespace: s.Namespace().String(),
 							},
 						},
 					},
@@ -648,7 +626,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+								Namespace: s.Namespace().String(),
 								TaskQueue: string(make([]byte, 1005)),
 							},
 						},
@@ -742,7 +720,7 @@ func (s *OperatorSuite) TestCreate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -787,7 +765,7 @@ func (s *OperatorSuite) TestUpdate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -812,7 +790,7 @@ func (s *OperatorSuite) TestUpdate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -834,7 +812,7 @@ func (s *OperatorSuite) TestUpdate() {
 					Target: &nexuspb.EndpointTarget{
 						Variant: &nexuspb.EndpointTarget_Worker_{
 							Worker: &nexuspb.EndpointTarget_Worker{
-								Namespace: s.Namespace(),
+								Namespace: s.Namespace().String(),
 								TaskQueue: s.defaultTaskQueue().Name,
 							},
 						},
@@ -1062,7 +1040,7 @@ func (s *NexusEndpointFunctionalSuite) createNexusEndpoint(name string) *persist
 				Target: &persistencespb.NexusEndpointTarget{
 					Variant: &persistencespb.NexusEndpointTarget_Worker_{
 						Worker: &persistencespb.NexusEndpointTarget_Worker{
-							NamespaceId: s.GetNamespaceID(s.Namespace()),
+							NamespaceId: s.NamespaceID().String(),
 							TaskQueue:   s.defaultTaskQueue().Name,
 						},
 					},

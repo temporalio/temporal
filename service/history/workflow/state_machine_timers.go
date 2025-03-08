@@ -29,17 +29,25 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // AddNextStateMachineTimerTask generates a state machine timer task if the first deadline doesn't have a task scheduled
 // yet.
-func AddNextStateMachineTimerTask(ms MutableState) {
+func AddNextStateMachineTimerTask(ms historyi.MutableState) {
+	// filter out empty timer groups
 	timers := ms.GetExecutionInfo().StateMachineTimers
+	timers = slices.DeleteFunc(timers, func(timerGroup *persistencespb.StateMachineTimerGroup) bool {
+		return len(timerGroup.Infos) == 0
+	})
+	ms.GetExecutionInfo().StateMachineTimers = timers
+
 	if len(timers) == 0 {
 		return
 	}
+
 	timerGroup := timers[0]
 	// We already have a timer for this deadline.
 	if timerGroup.Scheduled {
@@ -57,7 +65,7 @@ func AddNextStateMachineTimerTask(ms MutableState) {
 // deadline.
 // Only a single task for a given type can be tracked for a given machine. If a task of the same type is already
 // tracked, it will be overridden.
-func TrackStateMachineTimer(ms MutableState, deadline time.Time, taskInfo *persistencespb.StateMachineTaskInfo) {
+func TrackStateMachineTimer(ms historyi.MutableState, deadline time.Time, taskInfo *persistencespb.StateMachineTaskInfo) {
 	execInfo := ms.GetExecutionInfo()
 	group := &persistencespb.StateMachineTimerGroup{
 		Deadline: timestamppb.New(deadline),
@@ -85,7 +93,7 @@ func TrackStateMachineTimer(ms MutableState, deadline time.Time, taskInfo *persi
 // TrimStateMachineTimers returns of copy of trimmed the StateMachineTimers slice by removing any timer tasks that are
 // associated with an HSM node that has been deleted or updated on or after the provided minVersionedTransition.
 func TrimStateMachineTimers(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) == 0 {
@@ -122,7 +130,9 @@ func TrimStateMachineTimers(
 
 			trimmedTaskInfos = append(trimmedTaskInfos, taskInfo)
 		}
-		if len(trimmedTaskInfos) > 0 {
+		if len(trimmedTaskInfos) > 0 || timerGroup.Scheduled {
+			// We still want to keep the timer group if it has been scheduled even if it has no task info.
+			// This will prevent us from scheduling a new timer task for the same group.
 			trimmedStateMachineTimers = append(trimmedStateMachineTimers, &persistencespb.StateMachineTimerGroup{
 				Infos:     trimmedTaskInfos,
 				Deadline:  timerGroup.Deadline,

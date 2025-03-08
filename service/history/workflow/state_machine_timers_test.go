@@ -30,6 +30,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/testing/protorequire"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
@@ -37,7 +38,7 @@ import (
 
 func TestTrackStateMachineTimer_MaintainsSortedSlice(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	ms := workflow.NewMockMutableState(ctrl)
+	ms := historyi.NewMockMutableState(ctrl)
 
 	now := time.Now()
 	execInfo := &persistencespb.WorkflowExecutionInfo{}
@@ -78,7 +79,7 @@ func TestTrackStateMachineTimer_MaintainsSortedSlice(t *testing.T) {
 
 func TestAddNextStateMachineTimerTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	ms := workflow.NewMockMutableState(ctrl)
+	ms := historyi.NewMockMutableState(ctrl)
 
 	now := time.Now().UTC()
 	var scheduledTasks []tasks.Task

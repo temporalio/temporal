@@ -37,6 +37,8 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
+// TODO (alex): move this to functional_test_base.go as methods.
+
 func RandomizeStr(id string) string {
 	return fmt.Sprintf("%v-%v", id, uuid.New())
 }

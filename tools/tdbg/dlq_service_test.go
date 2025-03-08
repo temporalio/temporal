@@ -79,7 +79,7 @@ type (
 	}
 )
 
-func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
+func (tc *dlqTestCase) Run(t *testing.T) {
 	faultyAdminClient := &fakeAdminClient{err: errors.New("did not expect client to be used")}
 	p := dlqTestParams{
 		dlqVersion:            tc.version,
@@ -116,16 +116,8 @@ func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 	}
 	runArgs = appendArg(runArgs, tdbg.FlagOutputFilename, p.outputFileName)
 
-	// TODO: this is a hack to make sure that the first app.Run() call is finished before the second one starts because
-	// there is a race condition in the CLI app where all apps share the same help command pointer and try to initialize
-	// it at the same time. This workaround only protects the first call because it's ok if subsequent calls happen in
-	// parallel since the help command is already initialized.
-	_, isFirstRun := <-firstAppRun
 	t.Logf("Running %v", runArgs)
 	err := app.Run(runArgs)
-	if isFirstRun {
-		close(firstAppRun)
-	}
 	if len(p.expectedErrSubstrings) > 0 {
 		assert.Error(t, err, "Expected error to contain %v", p.expectedErrSubstrings)
 		for _, s := range p.expectedErrSubstrings {
@@ -144,10 +136,6 @@ func (tc *dlqTestCase) Run(t *testing.T, firstAppRun chan struct{}) {
 }
 
 func TestDLQCommand_V2(t *testing.T) {
-	t.Parallel()
-
-	firstAppRun := make(chan struct{}, 1)
-	firstAppRun <- struct{}{}
 	for _, tc := range []dlqTestCase{
 		{
 			name: "read no target cluster with faulty admin client",
@@ -221,6 +209,14 @@ func TestDLQCommand_V2(t *testing.T) {
 				p.command = "read"
 				p.adminClient.err = errors.New("some error")
 				p.expectedErrSubstrings = []string{"some error", "GetDLQTasks"}
+			},
+		},
+		{
+			name: "GetDLQTasks on empty queue",
+			override: func(p *dlqTestParams) {
+				p.command = "read"
+				p.dlqType = "1"
+				p.adminClient.err = errors.New(" GetDLQTasks failed. Error: queue not found:")
 			},
 		},
 		{
@@ -301,9 +297,8 @@ func TestDLQCommand_V2(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			tc.version = "v2"
-			tc.Run(t, firstAppRun)
+			tc.Run(t)
 		})
 	}
 }

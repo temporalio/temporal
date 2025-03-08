@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -182,10 +183,12 @@ func createWorkflowMutationFunction(
 		newRunID,
 		currentExecutionState.State,
 		currentExecutionState.Status,
-		currentExecutionState.CreateRequestId,
+		currentExecutionState.RequestIds,
 		workflowIDReusePolicy,
 		workflowIDConflictPolicy,
 		currentWorkflowStartTime,
+		nil,
+		false,
 	)
 	return workflowMutationFunc, err
 }
@@ -220,7 +223,7 @@ func startAndSignalWithCurrentWorkflow(
 		ctx,
 		currentWorkflowLease,
 		currentWorkflowUpdateAction,
-		func() (workflow.Context, workflow.MutableState, error) {
+		func() (workflow.Context, historyi.MutableState, error) {
 			return newWorkflowLease.GetContext(), newWorkflowLease.GetMutableState(), nil
 		},
 	)
@@ -239,7 +242,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	requestID string,
 ) (string, bool, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyActive,
+		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
 		return "", false, err
@@ -278,7 +281,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	case nil:
 		return newWorkflowLease.GetContext().GetWorkflowKey().RunID, true, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
-		if failedErr.RequestID == requestID {
+		if _, ok := failedErr.RequestIDs[requestID]; ok {
 			return failedErr.RunID, false, nil
 		}
 		return "", false, err

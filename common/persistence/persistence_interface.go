@@ -24,9 +24,6 @@
 
 //go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
 
-// Generates fault injection stores.
-//go:generate go run ../../cmd/tools/genfaultinjection -copyright_file ../../LICENSE -out faultinjection
-
 package persistence
 
 import (
@@ -232,8 +229,8 @@ type (
 	// create the shard with the returned value.
 	InternalGetOrCreateShardRequest struct {
 		ShardID          int32
-		CreateShardInfo  func() (rangeID int64, shardInfo *commonpb.DataBlob, err error)
-		LifecycleContext context.Context // cancelled when shard is unloaded
+		CreateShardInfo  func() (rangeID int64, shardInfo *commonpb.DataBlob, err error) `json:"-"` // cannot be serialized otherwise
+		LifecycleContext context.Context                                                 // cancelled when shard is unloaded
 	}
 
 	// InternalGetOrCreateShardResponse is the response to GetShard
@@ -292,12 +289,17 @@ type (
 
 	InternalUpdateTaskQueueUserDataRequest struct {
 		NamespaceID string
-		TaskQueue   string
-		Version     int64
-		UserData    *commonpb.DataBlob
+		Updates     map[string]*InternalSingleTaskQueueUserDataUpdate // key is task queue name
+	}
+
+	InternalSingleTaskQueueUserDataUpdate struct {
+		Version  int64
+		UserData *commonpb.DataBlob
 		// Used to build an index of build_id to task_queues
-		BuildIdsAdded   []string
-		BuildIdsRemoved []string
+		BuildIdsAdded   []string `json:",omitempty"`
+		BuildIdsRemoved []string `json:",omitempty"`
+		Applied         *bool
+		Conflicting     *bool
 	}
 
 	InternalTaskQueueUserDataEntry struct {
@@ -308,7 +310,7 @@ type (
 
 	InternalListTaskQueueUserDataEntriesResponse struct {
 		NextPageToken []byte
-		Entries       []InternalTaskQueueUserDataEntry
+		Entries       []InternalTaskQueueUserDataEntry `json:",omitempty"`
 	}
 
 	InternalCreateTasksRequest struct {
@@ -317,7 +319,7 @@ type (
 		TaskType      enumspb.TaskQueueType
 		RangeID       int64
 		TaskQueueInfo *commonpb.DataBlob
-		Tasks         []*InternalCreateTask
+		Tasks         []*InternalCreateTask `json:",omitempty"`
 	}
 
 	InternalCreateTask struct {
@@ -327,12 +329,12 @@ type (
 	}
 
 	InternalGetTasksResponse struct {
-		Tasks         []*commonpb.DataBlob
+		Tasks         []*commonpb.DataBlob `json:",omitempty"`
 		NextPageToken []byte
 	}
 
 	InternalListTaskQueueResponse struct {
-		Items         []*InternalListTaskQueueItem
+		Items         []*InternalListTaskQueueItem `json:",omitempty"`
 		NextPageToken []byte
 	}
 
@@ -356,7 +358,7 @@ type (
 		PreviousLastWriteVersion int64
 
 		NewWorkflowSnapshot  InternalWorkflowSnapshot
-		NewWorkflowNewEvents []*InternalAppendHistoryNodesRequest
+		NewWorkflowNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`
 	}
 
 	// InternalCreateWorkflowExecutionResponse is the response from persistence for create new workflow execution
@@ -371,9 +373,9 @@ type (
 		Mode UpdateWorkflowMode
 
 		UpdateWorkflowMutation  InternalWorkflowMutation
-		UpdateWorkflowNewEvents []*InternalAppendHistoryNodesRequest
+		UpdateWorkflowNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`
 		NewWorkflowSnapshot     *InternalWorkflowSnapshot
-		NewWorkflowNewEvents    []*InternalAppendHistoryNodesRequest
+		NewWorkflowNewEvents    []*InternalAppendHistoryNodesRequest `json:",omitempty"`
 	}
 
 	// InternalConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
@@ -385,14 +387,14 @@ type (
 
 		// workflow to be resetted
 		ResetWorkflowSnapshot        InternalWorkflowSnapshot
-		ResetWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest
+		ResetWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`
 		// maybe new workflow
 		NewWorkflowSnapshot        *InternalWorkflowSnapshot
-		NewWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest
+		NewWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`
 
 		// current workflow
 		CurrentWorkflowMutation        *InternalWorkflowMutation
-		CurrentWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest
+		CurrentWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`
 	}
 	InternalSetWorkflowExecutionRequest struct {
 		ShardID int32
@@ -403,17 +405,17 @@ type (
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
-		ActivityInfos       map[int64]*commonpb.DataBlob  // ActivityInfo
-		TimerInfos          map[string]*commonpb.DataBlob // TimerInfo
-		ChildExecutionInfos map[int64]*commonpb.DataBlob  // ChildExecutionInfo
-		RequestCancelInfos  map[int64]*commonpb.DataBlob  // RequestCancelInfo
-		SignalInfos         map[int64]*commonpb.DataBlob  // SignalInfo
-		SignalRequestedIDs  []string
-		ExecutionInfo       *commonpb.DataBlob // WorkflowExecutionInfo
-		ExecutionState      *commonpb.DataBlob // WorkflowExecutionState
+		ActivityInfos       map[int64]*commonpb.DataBlob  `json:",omitempty"` // ActivityInfo
+		TimerInfos          map[string]*commonpb.DataBlob `json:",omitempty"` // TimerInfo
+		ChildExecutionInfos map[int64]*commonpb.DataBlob  `json:",omitempty"` // ChildExecutionInfo
+		RequestCancelInfos  map[int64]*commonpb.DataBlob  `json:",omitempty"` // RequestCancelInfo
+		SignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"` // SignalInfo
+		SignalRequestedIDs  []string                      `json:",omitempty"`
+		ExecutionInfo       *commonpb.DataBlob            // WorkflowExecutionInfo
+		ExecutionState      *commonpb.DataBlob            // WorkflowExecutionState
 		NextEventID         int64
-		BufferedEvents      []*commonpb.DataBlob
-		Checksum            *commonpb.DataBlob // persistencespb.Checksum
+		BufferedEvents      []*commonpb.DataBlob `json:",omitempty"`
+		Checksum            *commonpb.DataBlob   // persistencespb.Checksum
 		DBRecordVersion     int64
 	}
 
@@ -430,7 +432,7 @@ type (
 		NamespaceID string
 		WorkflowID  string
 
-		Tasks map[tasks.Category][]InternalHistoryTask
+		Tasks map[tasks.Category][]InternalHistoryTask `json:",omitempty"`
 	}
 
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
@@ -441,30 +443,30 @@ type (
 		RunID       string
 
 		ExecutionInfo      *persistencespb.WorkflowExecutionInfo
-		ExecutionInfoBlob  *commonpb.DataBlob
+		ExecutionInfoBlob  *commonpb.DataBlob `json:"-"` // redundant in JSON
 		ExecutionState     *persistencespb.WorkflowExecutionState
-		ExecutionStateBlob *commonpb.DataBlob
+		ExecutionStateBlob *commonpb.DataBlob `json:"-"` // redundant in JSON
 		NextEventID        int64
 		StartVersion       int64
 		LastWriteVersion   int64
 		DBRecordVersion    int64
 
-		UpsertActivityInfos       map[int64]*commonpb.DataBlob
-		DeleteActivityInfos       map[int64]struct{}
-		UpsertTimerInfos          map[string]*commonpb.DataBlob
-		DeleteTimerInfos          map[string]struct{}
-		UpsertChildExecutionInfos map[int64]*commonpb.DataBlob
-		DeleteChildExecutionInfos map[int64]struct{}
-		UpsertRequestCancelInfos  map[int64]*commonpb.DataBlob
-		DeleteRequestCancelInfos  map[int64]struct{}
-		UpsertSignalInfos         map[int64]*commonpb.DataBlob
-		DeleteSignalInfos         map[int64]struct{}
-		UpsertSignalRequestedIDs  map[string]struct{}
-		DeleteSignalRequestedIDs  map[string]struct{}
+		UpsertActivityInfos       map[int64]*commonpb.DataBlob  `json:",omitempty"`
+		DeleteActivityInfos       map[int64]struct{}            `json:",omitempty"`
+		UpsertTimerInfos          map[string]*commonpb.DataBlob `json:",omitempty"`
+		DeleteTimerInfos          map[string]struct{}           `json:",omitempty"`
+		UpsertChildExecutionInfos map[int64]*commonpb.DataBlob  `json:",omitempty"`
+		DeleteChildExecutionInfos map[int64]struct{}            `json:",omitempty"`
+		UpsertRequestCancelInfos  map[int64]*commonpb.DataBlob  `json:",omitempty"`
+		DeleteRequestCancelInfos  map[int64]struct{}            `json:",omitempty"`
+		UpsertSignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"`
+		DeleteSignalInfos         map[int64]struct{}            `json:",omitempty"`
+		UpsertSignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
+		DeleteSignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
 		NewBufferedEvents         *commonpb.DataBlob
 		ClearBufferedEvents       bool
 
-		Tasks map[tasks.Category][]InternalHistoryTask
+		Tasks map[tasks.Category][]InternalHistoryTask `json:",omitempty"`
 
 		Condition int64
 
@@ -479,22 +481,22 @@ type (
 		RunID       string
 
 		ExecutionInfo      *persistencespb.WorkflowExecutionInfo
-		ExecutionInfoBlob  *commonpb.DataBlob
+		ExecutionInfoBlob  *commonpb.DataBlob `json:"-"` // redundant in JSON
 		ExecutionState     *persistencespb.WorkflowExecutionState
-		ExecutionStateBlob *commonpb.DataBlob
+		ExecutionStateBlob *commonpb.DataBlob `json:"-"` // redundant in JSON
 		StartVersion       int64
 		LastWriteVersion   int64
 		NextEventID        int64
 		DBRecordVersion    int64
 
-		ActivityInfos       map[int64]*commonpb.DataBlob
-		TimerInfos          map[string]*commonpb.DataBlob
-		ChildExecutionInfos map[int64]*commonpb.DataBlob
-		RequestCancelInfos  map[int64]*commonpb.DataBlob
-		SignalInfos         map[int64]*commonpb.DataBlob
-		SignalRequestedIDs  map[string]struct{}
+		ActivityInfos       map[int64]*commonpb.DataBlob  `json:",omitempty"`
+		TimerInfos          map[string]*commonpb.DataBlob `json:",omitempty"`
+		ChildExecutionInfos map[int64]*commonpb.DataBlob  `json:",omitempty"`
+		RequestCancelInfos  map[int64]*commonpb.DataBlob  `json:",omitempty"`
+		SignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"`
+		SignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
 
-		Tasks map[tasks.Category][]InternalHistoryTask
+		Tasks map[tasks.Category][]InternalHistoryTask `json:",omitempty"`
 
 		Condition int64
 
@@ -544,7 +546,7 @@ type (
 
 	// InternalListConcreteExecutionsResponse is the response to ListConcreteExecutions for Persistence Interface
 	InternalListConcreteExecutionsResponse struct {
-		States        []*InternalWorkflowMutableState
+		States        []*InternalWorkflowMutableState `json:",omitempty"`
 		NextPageToken []byte
 	}
 
@@ -553,7 +555,7 @@ type (
 	}
 
 	InternalGetHistoryTasksResponse struct {
-		Tasks         []InternalHistoryTask
+		Tasks         []InternalHistoryTask `json:",omitempty"`
 		NextPageToken []byte
 	}
 
@@ -600,7 +602,7 @@ type (
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
 		// branch ranges is used to delete range of history nodes from target branch and it ancestors.
-		BranchRanges []InternalDeleteHistoryBranchRange
+		BranchRanges []InternalDeleteHistoryBranchRange `json:",omitempty"`
 	}
 
 	// InternalDeleteHistoryBranchRange is used to delete a range of history nodes of a branch
@@ -644,7 +646,7 @@ type (
 	// InternalReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	InternalReadHistoryBranchResponse struct {
 		// History nodes
-		Nodes []InternalHistoryNode
+		Nodes []InternalHistoryNode `json:",omitempty"`
 		// Pagination token
 		NextPageToken []byte
 	}
@@ -655,7 +657,7 @@ type (
 		// pagination token
 		NextPageToken []byte
 		// all branches of all trees
-		Branches []InternalHistoryBranchDetail
+		Branches []InternalHistoryBranchDetail `json:",omitempty"`
 	}
 
 	// InternalHistoryBranchDetail used by InternalGetAllHistoryTreeBranchesResponse
@@ -678,7 +680,7 @@ type (
 	// Only used by persistence layer
 	InternalGetHistoryTreeContainingBranchResponse struct {
 		// TreeInfos
-		TreeInfos []*commonpb.DataBlob
+		TreeInfos []*commonpb.DataBlob `json:",omitempty"`
 	}
 
 	// InternalCreateNamespaceRequest is used to create the namespace
@@ -717,7 +719,7 @@ type (
 
 	// InternalListNamespacesResponse is the response for GetNamespace
 	InternalListNamespacesResponse struct {
-		Namespaces    []*InternalGetNamespaceResponse
+		Namespaces    []*InternalGetNamespaceResponse `json:",omitempty"`
 		NextPageToken []byte
 	}
 
@@ -729,7 +731,7 @@ type (
 
 	// InternalListClusterMetadataResponse is the response for ListClusterMetadata
 	InternalListClusterMetadataResponse struct {
-		ClusterMetadata []*InternalGetClusterMetadataResponse
+		ClusterMetadata []*InternalGetClusterMetadataResponse `json:",omitempty"`
 		NextPageToken   []byte
 	}
 
@@ -778,7 +780,7 @@ type (
 	InternalListNexusEndpointsResponse struct {
 		TableVersion  int64
 		NextPageToken []byte
-		Endpoints     []InternalNexusEndpoint
+		Endpoints     []InternalNexusEndpoint `json:",omitempty"`
 	}
 
 	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we
@@ -849,7 +851,7 @@ type (
 	}
 
 	InternalReadMessagesResponse struct {
-		Messages      []QueueV2Message
+		Messages      []QueueV2Message `json:",omitempty"`
 		NextPageToken []byte
 	}
 
@@ -885,7 +887,7 @@ type (
 	}
 
 	InternalListQueuesResponse struct {
-		Queues        []QueueInfo
+		Queues        []QueueInfo `json:",omitempty"`
 		NextPageToken []byte
 	}
 )

@@ -37,6 +37,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	workflow "go.temporal.io/server/service/history/workflow"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -65,11 +66,11 @@ func (m *MockBufferEventFlusher) EXPECT() *MockBufferEventFlusherMockRecorder {
 }
 
 // flush mocks base method.
-func (m *MockBufferEventFlusher) flush(ctx context.Context) (workflow.Context, workflow.MutableState, error) {
+func (m *MockBufferEventFlusher) flush(ctx context.Context) (workflow.Context, interfaces.MutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "flush", ctx)
 	ret0, _ := ret[0].(workflow.Context)
-	ret1, _ := ret[1].(workflow.MutableState)
+	ret1, _ := ret[1].(interfaces.MutableState)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }

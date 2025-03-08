@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
@@ -60,7 +59,7 @@ import (
 )
 
 type ClientMiscTestSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 	maxPendingSignals         int
 	maxPendingCancelRequests  int
 	maxPendingActivities      int
@@ -73,7 +72,7 @@ func TestClientMiscTestSuite(t *testing.T) {
 }
 
 func (s *ClientMiscTestSuite) SetupSuite() {
-	s.ClientFunctionalSuite.SetupSuite()
+	s.FunctionalTestSdkSuite.SetupSuite()
 	s.maxPendingSignals = testcore.ClientSuiteLimit
 	s.maxPendingCancelRequests = testcore.ClientSuiteLimit
 	s.maxPendingActivities = testcore.ClientSuiteLimit
@@ -274,11 +273,10 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 			defer cancel()
 			s.Error(run.Get(ctx, nil))
 		}
-		namespaceID := s.GetNamespaceID(s.Namespace())
-		shardID := common.WorkflowIDToHistoryShard(namespaceID, cancelerWorkflowId, s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
+		shardID := common.WorkflowIDToHistoryShard(s.NamespaceID().String(), cancelerWorkflowId, s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
 		workflowExecution, err := s.GetTestCluster().ExecutionManager().GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardID,
-			NamespaceID: namespaceID,
+			NamespaceID: s.NamespaceID().String(),
 			WorkflowID:  cancelerWorkflowId,
 			RunID:       run.GetRunID(),
 		})
@@ -443,7 +441,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	var stickyQueue string
 	s.Eventually(func() bool {
 		ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: future.GetID(),
 			},
@@ -459,7 +457,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	//nolint:forbidigo
 	time.Sleep(time.Second * 11) // wait 11s (longer than 10s timeout), after this time, matching will detect StickyWorkerUnavailable
 	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-		Namespace:     s.Namespace(),
+		Namespace:     s.Namespace().String(),
 		TaskQueue:     &taskqueuepb.TaskQueue{Name: stickyQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: s.TaskQueue()},
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	})
@@ -477,7 +475,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 
 	// check that mutable state still has sticky enabled
 	ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: future.GetID(),
 		},
@@ -488,7 +486,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 
 	// now poll from normal queue, and it should see the full history.
 	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: s.TaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 
@@ -547,9 +545,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 		WorkflowTaskTimeout: 10 * time.Second,
 		WorkflowRunTimeout:  10 * time.Second,
 	}, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	// Block until first workflow task started.
 	<-readyToSendUpdate
@@ -575,7 +571,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	for {
 		time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 		_, err = s.SdkClient().WorkflowService().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			UpdateRef: tv.UpdateRef(),
 			Identity:  "my-identity",
 			WaitPolicy: &updatepb.WaitPolicy{
@@ -611,7 +607,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 	4 WorkflowTaskCompleted
 	5 MarkerRecorded
 	6 WorkflowExecutionCompleted`,
-		s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+		s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
 }
 
 func (s *ClientMiscTestSuite) Test_CancelActivityAndTimerBeforeComplete() {
@@ -647,9 +643,7 @@ func (s *ClientMiscTestSuite) Test_CancelActivityAndTimerBeforeComplete() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 	err = workflowRun.Get(ctx, nil)
 	s.NoError(err)
 }
@@ -695,9 +689,7 @@ func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
 
 	ctx := context.Background()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -782,9 +774,7 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -851,9 +841,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -866,7 +854,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 		time.Sleep(2 * time.Second) //nolint:forbidigo
 		// make DescribeMutableState call, which force mutable state to reload from db
 		_, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      workflowRun.GetRunID(),
@@ -960,9 +948,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 		WorkflowRunTimeout:  10 * time.Second,
 	}
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	if err != nil {
-		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-	}
+	s.NoError(err)
 
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
@@ -991,7 +977,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 	8 WorkflowTaskCompleted
 	9 MarkerRecorded
 	10 WorkflowExecutionCompleted`,
-		s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+		s.GetHistory(s.Namespace().String(), tv.WorkflowExecution()))
 }
 
 func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
@@ -1041,9 +1027,8 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 
 			oldWorker := worker.New(s.SdkClient(), taskQueue, worker.Options{})
 			oldWorker.RegisterWorkflow(workflowFn)
-			if err := oldWorker.Start(); err != nil {
-				s.Logger.Fatal("Error when start worker", tag.Error(err))
-			}
+			err := oldWorker.Start()
+			s.NoError(err)
 
 			id := "test-sticky-delay" + tt.name
 			workflowOptions := sdkclient.StartWorkflowOptions{
@@ -1054,12 +1039,10 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-			if err != nil {
-				s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
-			}
+			s.NoError(err)
 
 			s.NotNil(workflowRun)
-			s.True(workflowRun.GetRunID() != "")
+			s.NotEmpty(workflowRun.GetRunID())
 
 			s.Eventually(func() bool {
 				// wait until first workflow task completed (so we know sticky is set on workflow)
@@ -1083,9 +1066,8 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 			// start a new worker
 			newWorker := worker.New(s.SdkClient(), taskQueue, worker.Options{})
 			newWorker.RegisterWorkflow(workflowFn)
-			if err := newWorker.Start(); err != nil {
-				s.Logger.Fatal("Error when start worker", tag.Error(err))
-			}
+			err = newWorker.Start()
+			s.NoError(err)
 			defer newWorker.Stop()
 
 			startTime := time.Now()
@@ -1142,7 +1124,7 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 	s.NoError(err)
 
 	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
 			SignalOperation: &batchpb.BatchOperationSignal{
 				Signal: "my-signal",
@@ -1205,7 +1187,7 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 	count.Add(1)
 
 	_, err = s.SdkClient().WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
 			ResetOperation: &batchpb.BatchOperationReset{
 				ResetType: enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK,
@@ -1309,7 +1291,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	s.NoError(err)
 	ex := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
 	// wait for first wft and first activity to complete
-	s.Eventually(func() bool { return len(s.GetHistory(s.Namespace(), ex)) >= 10 }, 5*time.Second, 100*time.Millisecond)
+	s.Eventually(func() bool { return len(s.GetHistory(s.Namespace().String(), ex)) >= 10 }, 5*time.Second, 100*time.Millisecond)
 
 	w1.Stop()
 
@@ -1355,7 +1337,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 		searchattribute.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(buildIdv2))
 	s.Eventually(func() bool {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Query:     query,
 		})
 		return err == nil && len(resp.Executions) == 1
@@ -1363,7 +1345,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 
 	// reset it using v2 as the bad build ID
 	_, err = s.FrontendClient().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace:       s.Namespace(),
+		Namespace:       s.Namespace().String(),
 		VisibilityQuery: query,
 		JobId:           uuid.New(),
 		Reason:          "test",

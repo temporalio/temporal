@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -130,6 +131,8 @@ type Config struct {
 	// specified RetryPolicy
 	DefaultWorkflowRetryPolicy dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 
+	FollowReusePolicyAfterConflictPolicyTerminate dynamicconfig.TypedPropertyFnWithNamespaceFilter[bool]
+
 	// VisibilityArchival system protection
 	VisibilityArchivalQueryMaxPageSize dynamicconfig.IntPropertyFn
 
@@ -186,6 +189,9 @@ type Config struct {
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	// Enable deployment version RPCs
+	EnableDeploymentVersions dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
 	// Enable batcher RPCs
 	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Batch operation dynamic configs
@@ -204,14 +210,14 @@ type Config struct {
 	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs.
 	EnableNexusAPIs dynamicconfig.BoolPropertyFn
 
-	AllowDeleteNamespaceIfNexusEndpointTarget dynamicconfig.BoolPropertyFn
-
 	CallbackURLMaxLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
 
-	NexusRequestHeadersBlacklist *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NexusRequestHeadersBlacklist   *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+	NexusOperationsMetricTagConfig *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
 
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -279,39 +285,41 @@ func NewConfig(
 		InternalFEGlobalNamespaceVisibilityRPS: dynamicconfig.InternalFrontendGlobalNamespaceVisibilityRPS.Get(dc),
 		// Overshoot since these low rate limits don't work well in an uncoordinated global limiter.
 		GlobalNamespaceNamespaceReplicationInducingAPIsRPS: dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Get(dc),
-		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
-		WorkerBuildIdSizeLimit:                   dynamicconfig.WorkerBuildIdSizeLimit.Get(dc),
-		ReachabilityTaskQueueScanLimit:           dynamicconfig.ReachabilityTaskQueueScanLimit.Get(dc),
-		ReachabilityQueryBuildIdLimit:            dynamicconfig.ReachabilityQueryBuildIdLimit.Get(dc),
-		ReachabilityCacheOpenWFsTTL:              dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc),
-		ReachabilityCacheClosedWFsTTL:            dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc),
-		ReachabilityQuerySetDurationSinceDefault: dynamicconfig.ReachabilityQuerySetDurationSinceDefault.Get(dc),
-		MaxBadBinaries:                           dynamicconfig.FrontendMaxBadBinaries.Get(dc),
-		DisableListVisibilityByFilter:            dynamicconfig.DisableListVisibilityByFilter.Get(dc),
-		BlobSizeLimitError:                       dynamicconfig.BlobSizeLimitError.Get(dc),
-		BlobSizeLimitWarn:                        dynamicconfig.BlobSizeLimitWarn.Get(dc),
-		ThrottledLogRPS:                          dynamicconfig.FrontendThrottledLogRPS.Get(dc),
-		ShutdownDrainDuration:                    dynamicconfig.FrontendShutdownDrainDuration.Get(dc),
-		ShutdownFailHealthCheckDuration:          dynamicconfig.FrontendShutdownFailHealthCheckDuration.Get(dc),
-		EnableNamespaceNotActiveAutoForwarding:   dynamicconfig.EnableNamespaceNotActiveAutoForwarding.Get(dc),
-		EnableNamespaceHandoverWait:              dynamicconfig.EnableNamespaceHandoverWait.Get(dc),
-		SearchAttributesNumberOfKeysLimit:        dynamicconfig.SearchAttributesNumberOfKeysLimit.Get(dc),
-		SearchAttributesSizeOfValueLimit:         dynamicconfig.SearchAttributesSizeOfValueLimit.Get(dc),
-		SearchAttributesTotalSizeLimit:           dynamicconfig.SearchAttributesTotalSizeLimit.Get(dc),
-		VisibilityArchivalQueryMaxPageSize:       dynamicconfig.VisibilityArchivalQueryMaxPageSize.Get(dc),
-		DisallowQuery:                            dynamicconfig.DisallowQuery.Get(dc),
-		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
-		DefaultWorkflowRetryPolicy:               dynamicconfig.DefaultWorkflowRetryPolicy.Get(dc),
-		DefaultWorkflowTaskTimeout:               dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
-		EnableServerVersionCheck:                 dynamicconfig.EnableServerVersionCheck.Get(dc),
-		EnableTokenNamespaceEnforcement:          dynamicconfig.EnableTokenNamespaceEnforcement.Get(dc),
-		KeepAliveMinTime:                         dynamicconfig.KeepAliveMinTime.Get(dc),
-		KeepAlivePermitWithoutStream:             dynamicconfig.KeepAlivePermitWithoutStream.Get(dc),
-		KeepAliveMaxConnectionIdle:               dynamicconfig.KeepAliveMaxConnectionIdle.Get(dc),
-		KeepAliveMaxConnectionAge:                dynamicconfig.KeepAliveMaxConnectionAge.Get(dc),
-		KeepAliveMaxConnectionAgeGrace:           dynamicconfig.KeepAliveMaxConnectionAgeGrace.Get(dc),
-		KeepAliveTime:                            dynamicconfig.KeepAliveTime.Get(dc),
-		KeepAliveTimeout:                         dynamicconfig.KeepAliveTimeout.Get(dc),
+
+		MaxIDLengthLimit:                              dynamicconfig.MaxIDLengthLimit.Get(dc),
+		WorkerBuildIdSizeLimit:                        dynamicconfig.WorkerBuildIdSizeLimit.Get(dc),
+		ReachabilityTaskQueueScanLimit:                dynamicconfig.ReachabilityTaskQueueScanLimit.Get(dc),
+		ReachabilityQueryBuildIdLimit:                 dynamicconfig.ReachabilityQueryBuildIdLimit.Get(dc),
+		ReachabilityCacheOpenWFsTTL:                   dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc),
+		ReachabilityCacheClosedWFsTTL:                 dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc),
+		ReachabilityQuerySetDurationSinceDefault:      dynamicconfig.ReachabilityQuerySetDurationSinceDefault.Get(dc),
+		MaxBadBinaries:                                dynamicconfig.FrontendMaxBadBinaries.Get(dc),
+		DisableListVisibilityByFilter:                 dynamicconfig.DisableListVisibilityByFilter.Get(dc),
+		BlobSizeLimitError:                            dynamicconfig.BlobSizeLimitError.Get(dc),
+		BlobSizeLimitWarn:                             dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		ThrottledLogRPS:                               dynamicconfig.FrontendThrottledLogRPS.Get(dc),
+		ShutdownDrainDuration:                         dynamicconfig.FrontendShutdownDrainDuration.Get(dc),
+		ShutdownFailHealthCheckDuration:               dynamicconfig.FrontendShutdownFailHealthCheckDuration.Get(dc),
+		EnableNamespaceNotActiveAutoForwarding:        dynamicconfig.EnableNamespaceNotActiveAutoForwarding.Get(dc),
+		EnableNamespaceHandoverWait:                   dynamicconfig.EnableNamespaceHandoverWait.Get(dc),
+		SearchAttributesNumberOfKeysLimit:             dynamicconfig.SearchAttributesNumberOfKeysLimit.Get(dc),
+		SearchAttributesSizeOfValueLimit:              dynamicconfig.SearchAttributesSizeOfValueLimit.Get(dc),
+		SearchAttributesTotalSizeLimit:                dynamicconfig.SearchAttributesTotalSizeLimit.Get(dc),
+		VisibilityArchivalQueryMaxPageSize:            dynamicconfig.VisibilityArchivalQueryMaxPageSize.Get(dc),
+		DisallowQuery:                                 dynamicconfig.DisallowQuery.Get(dc),
+		SendRawWorkflowHistory:                        dynamicconfig.SendRawWorkflowHistory.Get(dc),
+		DefaultWorkflowRetryPolicy:                    dynamicconfig.DefaultWorkflowRetryPolicy.Get(dc),
+		FollowReusePolicyAfterConflictPolicyTerminate: dynamicconfig.FollowReusePolicyAfterConflictPolicyTerminate.Get(dc),
+		DefaultWorkflowTaskTimeout:                    dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
+		EnableServerVersionCheck:                      dynamicconfig.EnableServerVersionCheck.Get(dc),
+		EnableTokenNamespaceEnforcement:               dynamicconfig.EnableTokenNamespaceEnforcement.Get(dc),
+		KeepAliveMinTime:                              dynamicconfig.KeepAliveMinTime.Get(dc),
+		KeepAlivePermitWithoutStream:                  dynamicconfig.KeepAlivePermitWithoutStream.Get(dc),
+		KeepAliveMaxConnectionIdle:                    dynamicconfig.KeepAliveMaxConnectionIdle.Get(dc),
+		KeepAliveMaxConnectionAge:                     dynamicconfig.KeepAliveMaxConnectionAge.Get(dc),
+		KeepAliveMaxConnectionAgeGrace:                dynamicconfig.KeepAliveMaxConnectionAgeGrace.Get(dc),
+		KeepAliveTime:                                 dynamicconfig.KeepAliveTime.Get(dc),
+		KeepAliveTimeout:                              dynamicconfig.KeepAliveTimeout.Get(dc),
 
 		DeleteNamespaceDeleteActivityRPS:                    dynamicconfig.DeleteNamespaceDeleteActivityRPS.Get(dc),
 		DeleteNamespacePageSize:                             dynamicconfig.DeleteNamespacePageSize.Get(dc),
@@ -321,7 +329,9 @@ func NewConfig(
 
 		EnableSchedules: dynamicconfig.FrontendEnableSchedules.Get(dc),
 
-		EnableDeployments: dynamicconfig.EnableDeployments.Get(dc),
+		// [cleanup-wv-pre-release]
+		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
+		EnableDeploymentVersions: dynamicconfig.EnableDeploymentVersions.Get(dc),
 
 		EnableBatcher:                   dynamicconfig.FrontendEnableBatcher.Get(dc),
 		MaxConcurrentBatchOperation:     dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
@@ -336,12 +346,11 @@ func NewConfig(
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
 		EnableWorkerVersioningRules:    dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Get(dc),
 
-		EnableNexusAPIs: dynamicconfig.EnableNexus.Get(dc),
-		AllowDeleteNamespaceIfNexusEndpointTarget: dynamicconfig.AllowDeleteNamespaceIfNexusEndpointTarget.Get(dc),
-		CallbackURLMaxLength:                      dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		CallbackHeaderMaxSize:                     dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		MaxCallbacksPerWorkflow:                   dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
-
+		EnableNexusAPIs:              dynamicconfig.EnableNexus.Get(dc),
+		CallbackURLMaxLength:         dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		CallbackHeaderMaxSize:        dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		MaxCallbacksPerWorkflow:      dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+		MaxNexusOperationTokenLength: nexusoperations.MaxOperationTokenLength.Get(dc),
 		NexusRequestHeadersBlacklist: dynamicconfig.NewGlobalCachedTypedValue(
 			dc,
 			dynamicconfig.FrontendNexusRequestHeadersBlacklist,
@@ -350,6 +359,13 @@ func NewConfig(
 					return matchNothing, nil
 				}
 				return util.WildCardStringsToRegexp(patterns)
+			},
+		),
+		NexusOperationsMetricTagConfig: dynamicconfig.NewGlobalCachedTypedValue(
+			dc,
+			nexusoperations.MetricTagConfiguration,
+			func(config nexusoperations.NexusMetricTagConfig) (*nexusoperations.NexusMetricTagConfig, error) {
+				return &config, nil
 			},
 		),
 

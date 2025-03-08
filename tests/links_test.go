@@ -39,7 +39,7 @@ import (
 )
 
 type LinksSuite struct {
-	testcore.ClientFunctionalSuite
+	testcore.FunctionalTestSdkSuite
 }
 
 func TestLinksTestSuite(t *testing.T) {
@@ -72,7 +72,7 @@ func (s *LinksSuite) TestTerminateWorkflow_LinksAttachedToEvent() {
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on TerminateWorkflow.
 	_, err = s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
 		},
@@ -101,7 +101,7 @@ func (s *LinksSuite) TestRequestCancelWorkflow_LinksAttachedToEvent() {
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on CancelWorkflow.
 	_, err = s.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
 		},
@@ -138,7 +138,7 @@ func (s *LinksSuite) TestSignalWorkflowExecution_LinksAttachedToEvent() {
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on SignalWorkflow.
 	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
 		},
@@ -171,7 +171,7 @@ func (s *LinksSuite) TestSignalWithStartWorkflowExecution_LinksAttachedToRelevan
 
 	// TODO(bergundy): Use SdkClient if and when it exposes links on SignalWithStartWorkflow.
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		Namespace:  s.Namespace(),
+		Namespace:  s.Namespace().String(),
 		WorkflowId: workflowID,
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "dont-care",

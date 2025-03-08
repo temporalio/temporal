@@ -60,12 +60,7 @@ const (
 	MinLongPollTimeout = time.Second * 2
 	// CriticalLongPollTimeout is a threshold for the context timeout passed into long poll API,
 	// below which a warning will be logged
-	CriticalLongPollTimeout = time.Second * 20
-)
-
-const (
-	// MaxWorkflowTaskStartToCloseTimeout sets the Max Workflow Task start to close timeout for a Workflow
-	MaxWorkflowTaskStartToCloseTimeout = 120 * time.Second
+	CriticalLongPollTimeout = time.Second * 10
 )
 
 const (

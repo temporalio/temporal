@@ -53,7 +53,7 @@ func Invoke(
 	workflowResetter ndc.WorkflowResetter,
 	eventsReapplier ndc.EventsReapplier,
 ) error {
-	if shard.GetConfig().SkipReapplicationByNamespaceID(namespaceUUID.String()) {
+	if shard.GetConfig().SkipReapplicationByNamespaceID(namespaceUUID) {
 		return nil
 	}
 

@@ -95,8 +95,8 @@ var (
 		},
 		{
 			Name:   "NamespaceID",
-			GoArgs: "namespaceID string",
-			Expr:   "[]Constraints{{NamespaceID: namespaceID}, {}}",
+			GoArgs: "namespaceID namespace.ID",
+			Expr:   "[]Constraints{{NamespaceID: namespaceID.String()}, {}}",
 		},
 		{
 			Name:   "TaskQueue",
@@ -308,6 +308,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/namespace"
 )
 
 const PrecedenceUnknown Precedence = 0

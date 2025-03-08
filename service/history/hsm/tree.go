@@ -272,11 +272,11 @@ func (n *Node) Path() []Key {
 	return append(n.Parent.Path(), n.Key)
 }
 
-// Outputs returns a compacted operation log from the root state machine. The operation log maintains a sequence of
+// OpLog returns a compacted operation log from the root state machine. The operation log maintains a sequence of
 // state changes, while compaction ensures operations are properly filtered when portions of the state machine tree are
 // deleted. For details on compaction rules, see OperationLog.compact().
 // This method must be called on the root node only.
-func (n *Node) Outputs() (OperationLog, error) {
+func (n *Node) OpLog() (OperationLog, error) {
 	if n.Parent != nil {
 		return nil, fmt.Errorf("can only be called from root node")
 	}

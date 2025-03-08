@@ -40,6 +40,7 @@ import (
 	common "go.temporal.io/api/common/v1"
 	history "go.temporal.io/api/history/v1"
 	namespace "go.temporal.io/server/common/namespace"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -67,10 +68,10 @@ func (m *MockMutableStateRebuilder) EXPECT() *MockMutableStateRebuilderMockRecor
 }
 
 // ApplyEvents mocks base method.
-func (m *MockMutableStateRebuilder) ApplyEvents(ctx context.Context, namespaceID namespace.ID, requestID string, execution *common.WorkflowExecution, history [][]*history.HistoryEvent, newRunHistory []*history.HistoryEvent, newRunID string) (MutableState, error) {
+func (m *MockMutableStateRebuilder) ApplyEvents(ctx context.Context, namespaceID namespace.ID, requestID string, execution *common.WorkflowExecution, history [][]*history.HistoryEvent, newRunHistory []*history.HistoryEvent, newRunID string) (interfaces.MutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ApplyEvents", ctx, namespaceID, requestID, execution, history, newRunHistory, newRunID)
-	ret0, _ := ret[0].(MutableState)
+	ret0, _ := ret[0].(interfaces.MutableState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -31,6 +31,7 @@ const (
 	ServiceRoleTagName          = "service_role"
 	CacheTypeTagName            = "cache_type"
 	FailureTagName              = "failure"
+	FailureSourceTagName        = "failure_source"
 	TaskCategoryTagName         = "task_category"
 	TaskTypeTagName             = "task_type"
 	TaskPriorityTagName         = "task_priority"
@@ -43,6 +44,8 @@ const (
 	httpStatusTagName           = "http_status"
 	nexusMethodTagName          = "method"
 	nexusEndpointTagName        = "nexus_endpoint"
+	nexusServiceTagName         = "nexus_service"
+	nexusOperationTagName       = "nexus_operation"
 	outcomeTagName              = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
@@ -658,10 +661,6 @@ var (
 		"wf_too_many_pending_external_workflow_signals",
 		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending signals to external workflows to be exceeded. See https://t.mp/limits for more information."),
 	)
-	UTF8ValidationErrors = NewCounterDef(
-		"utf8_validation_errors",
-		WithDescription("Number of times the service encountered a proto message with invalid UTF-8 in a string field"),
-	)
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
@@ -824,9 +823,11 @@ var (
 	MessageTypeRejectWorkflowExecutionUpdateCounter      = NewCounterDef("reject_workflow_update_message")
 	InvalidStateTransitionWorkflowExecutionUpdateCounter = NewCounterDef("invalid_state_transition_workflow_update_message")
 	WorkflowExecutionUpdateRegistrySize                  = NewBytesHistogramDef("workflow_update_registry_size")
+	WorkflowExecutionUpdateRegistrySizeLimited           = NewCounterDef("workflow_update_registry_size_limited")
 	WorkflowExecutionUpdateRequestRateLimited            = NewCounterDef("workflow_update_request_rate_limited")
 	WorkflowExecutionUpdateTooMany                       = NewCounterDef("workflow_update_request_too_many")
 	WorkflowExecutionUpdateAborted                       = NewCounterDef("workflow_update_aborted")
+	WorkflowExecutionUpdateContinueAsNewSuggestions      = NewCounterDef("workflow_update_continue_as_new_suggestions")
 	WorkflowExecutionUpdateSentToWorker                  = NewCounterDef("workflow_update_sent_to_worker")
 	WorkflowExecutionUpdateSentToWorkerAgain             = NewCounterDef("workflow_update_sent_to_worker_again")
 	WorkflowExecutionUpdateWaitStageAccepted             = NewCounterDef("workflow_update_wait_stage_accepted")
@@ -939,6 +940,7 @@ var (
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
 	ReplicationOutlierNamespace                    = NewCounterDef("replication_outlier_namespace")
+	ReplicationDuplicatedTaskCount                 = NewCounterDef("replication_duplicated_task")
 	EventReapplySkippedCount                       = NewCounterDef("event_reapply_skipped_count")
 	DirectQueryDispatchLatency                     = NewTimerDef("direct_query_dispatch_latency")
 	DirectQueryDispatchStickyLatency               = NewTimerDef("direct_query_dispatch_sticky_latency")
@@ -1223,4 +1225,10 @@ var (
 	MemoryStackGauge     = NewGaugeDef("memory_stack")
 	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
 	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
+	NumGCGauge           = NewGaugeDef("memory_num_gc_last",
+		WithDescription("Last runtime.MemStats.NumGC"),
+	)
+	GcPauseNsTotal = NewGaugeDef("memory_pause_total_ns_last",
+		WithDescription("Last runtime.MemStats.PauseTotalNs"),
+	)
 )

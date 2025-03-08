@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -116,10 +117,6 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	}
 
 	if currentRunID == targetRunID {
-		if !mutableState.IsTransitionHistoryEnabled() && !isWorkflowRebuilt {
-			return serviceerror.NewInternal("transactionMgr: encountered workflow not rebuilt & current workflow not guaranteed")
-		}
-
 		// update to current record, since target workflow is pointed by current record
 		return r.dispatchWorkflowUpdateAsCurrent(
 			ctx,
@@ -251,13 +248,13 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	if err != nil {
 		return err
 	}
-	if !r.bypassVersionSemanticsCheck && targetPolicy != workflow.TransactionPolicyPassive {
+	if !r.bypassVersionSemanticsCheck && targetPolicy != historyi.TransactionPolicyPassive {
 		return serviceerror.NewInternal("transactionMgrForExistingWorkflow updateAsZombie encountered target workflow policy not being passive")
 	}
 
 	var newContext workflow.Context
-	var newMutableState workflow.MutableState
-	var newTransactionPolicy *workflow.TransactionPolicy
+	var newMutableState historyi.MutableState
+	var newTransactionPolicy *historyi.TransactionPolicy
 	if newWorkflow != nil {
 		newWorkflowPolicy, err := newWorkflow.SuppressBy(
 			currentWorkflow,
@@ -265,7 +262,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		if err != nil {
 			return err
 		}
-		if !r.bypassVersionSemanticsCheck && newWorkflowPolicy != workflow.TransactionPolicyPassive {
+		if !r.bypassVersionSemanticsCheck && newWorkflowPolicy != historyi.TransactionPolicyPassive {
 			return serviceerror.NewInternal("transactionMgrForExistingWorkflow updateAsZombie encountered new workflow policy not being passive")
 		}
 
@@ -291,7 +288,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 			// new workflow does not exist, continue
 			newContext = newWorkflow.GetContext()
 			newMutableState = newWorkflow.GetMutableState()
-			newTransactionPolicy = workflow.TransactionPolicyPassive.Ptr()
+			newTransactionPolicy = historyi.TransactionPolicyPassive.Ptr()
 		}
 	}
 
@@ -306,7 +303,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		persistence.UpdateWorkflowModeBypassCurrent,
 		newContext,
 		newMutableState,
-		workflow.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 		newTransactionPolicy,
 	)
 }
@@ -319,8 +316,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 ) error {
 
 	var err error
-	resetWorkflowPolicy := workflow.TransactionPolicyPassive
-	currentWorkflowPolicy := workflow.TransactionPolicyPassive
+	resetWorkflowPolicy := historyi.TransactionPolicyPassive
+	currentWorkflowPolicy := historyi.TransactionPolicyPassive
 	if currentWorkflow.GetMutableState().IsWorkflowExecutionRunning() {
 		currentWorkflowPolicy, err = currentWorkflow.SuppressBy(
 			targetWorkflow,
@@ -333,16 +330,16 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 		return err
 	}
 
-	var newWorkflowPolicy *workflow.TransactionPolicy
+	var newWorkflowPolicy *historyi.TransactionPolicy
 	var newContext workflow.Context
-	var newMutableState workflow.MutableState
+	var newMutableState historyi.MutableState
 	if newWorkflow != nil {
 		newContext = newWorkflow.GetContext()
 		newMutableState = newWorkflow.GetMutableState()
 		if err := newWorkflow.Revive(); err != nil {
 			return err
 		}
-		newWorkflowPolicy = workflow.TransactionPolicyPassive.Ptr()
+		newWorkflowPolicy = historyi.TransactionPolicyPassive.Ptr()
 	}
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
@@ -366,15 +363,15 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
 	newWorkflow Workflow,
 ) error {
 
-	targetWorkflowPolicy := workflow.TransactionPolicyPassive
+	targetWorkflowPolicy := historyi.TransactionPolicyPassive
 
-	var newWorkflowPolicy *workflow.TransactionPolicy
+	var newWorkflowPolicy *historyi.TransactionPolicy
 	var newContext workflow.Context
-	var newMutableState workflow.MutableState
+	var newMutableState historyi.MutableState
 	if newWorkflow != nil {
 		newContext = newWorkflow.GetContext()
 		newMutableState = newWorkflow.GetMutableState()
-		newWorkflowPolicy = workflow.TransactionPolicyPassive.Ptr()
+		newWorkflowPolicy = historyi.TransactionPolicyPassive.Ptr()
 	}
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
@@ -407,13 +404,13 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	if err != nil {
 		return err
 	}
-	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != workflow.TransactionPolicyPassive {
+	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != historyi.TransactionPolicyPassive {
 		return serviceerror.NewInternal("transactionMgrForExistingWorkflow conflictResolveAsZombie encountered target workflow policy not being passive")
 	}
 
-	var newWorkflowPolicy workflow.TransactionPolicy
+	var newWorkflowPolicy historyi.TransactionPolicy
 	var newContext workflow.Context
-	var newMutableState workflow.MutableState
+	var newMutableState historyi.MutableState
 	if newWorkflow != nil {
 		newWorkflowPolicy, err = newWorkflow.SuppressBy(
 			currentWorkflow,
@@ -421,7 +418,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		if err != nil {
 			return err
 		}
-		if !r.bypassVersionSemanticsCheck && newWorkflowPolicy != workflow.TransactionPolicyPassive {
+		if !r.bypassVersionSemanticsCheck && newWorkflowPolicy != historyi.TransactionPolicyPassive {
 			return serviceerror.NewInternal("transactionMgrForExistingWorkflow conflictResolveAsZombie encountered new workflow policy not being passive")
 		}
 

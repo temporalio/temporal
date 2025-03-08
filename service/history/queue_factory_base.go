@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -74,6 +75,7 @@ type (
 		Config               *configs.Config
 		TimeSource           clock.TimeSource
 		MetricsHandler       metrics.Handler
+		TracerProvider       trace.TracerProvider
 		Logger               log.SnTaggedLogger
 		SchedulerRateLimiter queues.SchedulerRateLimiter
 		DLQWriter            *queues.DLQWriter
@@ -86,6 +88,7 @@ type (
 		HostScheduler         queues.Scheduler
 		HostPriorityAssigner  queues.PriorityAssigner
 		HostReaderRateLimiter quotas.RequestRateLimiter
+		Tracer                trace.Tracer
 	}
 
 	QueueFactoriesLifetimeHookParams struct {

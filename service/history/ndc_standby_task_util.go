@@ -41,12 +41,13 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
-	standbyActionFn     func(context.Context, workflow.Context, workflow.MutableState) (interface{}, error)
+	standbyActionFn     func(context.Context, workflow.Context, historyi.MutableState) (interface{}, error)
 	standbyPostActionFn func(context.Context, tasks.Task, interface{}, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time
@@ -109,6 +110,10 @@ func isWorkflowExistOnSource(
 	clientBean client.Bean,
 	registry namespace.Registry,
 ) bool {
+	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(workflowKey.NamespaceID))
+	if err != nil {
+		return true
+	}
 	remoteClusterName, err := getSourceClusterName(
 		currentCluster,
 		registry,
@@ -117,12 +122,12 @@ func isWorkflowExistOnSource(
 	if err != nil {
 		return true
 	}
-	_, remoteAdminClient, err := clientBean.GetRemoteFrontendClient(remoteClusterName)
+	_, remoteFrontend, err := clientBean.GetRemoteFrontendClient(remoteClusterName)
 	if err != nil {
 		return true
 	}
-	_, err = remoteAdminClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: workflowKey.GetNamespaceID(),
+	_, err = remoteFrontend.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: namespaceEntry.Name().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.GetWorkflowID(),
 			RunId:      workflowKey.GetRunID(),
@@ -165,7 +170,7 @@ type (
 )
 
 func newExecutionTimerPostActionInfo(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 ) (*executionTimerPostActionInfo, error) {
 	return &executionTimerPostActionInfo{
 		currentRunID: mutableState.GetExecutionState().RunId,
@@ -173,7 +178,7 @@ func newExecutionTimerPostActionInfo(
 }
 
 func newActivityTaskPostActionInfo(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
@@ -185,7 +190,7 @@ func newActivityTaskPostActionInfo(
 }
 
 func newActivityRetryTimePostActionInfo(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
 	activityInfo *persistencespb.ActivityInfo,
@@ -200,7 +205,7 @@ func newActivityRetryTimePostActionInfo(
 }
 
 func newWorkflowTaskPostActionInfo(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	workflowTaskScheduleToStartTimeout time.Duration,
 	taskqueue *taskqueuepb.TaskQueue,
 ) (*workflowTaskPostActionInfo, error) {

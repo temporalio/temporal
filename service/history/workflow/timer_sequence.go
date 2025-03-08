@@ -36,6 +36,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/primitives/timestamp"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -76,14 +77,14 @@ type (
 	}
 
 	timerSequenceImpl struct {
-		mutableState MutableState
+		mutableState historyi.MutableState
 	}
 )
 
 var _ TimerSequence = (*timerSequenceImpl)(nil)
 
 func NewTimerSequence(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) *timerSequenceImpl {
 	return &timerSequenceImpl{
 		mutableState: mutableState,

@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/historybuilder"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -57,7 +58,7 @@ type (
 			history [][]*historypb.HistoryEvent,
 			newRunHistory []*historypb.HistoryEvent,
 			newRunID string,
-		) (MutableState, error)
+		) (historyi.MutableState, error)
 	}
 
 	MutableStateRebuilderImpl struct {
@@ -66,7 +67,7 @@ type (
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
 
-		mutableState MutableState
+		mutableState historyi.MutableState
 	}
 )
 
@@ -80,7 +81,7 @@ var _ MutableStateRebuilder = (*MutableStateRebuilderImpl)(nil)
 func NewMutableStateRebuilder(
 	shard shard.Context,
 	logger log.Logger,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) *MutableStateRebuilderImpl {
 
 	return &MutableStateRebuilderImpl{
@@ -100,7 +101,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	history [][]*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
 	newRunID string,
-) (MutableState, error) {
+) (historyi.MutableState, error) {
 	for i := 0; i < len(history)-1; i++ {
 		_, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[i], nil, "")
 		if err != nil {
@@ -133,7 +134,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	history []*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
 	newRunID string,
-) (MutableState, error) {
+) (historyi.MutableState, error) {
 
 	if len(history) == 0 {
 		return nil, serviceerror.NewInternal(ErrMessageHistorySizeZero)
@@ -675,6 +676,11 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED_EXTERNALLY:
 			return nil, serviceerror.NewUnimplemented("Workflow/activity property modification not implemented")
 
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
+			if err := b.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
+				return nil, err
+			}
+
 		default:
 			def, ok := b.shard.StateMachineRegistry().EventDefinition(event.GetEventType())
 			if !ok {
@@ -711,7 +717,7 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 	namespaceID namespace.ID,
 	newExecution *commonpb.WorkflowExecution,
 	newRunHistory []*historypb.HistoryEvent,
-) (MutableState, error) {
+) (historyi.MutableState, error) {
 
 	// TODO: replication task should contain enough information to determine whether the new run is part of the same chain
 	// and not relying on a specific event type to make that decision
@@ -723,7 +729,7 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 	}
 
 	var err error
-	var newRunMutableState MutableState
+	var newRunMutableState historyi.MutableState
 	if sameWorkflowChain {
 		newRunMutableState, err = NewMutableStateInChain(
 			b.shard,

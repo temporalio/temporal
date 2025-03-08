@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 )
@@ -88,6 +89,7 @@ func (s *readerSuite) SetupTest() {
 			nil,
 			nil,
 			metrics.NoopMetricsHandler,
+			telemetry.NoopTracer,
 		)
 	})
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), &MonitorOptions{

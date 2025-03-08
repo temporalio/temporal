@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"strconv"
 
@@ -38,11 +39,14 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
@@ -97,7 +101,7 @@ func eagerNamespaceRefresherProvider(
 		namespaceRegistry,
 		logger,
 		clientBean,
-		namespace.NewReplicationTaskExecutor(
+		nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
 			logger,
@@ -111,7 +115,7 @@ func replicationTaskConverterFactoryProvider(
 	config *configs.Config,
 ) SourceTaskConverterProvider {
 	return func(
-		historyEngine shard.Engine,
+		historyEngine historyi.Engine,
 		shardContext shard.Context,
 		clientClusterName string,
 		serializer serialization.Serializer,
@@ -304,7 +308,7 @@ func ndcHistoryResenderProvider(
 			if err != nil {
 				return err
 			}
-			return engine.ReplicateHistoryEvents(
+			err = engine.ReplicateHistoryEvents(
 				ctx,
 				definition.WorkflowKey{
 					NamespaceID: namespaceId.String(),
@@ -317,6 +321,10 @@ func ndcHistoryResenderProvider(
 				nil,
 				"",
 			)
+			if errors.Is(err, consts.ErrDuplicate) {
+				return nil
+			}
+			return err
 		},
 		serializer,
 		config.StandbyTaskReReplicationContextTimeout,
@@ -341,7 +349,7 @@ func resendHandlerProvider(
 		clientBean,
 		serializer,
 		clusterMetadata,
-		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error) {
+		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error) {
 			shardContext, err := shardController.GetShardByNamespaceWorkflow(
 				namespaceId,
 				workflowId,
@@ -366,7 +374,7 @@ func eventImporterProvider(
 ) eventhandler.EventImporter {
 	return eventhandler.NewEventImporter(
 		historyFetcher,
-		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (shard.Engine, error) {
+		func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error) {
 			shardContext, err := shardController.GetShardByNamespaceWorkflow(
 				namespaceId,
 				workflowId,

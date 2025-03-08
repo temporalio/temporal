@@ -55,6 +55,8 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/addtasks"
 	"go.temporal.io/server/service/history/api/deleteworkflow"
@@ -106,6 +108,7 @@ import (
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
@@ -132,7 +135,7 @@ type (
 		nDCHSMStateReplicator      ndc.HSMStateReplicator
 		replicationProcessorMgr    replication.TaskProcessor
 		eventNotifier              events.Notifier
-		tokenSerializer            common.TaskTokenSerializer
+		tokenSerializer            *tasktoken.Serializer
 		metricsHandler             metrics.Handler
 		logger                     log.Logger
 		throttledLogger            log.Logger
@@ -157,6 +160,7 @@ type (
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
 		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+		testHooks                  testhooks.TestHooks
 	}
 )
 
@@ -183,7 +187,8 @@ func NewEngineWithShardContext(
 	dlqWriter replication.DLQWriter,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
-) shard.Engine {
+	testHooks testhooks.TestHooks,
+) historyi.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
@@ -211,7 +216,7 @@ func NewEngineWithShardContext(
 		clusterMetadata:            shard.GetClusterMetadata(),
 		timeSource:                 shard.GetTimeSource(),
 		executionManager:           executionManager,
-		tokenSerializer:            common.NewProtoTaskTokenSerializer(),
+		tokenSerializer:            tasktoken.NewSerializer(),
 		logger:                     log.With(logger, tag.ComponentHistoryEngine),
 		throttledLogger:            log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
 		metricsHandler:             shard.GetMetricsHandler(),
@@ -232,6 +237,7 @@ func NewEngineWithShardContext(
 		replicationProgressCache:   replicationProgressCache,
 		syncStateRetriever:         syncStateRetriever,
 		outboundQueueCBPool:        outboundQueueCBPool,
+		testHooks:                  testHooks,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -429,6 +435,7 @@ func (e *historyEngineImpl) ExecuteMultiOperation(
 		e.tokenSerializer,
 		e.persistenceVisibilityMgr,
 		e.matchingClient,
+		e.testHooks,
 	)
 }
 
@@ -547,7 +554,7 @@ func (e *historyEngineImpl) VerifyFirstWorkflowTaskScheduled(
 func (e *historyEngineImpl) RecordWorkflowTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordWorkflowTaskStartedRequest,
-) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 	return recordworkflowtaskstarted.Invoke(
 		ctx,
 		request,
@@ -759,14 +766,14 @@ func (e *historyEngineImpl) SyncActivities(
 
 func (e *historyEngineImpl) SyncHSM(
 	ctx context.Context,
-	request *shard.SyncHSMRequest,
+	request *historyi.SyncHSMRequest,
 ) error {
 	return e.nDCHSMStateReplicator.SyncHSMState(ctx, request)
 }
 
 func (e *historyEngineImpl) BackfillHistoryEvents(
 	ctx context.Context,
-	request *shard.BackfillHistoryEventsRequest,
+	request *historyi.BackfillHistoryEventsRequest,
 ) error {
 	return e.nDCHistoryReplicator.BackfillHistoryEvents(ctx, request)
 }
@@ -1005,7 +1012,7 @@ func (e *historyEngineImpl) GetReplicationStatus(
 func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
-) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retError error) {
+) (_ *historyservice.GetWorkflowExecutionHistoryResponseWithRaw, retError error) {
 	return getworkflowexecutionhistory.Invoke(ctx, e.shardContext, e.workflowConsistencyChecker, e.versionChecker, e.eventNotifier, request, e.persistenceVisibilityMgr)
 }
 

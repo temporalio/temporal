@@ -24,6 +24,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -38,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -129,6 +131,17 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 }
 
 func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
+	e.Logger.Error("SyncVersionedTransition replication task encountered error",
+		tag.WorkflowNamespaceID(e.NamespaceID),
+		tag.WorkflowID(e.WorkflowID),
+		tag.WorkflowRunID(e.RunID),
+		tag.TaskID(e.ExecutableTask.TaskID()),
+		tag.Error(err),
+	)
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
@@ -146,7 +159,17 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 			taskErr,
 			ResendAttempt,
 		); syncStateErr != nil || !doContinue {
-			return err
+			if syncStateErr != nil {
+				e.Logger.Error("SyncVersionedTransition replication task encountered error during sync state",
+					tag.WorkflowNamespaceID(e.NamespaceID),
+					tag.WorkflowID(e.WorkflowID),
+					tag.WorkflowRunID(e.RunID),
+					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.Error(syncStateErr),
+				)
+				return err
+			}
+			return nil
 		}
 		return e.Execute()
 	case *serviceerrors.RetryReplication:
@@ -204,13 +227,6 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		}
 		return e.Execute()
 	default:
-		e.Logger.Error("Sync Versioned Transition replication task encountered error",
-			tag.WorkflowNamespaceID(e.NamespaceID),
-			tag.WorkflowID(e.WorkflowID),
-			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.ExecutableTask.TaskID()),
-			tag.Error(err),
-		)
 		return err
 	}
 }

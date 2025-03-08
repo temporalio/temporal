@@ -45,8 +45,10 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/archival"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -395,7 +397,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				Return(namespaceEntry, p.GetNamespaceByIDError).AnyTimes()
 
 			if p.MutableStateExists {
-				mutableState := workflow.NewMockMutableState(p.Controller)
+				mutableState := historyi.NewMockMutableState(p.Controller)
 				mutableState.EXPECT().IsWorkflowExecutionRunning().Return(p.IsWorkflowExecutionRunning).AnyTimes()
 				mutableState.EXPECT().GetWorkflowKey().Return(p.WorkflowKey).AnyTimes()
 				workflowContext.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(
@@ -535,6 +537,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				mockMetadata,
 				logger,
 				metrics.NoopMetricsHandler,
+				telemetry.NoopTracer,
 			)
 			err := executable.Execute()
 			if len(p.ExpectedErrorSubstrings) > 0 {

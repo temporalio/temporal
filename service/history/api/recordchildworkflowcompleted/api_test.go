@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -84,11 +85,11 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistery)
 	shardContext.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
 
-	oldParentMutableState := workflow.NewMockMutableState(ctrl)
+	oldParentMutableState := historyi.NewMockMutableState(ctrl)
 	oldParentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	oldParentMutableState.EXPECT().GetExecutionInfo().Return(oldParentExecutionInfo)
 
-	newParentMutableState := workflow.NewMockMutableState(ctrl)
+	newParentMutableState := historyi.NewMockMutableState(ctrl)
 	newParentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	newParentMutableState.EXPECT().GetNextEventID().Return(int64(10))
 	newParentMutableState.EXPECT().AddChildWorkflowExecutionCompletedEvent(anyArg, anyArg, anyArg).Return(nil, nil)
@@ -155,7 +156,7 @@ func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
 	shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistery)
 	shardContext.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
 
-	oldParentMutableState := workflow.NewMockMutableState(ctrl)
+	oldParentMutableState := historyi.NewMockMutableState(ctrl)
 	oldParentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(maxResetRedirectCount + 1)
 	oldParentMutableState.EXPECT().GetExecutionInfo().Return(oldParentExecutionInfo).Times(maxResetRedirectCount + 1)
 

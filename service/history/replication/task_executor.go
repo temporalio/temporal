@@ -141,6 +141,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		metrics.ServiceLatency.With(e.metricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.SyncActivityTaskScope),
+			metrics.NamespaceTag(attr.GetNamespaceId()),
 		)
 	}()
 
@@ -238,6 +239,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		metrics.ServiceLatency.With(e.metricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.HistoryReplicationTaskScope),
+			metrics.NamespaceTag(attr.GetNamespaceId()),
 		)
 	}()
 

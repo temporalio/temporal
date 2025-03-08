@@ -47,25 +47,24 @@ func TestDeliverBufferTasks(t *testing.T) {
 
 	tests := []func(tlm *physicalTaskQueueManagerImpl){
 		func(tlm *physicalTaskQueueManagerImpl) { close(tlm.backlogMgr.taskReader.taskBuffer) },
-		func(tlm *physicalTaskQueueManagerImpl) { tlm.backlogMgr.taskReader.gorogrp.Cancel() },
+		func(tlm *physicalTaskQueueManagerImpl) { tlm.tqCtxCancel() },
 		func(tlm *physicalTaskQueueManagerImpl) {
 			rps := 0.1
-			tlm.matcher.UpdateRatelimit(&rps)
+			tlm.matcher.UpdateRatelimit(rps)
 			tlm.backlogMgr.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
 				Data: &persistencespb.TaskInfo{},
 			}
 			err := tlm.matcher.rateLimiter.Wait(context.Background()) // consume the token
 			assert.NoError(t, err)
-			tlm.backlogMgr.taskReader.gorogrp.Cancel()
+			tlm.tqCtxCancel()
 		},
 	}
 	for _, test := range tests {
 		// TODO: do not create pq manager, directly create backlog manager
 		tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
-		tlm.backlogMgr.taskReader.gorogrp.Go(tlm.backlogMgr.taskReader.dispatchBufferedTasks)
+		go tlm.backlogMgr.taskReader.dispatchBufferedTasks()
 		test(tlm)
 		// dispatchBufferedTasks should stop after invocation of the test function
-		tlm.backlogMgr.taskReader.gorogrp.Wait()
 	}
 }
 
@@ -77,10 +76,9 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	tlm.backlogMgr.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{},
 	}
-	tlm.backlogMgr.taskReader.gorogrp.Go(tlm.backlogMgr.taskReader.dispatchBufferedTasks)
+	go tlm.backlogMgr.taskReader.dispatchBufferedTasks()
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
-	tlm.backlogMgr.taskReader.gorogrp.Cancel()
-	tlm.backlogMgr.taskReader.gorogrp.Wait()
+	tlm.tqCtxCancel()
 }
 
 func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
@@ -149,10 +147,8 @@ func TestTaskWriterShutdown(t *testing.T) {
 	err = tlm.backlogMgr.SpoolTask(&persistencespb.TaskInfo{})
 	require.NoError(t, err)
 
-	// stop the task writer explicitly
-	tlm.backlogMgr.taskWriter.Stop()
-	// need to wait on channel to ensure goroutine has exited
-	<-tlm.backlogMgr.taskWriter.writeLoop.Done()
+	// stop the task queue explicitly
+	tlm.tqCtxCancel()
 
 	// now attempt to add a task
 	err = tlm.backlogMgr.SpoolTask(&persistencespb.TaskInfo{})
@@ -161,7 +157,7 @@ func TestTaskWriterShutdown(t *testing.T) {
 
 func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(controller, false)
+	backlogMgr := newBacklogMgr(t, controller, false)
 
 	// Add tasks on the taskWriters channel
 	backlogMgr.taskWriter.appendCh <- &writeTaskRequest{
@@ -175,7 +171,6 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 	require.Equal(t, int64(0), backlogMgr.db.getApproximateBacklogCount())
 
 	backlogMgr.taskWriter.Start()
-	defer backlogMgr.taskWriter.Stop()
 	// Adding tasks to the buffer will increase the in-memory counter by 1
 	// and this will be written to persistence
 	require.Eventually(t, func() bool { return backlogMgr.db.getApproximateBacklogCount() == int64(1) },
@@ -184,7 +179,7 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 
 func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
 	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(controller, false)
+	backlogMgr := newBacklogMgr(t, controller, false)
 
 	backlogMgr.taskAckManager.addTask(int64(1))
 	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
@@ -201,7 +196,7 @@ func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
 
 func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(controller, false)
+	backlogMgr := newBacklogMgr(t, controller, false)
 
 	backlogMgr.taskAckManager.addTask(int64(1))
 	backlogMgr.taskAckManager.addTask(int64(2))
@@ -229,11 +224,10 @@ func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
 // TestAddTasksValidateBacklogCounter uses the "backlogManager methods" to add a task to the backlog.
 func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
 	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(controller, false)
+	backlogMgr := newBacklogMgr(t, controller, false)
 
 	// only start the taskWriter for now!
 	backlogMgr.taskWriter.Start()
-	defer backlogMgr.taskWriter.Stop()
 	task := &persistencespb.TaskInfo{
 		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 		CreateTime: timestamp.TimeNowPtrUtc(),
@@ -245,7 +239,7 @@ func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
 
 func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
 	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(controller, true)
+	backlogMgr := newBacklogMgr(t, controller, true)
 
 	// mock error signals
 	logger := backlogMgr.logger.(*log.MockLogger) // nolint:revive
@@ -253,7 +247,6 @@ func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
 
 	// only start the taskWriter for now!
 	backlogMgr.taskWriter.Start()
-	defer backlogMgr.taskWriter.Stop()
 	taskCount := 10
 	for i := 0; i < taskCount; i++ {
 		// Create new tasks and spool them
@@ -269,11 +262,10 @@ func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
 
 func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(controller, false)
+	backlogMgr := newBacklogMgr(t, controller, false)
 
 	// Only start the taskWriter for now!
 	backlogMgr.taskWriter.Start()
-	defer backlogMgr.taskWriter.Stop()
 	taskCount := 10
 	for i := 0; i < taskCount; i++ {
 		// Create new tasks and spool them
@@ -287,7 +279,11 @@ func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 	require.Equal(t, int64(10), backlogMgr.db.getApproximateBacklogCount())
 }
 
-func newBacklogMgr(controller *gomock.Controller, serviceError bool) *backlogManagerImpl {
+type cleanupper interface {
+	Cleanup(func())
+}
+
+func newBacklogMgr(t cleanupper, controller *gomock.Controller, serviceError bool) *backlogManagerImpl {
 	logger := log.NewMockLogger(controller)
 	tm := newTestTaskManager(logger)
 	if serviceError {
@@ -312,9 +308,8 @@ func newBacklogMgr(controller *gomock.Controller, serviceError bool) *backlogMan
 	handler.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
 	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
 
-	return newBacklogManager(pqMgr, tlCfg, tm, logger, logger, matchingClient, handler, defaultContextInfoProvider)
-}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 
-func defaultContextInfoProvider(ctx context.Context) context.Context {
-	return ctx
+	return newBacklogManager(ctx, pqMgr, tlCfg, tm, logger, logger, matchingClient, handler)
 }

@@ -47,6 +47,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsmanager"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -62,8 +64,8 @@ type (
 		logger                 log.Logger
 		metadataMgr            persistence.MetadataManager
 		clusterMetadata        cluster.Metadata
-		namespaceReplicator    namespace.Replicator
-		namespaceAttrValidator *namespace.AttrValidatorImpl
+		namespaceReplicator    nsreplication.Replicator
+		namespaceAttrValidator *nsmanager.Validator
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
 		timeSource             clock.TimeSource
@@ -90,7 +92,7 @@ func newNamespaceHandler(
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
-	namespaceReplicator namespace.Replicator,
+	namespaceReplicator nsreplication.Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
 	timeSource clock.TimeSource,
@@ -101,7 +103,7 @@ func newNamespaceHandler(
 		metadataMgr:            metadataMgr,
 		clusterMetadata:        clusterMetadata,
 		namespaceReplicator:    namespaceReplicator,
-		namespaceAttrValidator: namespace.NewAttrValidator(clusterMetadata),
+		namespaceAttrValidator: nsmanager.NewValidator(clusterMetadata),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
 		timeSource:             timeSource,
@@ -142,7 +144,7 @@ func (d *namespaceHandler) RegisterNamespace(
 	switch err.(type) {
 	case nil:
 		// namespace already exists, cannot proceed
-		return nil, serviceerror.NewNamespaceAlreadyExists("Namespace already exists.")
+		return nil, serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("Namespace %q already exists", registerRequest.GetNamespace()))
 	case *serviceerror.NamespaceNotFound:
 		// namespace does not exists, proceeds
 	default:
@@ -890,7 +892,7 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
 func validateRetentionDuration(retention *durationpb.Duration, isGlobalNamespace bool) error {
-	if err := timestamp.ValidateProtoDuration(retention); err != nil {
+	if err := timestamp.ValidateAndCapProtoDuration(retention); err != nil {
 		return errInvalidRetentionPeriod
 	}
 

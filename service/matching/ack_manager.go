@@ -37,21 +37,22 @@ import (
 // Used to convert out of order acks into ackLevel movement.
 type ackManager struct {
 	sync.RWMutex
-	backlogMgr       *backlogManagerImpl // accessing approximateBacklogCounter
-	outstandingTasks *treemap.Map        // TaskID->acked
-	readLevel        int64               // Maximum TaskID inserted into outstandingTasks
-	ackLevel         int64               // Maximum TaskID below which all tasks are acked
+	db               *taskQueueDB // to update approximateBacklogCount
+	outstandingTasks *treemap.Map // TaskID->acked
+	readLevel        int64        // Maximum TaskID inserted into outstandingTasks
+	ackLevel         int64        // Maximum TaskID below which all tasks are acked
 	backlogCountHint atomic.Int64
 	logger           log.Logger
 }
 
-func newAckManager(backlogMgr *backlogManagerImpl) ackManager {
+func newAckManager(db *taskQueueDB, logger log.Logger) ackManager {
 	return ackManager{
-		backlogMgr:       backlogMgr,
-		logger:           backlogMgr.logger,
+		db:               db,
+		logger:           logger,
 		outstandingTasks: treemap.NewWith(godsutils.Int64Comparator),
 		readLevel:        -1,
-		ackLevel:         -1}
+		ackLevel:         -1,
+	}
 }
 
 // Registers task as in-flight and moves read level to it. Tasks can be added in increasing order of taskID only.
@@ -149,7 +150,7 @@ func (m *ackManager) completeTask(taskID int64) int64 {
 		numberOfAckedTasks += 1
 	}
 	if numberOfAckedTasks > 0 {
-		m.backlogMgr.db.updateApproximateBacklogCount(-numberOfAckedTasks)
+		m.db.updateApproximateBacklogCount(-numberOfAckedTasks)
 	}
 	return m.ackLevel
 }

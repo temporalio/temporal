@@ -81,7 +81,7 @@ func TestNode_MaintainsCachedData(t *testing.T) {
 	require.NoError(t, err)
 
 	require.False(t, root.Dirty())
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 	require.Equal(t, 0, len(opLog))
 
@@ -95,7 +95,7 @@ func TestNode_MaintainsCachedData(t *testing.T) {
 	require.Equal(t, hsmtest.State2, v1.State())
 
 	require.True(t, root.Dirty())
-	opLog, err = root.Outputs()
+	opLog, err = root.OpLog()
 	require.NoError(t, err)
 	require.Equal(t, 1, len(opLog))
 
@@ -151,7 +151,7 @@ func TestNode_MaintainsChildCache(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, root.Dirty()) // Should now be dirty again.
 
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 	require.Equal(t, 1, len(opLog))
 	transOp, ok := opLog[0].(hsm.TransitionOperation)
@@ -396,7 +396,7 @@ func TestNode_Sync(t *testing.T) {
 			protorequire.ProtoEqual(t, incomingNode.InternalRepr().LastUpdateVersionedTransition, currentNode.InternalRepr().LastUpdateVersionedTransition)
 			require.Equal(t, currentNodeTransitionCount+1, currentNode.InternalRepr().TransitionCount)
 
-			opLog, err := currentNode.Outputs()
+			opLog, err := currentNode.OpLog()
 			require.NoError(t, err)
 			require.Len(t, opLog, 1)
 			transOp, ok := opLog[0].(hsm.TransitionOperation)
@@ -519,10 +519,10 @@ func TestNode_DeleteChild(t *testing.T) {
 	})
 	require.ErrorIs(t, err, hsm.ErrStateMachineInvalidState)
 
-	_, err = l2.Outputs()
+	_, err = l2.OpLog()
 	require.Error(t, err)
 
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 	require.Len(t, opLog, 1) // After compaction, only the delete operation remains
 	_, ok := opLog[0].(hsm.DeleteOperation)
@@ -562,7 +562,7 @@ func TestNode_PreservesUnrelatedOperations(t *testing.T) {
 	err = l1.DeleteChild(l2.Key)
 	require.NoError(t, err)
 
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 
 	foundDelete := slices.ContainsFunc(opLog, func(op hsm.Operation) bool {
@@ -606,7 +606,7 @@ func TestNode_OutputsWithDeletion(t *testing.T) {
 	err = root.DeleteChild(l1.Key)
 	require.NoError(t, err)
 
-	outputs, err := root.Outputs()
+	outputs, err := root.OpLog()
 	require.NoError(t, err)
 	require.Len(t, outputs, 2) // root's transition and l1's deletion (l2's operations excluded due to l1 deletion)
 
@@ -643,13 +643,13 @@ func TestNode_ClearTransactionState(t *testing.T) {
 	err = root.DeleteChild(l1.Key)
 	require.NoError(t, err)
 
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 	require.NotEmpty(t, opLog)
 
 	root.ClearTransactionState()
 
-	opLog, err = root.Outputs()
+	opLog, err = root.OpLog()
 	require.NoError(t, err)
 	require.Empty(t, opLog)
 	require.False(t, root.Dirty())
@@ -686,7 +686,7 @@ func TestNode_DeleteDeepHierarchy(t *testing.T) {
 	err = nodes[1].DeleteChild(hsm.Key{Type: def1.Type(), ID: "node2"})
 	require.NoError(t, err)
 
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 	require.NotEmpty(t, opLog)
 
@@ -723,7 +723,7 @@ func TestNode_MixedOperationsBeforeDeletion(t *testing.T) {
 	}
 
 	// Count transition operations for l1 from root's outputs
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 	transitionCount := 0
 	for _, op := range opLog {
@@ -738,7 +738,7 @@ func TestNode_MixedOperationsBeforeDeletion(t *testing.T) {
 	err = root.DeleteChild(l1.Key)
 	require.NoError(t, err)
 
-	opLog, err = root.Outputs()
+	opLog, err = root.OpLog()
 	require.NoError(t, err)
 	require.NotEmpty(t, opLog)
 
@@ -787,7 +787,7 @@ func TestNode_MultipleDeletedPaths(t *testing.T) {
 	err = branch2.DeleteChild(b2child.Key)
 	require.NoError(t, err)
 
-	outputs, err := root.Outputs()
+	outputs, err := root.OpLog()
 	require.NoError(t, err)
 
 	// Verify both deletion operations exist
@@ -844,7 +844,7 @@ func TestNode_PathPrefixEdgeCases(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify operations
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 
 	var transitions, deletes [][]hsm.Key
@@ -878,7 +878,7 @@ func TestNode_PathPrefixEdgeCases(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	opLog, err = root.Outputs()
+	opLog, err = root.OpLog()
 	require.NoError(t, err)
 
 	// Find root's transition
@@ -926,7 +926,7 @@ func TestNode_ComplexHierarchicalDeletions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify only parent's delete operation remains, all child operations are removed
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 
 	require.Len(t, opLog, 1, "should only see parent's delete operation")
@@ -972,7 +972,7 @@ func TestNode_CompactionOrderPreservation(t *testing.T) {
 	// - node1's transition should be gone
 	// - delete operation should remain
 	// - node2's transitions should remain in original order
-	opLog, err := root.Outputs()
+	opLog, err := root.OpLog()
 	require.NoError(t, err)
 
 	var ops []string

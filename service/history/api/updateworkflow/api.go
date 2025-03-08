@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -126,7 +127,7 @@ func (u *Updater) Invoke(
 func (u *Updater) ApplyRequest(
 	ctx context.Context,
 	updateReg update.Registry,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 ) (*api.UpdateWorkflowAction, error) {
 	if u.req.GetRequest().GetFirstExecutionRunId() != "" &&
 		ms.GetExecutionInfo().GetFirstExecutionRunId() != u.req.GetRequest().GetFirstExecutionRunId() {
@@ -134,7 +135,8 @@ func (u *Updater) ApplyRequest(
 	}
 
 	u.wfKey = ms.GetWorkflowKey()
-	updateID := u.req.GetRequest().GetRequest().GetMeta().GetUpdateId()
+	updateRequest := u.req.GetRequest().GetRequest()
+	updateID := updateRequest.GetMeta().GetUpdateId()
 
 	if !ms.IsWorkflowExecutionRunning() {
 		// If the WF is not running anymore, use an existing Update, if it exists for the requested ID.
@@ -177,7 +179,7 @@ func (u *Updater) ApplyRequest(
 	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 		return nil, err
 	}
-	if err = u.upd.Admit(u.req.GetRequest().GetRequest(), workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
+	if err = u.upd.Admit(updateRequest, workflow.WithEffects(effect.Immediate(ctx), ms)); err != nil {
 		return nil, err
 	}
 

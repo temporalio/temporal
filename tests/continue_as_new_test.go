@@ -48,7 +48,7 @@ import (
 )
 
 type ContinueAsNewTestSuite struct {
-	testcore.FunctionalSuite
+	testcore.FunctionalTestSuite
 }
 
 func TestContinueAsNewTestSuite(t *testing.T) {
@@ -83,7 +83,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -146,7 +146,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -184,7 +184,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {
 	s.Equal(we.RunId, lastRunStartedEventAttrs.GetFirstExecutionRunId())
 
 	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace(),
+		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -206,7 +206,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -257,7 +257,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -277,7 +277,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 
 	var historyEvents []*historypb.HistoryEvent
 	for i := 0; i < 20; i++ {
-		historyEvents = s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
+		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		})
 		lastEvent := historyEvents[len(historyEvents)-1]
@@ -309,7 +309,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunExecutionTimeout() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
-		Namespace:                s.Namespace(),
+		Namespace:                s.Namespace().String(),
 		WorkflowId:               id,
 		WorkflowType:             workflowType,
 		TaskQueue:                taskQueue,
@@ -339,7 +339,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunExecutionTimeout() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -368,7 +368,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunExecutionTimeout() {
 			descResp, err := s.FrontendClient().DescribeWorkflowExecution(
 				testcore.NewContext(),
 				&workflowservice.DescribeWorkflowExecutionRequest{
-					Namespace: s.Namespace(),
+					Namespace: s.Namespace().String(),
 					Execution: &commonpb.WorkflowExecution{
 						WorkflowId: id,
 					},
@@ -397,7 +397,7 @@ func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -447,7 +447,7 @@ func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -458,7 +458,7 @@ func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 	minTaskID := int64(0)
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events := s.GetHistory(s.Namespace(), executions[0])
+	events := s.GetHistory(s.Namespace().String(), executions[0])
 	s.True(len(events) != 0)
 	for _, event := range events {
 		s.True(event.GetTaskId() > minTaskID)
@@ -467,7 +467,7 @@ func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	events = s.GetHistory(s.Namespace(), executions[1])
+	events = s.GetHistory(s.Namespace().String(), executions[1])
 	s.True(len(events) != 0)
 	for _, event := range events {
 		s.True(event.GetTaskId() > minTaskID)
@@ -576,7 +576,7 @@ func (w *ParentWithChildContinueAsNew) workflow(task *workflowservice.PollWorkfl
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
 					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-						Namespace:         w.suite.Namespace(),
+						Namespace:         w.suite.Namespace().String(),
 						WorkflowId:        w.childID,
 						WorkflowType:      w.childWorkflowType,
 						Input:             payloads.EncodeBytes(buf.Bytes()),
@@ -630,7 +630,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNew() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
 		WorkflowType:        definition.parentWorkflowType,
 		TaskQueue:           taskQueue,
@@ -646,7 +646,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNew() {
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: definition.workflow,
@@ -692,8 +692,8 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NoError(err)
 	s.NotNil(definition.completedEvent)
 	completedAttributes := definition.completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()
-	s.Equal(s.Namespace(), completedAttributes.Namespace)
-	// TODO: change to s.Equal(s.Namespace()ID) once it is available.
+	s.Equal(s.Namespace().String(), completedAttributes.Namespace)
+	s.Equal(s.NamespaceID().String(), completedAttributes.NamespaceId)
 	s.NotEmpty(completedAttributes.Namespace)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.NotEqual(
@@ -717,7 +717,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNew() {
  11 WorkflowTaskScheduled
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted
- 14 WorkflowExecutionCompleted`, s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
+ 14 WorkflowExecutionCompleted`, s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: parentID,
 		RunId:      we.RunId,
 	}))
@@ -744,7 +744,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
 		WorkflowType:        definition.parentWorkflowType,
 		TaskQueue:           taskQueue,
@@ -760,7 +760,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
 
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
+		Namespace:           s.Namespace().String(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: definition.workflow,
@@ -789,7 +789,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
 	_, err = s.FrontendClient().TerminateWorkflowExecution(
 		testcore.NewContext(),
 		&workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: parentID,
 			},
@@ -800,7 +800,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
 	parentDescribeResp, err := s.FrontendClient().DescribeWorkflowExecution(
 		testcore.NewContext(),
 		&workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.Namespace(),
+			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: parentID,
 			},
@@ -817,7 +817,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
 		childDescribeResp, err = s.FrontendClient().DescribeWorkflowExecution(
 			testcore.NewContext(),
 			&workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: s.Namespace(),
+				Namespace: s.Namespace().String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: childID,
 				},
@@ -849,14 +849,14 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
   7 WorkflowTaskScheduled
   8 WorkflowTaskStarted
   9 WorkflowTaskCompleted
- 10 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
+ 10 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: parentID,
 		RunId:      we.RunId,
 	}))
 
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
-  2 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
+  2 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: childID,
 	}))
 }

@@ -84,6 +84,7 @@ func NewNexusHTTPHandler(
 	namespaceConcurrencyLimitIntercptor *interceptor.ConcurrentRequestLimitInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
+	httpTraceProvider commonnexus.HTTPClientTraceProvider,
 ) *NexusHTTPHandler {
 	return &NexusHTTPHandler{
 		logger:                               logger,
@@ -110,6 +111,8 @@ func NewNexusHTTPHandler(
 				forwardingClients:             clientCache,
 				payloadSizeLimit:              serviceConfig.BlobSizeLimitError,
 				headersBlacklist:              serviceConfig.NexusRequestHeadersBlacklist,
+				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
+				httpTraceProvider:             httpTraceProvider,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),

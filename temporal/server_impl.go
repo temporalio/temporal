@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"slices"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
@@ -40,6 +41,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/telemetry"
 	"go.uber.org/multierr"
 )
 
@@ -56,6 +58,7 @@ type (
 		clusterMetadata            *cluster.Config
 		persistenceFactoryProvider persistenceClient.FactoryProviderFn
 		metricsHandler             metrics.Handler
+		tracerProvider             trace.TracerProvider
 	}
 )
 
@@ -178,6 +181,7 @@ func initSystemNamespaces(
 		customDataStoreFactory,
 		logger,
 		metricsHandler,
+		telemetry.NoopTracerProvider,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,

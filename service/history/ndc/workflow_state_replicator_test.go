@@ -55,11 +55,13 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -474,7 +476,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend()
 		RunId:      s.runID,
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -555,7 +557,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_SyncHSM(
 		RunId:      s.runID,
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -569,11 +571,11 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_SyncHSM(
 	})
 	mockMutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(namespaceID, s.workflowID, s.runID)).AnyTimes()
 
-	engine := shard.NewMockEngine(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.mockShard.SetEngineForTesting(engine)
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	s.NoError(err)
-	engine.EXPECT().SyncHSM(gomock.Any(), &shard.SyncHSMRequest{
+	engine.EXPECT().SyncHSM(gomock.Any(), &historyi.SyncHSMRequest{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID, s.workflowID, s.runID),
 		StateMachineNode: &persistencespb.StateMachineNode{
 			Children: request.WorkflowState.ExecutionInfo.SubStateMachinesByType,
@@ -665,7 +667,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		},
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -676,6 +678,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		},
 		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
@@ -688,7 +691,6 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		RunId: s.runID,
 	}).AnyTimes()
 	mockMutableState.EXPECT().ApplySnapshot(versionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes().State)
-	mockMutableState.EXPECT().PopTasks().Times(1)
 	mockTransactionManager.EXPECT().UpdateWorkflow(gomock.Any(), false, gomock.Any(), nil).Return(nil).Times(1)
 	mockTaskRefresher.EXPECT().
 		PartialRefresh(gomock.Any(), gomock.Any(), EqVersionedTransition(&persistencespb.VersionedTransition{
@@ -754,7 +756,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		},
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -765,6 +767,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		},
 		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
@@ -773,7 +776,6 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		},
 	}).AnyTimes()
 	mockMutableState.EXPECT().ApplySnapshot(versionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes().State)
-	mockMutableState.EXPECT().PopTasks().Times(1)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
@@ -840,7 +842,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		},
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -851,6 +853,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		},
 		locks.PriorityLow,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
@@ -931,7 +934,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 		},
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
@@ -956,6 +959,19 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
 	s.IsType(&serviceerrors.SyncState{}, err)
+}
+
+type historyEventMatcher struct {
+	expected *historypb.HistoryEvent
+}
+
+func (m *historyEventMatcher) Matches(x interface{}) bool {
+	evt, ok := x.(*historypb.HistoryEvent)
+	return ok && proto.Equal(evt, m.expected)
+}
+
+func (m *historyEventMatcher) String() string {
+	return fmt.Sprintf("is equal to %v", m.expected)
 }
 
 func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_WithGapAndTailEvents() {
@@ -1023,7 +1039,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	s.NoError(err)
 	tailBlobs, err := serializer.SerializeEvents(tailEvents, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: localVersionHistoryies,
 		TransitionHistory: []*persistencespb.VersionedTransition{
@@ -1037,7 +1053,15 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
-	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any())
+	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
+
+	allEvents := append(gapEvents, requestedEvents...)
+	allEvents = append(allEvents, tailEvents...)
+	for _, event := range allEvents {
+		mockMutableState.EXPECT().AddReapplyCandidateEvent(&historyEventMatcher{expected: event}).
+			Times(1)
+	}
+
 	mockWeCtx := workflow.NewMockContext(s.controller)
 	sourceClusterName := "test-cluster"
 	mockShard := shard.NewMockContext(s.controller)
@@ -1162,7 +1186,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 		},
 	}
 
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := historyi.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      namespaceID,
 		WorkflowId:       s.workflowID,
@@ -1192,6 +1216,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 	}).Return(&persistence.ForkHistoryBranchResponse{
 		NewBranchToken: forkedBranchToken,
 	}, nil)
+	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
 	err := s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
 		context.Background(),
 		namespace.ID(namespaceID),

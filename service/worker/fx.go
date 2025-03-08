@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -53,6 +54,7 @@ import (
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 )
 
@@ -63,7 +65,8 @@ var Module = fx.Options(
 	deletenamespace.Module,
 	scheduler.Module,
 	batcher.Module,
-	deployment.Module,
+	deployment.Module, // [cleanup-wv-pre-release]
+	workerdeployment.Module,
 	dlq.Module,
 	dynamicconfig.Module,
 	fx.Provide(
@@ -99,8 +102,8 @@ var Module = fx.Options(
 		clusterMetadata cluster.Metadata,
 		metadataManager persistence.MetadataManager,
 		logger log.Logger,
-	) namespace.ReplicationTaskExecutor {
-		return namespace.NewReplicationTaskExecutor(
+	) nsreplication.TaskExecutor {
+		return nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
 			logger,
