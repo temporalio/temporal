@@ -30,6 +30,8 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 )
 
@@ -232,6 +234,7 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 
 type matcherData struct {
 	config     *taskQueueConfig
+	logger     log.Logger
 	canForward bool
 
 	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
@@ -247,9 +250,10 @@ type matcherData struct {
 	lastPoller time.Time // most recent poll start time
 }
 
-func newMatcherData(config *taskQueueConfig, canForward bool) matcherData {
+func newMatcherData(config *taskQueueConfig, logger log.Logger, canForward bool) matcherData {
 	return matcherData{
 		config:     config,
+		logger:     logger,
 		canForward: canForward,
 		tasks: taskPQ{
 			ages: newBacklogAgeTracker(),
@@ -295,7 +299,7 @@ func (d *matcherData) EnqueueTaskAndWait(ctxs []context.Context, task *internalT
 
 			if task.matchResult == nil {
 				d.tasks.Remove(task)
-				task.wake(&matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
+				task.wake(d.logger, &matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
 			}
 		})
 		defer stop() // nolint:revive // there's only ever a small number of contexts
@@ -343,7 +347,7 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 				if poller.matchHeapIndex >= 0 {
 					d.pollers.Remove(poller)
 				}
-				poller.wake(&matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
+				poller.wake(d.logger, &matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
 			}
 		})
 		defer stop() // nolint:revive // there's only ever a small number of contexts
@@ -386,7 +390,7 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 		func(task *internalTask) {
 			// for sync tasks: wake up waiters with a fake context error
 			// for backlog tasks: the caller should call finish()
-			task.wake(&matchResult{ctxErr: errReprocessTask, ctxErrIdx: -1})
+			task.wake(d.logger, &matchResult{ctxErr: errReprocessTask, ctxErrIdx: -1})
 			reprocess = append(reprocess, task)
 		},
 	)
@@ -488,10 +492,10 @@ func (d *matcherData) findAndWakeMatches() {
 		task.recycleToken = d.recycleToken
 
 		res := &matchResult{task: task, poller: poller}
-		task.wake(res)
+		task.wake(d.logger, res)
 		// for poll forwarder: skip waking poller, forwarder will call finishMatchAfterPollForward
 		if !task.isPollForwarder {
-			poller.wake(res)
+			poller.wake(d.logger, res)
 		}
 		// TODO(pri): consider having task forwarding work the same way, with a half-match,
 		// instead of full match and then pass forward result on response channel?
@@ -521,7 +525,7 @@ func (d *matcherData) finishMatchAfterPollForward(poller *waitingPoller, task *i
 	defer d.lock.Unlock()
 
 	if poller.matchResult == nil {
-		poller.wake(&matchResult{task: task, poller: poller})
+		poller.wake(d.logger, &matchResult{task: task, poller: poller})
 	}
 }
 
@@ -555,9 +559,9 @@ func (w *waitableMatchResult) initMatch(d *matcherData) {
 // call with matcherData.lock held.
 // w.matchResult must be nil (can't call wake twice).
 // w must not be in queues anymore.
-func (w *waitableMatchResult) wake(res *matchResult) {
-	bugIf(w.matchResult != nil, "bug: wake called twice")
-	bugIf(w.matchHeapIndex >= 0, "bug: wake called but still in heap")
+func (w *waitableMatchResult) wake(logger log.Logger, res *matchResult) {
+	softassert.That(logger, w.matchResult == nil, "wake called twice")
+	softassert.That(logger, w.matchHeapIndex < 0, "wake called but still in heap")
 	w.matchResult = res
 	w.matchCond.Signal()
 }
@@ -630,13 +634,4 @@ func (s *simpleLimiter) consume(now int64, tokens int64) {
 	// Alternatively, if now is > ready by more than burst, then we end up subtracting the full
 	// burst from now and adding one interval.
 	s.ready = max(now, s.ready+s.burst.Nanoseconds()) - s.burst.Nanoseconds() + tokens*s.interval.Nanoseconds()
-}
-
-// simple assertions
-// TODO(pri): replace by something that doesn't panic
-
-func bugIf(cond bool, msg string) {
-	if cond {
-		panic(msg)
-	}
 }
