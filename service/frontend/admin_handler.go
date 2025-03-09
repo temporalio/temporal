@@ -1116,7 +1116,6 @@ func (adh *AdminHandler) DescribeCluster(
 	}, nil
 }
 
-
 // ListClusterMembers
 func (adh *AdminHandler) ListClusterMembers(
 	ctx context.Context,

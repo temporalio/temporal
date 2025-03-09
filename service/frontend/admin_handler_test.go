@@ -597,7 +597,6 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.True(resp.GetIsGlobalNamespaceEnabled())
 }
 
-
 func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ClientToServerBroken() {
 	clientClusterShardID := historyclient.ClusterShardID{
 		ClusterID: rand.Int31(),
