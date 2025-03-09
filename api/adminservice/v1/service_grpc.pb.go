@@ -56,9 +56,6 @@ const (
 	AdminService_GetNamespaceReplicationMessages_FullMethodName     = "/temporal.server.api.adminservice.v1.AdminService/GetNamespaceReplicationMessages"
 	AdminService_GetDLQReplicationMessages_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/GetDLQReplicationMessages"
 	AdminService_ReapplyEvents_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents"
-	AdminService_AddSearchAttributes_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes"
-	AdminService_RemoveSearchAttributes_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/RemoveSearchAttributes"
-	AdminService_GetSearchAttributes_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/GetSearchAttributes"
 	AdminService_DescribeCluster_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/DescribeCluster"
 	AdminService_ListClusters_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/ListClusters"
 	AdminService_ListClusterMembers_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/ListClusterMembers"
@@ -121,15 +118,6 @@ type AdminServiceClient interface {
 	GetDLQReplicationMessages(ctx context.Context, in *GetDLQReplicationMessagesRequest, opts ...grpc.CallOption) (*GetDLQReplicationMessagesResponse, error)
 	// ReapplyEvents applies stale events to the current workflow and current run.
 	ReapplyEvents(ctx context.Context, in *ReapplyEventsRequest, opts ...grpc.CallOption) (*ReapplyEventsResponse, error)
-	// AddSearchAttributes add custom search attributes and returns comprehensive information about them.
-	// Deprecated. Use operatorservice instead.
-	AddSearchAttributes(ctx context.Context, in *AddSearchAttributesRequest, opts ...grpc.CallOption) (*AddSearchAttributesResponse, error)
-	// RemoveSearchAttributes removes custom search attributes and returns comprehensive information about them.
-	// Deprecated. Use operatorservice instead.
-	RemoveSearchAttributes(ctx context.Context, in *RemoveSearchAttributesRequest, opts ...grpc.CallOption) (*RemoveSearchAttributesResponse, error)
-	// GetSearchAttributes returns comprehensive information about search attributes.
-	// Deprecated. Use operatorservice instead.
-	GetSearchAttributes(ctx context.Context, in *GetSearchAttributesRequest, opts ...grpc.CallOption) (*GetSearchAttributesResponse, error)
 	// DescribeCluster returns information about Temporal cluster.
 	DescribeCluster(ctx context.Context, in *DescribeClusterRequest, opts ...grpc.CallOption) (*DescribeClusterResponse, error)
 	// ListClusters returns information about Temporal clusters.
@@ -305,33 +293,6 @@ func (c *adminServiceClient) GetDLQReplicationMessages(ctx context.Context, in *
 func (c *adminServiceClient) ReapplyEvents(ctx context.Context, in *ReapplyEventsRequest, opts ...grpc.CallOption) (*ReapplyEventsResponse, error) {
 	out := new(ReapplyEventsResponse)
 	err := c.cc.Invoke(ctx, AdminService_ReapplyEvents_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *adminServiceClient) AddSearchAttributes(ctx context.Context, in *AddSearchAttributesRequest, opts ...grpc.CallOption) (*AddSearchAttributesResponse, error) {
-	out := new(AddSearchAttributesResponse)
-	err := c.cc.Invoke(ctx, AdminService_AddSearchAttributes_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *adminServiceClient) RemoveSearchAttributes(ctx context.Context, in *RemoveSearchAttributesRequest, opts ...grpc.CallOption) (*RemoveSearchAttributesResponse, error) {
-	out := new(RemoveSearchAttributesResponse)
-	err := c.cc.Invoke(ctx, AdminService_RemoveSearchAttributes_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *adminServiceClient) GetSearchAttributes(ctx context.Context, in *GetSearchAttributesRequest, opts ...grpc.CallOption) (*GetSearchAttributesResponse, error) {
-	out := new(GetSearchAttributesResponse)
-	err := c.cc.Invoke(ctx, AdminService_GetSearchAttributes_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -628,15 +589,6 @@ type AdminServiceServer interface {
 	GetDLQReplicationMessages(context.Context, *GetDLQReplicationMessagesRequest) (*GetDLQReplicationMessagesResponse, error)
 	// ReapplyEvents applies stale events to the current workflow and current run.
 	ReapplyEvents(context.Context, *ReapplyEventsRequest) (*ReapplyEventsResponse, error)
-	// AddSearchAttributes add custom search attributes and returns comprehensive information about them.
-	// Deprecated. Use operatorservice instead.
-	AddSearchAttributes(context.Context, *AddSearchAttributesRequest) (*AddSearchAttributesResponse, error)
-	// RemoveSearchAttributes removes custom search attributes and returns comprehensive information about them.
-	// Deprecated. Use operatorservice instead.
-	RemoveSearchAttributes(context.Context, *RemoveSearchAttributesRequest) (*RemoveSearchAttributesResponse, error)
-	// GetSearchAttributes returns comprehensive information about search attributes.
-	// Deprecated. Use operatorservice instead.
-	GetSearchAttributes(context.Context, *GetSearchAttributesRequest) (*GetSearchAttributesResponse, error)
 	// DescribeCluster returns information about Temporal cluster.
 	DescribeCluster(context.Context, *DescribeClusterRequest) (*DescribeClusterResponse, error)
 	// ListClusters returns information about Temporal clusters.
@@ -730,15 +682,6 @@ func (UnimplementedAdminServiceServer) GetDLQReplicationMessages(context.Context
 }
 func (UnimplementedAdminServiceServer) ReapplyEvents(context.Context, *ReapplyEventsRequest) (*ReapplyEventsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReapplyEvents not implemented")
-}
-func (UnimplementedAdminServiceServer) AddSearchAttributes(context.Context, *AddSearchAttributesRequest) (*AddSearchAttributesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AddSearchAttributes not implemented")
-}
-func (UnimplementedAdminServiceServer) RemoveSearchAttributes(context.Context, *RemoveSearchAttributesRequest) (*RemoveSearchAttributesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RemoveSearchAttributes not implemented")
-}
-func (UnimplementedAdminServiceServer) GetSearchAttributes(context.Context, *GetSearchAttributesRequest) (*GetSearchAttributesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetSearchAttributes not implemented")
 }
 func (UnimplementedAdminServiceServer) DescribeCluster(context.Context, *DescribeClusterRequest) (*DescribeClusterResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeCluster not implemented")
@@ -1079,60 +1022,6 @@ func _AdminService_ReapplyEvents_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).ReapplyEvents(ctx, req.(*ReapplyEventsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AdminService_AddSearchAttributes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AddSearchAttributesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AdminServiceServer).AddSearchAttributes(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AdminService_AddSearchAttributes_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AdminServiceServer).AddSearchAttributes(ctx, req.(*AddSearchAttributesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AdminService_RemoveSearchAttributes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RemoveSearchAttributesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AdminServiceServer).RemoveSearchAttributes(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AdminService_RemoveSearchAttributes_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AdminServiceServer).RemoveSearchAttributes(ctx, req.(*RemoveSearchAttributesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AdminService_GetSearchAttributes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetSearchAttributesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AdminServiceServer).GetSearchAttributes(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AdminService_GetSearchAttributes_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AdminServiceServer).GetSearchAttributes(ctx, req.(*GetSearchAttributesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1675,18 +1564,6 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReapplyEvents",
 			Handler:    _AdminService_ReapplyEvents_Handler,
-		},
-		{
-			MethodName: "AddSearchAttributes",
-			Handler:    _AdminService_AddSearchAttributes_Handler,
-		},
-		{
-			MethodName: "RemoveSearchAttributes",
-			Handler:    _AdminService_RemoveSearchAttributes_Handler,
-		},
-		{
-			MethodName: "GetSearchAttributes",
-			Handler:    _AdminService_GetSearchAttributes_Handler,
 		},
 		{
 			MethodName: "DescribeCluster",
