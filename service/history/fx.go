@@ -310,6 +310,9 @@ func ReplicationProgressCacheProvider(
 	serviceConfig *configs.Config,
 	logger log.Logger,
 	handler metrics.Handler,
+	lc fx.Lifecycle,
 ) replication.ProgressCache {
-	return replication.NewProgressCache(serviceConfig, logger, handler)
+	c := replication.NewProgressCache(serviceConfig, logger, handler)
+	lc.Append(fx.StopHook(c.Close))
+	return c
 }
