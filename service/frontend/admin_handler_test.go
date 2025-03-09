@@ -209,7 +209,6 @@ func (s *adminHandlerSuite) TearDownTest() {
 	s.handler.Stop()
 }
 
-
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
