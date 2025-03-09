@@ -143,6 +143,11 @@ func newReachabilityCache(
 	}
 }
 
+func (c *reachabilityCache) Close() {
+	c.openWFCache.Close()
+	c.closedWFCache.Close()
+}
+
 // Get retrieves the Workflow Count existence value and update time based on the query-string key.
 func (c *reachabilityCache) Get(
 	ctx context.Context,

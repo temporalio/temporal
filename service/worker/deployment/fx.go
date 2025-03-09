@@ -60,27 +60,41 @@ type (
 
 var Module = fx.Options(
 	fx.Provide(NewResult),
+	fx.Provide(DeploymentReachabilityCache),
+	fx.Invoke(DeploymentReachabilityCacheLifetimeHooks),
 	fx.Provide(DeploymentStoreClientProvider),
 )
+
+func DeploymentReachabilityCache(
+	visibilityManager manager.VisibilityManager,
+	dc *dynamicconfig.Collection,
+) reachabilityCache {
+	return newReachabilityCache(
+		metrics.NoopMetricsHandler,
+		visibilityManager,
+		dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc)(),
+		dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc)(),
+	)
+}
+
+func DeploymentReachabilityCacheLifetimeHooks(rc reachabilityCache, lc fx.Lifecycle) {
+	lc.Append(fx.StopHook(rc.Close))
+}
 
 func DeploymentStoreClientProvider(
 	logger log.Logger,
 	historyClient resource.HistoryClient,
 	visibilityManager manager.VisibilityManager,
+	reachabilityCache reachabilityCache,
 	dc *dynamicconfig.Collection,
 ) DeploymentStoreClient {
 	return &DeploymentClientImpl{
-		logger:                logger,
-		historyClient:         historyClient,
-		visibilityManager:     visibilityManager,
-		maxIDLengthLimit:      dynamicconfig.MaxIDLengthLimit.Get(dc),
-		visibilityMaxPageSize: dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
-		reachabilityCache: newReachabilityCache(
-			metrics.NoopMetricsHandler,
-			visibilityManager,
-			dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc)(),
-			dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc)(),
-		),
+		logger:                    logger,
+		historyClient:             historyClient,
+		visibilityManager:         visibilityManager,
+		maxIDLengthLimit:          dynamicconfig.MaxIDLengthLimit.Get(dc),
+		visibilityMaxPageSize:     dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		reachabilityCache:         reachabilityCache,
 		maxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 	}
 }
