@@ -304,6 +304,7 @@ func (e *matchingEngineImpl) Stop() {
 	close(e.membershipChangedCh)
 
 	e.nexusEndpointClient.notifyOwnershipChanged(false)
+	e.reachabilityCache.Close()
 
 	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
 		l.Stop(unloadCauseShuttingDown)
