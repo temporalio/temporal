@@ -505,6 +505,7 @@ func (c *lru) evictExpired(maxElements int) {
 	now := c.timeSource.Now().UTC()
 	element := c.byAccess.Back()
 	for i := 0; i < maxElements; i++ {
+		//nolint:revive // It's always *entryImpl, no need to check that explicitly.
 		entry := element.Value.(*entryImpl)
 		if !c.isEntryExpired(entry, now) {
 			break

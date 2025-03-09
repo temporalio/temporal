@@ -2162,10 +2162,13 @@ func newContext(
 			shardContext.contextTaggedLogger,
 			false,
 		)
-		shardContext.finalizer.Register("eventsCache", func(ctx context.Context) error {
+		err := shardContext.finalizer.Register("eventsCache", func(ctx context.Context) error {
 			shardContext.eventsCache.Close()
 			return nil
 		})
+		if err != nil {
+			logger.Debug("failed to register finalizer for events cache", tag.Error(err))
+		}
 	}
 	shardContext.initLastUpdatesTime()
 	return shardContext, nil
