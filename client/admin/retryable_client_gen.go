@@ -35,21 +35,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 )
 
-func (c *retryableClient) AddOrUpdateRemoteCluster(
-	ctx context.Context,
-	request *adminservice.AddOrUpdateRemoteClusterRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
-	var resp *adminservice.AddOrUpdateRemoteClusterResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) AddSearchAttributes(
 	ctx context.Context,
 	request *adminservice.AddSearchAttributesRequest,
@@ -440,21 +425,6 @@ func (c *retryableClient) ListClusterMembers(
 	return resp, err
 }
 
-func (c *retryableClient) ListClusters(
-	ctx context.Context,
-	request *adminservice.ListClustersRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListClustersResponse, error) {
-	var resp *adminservice.ListClustersResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.ListClusters(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) ListHistoryTasks(
 	ctx context.Context,
 	request *adminservice.ListHistoryTasksRequest,
@@ -584,21 +554,6 @@ func (c *retryableClient) RefreshWorkflowTasks(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.RefreshWorkflowTasks(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) RemoveRemoteCluster(
-	ctx context.Context,
-	request *adminservice.RemoveRemoteClusterRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveRemoteClusterResponse, error) {
-	var resp *adminservice.RemoveRemoteClusterResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.RemoveRemoteCluster(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

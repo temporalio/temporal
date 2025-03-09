@@ -33,10 +33,6 @@ import (
 
 func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.Tag {
 	switch r := message.(type) {
-	case *adminservice.AddOrUpdateRemoteClusterRequest:
-		return nil
-	case *adminservice.AddOrUpdateRemoteClusterResponse:
-		return nil
 	case *adminservice.AddSearchAttributesRequest:
 		return nil
 	case *adminservice.AddSearchAttributesResponse:
@@ -162,10 +158,6 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.ListClusterMembersResponse:
 		return nil
-	case *adminservice.ListClustersRequest:
-		return nil
-	case *adminservice.ListClustersResponse:
-		return nil
 	case *adminservice.ListHistoryTasksRequest:
 		return nil
 	case *adminservice.ListHistoryTasksResponse:
@@ -210,10 +202,6 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
 	case *adminservice.RefreshWorkflowTasksResponse:
-		return nil
-	case *adminservice.RemoveRemoteClusterRequest:
-		return nil
-	case *adminservice.RemoveRemoteClusterResponse:
 		return nil
 	case *adminservice.RemoveSearchAttributesRequest:
 		return nil

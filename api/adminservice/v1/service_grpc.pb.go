@@ -60,10 +60,7 @@ const (
 	AdminService_RemoveSearchAttributes_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/RemoveSearchAttributes"
 	AdminService_GetSearchAttributes_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/GetSearchAttributes"
 	AdminService_DescribeCluster_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/DescribeCluster"
-	AdminService_ListClusters_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/ListClusters"
 	AdminService_ListClusterMembers_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/ListClusterMembers"
-	AdminService_AddOrUpdateRemoteCluster_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/AddOrUpdateRemoteCluster"
-	AdminService_RemoveRemoteCluster_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/RemoveRemoteCluster"
 	AdminService_GetDLQMessages_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/GetDLQMessages"
 	AdminService_PurgeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQMessages"
 	AdminService_MergeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQMessages"
@@ -132,14 +129,8 @@ type AdminServiceClient interface {
 	GetSearchAttributes(ctx context.Context, in *GetSearchAttributesRequest, opts ...grpc.CallOption) (*GetSearchAttributesResponse, error)
 	// DescribeCluster returns information about Temporal cluster.
 	DescribeCluster(ctx context.Context, in *DescribeClusterRequest, opts ...grpc.CallOption) (*DescribeClusterResponse, error)
-	// ListClusters returns information about Temporal clusters.
-	ListClusters(ctx context.Context, in *ListClustersRequest, opts ...grpc.CallOption) (*ListClustersResponse, error)
 	// ListClusterMembers returns information about Temporal cluster members.
 	ListClusterMembers(ctx context.Context, in *ListClusterMembersRequest, opts ...grpc.CallOption) (*ListClusterMembersResponse, error)
-	// AddOrUpdateRemoteCluster adds or updates remote cluster.
-	AddOrUpdateRemoteCluster(ctx context.Context, in *AddOrUpdateRemoteClusterRequest, opts ...grpc.CallOption) (*AddOrUpdateRemoteClusterResponse, error)
-	// RemoveRemoteCluster removes remote cluster.
-	RemoveRemoteCluster(ctx context.Context, in *RemoveRemoteClusterRequest, opts ...grpc.CallOption) (*RemoveRemoteClusterResponse, error)
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
@@ -347,36 +338,9 @@ func (c *adminServiceClient) DescribeCluster(ctx context.Context, in *DescribeCl
 	return out, nil
 }
 
-func (c *adminServiceClient) ListClusters(ctx context.Context, in *ListClustersRequest, opts ...grpc.CallOption) (*ListClustersResponse, error) {
-	out := new(ListClustersResponse)
-	err := c.cc.Invoke(ctx, AdminService_ListClusters_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *adminServiceClient) ListClusterMembers(ctx context.Context, in *ListClusterMembersRequest, opts ...grpc.CallOption) (*ListClusterMembersResponse, error) {
 	out := new(ListClusterMembersResponse)
 	err := c.cc.Invoke(ctx, AdminService_ListClusterMembers_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *adminServiceClient) AddOrUpdateRemoteCluster(ctx context.Context, in *AddOrUpdateRemoteClusterRequest, opts ...grpc.CallOption) (*AddOrUpdateRemoteClusterResponse, error) {
-	out := new(AddOrUpdateRemoteClusterResponse)
-	err := c.cc.Invoke(ctx, AdminService_AddOrUpdateRemoteCluster_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *adminServiceClient) RemoveRemoteCluster(ctx context.Context, in *RemoveRemoteClusterRequest, opts ...grpc.CallOption) (*RemoveRemoteClusterResponse, error) {
-	out := new(RemoveRemoteClusterResponse)
-	err := c.cc.Invoke(ctx, AdminService_RemoveRemoteCluster_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -639,14 +603,8 @@ type AdminServiceServer interface {
 	GetSearchAttributes(context.Context, *GetSearchAttributesRequest) (*GetSearchAttributesResponse, error)
 	// DescribeCluster returns information about Temporal cluster.
 	DescribeCluster(context.Context, *DescribeClusterRequest) (*DescribeClusterResponse, error)
-	// ListClusters returns information about Temporal clusters.
-	ListClusters(context.Context, *ListClustersRequest) (*ListClustersResponse, error)
 	// ListClusterMembers returns information about Temporal cluster members.
 	ListClusterMembers(context.Context, *ListClusterMembersRequest) (*ListClusterMembersResponse, error)
-	// AddOrUpdateRemoteCluster adds or updates remote cluster.
-	AddOrUpdateRemoteCluster(context.Context, *AddOrUpdateRemoteClusterRequest) (*AddOrUpdateRemoteClusterResponse, error)
-	// RemoveRemoteCluster removes remote cluster.
-	RemoveRemoteCluster(context.Context, *RemoveRemoteClusterRequest) (*RemoveRemoteClusterResponse, error)
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
@@ -743,17 +701,8 @@ func (UnimplementedAdminServiceServer) GetSearchAttributes(context.Context, *Get
 func (UnimplementedAdminServiceServer) DescribeCluster(context.Context, *DescribeClusterRequest) (*DescribeClusterResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeCluster not implemented")
 }
-func (UnimplementedAdminServiceServer) ListClusters(context.Context, *ListClustersRequest) (*ListClustersResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListClusters not implemented")
-}
 func (UnimplementedAdminServiceServer) ListClusterMembers(context.Context, *ListClusterMembersRequest) (*ListClusterMembersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListClusterMembers not implemented")
-}
-func (UnimplementedAdminServiceServer) AddOrUpdateRemoteCluster(context.Context, *AddOrUpdateRemoteClusterRequest) (*AddOrUpdateRemoteClusterResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AddOrUpdateRemoteCluster not implemented")
-}
-func (UnimplementedAdminServiceServer) RemoveRemoteCluster(context.Context, *RemoveRemoteClusterRequest) (*RemoveRemoteClusterResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RemoveRemoteCluster not implemented")
 }
 func (UnimplementedAdminServiceServer) GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDLQMessages not implemented")
@@ -1155,24 +1104,6 @@ func _AdminService_DescribeCluster_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AdminService_ListClusters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListClustersRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AdminServiceServer).ListClusters(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AdminService_ListClusters_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AdminServiceServer).ListClusters(ctx, req.(*ListClustersRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _AdminService_ListClusterMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListClusterMembersRequest)
 	if err := dec(in); err != nil {
@@ -1187,42 +1118,6 @@ func _AdminService_ListClusterMembers_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).ListClusterMembers(ctx, req.(*ListClusterMembersRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AdminService_AddOrUpdateRemoteCluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AddOrUpdateRemoteClusterRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AdminServiceServer).AddOrUpdateRemoteCluster(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AdminService_AddOrUpdateRemoteCluster_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AdminServiceServer).AddOrUpdateRemoteCluster(ctx, req.(*AddOrUpdateRemoteClusterRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AdminService_RemoveRemoteCluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RemoveRemoteClusterRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AdminServiceServer).RemoveRemoteCluster(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AdminService_RemoveRemoteCluster_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AdminServiceServer).RemoveRemoteCluster(ctx, req.(*RemoveRemoteClusterRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1693,20 +1588,8 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AdminService_DescribeCluster_Handler,
 		},
 		{
-			MethodName: "ListClusters",
-			Handler:    _AdminService_ListClusters_Handler,
-		},
-		{
 			MethodName: "ListClusterMembers",
 			Handler:    _AdminService_ListClusterMembers_Handler,
-		},
-		{
-			MethodName: "AddOrUpdateRemoteCluster",
-			Handler:    _AdminService_AddOrUpdateRemoteCluster_Handler,
-		},
-		{
-			MethodName: "RemoveRemoteCluster",
-			Handler:    _AdminService_RemoveRemoteCluster_Handler,
 		},
 		{
 			MethodName: "GetDLQMessages",
