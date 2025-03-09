@@ -77,6 +77,10 @@ func NewSpecBuilder() *SpecBuilder {
 	}
 }
 
+func (b *SpecBuilder) Close() {
+	b.locationCache.Close()
+}
+
 func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledSpec, error) {
 	spec, err := canonicalizeSpec(spec)
 	if err != nil {
