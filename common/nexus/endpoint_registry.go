@@ -143,6 +143,7 @@ func (r *EndpointRegistryImpl) StartLifecycle() {
 func (r *EndpointRegistryImpl) StopLifecycle() {
 	r.cancelDcSub()
 	r.setEnabled(false)
+	r.readThroughCacheByID.Close()
 }
 
 func (r *EndpointRegistryImpl) setEnabled(enabled bool) {
