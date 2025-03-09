@@ -179,7 +179,7 @@ type (
 		// Serialize and batch user data updates by namespace.
 		userDataUpdateBatchers collection.SyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]]
 		// Stores results of reachability queries to visibility
-		reachabilityCache reachabilityCache
+		reachabilityCache *reachabilityCache
 	}
 )
 
@@ -304,7 +304,9 @@ func (e *matchingEngineImpl) Stop() {
 	close(e.membershipChangedCh)
 
 	e.nexusEndpointClient.notifyOwnershipChanged(false)
-	e.reachabilityCache.Close()
+	if e.reachabilityCache != nil {
+		e.reachabilityCache.Close()
+	}
 
 	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
 		l.Stop(unloadCauseShuttingDown)

@@ -78,7 +78,7 @@ var (
 )
 
 type reachabilityCalculator struct {
-	cache                        reachabilityCache
+	cache                        *reachabilityCache
 	nsID                         namespace.ID
 	nsName                       namespace.Name
 	taskQueue                    *tqid.TaskQueueFamily
@@ -90,7 +90,7 @@ type reachabilityCalculator struct {
 
 func newReachabilityCalculator(
 	data *persistencespb.VersioningData,
-	rCache reachabilityCache,
+	rCache *reachabilityCache,
 	nsID, nsName string,
 	taskQueue *tqid.TaskQueueFamily,
 	buildIdVisibilityGracePeriod time.Duration,
@@ -329,8 +329,8 @@ func newReachabilityCache(
 	visibilityMgr manager.VisibilityManager,
 	reachabilityCacheOpenWFExecutionTTL,
 	reachabilityCacheClosedWFExecutionTTL time.Duration,
-) reachabilityCache {
-	return reachabilityCache{
+) *reachabilityCache {
+	return &reachabilityCache{
 		openWFCache:    cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheOpenWFExecutionTTL}),
 		closedWFCache:  cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheClosedWFExecutionTTL}),
 		metricsHandler: handler,
