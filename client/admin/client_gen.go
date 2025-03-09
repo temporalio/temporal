@@ -33,16 +33,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-func (c *clientImpl) AddOrUpdateRemoteCluster(
-	ctx context.Context,
-	request *adminservice.AddOrUpdateRemoteClusterRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
-}
-
 func (c *clientImpl) AddSearchAttributes(
 	ctx context.Context,
 	request *adminservice.AddSearchAttributesRequest,
@@ -303,16 +293,6 @@ func (c *clientImpl) ListClusterMembers(
 	return c.client.ListClusterMembers(ctx, request, opts...)
 }
 
-func (c *clientImpl) ListClusters(
-	ctx context.Context,
-	request *adminservice.ListClustersRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListClustersResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.ListClusters(ctx, request, opts...)
-}
-
 func (c *clientImpl) ListHistoryTasks(
 	ctx context.Context,
 	request *adminservice.ListHistoryTasksRequest,
@@ -401,16 +381,6 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.RefreshWorkflowTasks(ctx, request, opts...)
-}
-
-func (c *clientImpl) RemoveRemoteCluster(
-	ctx context.Context,
-	request *adminservice.RemoveRemoteClusterRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveRemoteClusterResponse, error) {
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return c.client.RemoveRemoteCluster(ctx, request, opts...)
 }
 
 func (c *clientImpl) RemoveSearchAttributes(

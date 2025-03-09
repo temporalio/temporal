@@ -36,10 +36,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -154,9 +154,9 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	for ci, c := range s.clusters {
 		for remoteCi, remoteC := range s.clusters {
 			if ci != remoteCi {
-				_, err = c.AdminClient().AddOrUpdateRemoteCluster(
+				_, err = c.OperatorClient().AddOrUpdateRemoteCluster(
 					testcore.NewContext(),
-					&adminservice.AddOrUpdateRemoteClusterRequest{
+					&operatorservice.AddOrUpdateRemoteClusterRequest{
 						FrontendAddress:               remoteC.Host().RemoteFrontendGRPCAddress(),
 						FrontendHttpAddress:           remoteC.Host().FrontendHTTPAddress(),
 						EnableRemoteClusterConnection: true,
