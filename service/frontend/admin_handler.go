@@ -29,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -42,8 +41,6 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
-	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
@@ -56,7 +53,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
-	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/channel"
@@ -75,16 +71,13 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/dlq"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -124,8 +117,6 @@ type (
 		hostInfoProvider           membership.HostInfoProvider
 		metricsHandler             metrics.Handler
 		namespaceRegistry          namespace.Registry
-		saProvider                 searchattribute.Provider
-		saManager                  searchattribute.Manager
 		saMapperProvider           searchattribute.MapperProvider
 		saValidator                *searchattribute.Validator
 		clusterMetadata            cluster.Metadata
@@ -159,7 +150,6 @@ type (
 		MetricsHandler                      metrics.Handler
 		NamespaceRegistry                   namespace.Registry
 		SaProvider                          searchattribute.Provider
-		SaManager                           searchattribute.Manager
 		SaMapperProvider                    searchattribute.MapperProvider
 		ClusterMetadata                     cluster.Metadata
 		HealthServer                        *health.Server
@@ -229,8 +219,6 @@ func NewAdminHandler(
 		hostInfoProvider:           args.HostInfoProvider,
 		metricsHandler:             args.MetricsHandler,
 		namespaceRegistry:          args.NamespaceRegistry,
-		saProvider:                 args.SaProvider,
-		saManager:                  args.SaManager,
 		saMapperProvider:           args.SaMapperProvider,
 		saValidator: searchattribute.NewValidator(
 			args.SaProvider,
@@ -286,404 +274,6 @@ func (adh *AdminHandler) DeepHealthCheck(
 		return nil, err
 	}
 	return &adminservice.DeepHealthCheckResponse{State: healthStatus}, nil
-}
-
-// AddSearchAttributes add search attribute to the cluster.
-func (adh *AdminHandler) AddSearchAttributes(
-	ctx context.Context,
-	request *adminservice.AddSearchAttributesRequest,
-) (_ *adminservice.AddSearchAttributesResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	// validate request
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if len(request.GetSearchAttributes()) == 0 {
-		return nil, errSearchAttributesNotSet
-	}
-
-	indexName := request.GetIndexName()
-	if indexName == "" {
-		indexName = adh.visibilityMgr.GetIndexName()
-	}
-
-	currentSearchAttributes, err := adh.saProvider.GetSearchAttributes(indexName, true)
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-	}
-
-	for saName, saType := range request.GetSearchAttributes() {
-		if searchattribute.IsReserved(saName) {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName))
-		}
-		if currentSearchAttributes.IsDefined(saName) {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName))
-		}
-		if _, ok := enumspb.IndexedValueType_name[int32(saType)]; !ok {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownSearchAttributeTypeMessage, saType))
-		}
-	}
-
-	// TODO (rodrigozhou): Remove condition `indexName == ""`.
-	// If indexName == "", then calling addSearchAttributesElasticsearch will
-	// register the search attributes in the cluster metadata if ES is up or if
-	// `skip-schema-update` is set. This is for backward compatibility using
-	// standard visibility.
-	if adh.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
-		err = adh.addSearchAttributesElasticsearch(ctx, request, indexName)
-	} else {
-		err = adh.addSearchAttributesSQL(ctx, request, currentSearchAttributes)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	return &adminservice.AddSearchAttributesResponse{}, nil
-}
-
-func (adh *AdminHandler) addSearchAttributesElasticsearch(
-	ctx context.Context,
-	request *adminservice.AddSearchAttributesRequest,
-	indexName string,
-) error {
-	// Execute workflow.
-	wfParams := addsearchattributes.WorkflowParams{
-		CustomAttributesToAdd: request.GetSearchAttributes(),
-		IndexName:             indexName,
-		SkipSchemaUpdate:      request.GetSkipSchemaUpdate(),
-	}
-
-	sdkClient := adh.sdkClientFactory.GetSystemClient()
-	run, err := sdkClient.ExecuteWorkflow(
-		ctx,
-		sdkclient.StartWorkflowOptions{
-			TaskQueue: primitives.DefaultWorkerTaskQueue,
-			ID:        addsearchattributes.WorkflowName,
-		},
-		addsearchattributes.WorkflowName,
-		wfParams,
-	)
-	if err != nil {
-		return serviceerror.NewUnavailable(
-			fmt.Sprintf(errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err),
-		)
-	}
-
-	// Wait for workflow to complete.
-	err = run.Get(ctx, nil)
-	if err != nil {
-		return serviceerror.NewUnavailable(
-			fmt.Sprintf(errWorkflowReturnedErrorMessage, addsearchattributes.WorkflowName, err),
-		)
-	}
-	return nil
-}
-
-func (adh *AdminHandler) addSearchAttributesSQL(
-	ctx context.Context,
-	request *adminservice.AddSearchAttributesRequest,
-	currentSearchAttributes searchattribute.NameTypeMap,
-) error {
-	_, client, err := adh.clientFactory.NewLocalFrontendClientWithTimeout(
-		frontend.DefaultTimeout,
-		frontend.DefaultLongPollTimeout,
-	)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToCreateFrontendClientMessage, err))
-	}
-
-	nsName := request.GetNamespace()
-	if nsName == "" {
-		return errNamespaceNotSet
-	}
-	resp, err := client.DescribeNamespace(
-		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
-	)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
-	}
-
-	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
-	cmCustomSearchAttributes := currentSearchAttributes.Custom()
-	upsertFieldToAliasMap := make(map[string]string)
-	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
-	aliasToFieldMap := util.InverseMap(fieldToAliasMap)
-	for saName, saType := range request.GetSearchAttributes() {
-		// check if alias is already in use
-		if _, ok := aliasToFieldMap[saName]; ok {
-			return serviceerror.NewAlreadyExist(
-				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-			)
-		}
-		// find the first available field for the given type
-		targetFieldName := ""
-		cntUsed := 0
-		for fieldName, fieldType := range dbCustomSearchAttributes {
-			if fieldType != saType {
-				continue
-			}
-			// make sure the pre-allocated custom search attributes are created in cluster metadata
-			if _, ok := cmCustomSearchAttributes[fieldName]; !ok {
-				continue
-			}
-			if _, ok := fieldToAliasMap[fieldName]; ok {
-				cntUsed++
-			} else if _, ok := upsertFieldToAliasMap[fieldName]; ok {
-				cntUsed++
-			} else {
-				targetFieldName = fieldName
-				break
-			}
-		}
-		if targetFieldName == "" {
-			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf(errTooManySearchAttributesMessage, cntUsed, saType.String()),
-			)
-		}
-		upsertFieldToAliasMap[targetFieldName] = saName
-	}
-
-	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: nsName,
-		Config: &namespacepb.NamespaceConfig{
-			CustomSearchAttributeAliases: upsertFieldToAliasMap,
-		},
-	})
-	if err != nil && err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
-		return errRaceConditionAddingSearchAttributes
-	}
-	return err
-}
-
-// RemoveSearchAttributes remove search attribute from the cluster.
-func (adh *AdminHandler) RemoveSearchAttributes(
-	ctx context.Context,
-	request *adminservice.RemoveSearchAttributesRequest,
-) (_ *adminservice.RemoveSearchAttributesResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	// validate request
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if len(request.GetSearchAttributes()) == 0 {
-		return nil, errSearchAttributesNotSet
-	}
-
-	indexName := request.GetIndexName()
-	if indexName == "" {
-		indexName = adh.visibilityMgr.GetIndexName()
-	}
-
-	currentSearchAttributes, err := adh.saProvider.GetSearchAttributes(indexName, true)
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-	}
-
-	// TODO (rodrigozhou): Remove condition `indexName == ""`.
-	// If indexName == "", then calling addSearchAttributesElasticsearch will
-	// register the search attributes in the cluster metadata if ES is up or if
-	// `skip-schema-update` is set. This is for backward compatibility using
-	// standard visibility.
-	if adh.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
-		err = adh.removeSearchAttributesElasticsearch(ctx, request, indexName, currentSearchAttributes)
-	} else {
-		err = adh.removeSearchAttributesSQL(ctx, request, currentSearchAttributes)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	return &adminservice.RemoveSearchAttributesResponse{}, nil
-}
-
-func (adh *AdminHandler) removeSearchAttributesElasticsearch(
-	ctx context.Context,
-	request *adminservice.RemoveSearchAttributesRequest,
-	indexName string,
-	currentSearchAttributes searchattribute.NameTypeMap,
-) error {
-	newCustomSearchAttributes := maps.Clone(currentSearchAttributes.Custom())
-	for _, saName := range request.GetSearchAttributes() {
-		if !currentSearchAttributes.IsDefined(saName) {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
-		}
-		if _, ok := newCustomSearchAttributes[saName]; !ok {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName))
-		}
-		delete(newCustomSearchAttributes, saName)
-	}
-
-	err := adh.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err))
-	}
-	return nil
-}
-
-func (adh *AdminHandler) removeSearchAttributesSQL(
-	ctx context.Context,
-	request *adminservice.RemoveSearchAttributesRequest,
-	currentSearchAttributes searchattribute.NameTypeMap,
-) error {
-	_, client, err := adh.clientFactory.NewLocalFrontendClientWithTimeout(
-		frontend.DefaultTimeout,
-		frontend.DefaultLongPollTimeout,
-	)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToCreateFrontendClientMessage, err))
-	}
-
-	nsName := request.GetNamespace()
-	if nsName == "" {
-		return errNamespaceNotSet
-	}
-	resp, err := client.DescribeNamespace(
-		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
-	)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
-	}
-
-	upsertFieldToAliasMap := make(map[string]string)
-	aliasToFieldMap := util.InverseMap(resp.Config.CustomSearchAttributeAliases)
-	for _, saName := range request.GetSearchAttributes() {
-		if fieldName, ok := aliasToFieldMap[saName]; ok {
-			upsertFieldToAliasMap[fieldName] = ""
-			continue
-		}
-		if currentSearchAttributes.IsDefined(saName) {
-			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName),
-			)
-		}
-		return serviceerror.NewNotFound(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
-	}
-
-	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
-		Namespace: nsName,
-		Config: &namespacepb.NamespaceConfig{
-			CustomSearchAttributeAliases: upsertFieldToAliasMap,
-		},
-	})
-	return err
-}
-
-func (adh *AdminHandler) GetSearchAttributes(
-	ctx context.Context,
-	request *adminservice.GetSearchAttributesRequest,
-) (_ *adminservice.GetSearchAttributesResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	indexName := request.GetIndexName()
-	if indexName == "" {
-		indexName = adh.visibilityMgr.GetIndexName()
-	}
-
-	searchAttributes, err := adh.saProvider.GetSearchAttributes(indexName, true)
-	if err != nil {
-		adh.logger.Error("getSearchAttributes error", tag.Error(err))
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-	}
-
-	// TODO (rodrigozhou): Remove condition `indexName == ""`.
-	// If indexName == "", then calling addSearchAttributesElasticsearch will
-	// register the search attributes in the cluster metadata if ES is up or if
-	// `skip-schema-update` is set. This is for backward compatibility using
-	// standard visibility.
-	if adh.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
-		return adh.getSearchAttributesElasticsearch(ctx, indexName, searchAttributes)
-	}
-	return adh.getSearchAttributesSQL(ctx, request, searchAttributes)
-}
-
-func (adh *AdminHandler) getSearchAttributesElasticsearch(
-	ctx context.Context,
-	indexName string,
-	searchAttributes searchattribute.NameTypeMap,
-) (*adminservice.GetSearchAttributesResponse, error) {
-	var lastErr error
-
-	sdkClient := adh.sdkClientFactory.GetSystemClient()
-	descResp, err := sdkClient.DescribeWorkflowExecution(ctx, addsearchattributes.WorkflowName, "")
-	var wfInfo *workflowpb.WorkflowExecutionInfo
-	if err != nil {
-		// NotFound can happen when no search attributes were added and the workflow has never been executed.
-		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
-			lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to get %s workflow state: %v", addsearchattributes.WorkflowName, err))
-			adh.logger.Error("getSearchAttributes error", tag.Error(lastErr))
-		}
-	} else {
-		wfInfo = descResp.GetWorkflowExecutionInfo()
-	}
-
-	var esMapping map[string]string
-	if adh.ESClient != nil {
-		esMapping, err = adh.ESClient.GetMapping(ctx, indexName)
-		if err != nil {
-			lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to get mapping from Elasticsearch: %v", err))
-			adh.logger.Error("getSearchAttributes error", tag.Error(lastErr))
-		}
-	}
-
-	if lastErr != nil {
-		return nil, lastErr
-	}
-	return &adminservice.GetSearchAttributesResponse{
-		CustomAttributes:         searchAttributes.Custom(),
-		SystemAttributes:         searchAttributes.System(),
-		Mapping:                  esMapping,
-		AddWorkflowExecutionInfo: wfInfo,
-	}, nil
-}
-
-func (adh *AdminHandler) getSearchAttributesSQL(
-	ctx context.Context,
-	request *adminservice.GetSearchAttributesRequest,
-	searchAttributes searchattribute.NameTypeMap,
-) (*adminservice.GetSearchAttributesResponse, error) {
-	_, client, err := adh.clientFactory.NewLocalFrontendClientWithTimeout(
-		frontend.DefaultTimeout,
-		frontend.DefaultLongPollTimeout,
-	)
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToCreateFrontendClientMessage, err))
-	}
-
-	nsName := request.GetNamespace()
-	if nsName == "" {
-		return nil, errNamespaceNotSet
-	}
-	resp, err := client.DescribeNamespace(
-		ctx,
-		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
-	)
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err),
-		)
-	}
-
-	fieldToAliasMap := resp.Config.CustomSearchAttributeAliases
-	customSearchAttributes := make(map[string]enumspb.IndexedValueType)
-	for field, tp := range searchAttributes.Custom() {
-		if alias, ok := fieldToAliasMap[field]; ok {
-			customSearchAttributes[alias] = tp
-		}
-	}
-	return &adminservice.GetSearchAttributesResponse{
-		CustomAttributes: customSearchAttributes,
-		SystemAttributes: searchAttributes.System(),
-	}, nil
 }
 
 func (adh *AdminHandler) RebuildMutableState(

@@ -743,18 +743,6 @@ func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
 		hasNamespace bool
 	}{
 		{
-			req:          &adminservice.AddSearchAttributesRequest{},
-			hasNamespace: false,
-		},
-		{
-			req:          &adminservice.RemoveSearchAttributesRequest{},
-			hasNamespace: false,
-		},
-		{
-			req:          &adminservice.GetSearchAttributesRequest{},
-			hasNamespace: false,
-		},
-		{
 			req:          &operatorservice.AddSearchAttributesRequest{},
 			hasNamespace: false,
 		},
@@ -765,18 +753,6 @@ func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
 		{
 			req:          &operatorservice.ListSearchAttributesRequest{},
 			hasNamespace: false,
-		},
-		{
-			req:          &adminservice.AddSearchAttributesRequest{Namespace: "test-namespace"},
-			hasNamespace: true,
-		},
-		{
-			req:          &adminservice.RemoveSearchAttributesRequest{Namespace: "test-namespace"},
-			hasNamespace: true,
-		},
-		{
-			req:          &adminservice.GetSearchAttributesRequest{Namespace: "test-namespace"},
-			hasNamespace: true,
 		},
 		{
 			req:          &operatorservice.AddSearchAttributesRequest{Namespace: "test-namespace"},

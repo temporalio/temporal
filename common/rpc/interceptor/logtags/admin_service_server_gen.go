@@ -37,10 +37,6 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.AddOrUpdateRemoteClusterResponse:
 		return nil
-	case *adminservice.AddSearchAttributesRequest:
-		return nil
-	case *adminservice.AddSearchAttributesResponse:
-		return nil
 	case *adminservice.AddTasksRequest:
 		return nil
 	case *adminservice.AddTasksResponse:
@@ -124,10 +120,6 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 	case *adminservice.GetReplicationMessagesRequest:
 		return nil
 	case *adminservice.GetReplicationMessagesResponse:
-		return nil
-	case *adminservice.GetSearchAttributesRequest:
-		return nil
-	case *adminservice.GetSearchAttributesResponse:
 		return nil
 	case *adminservice.GetShardRequest:
 		return nil
@@ -214,10 +206,6 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 	case *adminservice.RemoveRemoteClusterRequest:
 		return nil
 	case *adminservice.RemoveRemoteClusterResponse:
-		return nil
-	case *adminservice.RemoveSearchAttributesRequest:
-		return nil
-	case *adminservice.RemoveSearchAttributesResponse:
 		return nil
 	case *adminservice.RemoveTaskRequest:
 		return nil

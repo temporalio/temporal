@@ -28,11 +28,9 @@ option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
-import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/version/v1/message.proto";
-import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/replication/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -233,38 +231,6 @@ message ReapplyEventsRequest {
 }
 
 message ReapplyEventsResponse {
-}
-
-message AddSearchAttributesRequest {
-  map<string, temporal.api.enums.v1.IndexedValueType> search_attributes = 1;
-  string index_name = 2;
-  bool skip_schema_update = 3;
-  string namespace = 4;
-}
-
-message AddSearchAttributesResponse {
-}
-
-message RemoveSearchAttributesRequest {
-  repeated string search_attributes = 1;
-  string index_name = 2;
-  string namespace = 3;
-}
-
-message RemoveSearchAttributesResponse {
-}
-
-message GetSearchAttributesRequest {
-  string index_name = 1;
-  string namespace = 2;
-}
-
-message GetSearchAttributesResponse {
-  map<string, temporal.api.enums.v1.IndexedValueType> custom_attributes = 1;
-  map<string, temporal.api.enums.v1.IndexedValueType> system_attributes = 2;
-  map<string, string> mapping = 3;
-  // State of the workflow that adds search attributes to the system.
-  temporal.api.workflow.v1.WorkflowExecutionInfo add_workflow_execution_info = 4;
 }
 
 message DescribeClusterRequest {
