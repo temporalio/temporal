@@ -111,7 +111,6 @@ var (
 		StartToCloseTimeout: 1 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 100 * time.Millisecond,
-			MaximumInterval: 60 * time.Second,
 			MaximumAttempts: 5,
 		},
 	}
