@@ -62,7 +62,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/historybuilder"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -81,7 +80,7 @@ type (
 	}
 
 	WorkflowStateReplicatorImpl struct {
-		shardContext      shard.Context
+		shardContext      historyi.ShardContext
 		namespaceRegistry namespace.Registry
 		workflowCache     wcache.Cache
 		clusterMetadata   cluster.Metadata
@@ -94,7 +93,7 @@ type (
 )
 
 func NewWorkflowStateReplicator(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	eventSerializer serialization.Serializer,
@@ -342,7 +341,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	wfCtx workflow.Context,
+	wfCtx historyi.WorkflowContext,
 	localMutableState historyi.MutableState,
 	releaseFn wcache.ReleaseCacheFunc,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
@@ -430,7 +429,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	wfCtx workflow.Context,
+	wfCtx historyi.WorkflowContext,
 	releaseFn wcache.ReleaseCacheFunc,
 	localMutableState historyi.MutableState,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
@@ -463,7 +462,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	wfCtx workflow.Context,
+	wfCtx historyi.WorkflowContext,
 	releaseFn wcache.ReleaseCacheFunc,
 	localMutableState historyi.MutableState,
 	sourceMutableState *persistencespb.WorkflowMutableState,
@@ -733,7 +732,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	workflowID string,
 	runID string,
 	sourceClusterName string,
-	wfCtx workflow.Context,
+	wfCtx historyi.WorkflowContext,
 	localMutableState historyi.MutableState,
 	sourceVersionHistories *historyspb.VersionHistories,
 	eventBlobs []*commonpb.DataBlob,
@@ -930,7 +929,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	wfCtx workflow.Context,
+	wfCtx historyi.WorkflowContext,
 	releaseFn wcache.ReleaseCacheFunc,
 	sourceMutableState *persistencespb.WorkflowMutableState,
 	sourceCluster string,

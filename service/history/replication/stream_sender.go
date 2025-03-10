@@ -65,7 +65,7 @@ type (
 	}
 	StreamSenderImpl struct {
 		server                  historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
-		shardContext            shard.Context
+		shardContext            historyi.ShardContext
 		historyEngine           historyi.Engine
 		taskConverter           SourceTaskConverter
 		metrics                 metrics.Handler
@@ -85,7 +85,7 @@ type (
 
 func NewStreamSender(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	historyEngine historyi.Engine,
 	taskConverter SourceTaskConverter,
 	clientClusterName string,

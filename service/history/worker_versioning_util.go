@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow/cache"
 )
@@ -48,7 +47,7 @@ func updateIndependentActivityBuildId(
 	ctx context.Context,
 	task tasks.Task,
 	buildId string,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	transactionPolicy historyi.TransactionPolicy,
 	workflowCache cache.Cache,
 	metricsHandler metrics.Handler,
@@ -145,7 +144,7 @@ func initializeWorkflowAssignedBuildId(
 	ctx context.Context,
 	transferTask *tasks.WorkflowTask,
 	buildId string,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	transactionPolicy historyi.TransactionPolicy,
 	workflowCache cache.Cache,
 	metricsHandler metrics.Handler,

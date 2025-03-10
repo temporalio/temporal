@@ -67,7 +67,7 @@ type (
 		deleteMgr                     deletemanager.DeleteManager
 		engine                        historyi.Engine
 		eventSerializer               serialization.Serializer
-		shard                         shard.Context
+		shard                         historyi.ShardContext
 		status                        int32
 		replicationTaskFetcherFactory TaskFetcherFactory
 		workflowCache                 wcache.Cache
@@ -88,7 +88,7 @@ type (
 
 func NewTaskProcessorManager(
 	config *configs.Config,
-	shard shard.Context,
+	shardContext historyi.ShardContext,
 	engine historyi.Engine,
 	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
@@ -104,12 +104,12 @@ func NewTaskProcessorManager(
 		deleteMgr:                     workflowDeleteManager,
 		engine:                        engine,
 		eventSerializer:               eventSerializer,
-		shard:                         shard,
+		shard:                         shardContext,
 		status:                        common.DaemonStatusInitialized,
 		replicationTaskFetcherFactory: replicationTaskFetcherFactory,
 		workflowCache:                 workflowCache,
 		resender: xdc.NewNDCHistoryResender(
-			shard.GetNamespaceRegistry(),
+			shardContext.GetNamespaceRegistry(),
 			clientBean,
 			func(
 				ctx context.Context,
@@ -138,19 +138,19 @@ func NewTaskProcessorManager(
 				}
 				return err
 			},
-			shard.GetPayloadSerializer(),
-			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
-			shard.GetLogger(),
+			shardContext.GetPayloadSerializer(),
+			shardContext.GetConfig().StandbyTaskReReplicationContextTimeout,
+			shardContext.GetLogger(),
 			config,
 		),
-		logger:         shard.GetLogger(),
-		metricsHandler: shard.GetMetricsHandler(),
+		logger:         shardContext.GetLogger(),
+		metricsHandler: shardContext.GetMetricsHandler(),
 		dlqWriter:      dlqWriter,
 
 		enableFetcher:        !config.EnableReplicationStream(),
 		taskProcessors:       make(map[string][]TaskProcessor),
 		taskExecutorProvider: taskExecutorProvider,
-		taskPollerManager:    newPollerManager(shard.GetShardID(), shard.GetClusterMetadata()),
+		taskPollerManager:    newPollerManager(shardContext.GetShardID(), shardContext.GetClusterMetadata()),
 		minTxAckedTaskID:     persistence.EmptyQueueMessageID,
 		shutdownChan:         make(chan struct{}),
 	}

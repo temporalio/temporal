@@ -40,13 +40,11 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func SignalWithStartWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
@@ -81,7 +79,7 @@ func SignalWithStartWorkflow(
 
 func startAndSignalWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
@@ -154,7 +152,7 @@ func startAndSignalWorkflow(
 }
 
 func createWorkflowMutationFunction(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	currentWorkflowLease api.WorkflowLease,
 	namespaceEntry *namespace.Namespace,
 	newRunID string,
@@ -213,7 +211,7 @@ func createVersionedRunID(currentWorkflowLease api.WorkflowLease) (*api.Versione
 
 func startAndSignalWithCurrentWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	currentWorkflowLease api.WorkflowLease,
 	currentWorkflowUpdateAction api.UpdateWorkflowActionFunc,
 	newWorkflowLease api.WorkflowLease,
@@ -223,7 +221,7 @@ func startAndSignalWithCurrentWorkflow(
 		ctx,
 		currentWorkflowLease,
 		currentWorkflowUpdateAction,
-		func() (workflow.Context, historyi.MutableState, error) {
+		func() (historyi.WorkflowContext, historyi.MutableState, error) {
 			return newWorkflowLease.GetContext(), newWorkflowLease.GetMutableState(), nil
 		},
 	)
@@ -236,7 +234,7 @@ func startAndSignalWithCurrentWorkflow(
 
 func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
 	requestID string,
@@ -292,7 +290,7 @@ func startAndSignalWithoutCurrentWorkflow(
 
 func signalWorkflow(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowLease api.WorkflowLease,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {

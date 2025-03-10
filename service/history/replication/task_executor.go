@@ -44,7 +44,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/deletemanager"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -55,7 +55,7 @@ type (
 
 	TaskExecutorParams struct {
 		RemoteCluster   string // TODO: Remove this remote cluster from executor then it can use singleton.
-		Shard           shard.Context
+		Shard           historyi.ShardContext
 		HistoryResender xdc.NDCHistoryResender
 		DeleteManager   deletemanager.DeleteManager
 		WorkflowCache   wcache.Cache
@@ -66,7 +66,7 @@ type (
 	taskExecutorImpl struct {
 		currentCluster     string
 		remoteCluster      string
-		shardContext       shard.Context
+		shardContext       historyi.ShardContext
 		namespaceRegistry  namespace.Registry
 		nDCHistoryResender xdc.NDCHistoryResender
 		deleteManager      deletemanager.DeleteManager
@@ -80,7 +80,7 @@ type (
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func NewTaskExecutor(
 	remoteCluster string,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	deleteManager deletemanager.DeleteManager,
 	workflowCache wcache.Cache,

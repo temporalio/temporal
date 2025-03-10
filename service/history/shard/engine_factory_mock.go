@@ -64,7 +64,7 @@ func (m *MockEngineFactory) EXPECT() *MockEngineFactoryMockRecorder {
 }
 
 // CreateEngine mocks base method.
-func (m *MockEngineFactory) CreateEngine(context Context) interfaces.Engine {
+func (m *MockEngineFactory) CreateEngine(context interfaces.ShardContext) interfaces.Engine {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEngine", context)
 	ret0, _ := ret[0].(interfaces.Engine)

@@ -366,7 +366,7 @@ func (s *executableTaskSuite) TestResend_NotFound() {
 		resendErr.EndEventId,
 		resendErr.EndEventVersion,
 	).Return(serviceerror.NewNotFound(""))
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(resendErr.NamespaceId),
@@ -741,7 +741,7 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 		endEventId,
 		endEventVersion,
 	).Return(fetcher)
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(workflowKey.NamespaceID),
@@ -1066,7 +1066,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 
 func (s *executableTaskSuite) TestMarkPoisonPill() {
 	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.namespaceId),
 		s.workflowId,
@@ -1085,7 +1085,7 @@ func (s *executableTaskSuite) TestMarkPoisonPill() {
 func (s *executableTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
 	s.task.markPoisonPillAttempts = MarkPoisonPillMaxAttempts - 1
 	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.namespaceId),
 		s.workflowId,
@@ -1154,7 +1154,7 @@ func (s *executableTaskSuite) TestSyncState() {
 		VersionedTransitionArtifact: versionedTransitionArtifact,
 	}, nil).Times(1)
 
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(syncStateErr.NamespaceId),

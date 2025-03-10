@@ -86,7 +86,6 @@ import (
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/proto"
@@ -242,7 +241,7 @@ type (
 		workflowTaskManager *workflowTaskStateMachine
 		QueryRegistry       historyi.QueryRegistry
 
-		shard                  shard.Context
+		shard                  historyi.ShardContext
 		clusterMetadata        cluster.Metadata
 		eventsCache            events.Cache
 		config                 *configs.Config
@@ -266,7 +265,7 @@ type (
 var _ historyi.MutableState = (*MutableStateImpl)(nil)
 
 func NewMutableState(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
@@ -383,7 +382,7 @@ func NewMutableState(
 }
 
 func NewMutableStateFromDB(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
@@ -508,7 +507,7 @@ func NewMutableStateFromDB(
 }
 
 func NewSanitizedMutableState(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
@@ -536,7 +535,7 @@ func NewSanitizedMutableState(
 }
 
 func NewMutableStateInChain(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,

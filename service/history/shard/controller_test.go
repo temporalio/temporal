@@ -602,7 +602,7 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 		queueStates := s.queueStates()
 
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).AnyTimes()
-		s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).DoAndReturn(func(shard Context) historyi.Engine {
+		s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).DoAndReturn(func(shard historyi.ShardContext) historyi.Engine {
 			mockEngine := historyi.NewMockEngine(disconnectedMockController)
 			status := new(int32)
 			// notification step is done after engine is created, so may not be called when test finishes
@@ -645,7 +645,7 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	}
 
-	randomLoadedShard := func() (int32, Context) {
+	randomLoadedShard := func() (int32, historyi.ShardContext) {
 		s.shardController.Lock()
 		defer s.shardController.Unlock()
 		if len(s.shardController.historyShards) == 0 {
@@ -985,8 +985,8 @@ var _ fmt.Stringer = (*ContextImpl)(nil)
 type contextMatcher int32
 
 func (s contextMatcher) Matches(x interface{}) bool {
-	context, ok := x.(Context)
-	return ok && context.GetShardID() == int32(s)
+	shardContext, ok := x.(historyi.ShardContext)
+	return ok && shardContext.GetShardID() == int32(s)
 }
 
 func (s contextMatcher) String() string {

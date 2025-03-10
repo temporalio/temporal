@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -59,7 +59,7 @@ const (
 // any validation on the shard ID because that must have been done by whoever provided the shard.Context to this method.
 func Invoke(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	deserializer TaskDeserializer,
 	numShards int,
 	req *historyservice.AddTasksRequest,

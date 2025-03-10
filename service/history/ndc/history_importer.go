@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -56,7 +55,7 @@ type (
 	}
 
 	HistoryImporterImpl struct {
-		shardContext   shard.Context
+		shardContext   historyi.ShardContext
 		namespaceCache namespace.Registry
 		workflowCache  wcache.Cache
 		taskRefresher  workflow.TaskRefresher
@@ -69,7 +68,7 @@ type (
 )
 
 func NewHistoryImporter(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *HistoryImporterImpl {
@@ -90,21 +89,21 @@ func NewHistoryImporter(
 		mutableStateMapper: NewMutableStateMapping(
 			shardContext,
 			func(
-				wfContext workflow.Context,
+				wfContext historyi.WorkflowContext,
 				mutableState historyi.MutableState,
 				logger log.Logger,
 			) BufferEventFlusher {
 				return NewBufferEventFlusher(shardContext, wfContext, mutableState, logger)
 			},
 			func(
-				wfContext workflow.Context,
+				wfContext historyi.WorkflowContext,
 				mutableState historyi.MutableState,
 				logger log.Logger,
 			) BranchMgr {
 				return NewBranchMgr(shardContext, wfContext, mutableState, logger)
 			},
 			func(
-				wfContext workflow.Context,
+				wfContext historyi.WorkflowContext,
 				mutableState historyi.MutableState,
 				logger log.Logger,
 			) ConflictResolver {
@@ -222,7 +221,7 @@ func (r *HistoryImporterImpl) applyEvents(
 
 func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 	task replicationTask,
@@ -248,7 +247,7 @@ func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 
 func (r *HistoryImporterImpl) applyNonStartEventsAndSerialize(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 	task replicationTask,

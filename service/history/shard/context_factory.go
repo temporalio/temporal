@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 )
@@ -49,10 +50,10 @@ import (
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_factory_mock.go
 
 type (
-	CloseCallback func(ControllableContext)
+	CloseCallback func(historyi.ControllableContext)
 
 	ContextFactory interface {
-		CreateContext(shardID int32, closeCallback CloseCallback) (ControllableContext, error)
+		CreateContext(shardID int32, closeCallback CloseCallback) (historyi.ControllableContext, error)
 	}
 
 	ContextFactoryParams struct {
@@ -98,7 +99,7 @@ func ContextFactoryProvider(params ContextFactoryParams) ContextFactory {
 func (c *contextFactoryImpl) CreateContext(
 	shardID int32,
 	closeCallback CloseCallback,
-) (ControllableContext, error) {
+) (historyi.ControllableContext, error) {
 	shard, err := newContext(
 		shardID,
 		c.EngineFactory,

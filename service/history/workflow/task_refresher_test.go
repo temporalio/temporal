@@ -1100,7 +1100,7 @@ func newMockTaskGeneratorProvider(
 }
 
 func (m *mockTaskGeneratorProvider) NewTaskGenerator(
-	_ shard.Context,
+	_ historyi.ShardContext,
 	_ historyi.MutableState,
 ) TaskGenerator {
 	return m.mockTaskGenerator

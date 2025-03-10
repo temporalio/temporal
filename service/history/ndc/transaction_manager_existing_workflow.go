@@ -34,8 +34,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -49,7 +47,7 @@ type (
 	}
 
 	nDCTransactionMgrForExistingWorkflowImpl struct {
-		shardContext                shard.Context
+		shardContext                historyi.ShardContext
 		transactionMgr              TransactionManager
 		bypassVersionSemanticsCheck bool
 	}
@@ -58,7 +56,7 @@ type (
 var _ transactionMgrForExistingWorkflow = (*nDCTransactionMgrForExistingWorkflowImpl)(nil)
 
 func newNDCTransactionMgrForExistingWorkflow(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	transactionMgr TransactionManager,
 	bypassVersionSemanticsCheck bool,
 ) *nDCTransactionMgrForExistingWorkflowImpl {
@@ -252,7 +250,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		return serviceerror.NewInternal("transactionMgrForExistingWorkflow updateAsZombie encountered target workflow policy not being passive")
 	}
 
-	var newContext workflow.Context
+	var newContext historyi.WorkflowContext
 	var newMutableState historyi.MutableState
 	var newTransactionPolicy *historyi.TransactionPolicy
 	if newWorkflow != nil {
@@ -331,7 +329,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 	}
 
 	var newWorkflowPolicy *historyi.TransactionPolicy
-	var newContext workflow.Context
+	var newContext historyi.WorkflowContext
 	var newMutableState historyi.MutableState
 	if newWorkflow != nil {
 		newContext = newWorkflow.GetContext()
@@ -366,7 +364,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
 	targetWorkflowPolicy := historyi.TransactionPolicyPassive
 
 	var newWorkflowPolicy *historyi.TransactionPolicy
-	var newContext workflow.Context
+	var newContext historyi.WorkflowContext
 	var newMutableState historyi.MutableState
 	if newWorkflow != nil {
 		newContext = newWorkflow.GetContext()
@@ -409,7 +407,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	}
 
 	var newWorkflowPolicy historyi.TransactionPolicy
-	var newContext workflow.Context
+	var newContext historyi.WorkflowContext
 	var newMutableState historyi.MutableState
 	if newWorkflow != nil {
 		newWorkflowPolicy, err = newWorkflow.SuppressBy(

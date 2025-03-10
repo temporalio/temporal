@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -51,7 +50,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockContext         *workflow.MockContext
+		mockContext         *historyi.MockWorkflowContext
 		mockMutableState    *historyi.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
@@ -70,7 +69,7 @@ func (s *workflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockContext = workflow.NewMockContext(s.controller)
+	s.mockContext = historyi.NewMockWorkflowContext(s.controller)
 	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -183,7 +182,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 		wcache.NoopReleaseFn,
 	)
 
-	incomingMockContext := workflow.NewMockContext(s.controller)
+	incomingMockContext := historyi.NewMockWorkflowContext(s.controller)
 	incomingMockMutableState := historyi.NewMockMutableState(s.controller)
 	incomingNDCWorkflow := NewWorkflow(
 		s.mockClusterMetadata,
@@ -248,7 +247,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	incomingRunID := uuid.New()
 	incomingLastEventTaskID := int64(144)
 	incomingLastEventVersion := lastEventVersion + 1
-	incomingMockContext := workflow.NewMockContext(s.controller)
+	incomingMockContext := historyi.NewMockWorkflowContext(s.controller)
 	incomingMockMutableState := historyi.NewMockMutableState(s.controller)
 	incomingNDCWorkflow := NewWorkflow(
 		s.mockClusterMetadata,
@@ -335,7 +334,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	incomingRunID := uuid.New()
 	incomingLastEventTaskID := int64(144)
 	incomingLastEventVersion := lastEventVersion + 1
-	incomingMockContext := workflow.NewMockContext(s.controller)
+	incomingMockContext := historyi.NewMockWorkflowContext(s.controller)
 	incomingMockMutableState := historyi.NewMockMutableState(s.controller)
 	incomingNDCWorkflow := NewWorkflow(
 		s.mockClusterMetadata,

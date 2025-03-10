@@ -61,7 +61,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -70,7 +69,7 @@ import (
 type (
 	WorkflowTaskCompletedHandler struct {
 		config                         *configs.Config
-		shardContext                   shard.Context
+		shardContext                   historyi.ShardContext
 		workflowConsistencyChecker     api.WorkflowConsistencyChecker
 		timeSource                     clock.TimeSource
 		namespaceRegistry              namespace.Registry
@@ -88,7 +87,7 @@ type (
 )
 
 func NewWorkflowTaskCompletedHandler(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	tokenSerializer *tasktoken.Serializer,
 	eventNotifier events.Notifier,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
@@ -1004,8 +1003,8 @@ func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
 
 func failWorkflowTask(
 	ctx context.Context,
-	shardContext shard.Context,
-	wfContext workflow.Context,
+	shardContext historyi.ShardContext,
+	wfContext historyi.WorkflowContext,
 	workflowTask *historyi.WorkflowTaskInfo,
 	wtFailedCause *workflowTaskFailedCause,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
@@ -1047,7 +1046,7 @@ func failWorkflowTask(
 	return mutableState, wtFailedEventID, nil
 }
 
-func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Context, wfContext workflow.Context) error {
+func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Context, wfContext historyi.WorkflowContext) error {
 
 	// Clear all changes in the workflow context that was made already.
 	wfContext.Clear()

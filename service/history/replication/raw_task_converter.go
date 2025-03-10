@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -66,13 +65,13 @@ type (
 	}
 	SourceTaskConverterProvider func(
 		historyEngine historyi.Engine,
-		shardContext shard.Context,
+		shardContext historyi.ShardContext,
 		clientClusterName string, // Some task converter may use the client cluster name.
 		serializer serialization.Serializer,
 	) SourceTaskConverter
 
 	syncVersionedTransitionTaskConverter struct {
-		shardContext       shard.Context
+		shardContext       historyi.ShardContext
 		shardID            int32
 		workflowCache      wcache.Cache
 		eventBlobCache     persistence.XDCCache
@@ -133,7 +132,7 @@ func (c *SourceTaskConverterImpl) Convert(
 
 func convertActivityStateReplicationTask(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	taskInfo *tasks.SyncActivityTask,
 	workflowCache wcache.Cache,
 ) (*replicationspb.ReplicationTask, error) {
@@ -212,7 +211,7 @@ func convertActivityStateReplicationTask(
 
 func convertWorkflowStateReplicationTask(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	taskInfo *tasks.SyncWorkflowStateTask,
 	workflowCache wcache.Cache,
 ) (*replicationspb.ReplicationTask, error) {
@@ -248,7 +247,7 @@ func convertWorkflowStateReplicationTask(
 
 func convertSyncHSMReplicationTask(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	taskInfo *tasks.SyncHSMTask,
 	workflowCache wcache.Cache,
 ) (*replicationspb.ReplicationTask, error) {
@@ -316,7 +315,7 @@ func convertSyncVersionedTransitionTask(
 
 func convertHistoryReplicationTask(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	taskInfo *tasks.HistoryReplicationTask,
 	shardID int32,
 	workflowCache wcache.Cache,
@@ -379,7 +378,7 @@ func convertHistoryReplicationTask(
 
 func generateStateReplicationTask(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
 	workflowCache wcache.Cache,
 	action func(mutableState historyi.MutableState, releaseFunc wcache.ReleaseCacheFunc) (*replicationspb.ReplicationTask, error),
@@ -412,7 +411,7 @@ func generateStateReplicationTask(
 
 func getVersionHistoryAndEvents(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	shardID int32,
 	workflowKey definition.WorkflowKey,
 	eventVersion int64,
@@ -455,7 +454,7 @@ func getVersionHistoryAndEvents(
 
 func getVersionHistoryAndEventsWithNewRun(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	shardID int32,
 	workflowKey definition.WorkflowKey,
 	eventVersion int64,
@@ -519,7 +518,7 @@ func getVersionHistoryAndEventsWithNewRun(
 
 func getBranchToken(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
 	workflowCache wcache.Cache,
 	eventID int64,
@@ -615,7 +614,7 @@ func convertGetHistoryError(
 }
 
 func newSyncVersionedTransitionTaskConverter(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	eventBlobCache persistence.XDCCache,
 	replicationCache ProgressCache,

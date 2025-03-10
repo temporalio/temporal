@@ -42,9 +42,7 @@ import (
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -55,7 +53,7 @@ type (
 		*require.Assertions
 
 		controller    *gomock.Controller
-		shardContext  *shard.MockContext
+		shardContext  *historyi.MockShardContext
 		workflowCache *wcache.MockCache
 		config        *configs.Config
 
@@ -83,7 +81,7 @@ func (s *workflowConsistencyCheckerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.shardContext = shard.NewMockContext(s.controller)
+	s.shardContext = historyi.NewMockShardContext(s.controller)
 	s.workflowCache = wcache.NewMockCache(s.controller)
 	s.config = tests.NewDynamicConfig()
 
@@ -105,7 +103,7 @@ func (s *workflowConsistencyCheckerSuite) TearDownTest() {
 func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck_Success_PassCheck() {
 	ctx := context.Background()
 
-	wfContext := workflow.NewMockContext(s.controller)
+	wfContext := historyi.NewMockWorkflowContext(s.controller)
 	mutableState := historyi.NewMockMutableState(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
