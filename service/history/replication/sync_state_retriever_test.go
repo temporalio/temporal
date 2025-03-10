@@ -37,6 +37,7 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -233,6 +234,16 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		15: {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 15}},
 	})
 	mu.EXPECT().HSM().Return(nil)
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mockChasmTree.EXPECT().Snapshot(&persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12}).
+		Return(chasm.NodesSnapshot{
+			Nodes: map[string]*persistencespb.ChasmNode{
+				"node-path": {
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
+				},
+			},
+		})
+	mu.EXPECT().ChasmTree().Return(mockChasmTree)
 
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
 		context.Background(),
@@ -260,6 +271,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 	s.Len(mutation.UpdatedChildExecutionInfos, 1)
 	s.Len(mutation.UpdatedRequestCancelInfos, 0)
 	s.Len(mutation.UpdatedSignalInfos, 1)
+	s.Len(mutation.UpdatedChasmNodes, 1)
 	s.Nil(mutation.UpdatedChildExecutionInfos[13].Clock) // field should be sanitized
 
 	s.Nil(result.VersionedTransitionArtifact.EventBatches)

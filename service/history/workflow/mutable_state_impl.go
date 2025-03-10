@@ -57,6 +57,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -167,6 +168,8 @@ type (
 		pendingSignalRequestedIDs map[string]struct{} // Set of signaled requestIds
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
 		deleteSignalRequestedIDs  map[string]struct{} // Deleted signaled requestId since last update
+
+		chasmTree historyi.ChasmTree
 
 		executionInfo  *persistencespb.WorkflowExecutionInfo // Workflow mutable state info.
 		executionState *persistencespb.WorkflowExecutionState
@@ -301,6 +304,9 @@ func NewMutableState(
 		updateSignalRequestedIDs:  make(map[string]struct{}),
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
+
+		// TODO: wire up with real chasm tree implementation
+		chasmTree: &noopChasmTree{},
 
 		approximateSize:              0,
 		totalTombstones:              0,
@@ -577,6 +583,10 @@ func (ms *MutableStateImpl) HSM() *hsm.Node {
 	return ms.stateMachineNode
 }
 
+func (ms *MutableStateImpl) ChasmTree() historyi.ChasmTree {
+	return ms.chasmTree
+}
+
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
 // Completions may be sent to arbitrary third parties, we intentionally do not include any termination reasons, and
 // expose only failure messages.
@@ -712,6 +722,7 @@ func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState 
 		ChildExecutionInfos: ms.pendingChildExecutionInfoIDs,
 		RequestCancelInfos:  ms.pendingRequestCancelInfoIDs,
 		SignalInfos:         ms.pendingSignalInfoIDs,
+		ChasmNodes:          ms.chasmTree.Snapshot(nil).Nodes,
 		SignalRequestedIds:  convert.StringSetToSlice(ms.pendingSignalRequestedIDs),
 		ExecutionInfo:       ms.executionInfo,
 		ExecutionState:      ms.executionState,
@@ -5737,13 +5748,22 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 	return setStateStatus(ms.executionState, state, status)
 }
 
+// IsDirty is used for sanity check that mutable state is "clean" after mutable state lock is released.
+// However, certain in-memory changes (e.g. speculative workflow task) won't be cleared before releasing
+// the lock and have to be excluded from the check.
 func (ms *MutableStateImpl) IsDirty() bool {
-	return ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0 || (ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
+	return ms.hBuilder.IsDirty() ||
+		len(ms.InsertTasks) > 0 ||
+		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
+		ms.chasmTree.IsDirty()
 }
 
+// isStateDirty is used upon closing transaction to determine if application data has been updated, and
+// mutable state should move to a new versioned transition.
 func (ms *MutableStateImpl) isStateDirty() bool {
 	// TODO: we need to track more workflow state changes
 	// e.g. changes to executionInfo.CancelRequested
+	// They are mostly covered by history builder check today.
 	return ms.hBuilder.IsDirty() ||
 		len(ms.activityInfosUserDataUpdated) > 0 ||
 		len(ms.deleteActivityInfos) > 0 ||
@@ -5761,7 +5781,8 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.visibilityUpdated ||
 		ms.executionStateUpdated ||
 		ms.workflowTaskUpdated ||
-		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
+		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty()) ||
+		ms.chasmTree.IsDirty()
 }
 
 func (ms *MutableStateImpl) IsTransitionHistoryEnabled() bool {
@@ -5826,6 +5847,8 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 		DeleteSignalInfos:         ms.deleteSignalInfos,
 		UpsertSignalRequestedIDs:  ms.updateSignalRequestedIDs,
 		DeleteSignalRequestedIDs:  ms.deleteSignalRequestedIDs,
+		UpsertChasmNodes:          result.chasmNodesMutation.UpdatedNodes,
+		DeleteChasmNodes:          result.chasmNodesMutation.DeletedNodes,
 		NewBufferedEvents:         result.bufferEvents,
 		ClearBufferedEvents:       result.clearBuffer,
 
@@ -5867,6 +5890,7 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		RequestCancelInfos:  ms.pendingRequestCancelInfoIDs,
 		SignalInfos:         ms.pendingSignalInfoIDs,
 		SignalRequestedIDs:  ms.pendingSignalRequestedIDs,
+		ChasmNodes:          ms.chasmTree.Snapshot(nil).Nodes,
 
 		Tasks: ms.InsertTasks,
 
@@ -5922,10 +5946,11 @@ func (ms *MutableStateImpl) updateMemo(
 }
 
 type closeTransactionResult struct {
-	workflowEventsSeq []*persistence.WorkflowEvents
-	bufferEvents      []*historypb.HistoryEvent
-	clearBuffer       bool
-	checksum          *persistencespb.Checksum
+	workflowEventsSeq  []*persistence.WorkflowEvents
+	bufferEvents       []*historypb.HistoryEvent
+	clearBuffer        bool
+	checksum           *persistencespb.Checksum
+	chasmNodesMutation chasm.NodesMutation
 }
 
 func (ms *MutableStateImpl) closeTransaction(
@@ -5943,12 +5968,21 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	if err := ms.closeTransactionUpdateTransitionHistory(
-		transactionPolicy,
-	); err != nil {
+	if ms.isStateDirty() {
+		if err := ms.closeTransactionUpdateTransitionHistory(
+			transactionPolicy,
+		); err != nil {
+			return closeTransactionResult{}, err
+		}
+		ms.closeTransactionHandleUnknownVersionedTransition()
+	}
+
+	// TODO: update approximateSize once chasm.NodesMutation returns size change as well.
+	chasmNodesMutation, err := ms.chasmTree.CloseTransaction()
+	if err != nil {
 		return closeTransactionResult{}, err
 	}
-	ms.closeTransactionHandleUnknownVersionedTransition()
+
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
@@ -5958,7 +5992,7 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	ms.closeTransactionTrackTombstones(transactionPolicy)
+	ms.closeTransactionTrackTombstones(transactionPolicy, chasmNodesMutation)
 
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
@@ -5985,10 +6019,11 @@ func (ms *MutableStateImpl) closeTransaction(
 	}
 
 	return closeTransactionResult{
-		workflowEventsSeq: workflowEventsSeq,
-		bufferEvents:      bufferEvents,
-		clearBuffer:       clearBuffer,
-		checksum:          checksum,
+		workflowEventsSeq:  workflowEventsSeq,
+		bufferEvents:       bufferEvents,
+		clearBuffer:        clearBuffer,
+		checksum:           checksum,
+		chasmNodesMutation: chasmNodesMutation,
 	}, nil
 }
 
@@ -6066,12 +6101,6 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 		return nil
 	}
 
-	// TODO: treat changes for transient workflow task or signalRequestID removal as state transition as well.
-	// Those changes are not replicated today.
-	if !ms.isStateDirty() {
-		return nil
-	}
-
 	// handle disable then re-enable of transition history
 	if len(ms.executionInfo.TransitionHistory) == 0 && len(ms.executionInfo.PreviousTransitionHistory) != 0 {
 		ms.executionInfo.TransitionHistory = ms.executionInfo.PreviousTransitionHistory
@@ -6145,6 +6174,7 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 	}
 
 	// LastUpdateVersionTransition for HSM nodes already updated when transitioning the nodes.
+	// LastUpdateVersionTransition for CHASM nodes already updated when closing the chasm tree transaction.
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
@@ -6157,12 +6187,7 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 			return
 		}
 	}
-	// already in unknown state or
-	// in an old state that didn't get updated
-	if !ms.isStateDirty() {
-		// no state change in the transaction
-		return
-	}
+
 	// State changed but transition history not updated.
 	// We are in unknown versioned transition state, clear the transition history.
 	if len(ms.executionInfo.TransitionHistory) != 0 {
@@ -6218,6 +6243,7 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 
 func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 	transactionPolicy historyi.TransactionPolicy,
+	chasmNodesMutation chasm.NodesMutation,
 ) {
 	if transactionPolicy != historyi.TransactionPolicyActive {
 		// Passive/Replication logic will update tombstone list when applying mutable state
@@ -6304,11 +6330,18 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 			},
 		})
 	}
+	for chasmNodePath := range chasmNodesMutation.DeletedNodes {
+		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
+			StateMachineKey: &persistencespb.StateMachineTombstone_ChasmNodePath{
+				ChasmNodePath: chasmNodePath,
+			},
+		})
+	}
 	// Entire signalRequestedIDs will be synced if updated, so we don't track individual signalRequestedID tombstone.
 	// TODO: Track signalRequestedID tombstone when we support syncing partial signalRequestedIDs.
 	// This requires tracking the lastUpdateVersionedTransition for each signalRequestedID,
 	// which is not supported by today's DB schema.
-	// TODO: we don't delete updateInfo and StateMachine today. Track them here when we do.
+	// TODO: we don't delete updateInfo today. Track them here when we do.
 	currentVersionedTransition := ms.CurrentVersionedTransition()
 
 	tombstoneBatch := &persistencespb.StateMachineTombstoneBatch{
@@ -7207,7 +7240,10 @@ func (ms *MutableStateImpl) ApplyMutation(
 
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
 
-	return nil
+	// approximateSize update will be handled upon closing transaction
+	return ms.chasmTree.ApplyMutation(chasm.NodesMutation{
+		UpdatedNodes: mutation.UpdatedChasmNodes,
+	})
 }
 
 func (ms *MutableStateImpl) ApplySnapshot(
@@ -7247,7 +7283,11 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	}
 
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
-	return nil
+
+	// approximateSize update will be handled upon closing transaction
+	return ms.chasmTree.ApplySnapshot(chasm.NodesSnapshot{
+		Nodes: snapshot.ChasmNodes,
+	})
 }
 
 func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {
@@ -7579,8 +7619,13 @@ func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*pers
 	return nil
 }
 
-func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.StateMachineTombstoneBatch, currentVersionedTransition *persistencespb.VersionedTransition) error {
+//revive:disable-next-line:cognitive-complexity
+func (ms *MutableStateImpl) applyTombstones(
+	tombstoneBatches []*persistencespb.StateMachineTombstoneBatch,
+	currentVersionedTransition *persistencespb.VersionedTransition,
+) error {
 	var err error
+	deletedChasmNodes := make(map[string]struct{})
 	for _, tombstoneBatch := range tombstoneBatches {
 		if CompareVersionedTransition(tombstoneBatch.VersionedTransition, currentVersionedTransition) <= 0 {
 			continue
@@ -7609,6 +7654,8 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 				}
 			case *persistencespb.StateMachineTombstone_StateMachinePath:
 				err = ms.DeleteSubStateMachine(tombstone.GetStateMachinePath())
+			case *persistencespb.StateMachineTombstone_ChasmNodePath:
+				deletedChasmNodes[tombstone.GetChasmNodePath()] = struct{}{}
 			default:
 				// TODO: updateID and stateMachinePath
 				err = serviceerror.NewInternal("unknown tombstone type")
@@ -7621,7 +7668,10 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 		ms.totalTombstones += len(tombstoneBatch.StateMachineTombstones)
 	}
 	ms.capTombstoneCount()
-	return nil
+
+	return ms.chasmTree.ApplyMutation(chasm.NodesMutation{
+		DeletedNodes: deletedChasmNodes,
+	})
 }
 
 func (ms *MutableStateImpl) disablingTransitionHistory() bool {
