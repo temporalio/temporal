@@ -284,6 +284,7 @@ func NewConfig(
 		InternalFEGlobalNamespaceVisibilityRPS: dynamicconfig.InternalFrontendGlobalNamespaceVisibilityRPS.Get(dc),
 		// Overshoot since these low rate limits don't work well in an uncoordinated global limiter.
 		GlobalNamespaceNamespaceReplicationInducingAPIsRPS: dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Get(dc),
+
 		MaxIDLengthLimit:                              dynamicconfig.MaxIDLengthLimit.Get(dc),
 		WorkerBuildIdSizeLimit:                        dynamicconfig.WorkerBuildIdSizeLimit.Get(dc),
 		ReachabilityTaskQueueScanLimit:                dynamicconfig.ReachabilityTaskQueueScanLimit.Get(dc),

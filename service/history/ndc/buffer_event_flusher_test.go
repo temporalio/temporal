@@ -40,9 +40,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 )
 
@@ -53,8 +53,8 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
-		mockContext         *workflow.MockContext
-		mockMutableState    *workflow.MockMutableState
+		mockContext         *historyi.MockWorkflowContext
+		mockMutableState    *historyi.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
 		logger log.Logger
@@ -76,8 +76,8 @@ func (s *bufferEventFlusherSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockContext = workflow.NewMockContext(s.controller)
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockContext = historyi.NewMockWorkflowContext(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -162,7 +162,7 @@ func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastWriteVersion, true).Return(nil)
-	workflowTask := &workflow.WorkflowTaskInfo{
+	workflowTask := &historyi.WorkflowTaskInfo{
 		ScheduledEventID: 1234,
 		StartedEventID:   2345,
 	}
@@ -184,7 +184,7 @@ func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {
 	s.mockMutableState.EXPECT().AddWorkflowTaskScheduledEvent(
 		false,
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
-	).Return(&workflow.WorkflowTaskInfo{}, nil)
+	).Return(&historyi.WorkflowTaskInfo{}, nil)
 	s.mockMutableState.EXPECT().FlushBufferedEvents()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()

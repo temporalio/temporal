@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -233,7 +234,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			namespaceRegistry.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceEntry.ID(), nil).AnyTimes()
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
 
-			mutableState := NewMockMutableState(ctrl)
+			mutableState := historyi.NewMockMutableState(ctrl)
 			execState := &persistencespb.WorkflowExecutionState{
 				State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -336,7 +337,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 
-	mutableState := NewMockMutableState(ctrl)
+	mutableState := historyi.NewMockMutableState(ctrl)
 	mutableState.EXPECT().GetCurrentVersion().Return(int64(3)).AnyTimes()
 	mutableState.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 
@@ -669,7 +670,7 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 				config,
 			)
 
-			mockMutableState := NewMockMutableState(controller)
+			mockMutableState := historyi.NewMockMutableState(controller)
 			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
 			firstRunID := uuid.New()
@@ -786,7 +787,7 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
-			mockMutableState := NewMockMutableState(controller)
+			mockMutableState := historyi.NewMockMutableState(controller)
 			executionInfo := &persistencespb.WorkflowExecutionInfo{
 				VersionHistories: &historyspb.VersionHistories{
 					CurrentVersionHistoryIndex: 0,
@@ -855,7 +856,7 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDeletedNodes(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	ms := NewMockMutableState(ctrl)
+	ms := historyi.NewMockMutableState(ctrl)
 	var genTasks []tasks.Task
 	ms.EXPECT().AddTasks(gomock.Any()).DoAndReturn(func(tasks ...tasks.Task) {
 		genTasks = append(genTasks, tasks...)

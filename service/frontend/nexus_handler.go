@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"regexp"
 	"runtime/debug"
@@ -321,6 +322,7 @@ type nexusHandler struct {
 	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	headersBlacklist              *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
 	metricTagConfig               *dynamicconfig.GlobalCachedTypedValue[*nexusoperations.NexusMetricTagConfig]
+	httpTraceProvider             commonnexus.HTTPClientTraceProvider
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -529,6 +531,22 @@ func (h *nexusHandler) forwardStartOperation(
 		return nil, err
 	}
 
+	if h.httpTraceProvider != nil {
+		traceLogger := log.With(h.logger,
+			tag.Operation(oc.method),
+			tag.WorkflowNamespace(oc.namespaceName),
+			tag.RequestID(options.RequestID),
+			tag.NexusOperation(operation),
+			tag.Endpoint(oc.endpointName),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.SourceCluster(h.clusterMetadata.GetCurrentClusterName()),
+			tag.TargetCluster(oc.namespace.ActiveClusterName()),
+		)
+		if trace := h.httpTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
+			ctx = httptrace.WithClientTrace(ctx, trace)
+		}
+	}
+
 	resp, err := client.StartOperation(ctx, operation, input.Reader, options)
 	if err != nil {
 		oc.logger.Error("received error from remote cluster for forwarded Nexus start operation request.", tag.Error(err))
@@ -624,6 +642,21 @@ func (h *nexusHandler) forwardCancelOperation(
 	if err != nil {
 		oc.logger.Warn("invalid Nexus cancel operation.", tag.Error(err))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
+	}
+
+	if h.httpTraceProvider != nil {
+		traceLogger := log.With(h.logger,
+			tag.Operation(oc.method),
+			tag.WorkflowNamespace(oc.namespaceName),
+			tag.NexusOperation(operation),
+			tag.Endpoint(oc.endpointName),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.SourceCluster(h.clusterMetadata.GetCurrentClusterName()),
+			tag.TargetCluster(oc.namespace.ActiveClusterName()),
+		)
+		if trace := h.httpTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
+			ctx = httptrace.WithClientTrace(ctx, trace)
+		}
 	}
 
 	err = handle.Cancel(ctx, options)

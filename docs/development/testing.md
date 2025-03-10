@@ -81,3 +81,13 @@ or if there's no SDK support for that API available yet.
 You'll find a fully initialized task poller in any functional test suite, look for `s.TaskPoller`.
 
 _NOTE: The previous `testcore.TaskPoller` has been deprecated and should not be used in new code._
+
+### softassert package
+
+`softassert.That` is a "soft" assertion that logs an error if the given condition is false.
+
+It is useful to highlight invariant violations in production code.
+It is *not* a substitute for regular error handling, validation, or control flow.
+
+In functional tests, a failed soft assertion will not stop the test execution immediately, but it
+will ultimately fail the test.

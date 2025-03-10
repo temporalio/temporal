@@ -48,7 +48,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -75,7 +75,7 @@ const (
 
 // Starter starts a new workflow execution.
 type Starter struct {
-	shardContext                                  shard.Context
+	shardContext                                  historyi.ShardContext
 	workflowConsistencyChecker                    api.WorkflowConsistencyChecker
 	tokenSerializer                               *tasktoken.Serializer
 	visibilityManager                             manager.VisibilityManager
@@ -91,7 +91,7 @@ type creationParams struct {
 	workflowID           string
 	runID                string
 	workflowLease        api.WorkflowLease
-	workflowTaskInfo     *workflow.WorkflowTaskInfo
+	workflowTaskInfo     *historyi.WorkflowTaskInfo
 	workflowSnapshot     *persistence.WorkflowSnapshot
 	workflowEventBatches []*persistence.WorkflowEvents
 }
@@ -101,12 +101,12 @@ type creationParams struct {
 type mutableStateInfo struct {
 	branchToken  []byte
 	lastEventID  int64
-	workflowTask *workflow.WorkflowTaskInfo
+	workflowTask *historyi.WorkflowTaskInfo
 }
 
 // NewStarter creates a new starter, fails if getting the active namespace fails.
 func NewStarter(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
 	visibilityManager manager.VisibilityManager,
@@ -275,7 +275,7 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have a started workflow task")
 	}
 	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyActive,
+		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
 		return nil, err
@@ -452,7 +452,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		nil,
 		workflowKey,
 		currentExecutionUpdateAction,
-		func() (workflow.Context, workflow.MutableState, error) {
+		func() (historyi.WorkflowContext, historyi.MutableState, error) {
 			newMutableState, err := api.NewWorkflowWithSignal(
 				s.shardContext,
 				s.namespace,
@@ -577,7 +577,7 @@ func (s *Starter) getMutableStateInfo(ctx context.Context, runID string) (_ *mut
 }
 
 // extractMutableStateInfo extracts the relevant information to generate a start response with an eager workflow task.
-func extractMutableStateInfo(mutableState workflow.MutableState) (*mutableStateInfo, error) {
+func extractMutableStateInfo(mutableState historyi.MutableState) (*mutableStateInfo, error) {
 	branchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err
@@ -587,7 +587,7 @@ func extractMutableStateInfo(mutableState workflow.MutableState) (*mutableStateI
 	workflowTaskSource := mutableState.GetStartedWorkflowTask()
 	// The workflowTask returned from the mutable state call is generated on the fly and technically doesn't require
 	// cloning. We clone here just in case that changes.
-	var workflowTask workflow.WorkflowTaskInfo
+	var workflowTask historyi.WorkflowTaskInfo
 	if workflowTaskSource != nil {
 		workflowTask = *workflowTaskSource
 	}
@@ -715,7 +715,7 @@ func extractHistoryEvents(persistenceEvents []*persistence.WorkflowEvents) []*hi
 // requests.
 func (s *Starter) generateResponse(
 	runID string,
-	workflowTaskInfo *workflow.WorkflowTaskInfo,
+	workflowTaskInfo *historyi.WorkflowTaskInfo,
 	historyEvents []*historypb.HistoryEvent,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
 	shardCtx := s.shardContext

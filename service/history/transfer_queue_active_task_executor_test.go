@@ -75,6 +75,7 @@ import (
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -128,7 +129,7 @@ type (
 	}
 )
 
-var defaultWorkflowTaskCompletionLimits = workflow.WorkflowTaskCompletionLimits{MaxResetPoints: primitives.DefaultHistoryMaxAutoResetPoints, MaxSearchAttributeValueSize: 2048}
+var defaultWorkflowTaskCompletionLimits = historyi.WorkflowTaskCompletionLimits{MaxResetPoints: primitives.DefaultHistoryMaxAutoResetPoints, MaxSearchAttributeValueSize: 2048}
 
 func TestTransferQueueActiveTaskExecutorSuite(t *testing.T) {
 	s := new(transferQueueActiveTaskExecutorSuite)
@@ -2681,7 +2682,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 		s.Run(c.Name, func() {
 			ctrl := gomock.NewController(s.T())
 
-			mockMutableState := workflow.NewMockMutableState(ctrl)
+			mockMutableState := historyi.NewMockMutableState(ctrl)
 			var closeTransferTaskId int64
 			if c.CloseTransferTaskIdSet {
 				closeTransferTaskId = 10
@@ -2698,8 +2699,8 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			namespaceEntry := tests.GlobalNamespaceEntry
 			mockMutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 
-			mockWorkflowContext := workflow.NewMockContext(ctrl)
-			mockShard := shard.NewMockContext(ctrl)
+			mockWorkflowContext := historyi.NewMockWorkflowContext(ctrl)
+			mockShard := historyi.NewMockShardContext(ctrl)
 			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
 			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any(), mockShard).Return(mockMutableState, nil)
 
@@ -2778,7 +2779,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 
 func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 	task *tasks.WorkflowTask,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 ) gomock.Matcher {
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: task.TaskQueue,
@@ -2874,7 +2875,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createSignalWorkflowExecutionRequ
 func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionRequest(
 	childNamespace namespace.Name,
 	task *tasks.StartChildExecutionTask,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	ci *persistencespb.ChildExecutionInfo,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	userMetadata *sdkpb.UserMetadata,
@@ -2920,7 +2921,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) createPersistenceMutableState(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	lastEventID int64,
 	lastEventVersion int64,
 ) *persistencespb.WorkflowMutableState {

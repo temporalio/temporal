@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -62,7 +63,7 @@ type (
 		controller            *gomock.Controller
 		mockShard             *shard.ContextTest
 		mockNamespaceRegistry *namespace.MockRegistry
-		mockMutableState      *workflow.MockMutableState
+		mockMutableState      *historyi.MockMutableState
 		mockClusterMetadata   *cluster.MockMetadata
 		syncStateRetriever    *MockSyncStateRetriever
 
@@ -91,7 +92,7 @@ func (s *ackManagerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,

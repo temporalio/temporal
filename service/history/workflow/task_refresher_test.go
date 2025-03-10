@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -63,7 +64,7 @@ type (
 		mockTaskGenerator     *MockTaskGenerator
 
 		namespaceEntry       *namespace.Namespace
-		mutableState         MutableState
+		mutableState         historyi.MutableState
 		stateMachineRegistry *hsm.Registry
 
 		taskRefresher *TaskRefresherImpl
@@ -1099,8 +1100,8 @@ func newMockTaskGeneratorProvider(
 }
 
 func (m *mockTaskGeneratorProvider) NewTaskGenerator(
-	_ shard.Context,
-	_ MutableState,
+	_ historyi.ShardContext,
+	_ historyi.MutableState,
 ) TaskGenerator {
 	return m.mockTaskGenerator
 }

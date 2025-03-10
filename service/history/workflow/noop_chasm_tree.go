@@ -20,25 +20,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination chasm_tree_mock.go
-
 package workflow
 
 import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
-var _ ChasmTree = (*noopChasmTree)(nil)
-var _ ChasmTree = (*chasm.Node)(nil)
-
-type ChasmTree interface {
-	CloseTransaction() (chasm.NodesMutation, error)
-	Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot
-	ApplyMutation(chasm.NodesMutation) error
-	ApplySnapshot(chasm.NodesSnapshot) error
-	IsDirty() bool
-}
+var _ historyi.ChasmTree = (*noopChasmTree)(nil)
 
 type noopChasmTree struct{}
 

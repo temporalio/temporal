@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -59,7 +59,7 @@ import (
 func Invoke(
 	ctx context.Context,
 	req *historyservice.RecordWorkflowTaskStartedRequest,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	config *configs.Config,
 	eventNotifier events.Notifier,
 	persistenceVisibilityMgr manager.VisibilityManager,
@@ -274,7 +274,7 @@ func Invoke(
 
 func setHistoryForRecordWfTaskStartedResp(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
 	maximumPageSize int32,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
@@ -373,9 +373,9 @@ func setHistoryForRecordWfTaskStartedResp(
 
 func CreateRecordWorkflowTaskStartedResponse(
 	ctx context.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	updateRegistry update.Registry,
-	workflowTask *workflow.WorkflowTaskInfo,
+	workflowTask *historyi.WorkflowTaskInfo,
 	identity string,
 	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
@@ -407,9 +407,9 @@ func CreateRecordWorkflowTaskStartedResponse(
 
 func CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 	ctx context.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	updateRegistry update.Registry,
-	workflowTask *workflow.WorkflowTaskInfo,
+	workflowTask *historyi.WorkflowTaskInfo,
 	identity string,
 	wtHeartbeat bool,
 ) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {

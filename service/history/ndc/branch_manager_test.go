@@ -38,9 +38,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 )
 
@@ -51,8 +51,8 @@ type (
 
 		controller           *gomock.Controller
 		mockShard            *shard.ContextTest
-		mockContext          *workflow.MockContext
-		mockMutableState     *workflow.MockMutableState
+		mockContext          *historyi.MockWorkflowContext
+		mockMutableState     *historyi.MockMutableState
 		mockClusterMetadata  *cluster.MockMetadata
 		mockExecutionManager *persistence.MockExecutionManager
 
@@ -76,8 +76,8 @@ func (s *branchMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockContext = workflow.NewMockContext(s.controller)
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockContext = historyi.NewMockWorkflowContext(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,

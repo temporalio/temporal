@@ -34,8 +34,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
@@ -47,7 +46,7 @@ type (
 	}
 
 	nDCTransactionMgrForNewWorkflowImpl struct {
-		shardContext                shard.Context
+		shardContext                historyi.ShardContext
 		transactionMgr              TransactionManager
 		bypassVersionSemanticsCheck bool
 	}
@@ -56,7 +55,7 @@ type (
 var _ transactionMgrForNewWorkflow = (*nDCTransactionMgrForNewWorkflowImpl)(nil)
 
 func newTransactionMgrForNewWorkflow(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	transactionMgr TransactionManager,
 	bypassVersionSemanticsCheck bool,
 ) *nDCTransactionMgrForNewWorkflowImpl {
@@ -160,7 +159,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 ) error {
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
@@ -215,7 +214,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	if err != nil {
 		return err
 	}
-	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != workflow.TransactionPolicyPassive {
+	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != historyi.TransactionPolicyPassive {
 		return serviceerror.NewInternal("transactionMgrForNewWorkflow createAsZombie encountered target workflow policy not being passive")
 	}
 
@@ -308,7 +307,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 		targetWorkflow.GetContext(),
 		targetWorkflow.GetMutableState(),
 		currentWorkflowPolicy,
-		workflow.TransactionPolicyPassive.Ptr(),
+		historyi.TransactionPolicyPassive.Ptr(),
 	)
 }
 

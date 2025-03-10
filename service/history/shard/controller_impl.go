@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/pingable"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"golang.org/x/sync/semaphore"
 	"golang.org/x/time/rate"
 )
@@ -60,11 +61,11 @@ var (
 type (
 	ControllerImpl struct {
 		sync.RWMutex
-		historyShards map[int32]ControllableContext
+		historyShards map[int32]historyi.ControllableContext
 
 		lingerState struct {
 			sync.Mutex
-			shards map[ControllableContext]struct{}
+			shards map[historyi.ControllableContext]struct{}
 		}
 
 		config               *configs.Config
@@ -111,13 +112,13 @@ func ControllerProvider(
 		config:                  config,
 		contextFactory:          contextFactory,
 		contextTaggedLogger:     contextTaggedLogger,
-		historyShards:           make(map[int32]ControllableContext),
+		historyShards:           make(map[int32]historyi.ControllableContext),
 		hostInfoProvider:        hostInfoProvider,
 		ownership:               ownership,
 		taggedMetricsHandler:    taggedMetricsHandler,
 		shardCountSubscriptions: map[*shardCountSubscription]struct{}{},
 	}
-	c.lingerState.shards = make(map[ControllableContext]struct{})
+	c.lingerState.shards = make(map[historyi.ControllableContext]struct{})
 	return c
 }
 
@@ -179,7 +180,7 @@ func (c *ControllerImpl) Status() int32 {
 func (c *ControllerImpl) GetShardByNamespaceWorkflow(
 	namespaceID namespace.ID,
 	workflowID string,
-) (Context, error) {
+) (historyi.ShardContext, error) {
 	shardID := c.config.GetShardID(namespaceID, workflowID)
 	return c.GetShardByID(shardID)
 }
@@ -189,7 +190,7 @@ func (c *ControllerImpl) GetShardByNamespaceWorkflow(
 // Callers can use GetEngine on the shard to block on rangeid lease acquisition.
 func (c *ControllerImpl) GetShardByID(
 	shardID int32,
-) (Context, error) {
+) (historyi.ShardContext, error) {
 	startTime := time.Now().UTC()
 	defer func() {
 		metrics.GetEngineForShardLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
@@ -223,7 +224,7 @@ func (c *ControllerImpl) ShardIDs() []int32 {
 	return ids
 }
 
-func (c *ControllerImpl) shardRemoveAndStop(shard ControllableContext) {
+func (c *ControllerImpl) shardRemoveAndStop(shard historyi.ControllableContext) {
 	startTime := time.Now().UTC()
 	defer func() {
 		metrics.RemoveEngineForShardLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
@@ -239,7 +240,7 @@ func (c *ControllerImpl) shardRemoveAndStop(shard ControllableContext) {
 // getOrCreateShardContext returns a shard context for the given shard ID, creating a new one
 // if necessary. If a shard context is created, it will initialize in the background.
 // This function won't block on rangeid lease acquisition.
-func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (ControllableContext, error) {
+func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (historyi.ControllableContext, error) {
 	if err := c.validateShardId(shardID); err != nil {
 		return nil, err
 	}
@@ -287,13 +288,13 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (ControllableCon
 	return shard, nil
 }
 
-func (c *ControllerImpl) removeShard(shardID int32, expected ControllableContext) ControllableContext {
+func (c *ControllerImpl) removeShard(shardID int32, expected historyi.ControllableContext) historyi.ControllableContext {
 	c.Lock()
 	defer c.Unlock()
 	return c.removeShardLocked(shardID, expected)
 }
 
-func (c *ControllerImpl) removeShardLocked(shardID int32, expected ControllableContext) ControllableContext {
+func (c *ControllerImpl) removeShardLocked(shardID int32, expected historyi.ControllableContext) historyi.ControllableContext {
 	current, ok := c.historyShards[shardID]
 	if !ok {
 		return nil
@@ -340,7 +341,7 @@ func (c *ControllerImpl) shardLingerThenClose(ctx context.Context, shardID int32
 	}()
 }
 
-func (c *ControllerImpl) beginLinger(shard ControllableContext) bool {
+func (c *ControllerImpl) beginLinger(shard historyi.ControllableContext) bool {
 	c.lingerState.Lock()
 	defer c.lingerState.Unlock()
 	if _, ok := c.lingerState.shards[shard]; ok {
@@ -350,13 +351,13 @@ func (c *ControllerImpl) beginLinger(shard ControllableContext) bool {
 	return true
 }
 
-func (c *ControllerImpl) endLinger(shard ControllableContext) {
+func (c *ControllerImpl) endLinger(shard historyi.ControllableContext) {
 	c.lingerState.Lock()
 	defer c.lingerState.Unlock()
 	delete(c.lingerState.shards, shard)
 }
 
-func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext) {
+func (c *ControllerImpl) doLinger(ctx context.Context, shard historyi.ControllableContext) {
 	startTime := time.Now()
 	// Enforce a max limit to ensure we close the shard in a reasonable time,
 	// and to indirectly limit the number of lingering shards.
