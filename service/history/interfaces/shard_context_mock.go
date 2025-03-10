@@ -49,6 +49,7 @@ import (
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
 	finalizer "go.temporal.io/server/common/finalizer"
+	locks "go.temporal.io/server/common/locks"
 	log "go.temporal.io/server/common/log"
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
@@ -314,6 +315,21 @@ func (m *MockShardContext) GetCurrentTime(cluster string) time.Time {
 func (mr *MockShardContextMockRecorder) GetCurrentTime(cluster any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentTime", reflect.TypeOf((*MockShardContext)(nil).GetCurrentTime), cluster)
+}
+
+// GetCurrentWorkflowContext mocks base method.
+func (m *MockShardContext) GetCurrentWorkflowContext(ctx context.Context, namespaceID namespace.ID, workflowID string, lockPriority locks.Priority) (ReleaseWorkflowContextFunc, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentWorkflowContext", ctx, namespaceID, workflowID, lockPriority)
+	ret0, _ := ret[0].(ReleaseWorkflowContextFunc)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCurrentWorkflowContext indicates an expected call of GetCurrentWorkflowContext.
+func (mr *MockShardContextMockRecorder) GetCurrentWorkflowContext(ctx, namespaceID, workflowID, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentWorkflowContext", reflect.TypeOf((*MockShardContext)(nil).GetCurrentWorkflowContext), ctx, namespaceID, workflowID, lockPriority)
 }
 
 // GetEngine mocks base method.
@@ -628,6 +644,22 @@ func (m *MockShardContext) GetTimeSource() clock0.TimeSource {
 func (mr *MockShardContextMockRecorder) GetTimeSource() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeSource", reflect.TypeOf((*MockShardContext)(nil).GetTimeSource))
+}
+
+// GetWorkflowContext mocks base method.
+func (m *MockShardContext) GetWorkflowContext(ctx context.Context, namespaceID namespace.ID, execution *common.WorkflowExecution, lockPriority locks.Priority) (WorkflowContext, ReleaseWorkflowContextFunc, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowContext", ctx, namespaceID, execution, lockPriority)
+	ret0, _ := ret[0].(WorkflowContext)
+	ret1, _ := ret[1].(ReleaseWorkflowContextFunc)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetWorkflowContext indicates an expected call of GetWorkflowContext.
+func (mr *MockShardContextMockRecorder) GetWorkflowContext(ctx, namespaceID, execution, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowContext", reflect.TypeOf((*MockShardContext)(nil).GetWorkflowContext), ctx, namespaceID, execution, lockPriority)
 }
 
 // GetWorkflowExecution mocks base method.
@@ -1073,6 +1105,21 @@ func (mr *MockControllableContextMockRecorder) GetCurrentTime(cluster any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentTime", reflect.TypeOf((*MockControllableContext)(nil).GetCurrentTime), cluster)
 }
 
+// GetCurrentWorkflowContext mocks base method.
+func (m *MockControllableContext) GetCurrentWorkflowContext(ctx context.Context, namespaceID namespace.ID, workflowID string, lockPriority locks.Priority) (ReleaseWorkflowContextFunc, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentWorkflowContext", ctx, namespaceID, workflowID, lockPriority)
+	ret0, _ := ret[0].(ReleaseWorkflowContextFunc)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCurrentWorkflowContext indicates an expected call of GetCurrentWorkflowContext.
+func (mr *MockControllableContextMockRecorder) GetCurrentWorkflowContext(ctx, namespaceID, workflowID, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentWorkflowContext", reflect.TypeOf((*MockControllableContext)(nil).GetCurrentWorkflowContext), ctx, namespaceID, workflowID, lockPriority)
+}
+
 // GetEngine mocks base method.
 func (m *MockControllableContext) GetEngine(ctx context.Context) (Engine, error) {
 	m.ctrl.T.Helper()
@@ -1399,6 +1446,22 @@ func (m *MockControllableContext) GetTimeSource() clock0.TimeSource {
 func (mr *MockControllableContextMockRecorder) GetTimeSource() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeSource", reflect.TypeOf((*MockControllableContext)(nil).GetTimeSource))
+}
+
+// GetWorkflowContext mocks base method.
+func (m *MockControllableContext) GetWorkflowContext(ctx context.Context, namespaceID namespace.ID, execution *common.WorkflowExecution, lockPriority locks.Priority) (WorkflowContext, ReleaseWorkflowContextFunc, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowContext", ctx, namespaceID, execution, lockPriority)
+	ret0, _ := ret[0].(WorkflowContext)
+	ret1, _ := ret[1].(ReleaseWorkflowContextFunc)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetWorkflowContext indicates an expected call of GetWorkflowContext.
+func (mr *MockControllableContextMockRecorder) GetWorkflowContext(ctx, namespaceID, execution, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowContext", reflect.TypeOf((*MockControllableContext)(nil).GetWorkflowContext), ctx, namespaceID, execution, lockPriority)
 }
 
 // GetWorkflowExecution mocks base method.
