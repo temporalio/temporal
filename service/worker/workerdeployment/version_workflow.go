@@ -26,7 +26,6 @@ package workerdeployment
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -55,16 +54,6 @@ type (
 		signalsCompleted       bool
 		drainageWorkflowFuture *workflow.ChildWorkflowFuture
 		done                   bool
-	}
-)
-
-var (
-	defaultActivityOptions = workflow.ActivityOptions{
-		StartToCloseTimeout: 1 * time.Minute,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 100 * time.Millisecond,
-			MaximumInterval: 60 * time.Second,
-		},
 	}
 )
 
