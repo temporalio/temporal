@@ -117,7 +117,7 @@ func TestWrapEventLoopFn_ReturnServiceError_ShouldRetryUntilStreamError(t *testi
 		stopFunc := func() {
 			stopFuncCallCount++
 		}
-		WrapEventLoop(originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), backoff.NewConstantDelayRetryPolicy(time.Millisecond))
+		WrapEventLoop(originalEventLoop, stopFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, NewClusterShardKey(1, 1), NewClusterShardKey(2, 1), streamRetryPolicy)
 		assertion.Equal(3, originalEventLoopCallCount)
 		assertion.Equal(1, stopFuncCallCount)
 
