@@ -80,7 +80,7 @@ func WrapEventLoop(
 ) {
 	defer streamStopper()
 
-	longRunningOps := func() error {
+	ops := func() error {
 		err := originalEventLoop()
 
 		if err != nil {
@@ -107,7 +107,7 @@ func WrapEventLoop(
 		// shutdown case
 		return nil
 	}
-	_ = backoff.ThrottleRetry(longRunningOps, retryPolicy, isRetryableError)
+	_ = backoff.ThrottleRetry(ops, retryPolicy, isRetryableError)
 }
 
 func isRetryableError(err error) bool {
