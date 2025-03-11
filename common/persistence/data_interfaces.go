@@ -357,8 +357,6 @@ type (
 		DeleteRequestCancelInfos  map[int64]struct{}
 		UpsertSignalInfos         map[int64]*persistencespb.SignalInfo
 		DeleteSignalInfos         map[int64]struct{}
-		UpsertChasmNodes          map[string]*persistencespb.ChasmNode
-		DeleteChasmNodes          map[string]struct{}
 		UpsertSignalRequestedIDs  map[string]struct{}
 		DeleteSignalRequestedIDs  map[string]struct{}
 		UpsertChasmNodes          map[string]*persistencespb.ChasmNode
