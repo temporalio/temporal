@@ -38,9 +38,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -48,8 +47,8 @@ func updateIndependentActivityBuildId(
 	ctx context.Context,
 	task tasks.Task,
 	buildId string,
-	shardContext shard.Context,
-	transactionPolicy workflow.TransactionPolicy,
+	shardContext historyi.ShardContext,
+	transactionPolicy historyi.TransactionPolicy,
 	workflowCache cache.Cache,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -84,7 +83,7 @@ func updateIndependentActivityBuildId(
 		release(retErr)
 	}()
 
-	var mutableState workflow.MutableState
+	var mutableState historyi.MutableState
 	var scheduledEventId int64
 	var taskVersion int64
 
@@ -120,7 +119,7 @@ func updateIndependentActivityBuildId(
 		return err
 	}
 
-	err = mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) error {
+	err = mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 		activityInfo.BuildIdInfo = &persistencespb.ActivityInfo_LastIndependentlyAssignedBuildId{LastIndependentlyAssignedBuildId: buildId}
 		return nil
 	})
@@ -145,8 +144,8 @@ func initializeWorkflowAssignedBuildId(
 	ctx context.Context,
 	transferTask *tasks.WorkflowTask,
 	buildId string,
-	shardContext shard.Context,
-	transactionPolicy workflow.TransactionPolicy,
+	shardContext historyi.ShardContext,
+	transactionPolicy historyi.TransactionPolicy,
 	workflowCache cache.Cache,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -222,7 +221,7 @@ func initializeWorkflowAssignedBuildId(
 	)
 }
 
-func MakeDirectiveForWorkflowTask(ms workflow.MutableState) *taskqueuespb.TaskVersionDirective {
+func MakeDirectiveForWorkflowTask(ms historyi.MutableState) *taskqueuespb.TaskVersionDirective {
 	return worker_versioning.MakeDirectiveForWorkflowTask(
 		ms.GetInheritedBuildId(),
 		ms.GetAssignedBuildId(),
@@ -233,7 +232,7 @@ func MakeDirectiveForWorkflowTask(ms workflow.MutableState) *taskqueuespb.TaskVe
 	)
 }
 
-func MakeDirectiveForActivityTask(mutableState workflow.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {
+func MakeDirectiveForActivityTask(mutableState historyi.MutableState, activityInfo *persistencespb.ActivityInfo) *taskqueuespb.TaskVersionDirective {
 	if behavior := mutableState.GetEffectiveVersioningBehavior(); behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		d := mutableState.GetEffectiveDeployment()
 		return &taskqueuespb.TaskVersionDirective{Behavior: behavior,

@@ -47,7 +47,7 @@ import (
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -59,7 +59,7 @@ const (
 )
 
 type Updater struct {
-	shardCtx                   shard.Context
+	shardCtx                   historyi.ShardContext
 	workflowConsistencyChecker api.WorkflowConsistencyChecker
 	matchingClient             matchingservice.MatchingServiceClient
 	req                        *historyservice.UpdateWorkflowExecutionRequest
@@ -79,7 +79,7 @@ type Updater struct {
 }
 
 func NewUpdater(
-	shardCtx shard.Context,
+	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 	request *historyservice.UpdateWorkflowExecutionRequest,
@@ -126,7 +126,7 @@ func (u *Updater) Invoke(
 func (u *Updater) ApplyRequest(
 	ctx context.Context,
 	updateReg update.Registry,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 ) (*api.UpdateWorkflowAction, error) {
 	if u.req.GetRequest().GetFirstExecutionRunId() != "" &&
 		ms.GetExecutionInfo().GetFirstExecutionRunId() != u.req.GetRequest().GetFirstExecutionRunId() {

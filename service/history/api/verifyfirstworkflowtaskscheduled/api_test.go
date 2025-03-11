@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -60,7 +61,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-var defaultWorkflowTaskCompletionLimits = workflow.WorkflowTaskCompletionLimits{MaxResetPoints: primitives.DefaultHistoryMaxAutoResetPoints, MaxSearchAttributeValueSize: 2048}
+var defaultWorkflowTaskCompletionLimits = historyi.WorkflowTaskCompletionLimits{MaxResetPoints: primitives.DefaultHistoryMaxAutoResetPoints, MaxSearchAttributeValueSize: 2048}
 
 type (
 	VerifyFirstWorkflowTaskScheduledSuite struct {
@@ -279,7 +280,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 }
 
 func addWorkflowExecutionStartedEventWithParent(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	workflowExecution *commonpb.WorkflowExecution,
 	workflowType, taskQueue string,
 	input *commonpb.Payloads,

@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -62,7 +63,7 @@ type (
 		mockShard           *shard.ContextTest
 		mockNamespaceCache  *namespace.MockRegistry
 		mockClusterMetadata *cluster.MockMetadata
-		mockMutableState    *workflow.MockMutableState
+		mockMutableState    *historyi.MockMutableState
 
 		mockExecutionMgr *persistence.MockExecutionManager
 
@@ -86,7 +87,7 @@ func (s *hsmStateReplicatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -95,7 +96,7 @@ func (s *hsmStateReplicatorSuite) SetupTest() {
 		},
 		tests.NewDynamicConfig(),
 	)
-	mockEngine := shard.NewMockEngine(s.controller)
+	mockEngine := historyi.NewMockEngine(s.controller)
 	mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 	mockEngine.EXPECT().Stop().MaxTimes(1)
@@ -155,7 +156,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_WorkflowNotFound() {
 	}).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
 	lastEventID := int64(10)
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey: nonExistKey,
 		EventVersionHistory: &historyspb.VersionHistory{
 			Items: []*historyspb.VersionHistoryItem{
@@ -188,7 +189,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_Diverge_LocalEventVersionLarger() 
 		DBRecordVersion: 777,
 	}, nil).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey: s.workflowKey,
 		EventVersionHistory: &historyspb.VersionHistory{
 			Items: []*historyspb.VersionHistoryItem{
@@ -213,7 +214,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_Diverge_IncomingEventVersionLarger
 		DBRecordVersion: 777,
 	}, nil).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey: s.workflowKey,
 		EventVersionHistory: &historyspb.VersionHistory{
 			Items: []*historyspb.VersionHistoryItem{
@@ -256,7 +257,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_LocalEventVersionSuperSet() {
 		},
 	}, nil).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey: s.workflowKey,
 		EventVersionHistory: &historyspb.VersionHistory{
 			Items: []*historyspb.VersionHistoryItem{
@@ -301,7 +302,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingEventVersionSuperSet() {
 		DBRecordVersion: 777,
 	}, nil).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey: s.workflowKey,
 		EventVersionHistory: &historyspb.VersionHistory{
 			Items: []*historyspb.VersionHistoryItem{
@@ -337,7 +338,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateStale() {
 		DBRecordVersion: 777,
 	}, nil).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey:         s.workflowKey,
 		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
 		StateMachineNode: &persistencespb.StateMachineNode{
@@ -375,7 +376,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionStale() {
 		DBRecordVersion: 777,
 	}, nil).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey:         s.workflowKey,
 		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
 		StateMachineNode: &persistencespb.StateMachineNode{
@@ -414,7 +415,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionedTransit
 		DBRecordVersion: 777,
 	}, nil).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey:         s.workflowKey,
 		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
 		StateMachineNode: &persistencespb.StateMachineNode{
@@ -460,7 +461,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionNewer() {
 		},
 	}, nil).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey:         s.workflowKey,
 		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
 		StateMachineNode: &persistencespb.StateMachineNode{
@@ -506,7 +507,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingLastUpdateVersionedTransit
 		},
 	}, nil).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey:         s.workflowKey,
 		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
 		StateMachineNode: &persistencespb.StateMachineNode{
@@ -570,7 +571,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowOpen() 
 		},
 	).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey:         s.workflowKey,
 		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
 		StateMachineNode: &persistencespb.StateMachineNode{
@@ -622,7 +623,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowZombie(
 		},
 	).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey:         s.workflowKey,
 		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
 		StateMachineNode: &persistencespb.StateMachineNode{
@@ -678,7 +679,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowClosed(
 		},
 	).Times(1)
 
-	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 		WorkflowKey:         s.workflowKey,
 		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
 		StateMachineNode: &persistencespb.StateMachineNode{
@@ -757,7 +758,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_StateMachineNotFound() {
 		s.T().Run(tc.name, func(t *testing.T) {
 			lastVersion := tc.versionHistory.Items[len(tc.versionHistory.Items)-1].Version
 
-			err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+			err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &historyi.SyncHSMRequest{
 				WorkflowKey:         s.workflowKey,
 				EventVersionHistory: tc.versionHistory,
 				StateMachineNode: &persistencespb.StateMachineNode{

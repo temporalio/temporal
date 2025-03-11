@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -119,7 +120,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
 
-	mockEngine := shard.NewMockEngine(s.controller)
+	mockEngine := historyi.NewMockEngine(s.controller)
 	mockEngine.EXPECT().NotifyNewHistoryEvent(gomock.Any()).AnyTimes()
 	mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockShard.SetEngineForTesting(mockEngine)
@@ -475,7 +476,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {
 		return results
 	}
 
-	constructQueryRegistry := func(numQueries int) workflow.QueryRegistry {
+	constructQueryRegistry := func(numQueries int) historyi.QueryRegistry {
 		queryRegistry := workflow.NewQueryRegistry()
 		for i := 0; i < numQueries; i++ {
 			queryRegistry.BufferQuery(&querypb.WorkflowQuery{})
@@ -483,16 +484,16 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {
 		return queryRegistry
 	}
 
-	assertQueryCounts := func(queryRegistry workflow.QueryRegistry, buffered, completed, unblocked, failed int) {
+	assertQueryCounts := func(queryRegistry historyi.QueryRegistry, buffered, completed, unblocked, failed int) {
 		s.Len(queryRegistry.GetBufferedIDs(), buffered)
 		s.Len(queryRegistry.GetCompletedIDs(), completed)
 		s.Len(queryRegistry.GetUnblockedIDs(), unblocked)
 		s.Len(queryRegistry.GetFailedIDs(), failed)
 	}
 
-	setupBufferedQueriesMocks := func() (workflow.QueryRegistry, *workflow.MockMutableState) {
+	setupBufferedQueriesMocks := func() (historyi.QueryRegistry, *historyi.MockMutableState) {
 		queryRegistry := constructQueryRegistry(10)
-		mockMutableState := workflow.NewMockMutableState(s.controller)
+		mockMutableState := historyi.NewMockMutableState(s.controller)
 		mockMutableState.EXPECT().GetQueryRegistry().Return(queryRegistry)
 		mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 			WorkflowId: tests.WorkflowID,
@@ -531,7 +532,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {
 	})
 }
 
-func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.TestVars) workflow.Context {
+func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.TestVars) historyi.WorkflowContext {
 	ms := workflow.TestLocalMutableState(s.workflowTaskCompletedHandler.shardContext, s.mockEventsCache, tv.Namespace(),
 		tv.WorkflowID(), tv.RunID(), log.NewTestLogger())
 
@@ -580,7 +581,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.T
 	return wfContext
 }
 
-func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVars, wfContext workflow.Context) (*protocolpb.Message, *update.Update, []byte) {
+func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVars, wfContext historyi.WorkflowContext) (*protocolpb.Message, *update.Update, []byte) {
 	ctx := context.Background()
 
 	ms, err := wfContext.LoadMutableState(ctx, s.workflowTaskCompletedHandler.shardContext)

@@ -38,9 +38,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/util"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/mock/gomock"
 )
 
@@ -51,8 +51,8 @@ type (
 
 		controller       *gomock.Controller
 		mockShard        *shard.ContextTest
-		mockContext      *workflow.MockContext
-		mockMutableState *workflow.MockMutableState
+		mockContext      *historyi.MockWorkflowContext
+		mockMutableState *historyi.MockMutableState
 		mockStateBuilder *MockStateRebuilder
 
 		logger log.Logger
@@ -75,8 +75,8 @@ func (s *conflictResolverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockContext = workflow.NewMockContext(s.controller)
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockContext = historyi.NewMockWorkflowContext(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 	s.mockStateBuilder = NewMockStateRebuilder(s.controller)
 
 	s.mockShard = shard.NewTestContext(
@@ -146,7 +146,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 		s.workflowID,
 		s.runID,
 	)
-	mockRebuildMutableState := workflow.NewMockMutableState(s.controller)
+	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
 			VersionHistories: versionhistory.NewVersionHistories(
@@ -272,7 +272,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 		s.workflowID,
 		s.runID,
 	)
-	mockRebuildMutableState := workflow.NewMockMutableState(s.controller)
+	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
 			VersionHistories: versionhistory.NewVersionHistories(
@@ -369,7 +369,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
 		s.workflowID,
 		s.runID,
 	)
-	mockRebuildMutableState := workflow.NewMockMutableState(s.controller)
+	mockRebuildMutableState := historyi.NewMockMutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
 			VersionHistories: versionhistory.NewVersionHistories(

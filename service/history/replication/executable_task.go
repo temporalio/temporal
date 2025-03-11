@@ -52,7 +52,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -319,7 +319,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	if item != nil {
 		nsTag = metrics.NamespaceTag(item.(namespace.Name).String())
 	}
-	metrics.ServiceLatency.With(e.MetricsHandler).Record(
+	metrics.ReplicationTaskProcessingLatency.With(e.MetricsHandler).Record(
 		now.Sub(e.taskReceivedTime),
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
@@ -553,7 +553,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 	}
 
 	applyFn := func() error {
-		backFillRequest := &shard.BackfillHistoryEventsRequest{
+		backFillRequest := &historyi.BackfillHistoryEventsRequest{
 			WorkflowKey:         workflowKey,
 			SourceClusterName:   e.SourceClusterName(),
 			VersionedHistory:    e.ReplicationTask().VersionedTransition,

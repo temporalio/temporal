@@ -361,6 +361,8 @@ type (
 		DeleteChasmNodes          map[string]struct{}
 		UpsertSignalRequestedIDs  map[string]struct{}
 		DeleteSignalRequestedIDs  map[string]struct{}
+		UpsertChasmNodes          map[string]*persistencespb.ChasmNode
+		DeleteChasmNodes          map[string]struct{}
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 

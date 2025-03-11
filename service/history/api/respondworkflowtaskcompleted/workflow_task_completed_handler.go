@@ -57,7 +57,7 @@ import (
 	"go.temporal.io/server/internal/protocol"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/proto"
@@ -78,9 +78,9 @@ type (
 		hasBufferedEventsOrMessages     bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
-		newMutableState                 workflow.MutableState
+		newMutableState                 historyi.MutableState
 		stopProcessing                  bool // should stop processing any more commands
-		mutableState                    workflow.MutableState
+		mutableState                    historyi.MutableState
 		effects                         effect.Controller
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
 		updateRegistry                  update.Registry
@@ -94,7 +94,7 @@ type (
 		namespaceRegistry      namespace.Registry
 		metricsHandler         metrics.Handler
 		config                 *configs.Config
-		shard                  shard.Context
+		shard                  historyi.ShardContext
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 	}
@@ -122,7 +122,7 @@ type (
 func newWorkflowTaskCompletedHandler(
 	identity string,
 	workflowTaskCompletedID int64,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	updateRegistry update.Registry,
 	effects effect.Controller,
 	attrValidator *api.CommandAttrValidator,
@@ -131,7 +131,7 @@ func newWorkflowTaskCompletedHandler(
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 	config *configs.Config,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,

@@ -42,7 +42,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -51,19 +51,19 @@ type (
 	HSMStateReplicator interface {
 		SyncHSMState(
 			ctx context.Context,
-			request *shard.SyncHSMRequest,
+			request *historyi.SyncHSMRequest,
 		) error
 	}
 
 	HSMStateReplicatorImpl struct {
-		shardContext  shard.Context
+		shardContext  historyi.ShardContext
 		workflowCache wcache.Cache
 		logger        log.Logger
 	}
 )
 
 func NewHSMStateReplicator(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *HSMStateReplicatorImpl {
@@ -77,7 +77,7 @@ func NewHSMStateReplicator(
 
 func (r *HSMStateReplicatorImpl) SyncHSMState(
 	ctx context.Context,
-	request *shard.SyncHSMRequest,
+	request *historyi.SyncHSMRequest,
 ) (retError error) {
 	namespaceID := namespace.ID(request.WorkflowKey.GetNamespaceID())
 	execution := &commonpb.WorkflowExecution{
@@ -132,7 +132,7 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 		return workflowContext.SubmitClosedWorkflowSnapshot(
 			ctx,
 			r.shardContext,
-			workflow.TransactionPolicyPassive,
+			historyi.TransactionPolicyPassive,
 		)
 	}
 
@@ -147,14 +147,14 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow
-		workflow.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 		nil,
 	)
 }
 
 func (r *HSMStateReplicatorImpl) syncHSMNode(
-	mutableState workflow.MutableState,
-	request *shard.SyncHSMRequest,
+	mutableState historyi.MutableState,
+	request *historyi.SyncHSMRequest,
 ) (bool, error) {
 
 	shouldSync, err := r.compareVersionHistory(mutableState, request.EventVersionHistory)
@@ -232,7 +232,7 @@ func (r *HSMStateReplicatorImpl) shouldSyncNode(
 }
 
 func (r *HSMStateReplicatorImpl) compareVersionHistory(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	incomingVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(

@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -69,7 +70,7 @@ type (
 			workflowTaskScheduledEventID int64,
 		) error
 		GenerateScheduleSpeculativeWorkflowTaskTasks(
-			workflowTask *WorkflowTaskInfo,
+			workflowTask *historyi.WorkflowTaskInfo,
 		) error
 		GenerateStartWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
@@ -108,7 +109,7 @@ type (
 
 	TaskGeneratorImpl struct {
 		namespaceRegistry namespace.Registry
-		mutableState      MutableState
+		mutableState      historyi.MutableState
 		config            *configs.Config
 		archivalMetadata  archiver.ArchivalMetadata
 	}
@@ -120,7 +121,7 @@ var _ TaskGenerator = (*TaskGeneratorImpl)(nil)
 
 func NewTaskGenerator(
 	namespaceRegistry namespace.Registry,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	config *configs.Config,
 	archivalMetadata archiver.ArchivalMetadata,
 ) *TaskGeneratorImpl {
@@ -466,7 +467,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 //  1. Always create ScheduleToStart timeout timer task (even for normal task queue).
 //  2. Don't create transfer task to push WT to matching.
 func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
-	workflowTask *WorkflowTaskInfo,
+	workflowTask *historyi.WorkflowTaskInfo,
 ) error {
 
 	var scheduleToStartTimeout time.Duration
@@ -856,7 +857,7 @@ func (r *TaskGeneratorImpl) archivalEnabled() bool {
 }
 
 func generateSubStateMachineTask(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	stateMachineRegistry *hsm.Registry,
 	node *hsm.Node,
 	subStateMachinePath []hsm.Key,

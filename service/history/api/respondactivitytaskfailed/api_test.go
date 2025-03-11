@@ -50,9 +50,8 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -63,14 +62,14 @@ type (
 		*require.Assertions
 
 		controller        *gomock.Controller
-		shardContext      *shard.MockContext
+		shardContext      *historyi.MockShardContext
 		namespaceRegistry *namespace.MockRegistry
 
 		workflowCache              *wcache.MockCache
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 
-		workflowContext     *workflow.MockContext
-		currentMutableState *workflow.MockMutableState
+		workflowContext     *historyi.MockWorkflowContext
+		currentMutableState *historyi.MockMutableState
 
 		activityInfo *persistencespb.ActivityInfo
 	}
@@ -429,8 +428,8 @@ func (s *workflowSuite) newRespondActivityTaskFailedRequest(uc UsecaseConfig) *h
 	return request
 }
 
-func (s *workflowSuite) setupWorkflowContext(mutableState *workflow.MockMutableState) *workflow.MockContext {
-	workflowContext := workflow.NewMockContext(s.controller)
+func (s *workflowSuite) setupWorkflowContext(mutableState *historyi.MockMutableState) *historyi.MockWorkflowContext {
+	workflowContext := historyi.NewMockWorkflowContext(s.controller)
 	workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(mutableState, nil).AnyTimes()
 	return workflowContext
 }
@@ -443,8 +442,8 @@ func (s *workflowSuite) setupCache() *wcache.MockCache {
 	return workflowCache
 }
 
-func (s *workflowSuite) setupShardContext(registry namespace.Registry) *shard.MockContext {
-	shardContext := shard.NewMockContext(s.controller)
+func (s *workflowSuite) setupShardContext(registry namespace.Registry) *historyi.MockShardContext {
+	shardContext := historyi.NewMockShardContext(s.controller)
 	shardContext.EXPECT().GetNamespaceRegistry().Return(registry).AnyTimes()
 	shardContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
 	shardContext.EXPECT().GetLogger().Return(log.NewTestLogger()).AnyTimes()
@@ -460,7 +459,7 @@ func (s *workflowSuite) setupShardContext(registry namespace.Registry) *shard.Mo
 	return shardContext
 }
 
-func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContext *shard.MockContext) {
+func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContext *historyi.MockShardContext) {
 	timer := metrics.NewMockTimerIface(s.controller)
 	tags := []metrics.Tag{
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
@@ -480,7 +479,7 @@ func (s *workflowSuite) expectTimerMetricsRecorded(uc UsecaseConfig, shardContex
 	shardContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
 }
 
-func (s *workflowSuite) expectCounterRecorded(shardContext *shard.MockContext) *shard.MockContext {
+func (s *workflowSuite) expectCounterRecorded(shardContext *historyi.MockShardContext) *historyi.MockShardContext {
 	counter := metrics.NewMockCounterIface(s.controller)
 	counter.EXPECT().Record(int64(1), metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope))
 
@@ -515,8 +514,8 @@ func (s *workflowSuite) setupNamespaceRegistry(uc UsecaseConfig) *namespace.Mock
 	return namespaceRegistry
 }
 
-func (s *workflowSuite) setupMutableState(uc UsecaseConfig, ai *persistencespb.ActivityInfo) *workflow.MockMutableState {
-	currentMutableState := workflow.NewMockMutableState(s.controller)
+func (s *workflowSuite) setupMutableState(uc UsecaseConfig, ai *persistencespb.ActivityInfo) *historyi.MockMutableState {
+	currentMutableState := historyi.NewMockMutableState(s.controller)
 	currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: tests.WorkflowID,

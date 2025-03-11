@@ -30,20 +30,19 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/server/common/log/tag"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
 	MutableStateMapper[Input any, Output any] func(
 		ctx context.Context,
-		wfContext workflow.Context,
-		mutableState workflow.MutableState,
+		wfContext historyi.WorkflowContext,
+		mutableState historyi.MutableState,
 		input Input,
-	) (workflow.MutableState, Output, error)
+	) (historyi.MutableState, Output, error)
 
 	MutableStateMapperImpl struct {
-		shardContext             shard.Context
+		shardContext             historyi.ShardContext
 		newBufferEventFlusher    bufferEventFlusherProvider
 		newBranchMgr             branchMgrProvider
 		newConflictResolver      conflictResolverProvider
@@ -66,10 +65,10 @@ var _ MutableStateMapper[replicationTask, struct{}] = (*MutableStateMapperImpl)(
 var _ MutableStateMapper[replicationTask, PrepareHistoryBranchOut] = (*MutableStateMapperImpl)(nil).GetOrCreateHistoryBranch
 var _ MutableStateMapper[GetOrRebuildMutableStateIn, bool] = (*MutableStateMapperImpl)(nil).GetOrRebuildCurrentMutableState
 var _ MutableStateMapper[GetOrRebuildMutableStateIn, bool] = (*MutableStateMapperImpl)(nil).GetOrRebuildMutableState
-var _ MutableStateMapper[replicationTask, workflow.MutableState] = (*MutableStateMapperImpl)(nil).ApplyEvents
+var _ MutableStateMapper[replicationTask, historyi.MutableState] = (*MutableStateMapperImpl)(nil).ApplyEvents
 
 func NewMutableStateMapping(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	newBufferEventFlusher bufferEventFlusherProvider,
 	newBranchMgr branchMgrProvider,
 	newConflictResolver conflictResolverProvider,
@@ -86,10 +85,10 @@ func NewMutableStateMapping(
 
 func (m *MutableStateMapperImpl) FlushBufferEvents(
 	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	task replicationTask,
-) (workflow.MutableState, struct{}, error) {
+) (historyi.MutableState, struct{}, error) {
 	flusher := m.newBufferEventFlusher(wfContext, mutableState, task.getLogger())
 	_, mutableState, err := flusher.flush(ctx)
 	if err != nil {
@@ -104,10 +103,10 @@ func (m *MutableStateMapperImpl) FlushBufferEvents(
 
 func (m *MutableStateMapperImpl) GetOrCreateHistoryBranch(
 	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	task replicationTask,
-) (workflow.MutableState, PrepareHistoryBranchOut, error) {
+) (historyi.MutableState, PrepareHistoryBranchOut, error) {
 	branchMgr := m.newBranchMgr(wfContext, mutableState, task.getLogger())
 	incomingVersionHistory := task.getVersionHistory()
 	eventBatches := task.getEvents()
@@ -153,10 +152,10 @@ func (m *MutableStateMapperImpl) GetOrCreateHistoryBranch(
 
 func (m *MutableStateMapperImpl) CreateHistoryBranch(
 	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	task replicationTask,
-) (workflow.MutableState, PrepareHistoryBranchOut, error) {
+) (historyi.MutableState, PrepareHistoryBranchOut, error) {
 	branchMgr := m.newBranchMgr(wfContext, mutableState, task.getLogger())
 	incomingVersionHistory := task.getVersionHistory()
 	doContinue, versionHistoryIndex, err := branchMgr.Create(
@@ -186,10 +185,10 @@ func (m *MutableStateMapperImpl) CreateHistoryBranch(
 
 func (m *MutableStateMapperImpl) GetOrRebuildCurrentMutableState(
 	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	task GetOrRebuildMutableStateIn,
-) (workflow.MutableState, bool, error) {
+) (historyi.MutableState, bool, error) {
 	conflictResolver := m.newConflictResolver(wfContext, mutableState, task.getLogger())
 	incomingVersion := task.getVersion()
 	mutableState, isRebuilt, err := conflictResolver.GetOrRebuildCurrentMutableState(
@@ -208,10 +207,10 @@ func (m *MutableStateMapperImpl) GetOrRebuildCurrentMutableState(
 
 func (m *MutableStateMapperImpl) GetOrRebuildMutableState(
 	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	task GetOrRebuildMutableStateIn,
-) (workflow.MutableState, bool, error) {
+) (historyi.MutableState, bool, error) {
 	conflictResolver := m.newConflictResolver(wfContext, mutableState, task.getLogger())
 	mutableState, isRebuilt, err := conflictResolver.GetOrRebuildMutableState(
 		ctx,
@@ -228,10 +227,10 @@ func (m *MutableStateMapperImpl) GetOrRebuildMutableState(
 
 func (m *MutableStateMapperImpl) ApplyEvents(
 	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	task replicationTask,
-) (workflow.MutableState, workflow.MutableState, error) {
+) (historyi.MutableState, historyi.MutableState, error) {
 	mutableStateRebuilder := m.newMutableStateRebuilder(mutableState, task.getLogger())
 	newMutableState, err := mutableStateRebuilder.ApplyEvents(
 		ctx,

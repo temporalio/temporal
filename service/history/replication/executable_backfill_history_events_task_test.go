@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -201,15 +202,15 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestExecute_Process() {
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
 
-	engine.EXPECT().BackfillHistoryEvents(gomock.Any(), &shard.BackfillHistoryEventsRequest{
+	engine.EXPECT().BackfillHistoryEvents(gomock.Any(), &historyi.BackfillHistoryEventsRequest{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: s.task.NamespaceID,
 			WorkflowID:  s.task.WorkflowID,
@@ -260,8 +261,8 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Success(
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,

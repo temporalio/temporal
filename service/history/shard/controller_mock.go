@@ -38,6 +38,7 @@ import (
 
 	namespace "go.temporal.io/server/common/namespace"
 	pingable "go.temporal.io/server/common/pingable"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -91,10 +92,10 @@ func (mr *MockControllerMockRecorder) GetPingChecks() *gomock.Call {
 }
 
 // GetShardByID mocks base method.
-func (m *MockController) GetShardByID(shardID int32) (Context, error) {
+func (m *MockController) GetShardByID(shardID int32) (interfaces.ShardContext, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetShardByID", shardID)
-	ret0, _ := ret[0].(Context)
+	ret0, _ := ret[0].(interfaces.ShardContext)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -106,10 +107,10 @@ func (mr *MockControllerMockRecorder) GetShardByID(shardID any) *gomock.Call {
 }
 
 // GetShardByNamespaceWorkflow mocks base method.
-func (m *MockController) GetShardByNamespaceWorkflow(namespaceID namespace.ID, workflowID string) (Context, error) {
+func (m *MockController) GetShardByNamespaceWorkflow(namespaceID namespace.ID, workflowID string) (interfaces.ShardContext, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetShardByNamespaceWorkflow", namespaceID, workflowID)
-	ret0, _ := ret[0].(Context)
+	ret0, _ := ret[0].(interfaces.ShardContext)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
