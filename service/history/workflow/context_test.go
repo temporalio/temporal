@@ -525,11 +525,7 @@ func (s *contextSuite) TestRefreshTask() {
 						s.Equal(persistence.UpdateWorkflowModeUpdateCurrent, request.Mode)
 						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
 						s.Empty(request.UpdateWorkflowEvents)
-						return &persistence.UpdateWorkflowExecutionResponse{
-							UpdateMutableStateStats: persistence.MutableStateStatistics{
-								HistoryStatistics: &persistence.HistoryStatistics{},
-							},
-						}, nil
+						return tests.UpdateWorkflowExecutionResponse, nil
 					}).Times(1)
 			},
 		},
@@ -550,11 +546,7 @@ func (s *contextSuite) TestRefreshTask() {
 					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
 						s.Equal(persistence.UpdateWorkflowModeSkipCurrent, request.Mode)
-						return &persistence.UpdateWorkflowExecutionResponse{
-							UpdateMutableStateStats: persistence.MutableStateStatistics{
-								HistoryStatistics: &persistence.HistoryStatistics{},
-							},
-						}, nil
+						return tests.UpdateWorkflowExecutionResponse, nil
 					}).Times(1)
 			},
 		},
@@ -583,11 +575,7 @@ func (s *contextSuite) TestRefreshTask() {
 					func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 						s.NotEmpty(request.UpdateWorkflowMutation.Tasks)
 						s.Equal(persistence.UpdateWorkflowModeBypassCurrent, request.Mode)
-						return &persistence.UpdateWorkflowExecutionResponse{
-							UpdateMutableStateStats: persistence.MutableStateStatistics{
-								HistoryStatistics: &persistence.HistoryStatistics{},
-							},
-						}, nil
+						return tests.UpdateWorkflowExecutionResponse, nil
 					}).Times(1)
 			},
 		},
