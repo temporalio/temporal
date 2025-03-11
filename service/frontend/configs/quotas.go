@@ -175,7 +175,10 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 
-		// APIs that rely on visibility
+		// APIs that rely on visibility.
+		// If you modify this list, please update the docs at
+		// https://docs.temporal.io/cloud/limits#visibility-api-rate-limit or in github at the link below
+		// https://github.com/temporalio/documentation/blob/main/docs/evaluate/temporal-cloud/limits.mdx#visibility-api-rate-limit
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":                     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               1,
