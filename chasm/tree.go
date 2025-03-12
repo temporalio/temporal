@@ -120,6 +120,23 @@ func NewTree(
 	return root, nil
 }
 
+// NewEmptyTree creates a new empty in-memory CHASM tree.
+func NewEmptyTree(
+	registry *Registry,
+	timeSource clock.TimeSource,
+	backend NodeBackend,
+	pathEncoder NodePathEncoder,
+) *Node {
+	base := &nodeBase{
+		registry:    registry,
+		timeSource:  timeSource,
+		backend:     backend,
+		pathEncoder: pathEncoder,
+	}
+	root := newNode(base, nil)
+	return root
+}
+
 // Component retrieves a component from the tree rooted at node n
 // using the provided component reference
 // It also performs consistency, access rule, and task validation checks
