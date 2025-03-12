@@ -2248,7 +2248,7 @@ func (s *ContextImpl) ChasmRegistry() *chasm.Registry {
 	return s.chasmRegistry
 }
 
-func (s *ContextImpl) GetWorkflowContext(
+func (s *ContextImpl) GetCachedWorkflowContext(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
@@ -2256,7 +2256,7 @@ func (s *ContextImpl) GetWorkflowContext(
 ) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 	return nil, nil, nil
 }
-func (s *ContextImpl) GetCurrentWorkflowContext(
+func (s *ContextImpl) GetCurrentCachedWorkflowContext(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string, lockPriority locks.Priority,
