@@ -1,0 +1,14 @@
+ignore:
+  - "**/*_gen.go"
+  - "**/*_mock.go"
+  - "**/*.pb.go"
+  - "**/pb.mock.go"
+  - "/api/**/*"
+  - "/cmd/**/*"
+  - "/common/testing/**/*"
+  - "/temporaltest/**/*"
+  - "/tests/**/*"
+  - "/tools/**/*"
+
+# disable pull request comments
+comment: false
