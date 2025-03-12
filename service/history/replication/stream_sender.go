@@ -137,13 +137,13 @@ func (s *StreamSenderImpl) Start() {
 	if s.isTieredStackEnabled {
 		// High Priority sender is used for live traffic
 		// Low Priority sender is used for force replication closed workflow
-		go WrapEventLoop(getSenderEventLoop(enumsspb.TASK_PRIORITY_HIGH), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
-		go WrapEventLoop(getSenderEventLoop(enumsspb.TASK_PRIORITY_LOW), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
+		go WrapEventLoop(getSenderEventLoop(enumsspb.TASK_PRIORITY_HIGH), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamRetryPolicy)
+		go WrapEventLoop(getSenderEventLoop(enumsspb.TASK_PRIORITY_LOW), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamRetryPolicy)
 	} else {
-		go WrapEventLoop(getSenderEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
+		go WrapEventLoop(getSenderEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamRetryPolicy)
 	}
 
-	go WrapEventLoop(s.recvEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
+	go WrapEventLoop(s.recvEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamRetryPolicy)
 
 	s.logger.Info("StreamSender started.")
 }
@@ -575,7 +575,7 @@ Loop:
 			WithMaximumAttempts(80).
 			WithExpirationInterval(3 * time.Minute)
 
-		err = backoff.ThrottleRetry(operation, retryPolicy, IsRetryableError)
+		err = backoff.ThrottleRetry(operation, retryPolicy, isRetryableError)
 		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
 			attempt,
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
