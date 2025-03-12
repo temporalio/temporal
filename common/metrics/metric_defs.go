@@ -928,6 +928,7 @@ var (
 	ReplicationTaskSendError              = NewCounterDef("replication_task_send_error")
 	ReplicationTaskGenerationLatency      = NewTimerDef("replication_task_generation_latency")
 	ReplicationTaskLoadLatency            = NewTimerDef("replication_task_load_latency")
+	ReplicationTaskLoadSize               = NewDimensionlessHistogramDef("replication_task_load_size")
 	ReplicationTaskSendLatency            = NewTimerDef("replication_task_send_latency")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
