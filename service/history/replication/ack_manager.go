@@ -542,6 +542,7 @@ func (p *ackMgrImpl) GetReplicationTasksIter(
 		if err != nil {
 			return nil, nil, err
 		}
+		metrics.ReplicationTaskLoadSize.With(p.metricsHandler).Record(int64(len(response.Tasks)))
 		return response.Tasks, response.NextPageToken, nil
 	}), nil
 }
