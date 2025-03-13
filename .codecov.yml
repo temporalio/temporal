@@ -1,3 +1,4 @@
+# see https://docs.codecov.com/docs/ignoring-paths
 ignore:
   - "**/*_gen.go"
   - "**/*_mock.go"
