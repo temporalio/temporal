@@ -224,7 +224,7 @@ func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 
 	defer log.CapturePanic(s.logger, &panicErr)
 
-	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification()
+	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
 	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
 
 	catchupEndExclusiveWatermark, err := s.sendCatchUp(priority)
