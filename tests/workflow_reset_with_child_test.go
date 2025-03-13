@@ -66,8 +66,6 @@ type WorkflowResetWithChildSuite struct {
 
 func TestWorkflowResetWithChildTestSuite(t *testing.T) {
 	t.Parallel()
-	// TODO: Enable this test when reset phase 2 is enabled.
-	t.Skip("Skipping until reset phase 2 is enabled")
 	suite.Run(t, new(WorkflowResetWithChildSuite))
 }
 
@@ -85,6 +83,8 @@ func (s *WorkflowResetWithChildSuite) SetupTest() {
 // Case 1.a Reset point is before the child init and child is not running (i.e. child already completed), with random ChildIDs
 // This test will create 3 child workflows and resets between each child.
 func (s *WorkflowResetWithChildSuite) TestResetWithChild() {
+	// TODO: Enable this test when reset phase 2 is enabled.
+	s.T().Skip("Skipping until reset phase 2 is enabled")
 	wfID := "reset-workflow-with-children"
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -187,6 +187,8 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild() {
 // Case 1.b Reset point is before the child init and child is not running (i.e. child already completed), with specified ChildIDs
 // This test will create 3 child workflows and resets between each child.
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID() {
+	// TODO: Enable this test when reset phase 2 is enabled.
+	s.T().Skip("Skipping until reset phase 2 is enabled")
 	wfID := "reset-workflow-with-children_with_child_id"
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -313,6 +315,8 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID() {
 // Case 1.c Reset point is before the child init and child is not running (i.e. child already completed), with specified
 // ChildIDs and WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE. This test will create 3 child workflows and resets between each child.
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID_WithRejectDuplicate() {
+	// TODO: Enable this test when reset phase 2 is enabled.
+	s.T().Skip("Skipping until reset phase 2 is enabled")
 	wfID := "reset-workflow-with-children-with-child-workflow-id-with-reject-duplicate"
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -391,6 +395,8 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_WithChildID_WithRejectD
 
 // 2.a Reset point is before the child init and child is running at the time of reset. Child uses random WorkflowID.
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID() {
+	// TODO: Enable this test when reset phase 2 is enabled.
+	s.T().Skip("Skipping until reset phase 2 is enabled")
 	wfID := "reset-workflow-with-running-child"
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -415,7 +421,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID(
 		},
 		Reason: "integration test",
 	}
-	// (reset #1) - resetting the workflow execution before child workflow starts.
+	// resetting the workflow execution before child workflow starts.
 	resetRequest.RequestId = "reset-request-1"
 	resetRequest.WorkflowTaskFinishEventId = 4
 	resp, err := s.SdkClient().ResetWorkflowExecution(context.Background(), resetRequest)
@@ -456,6 +462,8 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_RandomWID(
 
 // 2.b Reset point is before the child init and child is running at the time of reset. Child uses fixed WorkflowID.
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
+	// TODO: Enable this test when reset phase 2 is enabled.
+	s.T().Skip("Skipping until reset phase 2 is enabled")
 	wfID := "reset-workflow-with-running-child-with-set-wid"
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -480,7 +488,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
 		},
 		Reason: "integration test",
 	}
-	// (reset #1) - resetting the workflow execution before all 3 child workflows are started.
+	// resetting the workflow execution before all 3 child workflows are started.
 	resetRequest.RequestId = "reset-request-1"
 	resetRequest.WorkflowTaskFinishEventId = 4
 	resp, err := s.SdkClient().ResetWorkflowExecution(context.Background(), resetRequest)
@@ -513,6 +521,8 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID() {
 
 // 2.c Reset point is before the child init and child is running at the time of reset. Child uses fixed WorkflowID and POLICY_REJECT_DUPLICATE.
 func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID_WithRejectDuplicate() {
+	// TODO: Enable this test when reset phase 2 is enabled.
+	s.T().Skip("Skipping until reset phase 2 is enabled")
 	wfID := "reset-workflow-with-running-child-with-set-wid-with-reject-duplicate"
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -539,7 +549,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_RunningChild_SetWID_Wit
 		},
 		Reason: "integration test",
 	}
-	// (reset #1) - resetting the workflow execution before all 3 child workflows are started.
+	//  resetting the workflow execution before all 3 child workflows are started.
 	resetRequest.RequestId = "reset-request-1"
 	resetRequest.WorkflowTaskFinishEventId = 4
 	resp, err := s.SdkClient().ResetWorkflowExecution(context.Background(), resetRequest)
@@ -597,7 +607,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterStartingChild() {
 		Reason: "integration test",
 	}
 
-	// (reset #2) - resetting the new workflow execution after child-1 while child-1 is still running
+	// resetting the new workflow execution after child-1 while child-1 is still running
 	resetRequest.RequestId = "reset-request-2"
 	resetRequest.WorkflowExecution.RunId = firstRun.GetRunID()
 	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIdAfterChildInit(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
@@ -647,11 +657,16 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildCompletes() {
 		Reason: "integration test",
 	}
 
-	// Let the second child finish now
+	// Let the child finish now
 	err = s.SdkClient().SignalWorkflow(context.Background(), initialChildExecutions[0].WorkflowId, initialChildExecutions[0].RunId, "continue", "")
 	s.NoError(err)
 
-	// (reset #2) - resetting the new workflow execution after child-1 while child-1 is still running
+	// Wait for the child to complete.
+	s.Eventually(func() bool {
+		return s.getWorkflowTaskFinishEventIdAfterChild(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId) != 0
+	}, 5*time.Second, 100*time.Millisecond)
+
+	// resetting the new workflow execution after child initiation.
 	resetRequest.RequestId = "reset-request-2"
 	resetRequest.WorkflowExecution.RunId = firstRun.GetRunID()
 	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIdAfterChildInit(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
@@ -662,12 +677,6 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildCompletes() {
 	var resultAfterReset1 string
 	err = s.SdkClient().GetWorkflow(context.Background(), wfID, resp.GetRunId()).Get(ctx, &resultAfterReset1)
 	s.NoError(err)
-
-	// verify that the child completed.
-	descResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, initialChildExecutions[0].WorkflowId, initialChildExecutions[0].RunId)
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().GetStatus(),
-		"Child workflow should have status COMPLETED")
 }
 
 // 3.c Reset point is after the child init and the child terminated at the time of reset.
@@ -701,7 +710,7 @@ func (s *WorkflowResetWithChildSuite) TestResetWithChild_AfterChildTerminated() 
 	err = s.SdkClient().TerminateWorkflow(context.Background(), initialChildExecutions[0].WorkflowId, initialChildExecutions[0].RunId, "test")
 	s.NoError(err)
 
-	// (reset #2) - resetting the new workflow execution after child-1 while child-1 is still running
+	// resetting the new workflow execution after child initiation.
 	resetRequest.RequestId = "reset-request-2"
 	resetRequest.WorkflowExecution.RunId = firstRun.GetRunID()
 	resetRequest.WorkflowTaskFinishEventId = s.getWorkflowTaskFinishEventIdAfterChildInit(ctx, wfID, firstRun.GetRunID(), initialChildExecutions[0].WorkflowId)
