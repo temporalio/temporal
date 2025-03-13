@@ -719,14 +719,13 @@ func (d *namespaceHandler) CreateWorkflowRule(
 		CreateTime: timestamppb.New(d.timeSource.Now()),
 	}
 	config.WorkflowRules[ruleSpec.GetId()] = workflowRule
-	configVersion := existingNamespace.ConfigVersion + 1
 
 	updateReq := &persistence.UpdateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info:                        existingNamespace.Info,
 			Config:                      config,
 			ReplicationConfig:           existingNamespace.ReplicationConfig,
-			ConfigVersion:               configVersion,
+			ConfigVersion:               existingNamespace.ConfigVersion + 1,
 			FailoverVersion:             existingNamespace.FailoverVersion,
 			FailoverNotificationVersion: existingNamespace.FailoverNotificationVersion,
 		},
@@ -764,24 +763,42 @@ func (d *namespaceHandler) DescribeWorkflowRule(
 func (d *namespaceHandler) DeleteWorkflowRule(
 	ctx context.Context, ruleID string, nsName string,
 ) error {
+	if ruleID == "" {
+		return serviceerror.NewInvalidArgument("Workflow Rule ID is not set.")
+	}
+
+	metadata, err := d.metadataMgr.GetMetadata(ctx)
+
 	getNamespaceResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
 	if err != nil {
 		return err
 	}
 
-	workflowRules := getNamespaceResponse.Namespace.Config.WorkflowRules
-
-	if workflowRules == nil {
+	existingNamespace := getNamespaceResponse.Namespace
+	config := getNamespaceResponse.Namespace.Config
+	if config.WorkflowRules == nil {
 		return serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
 	}
-	_, ok := workflowRules[ruleID]
+	_, ok := config.WorkflowRules[ruleID]
 	if !ok {
 		return serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
 	}
 
-	delete(workflowRules, ruleID)
+	delete(config.WorkflowRules, ruleID)
 
-	return nil
+	updateReq := &persistence.UpdateNamespaceRequest{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:                        existingNamespace.Info,
+			Config:                      config,
+			ReplicationConfig:           existingNamespace.ReplicationConfig,
+			ConfigVersion:               existingNamespace.ConfigVersion + 1,
+			FailoverVersion:             existingNamespace.FailoverVersion,
+			FailoverNotificationVersion: existingNamespace.FailoverNotificationVersion,
+		},
+		IsGlobalNamespace:   getNamespaceResponse.IsGlobalNamespace,
+		NotificationVersion: metadata.NotificationVersion,
+	}
+	return d.metadataMgr.UpdateNamespace(ctx, updateReq)
 }
 
 func (d *namespaceHandler) ListWorkflowRules(
