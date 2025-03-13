@@ -697,14 +697,13 @@ func (d *namespaceHandler) CreateWorkflowRule(
 	if err != nil {
 		return nil, err
 	}
-	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
+	getNamespaceResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
 	if err != nil {
 		return nil, err
 	}
 
-	existingNamespace := getResponse.Namespace
-
-	config := existingNamespace.Config
+	existingNamespace := getNamespaceResponse.Namespace
+	config := getNamespaceResponse.Namespace.Config
 
 	if config.WorkflowRules == nil {
 		config.WorkflowRules = make(map[string]*rulespb.WorkflowRule)

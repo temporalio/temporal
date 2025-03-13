@@ -35,6 +35,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	rulespb "go.temporal.io/api/rules/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -154,6 +155,146 @@ func (s *ActivityApiRulesClientTestSuite) createWorkflow(ctx context.Context, wo
 	return workflowRun
 }
 
+func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Initial state - no rules
+	nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+	s.NotNil(nsResp)
+	s.Len(nsResp.Rules, 0)
+
+	// create a rule
+	ruleID1 := "pause-activity-rule-1"
+	activityType := "ActivityFunc"
+
+	createRuleRequest := &workflowservice.CreateWorkflowRuleRequest{
+		Namespace: s.Namespace().String(),
+		Spec: &rulespb.WorkflowRuleSpec{
+			Id: ruleID1,
+			Trigger: &rulespb.WorkflowRuleSpec_ActivityStart{
+				ActivityStart: &rulespb.WorkflowRuleSpec_ActivityStartTrigger{
+					Predicate: fmt.Sprintf("ActivityType = \"%s\"", activityType),
+				},
+			},
+			Actions: []*rulespb.WorkflowRuleAction{
+				{
+					Variant: &rulespb.WorkflowRuleAction_Pause{
+						Pause: &rulespb.WorkflowRuleAction_ActionPause{
+							Scope: enumspb.RULE_ACTION_SCOPE_ACTIVITY,
+						},
+					},
+				},
+			},
+		},
+	}
+	createRuleResponse, err := s.FrontendClient().CreateWorkflowRule(ctx, createRuleRequest)
+	s.NoError(err)
+	s.NotNil(createRuleResponse)
+
+	// verify that frontend has updated namespaces
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+			Namespace: s.Namespace().String(),
+		})
+		assert.NoError(s.T(), err)
+		assert.NotNil(s.T(), nsResp)
+		assert.NotNil(s.T(), nsResp.Rules)
+		if assert.Len(s.T(), nsResp.Rules, 1) {
+			assert.Equal(s.T(), ruleID1, nsResp.Rules[0].Spec.Id)
+		}
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// create a second rule with the same ID
+	createRuleResponse, err = s.FrontendClient().CreateWorkflowRule(ctx, createRuleRequest)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Error(err)
+	s.ErrorAs(err, &invalidArgument)
+	s.Nil(createRuleResponse)
+
+	// create a second rule with a different ID
+	ruleID2 := "pause-activity-rule-2"
+	createRuleRequest.Spec.Id = ruleID2
+	createRuleResponse, err = s.FrontendClient().CreateWorkflowRule(ctx, createRuleRequest)
+	s.NoError(err)
+	s.NotNil(createRuleResponse)
+
+	// verify that frontend has updated namespaces
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+			Namespace: s.Namespace().String(),
+		})
+		assert.NoError(s.T(), err)
+		assert.NotNil(s.T(), nsResp)
+		assert.NotNil(s.T(), nsResp.Rules)
+		if assert.Len(s.T(), nsResp.Rules, 2) {
+			// we can't guarantee the order of the rules
+			assert.True(s.T(), nsResp.Rules[0].Spec.Id == ruleID1 || nsResp.Rules[1].Spec.Id == ruleID1)
+			assert.True(s.T(), nsResp.Rules[0].Spec.Id == ruleID2 || nsResp.Rules[1].Spec.Id == ruleID2)
+		}
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// get rule by ID
+	describeRuleResponse, err := s.FrontendClient().DescribeWorkflowRule(ctx, &workflowservice.DescribeWorkflowRuleRequest{
+		Namespace: s.Namespace().String(),
+		RuleId:    ruleID1,
+	})
+	s.NoError(err)
+	s.NotNil(describeRuleResponse)
+	s.Equal(ruleID1, describeRuleResponse.Rule.Spec.Id)
+
+	describeRuleResponse, err = s.FrontendClient().DescribeWorkflowRule(ctx, &workflowservice.DescribeWorkflowRuleRequest{
+		Namespace: s.Namespace().String(),
+		RuleId:    ruleID2,
+	})
+	s.NoError(err)
+	s.NotNil(describeRuleResponse)
+	s.Equal(ruleID2, describeRuleResponse.Rule.Spec.Id)
+
+	// delete rule 1
+	deleteRuleResponse, err := s.FrontendClient().DeleteWorkflowRule(ctx, &workflowservice.DeleteWorkflowRuleRequest{
+		Namespace: s.Namespace().String(),
+		RuleId:    ruleID1,
+	})
+	s.NoError(err)
+	s.NotNil(deleteRuleResponse)
+
+	// verify that frontend has updated namespaces
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+			Namespace: s.Namespace().String(),
+		})
+		assert.NoError(s.T(), err)
+		assert.NotNil(s.T(), nsResp)
+		assert.NotNil(s.T(), nsResp.Rules)
+		if assert.Len(s.T(), nsResp.Rules, 1) {
+			// we can't guarantee the order of the rules
+			assert.Equal(s.T(), ruleID2, nsResp.Rules[0].Spec.Id)
+		}
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// delete rule 2
+	deleteRuleResponse, err = s.FrontendClient().DeleteWorkflowRule(ctx, &workflowservice.DeleteWorkflowRuleRequest{
+		Namespace: s.Namespace().String(),
+		RuleId:    ruleID2,
+	})
+	s.NoError(err)
+	s.NotNil(deleteRuleResponse)
+	// verify that frontend has updated namespaces
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
+			Namespace: s.Namespace().String(),
+		})
+		assert.NoError(s.T(), err)
+		assert.NotNil(s.T(), nsResp)
+		assert.NotNil(s.T(), nsResp.Rules)
+		assert.Len(s.T(), nsResp.Rules, 0)
+	}, 5*time.Second, 200*time.Millisecond)
+}
+
 func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_WhileRetrying() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -187,10 +328,10 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_WhileRetrying() {
 					Predicate: fmt.Sprintf("ActivityType = \"%s\"", activityType),
 				},
 			},
-			Actions: []*rulespb.Action{
+			Actions: []*rulespb.WorkflowRuleAction{
 				{
-					Variant: &rulespb.Action_Pause{
-						Pause: &rulespb.Action_ActionPause{
+					Variant: &rulespb.WorkflowRuleAction_Pause{
+						Pause: &rulespb.WorkflowRuleAction_ActionPause{
 							Scope: enumspb.RULE_ACTION_SCOPE_ACTIVITY,
 						},
 					},
@@ -207,12 +348,12 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_WhileRetrying() {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		s.NoError(err)
-		s.NotNil(nsResp)
-		s.NotNil(nsResp.Rules)
+		assert.NoError(s.T(), err)
+		assert.NotNil(s.T(), nsResp)
+		assert.NotNil(s.T(), nsResp.Rules)
 		if nsResp.GetRules() != nil {
-			s.Len(nsResp.Rules, 1)
-			s.Equal(ruleID, nsResp.Rules[0].Spec.Id)
+			assert.Len(s.T(), nsResp.Rules, 1)
+			assert.Equal(s.T(), ruleID, nsResp.Rules[0].Spec.Id)
 		}
 	}, 5*time.Second, 200*time.Millisecond)
 
@@ -257,4 +398,5 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_WhileRetrying() {
 	// wait for workflow to finish
 	var out string
 	err = workflowRun.Get(ctx, &out)
+	s.NoError(err)
 }
