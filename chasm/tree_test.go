@@ -23,6 +23,7 @@
 package chasm
 
 import (
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -31,6 +32,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 )
 
@@ -38,6 +40,7 @@ type (
 	nodeSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller  *gomock.Controller
 		nodeBackend *MockNodeBackend
@@ -54,6 +57,7 @@ func TestNodeSuite(t *testing.T) {
 
 func (s *nodeSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.nodeBackend = NewMockNodeBackend(s.controller)
@@ -98,82 +102,237 @@ func (s *nodeSuite) TestNewTree() {
 	s.Equal(expectedPreorderNodes, preorderNodes)
 }
 
-func (s *nodeSuite) TestSerializeNode_ComponentAttributes() {
-	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1)
-	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+func (s *nodeSuite) TestSetValue_TypeComponent() {
+	component := s.newTestComponent()
 
-	component := TestComponent{
-		ComponentData: &persistencespb.ActivityInfo{
-			ActivityId: "22",
-		},
-		SubComponent1: NewComponentField[TestSubComponent1](nil, TestSubComponent1{
-			SubComponent1Data: &persistencespb.ActivityInfo{ // Random proto type
-				ActivityId: "22.8",
-			},
-		}),
-		SubComponent2: nil,
-		SubData1: NewDataField[*persistencespb.ActivityInfo](nil,
-			&persistencespb.ActivityInfo{
-				ActivityId: "22.78",
-			}),
+	node := newNode(s.nodeBase(), nil)
+	err := node.setValue(component, fieldTypeComponent)
+	s.NoError(err)
+
+	// Assert that tree is constructed.
+	s.Equal(component, node.value)
+	s.NotNil(node.serializedValue.GetComponentAttributes(), "node serialized value must have attributes created")
+	s.Nil(node.serializedValue.GetComponentAttributes().GetData(), "node serialized value must not have data before serialize is called")
+
+	sc1Node := node.children["SubComponent1"]
+	s.NotNil(sc1Node)
+	s.NotNil(sc1Node.value, "child node value must be set and point to sub-component")
+	s.Equal(component.SubComponent1.Internal.value, sc1Node.value, "child node value must be set and point to sub-component")
+	s.Equal(sc1Node, component.SubComponent1.Internal.node, "Internal.node must be set and point to just created child node")
+	s.NotNil(sc1Node.serializedValue.GetComponentAttributes(), "child node serialized value must have attributes created")
+	s.Nil(sc1Node.serializedValue.GetComponentAttributes().GetData(), "child node serialized value must not have data before serialize is called")
+
+	sc11Node := node.children["SubComponent1"].children["SubComponent11"]
+	s.NotNil(sc11Node)
+	s.NotNil(sc11Node.value, "child node value must be set and point to sub-component")
+	s.Equal(component.SubComponent1.Internal.value.(*TestSubComponent1).SubComponent11.Internal.value, sc11Node.value, "child node value must be set and point to sub-component")
+	s.Equal(sc11Node, component.SubComponent1.Internal.value.(*TestSubComponent1).SubComponent11.Internal.node, "Internal.node must be set and point to just created child node")
+	s.NotNil(sc11Node.serializedValue.GetComponentAttributes(), "child node serialized value must have attributes created")
+	s.Nil(sc11Node.serializedValue.GetComponentAttributes().GetData(), "child node serialized value must not have data before serialize is called")
+
+	sd1Node := node.children["SubData1"]
+	s.NotNil(sd1Node)
+	s.NotNil(sd1Node.value, "child node value must be set and point to sub-component")
+	s.Equal(component.SubData1.Internal.value, sd1Node.value, "child node value must be set and point to sub-component")
+	s.Equal(sd1Node, component.SubData1.Internal.node, "Internal.node must be set and point to just created child node")
+	s.NotNil(sd1Node.serializedValue.GetDataAttributes(), "child node serialized value must have attributes created")
+	s.Nil(sd1Node.serializedValue.GetDataAttributes().GetData(), "child node serialized value must not have data before serialize is called")
+
+	s.Nil(node.children["SubComponent2"])
+}
+
+func (s *nodeSuite) TestSerializeNode_ComponentAttributes() {
+	component := s.newTestComponent()
+
+	node := newNode(s.nodeBase(), nil)
+	err := node.setValue(component, fieldTypeComponent)
+	s.NoError(err)
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(2) // 2 because component and sub-component
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(2)
+
+	err = node.serialize()
+	s.NoError(err)
+
+	s.NotNil(node.serializedValue)
+	s.NotNil(node.serializedValue.GetComponentAttributes().GetData(), "node serialized value must have data after serialize is called")
+	s.Equal("chasm.TestComponent", node.serializedValue.GetComponentAttributes().GetType(), "node serialized value must have type set")
+
+	// serialization is not recursive and must be called for every node.
+	sc1Node := node.children["SubComponent1"]
+	err = sc1Node.serialize()
+	s.NoError(err)
+	s.NotNil(sc1Node.serializedValue.GetComponentAttributes().GetData(), "child node serialized value must have data after serialize is called")
+	s.Equal("chasm.TestSubComponent1", sc1Node.serializedValue.GetComponentAttributes().GetType(), "node serialized value must have type set")
+
+	sd1Node := node.children["SubData1"]
+	err = sd1Node.serialize()
+	s.NoError(err)
+	s.NotNil(sd1Node.serializedValue.GetDataAttributes().GetData(), "child node serialized value must have data after serialize is called")
+}
+
+func (s *nodeSuite) TestSetValue_TypeData() {
+	component := &persistencespb.ActivityInfo{ // Random proto type
+		ActivityId: "22",
 	}
 
 	node := newNode(s.nodeBase(), nil)
-	node.protoValue = &persistencespb.ChasmNode{
-		Attributes: &persistencespb.ChasmNode_ComponentAttributes{
-			ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
-		},
-	}
-	node.value = component
-
-	mutation := &NodesMutation{
-		UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
-		DeletedNodes: make(map[string]struct{}),
-	}
-
-	err := node.serializeNode(mutation, []string{})
+	err := node.setValue(component, fieldTypeData)
 	s.NoError(err)
-
-	s.NotNil(node.protoValue)
-	s.NotNil(node.protoValue.GetComponentAttributes().GetData())
-	s.Equal("chasm.TestComponent", node.protoValue.GetComponentAttributes().GetType())
-
-	s.NotNil(node.children["SubComponent1"])
-	s.NotNil(node.children["SubComponent1"].value)
-	s.IsType(TestSubComponent1{}, node.children["SubComponent1"].value)
-
-	s.NotNil(node.children["SubData1"])
-	s.IsType(&persistencespb.ActivityInfo{}, node.children["SubData1"].value)
-
-	s.Nil(node.children["SubComponent2"])
-
-	s.Empty(mutation.UpdatedNodes)
-	s.Empty(mutation.DeletedNodes)
+	s.NotNil(node)
+	s.Equal(component, node.value)
+	s.NotNil(node.serializedValue.GetDataAttributes(), "node serialized value must have attributes created")
+	s.Nil(node.serializedValue.GetDataAttributes().GetData(), "node serialized value must not have data before serialize is called")
 }
-
 func (s *nodeSuite) TestSerializeNode_DataAttributes() {
 	component := &persistencespb.ActivityInfo{ // Random proto type
 		ActivityId: "22",
 	}
 
-	node := &Node{
-		nodeBase: s.nodeBase(),
-		protoValue: &persistencespb.ChasmNode{
-			Attributes: &persistencespb.ChasmNode_DataAttributes{
-				DataAttributes: &persistencespb.ChasmDataAttributes{},
-			},
-		},
-		value:    component,
-		children: make(map[string]*Node),
-	}
-
-	mutation := &NodesMutation{
-		UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
-		DeletedNodes: make(map[string]struct{}),
-	}
-
-	err := node.serializeNode(mutation, []string{})
+	node := newNode(s.nodeBase(), nil)
+	err := node.setValue(component, fieldTypeData)
 	s.NoError(err)
+
+	err = node.serialize()
+	s.NoError(err)
+	s.NotNil(node.serializedValue.GetDataAttributes().GetData(), "child node serialized value must have data after serialize is called")
+}
+
+func (s *nodeSuite) TestSyncChildren_Leaf() {
+	component := s.newTestComponent()
+
+	node := newNode(s.nodeBase(), nil)
+	err := node.setValue(component, fieldTypeComponent)
+	s.NoError(err)
+
+	// Set very leaf node to nil.
+	component.SubComponent1.Internal.value.(*TestSubComponent1).SubComponent11 = nil
+	s.NotNil(node.children["SubComponent1"].children["SubComponent11"])
+
+	rps, err := node.syncChildren()
+	s.NoError(err)
+
+	s.Len(rps, 1)
+	s.Equal("SubComponent1/SubComponent11", rps[0])
+	s.Nil(node.children["SubComponent1"].children["SubComponent11"])
+}
+
+func (s *nodeSuite) TestSyncChildren_MiddleNode() {
+	component := s.newTestComponent()
+
+	node := newNode(s.nodeBase(), nil)
+	err := node.setValue(component, fieldTypeComponent)
+	s.NoError(err)
+	s.NotNil(node)
+
+	// Set subcomponent at middle node to nil.
+	component.SubComponent1 = nil
+	s.NotNil(node.children["SubComponent1"])
+
+	rps, err := node.syncChildren()
+	s.NoError(err)
+
+	s.Len(rps, 3)
+	s.Contains(rps, "SubComponent1/SubComponent11")
+	s.Contains(rps, "SubComponent1/SubData11")
+	s.Contains(rps, "SubComponent1")
+
+	s.Nil(node.children["SubComponent1"])
+}
+
+func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
+	component := s.newTestComponent()
+
+	node := newNode(s.nodeBase(), nil)
+	err := node.setValue(component, fieldTypeComponent)
+	s.NoError(err)
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(2) // 2 because component and sub-component
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(2)
+
+	serializedNodes := map[string]*persistencespb.ChasmNode{}
+
+	err = node.serialize()
+	s.NoError(err)
+	serializedNodes[""] = node.serializedValue
+
+	for childName, childNode := range node.children {
+		err = childNode.serialize()
+		s.NoError(err)
+		serializedNodes[childName] = childNode.serializedValue
+	}
+
+	node2, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder)
+	s.NoError(err)
+	s.Nil(node2.value)
+
+	err = node2.deserialize(reflect.TypeOf(&TestComponent{}))
+	s.NoError(err)
+	s.NotNil(node2.value)
+	s.EqualExportedValues(node.value, node2.value)
+	s.Equal(node2.value.(*TestComponent).SubComponent1.Internal.node, node2.children["SubComponent1"])
+
+	s.Nil(node2.value.(*TestComponent).SubComponent1.Internal.value)
+	err = node2.value.(*TestComponent).SubComponent1.Internal.node.deserialize(reflect.TypeOf(&TestSubComponent1{}))
+	s.NoError(err)
+	s.NotNil(node2.value.(*TestComponent).SubComponent1.Internal.node.value)
+
+	s.NotNil(node2.children["SubComponent1"].value)
+	node2.children["SubComponent1"].value = nil
+	err = node2.children["SubComponent1"].deserialize(reflect.TypeOf(&TestSubComponent1{}))
+	s.NotNil(node2.children["SubComponent1"].value)
+}
+
+func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
+	component := &persistencespb.ActivityInfo{ // Random proto type
+		ActivityId: "22",
+	}
+
+	node := newNode(s.nodeBase(), nil)
+	err := node.setValue(component, fieldTypeData)
+	s.NoError(err)
+
+	serializedNodes := map[string]*persistencespb.ChasmNode{}
+	err = node.serialize()
+	s.NoError(err)
+	serializedNodes[""] = node.serializedValue
+
+	node2, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder)
+	s.NoError(err)
+	s.NotNil(node2)
+
+	err = node2.deserialize(reflect.TypeOf(&persistencespb.ActivityInfo{}))
+	s.NoError(err)
+	s.NotNil(node2.value)
+	s.ProtoEqual(node.value.(*persistencespb.ActivityInfo), node2.value.(*persistencespb.ActivityInfo))
+}
+
+func (s *nodeSuite) newTestComponent() *TestComponent {
+	component := &TestComponent{
+		ComponentData: &persistencespb.ActivityInfo{
+			ActivityId: "component-data",
+		},
+		SubComponent1: NewComponentField[*TestSubComponent1](nil, &TestSubComponent1{
+			SubComponent1Data: &persistencespb.ActivityInfo{ // Random proto type
+				ActivityId: "sub-component1-data",
+			},
+			SubComponent11: NewComponentField[*TestSubComponent11](nil, &TestSubComponent11{
+				SubComponent11Data: &persistencespb.ActivityInfo{ // Random proto type
+					ActivityId: "sub-component1-sub-component11-data",
+				},
+			}),
+			SubData11: NewDataField[*persistencespb.ActivityInfo](nil, &persistencespb.ActivityInfo{
+				ActivityId: "sub-component1-sub-data11",
+			}),
+		}),
+		SubComponent2: nil,
+		SubData1: NewDataField[*persistencespb.ActivityInfo](nil,
+			&persistencespb.ActivityInfo{
+				ActivityId: "sub-data1",
+			}),
+	}
+
+	return component
 }
 
 func (s *nodeSuite) preorderAndAssertParent(
@@ -183,7 +342,7 @@ func (s *nodeSuite) preorderAndAssertParent(
 	s.Equal(parent, n.parent)
 
 	var nodes []*persistencespb.ChasmNode
-	nodes = append(nodes, n.protoValue)
+	nodes = append(nodes, n.serializedValue)
 
 	childNames := make([]string, 0, len(n.children))
 	for childName := range n.children {

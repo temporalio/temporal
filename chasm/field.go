@@ -25,11 +25,17 @@
 package chasm
 
 import (
+	"reflect"
+	"strings"
+
 	"google.golang.org/protobuf/proto"
 )
 
 // Used by reflection.
-const chasmFieldTypeName = "chasm.Field"
+// TODO: add test to check this
+const chasmFieldTypePrefix = "chasm.Field["
+
+const fieldNameTag = "name"
 
 // This struct needs to be create via reflection
 // but reflection can't set prviate fields...
@@ -45,7 +51,6 @@ const (
 	fieldTypeComponent fieldType = iota + 1
 	fieldTypeComponentPointer
 	fieldTypeData
-	fieldTypeCollection
 )
 
 type fieldInternal struct {
@@ -121,6 +126,16 @@ func NewDataPointerField[D proto.Message](
 }
 
 // Used by reflection.
-const chasmCollectionTypeName = "chasm.Collection"
+// TODO: add test to check this.
+const chasmCollectionTypePrefix = "chasm.Collection["
 
 type Collection[T any] map[string]*Field[T]
+
+func genericTypePrefix(t reflect.Type) string {
+	tn := t.String()
+	bracketPos := strings.Index(tn, "[")
+	if bracketPos == -1 {
+		return ""
+	}
+	return tn[:bracketPos+1]
+}
