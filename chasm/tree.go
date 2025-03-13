@@ -52,6 +52,9 @@ type (
 
 	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
 	// including the node n itself.
+	//
+	// TODO: Return tree size changes in NodesMutation as well. MutateState needs to
+	// track the overall size of itself and terminate workflow if it exceeds the limit.
 	NodesMutation struct {
 		UpdatedNodes map[string]*persistencespb.ChasmNode // flattened node path -> chasm node
 		DeletedNodes map[string]struct{}
@@ -117,6 +120,23 @@ func NewTree(
 	return root, nil
 }
 
+// NewEmptyTree creates a new empty in-memory CHASM tree.
+func NewEmptyTree(
+	registry *Registry,
+	timeSource clock.TimeSource,
+	backend NodeBackend,
+	pathEncoder NodePathEncoder,
+) *Node {
+	base := &nodeBase{
+		registry:    registry,
+		timeSource:  timeSource,
+		backend:     backend,
+		pathEncoder: pathEncoder,
+	}
+	root := newNode(base, nil)
+	return root
+}
+
 // Component retrieves a component from the tree rooted at node n
 // using the provided component reference
 // It also performs consistency, access rule, and task validation checks
@@ -152,20 +172,27 @@ func (n *Node) AddTask(
 	panic("not implemented")
 }
 
-// CloseTransactionAsMutation is used by MutableState
-// to close the transaction and persist mutations into DB.
-func (n *Node) CloseTransactionAsMutation() (*NodesMutation, error) {
+// CloseTransaction is used by MutableState to close the transaction and
+// track changes made in the current transaction.
+func (n *Node) CloseTransaction() (NodesMutation, error) {
 	panic("not implemented")
 }
 
-// CloseTransactionAsSnapshot is used by MutableState
-// to close the transaction and persist entire CHASM tree into DB.
-func (n *Node) CloseTransactionAsSnapshot() (*NodesSnapshot, error) {
+// Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
+// A nil minVT will be treated as the same as the zero versioned transition and returns all nodes in the tree.
+// This method should only be invoked when IsDirty() is false.
+func (n *Node) Snapshot(
+	minVT *persistencespb.VersionedTransition,
+) NodesSnapshot {
 	panic("not implemented")
 }
 
 // ApplyMutation is used by replication stack to apply node
 // mutations from the source cluster.
+//
+// NOTE: It will be an error if UpdatedNodes and DeletedNodes have overlapping keys,
+// as the CHASM tree does not have enough information to tell if the deletion happens
+// before or after the update.
 func (n *Node) ApplyMutation(
 	mutation NodesMutation,
 ) error {
@@ -204,6 +231,12 @@ func (n *Node) insert(
 		n.children[childName] = childNode
 	}
 	childNode.insert(nodePath[1:], pNode, nodeBase)
+}
+
+// IsDirty returns true if any node rooted at Node n has been modified.
+// The result will be reset to false after a call to CloseTransaction().
+func (n *Node) IsDirty() bool {
+	panic("not implemented")
 }
 
 func newNode(

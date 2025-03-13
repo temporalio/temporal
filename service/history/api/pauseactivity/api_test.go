@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/events"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -53,7 +54,7 @@ type (
 		mockEventsCache     *events.MockCache
 		mockNamespaceCache  *namespace.MockRegistry
 		mockTaskGenerator   *workflow.MockTaskGenerator
-		mockMutableState    *workflow.MockMutableState
+		mockMutableState    *historyi.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
 		executionInfo *persistencespb.WorkflowExecutionInfo
@@ -80,7 +81,7 @@ func (s *pauseActivitySuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskGenerator = workflow.NewMockTaskGenerator(s.controller)
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,

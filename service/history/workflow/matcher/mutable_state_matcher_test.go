@@ -30,7 +30,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/sqlquery"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -92,7 +92,7 @@ func TestMatchMutableState(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	ms := workflow.NewMockMutableState(controller)
+	ms := historyi.NewMockMutableState(controller)
 	ms.EXPECT().GetExecutionState().Return(ws).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(we).AnyTimes()
 

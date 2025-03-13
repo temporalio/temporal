@@ -91,3 +91,18 @@ It is *not* a substitute for regular error handling, validation, or control flow
 
 In functional tests, a failed soft assertion will not stop the test execution immediately, but it
 will ultimately fail the test.
+
+## OpenTelemetry (OTEL)
+
+To debug your test by analysing observability traces, set the following environment variables:
+
+```bash
+export OTEL_BSP_SCHEDULE_DELAY=0
+export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
+export OTEL_TRACES_EXPORTER=otlp
+export TEMPORAL_OTEL_DEBUG=true
+```
+
+And have an OTEL collector running, such as Grafana Tempo (`make start-dependencies`).
+
+See [tracing.md](../../docs/development/tracing.md) for more details.

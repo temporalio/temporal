@@ -37,6 +37,7 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -47,9 +48,9 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
@@ -64,8 +65,8 @@ type (
 		mockShard                  *shard.ContextTest
 		controller                 *gomock.Controller
 		releaseFunc                func(err error)
-		workflowContext            *workflow.MockContext
-		newRunWorkflowContext      *workflow.MockContext
+		workflowContext            *historyi.MockWorkflowContext
+		newRunWorkflowContext      *historyi.MockWorkflowContext
 		namespaceID                string
 		execution                  *commonpb.WorkflowExecution
 		newRunId                   string
@@ -84,8 +85,8 @@ func (s *syncWorkflowStateSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.workflowContext = workflow.NewMockContext(s.controller)
-	s.newRunWorkflowContext = workflow.NewMockContext(s.controller)
+	s.workflowContext = historyi.NewMockWorkflowContext(s.controller)
+	s.newRunWorkflowContext = historyi.NewMockWorkflowContext(s.controller)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -129,7 +130,7 @@ func (s *syncWorkflowStateSuite) TearDownTest() {
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -155,7 +156,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -177,7 +178,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents()
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -233,6 +234,16 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		15: {LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 15}},
 	})
 	mu.EXPECT().HSM().Return(nil)
+	mockChasmTree := historyi.NewMockChasmTree(s.controller)
+	mockChasmTree.EXPECT().Snapshot(&persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12}).
+		Return(chasm.NodesSnapshot{
+			Nodes: map[string]*persistencespb.ChasmNode{
+				"node-path": {
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
+				},
+			},
+		})
+	mu.EXPECT().ChasmTree().Return(mockChasmTree)
 
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
 		context.Background(),
@@ -260,6 +271,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 	s.Len(mutation.UpdatedChildExecutionInfos, 1)
 	s.Len(mutation.UpdatedRequestCancelInfos, 0)
 	s.Len(mutation.UpdatedSignalInfos, 1)
+	s.Len(mutation.UpdatedChasmNodes, 1)
 	s.Nil(mutation.UpdatedChildExecutionInfos[13].Clock) // field should be sanitized
 
 	s.Nil(result.VersionedTransitionArtifact.EventBatches)
@@ -345,7 +357,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 	}
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			mu := workflow.NewMockMutableState(s.controller)
+			mu := historyi.NewMockMutableState(s.controller)
 			s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 				NamespaceID: s.namespaceID,
 				WorkflowID:  s.execution.WorkflowId,
@@ -383,7 +395,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvided_ReturnSnapshot() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -433,7 +445,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvid
 }
 
 func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
@@ -483,7 +495,7 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
 }
 
 func (s *syncWorkflowStateSuite) TestGetNewRunInfo_NotFound() {
-	mu := workflow.NewMockMutableState(s.controller)
+	mu := historyi.NewMockMutableState(s.controller)
 	versionHistories := &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{

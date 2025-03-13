@@ -180,13 +180,16 @@ func (s *Versioning3Suite) TestWorkflowWithPinnedOverride_NoSticky() {
 }
 
 func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	tv := testvars.New(s)
 
 	if sticky {
 		s.warmUpSticky(tv)
 	}
 
-	wftCompleted := make(chan any)
+	wftCompleted := make(chan struct{})
 	s.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
@@ -194,7 +197,7 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
 		})
 
-	actCompleted := make(chan any)
+	actCompleted := make(chan struct{})
 	s.pollActivityAndHandle(tv, actCompleted,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.NotNil(task)
@@ -203,14 +206,14 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 
 	runID := s.startWorkflow(tv, tv.VersioningOverridePinned())
 
-	<-wftCompleted
+	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
 	s.verifyVersioningSAs(tv, vbPinned, tv)
 	if sticky {
 		s.verifyWorkflowStickyQueue(tv.WithRunID(runID))
 	}
 
-	<-actCompleted
+	s.WaitForChannel(ctx, actCompleted)
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
 
 	s.pollWftAndHandle(tv, sticky, nil,
@@ -238,13 +241,16 @@ func (s *Versioning3Suite) TestQueryWithPinnedOverride_Sticky() {
 }
 
 func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	tv := testvars.New(s)
 
 	if sticky {
 		s.warmUpSticky(tv)
 	}
 
-	wftCompleted := make(chan any)
+	wftCompleted := make(chan struct{})
 	s.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
@@ -253,7 +259,7 @@ func (s *Versioning3Suite) testQueryWithPinnedOverride(sticky bool) {
 
 	runID := s.startWorkflow(tv, tv.VersioningOverridePinned())
 
-	<-wftCompleted
+	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
 	if sticky {
 		s.verifyWorkflowStickyQueue(tv.WithRunID(runID))
@@ -279,13 +285,16 @@ func (s *Versioning3Suite) TestUnpinnedQuery_Sticky() {
 }
 
 func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	tv := testvars.New(s)
 	tv2 := tv.WithBuildIDNumber(2)
 	if sticky {
 		s.warmUpSticky(tv)
 	}
 
-	wftCompleted := make(chan any)
+	wftCompleted := make(chan struct{})
 	s.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
@@ -297,19 +306,19 @@ func (s *Versioning3Suite) testUnpinnedQuery(sticky bool) {
 
 	runID := s.startWorkflow(tv, nil)
 
-	<-wftCompleted
+	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
 	if sticky {
 		s.verifyWorkflowStickyQueue(tv.WithRunID(runID))
 	}
 
-	pollerDone := make(chan any)
+	pollerDone := make(chan struct{})
 	go func() {
 		s.idlePollWorkflow(tv2, true, ver3MinPollTime, "new deployment should not receive query")
 		close(pollerDone)
 	}()
 	s.pollAndQueryWorkflow(tv, sticky)
-	<-pollerDone // wait for the idle poller to complete to not interfere with the next poller
+	s.WaitForChannel(ctx, pollerDone) // wait for the idle poller to complete to not interfere with the next poller
 
 	// redirect query to new deployment
 	s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
@@ -352,9 +361,12 @@ func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller() {
 	// to the default queue. Then, the activity poller on the pinned deployment arrives, the task
 	// should be now sent to that poller although no current deployment is set on the TQs.
 
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	tv := testvars.New(s)
 
-	wftCompleted := make(chan interface{})
+	wftCompleted := make(chan struct{})
 	s.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
@@ -365,7 +377,7 @@ func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller() {
 	override := tv.VersioningOverridePinned()
 	s.startWorkflow(tv, override)
 
-	<-wftCompleted
+	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
 	// Wait long enough to make sure the activity is backlogged.
 	s.validateBacklogCount(tv, tqTypeAct, 1)
@@ -405,13 +417,16 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_NoSticky() {
 }
 
 func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	tv := testvars.New(s)
 
 	if sticky {
 		s.warmUpSticky(tv)
 	}
 
-	wftCompleted := make(chan any)
+	wftCompleted := make(chan struct{})
 	s.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
@@ -419,7 +434,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
 		})
 
-	actCompleted := make(chan any)
+	actCompleted := make(chan struct{})
 	s.pollActivityAndHandle(tv, actCompleted,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.NotNil(task)
@@ -430,14 +445,14 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 
 	runID := s.startWorkflow(tv, nil)
 
-	<-wftCompleted
+	s.WaitForChannel(ctx, wftCompleted)
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
 	s.verifyVersioningSAs(tv, vbUnpinned, tv)
 	if sticky {
 		s.verifyWorkflowStickyQueue(tv.WithRunID(runID))
 	}
 
-	<-actCompleted
+	s.WaitForChannel(ctx, actCompleted)
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
 
 	s.pollWftAndHandle(tv, sticky, nil,
@@ -727,6 +742,9 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	// 8. WFT completes and the transition completes.
 	// 9. All the 3 remaining activities are now dispatched and completed.
 
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 	tv2 := tv1.WithBuildIDNumber(2)
 	if sticky {
@@ -748,12 +766,12 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	}
 
 	transitionCompleted := atomic.Bool{}
-	transitionStarted := make(chan any)
-	act1Started := make(chan any)
-	act1Completed := make(chan any)
-	act2Started := make(chan any)
-	act2Failed := make(chan any)
-	act2To4Completed := make(chan any)
+	transitionStarted := make(chan struct{})
+	act1Started := make(chan struct{})
+	act1Completed := make(chan struct{})
+	act2Started := make(chan struct{})
+	act2Failed := make(chan struct{})
+	act2To4Completed := make(chan struct{})
 
 	// 1. Start 1st and 2nd activities
 	s.pollActivityAndHandle(tv1, act1Completed,
@@ -768,7 +786,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			return respondActivity(), nil
 		})
 
-	<-act1Started
+	s.WaitForChannel(ctx, act1Started)
 	s.pollActivityAndHandle(tv1, act2Failed,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.NotNil(task)
@@ -781,7 +799,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			return nil, errors.New("intentional activity failure")
 		})
 
-	<-act2Started
+	s.WaitForChannel(ctx, act2Started)
 	s.verifyWorkflowVersioning(tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
 	// 2. Set d2 as the current deployment
@@ -832,7 +850,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	}
 
 	// 9. Now all activities should complete.
-	<-act2To4Completed
+	s.WaitForChannel(ctx, act2To4Completed)
 	s.pollWftAndHandle(tv2, sticky, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
@@ -1309,6 +1327,7 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: "__unversioned__", RampingVersion: tv.DeploymentVersionString(), RampingVersionPercentage: 20, UpdateTime: timestamp.TimePtr(t1)}, wfInfo.GetVersioningInfo())
 
 	s.syncTaskQueueDeploymentData(tv, true, 0, false, t1, tqTypeAct)
+
 	actInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tv.TaskQueue(),
@@ -1319,6 +1338,8 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 
 	// Now ramp to unversioned
 	s.syncTaskQueueDeploymentData(tv, false, 10, true, t2, tqTypeAct)
+	s.waitForDeploymentDataPropagation(tv, true, tqTypeAct)
+
 	actInfo, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tv.TaskQueue(),
@@ -1780,7 +1801,7 @@ func (s *Versioning3Suite) Name() string {
 func (s *Versioning3Suite) pollWftAndHandle(
 	tv *testvars.TestVars,
 	sticky bool,
-	async chan<- any,
+	async chan<- struct{},
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
@@ -1794,7 +1815,7 @@ func (s *Versioning3Suite) pollWftAndHandle(
 				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 				TaskQueue:         tq,
 			},
-		).HandleTask(tv, handler)
+		).HandleTask(tv, handler, taskpoller.WithTimeout(10*time.Second))
 		s.NoError(err)
 		return resp
 	}
@@ -1857,7 +1878,7 @@ func (s *Versioning3Suite) pollNexusTaskAndHandle(
 				DeploymentOptions: tv.WorkerDeploymentOptions(true),
 				TaskQueue:         tq,
 			},
-		).HandleTask(tv, handler)
+		).HandleTask(tv, handler, taskpoller.WithTimeout(10*time.Second))
 		s.NoError(err)
 		return resp
 	}
@@ -1873,7 +1894,7 @@ func (s *Versioning3Suite) pollNexusTaskAndHandle(
 
 func (s *Versioning3Suite) pollActivityAndHandle(
 	tv *testvars.TestVars,
-	async chan<- any,
+	async chan<- struct{},
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
@@ -2042,14 +2063,17 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 						delete(remaining, pt)
 					}
 				}
+				if unversionedRamp {
+					if perTypes[int32(pt.tp)].GetDeploymentData().GetUnversionedRampData() != nil {
+						delete(remaining, pt)
+					}
+					continue
+				}
 				versions := perTypes[int32(pt.tp)].GetDeploymentData().GetVersions()
 				for _, d := range versions {
 					if d.GetVersion().Equal(tv.DeploymentVersion()) {
 						delete(remaining, pt)
 					}
-				}
-				if unversionedRamp && perTypes[int32(pt.tp)].GetDeploymentData().GetUnversionedRampData() != nil {
-					delete(remaining, pt)
 				}
 			}
 		}

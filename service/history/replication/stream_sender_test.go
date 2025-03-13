@@ -61,7 +61,7 @@ type (
 
 		controller    *gomock.Controller
 		server        *historyservicemock.MockHistoryService_StreamWorkflowReplicationMessagesServer
-		shardContext  *shard.MockContext
+		shardContext  *historyi.MockShardContext
 		historyEngine *historyi.MockEngine
 		taskConverter *MockSourceTaskConverter
 
@@ -90,7 +90,7 @@ func (s *streamSenderSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.server = historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesServer(s.controller)
-	s.shardContext = shard.NewMockContext(s.controller)
+	s.shardContext = historyi.NewMockShardContext(s.controller)
 	s.historyEngine = historyi.NewMockEngine(s.controller)
 	s.taskConverter = NewMockSourceTaskConverter(s.controller)
 	s.config = tests.NewDynamicConfig()
@@ -778,6 +778,14 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 	item1.EXPECT().GetWorkflowID().Return("3").AnyTimes()
 	item2.EXPECT().GetWorkflowID().Return("2").AnyTimes()
 	item3.EXPECT().GetWorkflowID().Return("1").AnyTimes()
+	item0.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
+	item1.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
+	item2.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
+	item3.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
+	item0.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
+	item1.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
+	item2.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
+	item3.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
 	task0 := &replicationspb.ReplicationTask{
 		SourceTaskId:   beginInclusiveWatermark,
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),

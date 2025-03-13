@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -54,7 +54,7 @@ var ErrUseCurrentExecution = errors.New("ErrUseCurrentExecution")
 //
 // An action (ie "mitigate and allow"), an error (ie "deny") or neither (ie "allow") is returned.
 func ResolveDuplicateWorkflowID(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
 	namespaceEntry *namespace.Namespace,
 	newRunID string,
@@ -97,7 +97,7 @@ func ResolveDuplicateWorkflowID(
 }
 
 func ResolveWorkflowIDConflictPolicy(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowKey definition.WorkflowKey,
 	namespaceEntry *namespace.Namespace,
 	newRunID string,
@@ -151,7 +151,7 @@ func ResolveWorkflowIDReusePolicy(
 // A minimal interval between workflow starts is used to prevent multiple starts with the same ID too rapidly.
 // If the new workflow is started before the interval elapsed, the workflow start is aborted.
 func resolveDuplicateWorkflowStart(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	currentWorkflowStartTime time.Time,
 	workflowKey definition.WorkflowKey,
 	namespaceEntry *namespace.Namespace,

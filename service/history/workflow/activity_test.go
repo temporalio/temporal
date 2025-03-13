@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -54,7 +55,7 @@ type (
 		mockShard             *shard.ContextTest
 		mockNamespaceRegistry *namespace.MockRegistry
 
-		mockMutableState *MockMutableState
+		mockMutableState *historyi.MockMutableState
 		mutableState     *MutableStateImpl
 	}
 )
@@ -75,7 +76,7 @@ func (s *activitySuite) SetupTest() {
 		config,
 	)
 
-	s.mockMutableState = NewMockMutableState(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 
 	s.mockNamespaceRegistry = s.mockShard.Resource.NamespaceCache
 

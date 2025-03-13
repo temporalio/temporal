@@ -37,14 +37,13 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/vclock"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
-	MutableStateConsistencyPredicate func(mutableState workflow.MutableState) bool
+	MutableStateConsistencyPredicate func(mutableState historyi.MutableState) bool
 
 	WorkflowConsistencyChecker interface {
 		GetWorkflowCache() wcache.Cache
@@ -71,13 +70,13 @@ type (
 	}
 
 	WorkflowConsistencyCheckerImpl struct {
-		shardContext  shard.Context
+		shardContext  historyi.ShardContext
 		workflowCache wcache.Cache
 	}
 )
 
 func NewWorkflowConsistencyChecker(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 ) *WorkflowConsistencyCheckerImpl {
 	return &WorkflowConsistencyCheckerImpl{

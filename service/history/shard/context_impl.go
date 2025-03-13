@@ -203,7 +203,7 @@ const (
 	stopReasonOwnershipLost
 )
 
-var _ Context = (*ContextImpl)(nil)
+var _ historyi.ShardContext = (*ContextImpl)(nil)
 
 var (
 	// ErrShardStatusUnknown means we're not sure if we have the shard lock or not. This may be returned

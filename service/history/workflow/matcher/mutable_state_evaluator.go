@@ -29,7 +29,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/sqlquery"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 // Supported Fields
@@ -41,10 +41,10 @@ const (
 )
 
 type mutableStateMatchEvaluator struct {
-	ms workflow.MutableState
+	ms historyi.MutableState
 }
 
-func newMutableStateMatchEvaluator(ms workflow.MutableState) *mutableStateMatchEvaluator {
+func newMutableStateMatchEvaluator(ms historyi.MutableState) *mutableStateMatchEvaluator {
 	return &mutableStateMatchEvaluator{ms: ms}
 }
 

@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -57,14 +56,14 @@ type (
 	}
 
 	HSMStateReplicatorImpl struct {
-		shardContext  shard.Context
+		shardContext  historyi.ShardContext
 		workflowCache wcache.Cache
 		logger        log.Logger
 	}
 )
 
 func NewHSMStateReplicator(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *HSMStateReplicatorImpl {
@@ -133,7 +132,7 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 		return workflowContext.SubmitClosedWorkflowSnapshot(
 			ctx,
 			r.shardContext,
-			workflow.TransactionPolicyPassive,
+			historyi.TransactionPolicyPassive,
 		)
 	}
 
@@ -148,13 +147,13 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow
-		workflow.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive,
 		nil,
 	)
 }
 
 func (r *HSMStateReplicatorImpl) syncHSMNode(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	request *historyi.SyncHSMRequest,
 ) (bool, error) {
 
@@ -233,7 +232,7 @@ func (r *HSMStateReplicatorImpl) shouldSyncNode(
 }
 
 func (r *HSMStateReplicatorImpl) compareVersionHistory(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	incomingVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(

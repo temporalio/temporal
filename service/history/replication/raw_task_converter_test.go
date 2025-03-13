@@ -82,14 +82,14 @@ type (
 		workflowID  string
 
 		runID           string
-		workflowContext *workflow.MockContext
-		mutableState    *workflow.MockMutableState
+		workflowContext *historyi.MockWorkflowContext
+		mutableState    *historyi.MockMutableState
 		releaseFn       wcache.ReleaseCacheFunc
 		lockReleased    bool
 
 		newRunID           string
-		newWorkflowContext *workflow.MockContext
-		newMutableState    *workflow.MockMutableState
+		newWorkflowContext *historyi.MockWorkflowContext
+		newMutableState    *historyi.MockMutableState
 		newReleaseFn       wcache.ReleaseCacheFunc
 
 		replicationMultipleBatches bool
@@ -161,13 +161,13 @@ func (s *rawTaskConverterSuite) SetupTest() {
 	s.workflowID = uuid.New()
 
 	s.runID = uuid.New()
-	s.workflowContext = workflow.NewMockContext(s.controller)
-	s.mutableState = workflow.NewMockMutableState(s.controller)
+	s.workflowContext = historyi.NewMockWorkflowContext(s.controller)
+	s.mutableState = historyi.NewMockMutableState(s.controller)
 	s.releaseFn = func(error) { s.lockReleased = true }
 
 	s.newRunID = uuid.New()
-	s.newWorkflowContext = workflow.NewMockContext(s.controller)
-	s.newMutableState = workflow.NewMockMutableState(s.controller)
+	s.newWorkflowContext = historyi.NewMockWorkflowContext(s.controller)
+	s.newMutableState = historyi.NewMockMutableState(s.controller)
 	s.newReleaseFn = func(error) { s.lockReleased = true }
 	s.syncStateRetriever = NewMockSyncStateRetriever(s.controller)
 }

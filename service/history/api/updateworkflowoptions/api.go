@@ -37,8 +37,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -46,7 +45,7 @@ import (
 func Invoke(
 	ctx context.Context,
 	request *historyservice.UpdateWorkflowExecutionOptionsRequest,
-	shardCtx shard.Context,
+	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
 	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()))
@@ -123,7 +122,7 @@ func Invoke(
 	return ret, nil
 }
 
-func getOptionsFromMutableState(ms workflow.MutableState) *workflowpb.WorkflowExecutionOptions {
+func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowExecutionOptions {
 	opts := &workflowpb.WorkflowExecutionOptions{}
 	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
 		override, ok := proto.Clone(versioningInfo.GetVersioningOverride()).(*workflowpb.VersioningOverride)

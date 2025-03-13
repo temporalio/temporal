@@ -78,6 +78,8 @@ type (
 
 		// Used to calculate QPS
 		QPSQueue QPSQueue
+		// Queue size is determined by Multiplier * Concurrency
+		EstimationMultiplier int
 
 		// Carry over the replication status after continue-as-new.
 		TaskQueueUserDataReplicationStatus TaskQueueUserDataReplicationStatus
@@ -321,8 +323,12 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 		params.ReplicatedWorkflowCountPerSecond = params.OverallRps
 	}
 
+	if params.EstimationMultiplier <= 0 {
+		params.EstimationMultiplier = 2
+	}
+
 	if params.QPSQueue.Data == nil {
-		params.QPSQueue = NewQPSQueue(params.ConcurrentActivityCount)
+		params.QPSQueue = NewQPSQueue(params.ConcurrentActivityCount, params.EstimationMultiplier)
 		params.QPSQueue.Enqueue(params.ReplicatedWorkflowCount)
 	}
 
@@ -500,9 +506,9 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 // NewQPSQueue initializes a QPSQueue to collect data points for each workflow execution.
 // The queue size is set to concurrency + 1 to account for up to 'concurrency' activities
 // running simultaneously and the initial starting point.
-func NewQPSQueue(concurrentActivityCount int) QPSQueue {
+func NewQPSQueue(concurrentActivityCount int, estimationMultiplier int) QPSQueue {
 	return QPSQueue{
-		Data:    make([]QPSData, 0, concurrentActivityCount+1),
+		Data:    make([]QPSData, 0, max(0, estimationMultiplier*concurrentActivityCount+1)),
 		MaxSize: concurrentActivityCount + 1,
 	}
 }

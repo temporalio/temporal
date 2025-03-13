@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -582,7 +583,7 @@ func (s *visibilityQueueTaskExecutorSuite) execute(task tasks.Task) error {
 func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 	namespaceName namespace.Name,
 	task tasks.Task,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	taskQueueName string,
 	parentExecution *commonpb.WorkflowExecution,
 	rootExecution *commonpb.WorkflowExecution,
@@ -631,7 +632,7 @@ func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedRequest(
 	namespaceName namespace.Name,
 	task *tasks.StartExecutionVisibilityTask,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	taskQueueName string,
 ) gomock.Matcher {
 	return protomock.Eq(&manager.RecordWorkflowExecutionStartedRequest{
@@ -650,7 +651,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowRequest(
 	namespaceName namespace.Name,
 	task *tasks.UpsertExecutionVisibilityTask,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	taskQueueName string,
 ) gomock.Matcher {
 	return protomock.Eq(&manager.UpsertWorkflowExecutionRequest{
@@ -669,7 +670,7 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowRequest(
 func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionClosedRequest(
 	namespaceName namespace.Name,
 	task *tasks.CloseExecutionVisibilityTask,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	taskQueueName string,
 	parentExecution *commonpb.WorkflowExecution,
 	rootExecution *commonpb.WorkflowExecution,
@@ -694,7 +695,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionClosedRe
 }
 
 func (s *visibilityQueueTaskExecutorSuite) createPersistenceMutableState(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	lastEventID int64,
 	lastEventVersion int64,
 ) *persistencespb.WorkflowMutableState {

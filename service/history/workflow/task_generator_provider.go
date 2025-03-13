@@ -25,7 +25,7 @@
 package workflow
 
 import (
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 var (
@@ -42,7 +42,7 @@ var (
 
 type (
 	TaskGeneratorProvider interface {
-		NewTaskGenerator(shard.Context, MutableState) TaskGenerator
+		NewTaskGenerator(historyi.ShardContext, historyi.MutableState) TaskGenerator
 	}
 
 	taskGeneratorProviderImpl struct{}
@@ -60,8 +60,8 @@ func GetTaskGeneratorProvider() TaskGeneratorProvider {
 }
 
 func (p *taskGeneratorProviderImpl) NewTaskGenerator(
-	shard shard.Context,
-	mutableState MutableState,
+	shard historyi.ShardContext,
+	mutableState historyi.MutableState,
 ) TaskGenerator {
 	return NewTaskGenerator(
 		shard.GetNamespaceRegistry(),

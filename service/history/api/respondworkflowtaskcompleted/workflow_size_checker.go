@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
@@ -52,7 +52,7 @@ type (
 	workflowSizeChecker struct {
 		workflowSizeLimits
 
-		mutableState              workflow.MutableState
+		mutableState              historyi.MutableState
 		searchAttributesValidator *searchattribute.Validator
 		metricsHandler            metrics.Handler
 		logger                    log.Logger
@@ -61,7 +61,7 @@ type (
 
 func newWorkflowSizeChecker(
 	limits workflowSizeLimits,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	searchAttributesValidator *searchattribute.Validator,
 	metricsHandler metrics.Handler,
 	logger log.Logger,

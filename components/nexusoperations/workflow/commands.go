@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -50,7 +51,7 @@ type commandHandler struct {
 
 func (ch *commandHandler) HandleScheduleCommand(
 	ctx context.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	validator workflow.CommandValidator,
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
@@ -190,7 +191,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 
 func (ch *commandHandler) HandleCancelCommand(
 	ctx context.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	validator workflow.CommandValidator,
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,

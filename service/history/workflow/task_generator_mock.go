@@ -40,6 +40,7 @@ import (
 	history "go.temporal.io/api/history/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	hsm "go.temporal.io/server/service/history/hsm"
+	interfaces "go.temporal.io/server/service/history/interfaces"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -240,7 +241,7 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateRequestCancelExternalTasks(even
 }
 
 // GenerateScheduleSpeculativeWorkflowTaskTasks mocks base method.
-func (m *MockTaskGenerator) GenerateScheduleSpeculativeWorkflowTaskTasks(workflowTask *WorkflowTaskInfo) error {
+func (m *MockTaskGenerator) GenerateScheduleSpeculativeWorkflowTaskTasks(workflowTask *interfaces.WorkflowTaskInfo) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateScheduleSpeculativeWorkflowTaskTasks", workflowTask)
 	ret0, _ := ret[0].(error)

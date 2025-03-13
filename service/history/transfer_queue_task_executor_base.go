@@ -47,11 +47,10 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -68,7 +67,7 @@ var (
 type (
 	transferQueueTaskExecutorBase struct {
 		currentClusterName       string
-		shardContext             shard.Context
+		shardContext             historyi.ShardContext
 		registry                 namespace.Registry
 		cache                    wcache.Cache
 		logger                   log.Logger
@@ -83,7 +82,7 @@ type (
 )
 
 func newTransferQueueTaskExecutorBase(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 	metricHandler metrics.Handler,
@@ -118,7 +117,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	task *tasks.ActivityTask,
 	activityScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
-	transactionPolicy workflow.TransactionPolicy,
+	transactionPolicy historyi.TransactionPolicy,
 ) error {
 	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId: task.NamespaceID,
@@ -169,7 +168,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
-	transactionPolicy workflow.TransactionPolicy,
+	transactionPolicy historyi.TransactionPolicy,
 ) error {
 	var sst *durationpb.Duration
 	if workflowTaskScheduleToStartTimeout > 0 {
@@ -301,7 +300,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	)
 }
 
-func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms workflow.MutableState, weCtx workflow.Context) bool {
+func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms historyi.MutableState, weCtx historyi.WorkflowContext) bool {
 	closeTransferTaskId := ms.GetExecutionInfo().CloseTransferTaskId
 	// taskID == 0 if workflow closed before this field was added (v1.17).
 	if closeTransferTaskId == 0 {

@@ -216,6 +216,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 	require.Empty(t, cmp.Diff(
 		expectedContinueAsNewParams, *continueAsNewInput,
 		cmpopts.IgnoreFields(ForceReplicationParams{}, "TaskQueueUserDataReplicationStatus"),
+		cmpopts.IgnoreFields(ForceReplicationParams{}, "EstimationMultiplier"),
 		cmpopts.IgnoreFields(ForceReplicationParams{}, "QPSQueue"),
 	))
 

@@ -63,7 +63,7 @@ type (
 		mockShard           *shard.ContextTest
 		mockNamespaceCache  *namespace.MockRegistry
 		mockClusterMetadata *cluster.MockMetadata
-		mockMutableState    *workflow.MockMutableState
+		mockMutableState    *historyi.MockMutableState
 
 		mockExecutionMgr *persistence.MockExecutionManager
 
@@ -87,7 +87,7 @@ func (s *hsmStateReplicatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{

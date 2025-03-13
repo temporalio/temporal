@@ -75,6 +75,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -1139,15 +1140,15 @@ func (s *engine2Suite) TestTerminateWorkflowExecution_ParentMismatch() {
 	s.Equal(consts.ErrWorkflowParent, err)
 }
 
-func (s *engine2Suite) createExecutionStartedState(we *commonpb.WorkflowExecution, tl string, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) workflow.MutableState {
+func (s *engine2Suite) createExecutionStartedState(we *commonpb.WorkflowExecution, tl string, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) historyi.MutableState {
 	return s.createExecutionStartedStateWithParent(we, tl, nil, identity, scheduleWorkflowTask, startWorkflowTask)
 }
 
-func (s *engine2Suite) createExecutionStartedStateWithParent(we *commonpb.WorkflowExecution, tl string, parentInfo *workflowspb.ParentExecutionInfo, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) workflow.MutableState {
+func (s *engine2Suite) createExecutionStartedStateWithParent(we *commonpb.WorkflowExecution, tl string, parentInfo *workflowspb.ParentExecutionInfo, identity string, scheduleWorkflowTask bool, startWorkflowTask bool) historyi.MutableState {
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
 		we.GetWorkflowId(), we.GetRunId(), s.logger)
 	addWorkflowExecutionStartedEventWithParent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, parentInfo, identity)
-	var wt *workflow.WorkflowTaskInfo
+	var wt *historyi.WorkflowTaskInfo
 	if scheduleWorkflowTask {
 		wt = addWorkflowTaskScheduledEvent(ms)
 	}
@@ -2712,7 +2713,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	s.NoError(err)
 }
 
-func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we *commonpb.WorkflowExecution) workflow.MutableState {
+func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we *commonpb.WorkflowExecution) historyi.MutableState {
 	weContext, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		metrics.AddMetricsContext(context.Background()),
 		s.mockShard,

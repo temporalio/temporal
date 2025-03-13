@@ -42,8 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -149,7 +148,7 @@ type (
 	}
 
 	transactionMgrImpl struct {
-		shardContext      shard.Context
+		shardContext      historyi.ShardContext
 		namespaceRegistry namespace.Registry
 		workflowCache     wcache.Cache
 		clusterMetadata   cluster.Metadata
@@ -168,7 +167,7 @@ type (
 var _ TransactionManager = (*transactionMgrImpl)(nil)
 
 func NewTransactionManager(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	logger log.Logger,
@@ -274,11 +273,11 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 	ctx context.Context,
 	targetWorkflow Workflow,
 	targetWorkflowEventsSlice ...*persistence.WorkflowEvents,
-) (persistence.UpdateWorkflowMode, workflow.TransactionPolicy, error) {
+) (persistence.UpdateWorkflowMode, historyi.TransactionPolicy, error) {
 
 	isCurrentWorkflow, err := r.isWorkflowCurrent(ctx, targetWorkflow)
 	if err != nil {
-		return 0, workflow.TransactionPolicyActive, err
+		return 0, historyi.TransactionPolicyActive, err
 	}
 	isWorkflowRunning := targetWorkflow.GetMutableState().IsWorkflowExecutionRunning()
 	targetWorkflowActiveCluster := targetWorkflow.GetMutableState().GetNamespaceEntry().ActiveClusterName()
@@ -308,9 +307,9 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 				totalEvents,
 				targetWorkflow.GetMutableState().GetExecutionState().GetRunId(),
 			); err != nil {
-				return 0, workflow.TransactionPolicyActive, err
+				return 0, historyi.TransactionPolicyActive, err
 			}
-			return persistence.UpdateWorkflowModeUpdateCurrent, workflow.TransactionPolicyActive, nil
+			return persistence.UpdateWorkflowModeUpdateCurrent, historyi.TransactionPolicyActive, nil
 		}
 
 		// case 1.b
@@ -325,11 +324,11 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 		baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 		if err != nil {
-			return 0, workflow.TransactionPolicyActive, err
+			return 0, historyi.TransactionPolicyActive, err
 		}
 		baseRebuildLastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 		if err != nil {
-			return 0, workflow.TransactionPolicyActive, err
+			return 0, historyi.TransactionPolicyActive, err
 		}
 		baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 		baseNextEventID := baseMutableState.GetNextEventID()
@@ -357,13 +356,13 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			// no-op. Usually this is due to reset workflow with pending child workflows
 			r.logger.Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
 			// the target workflow is not reset so it is still the current workflow. It need to persist updated version histories.
-			return persistence.UpdateWorkflowModeUpdateCurrent, workflow.TransactionPolicyPassive, nil
+			return persistence.UpdateWorkflowModeUpdateCurrent, historyi.TransactionPolicyPassive, nil
 		case nil:
 			// after the reset of target workflow (current workflow) with additional events to be reapplied
 			// target workflow is no longer the current workflow
-			return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
+			return persistence.UpdateWorkflowModeBypassCurrent, historyi.TransactionPolicyPassive, nil
 		default:
-			return 0, workflow.TransactionPolicyActive, err
+			return 0, historyi.TransactionPolicyActive, err
 		}
 	}
 
@@ -374,13 +373,13 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		r.shardContext,
 		targetWorkflowEventsSlice,
 	); err != nil {
-		return 0, workflow.TransactionPolicyActive, err
+		return 0, historyi.TransactionPolicyActive, err
 	}
 
 	if isCurrentWorkflow {
-		return persistence.UpdateWorkflowModeUpdateCurrent, workflow.TransactionPolicyPassive, nil
+		return persistence.UpdateWorkflowModeUpdateCurrent, historyi.TransactionPolicyPassive, nil
 	}
-	return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
+	return persistence.UpdateWorkflowModeBypassCurrent, historyi.TransactionPolicyPassive, nil
 }
 
 func (r *transactionMgrImpl) CheckWorkflowExists(

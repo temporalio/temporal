@@ -50,8 +50,8 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
@@ -67,7 +67,7 @@ type (
 )
 
 func newTimerQueueActiveTaskExecutor(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
 	logger log.Logger,
@@ -287,7 +287,7 @@ type processingActivityTimeoutResult struct {
 }
 
 func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	timerSequenceID workflow.TimerSequenceID,
 	ai *persistencespb.ActivityInfo,
 ) (processingActivityTimeoutResult, error) {
@@ -586,7 +586,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		task,
 		resp.AssignedBuildId,
 		t.shardContext,
-		workflow.TransactionPolicyActive,
+		historyi.TransactionPolicyActive,
 		t.cache,
 		t.metricsHandler,
 		t.logger,
@@ -824,21 +824,21 @@ func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Can't use UpdateWorkflowExecutionAsActive since it updates the current run, and we are operating on a
 		// closed workflow.
-		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, workflow.TransactionPolicyActive)
+		return wfCtx.SubmitClosedWorkflowSnapshot(ctx, t.shardContext, historyi.TransactionPolicyActive)
 	}
 	return wfCtx.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 }
 
 func (t *timerQueueActiveTaskExecutor) getTimerSequence(
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 ) workflow.TimerSequence {
 	return workflow.NewTimerSequence(mutableState)
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	ctx context.Context,
-	context workflow.Context,
-	mutableState workflow.MutableState,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
 	scheduleNewWorkflowTask bool,
 ) error {
 	var err error
@@ -849,7 +849,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 			return err
 		}
 	}
-	return context.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	return wfContext.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 }
 
 func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(

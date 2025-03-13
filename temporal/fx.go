@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"sync/atomic"
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
@@ -862,6 +863,7 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 type SpanExporterInputs struct {
 	fx.In
 	Lifecycyle fx.Lifecycle
+	Logger     log.Logger
 	Config     *config.Config `optional:"true"`
 }
 
@@ -871,15 +873,14 @@ type SpanExporterInputs struct {
 //
 // - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
 var TraceExportModule = fx.Options(
-	fx.Invoke(func(log log.Logger) {
-		otel.SetErrorHandler(otel.ErrorHandlerFunc(
-			func(err error) {
-				log.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
-			}),
-		)
-	}),
-
 	fx.Provide(func(inputs SpanExporterInputs) ([]otelsdktrace.SpanExporter, error) {
+		var tracingReady atomic.Bool
+		otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+			if tracingReady.Load() { // ignore errors during startup
+				inputs.Logger.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
+			}
+		}))
+
 		exportersByType := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
 		if inputs.Config != nil {
 			var err error
@@ -898,9 +899,14 @@ var TraceExportModule = fx.Options(
 		maps.Copy(exportersByType, exportersByTypeFromEnv)
 
 		exporters := expmaps.Values(exportersByType)
+
 		inputs.Lifecycyle.Append(fx.Hook{
-			OnStart: startAll(exporters),
-			OnStop:  shutdownAll(exporters),
+			OnStart: func(ctx context.Context) error {
+				err = startAll(exporters)(ctx)
+				tracingReady.Store(true)
+				return err
+			},
+			OnStop: shutdownAll(exporters),
 		})
 		return exporters, nil
 	}),
@@ -967,9 +973,13 @@ var ServiceTracingModule = fx.Options(
 			opts = append(opts, otelsdktrace.WithSpanProcessor(sp))
 		}
 		tp := otelsdktrace.NewTracerProvider(opts...)
-		lc.Append(fx.Hook{OnStop: func(ctx context.Context) error {
-			return tp.Shutdown(ctx)
-		}})
+		lc.Append(fx.Hook{
+			OnStop: func(ctx context.Context) error {
+				otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+					// ignore errors during shutdown
+				}))
+				return tp.Shutdown(ctx)
+			}})
 		return tp
 	}),
 	// Haven't had use for baggage propagation yet

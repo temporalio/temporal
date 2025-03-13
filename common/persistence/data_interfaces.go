@@ -359,6 +359,8 @@ type (
 		DeleteSignalInfos         map[int64]struct{}
 		UpsertSignalRequestedIDs  map[string]struct{}
 		DeleteSignalRequestedIDs  map[string]struct{}
+		UpsertChasmNodes          map[string]*persistencespb.ChasmNode
+		DeleteChasmNodes          map[string]struct{}
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
@@ -383,6 +385,7 @@ type (
 		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
 		SignalInfos         map[int64]*persistencespb.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
+		ChasmNodes          map[string]*persistencespb.ChasmNode
 
 		Tasks map[tasks.Category][]tasks.Task
 
@@ -720,6 +723,7 @@ type (
 		SignalInfoSize        int
 		SignalRequestIDSize   int
 		BufferedEventsSize    int
+		ChasmTotalSize        int // total size of all CHASM nodes within a record
 		// UpdateInfoSize is included in ExecutionInfoSize
 
 		// Item count for various information captured within mutable state
