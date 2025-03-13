@@ -12,3 +12,6 @@ ignore:
 
 # disable pull request comments
 comment: false
+
+# disable GitHub checks
+github_checks: false
