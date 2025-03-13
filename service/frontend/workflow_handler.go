@@ -5736,7 +5736,7 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptions not implemented")
+		return nil, serviceerror.NewUnimplemented("method UpdateActivityOptions not implemented")
 	}
 
 	if request == nil {
@@ -5775,7 +5775,7 @@ func (wh *WorkflowHandler) PauseActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method PauseActivity not implemented")
+		return nil, serviceerror.NewUnimplemented("method PauseActivity not implemented")
 	}
 
 	if request == nil {
@@ -5811,7 +5811,7 @@ func (wh *WorkflowHandler) UnpauseActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method UnpauseActivity not implemented")
+		return nil, serviceerror.NewUnimplemented("method UnpauseActivity not implemented")
 	}
 
 	if request == nil {
@@ -5847,7 +5847,7 @@ func (wh *WorkflowHandler) ResetActivity(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
+		return nil, serviceerror.NewUnimplemented("method ResetActivity not implemented")
 	}
 
 	if request == nil {
@@ -5884,7 +5884,7 @@ func (wh *WorkflowHandler) CreateWorkflowRule(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method CreateWorkflowRule not supported")
+		return nil, serviceerror.NewUnimplemented("method CreateWorkflowRule not supported")
 	}
 
 	if request == nil {
@@ -5921,7 +5921,7 @@ func (wh *WorkflowHandler) DescribeWorkflowRule(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method DescribeWorkflowRule not supported")
+		return nil, serviceerror.NewUnimplemented("method DescribeWorkflowRule not supported")
 	}
 
 	if request == nil {
@@ -5946,7 +5946,7 @@ func (wh *WorkflowHandler) DeleteWorkflowRule(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method DeleteWorkflowRule not supported")
+		return nil, serviceerror.NewUnimplemented("method DeleteWorkflowRule not supported")
 	}
 	if request == nil {
 		return nil, errRequestNotSet
@@ -5970,7 +5970,7 @@ func (wh *WorkflowHandler) ListWorkflowRules(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.WorkflowRulesAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method ListWorkflowRules not supported")
+		return nil, serviceerror.NewUnimplemented("method ListWorkflowRules not supported")
 	}
 
 	if request == nil {
