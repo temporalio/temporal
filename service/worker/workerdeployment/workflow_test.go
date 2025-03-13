@@ -79,21 +79,17 @@ func (s *WorkerDeploymentSuite) Name() string {
 
 // Test_SetCurrentVersion_RejectStaleConcurrentUpdate tests that a stale concurrent update is rejected.
 //
-// The scenario this test is testing is as follows:
-// Two *identical* (same version, same identity) SetCurrentVersion updates are sent such that both of
-// them are accepted by the validator and are scheduled to be processed.
+// The scenario that this test is testing is as follows:
+// Two *identical* (same version, same identity) SetCurrentVersion updates are sent such that
+// both of them are accepted by the validator and are scheduled to be processed.
 // Since updates are processed sequentially, update #1 is processed first and then update #2.
-// The update #2 should be rejected because by the time it is processed, update #1 would have been
+// Update #2 should be rejected because by the time it is processed, update #1 would have been
 // processed and the state would have changed.
-//
-// The test verifies the above scenario by scheduling two updates.
-// Update #1 clears the validator and sleeps for a second to simulate the workflow giving up control.
-// Update #2 waits for the first one to complete and then attempts to set the current version.
 func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpdate() {
 	tv := testvars.New(s)
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
-	// adding version to worker deployment
+	// Adding the version to worker deployment.
 	s.env.RegisterDelayedCallback(func() {
 		s.env.UpdateWorkflow(AddVersionToWorkerDeployment, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
@@ -108,7 +104,6 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 		})
 	}, 0*time.Millisecond)
 
-	// Update #1 clears the validator but is then halted because of a sleep in the activity.
 	s.env.RegisterDelayedCallback(func() {
 		updateArgs := &deploymentspb.SetCurrentVersionArgs{
 			Identity:                tv.ClientIdentity(),
@@ -127,6 +122,10 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 		}, updateArgs)
 	}, 1*time.Millisecond)
 
+	// Update #1 clears the validator but is then halted because of a sleep in the activity. This is
+	// to simulate the workflow giving up control which shall allow update #2 to clear the validator.
+	// However, update #2 cannot yet start being processed since update #1 holds the lock and will only
+	// release it after it has completed processing.
 	var a *Activities
 	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
 	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Once().Return(
@@ -139,8 +138,6 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 		},
 	)
 
-	// Update #2 clears the validator and waits for the first update to complete. However,
-	// it should be rejected since completion of the first update changed the state.
 	s.env.RegisterDelayedCallback(func() {
 		updateArgs := &deploymentspb.SetCurrentVersionArgs{
 			Identity:                tv.ClientIdentity(),
@@ -154,12 +151,115 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 			OnAccept: func() {
 			},
 			OnComplete: func(a interface{}, err error) {
+				// Update #2 clears the validator and waits for the first update to complete. However,
+				// during processing, it should be rejected since completion of the first update changed the state.
 				s.ErrorContains(err, errNoChangeType)
 			},
 		}, updateArgs)
 	}, 1*time.Millisecond)
 
-	// Start the workflow with the right params
+	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+		maxVersionsGetter := func() int {
+			return 1000
+		}
+		return Workflow(ctx, maxVersionsGetter, args)
+	}
+
+	s.env.ExecuteWorkflow(deploymentWorkflow, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+	// Workflow times out so an error is expected.
+	s.Error(s.env.GetWorkflowError())
+	s.ErrorContains(s.env.GetWorkflowError(), "deadline exceeded (type: ScheduleToClose)")
+}
+
+// Test_SetRampingVersion_RejectStaleConcurrentUpdate tests that a stale concurrent update is rejected.
+//
+// The scenario that this test is testing is as follows:
+// Two *identical* (same version, same identity) SetRampingVersion updates are sent such that
+// both of them are accepted by the validator and are scheduled to be processed.
+// Since updates are processed sequentially, update #1 is processed first and then update #2.
+// Update #2 should be rejected because by the time it is processed, update #1 would have been
+// processed and the state would have changed.
+func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpdate() {
+	tv := testvars.New(s)
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	// Adding the version to worker deployment.
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(AddVersionToWorkerDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("update failed with error %v", err)
+			},
+			OnAccept: func() {
+			},
+			OnComplete: func(interface{}, error) {
+			},
+		}, &deploymentspb.AddVersionUpdateArgs{
+			Version: tv.DeploymentVersionString(),
+		})
+	}, 0*time.Millisecond)
+
+	s.env.RegisterDelayedCallback(func() {
+		updateArgs := &deploymentspb.SetRampingVersionArgs{
+			Identity:                tv.ClientIdentity(),
+			Version:                 tv.DeploymentVersionString(),
+			IgnoreMissingTaskQueues: true,
+			Percentage:              50,
+		}
+		// Setting the new version as current version
+		s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("update should not have failed with error %v", err)
+			},
+			OnAccept: func() {
+			},
+			OnComplete: func(a interface{}, err error) {
+			},
+		}, updateArgs)
+	}, 1*time.Millisecond)
+
+	// Update #1 clears the validator but is then halted because of a sleep in the activity. This is
+	// to simulate the workflow giving up control which shall allow update #2 to clear the validator.
+	// However, update #2 cannot yet start being processed since update #1 holds the lock and will only
+	// release it after it has completed processing.
+	var a *Activities
+	s.env.RegisterActivity(a.SyncWorkerDeploymentVersion)
+	s.env.OnActivity(a.SyncWorkerDeploymentVersion, mock.Anything, mock.Anything).Once().Return(
+		func(ctx context.Context, args *deploymentspb.SyncVersionStateActivityArgs) (*deploymentspb.SyncVersionStateActivityResult, error) {
+			if args.Version == tv.DeploymentVersionString() {
+				// Sleep in the activity to simulate workflow giving up control while processing the first update.
+				time.Sleep(1 * time.Second)
+			}
+			return &deploymentspb.SyncVersionStateActivityResult{}, nil
+		},
+	)
+
+	s.env.RegisterDelayedCallback(func() {
+		updateArgs := &deploymentspb.SetRampingVersionArgs{
+			Identity:                tv.ClientIdentity(),
+			Version:                 tv.DeploymentVersionString(),
+			IgnoreMissingTaskQueues: true,
+			Percentage:              50,
+		}
+		s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("update #2 should have been accepted by the validator")
+			},
+			OnAccept: func() {
+			},
+			OnComplete: func(a interface{}, err error) {
+				// Update #2 clears the validator and waits for the first update to complete. However,
+				// during processing, it should be rejected since completion of the first update changed the state.
+				s.ErrorContains(err, errNoChangeType)
+			},
+		}, updateArgs)
+	}, 1*time.Millisecond)
+
 	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 		maxVersionsGetter := func() int {
 			return 1000
