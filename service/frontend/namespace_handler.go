@@ -730,7 +730,7 @@ func (d *namespaceHandler) CreateWorkflowRule(
 			FailoverVersion:             existingNamespace.FailoverVersion,
 			FailoverNotificationVersion: existingNamespace.FailoverNotificationVersion,
 		},
-		IsGlobalNamespace:   getResponse.IsGlobalNamespace,
+		IsGlobalNamespace:   getNamespaceResponse.IsGlobalNamespace,
 		NotificationVersion: metadata.NotificationVersion,
 	}
 	err = d.metadataMgr.UpdateNamespace(ctx, updateReq)
@@ -744,16 +744,16 @@ func (d *namespaceHandler) CreateWorkflowRule(
 func (d *namespaceHandler) DescribeWorkflowRule(
 	ctx context.Context, ruleID string, nsName string,
 ) (*rulespb.WorkflowRule, error) {
-	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
+	getNamespaceResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
 	if err != nil {
 		return nil, err
 	}
 
-	if getResponse.Namespace.Config.WorkflowRules == nil {
+	if getNamespaceResponse.Namespace.Config.WorkflowRules == nil {
 		return nil, serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
 	}
 
-	rule, ok := getResponse.Namespace.Config.WorkflowRules[ruleID]
+	rule, ok := getNamespaceResponse.Namespace.Config.WorkflowRules[ruleID]
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
 	}
@@ -764,12 +764,12 @@ func (d *namespaceHandler) DescribeWorkflowRule(
 func (d *namespaceHandler) DeleteWorkflowRule(
 	ctx context.Context, ruleID string, nsName string,
 ) error {
-	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
+	getNamespaceResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
 	if err != nil {
 		return err
 	}
 
-	workflowRules := getResponse.Namespace.Config.WorkflowRules
+	workflowRules := getNamespaceResponse.Namespace.Config.WorkflowRules
 
 	if workflowRules == nil {
 		return serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
