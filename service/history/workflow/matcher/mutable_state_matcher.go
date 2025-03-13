@@ -23,7 +23,6 @@
 package matcher
 
 import (
-	historyi "go.temporal.io/server/service/history/interfaces"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
