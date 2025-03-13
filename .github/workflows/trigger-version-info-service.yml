@@ -1,0 +1,36 @@
+name: 'Trigger version-info-service release'
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  trigger-vis:
+    name: 'Trigger version-info-service release'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: version-info-service
+
+      - name: Dispatch version-info-service Github Action
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          VERSION: ${{ github.event.release.tag_name }}
+          RELEASE_TIME: ${{ github.event.release.published_at }}
+        run: |
+          gh workflow run server-release.yml -R https://github.com/temporalio/version-info-service \
+            -r main \
+            -f version="${VERSION}" \
+            -f release-time="${RELEASE_TIME}"
