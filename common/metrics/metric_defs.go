@@ -601,10 +601,16 @@ var (
 		"service_requests",
 		WithDescription("The number of RPC requests received by the service."),
 	)
-	ServicePendingRequests                   = NewGaugeDef("service_pending_requests")
-	ServiceFailures                          = NewCounterDef("service_errors")
-	ServicePanic                             = NewCounterDef("service_panics")
-	ServiceErrorWithType                     = NewCounterDef("service_error_with_type")
+	ServicePendingRequests = NewGaugeDef("service_pending_requests")
+	ServiceFailures        = NewCounterDef(
+		"service_errors",
+		WithDescription("The number of unexpected service request errors."),
+	)
+	ServicePanic         = NewCounterDef("service_panics")
+	ServiceErrorWithType = NewCounterDef(
+		"service_error_with_type",
+		WithDescription("The number of all service request errors by error type."),
+	)
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
 	ServiceLatencyUserLatency                = NewTimerDef("service_latency_userlatency")
