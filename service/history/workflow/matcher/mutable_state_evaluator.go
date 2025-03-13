@@ -30,7 +30,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/sqlquery"
-	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 // Supported Fields
@@ -42,8 +41,8 @@ const (
 )
 
 type mutableStateMatchEvaluator struct {
-<<<<<<< HEAD
-	ms historyi.MutableState
+	executionInfo  *persistencespb.WorkflowExecutionInfo
+	executionState *persistencespb.WorkflowExecutionState
 }
 
 func newMutableStateMatchEvaluator(
