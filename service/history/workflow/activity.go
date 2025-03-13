@@ -438,7 +438,7 @@ func MatchWorkflowRules(ms *MutableStateImpl, ai *persistencespb.ActivityInfo) {
 		// activity matched
 		for _, action := range rule.GetSpec().Actions {
 			switch action.Variant.(type) {
-			case *rulespb.Action_Pause:
+			case *rulespb.WorkflowRuleAction_Pause:
 				// pause the activity
 				if !ai.Paused {
 					if err = PauseActivity(ms, ai.ActivityId); err != nil {

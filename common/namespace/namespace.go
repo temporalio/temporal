@@ -303,7 +303,7 @@ func (ns *Namespace) CustomSearchAttributesMapper() CustomSearchAttributesMapper
 
 func (ns *Namespace) GetWorkflowRules() []*rulespb.WorkflowRule {
 	if ns.config.WorkflowRules == nil {
-		return []*rulespb.WorkflowRule{}
+		return nil
 	}
 	return expmaps.Values(ns.config.WorkflowRules)
 }
