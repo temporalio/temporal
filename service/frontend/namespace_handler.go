@@ -768,6 +768,9 @@ func (d *namespaceHandler) DeleteWorkflowRule(
 	}
 
 	metadata, err := d.metadataMgr.GetMetadata(ctx)
+	if err != nil {
+		return err
+	}
 
 	getNamespaceResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
 	if err != nil {
@@ -804,12 +807,12 @@ func (d *namespaceHandler) DeleteWorkflowRule(
 func (d *namespaceHandler) ListWorkflowRules(
 	ctx context.Context, nsName string,
 ) ([]*rulespb.WorkflowRule, error) {
-	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
+	getNamespaceResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: nsName})
 	if err != nil {
 		return nil, err
 	}
 
-	workflowRulesMap := getResponse.Namespace.Config.WorkflowRules
+	workflowRulesMap := getNamespaceResponse.Namespace.Config.WorkflowRules
 	if workflowRulesMap == nil {
 		return []*rulespb.WorkflowRule{}, nil
 	}

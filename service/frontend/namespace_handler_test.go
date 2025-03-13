@@ -1789,6 +1789,10 @@ func (s *namespaceHandlerCommonSuite) TestDeleteWorkflowRule() {
 		},
 	}
 
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: int64(1),
+	}, nil).AnyTimes()
+
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(&persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
@@ -1799,6 +1803,7 @@ func (s *namespaceHandlerCommonSuite) TestDeleteWorkflowRule() {
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 		},
 	}, nil).AnyTimes()
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	// happy path
 	err := s.handler.DeleteWorkflowRule(context.Background(), ruleId, namespaceName)
@@ -1848,16 +1853,17 @@ func (s *namespaceHandlerCommonSuite) TestDescribeWorkflowRule() {
 	var invalidArgument *serviceerror.InvalidArgument
 
 	// rule with such id doesn't exist
-	err = s.handler.DeleteWorkflowRule(context.Background(), "not existing rule id", namespaceName)
+	rule, err = s.handler.DescribeWorkflowRule(context.Background(), "not existing rule id", namespaceName)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgument)
+	s.Nil(rule)
 
 	// config is nil
 	nsConfig.WorkflowRules = nil
-	err = s.handler.DeleteWorkflowRule(context.Background(), "not existing rule id", namespaceName)
+	rule, err = s.handler.DescribeWorkflowRule(context.Background(), "not existing rule id", namespaceName)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgument)
-
+	s.Nil(rule)
 }
 
 func (s *namespaceHandlerCommonSuite) TestListWorkflowRules() {
