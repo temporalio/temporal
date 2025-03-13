@@ -60,7 +60,6 @@ env:
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
-  BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
 
 jobs:
   set-up-single-test:
@@ -232,8 +231,6 @@ jobs:
     strategy:
       fail-fast: false
     runs-on: ubuntu-latest
-    env:
-      BUILDKITE_MESSAGE: '{"job": "unit-test"}'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -269,13 +266,27 @@ jobs:
         uses: mikepenz/action-junit-report@v5.0.0-rc01
         if: failure()
         with:
-          report_paths: ./.testoutput/*.junit.xml
+          report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
           check_annotations: false
           annotate_only: true
           skip_annotations: true
 
-      - name: Upload test results
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: unit-test
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+
+      - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_unit_test }}
@@ -305,8 +316,6 @@ jobs:
     strategy:
       fail-fast: false
     runs-on: ubuntu-latest
-    env:
-      BUILDKITE_MESSAGE: '{"job": "integration-test"}'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -348,13 +357,27 @@ jobs:
         uses: mikepenz/action-junit-report@v5.0.0-rc01
         if: failure()
         with:
-          report_paths: ./.testoutput/*.junit.xml
+          report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
           check_annotations: false
           annotate_only: true
           skip_annotations: true
 
-      - name: Upload test results
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: integration-test
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+
+      - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
@@ -431,7 +454,6 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
-      BUILDKITE_MESSAGE: '{"job": "functional-test", "db": "${{ matrix.persistence_driver }}"}'
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -498,13 +520,27 @@ jobs:
         uses: mikepenz/action-junit-report@v5.0.0-rc01
         if: failure()
         with:
-          report_paths: ./.testoutput/*.junit.xml
+          report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
           check_annotations: false
           annotate_only: true
           skip_annotations: true
 
-      - name: Upload test results
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: functional-test
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+
+      - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
@@ -564,7 +600,6 @@ jobs:
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      BUILDKITE_MESSAGE: '{"job": "functional-test-xdc", "db": "${{ matrix.persistence_driver }}"}'
       TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
       - uses: actions/checkout@v4
@@ -622,13 +657,27 @@ jobs:
         uses: mikepenz/action-junit-report@v5.0.0-rc01
         if: failure()
         with:
-          report_paths: ./.testoutput/*.junit.xml
+          report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
           check_annotations: false
           annotate_only: true
           skip_annotations: true
 
-      - name: Upload test results
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: functional-test-xdc
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+
+      - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
@@ -743,7 +792,21 @@ jobs:
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
 
-      - name: Upload test results
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: functional-test-ndc
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+
+      - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
