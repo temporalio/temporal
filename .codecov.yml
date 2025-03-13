@@ -15,3 +15,9 @@ comment: false
 
 # disable GitHub checks
 github_checks: false
+
+# disable GitHub status
+coverage:
+  status:
+    project: off
+    patch: off
