@@ -283,14 +283,14 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 	})
 	s.NoError(err)
 	s.NotNil(deleteRuleResponse)
-	// verify that frontend has updated namespaces
+
+	// verify that frontend has updated namespaces and all rules are deleted
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		nsResp, err := s.FrontendClient().ListWorkflowRules(ctx, &workflowservice.ListWorkflowRulesRequest{
 			Namespace: s.Namespace().String(),
 		})
 		assert.NoError(s.T(), err)
 		assert.NotNil(s.T(), nsResp)
-		assert.NotNil(s.T(), nsResp.Rules)
 		assert.Len(s.T(), nsResp.Rules, 0)
 	}, 5*time.Second, 200*time.Millisecond)
 }
