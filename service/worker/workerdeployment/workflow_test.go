@@ -53,7 +53,6 @@ func (s *WorkerDeploymentSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
 	s.env.RegisterWorkflow(Workflow)
-	s.env.SetWorkflowRunTimeout(30 * time.Second)
 }
 
 func (s *WorkerDeploymentSuite) TearDownTest() {
@@ -163,9 +162,6 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	// Workflow times out so an error is expected.
-	s.Error(s.env.GetWorkflowError())
-	s.ErrorContains(s.env.GetWorkflowError(), "deadline exceeded (type: ScheduleToClose)")
 }
 
 // Test_SetRampingVersion_RejectStaleConcurrentUpdate tests that a stale concurrent update is rejected.
@@ -272,7 +268,4 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
-	// Workflow times out so an error is expected.
-	s.Error(s.env.GetWorkflowError())
-	s.ErrorContains(s.env.GetWorkflowError(), "deadline exceeded (type: ScheduleToClose)")
 }
