@@ -1,6 +1,6 @@
-[![Build status](https://github.com/temporalio/temporal/actions/workflows/run-tests.yml/badge.svg?branch=main)](https://github.com/temporalio/temporal/commits/main/)
-[![codecov](https://codecov.io/gh/temporalio/temporal/graph/badge.svg?token=FIKJ1QOUWN)](https://codecov.io/gh/temporalio/temporal)
-[![Discourse](https://img.shields.io/static/v1?label=Discourse&message=Get%20Help&color=informational)](https://community.temporal.io)
+![GitHub Release](https://img.shields.io/github/v/release/temporalio/temporal)
+![Code Coverage](https://img.shields.io/badge/codecov-report-blue)
+[![Community](https://img.shields.io/static/v1?label=community&message=get%20help&color=informational)](https://community.temporal.io)
 [![Go Report Card][go-report-image]][go-report-url]
 
 [go-report-image]: https://goreportcard.com/badge/github.com/temporalio/temporal
