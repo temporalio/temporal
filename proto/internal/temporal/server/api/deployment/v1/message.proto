@@ -164,6 +164,15 @@ message RegisterWorkerInVersionArgs {
     string task_queue_name = 1;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     int32 max_task_queues = 3;
+    string version = 4;
+}
+
+// used as Worker Deployment workflow update input:
+message RegisterWorkerInWorkerDeploymentArgs {
+    string task_queue_name = 1;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    int32 max_task_queues = 3;
+    WorkerDeploymentVersion version = 4;
 }
 
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):

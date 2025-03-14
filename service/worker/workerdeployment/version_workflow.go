@@ -141,7 +141,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
-		RegisterWorkerInDeployment,
+		RegisterWorkerInDeploymentVersion,
 		d.handleRegisterWorker,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateRegisterWorker,
@@ -434,19 +434,19 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		d.lock.Unlock()
 	}()
 
-	// wait until deployment workflow started
-	err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
-	if err != nil {
-		d.logger.Error("Update canceled before deployment workflow started")
-		// TODO (Carly): This is likely due to too many deployments, but make sure we excluded other possible errors here and send a proper error message all the time.
-		// TODO (Carly): mention the limit in here or make sure matching does in the error returned to the poller
-		return temporal.NewApplicationError("failed to create deployment version, likely you are exceeding the limit of allowed deployments in a namespace", errTooManyDeployments)
+	v := workflow.GetVersion(ctx, "RefactorRegisterWorker", workflow.DefaultVersion, 1)
+	if v == workflow.DefaultVersion {
+		// wait until deployment workflow started
+		err = workflow.Await(ctx, func() bool { return d.VersionState.StartedDeploymentWorkflow })
+		if err != nil {
+			d.logger.Error("Update canceled before deployment workflow started")
+			// TODO (Carly): This is likely due to too many deployments, but make sure we excluded other possible errors here and send a proper error message all the time.
+			// TODO (Carly): mention the limit in here or make sure matching does in the error returned to the poller
+			return temporal.NewApplicationError("failed to create deployment version, likely you are exceeding the limit of allowed deployments in a namespace", errTooManyDeployments)
+		}
 	}
 
-	// Add the task queue to the local state first. This is the safest because in case the rest of
-	// registration flow takes some time, DescribeVersion will return this TQ and other places such
-	// as SyncUnversionedRamp will have the most up-to-date version list sooner. Note that
-	// registration, once started, has to complete, all activities are indefinitely retried.
+	// Add the task queue to the local state.
 	if d.VersionState.TaskQueueFamilies == nil {
 		d.VersionState.TaskQueueFamilies = make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
 	}
@@ -467,19 +467,22 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		RampPercentage:    d.VersionState.RampPercentage,
 	}
 
-	// First try to add version to worker-deployment workflow so it rejects in case we hit the limit
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
-		DeploymentName: d.VersionState.Version.GetDeploymentName(),
-		UpdateArgs: &deploymentspb.AddVersionUpdateArgs{
-			Version:    worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
-			CreateTime: d.VersionState.CreateTime,
-		},
-		RequestId: d.newUUID(ctx),
-	}).Get(ctx, nil)
-	if err != nil {
-		// TODO (carly): make sure the error message that goes to the user is informative and has the limit mentioned
-		return temporal.NewApplicationError("too many versions in this deployment", errTooManyVersions)
+
+	if v == workflow.DefaultVersion {
+		// First try to add version to worker-deployment workflow so it rejects in case we hit the limit
+		err = workflow.ExecuteActivity(activityCtx, d.a.AddVersionToWorkerDeployment, &deploymentspb.AddVersionToWorkerDeploymentRequest{
+			DeploymentName: d.VersionState.Version.GetDeploymentName(),
+			UpdateArgs: &deploymentspb.AddVersionUpdateArgs{
+				Version:    worker_versioning.WorkerDeploymentVersionToString(d.VersionState.Version),
+				CreateTime: d.VersionState.CreateTime,
+			},
+			RequestId: d.newUUID(ctx),
+		}).Get(ctx, nil)
+		if err != nil {
+			// TODO (carly): make sure the error message that goes to the user is informative and has the limit mentioned
+			return temporal.NewApplicationError("too many versions in this deployment", errTooManyVersions)
+		}
 	}
 
 	// sync to user data
