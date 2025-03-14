@@ -899,8 +899,10 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	return replicationapi.GetTasks(ctx, e.shardContext, e.replicationAckMgr, pollingCluster, ackMessageID, ackTimestamp, queryMessageID)
 }
 
-func (e *historyEngineImpl) SubscribeReplicationNotification() (<-chan struct{}, string) {
-	return e.replicationAckMgr.SubscribeNotification()
+func (e *historyEngineImpl) SubscribeReplicationNotification(
+	clusterName string,
+) (notifyCh <-chan struct{}, subscribeId string) {
+	return e.replicationAckMgr.SubscribeNotification(clusterName)
 }
 
 func (e *historyEngineImpl) UnsubscribeReplicationNotification(subscriberID string) {
