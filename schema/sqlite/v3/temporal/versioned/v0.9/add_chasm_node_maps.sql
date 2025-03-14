@@ -3,7 +3,7 @@ CREATE TABLE chasm_node_maps (
   namespace_id BINARY(16) NOT NULL,
   workflow_id VARCHAR(255) NOT NULL,
   run_id BINARY(16) NOT NULL,
-  chasm_path VARCHAR(384) NOT NULL,
+  chasm_path BINARY(1536) NOT NULL,
 --
   data MEDIUMBLOB NOT NULL,
   data_encoding VARCHAR(16),
