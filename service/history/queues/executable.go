@@ -524,41 +524,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			// if err is due to workflow busy or APS limit, do not take any latency related to this attempt into account
 			e.inMemoryNoUserLatency += e.scheduleLatency + e.attemptNoUserLatency
 		}
-
-		if retErr != nil {
-			e.Lock()
-			defer e.Unlock()
-
-			e.attempt++
-			if e.attempt > taskCriticalLogMetricAttempts {
-				metrics.TaskAttempt.With(e.metricsHandler).Record(int64(e.attempt))
-				e.logger.Error("Critical error processing task, retrying.",
-					tag.Attempt(int32(e.attempt)),
-					tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
-					tag.Error(err),
-					tag.OperationCritical)
-			}
-		}
 	}()
 
-	if len(e.dlqErrorPattern()) > 0 {
-		match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
-		if mErr != nil {
-			e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern.Key()))
-		} else if match {
-			e.logger.Error(
-				fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
-					dynamicconfig.HistoryTaskDLQErrorPattern.Key()),
-				tag.Error(err),
-				tag.ErrorType(err))
-			e.terminalFailureCause = err
-			metrics.TaskTerminalFailures.With(e.metricsHandler).Record(1)
-			return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
-		}
-	}
+	err = e.convertDLQErrorPattern(err)
 
 	if e.isSafeToDropError(err) {
 		return nil
+	}
+
+	attempt := e.incAttempt()
+	if attempt > taskCriticalLogMetricAttempts {
+		metrics.TaskAttempt.With(e.metricsHandler).Record(int64(e.attempt))
 	}
 
 	if ok, rewrittenErr := e.isExpectedRetryableError(err); ok {
@@ -568,7 +544,18 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	// Unexpected errors handled below
 	e.unexpectedErrorAttempts++
 	metrics.TaskFailures.With(e.metricsHandler).Record(1)
-	e.logger.Warn("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
+	logger := log.With(e.logger,
+		tag.Error(err),
+		tag.ErrorType(err),
+		tag.Attempt(int32(attempt)),
+		tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
+		tag.LifeCycleProcessingFailed,
+	)
+	if attempt > taskCriticalLogMetricAttempts {
+		logger.Error("Critical error processing task, retrying.", tag.OperationCritical)
+	} else {
+		logger.Warn("Fail to process task")
+	}
 
 	if e.isUnexpectedNonRetryableError(err) {
 		// Terminal errors are likely due to data corruption.
@@ -597,6 +584,29 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	return err
+}
+
+func (e *executableImpl) convertDLQErrorPattern(err error) error {
+	if len(e.dlqErrorPattern()) <= 0 {
+		return err
+	}
+	match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
+	if mErr != nil {
+		e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern.Key()))
+		return err
+	}
+	if !match {
+		return err
+	}
+
+	e.logger.Error(
+		fmt.Sprintf("Error matches with %s. Marking task as terminally failed, will send to DLQ",
+			dynamicconfig.HistoryTaskDLQErrorPattern.Key()),
+		tag.Error(err),
+		tag.ErrorType(err))
+	e.terminalFailureCause = err
+	metrics.TaskTerminalFailures.With(e.metricsHandler).Record(1)
+	return fmt.Errorf("%w: %v", ErrTerminalTaskFailure, err)
 }
 
 func (e *executableImpl) IsRetryableError(err error) bool {
@@ -811,6 +821,14 @@ func (e *executableImpl) updatePriority() {
 	if e.priority > e.lowestPriority {
 		e.lowestPriority = e.priority
 	}
+}
+
+func (e *executableImpl) incAttempt() int {
+	e.Lock()
+	defer e.Unlock()
+
+	e.attempt++
+	return e.attempt
 }
 
 func (e *executableImpl) resetAttempt() {
