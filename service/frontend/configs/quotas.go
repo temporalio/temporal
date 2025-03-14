@@ -118,6 +118,10 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeployment":                2,
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeploymentVersion":         2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerDeploymentVersionMetadata": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/CreateWorkflowRule":                    2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowRule":                  2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkflowRule":                    2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowRules":                     2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
