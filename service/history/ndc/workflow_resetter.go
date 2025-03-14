@@ -694,7 +694,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		if runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
 			wfCtx = currentWorkflow.GetContext()
 		} else {
-			var release wcache.ReleaseCacheFunc
+			var release historyi.ReleaseWorkflowContextFunc
 			wfCtx, release, err = r.workflowCache.GetOrCreateWorkflowExecution(
 				ctx,
 				r.shardContext,

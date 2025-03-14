@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/finalizer"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -119,6 +120,9 @@ type (
 		// DeleteWorkflowExecution add task to delete visibility, current workflow execution, and deletes workflow execution.
 		// If branchToken != nil, then delete history also, otherwise leave history.
 		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime time.Time, stage *tasks.DeleteWorkflowExecutionStage) error
+
+		GetCachedWorkflowContext(ctx context.Context, namespaceID namespace.ID, execution *commonpb.WorkflowExecution, lockPriority locks.Priority) (WorkflowContext, ReleaseWorkflowContextFunc, error)
+		GetCurrentCachedWorkflowContext(ctx context.Context, namespaceID namespace.ID, workflowID string, lockPriority locks.Priority) (ReleaseWorkflowContextFunc, error)
 
 		UnloadForOwnershipLost()
 

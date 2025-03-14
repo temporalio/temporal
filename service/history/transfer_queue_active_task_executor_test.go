@@ -2708,7 +2708,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 
 			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), mockShard, gomock.Any(), gomock.Any(),
 				gomock.Any(),
-			).Return(mockWorkflowContext, wcache.ReleaseCacheFunc(func(err error) {
+			).Return(mockWorkflowContext, historyi.ReleaseWorkflowContextFunc(func(err error) {
 			}), nil)
 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)

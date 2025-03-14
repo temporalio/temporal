@@ -256,7 +256,7 @@ func (r *HistoryReplicatorImpl) BackfillHistoryEvents(
 func (r *HistoryReplicatorImpl) doApplyBackfillEvents(
 	ctx context.Context,
 	task replicationTask,
-	action func(context.Context, historyi.MutableState, historyi.WorkflowContext, wcache.ReleaseCacheFunc, replicationTask) error,
+	action func(context.Context, historyi.MutableState, historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, replicationTask) error,
 ) (retError error) {
 	wfContext, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -298,7 +298,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 	ctx context.Context,
 	mutableState historyi.MutableState,
 	wfContext historyi.WorkflowContext,
-	releaseFn wcache.ReleaseCacheFunc,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
 	task replicationTask,
 ) (retError error) {
 	versionedTransition := task.getVersionedTransition()
@@ -372,7 +372,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 func (r *HistoryReplicatorImpl) applyBackfillEventsWithNew(
 	ctx context.Context,
 	wfContext historyi.WorkflowContext,
-	releaseFn wcache.ReleaseCacheFunc,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
 	task replicationTask,
 ) (retError error) {
 	wfContext.Clear()
@@ -406,7 +406,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEventsWithoutNew(
 	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	branchIndex int32,
-	releaseFn wcache.ReleaseCacheFunc,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
 	task replicationTask,
 ) (retError error) {
 	return r.applyNonStartEventsToNonCurrentBranchWithoutContinueAsNew(
@@ -534,7 +534,7 @@ func (r *HistoryReplicatorImpl) doApplyEvents(
 func (r *HistoryReplicatorImpl) applyStartEvents(
 	ctx context.Context,
 	wfContext historyi.WorkflowContext,
-	releaseFn wcache.ReleaseCacheFunc,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
 	task replicationTask,
 ) error {
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(task.getNamespaceID())
@@ -590,7 +590,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	isRebuilt bool,
-	releaseFn wcache.ReleaseCacheFunc,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
 	task replicationTask,
 ) error {
 	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(ctx, wfContext, mutableState, task)
@@ -650,7 +650,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranch(
 	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	branchIndex int32,
-	releaseFn wcache.ReleaseCacheFunc,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
 	task replicationTask,
 ) error {
 
@@ -678,7 +678,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 	wfContext historyi.WorkflowContext,
 	mutableState historyi.MutableState,
 	branchIndex int32,
-	releaseFn wcache.ReleaseCacheFunc,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
 	task replicationTask,
 ) error {
 
@@ -734,7 +734,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithContinueAsNew(
 	ctx context.Context,
 	wfContext historyi.WorkflowContext,
-	releaseFn wcache.ReleaseCacheFunc,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
 	task replicationTask,
 ) error {
 

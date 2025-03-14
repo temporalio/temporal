@@ -79,7 +79,7 @@ type (
 			mutableState historyi.MutableState,
 			targetVersionedTransition *persistencespb.VersionedTransition,
 			targetVersionHistories [][]*historyspb.VersionHistoryItem,
-			releaseFunc wcache.ReleaseCacheFunc,
+			releaseFunc historyi.ReleaseWorkflowContextFunc,
 		) (*SyncStateResult, error)
 	}
 
@@ -173,7 +173,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableState(
 	mu historyi.MutableState,
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories [][]*historyspb.VersionHistoryItem,
-	releaseFunc wcache.ReleaseCacheFunc,
+	releaseFunc historyi.ReleaseWorkflowContextFunc,
 ) (_ *SyncStateResult, retError error) {
 	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetCurrentVersionedTransition, targetVersionHistories, releaseFunc)
 }
@@ -185,7 +185,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	mutableState historyi.MutableState,
 	targetCurrentVersionedTransition *persistencespb.VersionedTransition,
 	targetVersionHistories [][]*historyspb.VersionHistoryItem,
-	cacheReleaseFunc wcache.ReleaseCacheFunc,
+	cacheReleaseFunc historyi.ReleaseWorkflowContextFunc,
 ) (_ *SyncStateResult, retError error) {
 	shouldReturnMutation := func() bool {
 		if targetCurrentVersionedTransition == nil {

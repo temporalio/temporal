@@ -49,6 +49,7 @@ import (
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
 	finalizer "go.temporal.io/server/common/finalizer"
+	locks "go.temporal.io/server/common/locks"
 	log "go.temporal.io/server/common/log"
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
@@ -259,6 +260,22 @@ func (mr *MockShardContextMockRecorder) GetArchivalMetadata() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArchivalMetadata", reflect.TypeOf((*MockShardContext)(nil).GetArchivalMetadata))
 }
 
+// GetCachedWorkflowContext mocks base method.
+func (m *MockShardContext) GetCachedWorkflowContext(ctx context.Context, namespaceID namespace.ID, execution *common.WorkflowExecution, lockPriority locks.Priority) (WorkflowContext, ReleaseWorkflowContextFunc, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCachedWorkflowContext", ctx, namespaceID, execution, lockPriority)
+	ret0, _ := ret[0].(WorkflowContext)
+	ret1, _ := ret[1].(ReleaseWorkflowContextFunc)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetCachedWorkflowContext indicates an expected call of GetCachedWorkflowContext.
+func (mr *MockShardContextMockRecorder) GetCachedWorkflowContext(ctx, namespaceID, execution, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachedWorkflowContext", reflect.TypeOf((*MockShardContext)(nil).GetCachedWorkflowContext), ctx, namespaceID, execution, lockPriority)
+}
+
 // GetClusterMetadata mocks base method.
 func (m *MockShardContext) GetClusterMetadata() cluster.Metadata {
 	m.ctrl.T.Helper()
@@ -285,6 +302,21 @@ func (m *MockShardContext) GetConfig() *configs.Config {
 func (mr *MockShardContextMockRecorder) GetConfig() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfig", reflect.TypeOf((*MockShardContext)(nil).GetConfig))
+}
+
+// GetCurrentCachedWorkflowContext mocks base method.
+func (m *MockShardContext) GetCurrentCachedWorkflowContext(ctx context.Context, namespaceID namespace.ID, workflowID string, lockPriority locks.Priority) (ReleaseWorkflowContextFunc, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentCachedWorkflowContext", ctx, namespaceID, workflowID, lockPriority)
+	ret0, _ := ret[0].(ReleaseWorkflowContextFunc)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCurrentCachedWorkflowContext indicates an expected call of GetCurrentCachedWorkflowContext.
+func (mr *MockShardContextMockRecorder) GetCurrentCachedWorkflowContext(ctx, namespaceID, workflowID, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentCachedWorkflowContext", reflect.TypeOf((*MockShardContext)(nil).GetCurrentCachedWorkflowContext), ctx, namespaceID, workflowID, lockPriority)
 }
 
 // GetCurrentExecution mocks base method.
@@ -1016,6 +1048,22 @@ func (mr *MockControllableContextMockRecorder) GetArchivalMetadata() *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArchivalMetadata", reflect.TypeOf((*MockControllableContext)(nil).GetArchivalMetadata))
 }
 
+// GetCachedWorkflowContext mocks base method.
+func (m *MockControllableContext) GetCachedWorkflowContext(ctx context.Context, namespaceID namespace.ID, execution *common.WorkflowExecution, lockPriority locks.Priority) (WorkflowContext, ReleaseWorkflowContextFunc, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCachedWorkflowContext", ctx, namespaceID, execution, lockPriority)
+	ret0, _ := ret[0].(WorkflowContext)
+	ret1, _ := ret[1].(ReleaseWorkflowContextFunc)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetCachedWorkflowContext indicates an expected call of GetCachedWorkflowContext.
+func (mr *MockControllableContextMockRecorder) GetCachedWorkflowContext(ctx, namespaceID, execution, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachedWorkflowContext", reflect.TypeOf((*MockControllableContext)(nil).GetCachedWorkflowContext), ctx, namespaceID, execution, lockPriority)
+}
+
 // GetClusterMetadata mocks base method.
 func (m *MockControllableContext) GetClusterMetadata() cluster.Metadata {
 	m.ctrl.T.Helper()
@@ -1042,6 +1090,21 @@ func (m *MockControllableContext) GetConfig() *configs.Config {
 func (mr *MockControllableContextMockRecorder) GetConfig() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfig", reflect.TypeOf((*MockControllableContext)(nil).GetConfig))
+}
+
+// GetCurrentCachedWorkflowContext mocks base method.
+func (m *MockControllableContext) GetCurrentCachedWorkflowContext(ctx context.Context, namespaceID namespace.ID, workflowID string, lockPriority locks.Priority) (ReleaseWorkflowContextFunc, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentCachedWorkflowContext", ctx, namespaceID, workflowID, lockPriority)
+	ret0, _ := ret[0].(ReleaseWorkflowContextFunc)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCurrentCachedWorkflowContext indicates an expected call of GetCurrentCachedWorkflowContext.
+func (mr *MockControllableContextMockRecorder) GetCurrentCachedWorkflowContext(ctx, namespaceID, workflowID, lockPriority any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentCachedWorkflowContext", reflect.TypeOf((*MockControllableContext)(nil).GetCurrentCachedWorkflowContext), ctx, namespaceID, workflowID, lockPriority)
 }
 
 // GetCurrentExecution mocks base method.

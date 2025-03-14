@@ -68,10 +68,10 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 }
 
 // GetOrCreateCurrentWorkflowExecution mocks base method.
-func (m *MockCache) GetOrCreateCurrentWorkflowExecution(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, workflowID string, lockPriority locks.Priority) (ReleaseCacheFunc, error) {
+func (m *MockCache) GetOrCreateCurrentWorkflowExecution(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, workflowID string, lockPriority locks.Priority) (interfaces.ReleaseWorkflowContextFunc, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrCreateCurrentWorkflowExecution", ctx, shardContext, namespaceID, workflowID, lockPriority)
-	ret0, _ := ret[0].(ReleaseCacheFunc)
+	ret0, _ := ret[0].(interfaces.ReleaseWorkflowContextFunc)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -83,11 +83,11 @@ func (mr *MockCacheMockRecorder) GetOrCreateCurrentWorkflowExecution(ctx, shardC
 }
 
 // GetOrCreateWorkflowExecution mocks base method.
-func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, execution *common.WorkflowExecution, lockPriority locks.Priority) (interfaces.WorkflowContext, ReleaseCacheFunc, error) {
+func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, shardContext interfaces.ShardContext, namespaceID namespace.ID, execution *common.WorkflowExecution, lockPriority locks.Priority) (interfaces.WorkflowContext, interfaces.ReleaseWorkflowContextFunc, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrCreateWorkflowExecution", ctx, shardContext, namespaceID, execution, lockPriority)
 	ret0, _ := ret[0].(interfaces.WorkflowContext)
-	ret1, _ := ret[1].(ReleaseCacheFunc)
+	ret1, _ := ret[1].(interfaces.ReleaseWorkflowContextFunc)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }

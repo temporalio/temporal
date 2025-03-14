@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -90,7 +89,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 			NewWorkflowEvents:   newWorkflowEventsSeq,
 		},
 	)
-	if shard.OperationPossiblySucceeded(err) {
+	if persistence.OperationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
 	}
 	if err != nil {
@@ -141,7 +140,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 			CurrentWorkflowEvents:   currentWorkflowEventsSeq,
 		},
 	)
-	if shard.OperationPossiblySucceeded(err) {
+	if persistence.OperationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
@@ -201,7 +200,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 			NewWorkflowEvents:      newWorkflowEventsSeq,
 		},
 	)
-	if shard.OperationPossiblySucceeded(err) {
+	if persistence.OperationPossiblySucceeded(err) {
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
 	}
@@ -237,7 +236,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 		// RangeID , this is set by shard context
 		SetWorkflowSnapshot: *workflowSnapshot,
 	})
-	if shard.OperationPossiblySucceeded(err) {
+	if persistence.OperationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, workflowSnapshot)
 	}
 	if err != nil {

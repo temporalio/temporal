@@ -554,7 +554,7 @@ func (s *ContextImpl) AddTasks(
 	defer s.ioSemaphoreRelease()
 
 	err = s.addTasksSemaphoreAcquired(ctx, request)
-	if OperationPossiblySucceeded(err) {
+	if persistence.OperationPossiblySucceeded(err) {
 		engine.NotifyNewTasks(request.Tasks)
 	}
 	return err
@@ -1055,7 +1055,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					Tasks: newTasks,
 				}
 				err := s.addTasksSemaphoreAcquired(ctx, addTasksRequest)
-				if OperationPossiblySucceeded(err) {
+				if persistence.OperationPossiblySucceeded(err) {
 					engine.NotifyNewTasks(newTasks)
 				}
 				if err != nil {
@@ -2248,6 +2248,22 @@ func (s *ContextImpl) ChasmRegistry() *chasm.Registry {
 	return s.chasmRegistry
 }
 
+func (s *ContextImpl) GetCachedWorkflowContext(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	lockPriority locks.Priority,
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
+	return nil, nil, nil
+}
+func (s *ContextImpl) GetCurrentCachedWorkflowContext(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string, lockPriority locks.Priority,
+) (historyi.ReleaseWorkflowContextFunc, error) {
+	return nil, nil
+}
+
 // newDetachedContext creates a detached context with the same deadline
 // and values from the given context. Detached context won't be affected
 // if the context it bases on is cancelled.
@@ -2290,25 +2306,6 @@ func (s *ContextImpl) newShardClosedErrorWithShardID() *persistence.ShardOwnersh
 	return &persistence.ShardOwnershipLostError{
 		ShardID: s.shardID, // immutable
 		Msg:     "shard closed",
-	}
-}
-
-func OperationPossiblySucceeded(err error) bool {
-	switch err.(type) {
-	case *persistence.CurrentWorkflowConditionFailedError,
-		*persistence.WorkflowConditionFailedError,
-		*persistence.ConditionFailedError,
-		*persistence.ShardOwnershipLostError,
-		*persistence.InvalidPersistenceRequestError,
-		*persistence.TransactionSizeLimitError,
-		*persistence.AppendHistoryTimeoutError, // this means task operations is not started
-		*serviceerror.ResourceExhausted,
-		*serviceerror.NotFound,
-		*serviceerror.NamespaceNotFound:
-		// Persistence failure that means that write was definitely not committed.
-		return false
-	default:
-		return true
 	}
 }
 

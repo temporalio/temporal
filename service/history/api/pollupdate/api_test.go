@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/service/history/api/pollupdate"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -67,7 +66,7 @@ type (
 	mockWorkflowLeaseCtx struct {
 		api.WorkflowLease
 		GetContextFn   func() historyi.WorkflowContext
-		GetReleaseFnFn func() wcache.ReleaseCacheFunc
+		GetReleaseFnFn func() historyi.ReleaseWorkflowContextFunc
 	}
 
 	mockReg struct {
@@ -93,7 +92,7 @@ func (m mockWFConsistencyChecker) GetWorkflowLease(
 	return m.GetWorkflowContextFunc(ctx, clock, wfKey, prio)
 }
 
-func (m mockWorkflowLeaseCtx) GetReleaseFn() wcache.ReleaseCacheFunc {
+func (m mockWorkflowLeaseCtx) GetReleaseFn() historyi.ReleaseWorkflowContextFunc {
 	return m.GetReleaseFnFn()
 }
 
@@ -119,7 +118,7 @@ func TestPollOutcome(t *testing.T) {
 	wfCtx.EXPECT().UpdateRegistry(gomock.Any()).Return(reg).AnyTimes()
 
 	apiCtx := mockWorkflowLeaseCtx{
-		GetReleaseFnFn: func() wcache.ReleaseCacheFunc { return func(error) {} },
+		GetReleaseFnFn: func() historyi.ReleaseWorkflowContextFunc { return func(error) {} },
 		GetContextFn: func() historyi.WorkflowContext {
 			return wfCtx
 		},

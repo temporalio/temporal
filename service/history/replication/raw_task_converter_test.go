@@ -84,13 +84,13 @@ type (
 		runID           string
 		workflowContext *historyi.MockWorkflowContext
 		mutableState    *historyi.MockMutableState
-		releaseFn       wcache.ReleaseCacheFunc
+		releaseFn       historyi.ReleaseWorkflowContextFunc
 		lockReleased    bool
 
 		newRunID           string
 		newWorkflowContext *historyi.MockWorkflowContext
 		newMutableState    *historyi.MockMutableState
-		newReleaseFn       wcache.ReleaseCacheFunc
+		newReleaseFn       historyi.ReleaseWorkflowContextFunc
 
 		replicationMultipleBatches bool
 	}
