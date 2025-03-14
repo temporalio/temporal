@@ -47,20 +47,6 @@ func (c *metricClient) AddOrUpdateRemoteCluster(
 	return c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
 }
 
-func (c *metricClient) AddSearchAttributes(
-	ctx context.Context,
-	request *adminservice.AddSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (_ *adminservice.AddSearchAttributesResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientAddSearchAttributes")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.AddSearchAttributes(ctx, request, opts...)
-}
-
 func (c *metricClient) AddTasks(
 	ctx context.Context,
 	request *adminservice.AddTasksRequest,
@@ -313,20 +299,6 @@ func (c *metricClient) GetReplicationMessages(
 	return c.client.GetReplicationMessages(ctx, request, opts...)
 }
 
-func (c *metricClient) GetSearchAttributes(
-	ctx context.Context,
-	request *adminservice.GetSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (_ *adminservice.GetSearchAttributesResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientGetSearchAttributes")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.GetSearchAttributes(ctx, request, opts...)
-}
-
 func (c *metricClient) GetShard(
 	ctx context.Context,
 	request *adminservice.GetShardRequest,
@@ -563,20 +535,6 @@ func (c *metricClient) RemoveRemoteCluster(
 	}()
 
 	return c.client.RemoveRemoteCluster(ctx, request, opts...)
-}
-
-func (c *metricClient) RemoveSearchAttributes(
-	ctx context.Context,
-	request *adminservice.RemoveSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (_ *adminservice.RemoveSearchAttributesResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientRemoveSearchAttributes")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.RemoveSearchAttributes(ctx, request, opts...)
 }
 
 func (c *metricClient) RemoveTask(

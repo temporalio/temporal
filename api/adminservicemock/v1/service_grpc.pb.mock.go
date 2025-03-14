@@ -86,26 +86,6 @@ func (mr *MockAdminServiceClientMockRecorder) AddOrUpdateRemoteCluster(ctx, in a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddOrUpdateRemoteCluster", reflect.TypeOf((*MockAdminServiceClient)(nil).AddOrUpdateRemoteCluster), varargs...)
 }
 
-// AddSearchAttributes mocks base method.
-func (m *MockAdminServiceClient) AddSearchAttributes(ctx context.Context, in *adminservice.AddSearchAttributesRequest, opts ...grpc.CallOption) (*adminservice.AddSearchAttributesResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "AddSearchAttributes", varargs...)
-	ret0, _ := ret[0].(*adminservice.AddSearchAttributesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AddSearchAttributes indicates an expected call of AddSearchAttributes.
-func (mr *MockAdminServiceClientMockRecorder) AddSearchAttributes(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminServiceClient)(nil).AddSearchAttributes), varargs...)
-}
-
 // AddTasks mocks base method.
 func (m *MockAdminServiceClient) AddTasks(ctx context.Context, in *adminservice.AddTasksRequest, opts ...grpc.CallOption) (*adminservice.AddTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -466,26 +446,6 @@ func (mr *MockAdminServiceClientMockRecorder) GetReplicationMessages(ctx, in any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).GetReplicationMessages), varargs...)
 }
 
-// GetSearchAttributes mocks base method.
-func (m *MockAdminServiceClient) GetSearchAttributes(ctx context.Context, in *adminservice.GetSearchAttributesRequest, opts ...grpc.CallOption) (*adminservice.GetSearchAttributesResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "GetSearchAttributes", varargs...)
-	ret0, _ := ret[0].(*adminservice.GetSearchAttributesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetSearchAttributes indicates an expected call of GetSearchAttributes.
-func (mr *MockAdminServiceClientMockRecorder) GetSearchAttributes(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockAdminServiceClient)(nil).GetSearchAttributes), varargs...)
-}
-
 // GetShard mocks base method.
 func (m *MockAdminServiceClient) GetShard(ctx context.Context, in *adminservice.GetShardRequest, opts ...grpc.CallOption) (*adminservice.GetShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -826,26 +786,6 @@ func (mr *MockAdminServiceClientMockRecorder) RemoveRemoteCluster(ctx, in any, o
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRemoteCluster", reflect.TypeOf((*MockAdminServiceClient)(nil).RemoveRemoteCluster), varargs...)
 }
 
-// RemoveSearchAttributes mocks base method.
-func (m *MockAdminServiceClient) RemoveSearchAttributes(ctx context.Context, in *adminservice.RemoveSearchAttributesRequest, opts ...grpc.CallOption) (*adminservice.RemoveSearchAttributesResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "RemoveSearchAttributes", varargs...)
-	ret0, _ := ret[0].(*adminservice.RemoveSearchAttributesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RemoveSearchAttributes indicates an expected call of RemoveSearchAttributes.
-func (mr *MockAdminServiceClientMockRecorder) RemoveSearchAttributes(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSearchAttributes", reflect.TypeOf((*MockAdminServiceClient)(nil).RemoveSearchAttributes), varargs...)
-}
-
 // RemoveTask mocks base method.
 func (m *MockAdminServiceClient) RemoveTask(ctx context.Context, in *adminservice.RemoveTaskRequest, opts ...grpc.CallOption) (*adminservice.RemoveTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -1099,21 +1039,6 @@ func (m *MockAdminServiceServer) AddOrUpdateRemoteCluster(arg0 context.Context, 
 func (mr *MockAdminServiceServerMockRecorder) AddOrUpdateRemoteCluster(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddOrUpdateRemoteCluster", reflect.TypeOf((*MockAdminServiceServer)(nil).AddOrUpdateRemoteCluster), arg0, arg1)
-}
-
-// AddSearchAttributes mocks base method.
-func (m *MockAdminServiceServer) AddSearchAttributes(arg0 context.Context, arg1 *adminservice.AddSearchAttributesRequest) (*adminservice.AddSearchAttributesResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddSearchAttributes", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.AddSearchAttributesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AddSearchAttributes indicates an expected call of AddSearchAttributes.
-func (mr *MockAdminServiceServerMockRecorder) AddSearchAttributes(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminServiceServer)(nil).AddSearchAttributes), arg0, arg1)
 }
 
 // AddTasks mocks base method.
@@ -1386,21 +1311,6 @@ func (mr *MockAdminServiceServerMockRecorder) GetReplicationMessages(arg0, arg1 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).GetReplicationMessages), arg0, arg1)
 }
 
-// GetSearchAttributes mocks base method.
-func (m *MockAdminServiceServer) GetSearchAttributes(arg0 context.Context, arg1 *adminservice.GetSearchAttributesRequest) (*adminservice.GetSearchAttributesResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSearchAttributes", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.GetSearchAttributesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetSearchAttributes indicates an expected call of GetSearchAttributes.
-func (mr *MockAdminServiceServerMockRecorder) GetSearchAttributes(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockAdminServiceServer)(nil).GetSearchAttributes), arg0, arg1)
-}
-
 // GetShard mocks base method.
 func (m *MockAdminServiceServer) GetShard(arg0 context.Context, arg1 *adminservice.GetShardRequest) (*adminservice.GetShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -1654,21 +1564,6 @@ func (m *MockAdminServiceServer) RemoveRemoteCluster(arg0 context.Context, arg1 
 func (mr *MockAdminServiceServerMockRecorder) RemoveRemoteCluster(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRemoteCluster", reflect.TypeOf((*MockAdminServiceServer)(nil).RemoveRemoteCluster), arg0, arg1)
-}
-
-// RemoveSearchAttributes mocks base method.
-func (m *MockAdminServiceServer) RemoveSearchAttributes(arg0 context.Context, arg1 *adminservice.RemoveSearchAttributesRequest) (*adminservice.RemoveSearchAttributesResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveSearchAttributes", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.RemoveSearchAttributesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RemoveSearchAttributes indicates an expected call of RemoveSearchAttributes.
-func (mr *MockAdminServiceServerMockRecorder) RemoveSearchAttributes(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSearchAttributes", reflect.TypeOf((*MockAdminServiceServer)(nil).RemoveSearchAttributes), arg0, arg1)
 }
 
 // RemoveTask mocks base method.
