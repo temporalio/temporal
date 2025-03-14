@@ -26,12 +26,9 @@ package workerdeployment
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/testsuite"
@@ -64,19 +61,6 @@ func (s *WorkerDeploymentSuite) TearDownTest() {
 	s.env.AssertExpectations(s.T())
 }
 
-// To incorporate testVars in our tests.
-func (s *WorkerDeploymentSuite) Name() string {
-	fullName := s.T().Name()
-	if len(fullName) <= 30 {
-		return fullName
-	}
-	short := fmt.Sprintf("%s-%08x",
-		fullName[len(fullName)-21:],
-		farm.Fingerprint32([]byte(fullName)),
-	)
-	return strings.Replace(short, ".", "|", -1)
-}
-
 // Test_SetCurrentVersion_RejectStaleConcurrentUpdate tests that a stale concurrent update is rejected.
 //
 // The scenario that this test is testing is as follows:
@@ -86,7 +70,7 @@ func (s *WorkerDeploymentSuite) Name() string {
 // Update #2 should be rejected because by the time it is processed, update #1 would have been
 // processed and the state would have changed.
 func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpdate() {
-	tv := testvars.New(s)
+	tv := testvars.New(s.T())
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
 	// Adding the version to worker deployment.
@@ -113,7 +97,7 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 		// Setting the new version as current version
 		s.env.UpdateWorkflow(SetCurrentVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
-				s.Fail("update should not have failed with error %v", err)
+				s.Fail("update #1 should not have failed with error %v", err)
 			},
 			OnAccept: func() {
 			},
@@ -193,7 +177,7 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 // Update #2 should be rejected because by the time it is processed, update #1 would have been
 // processed and the state would have changed.
 func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpdate() {
-	tv := testvars.New(s)
+	tv := testvars.New(s.T())
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
 	// Adding the version to worker deployment.
@@ -221,7 +205,7 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 		// Setting the new version as current version
 		s.env.UpdateWorkflow(SetRampingVersion, "", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) {
-				s.Fail("update should not have failed with error %v", err)
+				s.Fail("update #1 should not have failed with error %v", err)
 			},
 			OnAccept: func() {
 			},
