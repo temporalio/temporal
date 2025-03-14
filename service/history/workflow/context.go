@@ -331,14 +331,17 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 
 	eventsToReapply := resetWorkflowEventsSeq
 	if len(resetWorkflowEventsSeq) == 0 {
-		eventsToReapply = []*persistence.WorkflowEvents{
-			{
-				NamespaceID: c.workflowKey.NamespaceID,
-				WorkflowID:  c.workflowKey.WorkflowID,
-				RunID:       c.workflowKey.RunID,
-				Events:      resetMutableState.GetReapplyCandidateEvents(),
-			},
+		if reapplyCandidateEvents := resetMutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
+			eventsToReapply = []*persistence.WorkflowEvents{
+				{
+					NamespaceID: c.workflowKey.NamespaceID,
+					WorkflowID:  c.workflowKey.WorkflowID,
+					RunID:       c.workflowKey.RunID,
+					Events:      reapplyCandidateEvents,
+				},
+			}
 		}
+
 	}
 
 	if err := c.conflictResolveEventReapply(
@@ -402,10 +405,18 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		}
 	}
 
+	updateMode := persistence.UpdateWorkflowModeSkipCurrent
+	if c.MutableState.IsCurrentWorkflowGuaranteed() {
+		updateMode = persistence.UpdateWorkflowModeUpdateCurrent
+	}
+	if c.MutableState.IsNonCurrentWorkflowGuaranteed() {
+		updateMode = persistence.UpdateWorkflowModeBypassCurrent
+	}
+
 	err = c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
-		persistence.UpdateWorkflowModeUpdateCurrent,
+		updateMode,
 		nil,
 		nil,
 		historyi.TransactionPolicyActive,
@@ -454,10 +465,18 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 	shardContext historyi.ShardContext,
 ) error {
 
+	updateMode := persistence.UpdateWorkflowModeSkipCurrent
+	if c.MutableState.IsCurrentWorkflowGuaranteed() {
+		updateMode = persistence.UpdateWorkflowModeUpdateCurrent
+	}
+	if c.MutableState.IsNonCurrentWorkflowGuaranteed() {
+		updateMode = persistence.UpdateWorkflowModeBypassCurrent
+	}
+
 	return c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		shardContext,
-		persistence.UpdateWorkflowModeUpdateCurrent,
+		updateMode,
 		nil,
 		nil,
 		historyi.TransactionPolicyPassive,
@@ -532,13 +551,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 
 	eventsToReapply := updateWorkflowEventsSeq
 	if len(updateWorkflowEventsSeq) == 0 {
-		eventsToReapply = []*persistence.WorkflowEvents{
-			{
-				NamespaceID: c.workflowKey.NamespaceID,
-				WorkflowID:  c.workflowKey.WorkflowID,
-				RunID:       c.workflowKey.RunID,
-				Events:      c.MutableState.GetReapplyCandidateEvents(),
-			},
+		if reapplyCandidateEvents := c.MutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
+			eventsToReapply = []*persistence.WorkflowEvents{
+				{
+					NamespaceID: c.workflowKey.NamespaceID,
+					WorkflowID:  c.workflowKey.WorkflowID,
+					RunID:       c.workflowKey.RunID,
+					Events:      reapplyCandidateEvents,
+				},
+			}
 		}
 	}
 
@@ -587,14 +608,6 @@ func (c *ContextImpl) SetWorkflowExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 ) (retError error) {
-	return c.SubmitClosedWorkflowSnapshot(ctx, shardContext, historyi.TransactionPolicyPassive)
-}
-
-func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
-	ctx context.Context,
-	shardContext historyi.ShardContext,
-	transactionPolicy historyi.TransactionPolicy,
-) (retError error) {
 	defer func() {
 		if retError != nil {
 			c.Clear()
@@ -602,7 +615,7 @@ func (c *ContextImpl) SubmitClosedWorkflowSnapshot(
 	}()
 
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
-		transactionPolicy,
+		historyi.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
@@ -739,6 +752,12 @@ func (c *ContextImpl) updateWorkflowExecutionEventReapply(
 	eventBatch1 []*persistence.WorkflowEvents,
 	eventBatch2 []*persistence.WorkflowEvents,
 ) error {
+	if updateMode == persistence.UpdateWorkflowModeSkipCurrent {
+		if len(eventBatch1) != 0 || len(eventBatch2) != 0 {
+			return serviceerror.NewInternal("encountered events reapplication without knowing if workflow is current. Events generated for a close workflow?")
+		}
+		return nil
+	}
 
 	if updateMode != persistence.UpdateWorkflowModeBypassCurrent {
 		return nil
@@ -873,11 +892,6 @@ func (c *ContextImpl) RefreshTasks(
 		return err
 	}
 
-	if !mutableState.IsWorkflowExecutionRunning() {
-		// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
-		// and we are operating on a closed workflow.
-		return c.SubmitClosedWorkflowSnapshot(ctx, shardContext, historyi.TransactionPolicyPassive)
-	}
 	return c.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
 }
 
