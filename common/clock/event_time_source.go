@@ -39,6 +39,7 @@ type (
 		mu     sync.RWMutex
 		now    time.Time
 		timers []*fakeTimer
+		async  bool
 	}
 
 	// fakeTimer is a fake implementation of [Timer].
@@ -65,6 +66,15 @@ func NewEventTimeSource() *EventTimeSource {
 	return &EventTimeSource{
 		now: time.Unix(0, 0),
 	}
+}
+
+// Some clients depend on the fact that the runtime's timers do _not_ run synchronously.
+// If UseAsyncTimers(true) is called, then EventTimeSource will behave that way also.
+func (ts *EventTimeSource) UseAsyncTimers(async bool) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	ts.async = async
 }
 
 // Now return the current time.
@@ -177,7 +187,11 @@ func (ts *EventTimeSource) fireTimers() {
 			t.index = n
 			n++
 		} else {
-			t.callback()
+			if ts.async {
+				go t.callback()
+			} else {
+				t.callback()
+			}
 			t.done = true
 		}
 	}

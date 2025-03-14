@@ -117,6 +117,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	task *tasks.ActivityTask,
 	activityScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
+	priority *commonpb.Priority,
 	transactionPolicy historyi.TransactionPolicy,
 ) error {
 	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
@@ -134,6 +135,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 		Stamp:                  task.Stamp,
+		Priority:               priority,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
@@ -168,6 +170,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
+	priority *commonpb.Priority,
 	transactionPolicy historyi.TransactionPolicy,
 ) error {
 	var sst *durationpb.Duration
@@ -185,6 +188,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		ScheduleToStartTimeout: sst,
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
+		Priority:               priority,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls

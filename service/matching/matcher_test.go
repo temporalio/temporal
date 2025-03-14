@@ -89,19 +89,23 @@ func (t *MatcherTestSuite) SetupTest() {
 	tlCfg.forwarderConfig = forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },
 		ForwarderMaxOutstandingTasks: func() int { return 1 },
-		ForwarderMaxRatePerSecond:    func() int { return 2 },
+		ForwarderMaxRatePerSecond:    func() float64 { return 2 },
 		ForwarderMaxChildrenPerNode:  func() int { return 20 },
 	}
 	t.childConfig = tlCfg
 	t.fwdr, err = newForwarder(&t.childConfig.forwarderConfig, t.queue, t.client)
 	t.Assert().NoError(err)
 	t.childMatcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
+	t.childMatcher.Start()
 
 	t.rootConfig = newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
 	t.rootMatcher = newTaskMatcher(t.rootConfig, nil, metrics.NoopMetricsHandler)
+	t.rootMatcher.Start()
 }
 
 func (t *MatcherTestSuite) TearDownTest() {
+	t.childMatcher.Stop()
+	t.rootMatcher.Stop()
 	t.controller.Finish()
 }
 
@@ -748,7 +752,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	}()
 
 	taskCompleted := false
-	completionFunc := func(*persistencespb.AllocatedTaskInfo, error) {
+	completionFunc := func(*internalTask, taskResponse) {
 		taskCompleted = true
 	}
 

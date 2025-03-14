@@ -26,7 +26,6 @@ package matching
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -37,24 +36,23 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 )
 
 type (
-	writeTaskRequest struct {
-		subqueue   int // for priTaskWriter only
-		taskInfo   *persistencespb.TaskInfo
-		responseCh chan<- error
-	}
+	// writeTaskRequest struct {
+	// 	subqueue   int
+	// 	taskInfo   *persistencespb.TaskInfo
+	// 	responseCh chan<- *writeTaskResponse
+	// }
 
-	taskIDBlock struct {
-		start int64
-		end   int64
-	}
+	// taskIDBlock struct {
+	// 	start int64
+	// 	end   int64
+	// }
 
-	// taskWriter writes tasks sequentially to persistence
-	taskWriter struct {
-		backlogMgr  *backlogManagerImpl
+	// priTaskWriter writes tasks persistence split among subqueues
+	priTaskWriter struct {
+		backlogMgr  *priBacklogManagerImpl
 		config      *taskQueueConfig
 		db          *taskQueueDB
 		logger      log.Logger
@@ -64,17 +62,17 @@ type (
 )
 
 var (
-	// errShutdown indicates that the task queue is shutting down
-	errShutdown            = &persistence.ConditionFailedError{Msg: "task queue shutting down"}
-	errNonContiguousBlocks = errors.New("previous block end is not equal to current block")
+// errShutdown indicates that the task queue is shutting down
+// errShutdown            = &persistence.ConditionFailedError{Msg: "task queue shutting down"}
+// errNonContiguousBlocks = errors.New("previous block end is not equal to current block")
 
-	noTaskIDs = taskIDBlock{start: 1, end: 0}
+// noTaskIDs = taskIDBlock{start: 1, end: 0}
 )
 
-func newTaskWriter(
-	backlogMgr *backlogManagerImpl,
-) *taskWriter {
-	return &taskWriter{
+func newPriTaskWriter(
+	backlogMgr *priBacklogManagerImpl,
+) *priTaskWriter {
+	return &priTaskWriter{
 		backlogMgr:  backlogMgr,
 		config:      backlogMgr.config,
 		db:          backlogMgr.db,
@@ -84,27 +82,13 @@ func newTaskWriter(
 	}
 }
 
-// Start taskWriter background goroutine.
-func (w *taskWriter) Start() {
+// Start priTaskWriter background goroutine.
+func (w *priTaskWriter) Start() {
 	go w.taskWriterLoop()
 }
 
-func (w *taskWriter) initReadWriteState() error {
-	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second).
-		WithMaximumInterval(10 * time.Second).
-		WithExpirationInterval(backoff.NoInterval)
-
-	state, err := w.renewLeaseWithRetry(retryForever, common.IsPersistenceTransientError)
-	if err != nil {
-		return err
-	}
-	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
-	w.backlogMgr.taskAckManager.setAckLevel(state.ackLevel)
-
-	return nil
-}
-
-func (w *taskWriter) appendTask(
+func (w *priTaskWriter) appendTask(
+	subqueue int,
 	taskInfo *persistencespb.TaskInfo,
 ) error {
 
@@ -120,6 +104,7 @@ func (w *taskWriter) appendTask(
 	req := &writeTaskRequest{
 		taskInfo:   taskInfo,
 		responseCh: ch,
+		subqueue:   subqueue,
 	}
 
 	select {
@@ -143,9 +128,9 @@ func (w *taskWriter) appendTask(
 	}
 }
 
-func (w *taskWriter) allocTaskIDs(count int) ([]int64, error) {
+func (w *priTaskWriter) allocTaskIDs(count int) ([]int64, error) {
 	result := make([]int64, count)
-	for i := 0; i < count; i++ {
+	for i := range result {
 		if w.taskIDBlock.start > w.taskIDBlock.end {
 			// we ran out of current allocation block
 			newBlock, err := w.allocTaskIDBlock(w.taskIDBlock.end)
@@ -160,11 +145,11 @@ func (w *taskWriter) allocTaskIDs(count int) ([]int64, error) {
 	return result, nil
 }
 
-func (w *taskWriter) appendTasks(
+func (w *priTaskWriter) appendTasks(
 	taskIDs []int64,
 	reqs []*writeTaskRequest,
 ) error {
-	_, err := w.db.CreateTasks(w.backlogMgr.tqCtx, taskIDs, reqs)
+	resp, err := w.db.CreateTasks(w.backlogMgr.tqCtx, taskIDs, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
 		w.logger.Error("Persistent store operation failure",
@@ -174,22 +159,39 @@ func (w *taskWriter) appendTasks(
 			tag.WorkflowTaskQueueType(w.backlogMgr.queueKey().TaskType()))
 		return err
 	}
+
+	w.backlogMgr.signalReaders(resp)
 	return nil
 }
 
-func (w *taskWriter) taskWriterLoop() {
-	err := w.initReadWriteState()
-	w.backlogMgr.SetInitializedError(err)
+func (w *priTaskWriter) initState() error {
+	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second).
+		WithMaximumInterval(10 * time.Second).
+		WithExpirationInterval(backoff.NoInterval)
+	state, err := w.renewLeaseWithRetry(retryForever, common.IsPersistenceTransientError)
+	if err != nil {
+		w.backlogMgr.initState(taskQueueState{}, err)
+		return err
+	}
+	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
+	w.backlogMgr.initState(state, nil)
+	return nil
+}
 
+func (w *priTaskWriter) taskWriterLoop() {
+	if w.initState() != nil {
+		return
+	}
+
+	var reqs []*writeTaskRequest
 	for {
 		select {
 		case request := <-w.appendCh:
 			// read a batch of requests from the channel
-			reqs := []*writeTaskRequest{request}
+			reqs = append(reqs[:0], request)
 			reqs = w.getWriteBatch(reqs)
-			batchSize := len(reqs)
 
-			taskIDs, err := w.allocTaskIDs(batchSize)
+			taskIDs, err := w.allocTaskIDs(len(reqs))
 			if err == nil {
 				err = w.appendTasks(taskIDs, reqs)
 			}
@@ -203,20 +205,19 @@ func (w *taskWriter) taskWriterLoop() {
 	}
 }
 
-func (w *taskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskRequest {
-readLoop:
-	for i := 0; i < w.config.MaxTaskBatchSize(); i++ {
+func (w *priTaskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskRequest {
+	for range w.config.MaxTaskBatchSize() - 1 {
 		select {
 		case req := <-w.appendCh:
 			reqs = append(reqs, req)
 		default: // channel is empty, don't block
-			break readLoop
+			return reqs
 		}
 	}
 	return reqs
 }
 
-func (w *taskWriter) renewLeaseWithRetry(
+func (w *priTaskWriter) renewLeaseWithRetry(
 	retryPolicy backoff.RetryPolicy,
 	retryErrors backoff.IsRetryable,
 ) (taskQueueState, error) {
@@ -234,7 +235,7 @@ func (w *taskWriter) renewLeaseWithRetry(
 	return newState, nil
 }
 
-func (w *taskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
+func (w *priTaskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
 	currBlock := rangeIDToTaskIDBlock(w.db.RangeID(), w.config.RangeSize)
 	if currBlock.end != prevBlockEnd {
 		return taskIDBlock{}, errNonContiguousBlocks

@@ -61,7 +61,9 @@ type (
 		// task queue configuration
 
 		RangeSize                                int64
+		NewMatcher                               dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxTaskQueueIdleTime                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		NumTaskqueueWritePartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -71,7 +73,7 @@ type (
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		ForwarderMaxOutstandingPolls             dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		ForwarderMaxOutstandingTasks             dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		ForwarderMaxRatePerSecond                dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ForwarderMaxRatePerSecond                dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		ForwarderMaxChildrenPerNode              dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		VersionCompatibleSetLimitPerQueue        dynamicconfig.IntPropertyFnWithNamespaceFilter
 		VersionBuildIdLimitPerQueue              dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -92,11 +94,14 @@ type (
 		QueryWorkflowTaskTimeoutLogRate          dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		MembershipUnloadDelay                    dynamicconfig.DurationPropertyFn
 		TaskQueueInfoByBuildIdTTL                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		PriorityLevels                           dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		BacklogTaskForwardTimeout  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MinTaskThrottlingBurstSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		MaxTaskDeleteBatchSize     dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		TaskDeleteInterval         dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -105,7 +110,9 @@ type (
 		ThrottledLogRPS dynamicconfig.IntPropertyFn
 
 		AdminNamespaceToPartitionDispatchRate          dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		AdminNamespaceToPartitionRateSub               dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
 		AdminNamespaceTaskqueueToPartitionDispatchRate dynamicconfig.FloatPropertyFnWithTaskQueueFilter
+		AdminNamespaceTaskqueueToPartitionRateSub      dynamicconfig.TypedSubscribableWithTaskQueueFilter[float64]
 
 		VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
 		VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
@@ -128,7 +135,7 @@ type (
 	forwarderConfig struct {
 		ForwarderMaxOutstandingPolls func() int
 		ForwarderMaxOutstandingTasks func() int
-		ForwarderMaxRatePerSecond    func() int
+		ForwarderMaxRatePerSecond    func() float64
 		ForwarderMaxChildrenPerNode  func() int
 	}
 
@@ -140,12 +147,17 @@ type (
 		QueryPollerUnavailableWindow func() time.Duration
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
+		BacklogTaskForwardTimeout  func() time.Duration
 		RangeSize                  int64
+		NewMatcher                 func(func(bool)) (bool, func())
 		GetTasksBatchSize          func() int
+		GetTasksReloadAt           func() int
 		UpdateAckInterval          func() time.Duration
 		MaxTaskQueueIdleTime       func() time.Duration
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
+		TaskDeleteInterval         func() time.Duration
+		PriorityLevels             func() int32
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
@@ -161,8 +173,10 @@ type (
 
 		// partition qps = AdminNamespaceToPartitionDispatchRate(namespace)
 		AdminNamespaceToPartitionDispatchRate func() float64
+		AdminNamespaceToPartitionRateSub      func(func(float64)) (float64, func())
 		// partition qps = AdminNamespaceTaskQueueToPartitionDispatchRate(namespace, task_queue)
 		AdminNamespaceTaskQueueToPartitionDispatchRate func() float64
+		AdminNamespaceTaskQueueToPartitionRateSub      func(func(float64)) (float64, func())
 
 		// Retry policy for fetching user data from root partition. Should retry forever.
 		GetUserDataRetryPolicy backoff.RetryPolicy
@@ -209,6 +223,7 @@ const (
 	unloadCauseConflict   // reactive unload due to other node stealing ownership
 	unloadCauseShuttingDown
 	unloadCauseForce
+	unloadCauseConfigChange
 	unloadCauseOtherError
 )
 
@@ -232,12 +247,16 @@ func NewConfig(
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
+		NewMatcher:                               dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
+		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
 		MaxTaskQueueIdleTime:                     dynamicconfig.MatchingMaxTaskQueueIdleTime.Get(dc),
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
+		BacklogTaskForwardTimeout:                dynamicconfig.MatchingBacklogTaskForwardTimeout.Get(dc),
 		MinTaskThrottlingBurstSize:               dynamicconfig.MatchingMinTaskThrottlingBurstSize.Get(dc),
 		MaxTaskDeleteBatchSize:                   dynamicconfig.MatchingMaxTaskDeleteBatchSize.Get(dc),
+		TaskDeleteInterval:                       dynamicconfig.MatchingTaskDeleteInterval.Get(dc),
 		OutstandingTaskAppendsThreshold:          dynamicconfig.MatchingOutstandingTaskAppendsThreshold.Get(dc),
 		MaxTaskBatchSize:                         dynamicconfig.MatchingMaxTaskBatchSize.Get(dc),
 		ThrottledLogRPS:                          dynamicconfig.MatchingThrottledLogRPS.Get(dc),
@@ -271,11 +290,14 @@ func NewConfig(
 		QueryWorkflowTaskTimeoutLogRate:          dynamicconfig.MatchingQueryWorkflowTaskTimeoutLogRate.Get(dc),
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
+		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
 		MatchingDropNonRetryableTasks:            dynamicconfig.MatchingDropNonRetryableTasks.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
+		AdminNamespaceToPartitionRateSub:               dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Subscribe(dc),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate.Get(dc),
+		AdminNamespaceTaskqueueToPartitionRateSub:      dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate.Subscribe(dc),
 
 		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
 		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
@@ -302,8 +324,14 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
+		NewMatcher: func(cb func(bool)) (bool, func()) {
+			return config.NewMatcher(ns.String(), taskQueueName, taskType, cb)
+		},
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)
+		},
+		GetTasksReloadAt: func() int {
+			return config.GetTasksReloadAt(ns.String(), taskQueueName, taskType)
 		},
 		UpdateAckInterval: func() time.Duration {
 			return config.UpdateAckInterval(ns.String(), taskQueueName, taskType)
@@ -327,8 +355,17 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		LongPollExpirationInterval: func() time.Duration {
 			return config.LongPollExpirationInterval(ns.String(), taskQueueName, taskType)
 		},
+		BacklogTaskForwardTimeout: func() time.Duration {
+			return config.BacklogTaskForwardTimeout(ns.String(), taskQueueName, taskType)
+		},
 		MaxTaskDeleteBatchSize: func() int {
 			return config.MaxTaskDeleteBatchSize(ns.String(), taskQueueName, taskType)
+		},
+		TaskDeleteInterval: func() time.Duration {
+			return config.TaskDeleteInterval(ns.String(), taskQueueName, taskType)
+		},
+		PriorityLevels: func() int32 {
+			return int32(config.PriorityLevels(ns.String(), taskQueueName, taskType))
 		},
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
@@ -359,8 +396,14 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		AdminNamespaceToPartitionDispatchRate: func() float64 {
 			return config.AdminNamespaceToPartitionDispatchRate(ns.String())
 		},
+		AdminNamespaceToPartitionRateSub: func(cb func(float64)) (float64, func()) {
+			return config.AdminNamespaceToPartitionRateSub(ns.String(), cb)
+		},
 		AdminNamespaceTaskQueueToPartitionDispatchRate: func() float64 {
 			return config.AdminNamespaceTaskqueueToPartitionDispatchRate(ns.String(), taskQueueName, taskType)
+		},
+		AdminNamespaceTaskQueueToPartitionRateSub: func(cb func(float64)) (float64, func()) {
+			return config.AdminNamespaceTaskqueueToPartitionRateSub(ns.String(), taskQueueName, taskType, cb)
 		},
 		forwarderConfig: forwarderConfig{
 			ForwarderMaxOutstandingPolls: func() int {
@@ -369,7 +412,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 			ForwarderMaxOutstandingTasks: func() int {
 				return config.ForwarderMaxOutstandingTasks(ns.String(), taskQueueName, taskType)
 			},
-			ForwarderMaxRatePerSecond: func() int {
+			ForwarderMaxRatePerSecond: func() float64 {
 				return config.ForwarderMaxRatePerSecond(ns.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxChildrenPerNode: func() int {
@@ -393,4 +436,8 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 			return config.PollerScalingDecisionsPerSecond(ns.String(), taskQueueName, taskType)
 		},
 	}
+}
+
+func defaultPriorityLevel(priorityLevels int32) int32 {
+	return (priorityLevels + 1) / 2
 }

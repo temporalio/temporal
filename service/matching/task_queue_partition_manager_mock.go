@@ -70,6 +70,20 @@ func (m *MocktaskQueuePartitionManager) EXPECT() *MocktaskQueuePartitionManagerM
 	return m.recorder
 }
 
+// AddSpooledTask mocks base method.
+func (m *MocktaskQueuePartitionManager) AddSpooledTask(ctx context.Context, task *internalTask, backlogQueue *PhysicalTaskQueueKey) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddSpooledTask", ctx, task, backlogQueue)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddSpooledTask indicates an expected call of AddSpooledTask.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) AddSpooledTask(ctx, task, backlogQueue any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSpooledTask", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).AddSpooledTask), ctx, task, backlogQueue)
+}
+
 // AddTask mocks base method.
 func (m *MocktaskQueuePartitionManager) AddTask(ctx context.Context, params addTaskParams) (string, bool, error) {
 	m.ctrl.T.Helper()

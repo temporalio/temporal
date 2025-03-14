@@ -109,6 +109,7 @@ message PollActivityTaskQueueResponse {
     string workflow_namespace = 15;
     temporal.api.common.v1.Header header = 16;
     temporal.api.taskqueue.v1.PollerScalingDecision poller_scaling_decision = 17;
+    temporal.api.common.v1.Priority priority = 18;
 }
 
 message AddWorkflowTaskRequest {
@@ -124,6 +125,7 @@ message AddWorkflowTaskRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
+    temporal.api.common.v1.Priority priority = 12;
 }
 
 message AddWorkflowTaskResponse {
@@ -146,8 +148,8 @@ message AddActivityTaskRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
-
     int32 stamp = 12;
+    temporal.api.common.v1.Priority priority = 13;
 }
 
 message AddActivityTaskResponse {
@@ -164,6 +166,7 @@ message QueryWorkflowRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 6;
+    temporal.api.common.v1.Priority priority = 7;
 }
 
 message QueryWorkflowResponse {

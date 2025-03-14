@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
@@ -77,64 +76,8 @@ func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
 	}
 }
 
-type testIDBlockAlloc struct {
-	rid   int64
-	alloc func() (taskQueueState, error)
-}
-
-func (a *testIDBlockAlloc) RangeID() int64 {
-	return a.rid
-}
-
-func (a *testIDBlockAlloc) RenewLease(_ context.Context) (taskQueueState, error) {
-	s, err := a.alloc()
-	if err == nil {
-		a.rid = s.rangeID
-	}
-	return s, err
-}
-
-func makeTestBlocAlloc(f func() (taskQueueState, error)) taskQueueManagerOpt {
-	return withIDBlockAllocator(&testIDBlockAlloc{alloc: f})
-}
-
-func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
-	return func(tqm *physicalTaskQueueManagerImpl) {
-		tqm.backlogMgr.taskWriter.idAlloc = ibl
-	}
-}
-
-func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.RangeSize = 1 // TaskID block size
-	var leaseErr error
-	tqm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t),
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			return taskQueueState{rangeID: 1}, leaseErr
-		}))
-	tqm.Start()
-	defer tqm.Stop(unloadCauseUnspecified)
-
-	// TQM started succesfully with an ID block of size 1. Perform one send
-	// without a poller to consume the one task ID from the reserved block.
-	err := tqm.SpoolTask(&persistencespb.TaskInfo{
-		CreateTime: timestamp.TimePtr(time.Now().UTC()),
-	})
-	require.NoError(t, err)
-
-	// TQM's ID block should be empty so the next AddTask will trigger an
-	// attempt to obtain more IDs. This specific error type indicates that
-	// another service instance has become the owner of the partition
-	leaseErr = &persistence.ConditionFailedError{Msg: "should kill the tqm"}
-
-	err = tqm.SpoolTask(&persistencespb.TaskInfo{
-		CreateTime: timestamp.TimePtr(time.Now().UTC()),
-	})
-	require.NoError(t, err)
-}
-
 /*
-TODO: rewrite or delete this test
+TODO(pri): rewrite or delete this test
 func TestReaderSignaling(t *testing.T) {
 	readerNotifications := make(chan struct{}, 1)
 	clearNotifications := func() {
@@ -244,7 +187,7 @@ func createTestTaskQueueManagerWithConfig(
 	partition := testOpts.dbq.Partition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, nsName)
 	onFatalErr := func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
-	userDataManager := newUserDataManager(me.taskManager, me.matchingRawClient, onFatalErr, partition, tqConfig, me.logger, me.namespaceRegistry)
+	userDataManager := newUserDataManager(me.taskManager, me.matchingRawClient, onFatalErr, nil, partition, tqConfig, me.logger, me.namespaceRegistry)
 	pm := createTestTaskQueuePartitionManager(ns, partition, tqConfig, me, userDataManager)
 	tlMgr, err := newPhysicalTaskQueueManager(pm, testOpts.dbq, opts...)
 	pm.defaultQueue = tlMgr
@@ -275,30 +218,31 @@ func TestReaderBacklogAge(t *testing.T) {
 
 	// Create queue Manager and set queue state
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
-	tlm.backlogMgr.db.rangeID = int64(1)
-	tlm.backlogMgr.db.ackLevel = int64(0)
-	tlm.backlogMgr.taskAckManager.setAckLevel(tlm.backlogMgr.db.ackLevel)
+	blm := tlm.backlogMgr.(*backlogManagerImpl)
+	require.NoError(t, blm.taskWriter.initReadWriteState())
+	require.Equal(t, int64(0), blm.taskAckManager.getAckLevel())
+	require.Equal(t, int64(0), blm.taskAckManager.getReadLevel())
 
-	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Minute, 1)
-	tlm.backlogMgr.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(10*time.Second, 2)
-	go tlm.backlogMgr.taskReader.dispatchBufferedTasks()
+	blm.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(time.Minute, 1)
+	blm.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(10*time.Second, 2)
+	go blm.taskReader.dispatchBufferedTasks()
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		assert.InDelta(t, time.Minute, tlm.backlogMgr.taskReader.getBacklogHeadAge(), float64(time.Second))
+		assert.InDelta(t, time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
 	}, time.Second, 10*time.Millisecond)
 
-	_, err := tlm.backlogMgr.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
+	_, err := blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		assert.InDelta(t, 10*time.Second, tlm.backlogMgr.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
+		assert.InDelta(t, 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
 	}, time.Second, 10*time.Millisecond)
 
-	_, err = tlm.backlogMgr.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
+	_, err = blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		assert.Equalf(t, time.Duration(0), tlm.backlogMgr.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
+		assert.Equalf(t, time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
 	}, time.Second, 10*time.Millisecond)
 }
 
@@ -329,17 +273,18 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 
 	// Create queue Manager and set queue state
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
-	tlm.backlogMgr.db.rangeID = int64(1)
-	tlm.backlogMgr.db.ackLevel = int64(0)
-	tlm.backlogMgr.taskAckManager.setAckLevel(tlm.backlogMgr.db.ackLevel)
+	blm := tlm.backlogMgr.(*backlogManagerImpl)
+	require.NoError(t, blm.taskWriter.initReadWriteState())
+	require.Equal(t, int64(0), blm.taskAckManager.getAckLevel())
+	require.Equal(t, int64(0), blm.taskAckManager.getReadLevel())
 
 	for i := int64(0); i < taskCount; i++ {
-		tlm.backlogMgr.taskAckManager.addTask(startTaskID + i)
+		blm.taskAckManager.addTask(startTaskID + i)
 	}
 
 	// Manually increase the backlog counter since it does not get incremented by taskAckManager.addTask
 	// Only doing this for the purpose of this test
-	tlm.backlogMgr.db.updateApproximateBacklogCount(taskCount)
+	blm.db.updateApproximateBacklogCount(taskCount)
 
 	includeTaskStatus := false
 	descResp := tlm.LegacyDescribeTaskQueue(includeTaskStatus)
@@ -359,7 +304,8 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	// Add a poller and complete all tasks
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), &pollMetadata{})
 	for i := int64(0); i < taskCount; i++ {
-		tlm.backlogMgr.taskAckManager.completeTask(startTaskID + i)
+		_, numAcked := blm.taskAckManager.completeTask(startTaskID + i)
+		blm.db.updateApproximateBacklogCount(-numAcked)
 	}
 
 	descResp = tlm.LegacyDescribeTaskQueue(includeTaskStatus)
@@ -377,7 +323,7 @@ func TestLegacyDescribeTaskQueue(t *testing.T) {
 	taskQueueStatus = descResp.DescResponse.GetTaskQueueStatus()
 	require.NotNil(t, taskQueueStatus)
 	require.Equal(t, taskCount, taskQueueStatus.GetAckLevel())
-	require.Zero(t, taskQueueStatus.GetBacklogCountHint()) // should be 0 since AckManager.CompleteTask decrements the updated backlog counter
+	require.Zero(t, taskQueueStatus.GetBacklogCountHint())
 }
 
 func TestCheckIdleTaskQueue(t *testing.T) {
@@ -392,7 +338,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	// Idle
 	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
-	time.Sleep(1 * time.Second)
+	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
 	// Active poll-er
@@ -400,7 +346,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm.Start()
 	tlm.pollerHistory.updatePollerInfo("test-poll", &pollMetadata{})
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
-	time.Sleep(1 * time.Second)
+	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 	tlm.Stop(unloadCauseUnspecified)
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
@@ -409,8 +355,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
-	tlm.backlogMgr.taskReader.Signal()
-	time.Sleep(1 * time.Second)
+	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 	tlm.Stop(unloadCauseUnspecified)
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
