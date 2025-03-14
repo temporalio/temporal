@@ -1038,8 +1038,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	tv := testvars.New(s)
 	currentVars := tv.WithBuildIDNumber(1)
 
-	// might have to make this as a separate go-routine.
-	s.pollFromDeployment(ctx, currentVars)
+	go s.pollFromDeployment(ctx, currentVars)
 	s.ensureCreateVersionInDeployment(currentVars)
 
 	// check that the current version's task queues have ramping version == ""
