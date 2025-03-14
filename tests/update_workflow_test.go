@@ -1330,7 +1330,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ValidateWorkerMessages() {
 
 				var wfNotReady *serviceerror.WorkflowNotReady
 				s.ErrorAs(updateResult.err, &wfNotReady, "API caller should get serviceerror.WorkflowNotReady, if server got a validation error while processing worker response.")
-				s.Contains(updateResult.err.Error(), "Unable to perform workflow execution update due unexpected workflow task failure.")
+				s.Contains(updateResult.err.Error(), "Unable to perform workflow execution update due to unexpected workflow task failure.")
 				s.Nil(updateResult.response)
 			} else {
 				s.NoError(err)
@@ -2231,7 +2231,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 	updateResult := <-updateResultCh
 	var wfNotReady *serviceerror.WorkflowNotReady
 	s.ErrorAs(updateResult.err, &wfNotReady)
-	s.Contains(updateResult.err.Error(), "Unable to perform workflow execution update due unexpected workflow task failure.")
+	s.Contains(updateResult.err.Error(), "Unable to perform workflow execution update due to unexpected workflow task failure.")
 
 	// New transient WFT is created, but it is not shown in the history.
 	events := s.GetHistory(s.Namespace().String(), tv.WorkflowExecution())
