@@ -59,14 +59,15 @@ This repository contains the source code of the Temporal server. To implement Wo
 
 ## Contributing
 
-We'd love your help in making Temporal great. Please review the [internal architecture docs](./docs/architecture/README.md).
+We'd love your help in making Temporal great.
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to build and run the server locally, run tests, etc.
+Helpful links to get started:
 
-If you'd like to work on or propose a new feature, first peruse [feature requests](https://community.temporal.io/c/feature-requests/6) and our [proposals repo](https://github.com/temporalio/proposals) to discover existing active and accepted proposals.
-
-Feel free to join the Temporal community [forum](https://community.temporal.io) or [Slack](https://t.mp/slack) to start a discussion or check if a feature has already been discussed.
-Once you're sure the proposal is not covered elsewhere, please follow our [proposal instructions](https://github.com/temporalio/proposals#creating-a-new-proposal) or submit a [feature request](https://community.temporal.io/c/feature-requests/6).
+- [work on or propose a new feature](https://github.com/temporalio/proposals)
+- [learn about the Temporal Server architecture](./docs/architecture/README.md)
+- [learn how to build and run the Temporal Server locally](./CONTRIBUTING.md)
+- [learn about Temporal Server testing tools and best practices](./docs/development/testing.md)
+- join the Temporal community [forum](https://community.temporal.io) and [Slack](https://t.mp/slack)
 
 ## License
 
