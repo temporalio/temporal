@@ -46,8 +46,8 @@ type (
 )
 
 func TestQuotasSuite(t *testing.T) {
-	s := new(quotasSuite)
-	suite.Run(t, s)
+	t.Parallel()
+	suite.Run(t, new(quotasSuite))
 }
 
 func (s *quotasSuite) SetupSuite() {

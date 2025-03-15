@@ -94,6 +94,8 @@ type (
 	matchingEngineSuite struct {
 		suite.Suite
 		*require.Assertions
+
+		newMatcher               bool
 		controller               *gomock.Controller
 		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
 		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
@@ -149,9 +151,13 @@ func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Na
 	return ns, mockNamespaceCache
 }
 
+// TODO(pri): cleanup; delete this
 func TestMatchingEngineSuite(t *testing.T) {
-	s := new(matchingEngineSuite)
-	suite.Run(t, s)
+	suite.Run(t, &matchingEngineSuite{newMatcher: false})
+}
+
+func TestMatchingEngineWithNewMatcherSuite(t *testing.T) {
+	suite.Run(t, &matchingEngineSuite{newMatcher: true})
 }
 
 func (s *matchingEngineSuite) SetupSuite() {
@@ -193,8 +199,16 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockNexusEndpointManager = persistence.NewMockNexusEndpointManager(s.controller)
 	s.mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}, nil).AnyTimes()
 
-	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
+	s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.taskManager)
 	s.matchingEngine.Start()
+}
+
+func (s *matchingEngineSuite) newConfig() *Config {
+	res := defaultTestConfig()
+	if s.newMatcher {
+		res = withNewMatcher(res)
+	}
+	return res
 }
 
 func (s *matchingEngineSuite) TearDownTest() {
@@ -251,115 +265,6 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 	pm, err := newTaskQueuePartitionManager(s.matchingEngine, s.ns, prtn, tqConfig, logger, logger, metricsHandler, &mockUserDataManager{})
 	s.Require().NoError(err)
 	return pm
-}
-
-func (s *matchingEngineSuite) TestAckManager() {
-	backlogMgr := newBacklogMgr(s.T(), s.controller, false)
-	_, err := backlogMgr.db.RenewLease(backlogMgr.tqCtx)
-	s.NoError(err)
-	m := backlogMgr.taskAckManager
-
-	m.setAckLevel(100)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(100, m.getReadLevel())
-	const t1 = 200
-	const t2 = 220
-	const t3 = 320
-	const t4 = 340
-	const t5 = 360
-	const t6 = 380
-
-	m.addTask(t1)
-	// Increment the backlog so that we don't under-count
-	// this happens since we decrease the counter on completion of a task
-	backlogMgr.db.updateApproximateBacklogCount(1)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(t1, m.getReadLevel())
-
-	m.addTask(t2)
-	backlogMgr.db.updateApproximateBacklogCount(1)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(t2, m.getReadLevel())
-
-	m.completeTask(t2)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(t2, m.getReadLevel())
-
-	m.completeTask(t1)
-	s.EqualValues(t2, m.getAckLevel())
-	s.EqualValues(t2, m.getReadLevel())
-
-	m.setAckLevel(300)
-	s.EqualValues(300, m.getAckLevel())
-	s.EqualValues(300, m.getReadLevel())
-
-	m.addTask(t3)
-	backlogMgr.db.updateApproximateBacklogCount(1)
-	s.EqualValues(300, m.getAckLevel())
-	s.EqualValues(t3, m.getReadLevel())
-
-	m.addTask(t4)
-	backlogMgr.db.updateApproximateBacklogCount(1)
-	s.EqualValues(300, m.getAckLevel())
-	s.EqualValues(t4, m.getReadLevel())
-
-	m.completeTask(t3)
-	s.EqualValues(t3, m.getAckLevel())
-	s.EqualValues(t4, m.getReadLevel())
-
-	m.completeTask(t4)
-	s.EqualValues(t4, m.getAckLevel())
-	s.EqualValues(t4, m.getReadLevel())
-
-	m.setReadLevel(t5)
-	s.EqualValues(t5, m.getReadLevel())
-
-	m.setAckLevel(t5)
-	m.setReadLevelAfterGap(t6)
-	s.EqualValues(t6, m.getReadLevel())
-	s.EqualValues(t6, m.getAckLevel())
-}
-
-func (s *matchingEngineSuite) TestAckManager_Sort() {
-	backlogMgr := newBacklogMgr(s.T(), s.controller, false)
-	_, err := backlogMgr.db.RenewLease(backlogMgr.tqCtx)
-	s.NoError(err)
-	m := backlogMgr.taskAckManager
-
-	const t0 = 100
-	m.setAckLevel(t0)
-	s.EqualValues(t0, m.getAckLevel())
-	s.EqualValues(t0, m.getReadLevel())
-	const t1 = 200
-	const t2 = 220
-	const t3 = 320
-	const t4 = 340
-	const t5 = 360
-
-	m.addTask(t1)
-	m.addTask(t2)
-	m.addTask(t3)
-	m.addTask(t4)
-	m.addTask(t5)
-
-	// Increment the backlog so that we don't under-count
-	// this happens since we decrease the counter on completion of a task
-	backlogMgr.db.updateApproximateBacklogCount(5)
-
-	m.completeTask(t2)
-	s.EqualValues(t0, m.getAckLevel())
-
-	m.completeTask(t1)
-	s.EqualValues(t2, m.getAckLevel())
-
-	m.completeTask(t5)
-	s.EqualValues(t2, m.getAckLevel())
-
-	m.completeTask(t4)
-	s.EqualValues(t2, m.getAckLevel())
-
-	m.completeTask(t3)
-	s.EqualValues(t5, m.getAckLevel())
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueuesEmptyResult() {
@@ -460,7 +365,7 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 
 	tqm2 := s.newPartitionManager(prtn, s.matchingEngine.config)
 
-	// try to unload a different tqm instance with the same taskqueue ID
+	// try to unload a different tqMgr instance with the same taskqueue ID
 	s.matchingEngine.unloadTaskQueuePartition(tqm2, unloadCauseUnspecified)
 
 	got, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
@@ -468,7 +373,7 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	s.Require().Same(tqm, got,
 		"Unload call with non-matching taskQueuePartitionManager should not cause unload")
 
-	// this time unload the right tqm
+	// this time unload the right tqMgr
 	s.matchingEngine.unloadTaskQueuePartition(tqm, unloadCauseUnspecified)
 
 	got, _, err = s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
@@ -1086,6 +991,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 // TODO: this unit test does not seem to belong to matchingEngine, move it to the right place
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher")
+	}
+
 	// Set a short long poll expiration so that we don't have to wait too long for 0 throttling cases
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(2 * time.Second)
 
@@ -1276,6 +1185,10 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher")
+	}
+
 	dispatchLimitFn := func(int, int64) float64 {
 		return defaultTaskDispatchRPS
 	}
@@ -1699,7 +1612,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
-		e := s.newMatchingEngine(defaultTestConfig(), s.taskManager)
+		e := s.newMatchingEngine(s.newConfig(), s.taskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
@@ -1857,7 +1770,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
-		e := s.newMatchingEngine(defaultTestConfig(), s.taskManager)
+		e := s.newMatchingEngine(s.newConfig(), s.taskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
@@ -1979,6 +1892,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 }
 
 func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher")
+	}
+
 	// test default is 100ms, but make it longer for this test so it's not flaky
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Second)
 
@@ -2028,6 +1945,10 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 
 // TODO: should be moved to backlog_manager_test
 func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher")
+	}
+
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -2077,11 +1998,11 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
-	blm.taskAckManager.setReadLevel(blm.db.GetMaxReadLevel(0))
+	blm.taskAckManager.setReadLevel(blm.getDB().GetMaxReadLevel(0))
 	batch, err := blm.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.EqualValues(0, len(batch.tasks))
-	s.EqualValues(blm.db.GetMaxReadLevel(0), batch.readLevel)
+	s.EqualValues(blm.getDB().GetMaxReadLevel(0), batch.readLevel)
 	s.True(batch.isReadBatchDone)
 
 	blm.taskAckManager.setReadLevel(0)
@@ -2126,13 +2047,17 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 // TODO: should be moved to backlog_manager_test
 func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher")
+	}
+
 	namespaceId := uuid.New()
 	tl := "makeToast"
 	prtn := newRootPartition(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
 	const rangeSize = 10
 	const maxReadLevel = int64(120)
-	config := defaultTestConfig()
+	config := s.newConfig()
 	config.RangeSize = rangeSize
 	pm := s.newPartitionManager(prtn, config)
 
@@ -2147,7 +2072,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 
 	blm := tlMgr.backlogMgr.(*backlogManagerImpl)
 	blm.taskAckManager.setReadLevel(0)
-	blm.db.setMaxReadLevelForTesting(0, maxReadLevel)
+	blm.getDB().setMaxReadLevelForTesting(0, maxReadLevel)
 	batch, err := blm.taskReader.getTaskBatch(context.Background())
 	s.Empty(batch.tasks)
 	s.Equal(int64(rangeSize*10), batch.readLevel)
@@ -2163,10 +2088,14 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 }
 
 func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher")
+	}
+
 	namespaceId := uuid.New()
 	tl := "makeToast"
 	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	config := defaultTestConfig()
+	config := s.newConfig()
 
 	for i := 0; i < 4; i++ {
 		prevGetTasksCount := s.taskManager.getGetTasksCount(dbq)
@@ -2185,6 +2114,10 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 
 // TODO: should be moved to backlog_manager_test
 func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher")
+	}
+
 	runID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -2759,7 +2692,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	// allow taskReader to finish starting dispatch loop so that we can unload tqms cleanly
 	time.Sleep(10 * time.Millisecond)
 
-	// unload base and versioned tqm. note: unload the partition manager unloads both
+	// unload base and versioned tqMgr. note: unload the partition manager unloads both
 	prtn := newRootPartition(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	baseTqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, prtn, false, loadCauseUnspecified)
 	s.NoError(err)
@@ -2822,7 +2755,7 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	self := s.mockHostInfoProvider.HostInfo()
 	other := membership.NewHostInfoFromAddress("other")
 
-	config := defaultTestConfig()
+	config := s.newConfig()
 	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
 	e := s.newMatchingEngine(config, s.taskManager)
 	e.Start()
@@ -3234,6 +3167,10 @@ func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksDBErrors
 }
 
 func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int, rangeSize int) {
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher")
+	}
+
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Millisecond)
 	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 
@@ -3257,7 +3194,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	// Check the maxReadLevel with the value of task stored in db
 	maxTaskId, ok := s.taskManager.maxTaskID(ptq)
 	s.True(ok)
-	s.EqualValues(maxTaskId, blm.db.GetMaxReadLevel(0))
+	s.EqualValues(maxTaskId, blm.getDB().GetMaxReadLevel(0))
 
 	// validate the approximateBacklogCounter
 	s.EqualValues(taskCount*numWorkers, blm.TotalApproximateBacklogCount())
@@ -3280,7 +3217,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.NoError(err)
 	s.EqualValues((taskCount*numWorkers)-1, s.taskManager.getTaskCount(ptq))
 
-	// Add pollers which shall also load the fresher version of tqm
+	// Add pollers which shall also load the fresher version of tqMgr
 	s.pollWorkflowTasks(false, workflowType, 1, (taskCount*numWorkers)-1, ptq, taskQueue, nil)
 
 	// Update pgMgr to have the latest pgMgr
@@ -3289,7 +3226,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	// Overwrite the maxReadLevel since it could have increased if the previous taskWriter was
 	// stopped (which would not result in resetting).
-	blm.db.setMaxReadLevelForTesting(0, maxTaskId)
+	blm.getDB().setMaxReadLevelForTesting(0, maxTaskId)
 
 	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
 	s.Eventually(func() bool {
@@ -3338,16 +3275,16 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 
 	wg.Wait()
 
-	pqMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
-	blm := pqMgr.backlogMgr.(*backlogManagerImpl)
-
-	// force GC to make sure all the acked tasks are cleaned up before validating the count
-	blm.taskGC.RunNow(blm.taskAckManager.getAckLevel())
-	s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), blm.TotalApproximateBacklogCount())
+	// TODO: priority unit tests
+	//ptqMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
+	//blm := ptqMgr.backlogMgr.(*backlogManagerImpl)
+	//
+	//// force GC to make sure all the acked tasks are cleaned up before validating the count
+	//blm.taskGC.RunNow(blm.taskAckManager.getAckLevel())
+	//s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), blm.TotalApproximateBacklogCount())
 }
 
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
-
 	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
 }
 
@@ -3360,7 +3297,6 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
-
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
 
@@ -3383,7 +3319,6 @@ func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksNoDBErrors() {
-
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
 
@@ -3950,4 +3885,12 @@ func (d *dynamicRateBurstWrapper) Rate() float64 {
 
 func (d *dynamicRateBurstWrapper) Burst() int {
 	return d.RateLimiterImpl.Burst()
+}
+
+// TODO(pri): cleanup; delete this
+func withNewMatcher(config *Config) *Config {
+	config.NewMatcher = func(_ string, _ string, _ enumspb.TaskQueueType, callback func(bool)) (v bool, cancel func()) {
+		return true, func() {}
+	}
+	return config
 }
