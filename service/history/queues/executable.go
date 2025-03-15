@@ -526,16 +526,16 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		}
 	}()
 
-	err = e.convertDLQErrorPattern(err)
+	if matchedErr := e.matchDLQErrorPattern(err); matchedErr != nil {
+		e.incAttempt()
+		return matchedErr
+	}
 
 	if e.isSafeToDropError(err) {
 		return nil
 	}
 
 	attempt := e.incAttempt()
-	if attempt > taskCriticalLogMetricAttempts {
-		metrics.TaskAttempt.With(e.metricsHandler).Record(int64(e.attempt))
-	}
 
 	if ok, rewrittenErr := e.isExpectedRetryableError(err); ok {
 		return rewrittenErr
@@ -586,17 +586,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	return err
 }
 
-func (e *executableImpl) convertDLQErrorPattern(err error) error {
+func (e *executableImpl) matchDLQErrorPattern(err error) error {
 	if len(e.dlqErrorPattern()) <= 0 {
-		return err
+		return nil
 	}
 	match, mErr := regexp.MatchString(e.dlqErrorPattern(), err.Error())
 	if mErr != nil {
 		e.logger.Error(fmt.Sprintf("Failed to match task processing error with %s", dynamicconfig.HistoryTaskDLQErrorPattern.Key()))
-		return err
+		return nil
 	}
 	if !match {
-		return err
+		return nil
 	}
 
 	e.logger.Error(
@@ -825,10 +825,14 @@ func (e *executableImpl) updatePriority() {
 
 func (e *executableImpl) incAttempt() int {
 	e.Lock()
-	defer e.Unlock()
-
 	e.attempt++
-	return e.attempt
+	attempt := e.attempt
+	e.Unlock()
+
+	if attempt > taskCriticalLogMetricAttempts {
+		metrics.TaskAttempt.With(e.metricsHandler).Record(int64(attempt))
+	}
+	return attempt
 }
 
 func (e *executableImpl) resetAttempt() {
