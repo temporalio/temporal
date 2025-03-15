@@ -256,7 +256,9 @@ func (db *taskQueueDB) OldUpdateState(
 		PrevRangeID:   db.rangeID,
 	})
 	if err == nil {
+		db.logger.Info("[pri] before OldUpdateState", tag.NewInt("subqueue", subqueueZero), tag.AckLevel(db.subqueues[subqueueZero].AckLevel))
 		db.subqueues[subqueueZero].AckLevel = ackLevel
+		db.logger.Info("[pri] after OldUpdateState", tag.NewInt("subqueue", subqueueZero), tag.AckLevel(db.subqueues[subqueueZero].AckLevel))
 	}
 	db.emitBacklogGauges()
 	return err
@@ -278,19 +280,22 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	return db.updateTaskQueueLocked(ctx, false)
 }
 
-func (db *taskQueueDB) updateAckLevelAndCount(subqueue int, ackLevel int64, delta int64) {
+func (db *taskQueueDB) updateAckLevelAndCount(subqueue int, newAckLevel int64, delta int64) {
 	db.Lock()
 	defer db.Unlock()
 
 	db.lastChange = time.Now()
-	if ackLevel < db.subqueues[subqueue].AckLevel {
-		db.logger.DPanic("bug: ack level should not move backwards!")
+	dbQueue := db.subqueues[subqueue]
+	if newAckLevel < dbQueue.AckLevel {
+		softassert.Fail(db.logger,
+			fmt.Sprintf("ack level in subqueue %d should not move backwards (from %v to %v)",
+				subqueue, dbQueue.AckLevel, newAckLevel))
 	}
-	db.subqueues[subqueue].AckLevel = ackLevel
+	dbQueue.AckLevel = newAckLevel
 
-	if ackLevel == db.getMaxReadLevelLocked(subqueue) {
+	if newAckLevel == db.getMaxReadLevelLocked(subqueue) {
 		// Reset approximateBacklogCount to fix the count divergence issue
-		db.subqueues[subqueue].ApproximateBacklogCount = 0
+		dbQueue.ApproximateBacklogCount = 0
 	} else if delta != 0 {
 		db.updateApproximateBacklogCountLocked(subqueue, delta)
 	}

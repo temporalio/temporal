@@ -387,3 +387,7 @@ func (c *priBacklogManagerImpl) respoolTaskAfterError(task *persistencespb.TaskI
 func (c *priBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 	return c.pqMgr.QueueKey()
 }
+
+func (c *priBacklogManagerImpl) getDB() *taskQueueDB {
+	return c.db
+}

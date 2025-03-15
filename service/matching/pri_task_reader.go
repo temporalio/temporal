@@ -159,11 +159,11 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	}
 
 	tr.lock.Lock()
+	defer tr.lock.Unlock()
 
 	tr.backlogAge.record(task.event.AllocatedTaskInfo.Data.CreateTime, -1)
 
 	numAcked := tr.ackTaskLocked(task.event.TaskId)
-	newAckLevel := tr.ackLevel
 
 	tr.maybeGCLocked()
 
@@ -173,9 +173,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 		tr.SignalTaskLoading()
 	}
 
-	tr.lock.Unlock()
-
-	tr.backlogMgr.db.updateAckLevelAndCount(tr.subqueue, newAckLevel, -numAcked)
+	tr.backlogMgr.db.updateAckLevelAndCount(tr.subqueue, tr.ackLevel, -numAcked)
 }
 
 // nolint:revive // can simplify later
@@ -518,10 +516,10 @@ func (tr *priTaskReader) doGC() {
 	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
 	defer cancel()
 
-	n, err := tr.backlogMgr.db.CompleteTasksLessThan(ctx, tr.ackLevel+1, batchSize, tr.subqueue)
-
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
+
+	n, err := tr.backlogMgr.db.CompleteTasksLessThan(ctx, tr.ackLevel+1, batchSize, tr.subqueue)
 
 	tr.inGC = false
 	if err != nil {

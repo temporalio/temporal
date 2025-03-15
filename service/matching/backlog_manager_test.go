@@ -29,28 +29,64 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 )
 
-func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
-	controller := gomock.NewController(t)
+type BacklogManagerTestSuite struct {
+	suite.Suite
 
-	// TODO: do not create pq manager, directly create backlog manager
-	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
-	blm := tlm.backlogMgr.(*backlogManagerImpl)
-	require.NoError(t, blm.taskWriter.initReadWriteState())
-	require.Equal(t, int64(1), blm.db.rangeID)
-	require.Equal(t, int64(0), blm.taskAckManager.getAckLevel())
-	require.Equal(t, int64(0), blm.taskAckManager.getReadLevel())
+	logger     *testlogger.TestLogger
+	blm        *backlogManagerImpl
+	controller *gomock.Controller
+	cancelCtx  context.CancelFunc
+	taskMgr    *testTaskManager
+	ptqMgr     *MockphysicalTaskQueueManager
+}
+
+func TestBacklogManagerTestSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &BacklogManagerTestSuite{})
+}
+
+func (s *BacklogManagerTestSuite) SetupTest() {
+	s.controller = gomock.NewController(s.T())
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	s.taskMgr = newTestTaskManager(s.logger)
+
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
+	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
+	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
+	queue := UnversionedQueueKey(prtn)
+	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
+
+	s.ptqMgr = NewMockphysicalTaskQueueManager(s.controller)
+	s.ptqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
+	s.ptqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	var ctx context.Context
+	ctx, s.cancelCtx = context.WithCancel(context.Background())
+	s.T().Cleanup(s.cancelCtx)
+
+	s.blm = newBacklogManager(ctx, s.ptqMgr, tlCfg, s.taskMgr, s.logger, s.logger, nil, metrics.NoopMetricsHandler)
+}
+
+func (s *BacklogManagerTestSuite) TearDownTest() {
+	s.controller.Finish()
+}
+
+func (s *BacklogManagerTestSuite) TestReadLevelForAllExpiredTasksInBatch() {
+	s.NoError(s.blm.taskWriter.initReadWriteState())
+	s.Equal(int64(1), s.blm.db.rangeID)
+	s.Equal(int64(0), s.blm.taskAckManager.getAckLevel())
+	s.Equal(int64(0), s.blm.taskAckManager.getReadLevel())
 
 	// Add all expired tasks
 	tasks := []*persistencespb.AllocatedTaskInfo{
@@ -70,12 +106,12 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, blm.taskReader.addTasksToBuffer(context.TODO(), tasks))
-	require.Equal(t, int64(0), blm.taskAckManager.getAckLevel())
-	require.Equal(t, int64(12), blm.taskAckManager.getReadLevel())
+	s.NoError(s.blm.taskReader.addTasksToBuffer(context.TODO(), tasks))
+	s.Equal(int64(0), s.blm.taskAckManager.getAckLevel())
+	s.Equal(int64(12), s.blm.taskAckManager.getReadLevel())
 
 	// Now add a mix of valid and expired tasks
-	require.NoError(t, blm.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
+	s.NoError(s.blm.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
 		{
 			Data: &persistencespb.TaskInfo{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
@@ -91,35 +127,55 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 			TaskId: 14,
 		},
 	}))
-	require.Equal(t, int64(0), blm.taskAckManager.getAckLevel())
-	require.Equal(t, int64(14), blm.taskAckManager.getReadLevel())
+	s.Equal(int64(0), s.blm.taskAckManager.getAckLevel())
+	s.Equal(int64(14), s.blm.taskAckManager.getReadLevel())
 }
 
-func TestTaskWriterShutdown(t *testing.T) {
-	controller := gomock.NewController(t)
+func (s *BacklogManagerTestSuite) TestTaskWriterShutdown() {
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.NoError(s.blm.WaitUntilInitialized(context.Background()))
 
-	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
-	tlm.Start()
-	err := tlm.WaitUntilInitialized(context.Background())
-	require.NoError(t, err)
+	err := s.blm.SpoolTask(&persistencespb.TaskInfo{})
+	s.NoError(err)
 
-	err = tlm.backlogMgr.SpoolTask(&persistencespb.TaskInfo{})
-	require.NoError(t, err)
+	s.cancelCtx()
+	s.ptqMgr.EXPECT().UnloadFromPartitionManager(unloadCauseConflict).Times(1)
 
-	// stop the task queue explicitly
-	tlm.tqCtxCancel()
-
-	// now attempt to add a task
-	err = tlm.backlogMgr.SpoolTask(&persistencespb.TaskInfo{})
-	require.Error(t, err)
+	err = s.blm.SpoolTask(&persistencespb.TaskInfo{})
+	s.Error(err)
 }
 
-func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
-	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(t, controller, false)
+func (s *BacklogManagerTestSuite) TestReadBatchDone() {
+	const rangeSize = 10
+	const maxReadLevel = int64(120)
+	s.blm.config.RangeSize = rangeSize
 
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	s.blm.taskAckManager.setReadLevel(0)
+	s.blm.getDB().setMaxReadLevelForTesting(subqueueZero, maxReadLevel)
+	batch, err := s.blm.taskReader.getTaskBatch(context.Background())
+	s.NoError(err)
+	s.Empty(batch.tasks)
+	s.Equal(int64(rangeSize*10), batch.readLevel)
+	s.False(batch.isReadBatchDone)
+	s.NoError(err)
+
+	s.blm.taskAckManager.setReadLevel(batch.readLevel)
+	batch, err = s.blm.taskReader.getTaskBatch(context.Background())
+	s.NoError(err)
+	s.Empty(batch.tasks)
+	s.Equal(maxReadLevel, batch.readLevel)
+	s.True(batch.isReadBatchDone)
+	s.NoError(err)
+}
+
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCountIncrement_taskWriterLoop() {
 	// Add tasks on the taskWriters channel
-	backlogMgr.taskWriter.appendCh <- &writeTaskRequest{
+	s.blm.taskWriter.appendCh <- &writeTaskRequest{
 		taskInfo: &persistencespb.TaskInfo{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
@@ -127,92 +183,81 @@ func TestApproximateBacklogCountIncrement_taskWriterLoop(t *testing.T) {
 		responseCh: make(chan<- error),
 	}
 
-	require.Equal(t, int64(0), backlogMgr.TotalApproximateBacklogCount())
+	s.Equal(int64(0), s.blm.TotalApproximateBacklogCount())
 
-	backlogMgr.taskWriter.Start()
+	s.blm.taskWriter.Start()
 	// Adding tasks to the buffer will increase the in-memory counter by 1
 	// and this will be written to persistence
-	require.Eventually(t, func() bool { return backlogMgr.TotalApproximateBacklogCount() == int64(1) },
+	s.Eventually(func() bool { return s.blm.TotalApproximateBacklogCount() == int64(1) },
 		time.Second*30, time.Millisecond)
 }
 
-func TestApproximateBacklogCounterDecrement_SingleTask(t *testing.T) {
-	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(t, controller, false)
-	_, err := backlogMgr.db.RenewLease(backlogMgr.tqCtx)
-	require.NoError(t, err)
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCounterDecrement_SingleTask() {
+	_, err := s.blm.db.RenewLease(s.blm.tqCtx)
+	s.NoError(err)
 
-	backlogMgr.taskAckManager.addTask(int64(1))
+	s.blm.taskAckManager.addTask(int64(1))
 	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
-	backlogMgr.db.updateApproximateBacklogCount(int64(1))
-	require.Equal(t, int64(1), backlogMgr.TotalApproximateBacklogCount(), "1 task in the backlog")
-	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
-	require.Equal(t, int64(1), backlogMgr.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
-	ackLevel, numAcked := backlogMgr.taskAckManager.completeTask(1)
-	require.Equal(t, int64(1), ackLevel, "should move ack level and decrease backlog counter on completion")
-	require.Equal(t, int64(1), numAcked, "should move ack level and decrease backlog counter on completion")
+	s.blm.db.updateApproximateBacklogCount(int64(1))
+	s.Equal(int64(1), s.blm.TotalApproximateBacklogCount(), "1 task in the backlog")
+	s.Equal(int64(-1), s.blm.taskAckManager.getAckLevel(), "should only move ack level on completion")
+	s.Equal(int64(1), s.blm.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
+	ackLevel, numAcked := s.blm.taskAckManager.completeTask(1)
+	s.Equal(int64(1), ackLevel, "should move ack level and decrease backlog counter on completion")
+	s.Equal(int64(1), numAcked, "should move ack level and decrease backlog counter on completion")
 
-	require.Equal(t, int64(1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
+	s.Equal(int64(1), s.blm.taskAckManager.getAckLevel(), "should only move ack level on completion")
 }
 
-func TestApproximateBacklogCounterDecrement_MultipleTasks(t *testing.T) {
-	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(t, controller, false)
-	_, err := backlogMgr.db.RenewLease(backlogMgr.tqCtx)
-	require.NoError(t, err)
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCounterDecrement_MultipleTasks() {
+	_, err := s.blm.db.RenewLease(s.blm.tqCtx)
+	s.NoError(err)
 
-	backlogMgr.taskAckManager.addTask(int64(1))
-	backlogMgr.taskAckManager.addTask(int64(2))
-	backlogMgr.taskAckManager.addTask(int64(3))
+	s.blm.taskAckManager.addTask(int64(1))
+	s.blm.taskAckManager.addTask(int64(2))
+	s.blm.taskAckManager.addTask(int64(3))
 
 	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
-	backlogMgr.db.updateApproximateBacklogCount(int64(3))
+	s.blm.db.updateApproximateBacklogCount(int64(3))
 
-	require.Equal(t, int64(3), backlogMgr.TotalApproximateBacklogCount(), "1 task in the backlog")
-	require.Equal(t, int64(-1), backlogMgr.taskAckManager.getAckLevel(), "should only move ack level on completion")
-	require.Equal(t, int64(3), backlogMgr.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
+	s.Equal(int64(3), s.blm.TotalApproximateBacklogCount(), "1 task in the backlog")
+	s.Equal(int64(-1), s.blm.taskAckManager.getAckLevel(), "should only move ack level on completion")
+	s.Equal(int64(3), s.blm.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
 
 	// Complete tasks
-	ackLevel, numAcked := backlogMgr.taskAckManager.completeTask(2)
-	require.Equal(t, int64(-1), ackLevel, "should not move the ack level")
-	require.Equal(t, int64(0), numAcked, "should not decrease the backlog counter as ack level has not gone up")
+	ackLevel, numAcked := s.blm.taskAckManager.completeTask(2)
+	s.Equal(int64(-1), ackLevel, "should not move the ack level")
+	s.Equal(int64(0), numAcked, "should not decrease the backlog counter as ack level has not gone up")
 
-	ackLevel, numAcked = backlogMgr.taskAckManager.completeTask(3)
-	require.Equal(t, int64(-1), ackLevel, "should not move the ack level")
-	require.Equal(t, int64(0), numAcked, "should not decrease the backlog counter as ack level has not gone up")
+	ackLevel, numAcked = s.blm.taskAckManager.completeTask(3)
+	s.Equal(int64(-1), ackLevel, "should not move the ack level")
+	s.Equal(int64(0), numAcked, "should not decrease the backlog counter as ack level has not gone up")
 
-	ackLevel, numAcked = backlogMgr.taskAckManager.completeTask(1)
-	require.Equal(t, int64(3), ackLevel, "should move the ack level")
-	require.Equal(t, int64(3), numAcked, "should decrease the backlog counter to 0 as no more tasks in the backlog")
+	ackLevel, numAcked = s.blm.taskAckManager.completeTask(1)
+	s.Equal(int64(3), ackLevel, "should move the ack level")
+	s.Equal(int64(3), numAcked, "should decrease the backlog counter to 0 as no more tasks in the backlog")
 
 }
 
 // TestAddTasksValidateBacklogCounter uses the "backlogManager methods" to add a task to the backlog.
-func TestAddSingleTaskValidateBacklogCounter(t *testing.T) {
-	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(t, controller, false)
-
+func (s *BacklogManagerTestSuite) TestAddSingleTaskValidateBacklogCounter() {
 	// only start the taskWriter for now!
-	backlogMgr.taskWriter.Start()
+	s.blm.taskWriter.Start()
 	task := &persistencespb.TaskInfo{
 		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 		CreateTime: timestamp.TimeNowPtrUtc(),
 	}
-	err := backlogMgr.SpoolTask(task)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), backlogMgr.TotalApproximateBacklogCount())
+	err := s.blm.SpoolTask(task)
+	s.NoError(err)
+	s.Equal(int64(1), s.blm.TotalApproximateBacklogCount())
 }
 
-func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
-	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(t, controller, true)
-
-	// mock error signals
-	logger := backlogMgr.logger.(*log.MockLogger) // nolint:revive
-	logger.EXPECT().Error("Persistent store operation failure", gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+func (s *BacklogManagerTestSuite) TestAddTasksValidateBacklogCounter_ServiceError() {
+	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.taskMgr.dbServiceError = true
 
 	// only start the taskWriter for now!
-	backlogMgr.taskWriter.Start()
+	s.blm.taskWriter.Start()
 	taskCount := 10
 	for i := 0; i < taskCount; i++ {
 		// Create new tasks and spool them
@@ -220,18 +265,15 @@ func TestAddTasksValidateBacklogCounter_ServiceError(t *testing.T) {
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
 		}
-		err := backlogMgr.SpoolTask(task)
-		require.Error(t, err)
+		err := s.blm.SpoolTask(task)
+		s.Error(err)
 	}
-	require.Equal(t, int64(10), backlogMgr.TotalApproximateBacklogCount())
+	s.Equal(int64(10), s.blm.TotalApproximateBacklogCount())
 }
 
-func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
-	controller := gomock.NewController(t)
-	backlogMgr := newBacklogMgr(t, controller, false)
-
+func (s *BacklogManagerTestSuite) TestAddMultipleTasksValidateBacklogCounter() {
 	// Only start the taskWriter for now!
-	backlogMgr.taskWriter.Start()
+	s.blm.taskWriter.Start()
 	taskCount := 10
 	for i := 0; i < taskCount; i++ {
 		// Create new tasks and spool them
@@ -239,43 +281,8 @@ func TestAddMultipleTasksValidateBacklogCounter(t *testing.T) {
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
 		}
-		err := backlogMgr.SpoolTask(task)
-		require.NoError(t, err)
+		err := s.blm.SpoolTask(task)
+		s.NoError(err)
 	}
-	require.Equal(t, int64(10), backlogMgr.TotalApproximateBacklogCount())
-}
-
-type cleanupper interface {
-	Cleanup(func())
-}
-
-func newBacklogMgr(t cleanupper, controller *gomock.Controller, serviceError bool) *backlogManagerImpl {
-	logger := log.NewMockLogger(controller)
-	tm := newTestTaskManager(logger)
-	if serviceError {
-		tm.dbServiceError = true
-	}
-
-	pqMgr := NewMockphysicalTaskQueueManager(controller)
-
-	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
-	handler := metrics.NewMockHandler(controller)
-
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
-	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
-	queue := UnversionedQueueKey(prtn)
-	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
-
-	// Set expected calls
-	pqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
-	pqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	handler.EXPECT().Counter(gomock.Any()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
-	handler.EXPECT().Timer(gomock.Any()).Return(metrics.NoopTimerMetricFunc).AnyTimes()
-	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
-	return newBacklogManager(ctx, pqMgr, tlCfg, tm, logger, logger, matchingClient, handler)
+	s.Equal(int64(10), s.blm.TotalApproximateBacklogCount())
 }
