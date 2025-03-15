@@ -67,6 +67,9 @@ type (
 		TotalApproximateBacklogCount() int64
 		BacklogHeadAge() time.Duration
 		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
+
+		// TODO(pri): remove
+		getDB() *taskQueueDB
 	}
 
 	backlogManagerImpl struct {
@@ -232,8 +235,9 @@ func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueS
 				StartId: c.taskWriter.taskIDBlock.start,
 				EndId:   c.taskWriter.taskIDBlock.end,
 			},
-			LoadedTasks:  c.taskAckManager.getBacklogCountHint(),
-			MaxReadLevel: c.db.GetMaxReadLevel(subqueueZero),
+			LoadedTasks:             c.taskAckManager.getBacklogCountHint(),
+			MaxReadLevel:            c.db.GetMaxReadLevel(subqueueZero),
+			ApproximateBacklogCount: c.db.getApproximateBacklogCount(subqueueZero),
 		},
 	}
 }
@@ -305,4 +309,8 @@ func executeWithRetry(
 
 func (c *backlogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 	return c.pqMgr.QueueKey()
+}
+
+func (c *backlogManagerImpl) getDB() *taskQueueDB {
+	return c.db
 }

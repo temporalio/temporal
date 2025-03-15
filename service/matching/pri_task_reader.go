@@ -517,7 +517,7 @@ func (tr *priTaskReader) doGC() {
 
 	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
 	defer cancel()
-
+	
 	n, err := tr.backlogMgr.db.CompleteTasksLessThan(ctx, tr.ackLevel+1, batchSize, tr.subqueue)
 
 	tr.lock.Lock()

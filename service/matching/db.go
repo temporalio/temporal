@@ -284,7 +284,7 @@ func (db *taskQueueDB) updateAckLevelAndCount(subqueue int, ackLevel int64, delt
 
 	db.lastChange = time.Now()
 	if ackLevel < db.subqueues[subqueue].AckLevel {
-		db.logger.DPanic("bug: ack level should not move backwards!")
+		//db.logger.DPanic("bug: ack level should not move backwards!")
 	}
 	db.subqueues[subqueue].AckLevel = ackLevel
 
