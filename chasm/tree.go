@@ -28,8 +28,8 @@ import (
 	"reflect"
 	"time"
 
-	"go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
@@ -223,6 +223,7 @@ func (n *Node) reflectSubcomponents() error {
 		switch genericTypePrefix(fieldT.Elem()) {
 		case chasmFieldTypePrefix:
 			internalV := fieldV.Elem().FieldByName(internalFieldName)
+			//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
 			internal := internalV.Interface().(fieldInternal)
 			if internal.node != nil {
 				// This subcomponent already has a tree node. No need to create a new one.
@@ -301,7 +302,7 @@ func (n *Node) serializeComponentNode() error {
 		}
 		protoMessageFound = true
 
-		blob, err := serialization.ProtoEncodeBlob(fieldV.Interface().(proto.Message), enums.ENCODING_TYPE_PROTO3)
+		blob, err := serialization.ProtoEncodeBlob(fieldV.Interface().(proto.Message), enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return err
 		}
@@ -354,6 +355,7 @@ func (n *Node) syncChildrenInternal(
 
 		switch genericTypePrefix(fieldT.Elem()) {
 		case chasmFieldTypePrefix:
+			//nolint:revive // Internal field is guaranteed to be of type fieldInternal.
 			internal := fieldV.Elem().FieldByName(internalFieldName).Interface().(fieldInternal)
 			if internal.node == nil {
 				// This can't happen!
@@ -373,11 +375,8 @@ func (n *Node) syncChildrenInternal(
 		}
 	}
 
-	if err := n.deleteChildren(removedPaths, childrenToKeep, nodePath); err != nil {
-		return err
-	}
-
-	return nil
+	err := n.deleteChildren(removedPaths, childrenToKeep, nodePath)
+	return err
 }
 
 func (n *Node) deleteChildren(removedPaths *[]string, childrenToKeep map[string]struct{}, currentPath []string) error {
@@ -405,7 +404,7 @@ func (n *Node) serializeDataNode() error {
 		return serviceerror.NewInternal("only support proto.Message as chasm data")
 	}
 
-	blob, err := serialization.ProtoEncodeBlob(protoValue, enums.ENCODING_TYPE_PROTO3)
+	blob, err := serialization.ProtoEncodeBlob(protoValue, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return err
 	}
@@ -509,7 +508,7 @@ func (n *Node) deserializeDataNode(
 }
 
 func (n *Node) unmarshalProto(
-	dataBlob *common.DataBlob,
+	dataBlob *commonpb.DataBlob,
 	valueT reflect.Type,
 ) (reflect.Value, error) {
 	if !valueT.AssignableTo(protoMessageT) {

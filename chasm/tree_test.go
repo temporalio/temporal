@@ -280,6 +280,7 @@ func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
 	s.NotNil(node2.children["SubComponent1"].value)
 	node2.children["SubComponent1"].value = nil
 	err = node2.children["SubComponent1"].deserialize(reflect.TypeOf(&TestSubComponent1{}))
+	s.NoError(err)
 	s.NotNil(node2.children["SubComponent1"].value)
 }
 

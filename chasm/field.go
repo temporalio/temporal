@@ -43,6 +43,7 @@ type Field[T any] struct {
 	Internal fieldInternal
 }
 
+// TODO: add unit test to check this.
 const internalFieldName = "Internal"
 
 type fieldType int
