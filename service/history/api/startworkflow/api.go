@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -235,7 +234,7 @@ func (s *Starter) Invoke(
 
 func (s *Starter) lockCurrentWorkflowExecution(
 	ctx context.Context,
-) (cache.ReleaseCacheFunc, error) {
+) (historyi.ReleaseWorkflowContextFunc, error) {
 	currentRelease, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateCurrentWorkflowExecution(
 		ctx,
 		s.shardContext,

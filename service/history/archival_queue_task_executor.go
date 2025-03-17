@@ -287,7 +287,7 @@ type lockedMutableState struct {
 	CloseVersion int64
 	// Release is a function that releases the context of the mutable state. This function should be called when
 	// you are done with the mutable state.
-	Release cache.ReleaseCacheFunc
+	Release historyi.ReleaseWorkflowContextFunc
 }
 
 // newLockedMutableState returns a new lockedMutableState with the given mutable state,
@@ -295,7 +295,7 @@ type lockedMutableState struct {
 func newLockedMutableState(
 	mutableState historyi.MutableState,
 	closeVersion int64,
-	releaseFunc cache.ReleaseCacheFunc,
+	releaseFunc historyi.ReleaseWorkflowContextFunc,
 ) *lockedMutableState {
 	return &lockedMutableState{
 		MutableState: mutableState,
