@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -54,12 +55,13 @@ type (
 
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
-		backlogMgr  *backlogManagerImpl
-		config      *taskQueueConfig
-		db          *taskQueueDB
-		logger      log.Logger
-		appendCh    chan *writeTaskRequest
-		taskIDBlock taskIDBlock
+		backlogMgr         *backlogManagerImpl
+		config             *taskQueueConfig
+		db                 *taskQueueDB
+		logger             log.Logger
+		appendCh           chan *writeTaskRequest
+		taskIDBlock        taskIDBlock
+		currentTaskIDBlock taskIDBlock // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
 	}
 )
 
@@ -99,6 +101,7 @@ func (w *taskWriter) initReadWriteState() error {
 		return err
 	}
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
+	w.currentTaskIDBlock = w.taskIDBlock
 	w.backlogMgr.taskAckManager.setAckLevel(state.ackLevel)
 
 	return nil
@@ -182,6 +185,9 @@ func (w *taskWriter) taskWriterLoop() {
 	w.backlogMgr.SetInitializedError(err)
 
 	for {
+		atomic.StoreInt64(&w.currentTaskIDBlock.start, w.taskIDBlock.start)
+		atomic.StoreInt64(&w.currentTaskIDBlock.end, w.taskIDBlock.end)
+
 		select {
 		case request := <-w.appendCh:
 			// read a batch of requests from the channel
@@ -247,4 +253,12 @@ func (w *taskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
 		return taskIDBlock{}, err
 	}
 	return rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize), nil
+}
+
+// getCurrentTaskIDBlock returns the current taskIDBlock. Safe to be called concurrently.
+func (w *taskWriter) getCurrentTaskIDBlock() taskIDBlock {
+	return taskIDBlock{
+		start: atomic.LoadInt64(&w.currentTaskIDBlock.start),
+		end:   atomic.LoadInt64(&w.currentTaskIDBlock.end),
+	}
 }
