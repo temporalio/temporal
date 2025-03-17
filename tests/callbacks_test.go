@@ -270,6 +270,20 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 			s.NoError(w.Start())
 			defer w.Stop()
 
+			startLink := &commonpb.Link{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{
+						Namespace:  s.Namespace().String(),
+						WorkflowId: "some-caller-wfid",
+						RunId:      "some-caller-runid",
+						Reference: &commonpb.Link_WorkflowEvent_EventRef{
+							EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							},
+						},
+					},
+				},
+			}
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:          uuid.New(),
 				Namespace:          s.Namespace().String(),
@@ -293,6 +307,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 						},
 					},
 				},
+				Links: []*commonpb.Link{startLink},
 			}
 
 			_, err = s.FrontendClient().StartWorkflowExecution(ctx, request)
@@ -327,9 +342,12 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				)
 				s.NoError(err)
 				s.Len(getHistoryResponse.History.Events, 1)
-				startEvent := getHistoryResponse.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
-				s.NotNil(startEvent)
-				s.ProtoElementsMatch(request.CompletionCallbacks, startEvent.CompletionCallbacks)
+				startEvent := getHistoryResponse.History.Events[0]
+				// Also checks workflow execution started event links are copied over.
+				s.ProtoElementsMatch(request.Links, startEvent.Links)
+				startEventAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
+				s.NotNil(startEventAttr)
+				s.ProtoElementsMatch(request.CompletionCallbacks, startEventAttr.CompletionCallbacks)
 
 				s.EventuallyWithT(func(col *assert.CollectT) {
 					description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, "")

@@ -696,6 +696,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		newMutableState,
 		newRunID,
 		startAttr,
+		startEvent.Links,
 		startAttr.LastCompletionResult,
 		timeoutFailure,
 		backoffInterval,
