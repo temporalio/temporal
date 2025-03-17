@@ -319,7 +319,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 	if item != nil {
 		nsTag = metrics.NamespaceTag(item.(namespace.Name).String())
 	}
-	metrics.ServiceLatency.With(e.MetricsHandler).Record(
+	metrics.ReplicationTaskProcessingLatency.With(e.MetricsHandler).Record(
 		now.Sub(e.taskReceivedTime),
 		metrics.OperationTag(e.metricsTag),
 		nsTag,
