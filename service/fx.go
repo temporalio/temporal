@@ -36,7 +36,6 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
-	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
 	"go.uber.org/fx"
@@ -163,7 +162,7 @@ func GrpcServerOptionsProvider(
 
 func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInterceptor {
 	interceptors := []grpc.UnaryServerInterceptor{
-		rpc.ServiceErrorInterceptor,
+		interceptor.ServiceErrorInterceptor,
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		metrics.NewServerMetricsTrailerPropagatorInterceptor(params.Logger),
 		params.TelemetryInterceptor.UnaryIntercept,

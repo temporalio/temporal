@@ -132,9 +132,9 @@ func NewTelemetryInterceptor(
 	}
 }
 
-// Use this method to override scope used for reporting a metric.
+// TelemetryUnaryOverrideOperationTag is used to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation string, req any) string {
+func TelemetryUnaryOverrideOperationTag(fullName, operation string, req any) string {
 	if strings.HasPrefix(fullName, api.WorkflowServicePrefix) {
 		// GetWorkflowExecutionHistory method handles both long poll and regular calls.
 		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
@@ -159,12 +159,12 @@ func (ti *TelemetryInterceptor) unaryOverrideOperationTag(fullName, operation st
 			}
 		}
 	}
-	return ti.overrideOperationTag(fullName, operation)
+	return TelemetryOverrideOperationTag(fullName, operation)
 }
 
-// Use this method to override scope used for reporting a metric.
+// TelemetryOverrideOperationTag is used to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func (ti *TelemetryInterceptor) overrideOperationTag(fullName, operation string) string {
+func TelemetryOverrideOperationTag(fullName, operation string) string {
 	// prepend Operator prefix to Operator APIs
 	if strings.HasPrefix(fullName, api.OperatorServicePrefix) {
 		return "Operator" + operation
@@ -359,7 +359,7 @@ func (ti *TelemetryInterceptor) unaryMetricsHandlerLogTags(req any,
 	fullMethod string,
 	methodName string,
 	nsName namespace.Name) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := ti.unaryOverrideOperationTag(fullMethod, methodName, req)
+	overridedMethodName := TelemetryUnaryOverrideOperationTag(fullMethod, methodName, req)
 
 	if nsName == "" {
 		return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
@@ -373,7 +373,7 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 	fullMethod string,
 	methodName string,
 ) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := ti.overrideOperationTag(fullMethod, methodName)
+	overridedMethodName := TelemetryOverrideOperationTag(fullMethod, methodName)
 	return ti.metricsHandler.WithTags(
 		metrics.OperationTag(overridedMethodName),
 		metrics.NamespaceUnknownTag(),

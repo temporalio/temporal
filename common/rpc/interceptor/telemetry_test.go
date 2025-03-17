@@ -409,14 +409,6 @@ func TestHandleError(t *testing.T) {
 }
 
 func TestOperationOverwrite(t *testing.T) {
-	controller := gomock.NewController(t)
-	register := namespace.NewMockRegistry(controller)
-	metricsHandler := metrics.NewMockHandler(controller)
-	telemetry := NewTelemetryInterceptor(register,
-		metricsHandler,
-		log.NewNoopLogger(),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false))
-
 	testCases := []struct {
 		methodName        string
 		fullName          string
@@ -441,20 +433,13 @@ func TestOperationOverwrite(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.methodName, func(t *testing.T) {
-			operation := telemetry.overrideOperationTag(tt.fullName, tt.methodName)
+			operation := TelemetryOverrideOperationTag(tt.fullName, tt.methodName)
 			assert.Equal(t, tt.expectedOperation, operation)
 		})
 	}
 }
 
 func TestOperationOverride(t *testing.T) {
-	controller := gomock.NewController(t)
-	register := namespace.NewMockRegistry(controller)
-	metricsHandler := metrics.NewMockHandler(controller)
-	telemetry := NewTelemetryInterceptor(register, metricsHandler,
-		log.NewNoopLogger(),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false))
-
 	wid := "test_workflow_id"
 	rid := "test_run_id"
 
@@ -520,7 +505,7 @@ func TestOperationOverride(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.methodName, func(t *testing.T) {
-			operation := telemetry.unaryOverrideOperationTag(tt.fullName, tt.methodName, tt.req)
+			operation := TelemetryUnaryOverrideOperationTag(tt.fullName, tt.methodName, tt.req)
 			assert.Equal(t, tt.expectedOperation, operation)
 		})
 	}
