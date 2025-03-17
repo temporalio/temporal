@@ -107,10 +107,8 @@ func (invokerMachineDefinition) CompareState(a any, b any) (int, error) {
 // TransitionEnqueue adds buffered starts to the Invoker's queue.
 var TransitionEnqueue = hsm.NewTransition(
 	[]enumsspb.SchedulerInvokerState{
-		enumsspb.SCHEDULER_INVOKER_STATE_UNSPECIFIED,
 		enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
 		enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
-		enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
 	},
 	enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
 	func(i Invoker, event EventEnqueue) (hsm.TransitionOutput, error) {
@@ -119,34 +117,30 @@ var TransitionEnqueue = hsm.NewTransition(
 	},
 )
 
-// TransitionCompleteExecution records actions completed during an ExecuteTask by
+// TransitionRecordExecution records actions completed during an ExecuteTask by
 // updating the Invoker's internal state.
 //
 // See also TransitionRecordAction on Scheduler.
-var TransitionCompleteExecution = hsm.NewTransition(
+var TransitionRecordExecution = hsm.NewTransition(
 	[]enumsspb.SchedulerInvokerState{
 		enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
 		enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
-		enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
 	},
-	// We always move to BackingOff to make the backoff timer effective immediately
-	// on transition (before more Execute tasks can be queued). If no starts are backing
-	// off, the ProcessBuffer task will immediately fire and move back to Waiting.
-	enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
-	func(i Invoker, event EventCompleteExecution) (hsm.TransitionOutput, error) {
+	// If the Invoker has no work to do, the ProcessBufferTask will immediately
+	// complete and transition to Waiting.
+	enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
+	func(i Invoker, event EventRecordExecution) (hsm.TransitionOutput, error) {
 		i.recordExecution(&event.executeResult)
 		return i.output()
 	},
 )
 
-// TransitionFinishProcessing records the results of processing the buffer to the
-// Invoker's internal state. Any BufferedStarts on StartWorkflows will also be
-// removed from the Invoker's BufferedStarts field. Use when no buffered starts need
-// to be retried.
+// TransitionFinishProcessing records the results of processing the buffer to
+// the Invoker's internal state and moves to Waiting. Use when no buffered starts
+// need to be retried.
 var TransitionFinishProcessing = hsm.NewTransition(
 	[]enumsspb.SchedulerInvokerState{
 		enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
-		enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
 	},
 	enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
 	func(i Invoker, event EventFinishProcessing) (hsm.TransitionOutput, error) {
@@ -156,35 +150,17 @@ var TransitionFinishProcessing = hsm.NewTransition(
 	},
 )
 
-// TransitionRetryProcessing is similar to TransitionFinishProcessing, except
-// it moves the Invoker into the BACKING_OFF state to retry failed tasks after
-// a delay. The event's ProcessBufferResult field is used to kick off immediate
-// tasks corresponding to requested actions, if any are set.
+// TransitionRetryProcessing is similar to TransitionFinishProcessing, except it
+// leaves the Invoker in Processing to retry failed buffered starts after their
+// backoff.
 var TransitionRetryProcessing = hsm.NewTransition(
 	[]enumsspb.SchedulerInvokerState{
-		enumsspb.SCHEDULER_INVOKER_STATE_WAITING, // A service call could fail after the Invoker goes idle.
 		enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
-		enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
 	},
-	enumsspb.SCHEDULER_INVOKER_STATE_BACKING_OFF,
+	enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
 	func(i Invoker, event EventRetryProcessing) (hsm.TransitionOutput, error) {
 		i.LastProcessedTime = timestamppb.New(event.LastProcessedTime)
 		i.update(&event.processBufferResult)
-		return i.output()
-	},
-)
-
-// TransitionWait moves the Invoker to waiting state. No new tasks will be
-// created until the Invoker's state changes.
-var TransitionWait = hsm.NewTransition(
-	[]enumsspb.SchedulerInvokerState{
-		enumsspb.SCHEDULER_INVOKER_STATE_UNSPECIFIED,
-		enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
-		enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
-	},
-	enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
-	func(i Invoker, event EventWait) (hsm.TransitionOutput, error) {
-		i.LastProcessedTime = timestamppb.New(event.LastProcessedTime)
 		return i.output()
 	},
 )
@@ -265,15 +241,15 @@ func (i Invoker) recordExecution(result *executeResult) {
 	}
 }
 
-// EarliestRetry returns the earliest possible time an attempted BufferedStart
-// in the queue can be retried. BufferedStarts that have not yet been attempted are
-// ignored. If no BufferedStarts are retrying, the return value will be Time's zero
-// value.
-func (i Invoker) earliestRetryTime() time.Time {
+// processingDeadline returns the earliest possible time that the BufferedStarts
+// queue should be processed, taking into account starts that have not yet been
+// attempted, as well as those that are pending backoff to retry. If the buffer
+// is empty, the return value will be Time's zero value.
+func (i Invoker) processingDeadline() time.Time {
 	var deadline time.Time
 	for _, start := range i.GetBufferedStarts() {
 		if start.GetAttempt() == 0 {
-			continue
+			return hsm.Immediate
 		}
 		backoff := start.GetBackoffTime().AsTime()
 		if deadline.IsZero() || backoff.Before(deadline) {

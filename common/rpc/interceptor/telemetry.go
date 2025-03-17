@@ -26,6 +26,7 @@ package interceptor
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -385,28 +386,34 @@ func (ti *TelemetryInterceptor) HandleError(
 	metricsHandler metrics.Handler,
 	logTags []tag.Tag,
 	err error,
-	nsName namespace.Name) {
+	nsName namespace.Name,
+) {
 	statusCode := serviceerror.ToStatus(err).Code()
+	if statusCode == codes.OK {
+		return
+	}
 
-	recordMetrics(metricsHandler, err, statusCode)
+	isExpectedError := isExpectedErrorByStatusCode(statusCode) || isExpectedErrorByType(err)
 
-	ti.logErrors(req, fullMethod, nsName, err, statusCode, logTags)
+	recordErrorMetrics(metricsHandler, err, isExpectedError)
+	ti.logError(req, fullMethod, nsName, err, statusCode, isExpectedError, logTags)
 }
 
-func (ti *TelemetryInterceptor) logErrors(
+func (ti *TelemetryInterceptor) logError(
 	req any,
 	fullMethod string,
 	nsName namespace.Name,
 	err error,
 	statusCode codes.Code,
+	isExpectedError bool,
 	logTags []tag.Tag,
 ) {
 	logAllErrors := nsName != "" && ti.logAllReqErrors(nsName.String())
-	if !logAllErrors && (common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err)) {
-		return
-	}
-
-	if !logAllErrors && isRecordingNeeded(statusCode) {
+	// context errors may not be user errors, but still too noisy to log by default
+	if !logAllErrors && (isExpectedError ||
+		common.IsContextDeadlineExceededErr(err) ||
+		common.IsContextCanceledErr(err) ||
+		common.IsResourceExhausted(err)) {
 		return
 	}
 
@@ -423,41 +430,66 @@ func (ti *TelemetryInterceptor) logErrors(
 	ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
 }
 
-func isRecordingNeeded(statusCode codes.Code) bool {
+func recordErrorMetrics(metricsHandler metrics.Handler, err error, isExpectedError bool) {
+	metrics.ServiceErrorWithType.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+
+	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	if errors.As(err, &resourceExhaustedErr) {
+		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
+			1,
+			metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause),
+			metrics.ResourceExhaustedScopeTag(resourceExhaustedErr.Scope),
+		)
+	}
+
+	if isExpectedError {
+		return
+	}
+
+	metrics.ServiceFailures.With(metricsHandler).Record(1)
+}
+
+func isExpectedErrorByStatusCode(statusCode codes.Code) bool {
 	switch statusCode {
-	case codes.InvalidArgument,
+	case codes.Canceled,
+		codes.InvalidArgument,
+		codes.NotFound,
 		codes.AlreadyExists,
+		codes.PermissionDenied,
 		codes.FailedPrecondition,
 		codes.OutOfRange,
-		codes.PermissionDenied,
-		codes.Unauthenticated,
-		codes.NotFound,
-		codes.ResourceExhausted:
+		codes.Unauthenticated:
 		return true
-	case codes.OK,
-		codes.Canceled,
-		codes.Unknown,
+	// We could just return false here, but making it explicit what codes are
+	// considered (potentially) server errors.
+	case codes.Unknown,
 		codes.DeadlineExceeded,
+		// the result for resource exhausted depends on the resource exhausted scope and
+		// will be handled by isExpectedErrorByType()
+		codes.ResourceExhausted,
 		codes.Aborted,
 		codes.Unimplemented,
 		codes.Internal,
 		codes.Unavailable,
 		codes.DataLoss:
 		return false
+	default:
+		return false
 	}
-
-	return false
 }
 
-func recordMetrics(metricsHandler metrics.Handler, err error, statusCode codes.Code) {
-	metrics.ServiceErrorWithType.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
-
+func isExpectedErrorByType(err error) bool {
+	// This is not a full list of service errors.
+	// Only errors with status code that fails the isExpectedErrorByStatusCode() check
+	// but are actually expected need to be explicitly handled here.
+	//
+	// Some of the errors listed below does not failed the isExpectedErrorByStatusCode() check
+	// but are listed nonetheless.
 	switch err := err.(type) {
 	case *serviceerror.ResourceExhausted:
-		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
-			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
-		return
-	case *serviceerror.AlreadyExists,
+		return err.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
+	case *serviceerror.Canceled,
+		*serviceerror.AlreadyExists,
 		*serviceerror.CancellationAlreadyRequested,
 		*serviceerror.FailedPrecondition,
 		*serviceerror.NamespaceInvalidState,
@@ -474,14 +506,12 @@ func recordMetrics(metricsHandler metrics.Handler, err error, statusCode codes.C
 		*serviceerror.PermissionDenied,
 		*serviceerror.NewerBuildExists,
 		*serviceerrors.StickyWorkerUnavailable,
-		*serviceerrors.ShardOwnershipLost,
 		*serviceerrors.TaskAlreadyStarted,
-		*serviceerrors.RetryReplication:
-		return
-	}
-
-	if !isRecordingNeeded(statusCode) {
-		metrics.ServiceFailures.With(metricsHandler).Record(1)
+		*serviceerrors.RetryReplication,
+		*serviceerrors.SyncState:
+		return true
+	default:
+		return false
 	}
 }
 

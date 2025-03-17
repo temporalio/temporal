@@ -713,6 +713,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 		&commonpb.WorkerVersionStamp{BuildId: "build_id_9"},
 		sdkMetadata,
 		meteringMeta,
+		"",
 		nil,
 		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
 	)

@@ -70,6 +70,8 @@ type (
 		LastWriteVersion int64
 		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus
+		Data             []byte
+		DataEncoding     string
 	}
 
 	// CurrentExecutionsFilter contains the column names within current_executions table that

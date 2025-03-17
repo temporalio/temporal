@@ -1,0 +1,10 @@
+<testsuites>
+    <testsuite name="suite" tests="0" failures="0" errors="0" id="0" time="">
+        <testcase name="TestCallbacksSuite/TestWorkflowCallbacks_1 (timeout)" classname="">
+            <failure message="Timeout"></failure>
+        </testcase>
+        <testcase name="TestCallbacksSuite/TestWorkflowCallbacks_2 (timeout)" classname="">
+            <failure message="Timeout"></failure>
+        </testcase>
+    </testsuite>
+</testsuites>

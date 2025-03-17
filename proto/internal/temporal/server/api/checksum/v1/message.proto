@@ -59,6 +59,7 @@ message MutableStateChecksumPayload {
     repeated int64 pending_signal_initiated_event_ids = 16;
     repeated int64 pending_req_cancel_initiated_event_ids = 17;
     repeated int64 pending_child_initiated_event_ids = 18;
+    repeated string pending_chasm_node_paths = 26;
 
     string sticky_task_queue_name = 19;
     temporal.server.api.history.v1.VersionHistories version_histories = 20;

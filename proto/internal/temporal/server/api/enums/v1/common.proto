@@ -41,12 +41,10 @@ enum ChecksumFlavor {
 enum SchedulerInvokerState {
     // Default value, unspecified state.
     SCHEDULER_INVOKER_STATE_UNSPECIFIED = 0;
-    // Invoker is awaiting actions to be buffered and eligible for execution.
+    // Invoker is awaiting backoff, or for actions to be buffered and eligible for execution.
     SCHEDULER_INVOKER_STATE_WAITING = 1;
     // Invoker is starting actions.
     SCHEDULER_INVOKER_STATE_PROCESSING = 2;
-    // Invoker is backing off before retrying failed executions.
-    SCHEDULER_INVOKER_STATE_BACKING_OFF = 3;
 }
 
 // State of a callback.

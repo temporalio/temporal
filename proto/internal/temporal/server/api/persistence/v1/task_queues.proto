@@ -50,7 +50,7 @@ message BuildId {
     temporal.server.api.clock.v1.HybridLogicalClock became_default_timestamp = 4;
 }
 
-// An internal represenation of temporal.api.taskqueue.v1.CompatibleVersionSet
+// An internal representation of temporal.api.taskqueue.v1.CompatibleVersionSet
 message CompatibleVersionSet {
     // Set IDs are used internally by matching.
     // A set typically has one set ID and extra care is taken to enforce this.
@@ -111,8 +111,24 @@ message DeploymentData {
     // Set of deployments that this task queue belongs to.
     // Current deployment is defined implicitly as the deployment with the most recent
     // TaskQueueData.last_became_current_time.
-    repeated DeploymentDataItem deployments = 1;
+    // Deprecated.
+    repeated DeploymentDataItem deployments = 1 [deprecated = true];
 
+    // Set of worker deployment versions that this task queue belongs to.
+    // Current Version is defined implicitly as the version with `current_since_time!=nil` and the most
+    // recent `routing_update_time`.
+    // Ramping Version is defined implicitly as the version with `ramping_since_time!=nil` and the most
+    // recent `routing_update_time`.
+    // The Ramping Version receives a share of unversioned/unpinned tasks according to its
+    // `ramp_percentage`. If there is no Ramping Version, all the unversioned/unpinned tasks are
+    // routed to the Current Version. If there is no Current Version, any poller with UNVERSIONED
+    // (or unspecified) WorkflowVersioningMode will receive the tasks.
+    repeated temporal.server.api.deployment.v1.DeploymentVersionData versions = 2;
+
+    // Present if the task queue's ramping version is unversioned.
+    temporal.server.api.deployment.v1.DeploymentVersionData unversioned_ramp_data = 3;
+
+    // Deprecated.
     message DeploymentDataItem {
         temporal.api.deployment.v1.Deployment deployment = 1;
         temporal.server.api.deployment.v1.TaskQueueData data = 2;

@@ -61,6 +61,7 @@ type RawHistoryClientSuite struct {
 
 type GetHistoryFunctionalSuite struct {
 	testcore.FunctionalTestSuite
+	EnableTransitionHistory bool
 }
 
 func TestRawHistorySuite(t *testing.T) {
@@ -75,7 +76,33 @@ func TestRawHistoryClientSuite(t *testing.T) {
 
 func TestGetHistoryFunctionalSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(GetHistoryFunctionalSuite))
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &GetHistoryFunctionalSuite{
+				EnableTransitionHistory: tc.enableTransitionHistory,
+			}
+			suite.Run(t, s)
+		})
+	}
+}
+
+func (s *GetHistoryFunctionalSuite) SetupSuite() {
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.EnableTransitionHistory.Key(): s.EnableTransitionHistory,
+	}
+	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *RawHistorySuite) SetupSuite() {

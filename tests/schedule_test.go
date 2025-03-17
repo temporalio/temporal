@@ -111,6 +111,7 @@ func (s *ScheduleFunctionalSuite) TearDownTest() {
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
+	s.FunctionalTestBase.TearDownTest()
 }
 
 func (s *ScheduleFunctionalSuite) TestBasics() {
@@ -205,13 +206,21 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 15*time.Second, 500*time.Millisecond)
 	time.Sleep(2 * time.Second) //nolint:forbidigo
 
-	// describe
+	// wait for visibility to stabilize on completed before calling describe,
+	// otherwise their recent actions may flake and differ
+
+	visibilityResponse := s.getScheduleEntryFomVisibility(sid, func(ent *schedulepb.ScheduleListEntry) bool {
+		recentActions := ent.GetInfo().GetRecentActions()
+		return len(recentActions) >= 2 && recentActions[1].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	})
 
 	describeResp, err := s.FrontendClient().DescribeSchedule(testcore.NewContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
 	})
 	s.NoError(err)
+
+	// validate describe response
 
 	checkSpec := func(spec *schedulepb.ScheduleSpec) {
 		protorequire.ProtoSliceEqual(s.T(), schedule.Spec.Interval, spec.Interval)
@@ -253,22 +262,20 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csaKeyword].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
+	// GreaterOrEqual is used as we may have had other runs start while waiting for visibility
 	s.DurationNear(describeResp.Info.CreateTime.AsTime().Sub(createTime), 0, 3*time.Second)
-	s.EqualValues(2, describeResp.Info.ActionCount)
+	s.GreaterOrEqual(describeResp.Info.ActionCount, int64(2))
 	s.EqualValues(0, describeResp.Info.MissedCatchupWindow)
 	s.EqualValues(0, describeResp.Info.OverlapSkipped)
-	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
-	s.EqualValues(2, len(describeResp.Info.RecentActions))
+	s.GreaterOrEqual(len(describeResp.Info.RunningWorkflows), 0)
+	s.GreaterOrEqual(len(describeResp.Info.RecentActions), 2)
 	action0 := describeResp.Info.RecentActions[0]
 	s.WithinRange(action0.ScheduleTime.AsTime(), createTime, time.Now())
 	s.True(action0.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 0)
 	s.DurationNear(action0.ActualTime.AsTime().Sub(action0.ScheduleTime.AsTime()), 0, 3*time.Second)
 
-	// list
+	// validate list response
 
-	visibilityResponse := s.getScheduleEntryFomVisibility(sid, func(ent *schedulepb.ScheduleListEntry) bool {
-		return len(ent.GetInfo().GetRecentActions()) >= 2
-	})
 	s.Equal(sid, visibilityResponse.ScheduleId)
 	s.Equal(schSAValue.Data, visibilityResponse.SearchAttributes.IndexedFields[csaKeyword].Data)
 	s.Equal(schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
@@ -296,8 +303,14 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	}
 	ex0 := wfResp.Executions[0]
 	s.True(strings.HasPrefix(ex0.Execution.WorkflowId, wid))
-	s.True(ex0.Execution.RunId == describeResp.Info.RecentActions[0].GetStartWorkflowResult().RunId ||
-		ex0.Execution.RunId == describeResp.Info.RecentActions[1].GetStartWorkflowResult().RunId)
+	matchingRunId := false
+	for _, recentAction := range describeResp.GetInfo().GetRecentActions() {
+		if ex0.GetExecution().GetRunId() == recentAction.GetStartWorkflowResult().GetRunId() {
+			matchingRunId = true
+			break
+		}
+	}
+	s.True(matchingRunId, "ListWorkflowExecutions returned a run ID wasn't in the describe response")
 	s.Equal(wt, ex0.Type.Name)
 	s.Nil(ex0.ParentExecution) // not a child workflow
 	s.Equal(wfMemo.Data, ex0.Memo.Fields["wfmemo1"].Data)
@@ -881,11 +894,6 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 }
 
 func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
-	// TODO - remove when ActionResultIncludesStatus becomes the active version
-	prevTweakables := scheduler.CurrentTweakablePolicies
-	scheduler.CurrentTweakablePolicies.Version = scheduler.ActionResultIncludesStatus
-	defer func() { scheduler.CurrentTweakablePolicies = prevTweakables }()
-
 	sid := "sched-test-list-running"
 	wid := "sched-test-list-running-wf"
 	wt := "sched-test-list-running-wt"
@@ -972,6 +980,81 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 	})
 	s.NoError(err)
 	s.assertSameRecentActions(descResp, listResp)
+}
+
+// A schedule's memo should have an upper bound on the number of spec items stored.
+func (s *ScheduleFunctionalSuite) TestLimitMemoSpecSize() {
+	// TODO - remove when MemoSpecFieldLimit becomes the default.
+	prevTweakables := scheduler.CurrentTweakablePolicies
+	scheduler.CurrentTweakablePolicies.Version = scheduler.LimitMemoSpecSize
+	defer func() { scheduler.CurrentTweakablePolicies = prevTweakables }()
+
+	expectedLimit := scheduler.CurrentTweakablePolicies.SpecFieldLengthLimit
+
+	sid := "sched-test-limit-memo-size"
+	wid := "sched-test-limit-memo-size-wf"
+	wt := "sched-test-limit-memo-size-wt"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Set up a schedule with a large number of spec items that should be trimmed in
+	// the memo block.
+	for i := 0; i < expectedLimit*2; i++ {
+		schedule.Spec.Interval = append(schedule.Spec.Interval, &schedulepb.IntervalSpec{
+			Interval: durationpb.New(time.Duration(i+1) * time.Second),
+		})
+		schedule.Spec.StructuredCalendar = append(schedule.Spec.StructuredCalendar, &schedulepb.StructuredCalendarSpec{
+			Minute: []*schedulepb.Range{
+				{
+					Start: int32(i + 1),
+					End:   int32(i + 1),
+				},
+			},
+		})
+		schedule.Spec.ExcludeStructuredCalendar = append(schedule.Spec.ExcludeStructuredCalendar, &schedulepb.StructuredCalendarSpec{
+			Second: []*schedulepb.Range{
+				{
+					Start: int32(i + 1),
+					End:   int32(i + 1),
+				},
+			},
+		})
+	}
+
+	// Create the schedule.
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	}
+	s.worker.RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error { return nil },
+		workflow.RegisterOptions{Name: wt},
+	)
+	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	s.NoError(err)
+	s.cleanup(sid)
+
+	// Verify the memo field length limit was enforced.
+	entry := s.getScheduleEntryFomVisibility(sid, nil)
+	s.Require().NotNil(entry)
+	spec := entry.GetInfo().GetSpec()
+	s.Require().Equal(expectedLimit, len(spec.GetInterval()))
+	s.Require().Equal(expectedLimit, len(spec.GetStructuredCalendar()))
+	s.Require().Equal(expectedLimit, len(spec.GetExcludeStructuredCalendar()))
 }
 
 func (s *ScheduleFunctionalSuite) TestNextTimeCache() {

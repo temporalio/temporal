@@ -156,6 +156,8 @@ func (factory *factory) getJoinTime(maxPropagationTime time.Duration) time.Time 
 	switch factory.ServiceName {
 	case primitives.MatchingService:
 		alignTime = dynamicconfig.MatchingAlignMembershipChange.Get(factory.DC)()
+	case primitives.HistoryService:
+		alignTime = dynamicconfig.HistoryAlignMembershipChange.Get(factory.DC)()
 	}
 	if alignTime == 0 {
 		return time.Time{}

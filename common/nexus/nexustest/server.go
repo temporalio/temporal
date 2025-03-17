@@ -66,13 +66,13 @@ func NewNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) {
 type Handler struct {
 	nexus.UnimplementedHandler
 	OnStartOperation  func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
-	OnCancelOperation func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error
+	OnCancelOperation func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error
 }
 
 func (h Handler) StartOperation(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 	return h.OnStartOperation(ctx, service, operation, input, options)
 }
 
-func (h Handler) CancelOperation(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
-	return h.OnCancelOperation(ctx, service, operation, operationID, options)
+func (h Handler) CancelOperation(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+	return h.OnCancelOperation(ctx, service, operation, token, options)
 }

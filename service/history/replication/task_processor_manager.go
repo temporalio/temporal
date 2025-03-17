@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,7 +48,9 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -62,9 +65,9 @@ type (
 	taskProcessorManagerImpl struct {
 		config                        *configs.Config
 		deleteMgr                     deletemanager.DeleteManager
-		engine                        shard.Engine
+		engine                        historyi.Engine
 		eventSerializer               serialization.Serializer
-		shard                         shard.Context
+		shard                         historyi.ShardContext
 		status                        int32
 		replicationTaskFetcherFactory TaskFetcherFactory
 		workflowCache                 wcache.Cache
@@ -85,8 +88,8 @@ type (
 
 func NewTaskProcessorManager(
 	config *configs.Config,
-	shard shard.Context,
-	engine shard.Engine,
+	shardContext historyi.ShardContext,
+	engine historyi.Engine,
 	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
 	clientBean client.Bean,
@@ -101,12 +104,12 @@ func NewTaskProcessorManager(
 		deleteMgr:                     workflowDeleteManager,
 		engine:                        engine,
 		eventSerializer:               eventSerializer,
-		shard:                         shard,
+		shard:                         shardContext,
 		status:                        common.DaemonStatusInitialized,
 		replicationTaskFetcherFactory: replicationTaskFetcherFactory,
 		workflowCache:                 workflowCache,
 		resender: xdc.NewNDCHistoryResender(
-			shard.GetNamespaceRegistry(),
+			shardContext.GetNamespaceRegistry(),
 			clientBean,
 			func(
 				ctx context.Context,
@@ -117,7 +120,7 @@ func NewTaskProcessorManager(
 				events [][]*historypb.HistoryEvent,
 				versionHistory []*historyspb.VersionHistoryItem,
 			) error {
-				return engine.ReplicateHistoryEvents(
+				err := engine.ReplicateHistoryEvents(
 					ctx,
 					definition.WorkflowKey{
 						NamespaceID: namespaceId.String(),
@@ -130,20 +133,24 @@ func NewTaskProcessorManager(
 					nil,
 					"",
 				)
+				if errors.Is(err, consts.ErrDuplicate) {
+					return nil
+				}
+				return err
 			},
-			shard.GetPayloadSerializer(),
-			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
-			shard.GetLogger(),
+			shardContext.GetPayloadSerializer(),
+			shardContext.GetConfig().StandbyTaskReReplicationContextTimeout,
+			shardContext.GetLogger(),
 			config,
 		),
-		logger:         shard.GetLogger(),
-		metricsHandler: shard.GetMetricsHandler(),
+		logger:         shardContext.GetLogger(),
+		metricsHandler: shardContext.GetMetricsHandler(),
 		dlqWriter:      dlqWriter,
 
 		enableFetcher:        !config.EnableReplicationStream(),
 		taskProcessors:       make(map[string][]TaskProcessor),
 		taskExecutorProvider: taskExecutorProvider,
-		taskPollerManager:    newPollerManager(shard.GetShardID(), shard.GetClusterMetadata()),
+		taskPollerManager:    newPollerManager(shardContext.GetShardID(), shardContext.GetClusterMetadata()),
 		minTxAckedTaskID:     persistence.EmptyQueueMessageID,
 		shutdownChan:         make(chan struct{}),
 	}

@@ -29,14 +29,14 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
 )
 
 func MergeDLQ(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	replicationDLQHandler replication.DLQHandler,
 ) (*historyservice.MergeDLQMessagesResponse, error) {
 	_, ok := shard.GetClusterMetadata().GetAllClusterInfo()[request.GetSourceCluster()]

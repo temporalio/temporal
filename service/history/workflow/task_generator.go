@@ -38,10 +38,12 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -68,7 +70,7 @@ type (
 			workflowTaskScheduledEventID int64,
 		) error
 		GenerateScheduleSpeculativeWorkflowTaskTasks(
-			workflowTask *WorkflowTaskInfo,
+			workflowTask *historyi.WorkflowTaskInfo,
 		) error
 		GenerateStartWorkflowTaskTasks(
 			workflowTaskScheduledEventID int64,
@@ -107,7 +109,7 @@ type (
 
 	TaskGeneratorImpl struct {
 		namespaceRegistry namespace.Registry
-		mutableState      MutableState
+		mutableState      historyi.MutableState
 		config            *configs.Config
 		archivalMetadata  archiver.ArchivalMetadata
 	}
@@ -119,7 +121,7 @@ var _ TaskGenerator = (*TaskGeneratorImpl)(nil)
 
 func NewTaskGenerator(
 	namespaceRegistry namespace.Registry,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	config *configs.Config,
 	archivalMetadata archiver.ArchivalMetadata,
 ) *TaskGeneratorImpl {
@@ -300,30 +302,30 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	if err != nil {
 		return err
 	}
+
 	for _, op := range opLog {
-		transitionOp, ok := op.(hsm.TransitionOperation)
-		if !ok {
-			continue
-		}
-
-		node, err := tree.Child(transitionOp.Path())
-		if err != nil {
-			return err
-		}
-
-		for _, task := range transitionOp.Output.Tasks {
-			// since this method is called after transition history is updated for the current transition,
-			// we can safely call generateSubStateMachineTask which sets MutableStateVersionedTransition
-			// to the last versioned transition in StateMachineRef
-			if err := generateSubStateMachineTask(
-				r.mutableState,
-				stateMachineRegistry,
-				node,
-				transitionOp.Path(),
-				transitionOp.Output.TransitionCount,
-				task,
-			); err != nil {
+		switch transitionOp := op.(type) {
+		case hsm.DeleteOperation:
+			deleteStateMachineTimersByPath(r.mutableState.GetExecutionInfo(), transitionOp.Path())
+		case hsm.TransitionOperation:
+			node, err := tree.Child(transitionOp.Path())
+			if err != nil {
 				return err
+			}
+			for _, task := range transitionOp.Output.Tasks {
+				// since this method is called after transition history is updated for the current transition,
+				// we can safely call generateSubStateMachineTask which sets MutableStateVersionedTransition
+				// to the last versioned transition in StateMachineRef
+				if err := generateSubStateMachineTask(
+					r.mutableState,
+					stateMachineRegistry,
+					node,
+					transitionOp.Path(),
+					transitionOp.Output.TransitionCount,
+					task,
+				); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -465,7 +467,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 //  1. Always create ScheduleToStart timeout timer task (even for normal task queue).
 //  2. Don't create transfer task to push WT to matching.
 func (r *TaskGeneratorImpl) GenerateScheduleSpeculativeWorkflowTaskTasks(
-	workflowTask *WorkflowTaskInfo,
+	workflowTask *historyi.WorkflowTaskInfo,
 ) error {
 
 	var scheduleToStartTimeout time.Duration
@@ -757,16 +759,16 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 			Version:     lastItem.GetVersion(),
 			Priority:    enumsspb.TASK_PRIORITY_LOW,
 		}}
-		if r.mutableState.IsTransitionHistoryEnabled() {
+		if r.mutableState.IsTransitionHistoryEnabled() &&
+			// even though current cluster may enabled state transition, but transition history can be cleared
+			// by processing a replication task from a cluster that has state transition disabled
+			len(executionInfo.TransitionHistory) > 0 {
+
 			transitionHistory := executionInfo.TransitionHistory
-			if len(transitionHistory) == 0 {
-				// TODO: Handle the case where state-based replication is re-enabled.
-				return nil, 0, serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
-			}
 			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 				WorkflowKey:         workflowKey,
 				Priority:            enumsspb.TASK_PRIORITY_LOW,
-				VersionedTransition: transitionHistory[len(transitionHistory)-1],
+				VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
 				FirstEventID:        executionInfo.LastFirstEventId,
 				FirstEventVersion:   lastItem.Version,
 				NextEventID:         lastItem.GetEventId() + 1,
@@ -801,16 +803,16 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		})
 	}
 
-	if r.mutableState.IsTransitionHistoryEnabled() {
+	if r.mutableState.IsTransitionHistoryEnabled() &&
+		// even though current cluster may enabled state transition, but transition history can be cleared
+		// by processing a replication task from a cluster that has state transition disabled
+		len(executionInfo.TransitionHistory) > 0 {
+
 		transitionHistory := executionInfo.TransitionHistory
-		if len(transitionHistory) == 0 {
-			// TODO: Handle the case where state-based replication is re-enabled.
-			return nil, 0, serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
-		}
 		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 			WorkflowKey:         workflowKey,
 			Priority:            enumsspb.TASK_PRIORITY_LOW,
-			VersionedTransition: transitionHistory[len(transitionHistory)-1],
+			VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
 			FirstEventID:        executionInfo.LastFirstEventId,
 			FirstEventVersion:   lastItem.GetVersion(),
 			NextEventID:         lastItem.GetEventId() + 1,
@@ -855,7 +857,7 @@ func (r *TaskGeneratorImpl) archivalEnabled() bool {
 }
 
 func generateSubStateMachineTask(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	stateMachineRegistry *hsm.Registry,
 	node *hsm.Node,
 	subStateMachinePath []hsm.Key,
@@ -879,11 +881,7 @@ func generateSubStateMachineTask(
 	}
 	machineLastUpdateVersionedTransition := node.InternalRepr().GetLastUpdateVersionedTransition()
 
-	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
-	var currentVersionedTransition *persistencespb.VersionedTransition
-	if len(transitionHistory) > 0 {
-		currentVersionedTransition = transitionHistory[len(transitionHistory)-1]
-	}
+	currentVersionedTransition := mutableState.CurrentVersionedTransition()
 	ref := &persistencespb.StateMachineRef{
 		Path:                                 ppath,
 		MutableStateVersionedTransition:      currentVersionedTransition,
@@ -925,4 +923,37 @@ func generateSubStateMachineTask(
 	}
 
 	return nil
+}
+
+func deleteStateMachineTimersByPath(execInfo *persistencespb.WorkflowExecutionInfo, path []hsm.Key) {
+	trimmedTimers := make([]*persistencespb.StateMachineTimerGroup, 0, len(execInfo.StateMachineTimers))
+
+	for _, group := range execInfo.StateMachineTimers {
+		trimmedInfos := make([]*persistencespb.StateMachineTaskInfo, 0, len(group.Infos))
+		for _, info := range group.GetInfos() {
+			if !isPathAffectedByDelete(path, info.GetRef().GetPath()) {
+				trimmedInfos = append(trimmedInfos, info)
+			}
+		}
+		if len(trimmedInfos) > 0 {
+			trimmedTimers = append(trimmedTimers, &persistencespb.StateMachineTimerGroup{
+				Infos:     trimmedInfos,
+				Deadline:  group.Deadline,
+				Scheduled: group.Scheduled,
+			})
+		}
+	}
+	execInfo.StateMachineTimers = trimmedTimers
+}
+
+func isPathAffectedByDelete(deletePath []hsm.Key, timerPath []*persistencespb.StateMachineKey) bool {
+	if len(deletePath) > len(timerPath) {
+		return false
+	}
+	for i := range deletePath {
+		if deletePath[i].Type != timerPath[i].GetType() || deletePath[i].ID != timerPath[i].GetId() {
+			return false
+		}
+	}
+	return true
 }

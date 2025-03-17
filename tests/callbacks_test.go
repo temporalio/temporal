@@ -314,6 +314,23 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 					err = nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional error")
 				}
 				ch.requestCompleteCh <- err
+
+				getHistoryResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(
+					ctx,
+					&workflowservice.GetWorkflowExecutionHistoryRequest{
+						Namespace: s.Namespace().String(),
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: request.WorkflowId,
+						},
+						MaximumPageSize: 1, // only interested in the start event
+					},
+				)
+				s.NoError(err)
+				s.Len(getHistoryResponse.History.Events, 1)
+				startEvent := getHistoryResponse.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
+				s.NotNil(startEvent)
+				s.ProtoElementsMatch(request.CompletionCallbacks, startEvent.CompletionCallbacks)
+
 				s.EventuallyWithT(func(col *assert.CollectT) {
 					description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, "")
 					assert.NoError(col, err)

@@ -119,10 +119,7 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 		})
 	})
 	if err != nil {
-		return fmt.Errorf(
-			"unable to transition Executor to Executing state: %w",
-			err,
-		)
+		return err
 	}
 
 	// Write Generator internal state, flushing the high water mark to persistence.

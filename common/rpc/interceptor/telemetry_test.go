@@ -25,6 +25,7 @@
 package interceptor
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -325,22 +327,57 @@ func TestHandleError(t *testing.T) {
 			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 		},
 		{
-			name:                      "resource-exhausted",
-			err:                       serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED, "resource exhausted"),
+			name: "resource-exhausted-system",
+			err: &serviceerror.ResourceExhausted{
+				Message: "resource exhausted",
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			},
 			expectLogging:             false,
-			ServiceFailuresCount:      0,
+			ServiceFailuresCount:      1,
 			ResourceExhaustedCount:    1,
 			ServiceErrorWithTypeCount: 1,
 			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		},
 		{
-			name:                      "resource-exhausted",
-			err:                       serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED, "resource exhausted"),
+			name: "resource-exhausted-namespace",
+			err: &serviceerror.ResourceExhausted{
+				Message: "resource exhausted",
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			},
 			expectLogging:             true,
 			ServiceFailuresCount:      0,
 			ResourceExhaustedCount:    1,
 			ServiceErrorWithTypeCount: 1,
 			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		},
+		{
+			name:                      "canceled",
+			err:                       context.Canceled,
+			expectLogging:             false,
+			ServiceFailuresCount:      0,
+			ResourceExhaustedCount:    0,
+			ServiceErrorWithTypeCount: 1,
+			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		},
+		{
+			name:                      "deadline-exceeded",
+			err:                       context.DeadlineExceeded,
+			expectLogging:             true,
+			ServiceFailuresCount:      1,
+			ResourceExhaustedCount:    0,
+			ServiceErrorWithTypeCount: 1,
+			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		},
+		{
+			name:                      "shard-ownership-lost",
+			err:                       serviceerrors.NewShardOwnershipLost("shard ownership lost", "hostname"),
+			expectLogging:             true,
+			ServiceFailuresCount:      1,
+			ResourceExhaustedCount:    0,
+			ServiceErrorWithTypeCount: 1,
+			logAllErrors:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		},
 	}
 

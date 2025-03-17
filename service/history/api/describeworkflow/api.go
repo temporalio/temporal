@@ -50,7 +50,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -80,7 +80,7 @@ func clonePayloadMap(source map[string]*commonpb.Payload) map[string]*commonpb.P
 func Invoke(
 	ctx context.Context,
 	req *historyservice.DescribeWorkflowExecutionRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	persistenceVisibilityMgr manager.VisibilityManager,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
@@ -432,10 +432,12 @@ func buildPendingNexusOperationInfo(
 	}
 
 	return &workflowpb.PendingNexusOperationInfo{
-		Endpoint:                op.Endpoint,
-		Service:                 op.Service,
-		Operation:               op.Operation,
-		OperationId:             op.OperationId,
+		Endpoint:  op.Endpoint,
+		Service:   op.Service,
+		Operation: op.Operation,
+		// TODO(bergundy): Remove this fallback after the 1.27 release.
+		OperationId:             op.OperationToken,
+		OperationToken:          op.OperationToken,
 		ScheduledEventId:        scheduledEventID,
 		ScheduleToCloseTimeout:  op.ScheduleToCloseTimeout,
 		ScheduledTime:           op.ScheduledTime,

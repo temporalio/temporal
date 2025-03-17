@@ -240,6 +240,28 @@ func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestSQLiteTaskQueueUserDataSuite(t *testing.T) {
+	cfg := NewSQLiteMemoryConfig()
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+		metrics.NoopMetricsHandler,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewTaskQueueUserDataSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
 func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
 	cfg := NewSQLiteFileConfig()
 	SetupSQLiteDatabase(t, cfg)
@@ -388,6 +410,32 @@ func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 	}()
 
 	s := NewTaskQueueTaskSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileTaskQueueUserDataSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(t, cfg)
+	defer func() {
+		assert.NoError(t, os.Remove(cfg.DatabaseName))
+	}()
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+		metrics.NoopMetricsHandler,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewTaskQueueUserDataSuite(t, taskQueueStore, logger)
 	suite.Run(t, s)
 }
 
@@ -1139,7 +1187,7 @@ func TestSQLiteTransactionContextCancellation(t *testing.T) {
 	cancel()
 
 	err = tx.Commit()
-	assert.ErrorAs(t, err, &context.Canceled)
+	assert.ErrorIs(t, err, context.Canceled)
 
 	// Check if we still have a connection to the db.
 	_, err = db.LockTaskQueues(context.Background(), sqlplugin.TaskQueuesFilter{

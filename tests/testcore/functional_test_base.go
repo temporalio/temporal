@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/environment"
 	"go.uber.org/fx"
@@ -83,17 +84,14 @@ type (
 
 		Logger log.Logger
 
-		// Test cluster configuration.
-		testClusterFactory TestClusterFactory
-		testCluster        *TestCluster
-		testClusterConfig  *TestClusterConfig
-		frontendClient     workflowservice.WorkflowServiceClient
-		adminClient        adminservice.AdminServiceClient
-		operatorClient     operatorservice.OperatorServiceClient
-		httpAPIAddress     string
-		namespace          namespace.Name
-		namespaceID        namespace.ID
-		foreignNamespace   namespace.Name
+		testCluster *TestCluster
+		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
+		testClusterConfig *TestClusterConfig
+
+		namespace   namespace.Name
+		namespaceID namespace.ID
+		// TODO (alex): rename to externalNamespace
+		foreignNamespace namespace.Name
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
@@ -146,19 +144,19 @@ func (s *FunctionalTestBase) GetTestClusterConfig() *TestClusterConfig {
 }
 
 func (s *FunctionalTestBase) FrontendClient() workflowservice.WorkflowServiceClient {
-	return s.frontendClient
+	return s.testCluster.FrontendClient()
 }
 
 func (s *FunctionalTestBase) AdminClient() adminservice.AdminServiceClient {
-	return s.adminClient
+	return s.testCluster.AdminClient()
 }
 
 func (s *FunctionalTestBase) OperatorClient() operatorservice.OperatorServiceClient {
-	return s.operatorClient
+	return s.testCluster.OperatorClient()
 }
 
 func (s *FunctionalTestBase) HttpAPIAddress() string {
-	return s.httpAPIAddress
+	return s.testCluster.Host().FrontendHTTPAddress()
 }
 
 func (s *FunctionalTestBase) Namespace() namespace.Name {
@@ -182,6 +180,13 @@ func (s *FunctionalTestBase) SetupSuite() {
 }
 
 func (s *FunctionalTestBase) TearDownSuite() {
+	// NOTE: We can't make s.Logger a testlogger.TestLogger because of AcquireShardSuiteBase.
+	if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
+		// Before we tear down the cluster, we disable the test logger.
+		// This prevents cluster teardown errors from failing the test; and log spam.
+		tl.Close()
+	}
+
 	s.TearDownCluster()
 }
 
@@ -194,9 +199,16 @@ func (s *FunctionalTestBase) SetupSuiteWithDefaultCluster(options ...TestCluster
 func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, options ...TestClusterOption) {
 	params := ApplyTestClusterOptions(options)
 
-	// Logger might be already set by the test suite.
+	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
 	if s.Logger == nil {
-		s.Logger = log.NewTestLogger()
+		tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+		// Instead of panic'ing immediately, TearDownTest will check if the test logger failed
+		// after each test completed. This is better since otherwise is would fail inside
+		// the server and not the test, creating a lot of noise and possibly stuck tests.
+		testlogger.DontPanicOnError(tl)
+		// Fail test when an assertion fails (see `softassert` package).
+		tl.Expect(testlogger.Error, ".*", tag.FailedAssertion)
+		s.Logger = tl
 	}
 
 	// Setup test cluster.
@@ -212,14 +224,16 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 	if s.testClusterConfig.ESConfig != nil {
 		s.testClusterConfig.DynamicConfigOverrides[dynamicconfig.SecondaryVisibilityWritingMode.Key()] = visibility.SecondaryVisibilityWritingModeDual
 	}
+	// Enable raw history for functional tests.
+	// TODO (prathyush): remove this after setting it to true by default.
+	s.testClusterConfig.DynamicConfigOverrides[dynamicconfig.SendRawHistoryBetweenInternalServices.Key()] = true
 
 	s.testClusterConfig.ServiceFxOptions = params.ServiceOptions
 	s.testClusterConfig.EnableMetricsCapture = true
 	s.testClusterConfig.EnableArchival = params.ArchivalEnabled
 
-	s.testClusterFactory = NewTestClusterFactory()
-
-	s.testCluster, err = s.testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
+	testClusterFactory := NewTestClusterFactory()
+	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
 	s.Require().NoError(err)
 
 	// Setup test cluster namespaces.
@@ -230,12 +244,6 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(clusterConfigFile string, opt
 	s.foreignNamespace = namespace.Name(RandomizeStr("foreign-namespace"))
 	_, err = s.RegisterNamespace(s.ForeignNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
-
-	// Setup test cluster clients.
-	s.frontendClient = s.testCluster.FrontendClient()
-	s.adminClient = s.testCluster.AdminClient()
-	s.operatorClient = s.testCluster.OperatorClient()
-	s.httpAPIAddress = s.testCluster.Host().FrontendHTTPAddress()
 }
 
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
@@ -248,6 +256,7 @@ func (s *FunctionalTestBase) SetupTest() {
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
+	s.checkNoUnexpectedErrorLogs() // make sure the previous sub test was cleaned up properly
 	s.initAssertions()
 }
 
@@ -355,6 +364,25 @@ func (s *FunctionalTestBase) TearDownCluster() {
 	}
 }
 
+// **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
+func (s *FunctionalTestBase) TearDownTest() {
+	s.checkNoUnexpectedErrorLogs()
+}
+
+// **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
+func (s *FunctionalTestBase) TearDownSubTest() {
+	s.checkNoUnexpectedErrorLogs()
+}
+
+func (s *FunctionalTestBase) checkNoUnexpectedErrorLogs() {
+	if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
+		if tl.ResetFailureStatus() {
+			s.Fail(`Failing test as unexpected error logs were found.
+Look for 'Unexpected Error log encountered'.`)
+		}
+	}
+}
+
 // Register namespace using persistence API because:
 //  1. The Retention period is set to 0 for archival tests, and this can't be done through FE,
 //  2. Update search attributes would require an extra API call,
@@ -421,7 +449,7 @@ func (s *FunctionalTestBase) MarkNamespaceAsDeleted(
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
-	_, err := s.frontendClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err := s.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: nsName.String(),
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
 			State: enumspb.NAMESPACE_STATE_DELETED,
@@ -433,7 +461,7 @@ func (s *FunctionalTestBase) MarkNamespaceAsDeleted(
 
 func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
 	return func() []*historypb.HistoryEvent {
-		historyResponse, err := s.frontendClient.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:       namespace,
 			Execution:       execution,
 			MaximumPageSize: 5, // Use small page size to force pagination code path
@@ -442,7 +470,7 @@ func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonp
 
 		events := historyResponse.History.Events
 		for historyResponse.NextPageToken != nil {
-			historyResponse, err = s.frontendClient.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			historyResponse, err = s.FrontendClient().GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace:     namespace,
 				Execution:     execution,
 				NextPageToken: historyResponse.NextPageToken,
@@ -566,7 +594,7 @@ func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{
 // TODO (alex): change to nsName namespace.Name
 func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
-	_, err := s.frontendClient.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err := s.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         nsName,
 		WorkflowExecution: execution,
 		SignalName:        signalName,

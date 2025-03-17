@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -249,7 +250,7 @@ type (
 		mockEventsCache     *events.MockCache
 		mockNamespaceCache  *namespace.MockRegistry
 		mockTaskGenerator   *workflow.MockTaskGenerator
-		mockMutableState    *workflow.MockMutableState
+		mockMutableState    *historyi.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
 		executionInfo *persistencespb.WorkflowExecutionInfo
@@ -276,7 +277,7 @@ func (s *activityOptionsSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskGenerator = workflow.NewMockTaskGenerator(s.controller)
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -321,14 +322,14 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
-	_, err := updateActivityOptions(s.validator, s.mockMutableState, request)
+	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request)
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrWorkflowCompleted)
 }
 
 func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservice.UpdateActivityOptionsByIdRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
 			ActivityOptions: &activitypb.ActivityOptions{
 				TaskQueue: &taskqueuepb.TaskQueue{Name: "task_queue_name"},
 			},
@@ -337,12 +338,13 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 					"TaskQueue.Name",
 				},
 			},
+			Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
 		},
 	}
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
-	_, err := updateActivityOptions(s.validator, s.mockMutableState, request)
+	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request)
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrActivityNotFound)
 }
@@ -398,13 +400,14 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
 
 	request := &historyservice.UpdateActivityOptionsRequest{
-		UpdateRequest: &workflowservice.UpdateActivityOptionsByIdRequest{
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
 			ActivityOptions: options,
 			UpdateMask:      updateMask,
+			Activity:        &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"},
 		},
 	}
 
-	response, err := updateActivityOptions(s.validator, s.mockMutableState, request)
+	response, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request)
 
 	s.NoError(err)
 	s.NotNil(response)

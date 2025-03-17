@@ -28,7 +28,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/service/history/consts"
 )
 
@@ -78,9 +77,6 @@ func SerializeRawHistoryToken(token *tokenspb.RawHistoryContinuation) ([]byte, e
 	if token == nil {
 		return nil, nil
 	}
-	if err := utf8validator.Validate(token, utf8validator.SourceRPCResponse); err != nil {
-		return nil, err
-	}
 	return token.Marshal()
 }
 
@@ -88,9 +84,6 @@ func SerializeRawHistoryToken(token *tokenspb.RawHistoryContinuation) ([]byte, e
 func DeserializeRawHistoryToken(bytes []byte) (*tokenspb.RawHistoryContinuation, error) {
 	token := &tokenspb.RawHistoryContinuation{}
 	err := token.Unmarshal(bytes)
-	if err == nil {
-		err = utf8validator.Validate(token, utf8validator.SourceRPCRequest)
-	}
 	return token, err
 }
 
@@ -99,9 +92,6 @@ func SerializeHistoryToken(token *tokenspb.HistoryContinuation) ([]byte, error) 
 	if token == nil {
 		return nil, nil
 	}
-	if err := utf8validator.Validate(token, utf8validator.SourceRPCResponse); err != nil {
-		return nil, err
-	}
 	return token.Marshal()
 }
 
@@ -109,9 +99,6 @@ func SerializeHistoryToken(token *tokenspb.HistoryContinuation) ([]byte, error) 
 func DeserializeHistoryToken(bytes []byte) (*tokenspb.HistoryContinuation, error) {
 	token := &tokenspb.HistoryContinuation{}
 	err := token.Unmarshal(bytes)
-	if err == nil {
-		err = utf8validator.Validate(token, utf8validator.SourceRPCRequest)
-	}
 	return token, err
 }
 

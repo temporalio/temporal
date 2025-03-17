@@ -202,11 +202,12 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) HasPollerAfter(buildId, acc
 }
 
 // LegacyDescribeTaskQueue mocks base method.
-func (m *MocktaskQueuePartitionManager) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+func (m *MocktaskQueuePartitionManager) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) (*matchingservice.DescribeTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LegacyDescribeTaskQueue", includeTaskQueueStatus)
 	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueueResponse)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // LegacyDescribeTaskQueue indicates an expected call of LegacyDescribeTaskQueue.
@@ -321,20 +322,6 @@ func (m *MocktaskQueuePartitionManager) Stop(arg0 unloadCause) {
 func (mr *MocktaskQueuePartitionManagerMockRecorder) Stop(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).Stop), arg0)
-}
-
-// String mocks base method.
-func (m *MocktaskQueuePartitionManager) String() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "String")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// String indicates an expected call of String.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) String() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "String", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).String))
 }
 
 // TimeSinceLastFanOut mocks base method.

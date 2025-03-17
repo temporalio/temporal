@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -365,8 +366,8 @@ func (s *executableTaskSuite) TestResend_NotFound() {
 		resendErr.EndEventId,
 		resendErr.EndEventVersion,
 	).Return(serviceerror.NewNotFound(""))
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(resendErr.NamespaceId),
 		resendErr.WorkflowId,
@@ -740,15 +741,15 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 		endEventId,
 		endEventVersion,
 	).Return(fetcher)
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(workflowKey.NamespaceID),
 		workflowKey.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
 	engine.EXPECT().BackfillHistoryEvents(
-		gomock.Any(), protomock.Eq(&shard.BackfillHistoryEventsRequest{
+		gomock.Any(), protomock.Eq(&historyi.BackfillHistoryEventsRequest{
 			WorkflowKey:         workflowKey,
 			SourceClusterName:   s.sourceCluster,
 			VersionedHistory:    s.task.replicationTask.VersionedTransition,
@@ -756,7 +757,7 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 			Events:              [][]*historypb.HistoryEvent{eventBatchOriginal1},
 		})).Return(nil)
 	engine.EXPECT().BackfillHistoryEvents(
-		gomock.Any(), protomock.Eq(&shard.BackfillHistoryEventsRequest{
+		gomock.Any(), protomock.Eq(&historyi.BackfillHistoryEventsRequest{
 			WorkflowKey:         workflowKey,
 			SourceClusterName:   s.sourceCluster,
 			VersionedHistory:    s.task.replicationTask.VersionedTransition,
@@ -804,19 +805,17 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
-	namespaceEntry := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:   namespaceID,
-				Name: namespaceName,
-			},
-			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: cluster.TestAlternativeClusterName,
-				Clusters: []string{
-					cluster.TestCurrentClusterName,
-					cluster.TestAlternativeClusterName,
-				},
+	namespaceEntry := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:   namespaceID,
+			Name: namespaceName,
+		},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 	})
@@ -831,18 +830,16 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
-	namespaceEntry := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:   namespaceID,
-				Name: namespaceName,
-			},
-			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: cluster.TestAlternativeClusterName,
-				Clusters: []string{
-					cluster.TestAlternativeClusterName,
-				},
+	namespaceEntry := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:   namespaceID,
+			Name: namespaceName,
+		},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestAlternativeClusterName,
 			},
 		},
 	})
@@ -857,20 +854,18 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
-	namespaceEntry := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:    namespaceID,
-				Name:  namespaceName,
-				State: enumspb.NAMESPACE_STATE_DELETED,
-			},
-			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: cluster.TestAlternativeClusterName,
-				Clusters: []string{
-					cluster.TestCurrentClusterName,
-					cluster.TestAlternativeClusterName,
-				},
+	namespaceEntry := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:    namespaceID,
+			Name:  namespaceName,
+			State: enumspb.NAMESPACE_STATE_DELETED,
+		},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
 			},
 		},
 	})
@@ -893,8 +888,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Error() {
 func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_SyncFromRemoteSuccess() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
-	namespaceEntry := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
+	namespaceEntry := namespace.FromPersistentState(
+		&persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespaceID,
 				Name: namespaceName,
@@ -907,8 +902,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 					cluster.TestAlternativeClusterName,
 				},
 			},
-		},
-	})
+		})
 	// enable feature flag
 	s.config.EnableReplicationEagerRefreshNamespace = dynamicconfig.GetBoolPropertyFn(true)
 
@@ -952,8 +946,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
 		},
 	)
-	namespaceEntryOld := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
+	namespaceEntryOld := namespace.FromPersistentState(
+		&persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespaceID,
 				Name: namespaceName,
@@ -967,10 +961,9 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 				},
 			},
 			FailoverVersion: 10,
-		},
-	})
-	namespaceEntryNew := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
+		})
+	namespaceEntryNew := namespace.FromPersistentState(
+		&persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespaceID,
 				Name: namespaceName,
@@ -984,8 +977,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 				},
 			},
 			FailoverVersion: 100,
-		},
-	})
+		})
 	// enable feature flag
 	s.config.EnableReplicationEagerRefreshNamespace = dynamicconfig.GetBoolPropertyFn(true)
 
@@ -1029,22 +1021,20 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80},
 		},
 	)
-	namespaceEntryOld := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{
-				Id:   namespaceID,
-				Name: namespaceName,
-			},
-			Config: &persistencespb.NamespaceConfig{},
-			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: cluster.TestAlternativeClusterName,
-				Clusters: []string{
-					cluster.TestCurrentClusterName,
-					cluster.TestAlternativeClusterName,
-				},
-			},
-			FailoverVersion: 10,
+	namespaceEntryOld := namespace.FromPersistentState(&persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:   namespaceID,
+			Name: namespaceName,
 		},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		FailoverVersion: 10,
 	})
 	// enable feature flag
 	s.config.EnableReplicationEagerRefreshNamespace = dynamicconfig.GetBoolPropertyFn(true)
@@ -1076,7 +1066,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 
 func (s *executableTaskSuite) TestMarkPoisonPill() {
 	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.namespaceId),
 		s.workflowId,
@@ -1095,7 +1085,7 @@ func (s *executableTaskSuite) TestMarkPoisonPill() {
 func (s *executableTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
 	s.task.markPoisonPillAttempts = MarkPoisonPillMaxAttempts - 1
 	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.namespaceId),
 		s.workflowId,
@@ -1164,8 +1154,8 @@ func (s *executableTaskSuite) TestSyncState() {
 		VersionedTransitionArtifact: versionedTransitionArtifact,
 	}, nil).Times(1)
 
-	shardContext := shard.NewMockContext(s.controller)
-	engine := shard.NewMockEngine(s.controller)
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(syncStateErr.NamespaceId),
 		syncStateErr.WorkflowId,

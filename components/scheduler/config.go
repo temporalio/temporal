@@ -37,10 +37,9 @@ type (
 		MinCatchupWindow                  time.Duration // Minimum for catchup window
 		MaxBufferSize                     int           // MaxBufferSize limits the number of buffered actions pending execution in total
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
-		RecentActionCount                 int           // How many recent actions are recorded in SchedulerInfo.
+		RecentActionCount                 int           // Number of recent actions taken (workflow execution results) recorded in the ScheduleInfo metadata.
 
 		// TODO - incomplete tweakables list
-
 	}
 
 	// State Machine Scheduler dynamic config, shared among all sub state machines.

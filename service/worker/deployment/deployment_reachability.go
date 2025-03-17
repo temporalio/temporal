@@ -29,8 +29,8 @@ import (
 	"fmt"
 	"time"
 
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -99,10 +99,11 @@ func makeCountRequest(
 
 func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 	var statusFilter string
-	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(&deploymentpb.Deployment{
-		SeriesName: seriesName,
-		BuildId:    buildID,
-	}))
+	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(
+		worker_versioning.WorkerDeploymentVersionToString(&deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: seriesName,
+			BuildId:        buildID,
+		})))
 	if open {
 		statusFilter = "= 'Running'"
 	} else {

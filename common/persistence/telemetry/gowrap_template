@@ -26,11 +26,19 @@ func new{{upFirst $decorator}} (
         {{ $methodIdent := (printf "%s.%s" $.Interface.Name $method.Name) }}
         // {{$method.Name}} wraps {{ (printf "%s.%s" $.Interface.Name $method.Name) }}.
         func (d {{$decorator}}) {{$method.Declaration}} {
-            ctx, span := d.tracer.Start(ctx, "{{ printf "persistence.%s/%s" $.Interface.Name $method.Name }}")
+            ctx, span := d.tracer.Start(
+                ctx,
+                "{{ printf "persistence.%s/%s" $.Interface.Name $method.Name }}",
+                trace.WithAttributes(
+                    attribute.Key("persistence.store").String("{{ $.Interface.Name }}"),
+                    attribute.Key("persistence.method").String("{{ $method.Name }}"),
+                ))
             defer span.End()
 
-            span.SetAttributes(attribute.Key("persistence.store").String("{{ $.Interface.Name }}"))
-            span.SetAttributes(attribute.Key("persistence.method").String("{{ $method.Name }}"))
+            if deadline, ok := ctx.Deadline(); ok {
+                span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+                span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+            }
 
             {{$method.ResultsNames}} = d.{{$.Interface.Name}}.{{$method.Call}}
             {{- if $method.ReturnsError}}

@@ -522,53 +522,66 @@ func (d *MatchingTaskStore) UpdateTaskQueueUserData(
 ) error {
 	batch := d.Session.NewBatch(gocql.UnloggedBatch).WithContext(ctx)
 
-	if request.Version == 0 {
-		batch.Query(templateInsertTaskQueueUserDataQuery,
-			request.NamespaceID,
-			request.TaskQueue,
-			request.UserData.Data,
-			request.UserData.EncodingType.String(),
-		)
-	} else {
-		batch.Query(templateUpdateTaskQueueUserDataQuery,
-			request.UserData.Data,
-			request.UserData.EncodingType.String(),
-			request.Version+1,
-			request.NamespaceID,
-			request.TaskQueue,
-			request.Version,
-		)
-	}
-	for _, buildId := range request.BuildIdsAdded {
-		batch.Query(templateInsertBuildIdTaskQueueMappingQuery, request.NamespaceID, buildId, request.TaskQueue)
-	}
-	for _, buildId := range request.BuildIdsRemoved {
-		batch.Query(templateDeleteBuildIdTaskQueueMappingQuery, request.NamespaceID, buildId, request.TaskQueue)
+	for taskQueue, update := range request.Updates {
+		if update.Version == 0 {
+			batch.Query(templateInsertTaskQueueUserDataQuery,
+				request.NamespaceID,
+				taskQueue,
+				update.UserData.Data,
+				update.UserData.EncodingType.String(),
+			)
+		} else {
+			batch.Query(templateUpdateTaskQueueUserDataQuery,
+				update.UserData.Data,
+				update.UserData.EncodingType.String(),
+				update.Version+1,
+				request.NamespaceID,
+				taskQueue,
+				update.Version,
+			)
+		}
+		for _, buildId := range update.BuildIdsAdded {
+			batch.Query(templateInsertBuildIdTaskQueueMappingQuery, request.NamespaceID, buildId, taskQueue)
+		}
+		for _, buildId := range update.BuildIdsRemoved {
+			batch.Query(templateDeleteBuildIdTaskQueueMappingQuery, request.NamespaceID, buildId, taskQueue)
+		}
 	}
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, previous)
-
+	for _, update := range request.Updates {
+		if update.Applied != nil {
+			*update.Applied = applied
+		}
+	}
 	if err != nil {
 		return gocql.ConvertError("UpdateTaskQueueUserData", err)
 	}
-
-	// We only care about the conflict in the first query
-	err = iter.Close()
-	if err != nil {
-		return gocql.ConvertError("UpdateTaskQueueUserData", err)
-	}
+	defer iter.Close()
 
 	if !applied {
-		var columns []string
-		for k, v := range previous {
-			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
+		// No error, but not applied. That means we had a conflict.
+		// Iterate through results to identify first conflicting row.
+		for {
+			name, nameErr := getTypedFieldFromRow[string]("task_queue_name", previous)
+			previousVersion, verErr := getTypedFieldFromRow[int64]("version", previous)
+			update, hasUpdate := request.Updates[name]
+			if nameErr == nil && verErr == nil && hasUpdate && update.Version != previousVersion {
+				if update.Conflicting != nil {
+					*update.Conflicting = true
+				}
+				return &p.ConditionFailedError{
+					Msg: fmt.Sprintf("Failed to update task queues: task queue %q version %d != %d",
+						name, update.Version, previousVersion),
+				}
+			}
+			clear(previous)
+			if !iter.MapScan(previous) {
+				break
+			}
 		}
-
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update task queue. name: %v, version: %v, columns: (%v)",
-				request.TaskQueue, request.Version, strings.Join(columns, ",")),
-		}
+		return &p.ConditionFailedError{Msg: "Failed to update task queues: unknown conflict"}
 	}
 
 	return nil

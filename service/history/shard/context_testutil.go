@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/future"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 )
@@ -56,7 +58,7 @@ type ContextTest struct {
 	MockEventsCache *events.MockCache
 }
 
-var _ Context = (*ContextTest)(nil)
+var _ historyi.ShardContext = (*ContextTest)(nil)
 
 func NewTestContextWithTimeSource(
 	ctrl *gomock.Controller,
@@ -103,13 +105,13 @@ type ContextConfigOverrides struct {
 
 type StubContext struct {
 	ContextTest
-	engine Engine
+	engine historyi.Engine
 }
 
 func NewStubContext(
 	ctrl *gomock.Controller,
 	overrides ContextConfigOverrides,
-	engine Engine,
+	engine historyi.Engine,
 ) *StubContext {
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
 	eventsCache := events.NewMockCache(ctrl)
@@ -162,7 +164,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		queueMetricEmitter:  sync.Once{},
 
 		state:              contextStateAcquired,
-		engineFuture:       future.NewFuture[Engine](),
+		engineFuture:       future.NewFuture[historyi.Engine](),
 		shardInfo:          config.ShardInfo,
 		remoteClusterInfos: make(map[string]*remoteClusterInfo),
 		handoverNamespaces: make(map[namespace.Name]*namespaceHandOverInfo),
@@ -171,6 +173,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		timeSource:              t.TimeSource,
 		namespaceRegistry:       registry,
 		stateMachineRegistry:    hsm.NewRegistry(),
+		chasmRegistry:           chasm.NewRegistry(),
 		persistenceShardManager: t.GetShardManager(),
 		clientBean:              t.GetClientBean(),
 		saProvider:              t.GetSearchAttributesProvider(),
@@ -196,7 +199,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 }
 
 // SetEngineForTest sets s.engine. Only used by tests.
-func (s *ContextTest) SetEngineForTesting(engine Engine) {
+func (s *ContextTest) SetEngineForTesting(engine historyi.Engine) {
 	s.engineFuture.Set(engine, nil)
 }
 
@@ -227,6 +230,10 @@ func (s *ContextTest) SetStateMachineRegistry(reg *hsm.Registry) {
 	s.stateMachineRegistry = reg
 }
 
+func (s *ContextTest) SetChasmRegistry(reg *chasm.Registry) {
+	s.chasmRegistry = reg
+}
+
 // StopForTest calls FinishStop(). In general only the controller
 // should call that, but integration tests need to do it also to clean up any
 // background acquireShard goroutines that may exist.
@@ -234,6 +241,6 @@ func (s *ContextTest) StopForTest() {
 	s.FinishStop()
 }
 
-func (s *StubContext) GetEngine(_ context.Context) (Engine, error) {
+func (s *StubContext) GetEngine(_ context.Context) (historyi.Engine, error) {
 	return s.engine, nil
 }

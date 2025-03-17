@@ -52,18 +52,15 @@ func prettyPrintAny(b *strings.Builder, v reflect.Value, depth int) {
 	case reflect.Func:
 		panic("Not implemented")
 	case reflect.Interface:
-		prettyPrintStruct(b, v.Elem(), depth)
+		if v.Elem().Type().Kind() == reflect.Pointer {
+			prettyPrintPointer(b, v.Elem(), depth)
+		} else {
+			prettyPrintStruct(b, v.Elem(), depth)
+		}
 	case reflect.Map:
 		prettyPrintMap(b, v, depth)
 	case reflect.Pointer:
-		if v.IsValid() {
-			if v.IsNil() {
-				b.WriteString("nil")
-			} else {
-				b.WriteByte('&')
-				prettyPrintStruct(b, v.Elem(), depth)
-			}
-		}
+		prettyPrintPointer(b, v, depth)
 	case reflect.Slice:
 		prettyPrintSlice(b, v, depth)
 	case reflect.Struct:
@@ -78,6 +75,7 @@ func prettyPrintMap(b *strings.Builder, v reflect.Value, depth int) {
 	fmt.Fprintf(b, "map[%s]%s", v.Type().Key().Name(), v.Type().Elem().Name())
 	if v.Len() == 0 {
 		b.WriteString("{}")
+		return
 	}
 
 	b.WriteByte('{')
@@ -90,12 +88,13 @@ func prettyPrintMap(b *strings.Builder, v reflect.Value, depth int) {
 		prettyPrintAny(b, iter.Value(), depth+1)
 	}
 	indent(b, depth)
-	b.WriteByte('\n')
+	b.WriteByte('}')
 }
 
 func prettyPrintSlice(b *strings.Builder, v reflect.Value, depth int) {
 	if v.Len() == 0 {
 		b.WriteString("[]")
+		return
 	}
 	b.WriteByte('[')
 	for j := 0; j < v.Len(); j++ {
@@ -128,6 +127,18 @@ func prettyPrintStruct(b *strings.Builder, v reflect.Value, depth int) {
 	}
 	indent(b, depth)
 	b.WriteString("}")
+}
+
+func prettyPrintPointer(b *strings.Builder, v reflect.Value, depth int) {
+	if !v.IsValid() {
+		return
+	}
+	if v.IsNil() {
+		b.WriteString("nil")
+	} else {
+		b.WriteByte('&')
+		prettyPrintStruct(b, v.Elem(), depth)
+	}
 }
 
 func indent(b *strings.Builder, depth int) {

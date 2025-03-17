@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -49,14 +49,14 @@ type (
 			ctx context.Context,
 			nsID namespace.ID,
 			we *commonpb.WorkflowExecution,
-			ms workflow.MutableState,
+			ms historyi.MutableState,
 		) error
 		DeleteWorkflowExecution(
 			ctx context.Context,
 			nsID namespace.ID,
 			we *commonpb.WorkflowExecution,
-			weCtx workflow.Context,
-			ms workflow.MutableState,
+			weCtx historyi.WorkflowContext,
+			ms historyi.MutableState,
 			forceDeleteFromOpenVisibility bool,
 			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
@@ -64,14 +64,14 @@ type (
 			ctx context.Context,
 			nsID namespace.ID,
 			we *commonpb.WorkflowExecution,
-			weCtx workflow.Context,
-			ms workflow.MutableState,
+			weCtx historyi.WorkflowContext,
+			ms historyi.MutableState,
 			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
 	}
 
 	DeleteManagerImpl struct {
-		shardContext      shard.Context
+		shardContext      historyi.ShardContext
 		workflowCache     wcache.Cache
 		config            *configs.Config
 		metricsHandler    metrics.Handler
@@ -83,7 +83,7 @@ type (
 var _ DeleteManager = (*DeleteManagerImpl)(nil)
 
 func NewDeleteManager(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	cache wcache.Cache,
 	config *configs.Config,
 	timeSource clock.TimeSource,
@@ -105,7 +105,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ctx context.Context,
 	nsID namespace.ID,
 	we *commonpb.WorkflowExecution,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 ) error {
 
 	taskGenerator := workflow.GetTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
@@ -132,8 +132,8 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	nsID namespace.ID,
 	we *commonpb.WorkflowExecution,
-	weCtx workflow.Context,
-	ms workflow.MutableState,
+	weCtx historyi.WorkflowContext,
+	ms historyi.MutableState,
 	forceDeleteFromOpenVisibility bool,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
@@ -145,8 +145,8 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	ctx context.Context,
 	nsID namespace.ID,
 	we *commonpb.WorkflowExecution,
-	weCtx workflow.Context,
-	ms workflow.MutableState,
+	weCtx historyi.WorkflowContext,
+	ms historyi.MutableState,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
@@ -157,8 +157,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	we *commonpb.WorkflowExecution,
-	weCtx workflow.Context,
-	ms workflow.MutableState,
+	weCtx historyi.WorkflowContext,
+	ms historyi.MutableState,
 	forceDeleteFromOpenVisibility bool, //revive:disable-line:flag-parameter
 	stage *tasks.DeleteWorkflowExecutionStage,
 	metricsHandler metrics.Handler,

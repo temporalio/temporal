@@ -33,7 +33,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -81,6 +80,7 @@ const (
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
 		`child_executions_map, child_executions_map_encoding, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
+		`chasm_node_map, chasm_node_map_encoding, ` +
 		`checksum, checksum_encoding, db_record_version ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -233,6 +233,26 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
+	templateResetChasmNodeQuery = `UPDATE executions ` +
+		`SET chasm_node_map = ?, chasm_node_map_encoding = ? ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
+	templateUpdateChasmNodeQuery = `UPDATE executions ` +
+		`SET chasm_node_map[ ? ] = ?, chasm_node_map_encoding = ? ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
 	templateResetSignalInfoQuery = `UPDATE executions ` +
 		`SET signal_map = ?, signal_map_encoding = ? ` +
 		`WHERE shard_id = ? ` +
@@ -324,6 +344,16 @@ const (
 		`and task_id = ? `
 
 	templateDeleteSignalInfoQuery = `DELETE signal_map[ ? ] ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
+	templateDeleteChasmNodeQuery = `DELETE chasm_node_map[ ? ] ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -542,6 +572,20 @@ func (d *MutableStateStore) GetWorkflowExecution(
 	state.SignalInfos = signalInfos
 	state.SignalRequestedIDs = gocql.UUIDsToStringSlice(result["signal_requested"])
 
+	chasmNodeBlobs := make(map[string]*commonpb.DataBlob)
+	chasmNodeEncoding, ok := result["chasm_node_map_encoding"].(string)
+	if !ok {
+		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map_encoding type")
+	}
+	chasmNodeBytes, ok := result["chasm_node_map"].(map[string][]byte)
+	if !ok {
+		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map type")
+	}
+	for key, value := range chasmNodeBytes {
+		chasmNodeBlobs[key] = p.NewDataBlob(value, chasmNodeEncoding)
+	}
+	state.ChasmNodes = chasmNodeBlobs
+
 	eList := result["buffered_events_list"].([]map[string]interface{})
 	bufferedEventsBlobs := make([]*commonpb.DataBlob, 0, len(eList))
 	for _, v := range eList {
@@ -622,6 +666,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 		} else {
 			lastWriteVersion := updateWorkflow.LastWriteVersion
 
+			// TODO: double encoding execution state? already in updateWorkflow.ExecutionStateBlob
 			executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(updateWorkflow.ExecutionState)
 			if err != nil {
 				return err
@@ -738,65 +783,36 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 
 	case p.ConflictResolveWorkflowModeUpdateCurrent:
 		executionState := resetWorkflow.ExecutionState
+		executionStateBlob := resetWorkflow.ExecutionStateBlob
 		lastWriteVersion := resetWorkflow.LastWriteVersion
 		if newWorkflow != nil {
 			lastWriteVersion = newWorkflow.LastWriteVersion
 			executionState = newWorkflow.ExecutionState
-		}
-		runID := executionState.RunId
-		createRequestID := executionState.CreateRequestId
-		state := executionState.State
-		status := executionState.Status
-
-		executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(&persistencespb.WorkflowExecutionState{
-			RunId:           runID,
-			CreateRequestId: createRequestID,
-			State:           state,
-			Status:          status,
-		})
-		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
+			executionStateBlob = newWorkflow.ExecutionStateBlob
 		}
 
 		if currentWorkflow != nil {
 			currentRunID = currentWorkflow.ExecutionState.RunId
-
-			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-				runID,
-				executionStateDatablob.Data,
-				executionStateDatablob.EncodingType.String(),
-				lastWriteVersion,
-				state,
-				shardID,
-				rowTypeExecution,
-				namespaceID,
-				workflowID,
-				permanentRunID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				currentRunID,
-			)
-
 		} else {
 			// reset workflow is current
 			currentRunID = resetWorkflow.ExecutionState.RunId
-
-			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-				runID,
-				executionStateDatablob.Data,
-				executionStateDatablob.EncodingType.String(),
-				lastWriteVersion,
-				state,
-				shardID,
-				rowTypeExecution,
-				namespaceID,
-				workflowID,
-				permanentRunID,
-				defaultVisibilityTimestamp,
-				rowTypeExecutionTaskID,
-				currentRunID,
-			)
 		}
+
+		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+			executionState.RunId,
+			executionStateBlob.Data,
+			executionStateBlob.EncodingType.String(),
+			lastWriteVersion,
+			executionState.State,
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			permanentRunID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			currentRunID,
+		)
 
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
@@ -890,7 +906,7 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 	} else if resp.RunID == runID {
 		return &p.CurrentWorkflowConditionFailedError{
 			Msg:              fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
-			RequestID:        "",
+			RequestIDs:       nil,
 			RunID:            "",
 			State:            enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,

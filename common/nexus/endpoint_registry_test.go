@@ -69,13 +69,13 @@ func TestGet(t *testing.T) {
 
 	// first long poll
 	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
-		PageSize:              int32(1000),
+		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
 	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
 		time.Sleep(20 * time.Millisecond)
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
-	}).MaxTimes(1)
+	}).AnyTimes()
 
 	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
@@ -109,13 +109,13 @@ func TestGetNotFound(t *testing.T) {
 
 	// first long poll
 	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), &matchingservice.ListNexusEndpointsRequest{
-		PageSize:              int32(1000),
+		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
 	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
 		time.Sleep(20 * time.Millisecond)
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
-	}).MaxTimes(1)
+	}).AnyTimes()
 
 	// readthrough
 	mocks.persistence.EXPECT().GetNexusEndpoint(gomock.Any(), &persistence.GetNexusEndpointRequest{ID: testEntry.Id}).Return(testEntry, nil)

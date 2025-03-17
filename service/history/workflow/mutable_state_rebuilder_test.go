@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -73,7 +74,7 @@ type (
 		mockEventsCache      *events.MockCache
 		mockNamespaceCache   *namespace.MockRegistry
 		mockTaskGenerator    *MockTaskGenerator
-		mockMutableState     *MockMutableState
+		mockMutableState     *historyi.MockMutableState
 		mockClusterMetadata  *cluster.MockMetadata
 		stateMachineRegistry *hsm.Registry
 
@@ -85,7 +86,7 @@ type (
 	}
 
 	testTaskGeneratorProvider struct {
-		mockMutableState  *MockMutableState
+		mockMutableState  *historyi.MockMutableState
 		mockTaskGenerator *MockTaskGenerator
 	}
 )
@@ -106,7 +107,7 @@ func (s *stateBuilderSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskGenerator = NewMockTaskGenerator(s.controller)
-	s.mockMutableState = NewMockMutableState(s.controller)
+	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -128,6 +129,7 @@ func (s *stateBuilderSuite) SetupTest() {
 	root, err := hsm.NewRoot(reg, StateMachineType, s.mockMutableState, make(map[string]*persistencespb.StateMachineMap), s.mockMutableState)
 	s.NoError(err)
 	s.mockMutableState.EXPECT().HSM().Return(root).AnyTimes()
+	s.mockMutableState.EXPECT().IsTransitionHistoryEnabled().Return(false).AnyTimes()
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
@@ -1032,7 +1034,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 			Attempt:             workflowTaskAttempt,
 		}},
 	}
-	wt := &WorkflowTaskInfo{
+	wt := &historyi.WorkflowTaskInfo{
 		Version:             event.GetVersion(),
 		ScheduledEventID:    event.GetEventId(),
 		StartedEventID:      common.EmptyEventID,
@@ -1082,7 +1084,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 			RequestId:        workflowTaskRequestID,
 		}},
 	}
-	wt := &WorkflowTaskInfo{
+	wt := &historyi.WorkflowTaskInfo{
 		Version:             event.GetVersion(),
 		ScheduledEventID:    scheduledEventID,
 		StartedEventID:      event.GetEventId(),
@@ -1092,7 +1094,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 		Attempt:             1,
 	}
 	s.mockMutableState.EXPECT().ApplyWorkflowTaskStartedEvent(
-		(*WorkflowTaskInfo)(nil), event.GetVersion(), scheduledEventID, event.GetEventId(), workflowTaskRequestID, timestamp.TimeValue(event.GetEventTime()),
+		(*historyi.WorkflowTaskInfo)(nil), event.GetVersion(), scheduledEventID, event.GetEventId(), workflowTaskRequestID, timestamp.TimeValue(event.GetEventTime()),
 		false, gomock.Any(), nil, int64(0),
 	).Return(wt, nil)
 	s.mockUpdateVersion(event)
@@ -1135,7 +1137,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskTimedOut() {
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	newScheduledEventID := int64(233)
 	s.executionInfo.TaskQueue = taskqueue.GetName()
-	s.mockMutableState.EXPECT().ApplyTransientWorkflowTaskScheduled().Return(&WorkflowTaskInfo{
+	s.mockMutableState.EXPECT().ApplyTransientWorkflowTaskScheduled().Return(&historyi.WorkflowTaskInfo{
 		Version:          version,
 		ScheduledEventID: newScheduledEventID,
 		TaskQueue:        taskqueue,
@@ -1179,7 +1181,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskFailed() {
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	newScheduledEventID := int64(233)
 	s.executionInfo.TaskQueue = taskqueue.GetName()
-	s.mockMutableState.EXPECT().ApplyTransientWorkflowTaskScheduled().Return(&WorkflowTaskInfo{
+	s.mockMutableState.EXPECT().ApplyTransientWorkflowTaskScheduled().Return(&historyi.WorkflowTaskInfo{
 		Version:          version,
 		ScheduledEventID: newScheduledEventID,
 		TaskQueue:        taskqueue,
@@ -2171,8 +2173,8 @@ func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
 }
 
 func (p *testTaskGeneratorProvider) NewTaskGenerator(
-	shardContext shard.Context,
-	mutableState MutableState,
+	shardContext historyi.ShardContext,
+	mutableState historyi.MutableState,
 ) TaskGenerator {
 	if mutableState == p.mockMutableState {
 		return p.mockTaskGenerator

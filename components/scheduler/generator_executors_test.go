@@ -98,14 +98,14 @@ func TestExecuteBufferTask_Basic(t *testing.T) {
 	require.NoError(t, err)
 
 	// Buffering should have resulted in buffered starts being applied to the
-	// Executor.
-	executorNode, err := schedulerNode.Child([]hsm.Key{scheduler.InvokerMachineKey})
+	// Invoker.
+	invokerNode, err := schedulerNode.Child([]hsm.Key{scheduler.InvokerMachineKey})
 	require.NoError(t, err)
-	executor, err := hsm.MachineData[scheduler.Invoker](executorNode)
+	invoker, err := hsm.MachineData[scheduler.Invoker](invokerNode)
 	require.NoError(t, err)
 
 	// We expect 5 buffered starts.
-	require.Equal(t, 5, len(executor.BufferedStarts))
+	require.Equal(t, 5, len(invoker.BufferedStarts))
 
 	// Generator's high water mark should have advanced.
 	generator, err = hsm.MachineData[scheduler.Generator](generatorNode)

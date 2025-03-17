@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -36,8 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 // maxResetRedirectCount is the number of times we follow the reset run ID to forward the request to the new parent.
@@ -52,7 +52,7 @@ const maxResetRedirectCount = 100
 func Invoke(
 	ctx context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RecordChildExecutionCompletedResponse, retError error) {
 	_, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
@@ -89,7 +89,7 @@ func Invoke(
 func recordChildWorkflowCompleted(
 	ctx context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (string, error) {
 	resetRunID := ""
@@ -98,7 +98,7 @@ func recordChildWorkflowCompleted(
 	err := api.GetAndUpdateWorkflowWithConsistencyCheck(
 		ctx,
 		request.Clock,
-		func(mutableState workflow.MutableState) bool {
+		func(mutableState historyi.MutableState) bool {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// current branch already closed, we won't perform any operation, pass the check
 				return true
@@ -153,6 +153,11 @@ func recordChildWorkflowCompleted(
 				return nil, consts.ErrChildExecutionNotFound
 			}
 
+			if request.GetChildFirstExecutionRunId() != "" && ci.GetStartedRunId() != request.GetChildFirstExecutionRunId() {
+				// this can happen when parent starts another child run in different branch
+				return nil, consts.ErrChildExecutionNotFound
+			}
+
 			completionEvent := request.CompletionEvent
 			switch completionEvent.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
@@ -188,7 +193,7 @@ func recordChildWorkflowCompleted(
 
 func recordStartedEventIfMissing(
 	ctx context.Context,
-	mutableState workflow.MutableState,
+	mutableState historyi.MutableState,
 	request *historyservice.RecordChildExecutionCompletedRequest,
 	ci *persistencespb.ChildExecutionInfo,
 ) error {
@@ -199,10 +204,17 @@ func recordStartedEventIfMissing(
 			return consts.ErrChildExecutionNotFound
 		}
 		initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+		execution := &commonpb.WorkflowExecution{
+			WorkflowId: request.GetChildExecution().GetWorkflowId(),
+			RunId:      request.GetChildExecution().GetRunId(),
+		}
+		if request.GetChildFirstExecutionRunId() != "" {
+			execution.RunId = request.GetChildFirstExecutionRunId()
+		}
 		// note values used here should not matter because the child info will be deleted
 		// when the response is recorded, so it should be fine e.g. that ci.Clock is nil
 		_, err = mutableState.AddChildWorkflowExecutionStartedEvent(
-			request.GetChildExecution(),
+			execution,
 			initiatedAttr.WorkflowType,
 			initiatedEvent.EventId,
 			initiatedAttr.Header,

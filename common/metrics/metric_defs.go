@@ -31,6 +31,7 @@ const (
 	ServiceRoleTagName          = "service_role"
 	CacheTypeTagName            = "cache_type"
 	FailureTagName              = "failure"
+	FailureSourceTagName        = "failure_source"
 	TaskCategoryTagName         = "task_category"
 	TaskTypeTagName             = "task_type"
 	TaskPriorityTagName         = "task_priority"
@@ -43,6 +44,8 @@ const (
 	httpStatusTagName           = "http_status"
 	nexusMethodTagName          = "method"
 	nexusEndpointTagName        = "nexus_endpoint"
+	nexusServiceTagName         = "nexus_service"
+	nexusOperationTagName       = "nexus_operation"
 	outcomeTagName              = "outcome"
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
@@ -598,10 +601,16 @@ var (
 		"service_requests",
 		WithDescription("The number of RPC requests received by the service."),
 	)
-	ServicePendingRequests                   = NewGaugeDef("service_pending_requests")
-	ServiceFailures                          = NewCounterDef("service_errors")
-	ServicePanic                             = NewCounterDef("service_panics")
-	ServiceErrorWithType                     = NewCounterDef("service_error_with_type")
+	ServicePendingRequests = NewGaugeDef("service_pending_requests")
+	ServiceFailures        = NewCounterDef(
+		"service_errors",
+		WithDescription("The number of unexpected service request errors."),
+	)
+	ServicePanic         = NewCounterDef("service_panics")
+	ServiceErrorWithType = NewCounterDef(
+		"service_error_with_type",
+		WithDescription("The number of all service request errors by error type."),
+	)
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
 	ServiceLatencyUserLatency                = NewTimerDef("service_latency_userlatency")
@@ -658,10 +667,6 @@ var (
 		"wf_too_many_pending_external_workflow_signals",
 		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending signals to external workflows to be exceeded. See https://t.mp/limits for more information."),
 	)
-	UTF8ValidationErrors = NewCounterDef(
-		"utf8_validation_errors",
-		WithDescription("Number of times the service encountered a proto message with invalid UTF-8 in a string field"),
-	)
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
@@ -700,6 +705,7 @@ var (
 	)
 	HostRPSLimit          = NewGaugeDef("host_rps_limit")
 	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
+	HandoverWaitLatency   = NewTimerDef("handover_wait_latency")
 
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")
@@ -827,6 +833,7 @@ var (
 	WorkflowExecutionUpdateRequestRateLimited            = NewCounterDef("workflow_update_request_rate_limited")
 	WorkflowExecutionUpdateTooMany                       = NewCounterDef("workflow_update_request_too_many")
 	WorkflowExecutionUpdateAborted                       = NewCounterDef("workflow_update_aborted")
+	WorkflowExecutionUpdateContinueAsNewSuggestions      = NewCounterDef("workflow_update_continue_as_new_suggestions")
 	WorkflowExecutionUpdateSentToWorker                  = NewCounterDef("workflow_update_sent_to_worker")
 	WorkflowExecutionUpdateSentToWorkerAgain             = NewCounterDef("workflow_update_sent_to_worker_again")
 	WorkflowExecutionUpdateWaitStageAccepted             = NewCounterDef("workflow_update_wait_stage_accepted")
@@ -892,6 +899,7 @@ var (
 	SignalInfoSize                        = NewBytesHistogramDef("signal_info_size")
 	SignalRequestIDSize                   = NewBytesHistogramDef("signal_request_id_size")
 	BufferedEventsSize                    = NewBytesHistogramDef("buffered_events_size")
+	ChasmTotalSize                        = NewBytesHistogramDef("chasm_total_size")
 	ActivityInfoCount                     = NewDimensionlessHistogramDef("activity_info_count")
 	TimerInfoCount                        = NewDimensionlessHistogramDef("timer_info_count")
 	ChildInfoCount                        = NewDimensionlessHistogramDef("child_info_count")
@@ -922,6 +930,12 @@ var (
 	ReplicationServiceError               = NewCounterDef("replication_service_error")
 	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
+	ReplicationTaskSendAttempt            = NewDimensionlessHistogramDef("replication_task_send_attempt")
+	ReplicationTaskSendError              = NewCounterDef("replication_task_send_error")
+	ReplicationTaskGenerationLatency      = NewTimerDef("replication_task_generation_latency")
+	ReplicationTaskLoadLatency            = NewTimerDef("replication_task_load_latency")
+	ReplicationTaskLoadSize               = NewDimensionlessHistogramDef("replication_task_load_size")
+	ReplicationTaskSendLatency            = NewTimerDef("replication_task_send_latency")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
 	ReplicationTasksSkipped               = NewCounterDef("replication_tasks_skipped")
@@ -933,12 +947,14 @@ var (
 	// ReplicationTasksFetched records the number of tasks fetched by the poller.
 	ReplicationTasksFetched                        = NewDimensionlessHistogramDef("replication_tasks_fetched")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
+	ReplicationTaskProcessingLatency               = NewTimerDef("replication_task_processing_latency")
 	ReplicationTaskTransmissionLatency             = NewTimerDef("replication_task_transmission_latency")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
 	ReplicationOutlierNamespace                    = NewCounterDef("replication_outlier_namespace")
+	ReplicationDuplicatedTaskCount                 = NewCounterDef("replication_duplicated_task")
 	EventReapplySkippedCount                       = NewCounterDef("event_reapply_skipped_count")
 	DirectQueryDispatchLatency                     = NewTimerDef("direct_query_dispatch_latency")
 	DirectQueryDispatchStickyLatency               = NewTimerDef("direct_query_dispatch_sticky_latency")
@@ -1223,4 +1239,10 @@ var (
 	MemoryStackGauge     = NewGaugeDef("memory_stack")
 	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
 	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
+	NumGCGauge           = NewGaugeDef("memory_num_gc_last",
+		WithDescription("Last runtime.MemStats.NumGC"),
+	)
+	GcPauseNsTotal = NewGaugeDef("memory_pause_total_ns_last",
+		WithDescription("Last runtime.MemStats.PauseTotalNs"),
+	)
 )

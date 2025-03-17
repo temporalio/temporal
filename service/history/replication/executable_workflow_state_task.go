@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -40,6 +41,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -140,7 +142,40 @@ func (e *ExecutableWorkflowStateTask) Execute() error {
 }
 
 func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
+	if errors.Is(err, consts.ErrDuplicate) {
+		e.MarkTaskDuplicated()
+		return nil
+	}
 	switch retryErr := err.(type) {
+	case *serviceerrors.SyncState:
+		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemPreemptableCallerInfo,
+		), e.NamespaceID)
+		if nsError != nil {
+			return err
+		}
+		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
+		defer cancel()
+
+		if doContinue, syncStateErr := e.SyncState(
+			ctx,
+			retryErr,
+			ResendAttempt,
+		); syncStateErr != nil || !doContinue {
+			if syncStateErr != nil {
+				e.Logger.Error("SyncWorkflowState replication task encountered error during sync state",
+					tag.WorkflowNamespaceID(e.NamespaceID),
+					tag.WorkflowID(e.WorkflowID),
+					tag.WorkflowRunID(e.RunID),
+					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.Error(syncStateErr),
+				)
+				return err
+			}
+			return nil
+		}
+		return nil
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:

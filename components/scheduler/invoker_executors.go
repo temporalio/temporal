@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -80,7 +79,7 @@ const (
 	manualStartExecutionDeadline = 1 * time.Hour
 
 	// Upper bound on how many times starting an individual buffered action should be retried.
-	ExecutorMaxStartAttempts = 10 // TODO - dial this up/remove it
+	InvokerMaxStartAttempts = 10 // TODO - dial this up/remove it
 )
 
 var (
@@ -141,16 +140,16 @@ func (e invokerTaskExecutor) executeExecuteTask(
 
 	// Terminate, cancel, and start workflows. The result struct contains the
 	// complete outcome of all requests executed in a single batch.
-	result = result.Append(e.terminateWorkflows(logger, *scheduler, invoker.GetTerminateWorkflows()))
-	result = result.Append(e.cancelWorkflows(logger, *scheduler, invoker.GetCancelWorkflows()))
-	sres, startResults := e.startWorkflows(logger, env, *scheduler, eligibleStarts)
+	result = result.Append(e.terminateWorkflows(ctx, logger, *scheduler, invoker.GetTerminateWorkflows()))
+	result = result.Append(e.cancelWorkflows(ctx, logger, *scheduler, invoker.GetCancelWorkflows()))
+	sres, startResults := e.startWorkflows(ctx, logger, env, *scheduler, eligibleStarts)
 	result = result.Append(sres)
 
 	// Write results.
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		// Record completed executions on the Invoker.
 		err := hsm.MachineTransition(node, func(i Invoker) (hsm.TransitionOutput, error) {
-			return TransitionCompleteExecution.Apply(i, EventCompleteExecution{
+			return TransitionRecordExecution.Apply(i, EventRecordExecution{
 				Node:          node,
 				executeResult: result,
 			})
@@ -172,12 +171,13 @@ func (e invokerTaskExecutor) executeExecuteTask(
 
 // cancelWorkflows does a best-effort attempt to cancel all workflow executions provided in targets.
 func (e invokerTaskExecutor) cancelWorkflows(
+	ctx context.Context,
 	logger log.Logger,
 	scheduler Scheduler,
 	targets []*commonpb.WorkflowExecution,
 ) (result executeResult) {
 	for _, wf := range targets {
-		err := e.cancelWorkflow(scheduler, wf)
+		err := e.cancelWorkflow(ctx, scheduler, wf)
 		if err != nil {
 			logger.Error("Failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 			e.MetricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
@@ -191,12 +191,13 @@ func (e invokerTaskExecutor) cancelWorkflows(
 
 // terminateWorkflows does a best-effort attempt to cancel all workflow executions provided in targets.
 func (e invokerTaskExecutor) terminateWorkflows(
+	ctx context.Context,
 	logger log.Logger,
 	scheduler Scheduler,
 	targets []*commonpb.WorkflowExecution,
 ) (result executeResult) {
 	for _, wf := range targets {
-		err := e.terminateWorkflow(scheduler, wf)
+		err := e.terminateWorkflow(ctx, scheduler, wf)
 		if err != nil {
 			logger.Error("Failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 			e.MetricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
@@ -210,6 +211,7 @@ func (e invokerTaskExecutor) terminateWorkflows(
 
 // startWorkflows executes the provided list of starts, returning a result with their outcomes.
 func (e invokerTaskExecutor) startWorkflows(
+	ctx context.Context,
 	logger log.Logger,
 	env hsm.Environment,
 	scheduler Scheduler,
@@ -218,7 +220,7 @@ func (e invokerTaskExecutor) startWorkflows(
 	metricsWithTag := e.MetricsHandler.WithTags(
 		metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 	for _, start := range starts {
-		startResult, err := e.startWorkflow(env, scheduler, start)
+		startResult, err := e.startWorkflow(ctx, env, scheduler, start)
 		if err != nil {
 			logger.Error("Failed to start workflow", tag.Error(err))
 
@@ -264,9 +266,12 @@ func (e invokerTaskExecutor) executeProcessBufferTask(env hsm.Environment, node 
 	executionInfo := scheduler.Schedule.Action.GetStartWorkflow()
 	if executionInfo == nil || len(invoker.GetBufferedStarts()) == 0 {
 		return hsm.MachineTransition(node, func(e Invoker) (hsm.TransitionOutput, error) {
-			return TransitionWait.Apply(e, EventWait{
+			return TransitionFinishProcessing.Apply(e, EventFinishProcessing{
 				Node:              node,
 				LastProcessedTime: env.Now(),
+				processBufferResult: processBufferResult{
+					DiscardStarts: invoker.GetBufferedStarts(),
+				},
 			})
 		})
 	}
@@ -326,8 +331,6 @@ func (e invokerTaskExecutor) processBuffer(
 ) (result processBufferResult) {
 	isRunning := len(scheduler.Info.RunningWorkflows) > 0
 
-	// If the buffer
-
 	// Processing completely ignores any BufferedStart that's already executing/backing off.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 		return start.Attempt == 0
@@ -338,9 +341,9 @@ func (e invokerTaskExecutor) processBuffer(
 
 	// ProcessBuffer will drop starts by omitting them from NewBuffer. Start with the
 	// diff between the input and NewBuffer, and add any executing starts.
-	keepStarts := make(map[string]bool) // request ID -> is present
+	keepStarts := make(map[string]struct{}) // request ID -> is present
 	for _, start := range action.NewBuffer {
-		keepStarts[start.GetRequestId()] = true
+		keepStarts[start.GetRequestId()] = struct{}{}
 	}
 
 	// Combine all available starts.
@@ -369,12 +372,13 @@ func (e invokerTaskExecutor) processBuffer(
 		}
 
 		// Append for immediate execution.
-		keepStarts[start.GetRequestId()] = true
+		keepStarts[start.GetRequestId()] = struct{}{}
 		result.StartWorkflows = append(result.StartWorkflows, start)
 	}
 
 	result.DiscardStarts = util.FilterSlice(pendingBufferedStarts, func(start *schedulespb.BufferedStart) bool {
-		return !keepStarts[start.GetRequestId()]
+		_, keep := keepStarts[start.GetRequestId()]
+		return !keep
 	})
 
 	// Terminate overrides cancel if both are requested.
@@ -430,6 +434,7 @@ func (e invokerTaskExecutor) startWorkflowDeadline(
 }
 
 func (e invokerTaskExecutor) startWorkflow(
+	ctx context.Context,
 	env hsm.Environment,
 	scheduler Scheduler,
 	start *schedulespb.BufferedStart,
@@ -438,7 +443,7 @@ func (e invokerTaskExecutor) startWorkflow(
 	nominalTimeSec := start.NominalTime.AsTime().Truncate(time.Second)
 	workflowID := fmt.Sprintf("%s-%s", requestSpec.WorkflowId, nominalTimeSec.Format(time.RFC3339))
 
-	if start.Attempt >= ExecutorMaxStartAttempts {
+	if start.Attempt >= InvokerMaxStartAttempts {
 		return nil, errRetryLimitExceeded
 	}
 
@@ -475,8 +480,6 @@ func (e invokerTaskExecutor) startWorkflow(
 		ContinuedFailure:         nil,
 		UserMetadata:             requestSpec.UserMetadata,
 	}
-	ctx, cancelFunc := e.newContext(scheduler.Namespace)
-	defer cancelFunc()
 	result, err := e.FrontendClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
 		return nil, err
@@ -493,7 +496,11 @@ func (e invokerTaskExecutor) startWorkflow(
 	}, nil
 }
 
-func (e invokerTaskExecutor) terminateWorkflow(scheduler Scheduler, target *commonpb.WorkflowExecution) error {
+func (e invokerTaskExecutor) terminateWorkflow(
+	ctx context.Context,
+	scheduler Scheduler,
+	target *commonpb.WorkflowExecution,
+) error {
 	request := &historyservice.TerminateWorkflowExecutionRequest{
 		NamespaceId: scheduler.NamespaceId,
 		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
@@ -504,13 +511,15 @@ func (e invokerTaskExecutor) terminateWorkflow(scheduler Scheduler, target *comm
 			FirstExecutionRunId: target.RunId,
 		},
 	}
-	ctx, cancelFunc := e.newContext(scheduler.Namespace)
-	defer cancelFunc()
 	_, err := e.HistoryClient.TerminateWorkflowExecution(ctx, request)
 	return err
 }
 
-func (e invokerTaskExecutor) cancelWorkflow(scheduler Scheduler, target *commonpb.WorkflowExecution) error {
+func (e invokerTaskExecutor) cancelWorkflow(
+	ctx context.Context,
+	scheduler Scheduler,
+	target *commonpb.WorkflowExecution,
+) error {
 	request := &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: scheduler.NamespaceId,
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -521,16 +530,8 @@ func (e invokerTaskExecutor) cancelWorkflow(scheduler Scheduler, target *commonp
 			FirstExecutionRunId: target.RunId,
 		},
 	}
-	ctx, cancelFunc := e.newContext(scheduler.Namespace)
-	defer cancelFunc()
 	_, err := e.HistoryClient.RequestCancelWorkflowExecution(ctx, request)
 	return err
-}
-
-func (e invokerTaskExecutor) newContext(namespace string) (context.Context, context.CancelFunc) {
-	ctx, cancelFunc := context.WithTimeout(context.Background(), e.Config.ServiceCallTimeout())
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace))
-	return ctx, cancelFunc
 }
 
 // getRateLimiterPermission returns a delay for which the caller should wait

@@ -33,14 +33,14 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
 func GenerateTask(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(request.GetNamespaceId()))

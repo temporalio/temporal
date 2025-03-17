@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/workflow"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
@@ -43,7 +43,7 @@ type (
 	EventsReapplier interface {
 		ReapplyEvents(
 			ctx context.Context,
-			ms workflow.MutableState,
+			ms historyi.MutableState,
 			updateRegistry update.Registry,
 			historyEvents []*historypb.HistoryEvent,
 			runID string,
@@ -72,7 +72,7 @@ func NewEventsReapplier(
 
 func (r *EventsReapplierImpl) ReapplyEvents(
 	ctx context.Context,
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	updateRegistry update.Registry,
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
@@ -87,6 +87,11 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 	}
 	if len(reappliedEvents) == 0 {
 		return nil, nil
+	}
+
+	if !ms.IsWorkflowExecutionRunning() {
+		// workflow is closed after reapplying events, no need to schedule workflow task
+		return reappliedEvents, nil
 	}
 
 	// After reapply event, checking if we should schedule a workflow task

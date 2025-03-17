@@ -24,10 +24,9 @@ package testrunner
 
 import (
 	"context"
-	"encoding/xml"
 	"errors"
 	"fmt"
-	"iter"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -38,121 +37,48 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jstemmer/go-junit-report/v2/junit"
 )
 
-type node struct {
-	children map[string]node
-}
-
-func (n node) visitor(path ...string) func(yield func(string, node) bool) {
-	return func(yield func(string, node) bool) {
-		for name, child := range n.children {
-			path := append(path, name)
-			if !yield(strings.Join(path, "/"), child) {
-				return
-			}
-			child.visitor(path...)(yield)
-		}
-	}
-}
-
-func (n node) walk() iter.Seq2[string, node] {
-	return n.visitor()
-}
+const (
+	codeCoverageExtension = ".cover.out"
+	retriesFlag           = "--retries="
+	coverProfileFlag      = "-coverprofile="
+	junitReportFlag       = "--junitfile="
+)
 
 type attempt struct {
-	runner       *runner
-	number       int
-	junitXmlPath string
-	exitErr      *exec.ExitError
-	suites       junit.Testsuites
+	runner           *runner
+	number           int
+	exitErr          *exec.ExitError
+	junitReport      *junitReport
+	coverProfilePath string
 }
 
-func (a *attempt) run(ctx context.Context, args []string) error {
-	args = append([]string{"--junitfile", a.junitXmlPath}, args...)
-	log.Printf("starting test attempt %d with args: %v", a.number, args)
+func (a *attempt) run(ctx context.Context, args []string) (string, error) {
+	for i, arg := range args {
+		if strings.HasPrefix(arg, coverProfileFlag) {
+			args[i] = coverProfileFlag + a.coverProfilePath
+		} else if strings.HasPrefix(arg, junitReportFlag) {
+			args[i] = junitReportFlag + a.junitReport.path
+		}
+	}
+	log.Printf("starting test attempt #%d: %v %v",
+		a.number, a.runner.gotestsumExecutable, strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, a.runner.gotestsumExecutable, args...)
+	var output strings.Builder
+	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
 	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	if err := cmd.Run(); err != nil {
-		return err
+		return output.String(), err
 	}
-	return nil
-}
-
-func (a *attempt) recordResult(exitErr *exec.ExitError) error {
-	var suites junit.Testsuites
-
-	f, err := os.Open(a.junitXmlPath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	decoder := xml.NewDecoder(f)
-	if err := decoder.Decode(&suites); err != nil {
-		return err
-	}
-	a.exitErr = exitErr
-	a.suites = suites
-	return nil
-}
-
-func (a attempt) testCases() map[string]struct{} {
-	cases := make(map[string]struct{})
-
-	for _, suite := range a.suites.Suites {
-		for _, tc := range suite.Testcases {
-			cases[tc.Name] = struct{}{}
-		}
-	}
-
-	return cases
-}
-
-func (a attempt) failures() []string {
-	root := node{children: make(map[string]node)}
-
-	for _, suite := range a.suites.Suites {
-		if suite.Failures == 0 {
-			continue
-		}
-		for _, tc := range suite.Testcases {
-			if tc.Failure == nil {
-				continue
-			}
-			n := root
-			for _, part := range strings.Split(tc.Name, "/") {
-				child, ok := n.children[part]
-				if !ok {
-					child = node{children: make(map[string]node)}
-					n.children[part] = child
-				}
-				n = child
-			}
-		}
-	}
-
-	leafFailures := make([]string, 0)
-
-	// Walk the tree and find all leaf failures. The way Go test failures are reported in junit is that there's a
-	// test case per suite and per test in that suite. Filter out any nodes that have children to find the most
-	// specific failures to rerun.
-	for path, n := range root.walk() {
-		if len(n.children) > 0 {
-			continue
-		}
-		leafFailures = append(leafFailures, path)
-	}
-
-	return leafFailures
+	return "", nil
 }
 
 type runner struct {
 	gotestsumExecutable string
 	junitOutputPath     string
+	coverProfilePath    string
 	attempts            []*attempt
 	retries             int
 }
@@ -166,121 +92,63 @@ func newRunner(gotestsumExecutable string) *runner {
 
 func (r *runner) sanitizeAndParseArgs(args []string) ([]string, error) {
 	var sanitizedArgs []string
-	type action struct {
-		f   func(string) error
-		err string
-	}
-	var next *action
-	for i, arg := range args {
-		if next != nil {
-			if err := next.f(arg); err != nil {
-				return nil, err
-			}
-			next = nil
-			continue
-		} else if arg == "-retries" {
-			next = &action{
-				f: func(arg string) error {
-					var err error
-					r.retries, err = strconv.Atoi(arg)
-					return err
-				},
-				err: "got -retries flag with no value",
-			}
-			continue
-		} else if strings.HasPrefix(arg, "-retries=") {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, retriesFlag) {
 			var err error
-			r.retries, err = strconv.Atoi(arg[len("-retries="):])
+			r.retries, err = strconv.Atoi(strings.Split(arg, "=")[1])
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("invalid argument %q: %w", retriesFlag, err)
 			}
-			continue
-		} else if arg == "--junitfile" {
-			// --junitfile is used by gotestsum
-			next = &action{
-				f: func(arg string) error {
-					r.junitOutputPath = arg
-					return nil
-				},
-				err: "got --junitfile flag with no value",
+			if r.retries == 0 {
+				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", retriesFlag)
 			}
-			continue
-		} else if strings.HasPrefix(arg, "--junitfile=") {
-			// --junitfile is used by gotestsum
-			r.junitOutputPath = arg[len("--junitfile="):]
-			continue
-		} else if arg == "--" {
-			// Forward all arguments from -- on.
-			sanitizedArgs = append(sanitizedArgs, args[i:]...)
-			break
+			continue // this is a `testrunner` only arg and not passed through
 		}
+
+		if strings.HasPrefix(arg, coverProfileFlag) {
+			r.coverProfilePath = strings.Split(arg, "=")[1]
+		} else if strings.HasPrefix(arg, junitReportFlag) {
+			// --junitfile is used by gotestsum
+			r.junitOutputPath = strings.Split(arg, "=")[1]
+		}
+
 		sanitizedArgs = append(sanitizedArgs, arg)
 	}
-	if next != nil {
-		return nil, fmt.Errorf("incomplete command line arguments: %s", next.err)
-	}
 	if r.junitOutputPath == "" {
-		return nil, fmt.Errorf("missing required argument --junitfile")
+		return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
+	}
+	if r.coverProfilePath == "" {
+		return nil, fmt.Errorf("missing required argument %q", coverProfileFlag)
+	}
+	if r.retries == 0 {
+		return nil, fmt.Errorf("missing required argument %q", retriesFlag)
 	}
 	return sanitizedArgs, nil
 }
 
 func (r *runner) newAttempt() *attempt {
-	f := filepath.Join(os.TempDir(), fmt.Sprintf("temporalio-temporal-%s-junit.xml", uuid.NewString()))
 	a := &attempt{
-		runner:       r,
-		number:       len(r.attempts) + 1,
-		junitXmlPath: f,
+		runner: r,
+		number: len(r.attempts) + 1,
+		coverProfilePath: fmt.Sprintf(
+			"%v_%v%v",
+			strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
+			len(r.attempts),
+			codeCoverageExtension),
+		junitReport: &junitReport{
+			path: filepath.Join(os.TempDir(), fmt.Sprintf("temporalio-temporal-%s-junit.xml", uuid.NewString())),
+		},
 	}
 	r.attempts = append(r.attempts, a)
 	return a
 }
 
-func (r *runner) combineAttempts() junit.Testsuites {
-	var combined junit.Testsuites
-
-	for i, attempt := range r.attempts {
-		combined.Tests += attempt.suites.Tests
-		combined.Errors += attempt.suites.Errors
-		combined.Failures += attempt.suites.Failures
-		combined.Skipped += attempt.suites.Skipped
-		combined.Disabled += attempt.suites.Disabled
-		combined.Time += attempt.suites.Time
-
-		if i == 0 {
-			combined.XMLName = attempt.suites.XMLName
-			combined.Name = attempt.suites.Name
-			combined.Suites = attempt.suites.Suites
-			continue
-		}
-
-		// Just a sanity check for this tool since it's new and we want to make sure we actually rerun what we
-		// expect.
-		casesTested := attempt.testCases()
-		casesMissing := make([]string, 0)
-		for _, f := range r.attempts[i-1].failures() {
-			if _, ok := casesTested[f]; !ok {
-				casesMissing = append(casesMissing, f)
-			}
-		}
-		if len(casesMissing) > 0 {
-			log.Fatalf("expected a rerun of all failures from the previous attempt, missing: %v", casesMissing)
-		}
-
-		for _, suite := range attempt.suites.Suites {
-			cpy := suite
-			cpy.Name += fmt.Sprintf(" (retry %d)", i)
-			cpy.Testcases = make([]junit.Testcase, 0, len(suite.Testcases))
-			for _, test := range suite.Testcases {
-				tcpy := test
-				tcpy.Name += fmt.Sprintf(" (retry %d)", i)
-				cpy.Testcases = append(cpy.Testcases, tcpy)
-			}
-			combined.Suites = append(combined.Suites, cpy)
-		}
+func (r *runner) allReports() []*junitReport {
+	var reports []*junitReport
+	for _, a := range r.attempts {
+		reports = append(reports, a.junitReport)
 	}
-
-	return combined
+	return reports
 }
 
 func Main() {
@@ -295,23 +163,43 @@ func Main() {
 		log.Fatalf("failed to parse command line options: %v", err)
 	}
 
+	var currentAttempt *attempt
 	for retry := 0; retry <= r.retries; retry++ {
-		var exitErr *exec.ExitError
-		a := r.newAttempt()
-		err := a.run(ctx, args)
-		if err != nil && !errors.As(err, &exitErr) {
+		currentAttempt = r.newAttempt()
+
+		// Run tests.
+		stdout, err := currentAttempt.run(ctx, args)
+		if err != nil && !errors.As(err, &currentAttempt.exitErr) {
 			log.Fatalf("test run failed with an unexpected error: %v", err)
 		}
-		if err := a.recordResult(exitErr); err != nil {
-			log.Fatalf("failed to record run result: %v", err)
-		}
-		if exitErr == nil {
+
+		stacktrace, timedoutTests := parseTestTimeouts(stdout)
+		if len(timedoutTests) > 0 {
+			// Run timed out and was aborted.
+			// Update JUnit XML output for timed out tests since none will have been generated.
+			currentAttempt.junitReport = generateForTimedoutTests(timedoutTests)
+			log.Print(stacktrace)
+
+			// Don't retry.
 			break
 		}
-		failures := r.attempts[retry].failures()
+
+		// All tests were run, parse JUnit XML output.
+		if err = currentAttempt.junitReport.read(); err != nil {
+			log.Fatal(err)
+		}
+
+		// If the run completely successfull, no need to retry.
+		if currentAttempt.exitErr == nil {
+			break
+		}
+
+		// Sanity check: make sure failures are reported when the run failed.
+		failures := currentAttempt.junitReport.collectTestCaseFailures()
 		if len(failures) == 0 {
 			log.Fatalf("tests failed but no failures have been detected, not rerunning tests")
 		}
+
 		// Rerun all tests from previous attempt if there's more than 10 failures in a single suite.
 		if len(failures) > 10 && retry < r.retries {
 			log.Printf(
@@ -333,22 +221,20 @@ func Main() {
 		}
 	}
 
-	combinedReport := r.combineAttempts()
-	f, err := os.Create(r.junitOutputPath)
+	// Merge reports from all attempts and write the final JUnit report.
+	mergedReport, err := mergeReports(r.allReports())
 	if err != nil {
-		log.Fatalf("failed to create junit output file: %v", err)
+		log.Fatal(err)
 	}
-	defer f.Close()
-	enc := xml.NewEncoder(f)
-	enc.Indent("", "    ")
-	if err := enc.Encode(combinedReport); err != nil {
-		log.Fatalf("failed to encode junit output: %v", err)
+	mergedReport.path = r.junitOutputPath
+	if err = mergedReport.write(); err != nil {
+		log.Fatal(err)
 	}
 
-	lastAttempt := r.attempts[len(r.attempts)-1]
-	if lastAttempt.exitErr != nil {
+	// Exit with the exit code of the last attempt.
+	if currentAttempt.exitErr != nil {
 		log.Printf("exiting with failure after running %d attempt(s)", len(r.attempts))
-		os.Exit(lastAttempt.exitErr.ExitCode())
+		os.Exit(currentAttempt.exitErr.ExitCode())
 	}
 }
 

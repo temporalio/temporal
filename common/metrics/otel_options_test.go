@@ -81,25 +81,30 @@ func TestAddOptions(t *testing.T) {
 
 			handler := &otelMetricsHandler{catalog: c.catalog}
 			var (
-				counter counterOptions
-				gauge   gaugeOptions
-				hist    histogramOptions
+				counter     counterOptions
+				gauge       gaugeOptions
+				int64hist   int64HistogramOptions
+				float64hist float64HistogramOptions
 			)
 			for _, opt := range inputOpts {
 				counter = append(counter, opt.(metric.Int64CounterOption))
 				gauge = append(gauge, opt.(metric.Float64ObservableGaugeOption))
-				hist = append(hist, opt.(metric.Int64HistogramOption))
+				int64hist = append(int64hist, opt.(metric.Int64HistogramOption))
+				float64hist = append(float64hist, opt.(metric.Float64HistogramOption))
 			}
 			counter = addOptions(handler, counter, metricName)
 			gauge = addOptions(handler, gauge, metricName)
-			hist = addOptions(handler, hist, metricName)
+			int64hist = addOptions(handler, int64hist, metricName)
+			float64hist = addOptions(handler, float64hist, metricName)
 			require.Len(t, counter, len(c.expectedOpts))
 			require.Len(t, gauge, len(c.expectedOpts))
-			require.Len(t, hist, len(c.expectedOpts))
+			require.Len(t, int64hist, len(c.expectedOpts))
+			require.Len(t, float64hist, len(c.expectedOpts))
 			for i, opt := range c.expectedOpts {
 				assert.Equal(t, opt, counter[i])
 				assert.Equal(t, opt, gauge[i])
-				assert.Equal(t, opt, hist[i])
+				assert.Equal(t, opt, int64hist[i])
+				assert.Equal(t, opt, float64hist[i])
 			}
 		})
 	}

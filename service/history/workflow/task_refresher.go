@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
@@ -45,7 +45,7 @@ type (
 		// those have side effects.
 		Refresh(
 			ctx context.Context,
-			mutableState MutableState,
+			mutableState historyi.MutableState,
 		) error
 		// PartialRefresh refresh tasks for all sub state machines that have been updated
 		// since the given minVersionedTransition (inclusive).
@@ -55,13 +55,13 @@ type (
 		// the behavior is equivalent to Refresh().
 		PartialRefresh(
 			ctx context.Context,
-			mutableState MutableState,
+			mutableState historyi.MutableState,
 			minVersionedTransition *persistencespb.VersionedTransition,
 		) error
 	}
 
 	TaskRefresherImpl struct {
-		shard shard.Context
+		shard historyi.ShardContext
 
 		// this defaults to the global taskGeneratorProvider
 		// for testing purposes, it can be overridden to use a mock task generator
@@ -70,7 +70,7 @@ type (
 )
 
 func NewTaskRefresher(
-	shard shard.Context,
+	shard historyi.ShardContext,
 ) *TaskRefresherImpl {
 
 	return &TaskRefresherImpl{
@@ -82,7 +82,7 @@ func NewTaskRefresher(
 
 func (r *TaskRefresherImpl) Refresh(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 ) error {
 	if r.shard.GetConfig().EnableNexus() {
 		// Invalidate all tasks generated for this mutable state before the refresh.
@@ -94,7 +94,7 @@ func (r *TaskRefresherImpl) Refresh(
 
 func (r *TaskRefresherImpl) PartialRefresh(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) != 0 {
@@ -207,7 +207,7 @@ func (r *TaskRefresherImpl) PartialRefresh(
 
 func RefreshTasksForWorkflowStart(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -255,7 +255,7 @@ func RefreshTasksForWorkflowStart(
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -286,7 +286,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 
 func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -316,7 +316,7 @@ func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 }
 
 func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -364,7 +364,7 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 
 func (r *TaskRefresherImpl) refreshTasksForActivity(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -430,7 +430,7 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 }
 
 func (r *TaskRefresherImpl) refreshTasksForTimer(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 
@@ -473,7 +473,7 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 
 func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -510,7 +510,7 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 
 func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -549,7 +549,7 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 
 func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -587,7 +587,7 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 }
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	taskGenerator TaskGenerator,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
@@ -609,7 +609,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 }
 
 func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
-	mutableState MutableState,
+	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 
@@ -655,9 +655,7 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 		return err
 	}
 
-	if len(nodesToRefresh) != 0 {
-		// TODO: after hsm node tombstone is tracked in mutable state,
-		// also trigger trim when there are new tombstones after minVersionedTransition
+	if len(nodesToRefresh) != 0 || mutableState.IsSubStateMachineDeleted() {
 		if err := TrimStateMachineTimers(mutableState, minVersionedTransition); err != nil {
 			return err
 		}

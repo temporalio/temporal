@@ -36,8 +36,8 @@ import (
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/fx"
@@ -213,7 +213,7 @@ func (f *outboundQueueFactory) Stop() {
 }
 
 func (f *outboundQueueFactory) CreateQueue(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 ) queues.Queue {
 	logger := log.With(shardContext.GetLogger(), tag.ComponentOutboundQueue)

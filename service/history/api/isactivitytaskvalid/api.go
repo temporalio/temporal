@@ -32,13 +32,13 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 func Invoke(
 	ctx context.Context,
 	req *historyservice.IsActivityTaskValidRequest,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.IsActivityTaskValidResponse, retError error) {
 	isValid := false

@@ -36,13 +36,21 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 )
 
 type (
+	// TODO (alex): merge this with FunctionalTestBase.
 	FunctionalTestSdkSuite struct {
 		FunctionalTestBase
+
+		// Suites can override client or worker options by modifying these before calling
+		// FunctionalTestSdkSuite.SetupSuite. ClientOptions.HostPort and Namespace cannot be
+		// overridden.
+		ClientOptions sdkclient.Options
+		WorkerOptions worker.Options
 
 		sdkClient sdkclient.Client
 		worker    worker.Worker
@@ -50,6 +58,7 @@ type (
 	}
 )
 
+// TODO (alex): move this to test_data_converter.go where it is actually used.
 var (
 	ErrEncodingIsNotSet       = errors.New("payload encoding metadata is not set")
 	ErrEncodingIsNotSupported = errors.New("payload encoding is not supported")
@@ -81,7 +90,7 @@ func (s *FunctionalTestSdkSuite) SetupSuite() {
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 
-	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/client_cluster.yaml", WithDynamicConfigOverrides(dynamicConfigOverrides))
+	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/es_cluster.yaml", WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 func (s *FunctionalTestSdkSuite) SetupTest() {
@@ -92,17 +101,18 @@ func (s *FunctionalTestSdkSuite) SetupTest() {
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
+	s.ClientOptions.HostPort = s.FrontendGRPCAddress()
+	s.ClientOptions.Namespace = s.Namespace().String()
+	if s.ClientOptions.Logger == nil {
+		s.ClientOptions.Logger = log.NewSdkLogger(s.Logger)
+	}
+
 	var err error
-	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.FrontendGRPCAddress(),
-		Namespace: s.Namespace().String(),
-	})
+	s.sdkClient, err = sdkclient.Dial(s.ClientOptions)
 	s.NoError(err)
 	s.taskQueue = RandomizeStr("tq")
 
-	// We need to set this timeout to 0 to disable the deadlock detector. Otherwise, the deadlock detector will cause
-	// TestTooManyChildWorkflows to fail because it thinks there is a deadlock due to the blocked child workflows.
-	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{DeadlockDetectionTimeout: 0})
+	s.worker = worker.New(s.sdkClient, s.taskQueue, s.WorkerOptions)
 	err = s.worker.Start()
 	s.NoError(err)
 }
@@ -114,6 +124,7 @@ func (s *FunctionalTestSdkSuite) TearDownTest() {
 	if s.sdkClient != nil {
 		s.sdkClient.Close()
 	}
+	s.FunctionalTestBase.TearDownTest()
 }
 
 func (s *FunctionalTestSdkSuite) EventuallySucceeds(ctx context.Context, operationCtx backoff.OperationCtx) {

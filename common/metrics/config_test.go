@@ -135,22 +135,28 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 		expectResult map[string][]float64
 	}
 
-	customizedBoundaries := map[string][]float64{
-		Dimensionless: {1},
-		Milliseconds:  defaultPerUnitHistogramBoundaries[Milliseconds],
-		Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
-	}
 	testCases := []histogramTest{
 		{
-			input:        nil,
-			expectResult: defaultPerUnitHistogramBoundaries,
+			input: nil,
+			expectResult: map[string][]float64{
+				Dimensionless: defaultPerUnitHistogramBoundaries[Dimensionless],
+				Milliseconds:  defaultPerUnitHistogramBoundaries[Milliseconds],
+				Seconds:       {0.001, 0.002, 0.005, 0.010, 0.020, 0.050, 0.100, 0.200, 0.500, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000},
+				Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
+			},
 		},
 		{
 			input: map[string][]float64{
 				UnitNameDimensionless: {1},
+				UnitNameMilliseconds:  {10, 1000, 2000},
 				"notDefine":           {1},
 			},
-			expectResult: customizedBoundaries,
+			expectResult: map[string][]float64{
+				Dimensionless: {1},
+				Milliseconds:  {10, 1000, 2000},
+				Seconds:       {0.01, 1, 2},
+				Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
+			},
 		},
 	}
 
@@ -209,5 +215,4 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 			assert.IsType(t, c.expectedType, handler)
 		})
 	}
-
 }

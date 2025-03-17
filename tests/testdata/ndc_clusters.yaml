@@ -21,8 +21,6 @@
         initialFailoverVersion: 3
         rpcName: "frontend"
         rpcAddress: "nowhere3:7134"
-  workerconfig:
-    enablereplicator: true
   clusterno: 0
   historyconfig:
     numhistoryshards: 1
@@ -58,8 +56,6 @@
         initialFailoverVersion: 3
         rpcName: "frontend"
         rpcAddress: "nowhere3:7134"
-  workerconfig:
-    enablereplicator: true
   clusterno: 1
   historyconfig:
     numhistoryshards: 1
@@ -95,8 +91,6 @@
         initialFailoverVersion: 3
         rpcName: "frontend"
         rpcAddress: "nowhere3:7134"
-  workerconfig:
-    enablereplicator: true
   clusterno: 2
   historyconfig:
     numhistoryshards: 1

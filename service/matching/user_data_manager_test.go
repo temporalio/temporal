@@ -104,8 +104,11 @@ func TestUserData_LoadOnInit(t *testing.T) {
 	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: defaultNamespaceId,
-			TaskQueue:   defaultRootTqID,
-			UserData:    data1,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				defaultRootTqID: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: data1,
+				},
+			},
 		}))
 	data1.Version++
 
@@ -140,8 +143,11 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: defaultNamespaceId,
-			TaskQueue:   defaultRootTqID,
-			UserData:    data1,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				defaultRootTqID: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: data1,
+				},
+			},
 		}))
 	data1.Version++
 
@@ -167,8 +173,11 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: defaultNamespaceId,
-			TaskQueue:   defaultRootTqID,
-			UserData:    data2,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				defaultRootTqID: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: data2,
+				},
+			},
 		}))
 	data2.Version++
 
@@ -204,8 +213,11 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: defaultNamespaceId,
-			TaskQueue:   defaultRootTqID,
-			UserData:    data5,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				defaultRootTqID: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: data5,
+				},
+			},
 		}))
 	data5.Version++
 
@@ -231,8 +243,11 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: defaultNamespaceId,
-			TaskQueue:   defaultRootTqID,
-			UserData:    data4,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				defaultRootTqID: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: data4,
+				},
+			},
 		}))
 	data4.Version++
 
@@ -316,7 +331,7 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // only one fetch
@@ -453,7 +468,9 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).
+		// +3 because the counter resets when version changes so the calls with error do not count
+		MaxTimes(maxFastUserDataFetches + 3)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -537,7 +554,9 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).
+		// +3 because the counter resets when version changes so the calls with error do not count
+		MaxTimes(maxFastUserDataFetches + 3)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -606,7 +625,7 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -657,7 +676,7 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -712,7 +731,7 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
-		}, nil).MaxTimes(3)
+		}, nil).MaxTimes(maxFastUserDataFetches + 1)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -806,11 +825,14 @@ func TestUserData_Propagation(t *testing.T) {
 	opts.matchingClientMock.EXPECT().UpdateTaskQueueUserData(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, req *matchingservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 			err := tm.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-				NamespaceID:     req.NamespaceId,
-				TaskQueue:       req.TaskQueue,
-				UserData:        req.UserData,
-				BuildIdsAdded:   req.BuildIdsAdded,
-				BuildIdsRemoved: req.BuildIdsRemoved,
+				NamespaceID: req.NamespaceId,
+				Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+					req.TaskQueue: &persistence.SingleTaskQueueUserDataUpdate{
+						UserData:        req.UserData,
+						BuildIdsAdded:   req.BuildIdsAdded,
+						BuildIdsRemoved: req.BuildIdsRemoved,
+					},
+				},
 			})
 			return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
 		},
@@ -897,11 +919,14 @@ func TestUserData_CheckPropagation(t *testing.T) {
 	opts.matchingClientMock.EXPECT().UpdateTaskQueueUserData(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, req *matchingservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 			err := tm.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-				NamespaceID:     req.NamespaceId,
-				TaskQueue:       req.TaskQueue,
-				UserData:        req.UserData,
-				BuildIdsAdded:   req.BuildIdsAdded,
-				BuildIdsRemoved: req.BuildIdsRemoved,
+				NamespaceID: req.NamespaceId,
+				Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+					req.TaskQueue: &persistence.SingleTaskQueueUserDataUpdate{
+						UserData:        req.UserData,
+						BuildIdsAdded:   req.BuildIdsAdded,
+						BuildIdsRemoved: req.BuildIdsRemoved,
+					},
+				},
 			})
 			return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
 		},

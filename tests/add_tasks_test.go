@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -73,7 +74,7 @@ type (
 		s *AddTasksSuite
 	}
 	faultyShardContext struct {
-		shard.Context
+		historyi.ShardContext
 		suite *AddTasksSuite
 	}
 	// executorWrapper is used to wrap any [queues.Executable] that the history service makes so that we can intercept
@@ -94,20 +95,20 @@ func TestAddTasksSuite(t *testing.T) {
 	suite.Run(t, new(AddTasksSuite))
 }
 
-func (c *faultyShardController) GetShardByID(shardID int32) (shard.Context, error) {
+func (c *faultyShardController) GetShardByID(shardID int32) (historyi.ShardContext, error) {
 	ctx, err := c.Controller.GetShardByID(shardID)
 	if err != nil {
 		return nil, err
 	}
-	return &faultyShardContext{Context: ctx, suite: c.s}, nil
+	return &faultyShardContext{ShardContext: ctx, suite: c.s}, nil
 }
 
-func (c *faultyShardContext) GetEngine(ctx context.Context) (shard.Engine, error) {
+func (c *faultyShardContext) GetEngine(ctx context.Context) (historyi.Engine, error) {
 	err := c.suite.getEngineErr.Load()
 	if err != nil && *err != nil {
 		return nil, *err
 	}
-	return c.Context.GetEngine(ctx)
+	return c.ShardContext.GetEngine(ctx)
 }
 
 // Wrap a [queues.Executable] with the noopExecutor.
