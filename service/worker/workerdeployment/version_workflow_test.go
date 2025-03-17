@@ -26,60 +26,55 @@ package workerdeployment
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/testsuite"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type deploymentSuite struct {
+type VersionWorkflowSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
 	controller *gomock.Controller
 	env        *testsuite.TestWorkflowEnvironment
 }
 
-func TestDeploymentSuite(t *testing.T) {
-	suite.Run(t, new(deploymentSuite))
+func TestVersionWorkflowSuite(t *testing.T) {
+	suite.Run(t, new(VersionWorkflowSuite))
 }
 
-func (s *deploymentSuite) SetupTest() {
+func (s *VersionWorkflowSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
 	s.env.RegisterWorkflow(VersionWorkflow)
 }
 
-func (s *deploymentSuite) TearDownTest() {
+func (s *VersionWorkflowSuite) TearDownTest() {
 	s.controller.Finish()
 	s.env.AssertExpectations(s.T())
 }
 
-// TestRegisterTaskQueueInDeployment tests the case when a task-queue
-// is registered in a deployment
-// func (s *deploymentSuite) TestRegisterTaskQueueInDeployment() {
-// )
-// }
+// Test_SyncState_BatchSize verifies if the right number of batches are created during the sync state activity
+func (s *VersionWorkflowSuite) Test_SyncState_BatchSize() {
+	tv := testvars.New(s.T())
 
-// TestRegisterTaskQueuesInDeployment tests the case when multiple task-queues
-// are registered (non-concurrently) in a deployment
-// func (s *deploymentSuite) TestRegisterTaskQueuesInDeployment() {
-// )
-// }
-
-// TestRegisterTaskQueuesInDeploymentConcurrent tests the case when multiple task-queues
-// are registered concurrently in a deployment
-// func (s *deploymentSuite) TestRegisterTaskQueuesInDeploymentConcurrent() {
-// )
-// }
-
-// TestRegisterTaskQueuesExceedLimit tests the case when the number of registered task-queues
-// exceed the allowed per-deployment limit
-// func (s *deploymentSuite) TestRegisterTaskQueuesExceedLimit() {
-// )
-// }
-
-// TestStartDeploymentWorkflowExceedLimit tests the case when the number of
-// deployment workflow executions exceed the allowed namespace limit
-// func (s *deploymentSuite) TestRegisterTaskQueuesExceedLimit() {
-// )
-// }
+	s.env.RegisterDelayedCallback(func() {
+		syncStateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+			RoutingUpdateTime: timestamppb.New(time.Now()),
+			CurrentSinceTime:  timestamppb.New(time.Now()),
+			RampingSinceTime:  timestamppb.New(time.Now()),
+			RampPercentage:    100,
+		}
+		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("update #1 should not have failed with error %v", err)
+			},
+			OnAccept: func() {
+			},
+		}, syncStateArgs)
+	})
+}

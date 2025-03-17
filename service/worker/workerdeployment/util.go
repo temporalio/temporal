@@ -92,6 +92,8 @@ const (
 	errVersionHasPollers          = "Version cannot be deleted since it has active pollers."
 	errVersionIsCurrentOrRamping  = "Version cannot be deleted since it is current or ramping."
 	errConflictTokenMismatchType  = "errConflictTokenMismatch"
+
+	syncBatchSize = 25
 )
 
 var (

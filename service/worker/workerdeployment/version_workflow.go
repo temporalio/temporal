@@ -549,6 +549,14 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	syncReq := &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version: state.GetVersion(),
 	}
+
+	// ------------------------------------------------------------
+
+	// send in the task-queue families in batches of syncBatchSize
+	batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+	batch := make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+	maxBatchSize := syncBatchSize
+
 	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
 		byType := state.TaskQueueFamilies[tqName]
 		data := &deploymentspb.DeploymentVersionData{
@@ -568,27 +576,47 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			Types: types,
 			Data:  data,
 		})
+
+		batch = append(batch, syncReq.Sync...)
+
+		if len(batch) == maxBatchSize {
+			batches = append(batches, batch)
+			batch = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+		}
 	}
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
-	err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
-	if err != nil {
-		// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
-		return nil, err
+	if len(batch) > 0 {
+		batches = append(batches, batch)
 	}
-	if len(syncRes.TaskQueueMaxVersions) > 0 {
-		// wait for propagation
-		err = workflow.ExecuteActivity(
-			activityCtx,
-			d.a.CheckWorkerDeploymentUserDataPropagation,
-			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
-			}).Get(ctx, nil)
+
+	// calling SyncDeploymentVersionUserData for each batch
+	for _, batch := range batches {
+		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+
+		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+			Version: state.GetVersion(),
+			Sync:    batch,
+		}).Get(ctx, &syncRes)
 		if err != nil {
 			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 			return nil, err
 		}
+		if len(syncRes.TaskQueueMaxVersions) > 0 {
+			// wait for propagation
+			err = workflow.ExecuteActivity(
+				activityCtx,
+				d.a.CheckWorkerDeploymentUserDataPropagation,
+				&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+					TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+				}).Get(ctx, nil)
+			if err != nil {
+				// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+				return nil, err
+			}
+		}
 	}
+
+	// ------------------------------------------------------------
 
 	wasAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
 
