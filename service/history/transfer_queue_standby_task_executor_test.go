@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -606,7 +607,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(parentNamespaceID)).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
 	s.clientBean.EXPECT().GetRemoteFrontendClient(tests.GlobalChildNamespaceEntry.ActiveClusterName()).Return(nil, s.mockFrontendClient, nil).AnyTimes()
 	s.mockFrontendClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: parentNamespaceID,
+		Namespace: tests.ParentNamespace.String(),
 		Execution: parentExecution,
 	})).Return(nil, serviceerror.NewInternal("some error")).AnyTimes()
 
@@ -1119,7 +1120,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
-	ms workflow.MutableState,
+	ms historyi.MutableState,
 	lastEventID int64,
 	lastEventVersion int64,
 ) *persistencespb.WorkflowMutableState {

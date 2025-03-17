@@ -37,7 +37,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -237,7 +236,7 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 		// WorkflowRunTimeout should be shorten to execution timeout
 		WorkflowRunTimeout: durationpb.New(executionTimeout * 2),
 		// WorkflowTaskTimeout should be shorten to max workflow task timeout
-		WorkflowTaskTimeout: durationpb.New(common.MaxWorkflowTaskStartToCloseTimeout * 2),
+		WorkflowTaskTimeout: durationpb.New(maxWorkflowTaskStartToCloseTimeout * 2),
 	}
 
 	executionInfo := &persistencespb.WorkflowExecutionInfo{
@@ -257,7 +256,7 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 	s.Equal(workflowTypeName, attributes.GetWorkflowType().GetName())
 	s.Equal(taskQueue, attributes.GetTaskQueue().GetName())
 	s.Equal(executionTimeout, attributes.GetWorkflowRunTimeout().AsDuration())
-	s.Equal(common.MaxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
+	s.Equal(maxWorkflowTaskStartToCloseTimeout, attributes.GetWorkflowTaskTimeout().AsDuration())
 }
 
 func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {

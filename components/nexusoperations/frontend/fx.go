@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.uber.org/fx"
 )
 
@@ -48,6 +49,7 @@ func ConfigProvider(coll *dynamicconfig.Collection) *Config {
 		Enabled:                       dynamicconfig.EnableNexus.Get(coll),
 		PayloadSizeLimit:              dynamicconfig.BlobSizeLimitError.Get(coll),
 		ForwardingEnabledForNamespace: dynamicconfig.EnableNamespaceNotActiveAutoForwarding.Get(coll),
+		MaxOperationTokenLength:       nexusoperations.MaxOperationTokenLength.Get(coll),
 	}
 }
 

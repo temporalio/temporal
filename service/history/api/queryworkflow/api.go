@@ -46,7 +46,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -56,7 +56,7 @@ const failQueryWorkflowTaskAttemptCount = 3
 func Invoke(
 	ctx context.Context,
 	request *historyservice.QueryWorkflowRequest,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -105,6 +105,7 @@ func Invoke(
 
 	req := request.GetRequest()
 	_, mutableStateStatus := workflowLease.GetMutableState().GetWorkflowStateStatus()
+	scope = scope.WithTags(metrics.StringTag("workflow_status", mutableStateStatus.String()))
 	if mutableStateStatus != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && req.QueryRejectCondition != enumspb.QUERY_REJECT_CONDITION_NONE {
 		notOpenReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_OPEN
 		notCompletedCleanlyReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY && mutableStateStatus != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
@@ -251,7 +252,7 @@ func Invoke(
 }
 
 func queryWillTimeoutsBeforeFirstWorkflowTaskStart(
-	ctx context.Context, mutableState workflow.MutableState,
+	ctx context.Context, mutableState historyi.MutableState,
 ) (bool, error) {
 	startEvent, err := mutableState.GetStartEvent(ctx)
 	if err != nil {
@@ -279,7 +280,7 @@ func queryDirectlyThroughMatching(
 	msResp *historyservice.GetMutableStateResponse,
 	namespaceID string,
 	queryRequest *workflowservice.QueryWorkflowRequest,
-	shard shard.Context,
+	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,

@@ -2,8 +2,6 @@ clusterno: 0
 historyconfig:
   numhistoryshards: 1
   numhistoryhosts: 1
-workerconfig:
-  enablereplicator: false
 faultInjection:
   targets:
     dataStores:

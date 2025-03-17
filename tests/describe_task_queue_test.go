@@ -29,6 +29,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -275,7 +276,9 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 			s.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
 			s.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksDispatchRate > 0)
 		} else {
-			s.EventuallyWithT(func(t *assert.CollectT) {
+			s.EventuallyWithT(func(c *assert.CollectT) {
+				a := require.New(c)
+
 				resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 					Namespace:              s.Namespace().String(),
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -286,18 +289,16 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 					ReportTaskReachability: false,
 					ReportStats:            true,
 				})
-				s.NoError(err)
-				s.NotNil(resp)
-				s.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+				a.NoError(err)
+				a.NotNil(resp)
+				a.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
 				versionInfo := resp.GetVersionsInfo()[""]
-				s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
+				a.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
 				types := versionInfo.GetTypesInfo()
-				s.Equal(len(types), len(expectedBacklogCount))
+				a.Equal(len(types), len(expectedBacklogCount))
 
 				wfStats := types[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Stats
 				actStats := types[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].Stats
-
-				a := assert.New(t)
 
 				// Actual counter can be greater than the expected due to history retries. We make sure the counter is in
 				// range [expected, expected+maxBacklogExtraTasks]
@@ -315,16 +316,17 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 		}
 	} else {
 		// Querying the Legacy API
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			a := require.New(c)
 			resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 				Namespace:              s.Namespace().String(),
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED,
 				IncludeTaskQueueStatus: true,
 			})
-			s.NoError(err)
-			s.NotNil(resp)
-			return resp.TaskQueueStatus.GetBacklogCountHint() == expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW]
+			a.NoError(err)
+			a.NotNil(resp)
+			a.Equal(resp.TaskQueueStatus.GetBacklogCountHint(), expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW])
 		}, 6*time.Second, 100*time.Millisecond)
 	}
 }
@@ -349,7 +351,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueuePartition(tqName strin
 				ReportPollers:                 false,
 				ReportInternalTaskQueueStatus: false,
 			})
-		a := assert.New(t)
+		a := require.New(t)
 		a.NoError(err)
 
 		// parsing out the response

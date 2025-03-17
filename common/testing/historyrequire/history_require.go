@@ -389,7 +389,7 @@ func (h HistoryRequire) formatHistoryEvents(historyEvents []*historypb.HistoryEv
 
 		var versionStr string
 		if event.GetVersion() != 0 {
-			versionStr = fmt.Sprintf("v%2d ", event.GetVersion())
+			versionStr = fmt.Sprintf("%3s ", "v"+strconv.Itoa(int(event.GetVersion())))
 		}
 
 		var eventAttrsJsonStr string
@@ -494,6 +494,13 @@ func (h HistoryRequire) equalExpectedMapToActualAttributes(expectedMap map[strin
 			require.Failf(h.t, "", "Expected property %s.%s wasn't found for EventID=%v", attrPrefix, attrName, eventID)
 		}
 
+		if expectedValue == nil {
+			if !actualV.IsNil() {
+				require.Failf(h.t, "", "Value of property %s.%s for EventID=%v expected to be nil", attrPrefix, attrName, eventID)
+			}
+			continue
+		}
+
 		if es, ok := expectedValue.([]any); ok {
 			for i, ei := range es {
 				eim := ei.(map[string]any)
@@ -510,6 +517,7 @@ func (h HistoryRequire) equalExpectedMapToActualAttributes(expectedMap map[strin
 			h.equalExpectedMapToActualAttributes(em, actualV, eventID, attrPrefix+"."+attrName)
 			continue
 		}
+
 		actualValue := actualV.Interface()
 		// Actual bytes are expressed as strings in expected history.
 		if actualValueBytes, ok := actualValue.([]byte); ok {

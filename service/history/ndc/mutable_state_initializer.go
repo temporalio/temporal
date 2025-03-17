@@ -40,8 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/utf8validator"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/proto"
@@ -71,7 +70,7 @@ type (
 	}
 
 	MutableStateInitializerImpl struct {
-		shardContext   shard.Context
+		shardContext   historyi.ShardContext
 		namespaceCache namespace.Registry
 		workflowCache  wcache.Cache
 		logger         log.Logger
@@ -79,7 +78,7 @@ type (
 )
 
 func NewMutableStateInitializer(
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *MutableStateInitializerImpl {
@@ -215,9 +214,9 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 
 func (r *MutableStateInitializerImpl) flushBufferEvents(
 	ctx context.Context,
-	wfContext workflow.Context,
-	mutableState workflow.MutableState,
-) (workflow.MutableState, error) {
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
+) (historyi.MutableState, error) {
 	flusher := NewBufferEventFlusher(r.shardContext, wfContext, mutableState, r.logger)
 	_, mutableState, err := flusher.flush(ctx)
 	if err != nil {
@@ -236,11 +235,6 @@ func (r *MutableStateInitializerImpl) serializeBackfillToken(
 	dbHistorySize int64,
 	existsInDB bool,
 ) ([]byte, error) {
-	// This is ultimately for the replication rpc stream, so it's not really a request or
-	// response, but use SourceRPCResponse here since it's outgoing data.
-	if err := utf8validator.Validate(mutableState, utf8validator.SourceRPCResponse); err != nil {
-		return nil, err
-	}
 	mutableStateRow, err := mutableState.Marshal()
 	if err != nil {
 		return nil, err
@@ -276,11 +270,6 @@ func (r *MutableStateInitializerImpl) deserializeBackfillToken(
 		return nil, 0, 0, false, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_JSON, err)
 	}
 	err := proto.Unmarshal(historyBackfillToken.MutableStateRow, mutableState)
-	if err == nil {
-		// This is ultimately from the replication rpc stream, so it's not really a request or
-		// response, but use SourceRPCRequest here since it's incoming data.
-		err = utf8validator.Validate(mutableState, utf8validator.SourceRPCRequest)
-	}
 	if err != nil {
 		return nil, 0, 0, false, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}

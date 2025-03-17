@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflow"
-	"go.temporal.io/server/service/history/shard"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -58,7 +58,7 @@ type (
 
 type (
 	multiOp struct {
-		shardContext       shard.Context
+		shardContext       historyi.ShardContext
 		namespaceId        namespace.ID
 		consistencyChecker api.WorkflowConsistencyChecker
 		testHooks          testhooks.TestHooks
@@ -74,7 +74,7 @@ type (
 func Invoke(
 	ctx context.Context,
 	req *historyservice.ExecuteMultiOperationRequest,
-	shardContext shard.Context,
+	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
 	visibilityManager manager.VisibilityManager,
@@ -184,8 +184,8 @@ func (mo *multiOp) workflowLeaseCallback(
 ) api.CreateOrUpdateLeaseFunc {
 	return func(
 		existingLease api.WorkflowLease,
-		shardContext shard.Context,
-		ms workflow.MutableState,
+		shardContext historyi.ShardContext,
+		ms historyi.MutableState,
 	) (api.WorkflowLease, error) {
 		var res api.WorkflowLease
 

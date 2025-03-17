@@ -33,65 +33,60 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/workflow"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
-)
-
-var (
-	WorkflowTerminationReason   = "Terminate Workflow Due To Version Conflict."
-	WorkflowTerminationIdentity = "history-service"
+	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type (
 	Workflow interface {
-		GetContext() workflow.Context
-		GetMutableState() workflow.MutableState
-		GetReleaseFn() wcache.ReleaseCacheFunc
+		GetContext() historyi.WorkflowContext
+		GetMutableState() historyi.MutableState
+		GetReleaseFn() historyi.ReleaseWorkflowContextFunc
 		GetVectorClock() (int64, int64, error)
 
 		HappensAfter(that Workflow) (bool, error)
 		Revive() error
-		SuppressBy(incomingWorkflow Workflow) (workflow.TransactionPolicy, error)
+		SuppressBy(incomingWorkflow Workflow) (historyi.TransactionPolicy, error)
 		FlushBufferedEvents() error
 	}
 
 	WorkflowImpl struct {
 		clusterMetadata cluster.Metadata
 
-		context      workflow.Context
-		mutableState workflow.MutableState
-		releaseFn    wcache.ReleaseCacheFunc
+		context      historyi.WorkflowContext
+		mutableState historyi.MutableState
+		releaseFn    historyi.ReleaseWorkflowContextFunc
 	}
 )
 
 func NewWorkflow(
 	clusterMetadata cluster.Metadata,
-	context workflow.Context,
-	mutableState workflow.MutableState,
-	releaseFn wcache.ReleaseCacheFunc,
+	wfContext historyi.WorkflowContext,
+	mutableState historyi.MutableState,
+	releaseFn historyi.ReleaseWorkflowContextFunc,
 ) *WorkflowImpl {
 
 	return &WorkflowImpl{
 		clusterMetadata: clusterMetadata,
 
-		context:      context,
+		context:      wfContext,
 		mutableState: mutableState,
 		releaseFn:    releaseFn,
 	}
 }
 
-func (r *WorkflowImpl) GetContext() workflow.Context {
+func (r *WorkflowImpl) GetContext() historyi.WorkflowContext {
 	return r.context
 }
 
-func (r *WorkflowImpl) GetMutableState() workflow.MutableState {
+func (r *WorkflowImpl) GetMutableState() historyi.MutableState {
 	return r.mutableState
 }
 
-func (r *WorkflowImpl) GetReleaseFn() wcache.ReleaseCacheFunc {
+func (r *WorkflowImpl) GetReleaseFn() historyi.ReleaseWorkflowContextFunc {
 	return r.releaseFn
 }
 
@@ -159,7 +154,7 @@ func (r *WorkflowImpl) Revive() error {
 
 func (r *WorkflowImpl) SuppressBy(
 	incomingWorkflow Workflow,
-) (workflow.TransactionPolicy, error) {
+) (historyi.TransactionPolicy, error) {
 
 	// NOTE: READ BEFORE MODIFICATION
 	//
@@ -170,11 +165,11 @@ func (r *WorkflowImpl) SuppressBy(
 
 	lastWriteVersion, lastEventTaskID, err := r.GetVectorClock()
 	if err != nil {
-		return workflow.TransactionPolicyActive, err
+		return historyi.TransactionPolicyActive, err
 	}
 	incomingLastWriteVersion, incomingLastEventTaskID, err := incomingWorkflow.GetVectorClock()
 	if err != nil {
-		return workflow.TransactionPolicyActive, err
+		return historyi.TransactionPolicyActive, err
 	}
 
 	if WorkflowHappensAfter(
@@ -183,21 +178,21 @@ func (r *WorkflowImpl) SuppressBy(
 		incomingLastWriteVersion,
 		incomingLastEventTaskID,
 	) {
-		return workflow.TransactionPolicyActive, serviceerror.NewInternal("Workflow cannot suppress workflow by older workflow")
+		return historyi.TransactionPolicyActive, serviceerror.NewInternal("Workflow cannot suppress workflow by older workflow")
 	}
 
 	// if workflow is in zombie or finished state, keep as is
 	if !r.mutableState.IsWorkflowExecutionRunning() {
-		return workflow.TransactionPolicyPassive, nil
+		return historyi.TransactionPolicyPassive, nil
 	}
 
 	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster == lastWriteCluster {
-		return workflow.TransactionPolicyActive, r.terminateWorkflow(lastWriteVersion, incomingLastWriteVersion)
+		return historyi.TransactionPolicyActive, r.terminateWorkflow(lastWriteVersion, incomingLastWriteVersion)
 	}
-	return workflow.TransactionPolicyPassive, r.mutableState.UpdateWorkflowStateStatus(
+	return historyi.TransactionPolicyPassive, r.mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
@@ -296,9 +291,9 @@ func (r *WorkflowImpl) terminateWorkflow(
 
 	_, err = r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		eventBatchFirstEventID,
-		WorkflowTerminationReason,
+		common.FailureReasonWorkflowTerminationDueToVersionConflict,
 		payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
-		WorkflowTerminationIdentity,
+		consts.IdentityHistoryService,
 		false,
 		nil, // No links necessary.
 	)

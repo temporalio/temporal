@@ -30,7 +30,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func TestValidateProtoDuration(t *testing.T) {
+func TestValidateAndCapProtoDuration(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -69,13 +69,19 @@ func TestValidateProtoDuration(t *testing.T) {
 			expectedErr:           errMismatchedSigns,
 			expectedTimerDuration: nil,
 		},
+		{
+			name:                  "large duration",
+			timerDuration:         durationpb.New(280 * 365 * 24 * time.Hour),
+			expectedErr:           nil,
+			expectedTimerDuration: durationpb.New(maxAllowedDuration),
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			actualErr := ValidateProtoDuration(tc.timerDuration)
+			actualErr := ValidateAndCapProtoDuration(tc.timerDuration)
 
 			assert.Equal(t, tc.expectedErr, actualErr)
 			if tc.expectedErr == nil {

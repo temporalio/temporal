@@ -38,9 +38,7 @@ PERSISTENCE_DRIVER ?= cassandra
 TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
 
-# Always use "protolegacy" tag to allow disabling utf-8 validation on proto messages
-# during proto library transition.
-ALL_BUILD_TAGS := protolegacy,$(BUILD_TAG)
+ALL_BUILD_TAGS := $(BUILD_TAG),
 ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
 TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
@@ -118,28 +116,20 @@ ifeq ($(UNIT_TEST_DIRS),)
 UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
 endif
 
-# github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
+# Pinning modernc.org/sqlite to this version until https://gitlab.com/cznic/sqlite/-/issues/196 is resolved.
 PINNED_DEPENDENCIES := \
-	github.com/go-sql-driver/mysql@v1.5.0 \
-	github.com/urfave/cli/v2@v2.4.0
+	modernc.org/sqlite@v1.34.1 \
+	modernc.org/libc@v1.55.3
 
 # Code coverage & test report output files.
 TEST_OUTPUT_ROOT        := ./.testoutput
-NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).cover.out   # generates a new filename each time it's substituted
-SUMMARY_COVER_PROFILE  := $(TEST_OUTPUT_ROOT)/summary.cover.out
-NEW_REPORT              = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).junit.xml   # generates a new filename each time it's substituted
+NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/coverage.$(shell xxd -p -l 16 /dev/urandom).out   # generates a new filename each time it's substituted
+NEW_REPORT              = $(TEST_OUTPUT_ROOT)/junit.$(shell xxd -p -l 16 /dev/urandom).xml   # generates a new filename each time it's substituted
+COVERPKG_FLAG 		    = -coverpkg=$(shell go list ./... | paste -sd "," -)
 
 # DB
 SQL_USER ?= temporal
 SQL_PASSWORD ?= temporal
-
-# Need the following option to have integration and functional tests count towards coverage. godoc below:
-# -coverpkg pkg1,pkg2,pkg3
-#   Apply coverage analysis in each test to the given list of packages.
-#   The default is for each test to analyze only the package being tested.
-#   Packages are specified as import paths.
-INTEGRATION_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/common/persistence/..."
-FUNCTIONAL_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/temporal/..."
 
 # Only prints output if the exit code is non-zero
 define silent_exec
@@ -170,7 +160,7 @@ GOLANGCI_LINT_VERSION := dafd65537336fdce063c492a7ab2a68cc89f8d52
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
-	
+
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 GCI_VERSION := v0.13.5
 GCI := $(LOCALBIN)/gci-$(GCI_VERSION)
@@ -226,7 +216,7 @@ $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
-STRINGER_VER := v0.21.0
+STRINGER_VER := v0.30.0
 STRINGER := $(LOCALBIN)/stringer
 $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))
@@ -418,57 +408,35 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(UNIT_TEST_DIRS) -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE)
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(INTEGRATION_TEST_DIRS) -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_COVERPKG)
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_DIRS)
 
 # This should use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
-	go test -c -o /dev/null $(FUNCTIONAL_TEST_ROOT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(FUNCTIONAL_TEST_COVERPKG)
+	go test -c -cover -o /dev/null $(FUNCTIONAL_TEST_ROOT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(COVERPKG_FLAG)
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_ROOT) -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_XDC_ROOT) -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_XDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_NDC_ROOT) -- \
-		$(COMPILED_TEST_ARGS) \
-		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) --retries=$(FAILED_TEST_RETRIES) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
-
-.PHONY: $(SUMMARY_COVER_PROFILE)
-$(SUMMARY_COVER_PROFILE):
-	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
-	@rm -f $(SUMMARY_COVER_PROFILE) $(SUMMARY_COVER_PROFILE).html
-	@if [ -z "$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out)" ]; then \
-		echo "No coverage data, aborting!" && exit 1; \
-	fi
-	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
-	$(foreach COVER_PROFILE,$(wildcard $(TEST_OUTPUT_ROOT)/*.cover.out),\
-		@printf "Add %s...\n" $(COVER_PROFILE); \
-		@grep -v -e "[Mm]ocks\?.go" -e "^mode: \w\+" $(COVER_PROFILE) >> $(SUMMARY_COVER_PROFILE) || true \
-	$(NEWLINE))
-
-coverage-report: $(SUMMARY_COVER_PROFILE)
-	@printf $(COLOR) "Generate HTML report from $(SUMMARY_COVER_PROFILE) to $(SUMMARY_COVER_PROFILE).html..."
-	@go tool cover -html=$(SUMMARY_COVER_PROFILE) -o $(SUMMARY_COVER_PROFILE).html
 
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
@@ -583,6 +551,9 @@ start-postgres12: temporal-server
 
 start-sqlite: temporal-server
 	./temporal-server --env development-sqlite --allow-no-auth start
+
+start-sqlite-file: temporal-server
+	./temporal-server --env development-sqlite-file --allow-no-auth start
 
 start-xdc-cluster-a: temporal-server
 	./temporal-server --env development-cluster-a --allow-no-auth start

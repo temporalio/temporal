@@ -177,6 +177,43 @@ func (this *WorkflowExecutionState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type RequestIDInfo to the protobuf v3 wire format
+func (val *RequestIDInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RequestIDInfo from the protobuf v3 wire format
+func (val *RequestIDInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RequestIDInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RequestIDInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RequestIDInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RequestIDInfo
+	switch t := that.(type) {
+	case *RequestIDInfo:
+		that1 = t
+	case RequestIDInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type TransferTaskInfo to the protobuf v3 wire format
 func (val *TransferTaskInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -872,6 +909,43 @@ func (this *NexusOperationCancellationInfo) Equal(that interface{}) bool {
 	case *NexusOperationCancellationInfo:
 		that1 = t
 	case NexusOperationCancellationInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ResetChildInfo to the protobuf v3 wire format
+func (val *ResetChildInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ResetChildInfo from the protobuf v3 wire format
+func (val *ResetChildInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ResetChildInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ResetChildInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ResetChildInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ResetChildInfo
+	switch t := that.(type) {
+	case *ResetChildInfo:
+		that1 = t
+	case ResetChildInfo:
 		that1 = &t
 	default:
 		return false

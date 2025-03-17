@@ -154,6 +154,7 @@ message StateMachineTombstone {
         int64 signal_external_initiated_event_id = 5;
         string update_id = 6;
         StateMachinePath state_machine_path = 7;
+        string chasm_node_path = 8;
     }
 }
 

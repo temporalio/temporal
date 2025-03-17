@@ -39,10 +39,10 @@ on:
       test_runner:
         description: "Which runner to use. Choose higher RAM if your n_runs is high."
         type: choice
-        default: "16GB RAM (ubuntu-20.04)"
+        default: "16GB RAM (ubuntu-latest)"
         options:
-          - "16GB RAM (ubuntu-20.04)"
-          - "64GB RAM (ubuntu-22.04)"
+          - "16GB RAM (ubuntu-latest)"
+          - "64GB RAM (ubuntu-latest-16-cores)"
       test_dbs:
         description: 'List of DBs to test on (i.e. ["sqlite", "cassandra", "mysql8", "postgres12"])'
         type: string
@@ -60,12 +60,11 @@ env:
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
-  BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
 
 jobs:
   set-up-single-test:
     name: Set up single test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     outputs:
       shard_indices: ${{ steps.generate_output.outputs.shard_indices }}
       total_shards: ${{ steps.generate_output.outputs.shards }}
@@ -84,12 +83,12 @@ jobs:
         run: |
           shards=3
           timeout=25   # update this to TEST_TIMEOUT if you update the Makefile
-          runs_on='["ubuntu-20.04"]'
+          runs_on='["ubuntu-latest"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
             shards=1
             timeout=${{ inputs.timeout_minutes }}
             single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
-            if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-22.04)" ]]; then
+            if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-latest-16-cores)" ]]; then
               runs_on='[ "ubuntu-latest-16-cores" ]'
             fi
           fi
@@ -137,7 +136,7 @@ jobs:
     name: Pre-build for cache
     strategy:
       fail-fast: false
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -181,7 +180,7 @@ jobs:
     needs: pre-build
     strategy:
       fail-fast: false
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -214,7 +213,7 @@ jobs:
       - uses: arduino/setup-protoc@v3
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -231,9 +230,7 @@ jobs:
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
-    runs-on: ubuntu-20.04
-    env:
-      BUILDKITE_MESSAGE: '{"job": "unit-test"}'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -269,13 +266,28 @@ jobs:
         uses: mikepenz/action-junit-report@v5.0.0-rc01
         if: failure()
         with:
-          report_paths: ./.testoutput/*.junit.xml
+          report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
           check_annotations: false
           annotate_only: true
           skip_annotations: true
 
-      - name: Upload test results
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: unit-test
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: unit-test
+
+      - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_unit_test }}
@@ -304,9 +316,7 @@ jobs:
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
-    runs-on: ubuntu-20.04
-    env:
-      BUILDKITE_MESSAGE: '{"job": "integration-test"}'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -348,13 +358,28 @@ jobs:
         uses: mikepenz/action-junit-report@v5.0.0-rc01
         if: failure()
         with:
-          report_paths: ./.testoutput/*.junit.xml
+          report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
           check_annotations: false
           annotate_only: true
           skip_annotations: true
 
-      - name: Upload test results
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: integration-test
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: integration-test
+
+      - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
@@ -431,7 +456,6 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
-      BUILDKITE_MESSAGE: '{"job": "functional-test", "db": "${{ matrix.persistence_driver }}"}'
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -498,13 +522,28 @@ jobs:
         uses: mikepenz/action-junit-report@v5.0.0-rc01
         if: failure()
         with:
-          report_paths: ./.testoutput/*.junit.xml
+          report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
           check_annotations: false
           annotate_only: true
           skip_annotations: true
 
-      - name: Upload test results
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: functional-test
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: functional-test
+
+      - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
@@ -560,11 +599,10 @@ jobs:
             persistence_driver: postgres12_pgx
             parallel_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      BUILDKITE_MESSAGE: '{"job": "functional-test-xdc", "db": "${{ matrix.persistence_driver }}"}'
       TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
       - uses: actions/checkout@v4
@@ -622,13 +660,28 @@ jobs:
         uses: mikepenz/action-junit-report@v5.0.0-rc01
         if: failure()
         with:
-          report_paths: ./.testoutput/*.junit.xml
+          report_paths: ./.testoutput/junit.*.xml
           detailed_summary: true
           check_annotations: false
           annotate_only: true
           skip_annotations: true
 
-      - name: Upload test results
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: functional-test-xdc
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: functional-test-xdc
+
+      - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
@@ -686,7 +739,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -743,7 +796,22 @@ jobs:
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
 
-      - name: Upload test results
+      - name: Upload code coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: functional-test-ndc
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./.testoutput
+          flags: functional-test-ndc
+
+      - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
@@ -775,7 +843,7 @@ jobs:
       - functional-test
       - functional-test-xdc
       - functional-test-ndc
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     env:
       RESULTS: ${{ toJSON(needs.*.result) }}
     steps:

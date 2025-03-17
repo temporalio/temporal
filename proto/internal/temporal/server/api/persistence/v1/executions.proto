@@ -30,6 +30,7 @@ import "google/protobuf/timestamp.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/common.proto";
+import "temporal/api/enums/v1/event_type.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
@@ -280,6 +281,12 @@ message WorkflowExecutionInfo {
     repeated VersionedTransition previous_transition_history = 100;
     VersionedTransition last_transition_history_break_point = 101;
 
+    // This is a set of child workflows that were initialized after the reset point in the parent workflow.
+    // The children are identified by the key "workflow_type:workflow_id". When the parent starts to make progress after reset, it uses this data to
+    // determine the right start policy to apply to the child. This list will include children initiated in continue-as-new runs.
+    map<string, ResetChildInfo> children_initialized_post_reset_point = 102;
+    // The worker deployment that completed the last WFT.
+    string worker_deployment_name = 103;
 }
 
 message ExecutionStats {
@@ -294,6 +301,14 @@ message WorkflowExecutionState {
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
     VersionedTransition last_update_versioned_transition = 5;
     google.protobuf.Timestamp start_time = 6;
+    // Request IDs that are attached to the workflow execution. It can the request ID that started
+    // the workflow execution or request IDs that were attached to an existing running workflow
+    // execution via StartWorkflowExecutionRequest.OnConflictOptions.
+    map<string, RequestIDInfo> request_ids = 7;
+}
+
+message RequestIDInfo {
+    temporal.api.enums.v1.EventType event_type = 1;
 }
 
 // transfer column
@@ -531,7 +546,12 @@ message ActivityInfo {
 
     // The deployment this activity was dispatched to most recently. Present only if the activity
     // was dispatched to a versioned worker.
+    // Deprecated. Replaced by last_worker_deployment_version.
     temporal.api.deployment.v1.Deployment last_started_deployment = 43;
+
+    // The deployment this activity was dispatched to most recently. Present only if the activity
+    // was dispatched to a versioned worker.
+    string last_worker_deployment_version = 44;
 }
 
 // timer_map column
@@ -683,8 +703,8 @@ message NexusOperationInfo {
     // Token for fetching the scheduled event.
     bytes scheduled_event_token = 5;
 
-    // Operation ID. Only set for asynchronous operations after a successful StartOperation call.
-    string operation_id = 6;
+    // Operation token. Only set for asynchronous operations after a successful StartOperation call.
+    string operation_token = 6;
 
     // Schedule-to-close timeout for this operation.
     // This is the only timeout settable by a workflow.
@@ -733,4 +753,10 @@ message NexusOperationCancellationInfo {
     temporal.api.failure.v1.Failure last_attempt_failure = 5;
     // The time when the next attempt is scheduled.
     google.protobuf.Timestamp next_attempt_schedule_time = 6;
+}
+
+// ResetChildInfo contains the state and actions to be performed on children when a parent workflow resumes after reset.
+message ResetChildInfo {
+    // If true, the parent workflow should terminate the child before starting it.
+    bool should_terminate_and_start = 1;
 }

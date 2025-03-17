@@ -40,7 +40,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/testing/protopack"
@@ -66,86 +65,6 @@ func TestIsContextCanceledErr(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	require.True(t, IsContextCanceledErr(ctx.Err()))
-}
-
-func TestOverrideWorkflowRunTimeout_InfiniteRunTimeout_InfiniteExecutionTimeout(t *testing.T) {
-	runTimeout := time.Duration(0)
-	executionTimeout := time.Duration(0)
-	require.Equal(t, time.Duration(0), OverrideWorkflowRunTimeout(runTimeout, executionTimeout))
-}
-
-func TestOverrideWorkflowRunTimeout_FiniteRunTimeout_InfiniteExecutionTimeout(t *testing.T) {
-	runTimeout := time.Duration(10)
-	executionTimeout := time.Duration(0)
-	require.Equal(t, time.Duration(10), OverrideWorkflowRunTimeout(runTimeout, executionTimeout))
-}
-
-func TestOverrideWorkflowRunTimeout_InfiniteRunTimeout_FiniteExecutionTimeout(t *testing.T) {
-	runTimeout := time.Duration(0)
-	executionTimeout := time.Duration(10)
-	require.Equal(t, time.Duration(10), OverrideWorkflowRunTimeout(runTimeout, executionTimeout))
-}
-
-func TestOverrideWorkflowRunTimeout_FiniteRunTimeout_FiniteExecutionTimeout(t *testing.T) {
-	runTimeout := time.Duration(100)
-	executionTimeout := time.Duration(10)
-	require.Equal(t, time.Duration(10), OverrideWorkflowRunTimeout(runTimeout, executionTimeout))
-
-	runTimeout = time.Duration(10)
-	executionTimeout = time.Duration(100)
-	require.Equal(t, time.Duration(10), OverrideWorkflowRunTimeout(runTimeout, executionTimeout))
-}
-
-func TestOverrideWorkflowTaskTimeout_Infinite(t *testing.T) {
-	taskTimeout := time.Duration(0)
-	runTimeout := time.Duration(100)
-	defaultTimeout := time.Duration(20)
-	defaultTimeoutFn := dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(20), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = time.Duration(0)
-	runTimeout = time.Duration(10)
-	defaultTimeout = time.Duration(20)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(10), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = time.Duration(0)
-	runTimeout = time.Duration(0)
-	defaultTimeout = time.Duration(30)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(30), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = time.Duration(0)
-	runTimeout = time.Duration(0)
-	defaultTimeout = MaxWorkflowTaskStartToCloseTimeout + time.Duration(1)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, MaxWorkflowTaskStartToCloseTimeout, OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-}
-
-func TestOverrideWorkflowTaskTimeout_Finite(t *testing.T) {
-	taskTimeout := time.Duration(10)
-	runTimeout := MaxWorkflowTaskStartToCloseTimeout - time.Duration(1)
-	defaultTimeout := time.Duration(20)
-	defaultTimeoutFn := dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(10), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = MaxWorkflowTaskStartToCloseTimeout - time.Duration(1)
-	runTimeout = time.Duration(10)
-	defaultTimeout = time.Duration(20)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(10), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = time.Duration(10)
-	runTimeout = MaxWorkflowTaskStartToCloseTimeout + time.Duration(1)
-	defaultTimeout = time.Duration(20)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, time.Duration(10), OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
-
-	taskTimeout = MaxWorkflowTaskStartToCloseTimeout + time.Duration(1)
-	runTimeout = MaxWorkflowTaskStartToCloseTimeout + time.Duration(1)
-	defaultTimeout = time.Duration(20)
-	defaultTimeoutFn = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(defaultTimeout)
-	require.Equal(t, MaxWorkflowTaskStartToCloseTimeout, OverrideWorkflowTaskTimeout("random domain", taskTimeout, runTimeout, defaultTimeoutFn))
 }
 
 func TestMapShardID_ByNamespaceWorkflow_4And16(t *testing.T) {

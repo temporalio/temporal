@@ -28,6 +28,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -43,8 +44,9 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
-	deletemanager "go.temporal.io/server/service/history/deletemanager"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/deletemanager"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -76,7 +78,7 @@ type (
 	dlqHandlerImpl struct {
 		taskExecutorsLock    sync.Mutex
 		taskExecutors        map[string]TaskExecutor
-		shard                shard.Context
+		shard                historyi.ShardContext
 		deleteManager        deletemanager.DeleteManager
 		workflowCache        wcache.Cache
 		resender             xdc.NDCHistoryResender
@@ -86,7 +88,7 @@ type (
 )
 
 func NewLazyDLQHandler(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	deleteManager deletemanager.DeleteManager,
 	workflowCache wcache.Cache,
 	clientBean client.Bean,
@@ -103,7 +105,7 @@ func NewLazyDLQHandler(
 }
 
 func newDLQHandler(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	deleteManager deletemanager.DeleteManager,
 	workflowCache wcache.Cache,
 	clientBean client.Bean,
@@ -135,7 +137,7 @@ func newDLQHandler(
 				if err != nil {
 					return err
 				}
-				return engine.ReplicateHistoryEvents(
+				err = engine.ReplicateHistoryEvents(
 					ctx,
 					definition.WorkflowKey{
 						NamespaceID: namespaceId.String(),
@@ -148,6 +150,10 @@ func newDLQHandler(
 					nil,
 					"",
 				)
+				if errors.Is(err, consts.ErrDuplicate) {
+					return nil
+				}
+				return err
 
 			},
 			shard.GetPayloadSerializer(),

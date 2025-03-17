@@ -25,6 +25,7 @@
 package shard
 
 import (
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -41,6 +42,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 )
@@ -48,10 +50,10 @@ import (
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_factory_mock.go
 
 type (
-	CloseCallback func(ControllableContext)
+	CloseCallback func(historyi.ControllableContext)
 
 	ContextFactory interface {
-		CreateContext(shardID int32, closeCallback CloseCallback) (ControllableContext, error)
+		CreateContext(shardID int32, closeCallback CloseCallback) (historyi.ControllableContext, error)
 	}
 
 	ContextFactoryParams struct {
@@ -80,6 +82,7 @@ type (
 		EventsCache                 events.Cache
 
 		StateMachineRegistry *hsm.Registry
+		ChasmRegistry        *chasm.Registry
 	}
 
 	contextFactoryImpl struct {
@@ -96,7 +99,7 @@ func ContextFactoryProvider(params ContextFactoryParams) ContextFactory {
 func (c *contextFactoryImpl) CreateContext(
 	shardID int32,
 	closeCallback CloseCallback,
-) (ControllableContext, error) {
+) (historyi.ControllableContext, error) {
 	shard, err := newContext(
 		shardID,
 		c.EngineFactory,
@@ -121,6 +124,7 @@ func (c *contextFactoryImpl) CreateContext(
 		c.TaskCategoryRegistry,
 		c.EventsCache,
 		c.StateMachineRegistry,
+		c.ChasmRegistry,
 	)
 	if err != nil {
 		return nil, err

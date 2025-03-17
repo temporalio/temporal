@@ -33,6 +33,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -65,11 +66,19 @@ func newTelemetryClusterMetadataStore(
 
 // DeleteClusterMetadata wraps ClusterMetadataStore.DeleteClusterMetadata.
 func (d telemetryClusterMetadataStore) DeleteClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalDeleteClusterMetadataRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/DeleteClusterMetadata")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ClusterMetadataStore/DeleteClusterMetadata",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ClusterMetadataStore"),
+			attribute.Key("persistence.method").String("DeleteClusterMetadata"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ClusterMetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteClusterMetadata"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ClusterMetadataStore.DeleteClusterMetadata(ctx, request)
 	if err != nil {
@@ -92,11 +101,19 @@ func (d telemetryClusterMetadataStore) DeleteClusterMetadata(ctx context.Context
 
 // GetClusterMembers wraps ClusterMetadataStore.GetClusterMembers.
 func (d telemetryClusterMetadataStore) GetClusterMembers(ctx context.Context, request *_sourcePersistence.GetClusterMembersRequest) (gp1 *_sourcePersistence.GetClusterMembersResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/GetClusterMembers")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ClusterMetadataStore/GetClusterMembers",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ClusterMetadataStore"),
+			attribute.Key("persistence.method").String("GetClusterMembers"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ClusterMetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetClusterMembers"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	gp1, err = d.ClusterMetadataStore.GetClusterMembers(ctx, request)
 	if err != nil {
@@ -126,11 +143,19 @@ func (d telemetryClusterMetadataStore) GetClusterMembers(ctx context.Context, re
 
 // GetClusterMetadata wraps ClusterMetadataStore.GetClusterMetadata.
 func (d telemetryClusterMetadataStore) GetClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalGetClusterMetadataRequest) (ip1 *_sourcePersistence.InternalGetClusterMetadataResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/GetClusterMetadata")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ClusterMetadataStore/GetClusterMetadata",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ClusterMetadataStore"),
+			attribute.Key("persistence.method").String("GetClusterMetadata"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ClusterMetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetClusterMetadata"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ClusterMetadataStore.GetClusterMetadata(ctx, request)
 	if err != nil {
@@ -160,11 +185,19 @@ func (d telemetryClusterMetadataStore) GetClusterMetadata(ctx context.Context, r
 
 // ListClusterMetadata wraps ClusterMetadataStore.ListClusterMetadata.
 func (d telemetryClusterMetadataStore) ListClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalListClusterMetadataRequest) (ip1 *_sourcePersistence.InternalListClusterMetadataResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/ListClusterMetadata")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ClusterMetadataStore/ListClusterMetadata",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ClusterMetadataStore"),
+			attribute.Key("persistence.method").String("ListClusterMetadata"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ClusterMetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ListClusterMetadata"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.ClusterMetadataStore.ListClusterMetadata(ctx, request)
 	if err != nil {
@@ -194,11 +227,19 @@ func (d telemetryClusterMetadataStore) ListClusterMetadata(ctx context.Context, 
 
 // PruneClusterMembership wraps ClusterMetadataStore.PruneClusterMembership.
 func (d telemetryClusterMetadataStore) PruneClusterMembership(ctx context.Context, request *_sourcePersistence.PruneClusterMembershipRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/PruneClusterMembership")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ClusterMetadataStore/PruneClusterMembership",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ClusterMetadataStore"),
+			attribute.Key("persistence.method").String("PruneClusterMembership"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ClusterMetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("PruneClusterMembership"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ClusterMetadataStore.PruneClusterMembership(ctx, request)
 	if err != nil {
@@ -221,11 +262,19 @@ func (d telemetryClusterMetadataStore) PruneClusterMembership(ctx context.Contex
 
 // SaveClusterMetadata wraps ClusterMetadataStore.SaveClusterMetadata.
 func (d telemetryClusterMetadataStore) SaveClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalSaveClusterMetadataRequest) (b1 bool, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/SaveClusterMetadata")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ClusterMetadataStore/SaveClusterMetadata",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ClusterMetadataStore"),
+			attribute.Key("persistence.method").String("SaveClusterMetadata"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ClusterMetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("SaveClusterMetadata"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	b1, err = d.ClusterMetadataStore.SaveClusterMetadata(ctx, request)
 	if err != nil {
@@ -255,11 +304,19 @@ func (d telemetryClusterMetadataStore) SaveClusterMetadata(ctx context.Context, 
 
 // UpsertClusterMembership wraps ClusterMetadataStore.UpsertClusterMembership.
 func (d telemetryClusterMetadataStore) UpsertClusterMembership(ctx context.Context, request *_sourcePersistence.UpsertClusterMembershipRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.ClusterMetadataStore/UpsertClusterMembership")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ClusterMetadataStore/UpsertClusterMembership",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ClusterMetadataStore"),
+			attribute.Key("persistence.method").String("UpsertClusterMembership"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("ClusterMetadataStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("UpsertClusterMembership"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.ClusterMetadataStore.UpsertClusterMembership(ctx, request)
 	if err != nil {

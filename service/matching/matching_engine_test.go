@@ -254,7 +254,7 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 }
 
 func (s *matchingEngineSuite) TestAckManager() {
-	backlogMgr := newBacklogMgr(s.controller, false)
+	backlogMgr := newBacklogMgr(s.T(), s.controller, false)
 	m := newAckManager(backlogMgr.db, backlogMgr.logger)
 
 	m.setAckLevel(100)
@@ -319,7 +319,7 @@ func (s *matchingEngineSuite) TestAckManager() {
 }
 
 func (s *matchingEngineSuite) TestAckManager_Sort() {
-	backlogMgr := newBacklogMgr(s.controller, false)
+	backlogMgr := newBacklogMgr(s.T(), s.controller, false)
 	m := newAckManager(backlogMgr.db, backlogMgr.logger)
 
 	const t0 = 100
@@ -443,7 +443,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 		s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
 		s.Nil(descResp.DescResponse.GetTaskQueueStatus())
 	}
-	s.EqualValues(1, s.taskManager.getQueueManager(tlID).RangeID())
+	s.EqualValues(1, s.taskManager.getQueueManagerByKey(tlID).RangeID())
 }
 
 func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
@@ -976,7 +976,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	namespaceId := uuid.New()
 	tl := "makeToast"
 	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
+	s.taskManager.getQueueManagerByKey(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	taskQueue := &taskqueuepb.TaskQueue{
@@ -1077,7 +1077,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= s.taskManager.getQueueManager(tlID).rangeID)
+	s.True(expectedRange <= s.taskManager.getQueueManagerByKey(tlID).rangeID)
 }
 
 // TODO: this unit test does not seem to belong to matchingEngine, move it to the right place
@@ -1103,7 +1103,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
 
 	var err error
-	s.taskManager.getQueueManager(dbq).rangeID = initialRangeID
+	s.taskManager.getQueueManagerByKey(dbq).rangeID = initialRangeID
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 
 	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
@@ -1249,7 +1249,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= s.taskManager.getQueueManager(dbq).rangeID)
+	s.True(expectedRange <= s.taskManager.getQueueManagerByKey(dbq).rangeID)
 
 	// check the poller information
 	tlType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
@@ -1319,7 +1319,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	dbq := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
-	s.taskManager.getQueueManager(dbq).rangeID = initialRangeID
+	s.taskManager.getQueueManagerByKey(dbq).rangeID = initialRangeID
 	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
 
 	mgrImpl, ok := mgr.(*taskQueuePartitionManagerImpl).defaultQueue.(*physicalTaskQueueManagerImpl)
@@ -1452,7 +1452,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= s.taskManager.getQueueManager(dbq).rangeID)
+	s.True(expectedRange <= s.taskManager.getQueueManagerByKey(dbq).rangeID)
 	s.EqualValues(0, s.taskManager.getTaskCount(dbq))
 
 	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
@@ -1482,7 +1482,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 	namespaceId := uuid.New()
 	tl := "makeToast"
 	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
+	s.taskManager.getQueueManagerByKey(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	taskQueue := &taskqueuepb.TaskQueue{
@@ -1582,7 +1582,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= s.taskManager.getQueueManager(tlID).rangeID)
+	s.True(expectedRange <= s.taskManager.getQueueManagerByKey(tlID).rangeID)
 }
 
 func (s *matchingEngineSuite) TestPollWithExpiredContext() {
@@ -1685,7 +1685,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	namespaceId := uuid.New()
 	tl := "makeToast"
 	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
+	s.taskManager.getQueueManagerByKey(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	taskQueue := &taskqueuepb.TaskQueue{
@@ -1825,7 +1825,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= s.taskManager.getQueueManager(tlID).rangeID)
+	s.True(expectedRange <= s.taskManager.getQueueManagerByKey(tlID).rangeID)
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
@@ -1843,7 +1843,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	namespaceId := uuid.New()
 	tl := "makeToast"
 	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
+	s.taskManager.getQueueManagerByKey(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	taskQueue := &taskqueuepb.TaskQueue{
@@ -1971,7 +1971,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= s.taskManager.getQueueManager(tlID).rangeID)
+	s.True(expectedRange <= s.taskManager.getQueueManagerByKey(tlID).rangeID)
 }
 
 func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
@@ -2265,8 +2265,8 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 			s.Truef(-3 <= delta && delta <= 1, "remaining %d, getTaskCount %d", remaining, s.taskManager.getTaskCount(dbq))
 		}
 		// ensure full gc for the next case (twice in case one doesn't get the gc lock)
-		tlMgr.backlogMgr.taskGC.RunNow(context.Background(), tlMgr.backlogMgr.taskAckManager.getAckLevel())
-		tlMgr.backlogMgr.taskGC.RunNow(context.Background(), tlMgr.backlogMgr.taskAckManager.getAckLevel())
+		tlMgr.backlogMgr.taskGC.RunNow(tlMgr.backlogMgr.taskAckManager.getAckLevel())
+		tlMgr.backlogMgr.taskGC.RunNow(tlMgr.backlogMgr.taskAckManager.getAckLevel())
 	}
 }
 
@@ -2410,8 +2410,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2436,8 +2439,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2462,8 +2468,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2535,8 +2544,11 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 	s.NoError(s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		}))
 	userData.Version++
 
@@ -2616,8 +2628,11 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 	err := s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
-			TaskQueue:   tq,
-			UserData:    userData,
+			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+				tq: &persistence.SingleTaskQueueUserDataUpdate{
+					UserData: userData,
+				},
+			},
 		})
 	s.NoError(err)
 
@@ -2712,10 +2727,13 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 
 	err := s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
-		TaskQueue:   tq,
-		UserData: &persistencespb.VersionedTaskQueueUserData{
-			Data:    userData,
-			Version: 34,
+		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+			tq: &persistence.SingleTaskQueueUserDataUpdate{
+				UserData: &persistencespb.VersionedTaskQueueUserData{
+					Data:    userData,
+					Version: 34,
+				},
+			},
 		},
 	})
 	s.Assert().NoError(err)
@@ -2762,10 +2780,13 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 
 	err = s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
-		TaskQueue:   tq,
-		UserData: &persistencespb.VersionedTaskQueueUserData{
-			Data:    userData,
-			Version: 34,
+		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+			tq: &persistence.SingleTaskQueueUserDataUpdate{
+				UserData: &persistencespb.VersionedTaskQueueUserData{
+					Data:    userData,
+					Version: 34,
+				},
+			},
 		},
 	})
 	s.NoError(err)
@@ -3067,7 +3088,7 @@ func (s *matchingEngineSuite) mockHistoryWhilePolling(workflowType *commonpb.Wor
 func (s *matchingEngineSuite) createTQAndPTQForBacklogTests() (*taskqueuepb.TaskQueue, *PhysicalTaskQueueKey) {
 	tq := "approximateBacklogCounter"
 	ptq := newUnversionedRootQueueKey(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	s.taskManager.getQueueManager(ptq).rangeID = 1
+	s.taskManager.getQueueManagerByKey(ptq).rangeID = 1
 	s.matchingEngine.config.RangeSize = 10
 
 	taskQueue := &taskqueuepb.TaskQueue{
@@ -3315,7 +3336,7 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 
 	// force GC to make sure all the acked tasks are cleaned up before validating the count
-	pgMgr.backlogMgr.taskGC.RunNow(context.Background(), pgMgr.backlogMgr.taskAckManager.getAckLevel())
+	pgMgr.backlogMgr.taskGC.RunNow(pgMgr.backlogMgr.taskAckManager.getAckLevel())
 	s.LessOrEqual(int64(s.taskManager.getTaskCount(ptq)), pgMgr.backlogMgr.db.getApproximateBacklogCount())
 }
 
@@ -3483,12 +3504,9 @@ type testTaskManager struct {
 }
 
 type dbTaskQueueKey struct {
-	partitionKey tqid.PartitionKey
-	version      PhysicalTaskQueueVersion
-}
-
-func getKey(dbq *PhysicalTaskQueueKey) dbTaskQueueKey {
-	return dbTaskQueueKey{dbq.partition.Key(), dbq.Version()}
+	persistenceName string
+	namespaceId     string
+	taskType        enumspb.TaskQueueType
 }
 
 func newTestTaskManager(logger log.Logger) *testTaskManager {
@@ -3502,8 +3520,12 @@ func (m *testTaskManager) GetName() string {
 func (m *testTaskManager) Close() {
 }
 
-func (m *testTaskManager) getQueueManager(queue *PhysicalTaskQueueKey) *testPhysicalTaskQueueManager {
-	key := getKey(queue)
+func (m *testTaskManager) getQueueManagerByKey(dbq *PhysicalTaskQueueKey) *testPhysicalTaskQueueManager {
+	return m.getQueueManager(dbq.PersistenceName(), dbq.NamespaceId(), dbq.TaskType())
+}
+
+func (m *testTaskManager) getQueueManager(name, namespaceId string, taskType enumspb.TaskQueueType) *testPhysicalTaskQueueManager {
+	key := dbTaskQueueKey{persistenceName: name, namespaceId: namespaceId, taskType: taskType}
 	m.Lock()
 	defer m.Unlock()
 	result, ok := m.queues[key]
@@ -3560,11 +3582,7 @@ func (m *testTaskManager) CreateTaskQueue(
 	request *persistence.CreateTaskQueueRequest,
 ) (*persistence.CreateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
-	dbq, err := ParsePhysicalTaskQueueKey(tli.Name, tli.NamespaceId, tli.TaskType)
-	if err != nil {
-		return nil, err
-	}
-	tlm := m.getQueueManager(dbq)
+	tlm := m.getQueueManager(tli.Name, tli.NamespaceId, tli.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
 
@@ -3585,11 +3603,7 @@ func (m *testTaskManager) UpdateTaskQueue(
 	request *persistence.UpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
-	dbq, err := ParsePhysicalTaskQueueKey(tli.Name, tli.NamespaceId, tli.TaskType)
-	if err != nil {
-		return nil, err
-	}
-	tlm := m.getQueueManager(dbq)
+	tlm := m.getQueueManager(tli.Name, tli.NamespaceId, tli.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
 	tlm.updateCount++
@@ -3609,11 +3623,7 @@ func (m *testTaskManager) GetTaskQueue(
 	_ context.Context,
 	request *persistence.GetTaskQueueRequest,
 ) (*persistence.GetTaskQueueResponse, error) {
-	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, request.TaskType)
-	if err != nil {
-		return nil, err
-	}
-	tlm := m.getQueueManager(dbq)
+	tlm := m.getQueueManager(request.TaskQueue, request.NamespaceID, request.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
 
@@ -3637,7 +3647,7 @@ func (m *testTaskManager) GetTaskQueue(
 
 // minTaskID returns the minimum value of the TaskID present in testTaskManager
 func (m *testTaskManager) minTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
-	tlm := m.getQueueManager(dbq)
+	tlm := m.getQueueManagerByKey(dbq)
 	tlm.Lock()
 	defer tlm.Unlock()
 	minKey, _ := tlm.tasks.Min()
@@ -3647,7 +3657,7 @@ func (m *testTaskManager) minTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
 
 // maxTaskID returns the maximum value of the TaskID present in testTaskManager
 func (m *testTaskManager) maxTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
-	tlm := m.getQueueManager(dbq)
+	tlm := m.getQueueManagerByKey(dbq)
 	tlm.Lock()
 	defer tlm.Unlock()
 	maxKey, _ := tlm.tasks.Max()
@@ -3659,11 +3669,7 @@ func (m *testTaskManager) CompleteTasksLessThan(
 	_ context.Context,
 	request *persistence.CompleteTasksLessThanRequest,
 ) (int, error) {
-	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueueName, request.NamespaceID, request.TaskType)
-	if err != nil {
-		return 0, err
-	}
-	tlm := m.getQueueManager(dbq)
+	tlm := m.getQueueManager(request.TaskQueueName, request.NamespaceID, request.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
 	keys := tlm.tasks.Keys()
@@ -3689,8 +3695,8 @@ func (m *testTaskManager) DeleteTaskQueue(
 ) error {
 	m.Lock()
 	defer m.Unlock()
-	q := newUnversionedRootQueueKey(request.TaskQueue.NamespaceID, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
-	delete(m.queues, getKey(q))
+	key := dbTaskQueueKey{persistenceName: request.TaskQueue.TaskQueueName, namespaceId: request.TaskQueue.NamespaceID, taskType: request.TaskQueue.TaskQueueType}
+	delete(m.queues, key)
 	return nil
 }
 
@@ -3730,11 +3736,7 @@ func (m *testTaskManager) CreateTasks(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", errors.New("failure")))
 	}
 
-	dbq, err := ParsePhysicalTaskQueueKey(taskQueue, namespaceId, taskType)
-	if err != nil {
-		return nil, err
-	}
-	tlm := m.getQueueManager(dbq)
+	tlm := m.getQueueManager(taskQueue, namespaceId, taskType)
 	tlm.Lock()
 	defer tlm.Unlock()
 
@@ -3784,12 +3786,7 @@ func (m *testTaskManager) GetTasks(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed"))
 	}
 
-	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, request.TaskType)
-
-	if err != nil {
-		return nil, err
-	}
-	tlm := m.getQueueManager(dbq)
+	tlm := m.getQueueManager(request.TaskQueue, request.NamespaceID, request.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
 	var tasks []*persistencespb.AllocatedTaskInfo
@@ -3813,7 +3810,7 @@ func (m *testTaskManager) GetTasks(
 
 // getTaskCount returns number of tasks in a task queue
 func (m *testTaskManager) getTaskCount(q *PhysicalTaskQueueKey) int {
-	tlm := m.getQueueManager(q)
+	tlm := m.getQueueManagerByKey(q)
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.tasks.Size()
@@ -3821,7 +3818,7 @@ func (m *testTaskManager) getTaskCount(q *PhysicalTaskQueueKey) int {
 
 // getCreateTaskCount returns how many times CreateTask was called
 func (m *testTaskManager) getCreateTaskCount(q *PhysicalTaskQueueKey) int {
-	tlm := m.getQueueManager(q)
+	tlm := m.getQueueManagerByKey(q)
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.createTaskCount
@@ -3829,7 +3826,7 @@ func (m *testTaskManager) getCreateTaskCount(q *PhysicalTaskQueueKey) int {
 
 // getGetTasksCount returns how many times GetTasks was called
 func (m *testTaskManager) getGetTasksCount(q *PhysicalTaskQueueKey) int {
-	tlm := m.getQueueManager(q)
+	tlm := m.getQueueManagerByKey(q)
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.getTasksCount
@@ -3837,7 +3834,7 @@ func (m *testTaskManager) getGetTasksCount(q *PhysicalTaskQueueKey) int {
 
 // getGetUserDataCount returns how many times GetUserData was called
 func (m *testTaskManager) getGetUserDataCount(q *PhysicalTaskQueueKey) int {
-	tlm := m.getQueueManager(q)
+	tlm := m.getQueueManagerByKey(q)
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.getUserDataCount
@@ -3845,7 +3842,7 @@ func (m *testTaskManager) getGetUserDataCount(q *PhysicalTaskQueueKey) int {
 
 // getUpdateCount returns how many times UpdateTaskQueue was called
 func (m *testTaskManager) getUpdateCount(q *PhysicalTaskQueueKey) int {
-	tlm := m.getQueueManager(q)
+	tlm := m.getQueueManagerByKey(q)
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.updateCount
@@ -3878,11 +3875,7 @@ func (m *testTaskManager) String() string {
 
 // GetTaskQueueData implements persistence.TaskManager
 func (m *testTaskManager) GetTaskQueueUserData(_ context.Context, request *persistence.GetTaskQueueUserDataRequest) (*persistence.GetTaskQueueUserDataResponse, error) {
-	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	if err != nil {
-		return nil, err
-	}
-	tlm := m.getQueueManager(dbq)
+	tlm := m.getQueueManager(request.TaskQueue, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	tlm.Lock()
 	defer tlm.Unlock()
 	tlm.getUserDataCount++
@@ -3893,16 +3886,14 @@ func (m *testTaskManager) GetTaskQueueUserData(_ context.Context, request *persi
 
 // UpdateTaskQueueUserData implements persistence.TaskManager
 func (m *testTaskManager) UpdateTaskQueueUserData(_ context.Context, request *persistence.UpdateTaskQueueUserDataRequest) error {
-	dbq, err := ParsePhysicalTaskQueueKey(request.TaskQueue, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	if err != nil {
-		return err
+	for tq, update := range request.Updates {
+		tlm := m.getQueueManager(tq, request.NamespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		tlm.Lock()
+		newData := common.CloneProto(update.UserData)
+		newData.Version++
+		tlm.userData = newData
+		tlm.Unlock()
 	}
-	tlm := m.getQueueManager(dbq)
-	tlm.Lock()
-	defer tlm.Unlock()
-	newData := common.CloneProto(request.UserData)
-	newData.Version++
-	tlm.userData = newData
 	return nil
 }
 

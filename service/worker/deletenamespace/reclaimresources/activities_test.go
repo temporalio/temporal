@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
@@ -53,7 +52,6 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewTestLogger(),
 	}
 
@@ -78,7 +76,6 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_ExecutionsExist(t *testing.T) 
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewTestLogger(),
 	}
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
@@ -107,7 +104,6 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NotDeletedExecutionsExist(t *t
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewTestLogger(),
 	}
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)

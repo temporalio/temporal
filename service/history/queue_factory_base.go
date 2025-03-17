@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
@@ -64,7 +65,7 @@ type (
 		// as that will lead to a cycle dependency issue between shard and workflow package.
 		// 2. Move this interface to queues package after 1 is done so that there's no cycle dependency
 		// between workflow and queues package.
-		CreateQueue(shard shard.Context, cache wcache.Cache) queues.Queue
+		CreateQueue(shardContext historyi.ShardContext, cache wcache.Cache) queues.Queue
 	}
 
 	QueueFactoryBaseParams struct {

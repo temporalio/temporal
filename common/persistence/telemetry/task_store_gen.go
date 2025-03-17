@@ -33,6 +33,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -65,11 +66,19 @@ func newTelemetryTaskStore(
 
 // CompleteTasksLessThan wraps TaskStore.CompleteTasksLessThan.
 func (d telemetryTaskStore) CompleteTasksLessThan(ctx context.Context, request *_sourcePersistence.CompleteTasksLessThanRequest) (i1 int, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/CompleteTasksLessThan")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/CompleteTasksLessThan",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("CompleteTasksLessThan"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("CompleteTasksLessThan"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	i1, err = d.TaskStore.CompleteTasksLessThan(ctx, request)
 	if err != nil {
@@ -99,11 +108,19 @@ func (d telemetryTaskStore) CompleteTasksLessThan(ctx context.Context, request *
 
 // CountTaskQueuesByBuildId wraps TaskStore.CountTaskQueuesByBuildId.
 func (d telemetryTaskStore) CountTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.CountTaskQueuesByBuildIdRequest) (i1 int, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/CountTaskQueuesByBuildId")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/CountTaskQueuesByBuildId",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("CountTaskQueuesByBuildId"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("CountTaskQueuesByBuildId"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	i1, err = d.TaskStore.CountTaskQueuesByBuildId(ctx, request)
 	if err != nil {
@@ -133,11 +150,19 @@ func (d telemetryTaskStore) CountTaskQueuesByBuildId(ctx context.Context, reques
 
 // CreateTaskQueue wraps TaskStore.CreateTaskQueue.
 func (d telemetryTaskStore) CreateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalCreateTaskQueueRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/CreateTaskQueue")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/CreateTaskQueue",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("CreateTaskQueue"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("CreateTaskQueue"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.TaskStore.CreateTaskQueue(ctx, request)
 	if err != nil {
@@ -160,11 +185,19 @@ func (d telemetryTaskStore) CreateTaskQueue(ctx context.Context, request *_sourc
 
 // CreateTasks wraps TaskStore.CreateTasks.
 func (d telemetryTaskStore) CreateTasks(ctx context.Context, request *_sourcePersistence.InternalCreateTasksRequest) (cp1 *_sourcePersistence.CreateTasksResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/CreateTasks")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/CreateTasks",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("CreateTasks"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("CreateTasks"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	cp1, err = d.TaskStore.CreateTasks(ctx, request)
 	if err != nil {
@@ -194,11 +227,19 @@ func (d telemetryTaskStore) CreateTasks(ctx context.Context, request *_sourcePer
 
 // DeleteTaskQueue wraps TaskStore.DeleteTaskQueue.
 func (d telemetryTaskStore) DeleteTaskQueue(ctx context.Context, request *_sourcePersistence.DeleteTaskQueueRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/DeleteTaskQueue")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/DeleteTaskQueue",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("DeleteTaskQueue"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("DeleteTaskQueue"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.TaskStore.DeleteTaskQueue(ctx, request)
 	if err != nil {
@@ -221,11 +262,19 @@ func (d telemetryTaskStore) DeleteTaskQueue(ctx context.Context, request *_sourc
 
 // GetTaskQueue wraps TaskStore.GetTaskQueue.
 func (d telemetryTaskStore) GetTaskQueue(ctx context.Context, request *_sourcePersistence.InternalGetTaskQueueRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/GetTaskQueue")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/GetTaskQueue",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("GetTaskQueue"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetTaskQueue"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.TaskStore.GetTaskQueue(ctx, request)
 	if err != nil {
@@ -255,11 +304,19 @@ func (d telemetryTaskStore) GetTaskQueue(ctx context.Context, request *_sourcePe
 
 // GetTaskQueueUserData wraps TaskStore.GetTaskQueueUserData.
 func (d telemetryTaskStore) GetTaskQueueUserData(ctx context.Context, request *_sourcePersistence.GetTaskQueueUserDataRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueUserDataResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/GetTaskQueueUserData")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/GetTaskQueueUserData",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("GetTaskQueueUserData"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetTaskQueueUserData"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.TaskStore.GetTaskQueueUserData(ctx, request)
 	if err != nil {
@@ -289,11 +346,19 @@ func (d telemetryTaskStore) GetTaskQueueUserData(ctx context.Context, request *_
 
 // GetTaskQueuesByBuildId wraps TaskStore.GetTaskQueuesByBuildId.
 func (d telemetryTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.GetTaskQueuesByBuildIdRequest) (sa1 []string, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/GetTaskQueuesByBuildId")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/GetTaskQueuesByBuildId",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("GetTaskQueuesByBuildId"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetTaskQueuesByBuildId"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	sa1, err = d.TaskStore.GetTaskQueuesByBuildId(ctx, request)
 	if err != nil {
@@ -323,11 +388,19 @@ func (d telemetryTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request 
 
 // GetTasks wraps TaskStore.GetTasks.
 func (d telemetryTaskStore) GetTasks(ctx context.Context, request *_sourcePersistence.GetTasksRequest) (ip1 *_sourcePersistence.InternalGetTasksResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/GetTasks")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/GetTasks",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("GetTasks"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("GetTasks"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.TaskStore.GetTasks(ctx, request)
 	if err != nil {
@@ -357,11 +430,19 @@ func (d telemetryTaskStore) GetTasks(ctx context.Context, request *_sourcePersis
 
 // ListTaskQueue wraps TaskStore.ListTaskQueue.
 func (d telemetryTaskStore) ListTaskQueue(ctx context.Context, request *_sourcePersistence.ListTaskQueueRequest) (ip1 *_sourcePersistence.InternalListTaskQueueResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/ListTaskQueue")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/ListTaskQueue",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("ListTaskQueue"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ListTaskQueue"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.TaskStore.ListTaskQueue(ctx, request)
 	if err != nil {
@@ -391,11 +472,19 @@ func (d telemetryTaskStore) ListTaskQueue(ctx context.Context, request *_sourceP
 
 // ListTaskQueueUserDataEntries wraps TaskStore.ListTaskQueueUserDataEntries.
 func (d telemetryTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, request *_sourcePersistence.ListTaskQueueUserDataEntriesRequest) (ip1 *_sourcePersistence.InternalListTaskQueueUserDataEntriesResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/ListTaskQueueUserDataEntries")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/ListTaskQueueUserDataEntries",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("ListTaskQueueUserDataEntries"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("ListTaskQueueUserDataEntries"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	ip1, err = d.TaskStore.ListTaskQueueUserDataEntries(ctx, request)
 	if err != nil {
@@ -425,11 +514,19 @@ func (d telemetryTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 
 // UpdateTaskQueue wraps TaskStore.UpdateTaskQueue.
 func (d telemetryTaskStore) UpdateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueRequest) (up1 *_sourcePersistence.UpdateTaskQueueResponse, err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/UpdateTaskQueue")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/UpdateTaskQueue",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("UpdateTaskQueue"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("UpdateTaskQueue"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	up1, err = d.TaskStore.UpdateTaskQueue(ctx, request)
 	if err != nil {
@@ -459,11 +556,19 @@ func (d telemetryTaskStore) UpdateTaskQueue(ctx context.Context, request *_sourc
 
 // UpdateTaskQueueUserData wraps TaskStore.UpdateTaskQueueUserData.
 func (d telemetryTaskStore) UpdateTaskQueueUserData(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueUserDataRequest) (err error) {
-	ctx, span := d.tracer.Start(ctx, "persistence.TaskStore/UpdateTaskQueueUserData")
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.TaskStore/UpdateTaskQueueUserData",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("TaskStore"),
+			attribute.Key("persistence.method").String("UpdateTaskQueueUserData"),
+		))
 	defer span.End()
 
-	span.SetAttributes(attribute.Key("persistence.store").String("TaskStore"))
-	span.SetAttributes(attribute.Key("persistence.method").String("UpdateTaskQueueUserData"))
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
 
 	err = d.TaskStore.UpdateTaskQueueUserData(ctx, request)
 	if err != nil {

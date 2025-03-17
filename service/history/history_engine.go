@@ -108,10 +108,10 @@ import (
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -121,7 +121,7 @@ type (
 	historyEngineImpl struct {
 		status                     int32
 		currentClusterName         string
-		shardContext               shard.Context
+		shardContext               historyi.ShardContext
 		timeSource                 clock.TimeSource
 		clusterMetadata            cluster.Metadata
 		executionManager           persistence.ExecutionManager
@@ -165,7 +165,7 @@ type (
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
-	shard shard.Context,
+	shard historyi.ShardContext,
 	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
@@ -187,7 +187,7 @@ func NewEngineWithShardContext(
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 	testHooks testhooks.TestHooks,
-) shard.Engine {
+) historyi.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
@@ -553,7 +553,7 @@ func (e *historyEngineImpl) VerifyFirstWorkflowTaskScheduled(
 func (e *historyEngineImpl) RecordWorkflowTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordWorkflowTaskStartedRequest,
-) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 	return recordworkflowtaskstarted.Invoke(
 		ctx,
 		request,
@@ -765,14 +765,14 @@ func (e *historyEngineImpl) SyncActivities(
 
 func (e *historyEngineImpl) SyncHSM(
 	ctx context.Context,
-	request *shard.SyncHSMRequest,
+	request *historyi.SyncHSMRequest,
 ) error {
 	return e.nDCHSMStateReplicator.SyncHSMState(ctx, request)
 }
 
 func (e *historyEngineImpl) BackfillHistoryEvents(
 	ctx context.Context,
-	request *shard.BackfillHistoryEventsRequest,
+	request *historyi.BackfillHistoryEventsRequest,
 ) error {
 	return e.nDCHistoryReplicator.BackfillHistoryEvents(ctx, request)
 }
@@ -1011,7 +1011,7 @@ func (e *historyEngineImpl) GetReplicationStatus(
 func (e *historyEngineImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
-) (_ *historyservice.GetWorkflowExecutionHistoryResponse, retError error) {
+) (_ *historyservice.GetWorkflowExecutionHistoryResponseWithRaw, retError error) {
 	return getworkflowexecutionhistory.Invoke(ctx, e.shardContext, e.workflowConsistencyChecker, e.versionChecker, e.eventNotifier, request, e.persistenceVisibilityMgr)
 }
 

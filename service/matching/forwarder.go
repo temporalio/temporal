@@ -267,6 +267,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				},
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
+				DeploymentOptions:         pollMetadata.deploymentOptions,
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
 		})
@@ -284,7 +285,9 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 					Kind: fwdr.partition.Kind(),
 				},
 				Identity:                  identity,
+				TaskQueueMetadata:         pollMetadata.taskQueueMetadata,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
+				DeploymentOptions:         pollMetadata.deploymentOptions,
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
 		})
@@ -303,6 +306,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				},
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
+				DeploymentOptions:         pollMetadata.deploymentOptions,
 				// Namespace is ignored here.
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
