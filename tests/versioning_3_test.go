@@ -479,7 +479,6 @@ func (s *Versioning3Suite) TestUnpinnedWorkflowWithRamp_ToUnversioned() {
 	)
 }
 
-// testing.go:1399: race detected during execution of test
 func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	// This test sets a 50% ramp and runs 50 wfs and ensures both versions got some wf and
 	// activity tasks.
