@@ -196,9 +196,7 @@ func (n *Node) Snapshot(
 	}
 
 	nodes := make(map[string]*persistencespb.ChasmNode)
-	if err := n.snapshotInternal(exclusiveMinVT, []string{}, nodes); err != nil {
-		return NodesSnapshot{}
-	}
+	n.snapshotInternal(exclusiveMinVT, []string{}, nodes)
 
 	return NodesSnapshot{
 		Nodes: nodes,
@@ -209,9 +207,9 @@ func (n *Node) snapshotInternal(
 	exclusiveMinVT *persistencespb.VersionedTransition,
 	currentPath []string,
 	nodes map[string]*persistencespb.ChasmNode,
-) error {
+) {
 	if n == nil {
-		return nil
+		return
 	}
 
 	if transitionhistory.Compare(n.persistence.LastUpdateVersionedTransition, exclusiveMinVT) > 0 {
@@ -223,16 +221,12 @@ func (n *Node) snapshotInternal(
 	}
 
 	for childName, childNode := range n.children {
-		if err := childNode.snapshotInternal(
+		childNode.snapshotInternal(
 			exclusiveMinVT,
 			append(currentPath, childName),
 			nodes,
-		); err != nil {
-			return err
-		}
+		)
 	}
-
-	return nil
 }
 
 // ApplyMutation is used by replication stack to apply node
