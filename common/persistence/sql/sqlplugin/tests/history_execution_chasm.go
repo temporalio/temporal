@@ -87,8 +87,8 @@ func (s *historyExecutionChasmSuite) runTestCase(tc *testCase) {
 		s.NoError(err)
 
 		// We set clientFoundRows to true in our MySQL session, which makes the result count
-		// for updates not useful for comparison here, as rows matched by WHERE (not just
-		// those updated with IN) are counted:
+		// for updates not useful for comparison here, as rows that have been updated
+		// are double-counted in `INSERT ... ON DUPLICATE KEY UPDATE` statements:
 		//
 		// https://dev.mysql.com/doc/refman/8.4/en/information-functions.html#function_row-count
 		//
