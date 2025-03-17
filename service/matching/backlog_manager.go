@@ -223,7 +223,7 @@ func (c *backlogManagerImpl) TotalApproximateBacklogCount() int64 {
 }
 
 func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
-	currentTaskIDBlock := c.taskWriter.getTaskIDBlock()
+	currentTaskIDBlock := c.taskWriter.getCurrentTaskIDBlock()
 	return []*taskqueuespb.InternalTaskQueueStatus{
 		&taskqueuespb.InternalTaskQueueStatus{
 			ReadLevel: c.taskAckManager.getReadLevel(),

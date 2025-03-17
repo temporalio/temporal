@@ -53,13 +53,13 @@ type (
 
 	// priTaskWriter writes tasks persistence split among subqueues
 	priTaskWriter struct {
-		backlogMgr      *priBacklogManagerImpl
-		config          *taskQueueConfig
-		db              *taskQueueDB
-		logger          log.Logger
-		appendCh        chan *writeTaskRequest
-		taskIDBlock     taskIDBlock
-		lastTaskIDBlock taskIDBlock // copy of the last taskIDBlock for safe concurrent access via currentTaskIDBlock()
+		backlogMgr         *priBacklogManagerImpl
+		config             *taskQueueConfig
+		db                 *taskQueueDB
+		logger             log.Logger
+		appendCh           chan *writeTaskRequest
+		taskIDBlock        taskIDBlock
+		currentTaskIDBlock taskIDBlock // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
 	}
 )
 
@@ -175,7 +175,7 @@ func (w *priTaskWriter) initState() error {
 		return err
 	}
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
-	w.lastTaskIDBlock = w.taskIDBlock
+	w.currentTaskIDBlock = w.taskIDBlock
 	w.backlogMgr.initState(state, nil)
 	return nil
 }
@@ -187,8 +187,8 @@ func (w *priTaskWriter) taskWriterLoop() {
 
 	var reqs []*writeTaskRequest
 	for {
-		atomic.StoreInt64(&w.lastTaskIDBlock.start, w.taskIDBlock.start)
-		atomic.StoreInt64(&w.lastTaskIDBlock.end, w.taskIDBlock.end)
+		atomic.StoreInt64(&w.currentTaskIDBlock.start, w.taskIDBlock.start)
+		atomic.StoreInt64(&w.currentTaskIDBlock.end, w.taskIDBlock.end)
 
 		select {
 		case request := <-w.appendCh:
@@ -255,9 +255,10 @@ func (w *priTaskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error
 	return rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize), nil
 }
 
-func (w *priTaskWriter) currentTaskIDBlock() taskIDBlock {
+// getCurrentTaskIDBlock returns the current taskIDBlock. Safe to be called concurrently.
+func (w *priTaskWriter) getCurrentTaskIDBlock() taskIDBlock {
 	return taskIDBlock{
-		start: atomic.LoadInt64(&w.lastTaskIDBlock.start),
-		end:   atomic.LoadInt64(&w.lastTaskIDBlock.end),
+		start: atomic.LoadInt64(&w.currentTaskIDBlock.start),
+		end:   atomic.LoadInt64(&w.currentTaskIDBlock.end),
 	}
 }

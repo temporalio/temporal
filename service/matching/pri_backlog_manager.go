@@ -323,7 +323,7 @@ func (c *priBacklogManagerImpl) TotalApproximateBacklogCount() int64 {
 }
 
 func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
-	currentTaskIDBlock := c.taskWriter.currentTaskIDBlock()
+	currentTaskIDBlock := c.taskWriter.getCurrentTaskIDBlock()
 
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()

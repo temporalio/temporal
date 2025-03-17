@@ -55,13 +55,13 @@ type (
 
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
-		backlogMgr      *backlogManagerImpl
-		config          *taskQueueConfig
-		db              *taskQueueDB
-		logger          log.Logger
-		appendCh        chan *writeTaskRequest
-		taskIDBlock     taskIDBlock
-		lastTaskIDBlock taskIDBlock // copy of the last taskIDBlock for safe concurrent access via getTaskIDBlock()
+		backlogMgr         *backlogManagerImpl
+		config             *taskQueueConfig
+		db                 *taskQueueDB
+		logger             log.Logger
+		appendCh           chan *writeTaskRequest
+		taskIDBlock        taskIDBlock
+		currentTaskIDBlock taskIDBlock // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
 	}
 )
 
@@ -101,7 +101,7 @@ func (w *taskWriter) initReadWriteState() error {
 		return err
 	}
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
-	w.lastTaskIDBlock = w.taskIDBlock
+	w.currentTaskIDBlock = w.taskIDBlock
 	w.backlogMgr.taskAckManager.setAckLevel(state.ackLevel)
 
 	return nil
@@ -185,8 +185,8 @@ func (w *taskWriter) taskWriterLoop() {
 	w.backlogMgr.SetInitializedError(err)
 
 	for {
-		atomic.StoreInt64(&w.lastTaskIDBlock.start, w.taskIDBlock.start)
-		atomic.StoreInt64(&w.lastTaskIDBlock.end, w.taskIDBlock.end)
+		atomic.StoreInt64(&w.currentTaskIDBlock.start, w.taskIDBlock.start)
+		atomic.StoreInt64(&w.currentTaskIDBlock.end, w.taskIDBlock.end)
 
 		select {
 		case request := <-w.appendCh:
@@ -255,10 +255,10 @@ func (w *taskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
 	return rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize), nil
 }
 
-// getTaskIDBlock returns the latest taskIDBlock. Safe to be called concurrently.
-func (w *taskWriter) getTaskIDBlock() taskIDBlock {
+// getCurrentTaskIDBlock returns the current taskIDBlock. Safe to be called concurrently.
+func (w *taskWriter) getCurrentTaskIDBlock() taskIDBlock {
 	return taskIDBlock{
-		start: atomic.LoadInt64(&w.lastTaskIDBlock.start),
-		end:   atomic.LoadInt64(&w.lastTaskIDBlock.end),
+		start: atomic.LoadInt64(&w.currentTaskIDBlock.start),
+		end:   atomic.LoadInt64(&w.currentTaskIDBlock.end),
 	}
 }
