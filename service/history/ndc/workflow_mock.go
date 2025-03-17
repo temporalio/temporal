@@ -37,7 +37,6 @@ import (
 	reflect "reflect"
 
 	interfaces "go.temporal.io/server/service/history/interfaces"
-	cache "go.temporal.io/server/service/history/workflow/cache"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -107,10 +106,10 @@ func (mr *MockWorkflowMockRecorder) GetMutableState() *gomock.Call {
 }
 
 // GetReleaseFn mocks base method.
-func (m *MockWorkflow) GetReleaseFn() cache.ReleaseCacheFunc {
+func (m *MockWorkflow) GetReleaseFn() interfaces.ReleaseWorkflowContextFunc {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReleaseFn")
-	ret0, _ := ret[0].(cache.ReleaseCacheFunc)
+	ret0, _ := ret[0].(interfaces.ReleaseWorkflowContextFunc)
 	return ret0
 }
 

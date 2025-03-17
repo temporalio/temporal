@@ -27,6 +27,7 @@ package shard
 import (
 	"sync"
 
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -96,7 +97,7 @@ func (t *taskRequestTracker) track(
 		// Task key is not pending only when we get a definitive result from persistence.
 		// This result can be either a success or a error that guarantees the task with that key
 		// will not be persisted.
-		if writeErr == nil || !OperationPossiblySucceeded(writeErr) {
+		if writeErr == nil || !persistence.OperationPossiblySucceeded(writeErr) {
 			// we can only remove the task from the pending task list if we are sure it was inserted
 			// or the insertion is guaranteed to have failed
 			for category, minKey := range minKeyByCategory {
