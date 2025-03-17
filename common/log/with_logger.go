@@ -49,7 +49,11 @@ func newWithLogger(logger Logger, tags ...tag.Tag) *withLogger {
 }
 
 func (l *withLogger) prependTags(tags []tag.Tag) []tag.Tag {
-	return append(l.tags, tags...)
+	allTags := make([]tag.Tag, len(l.tags)+len(tags))
+	copy(allTags, l.tags)
+	copy(allTags[len(l.tags):], tags)
+
+	return allTags
 }
 
 // Debug writes message to the log (if enabled).
