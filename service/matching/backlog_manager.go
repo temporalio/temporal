@@ -223,14 +223,14 @@ func (c *backlogManagerImpl) TotalApproximateBacklogCount() int64 {
 }
 
 func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
+	currentTaskIDBlock := c.taskWriter.getCurrentTaskIDBlock()
 	return []*taskqueuespb.InternalTaskQueueStatus{
 		&taskqueuespb.InternalTaskQueueStatus{
 			ReadLevel: c.taskAckManager.getReadLevel(),
 			AckLevel:  c.taskAckManager.getAckLevel(),
 			TaskIdBlock: &taskqueuepb.TaskIdBlock{
-				// TODO(pri): this is a data race, it should only be read by taskWriterLoop
-				StartId: c.taskWriter.taskIDBlock.start,
-				EndId:   c.taskWriter.taskIDBlock.end,
+				StartId: currentTaskIDBlock.start,
+				EndId:   currentTaskIDBlock.end,
 			},
 			LoadedTasks:  c.taskAckManager.getBacklogCountHint(),
 			MaxReadLevel: c.db.GetMaxReadLevel(subqueueZero),

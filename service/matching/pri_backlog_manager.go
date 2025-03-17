@@ -323,11 +323,7 @@ func (c *priBacklogManagerImpl) TotalApproximateBacklogCount() int64 {
 }
 
 func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {
-	// TODO(pri): this is a data race, it should only be read by taskWriterLoop
-	idBlock := &taskqueuepb.TaskIdBlock{
-		StartId: c.taskWriter.taskIDBlock.start,
-		EndId:   c.taskWriter.taskIDBlock.end,
-	}
+	currentTaskIDBlock := c.taskWriter.getCurrentTaskIDBlock()
 
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
@@ -336,9 +332,12 @@ func (c *priBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQue
 	for i, r := range c.subqueues {
 		readLevel, ackLevel := r.getLevels()
 		status[i] = &taskqueuespb.InternalTaskQueueStatus{
-			ReadLevel:               readLevel,
-			AckLevel:                ackLevel,
-			TaskIdBlock:             idBlock,
+			ReadLevel: readLevel,
+			AckLevel:  ackLevel,
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				StartId: currentTaskIDBlock.start,
+				EndId:   currentTaskIDBlock.end,
+			},
 			LoadedTasks:             int64(r.getLoadedTasks()),
 			MaxReadLevel:            c.db.GetMaxReadLevel(i),
 			ApproximateBacklogCount: c.db.getApproximateBacklogCount(i),
