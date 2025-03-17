@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -52,12 +53,13 @@ type (
 
 	// priTaskWriter writes tasks persistence split among subqueues
 	priTaskWriter struct {
-		backlogMgr  *priBacklogManagerImpl
-		config      *taskQueueConfig
-		db          *taskQueueDB
-		logger      log.Logger
-		appendCh    chan *writeTaskRequest
-		taskIDBlock taskIDBlock
+		backlogMgr         *priBacklogManagerImpl
+		config             *taskQueueConfig
+		db                 *taskQueueDB
+		logger             log.Logger
+		appendCh           chan *writeTaskRequest
+		taskIDBlock        taskIDBlock
+		currentTaskIDBlock taskIDBlock // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
 	}
 )
 
@@ -91,7 +93,6 @@ func (w *priTaskWriter) appendTask(
 	subqueue int,
 	taskInfo *persistencespb.TaskInfo,
 ) error {
-
 	select {
 	case <-w.backlogMgr.tqCtx.Done():
 		return errShutdown
@@ -174,6 +175,7 @@ func (w *priTaskWriter) initState() error {
 		return err
 	}
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
+	w.currentTaskIDBlock = w.taskIDBlock
 	w.backlogMgr.initState(state, nil)
 	return nil
 }
@@ -185,6 +187,9 @@ func (w *priTaskWriter) taskWriterLoop() {
 
 	var reqs []*writeTaskRequest
 	for {
+		atomic.StoreInt64(&w.currentTaskIDBlock.start, w.taskIDBlock.start)
+		atomic.StoreInt64(&w.currentTaskIDBlock.end, w.taskIDBlock.end)
+
 		select {
 		case request := <-w.appendCh:
 			// read a batch of requests from the channel
@@ -248,4 +253,12 @@ func (w *priTaskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error
 		return taskIDBlock{}, err
 	}
 	return rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize), nil
+}
+
+// getCurrentTaskIDBlock returns the current taskIDBlock. Safe to be called concurrently.
+func (w *priTaskWriter) getCurrentTaskIDBlock() taskIDBlock {
+	return taskIDBlock{
+		start: atomic.LoadInt64(&w.currentTaskIDBlock.start),
+		end:   atomic.LoadInt64(&w.currentTaskIDBlock.end),
+	}
 }
