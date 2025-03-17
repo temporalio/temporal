@@ -2132,6 +2132,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	firstRunID string,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
 	taskQueue := previousExecutionInfo.TaskQueue
@@ -2215,6 +2216,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		// No need to request eager execution here (for now)
 		RequestEagerExecution: false,
 		CompletionCallbacks:   completionCallbacks,
+		Links:                 links,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -4934,6 +4936,11 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		return nil, nil, err
 	}
 
+	startEvent, err := ms.GetStartEvent(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	if _, err = newMutableState.addWorkflowExecutionStartedEventForContinueAsNew(
 		parentInfo,
 		&newExecution,
@@ -4941,6 +4948,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		command,
 		firstRunID,
 		rootInfo,
+		startEvent.Links,
 	); err != nil {
 		return nil, nil, err
 	}
