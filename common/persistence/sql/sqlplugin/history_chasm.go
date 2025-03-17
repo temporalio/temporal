@@ -53,7 +53,7 @@ type (
 		ChasmPaths  []string
 	}
 
-	// ChasmNodeMapsFilter represents parameters to selecting all of a workflow's
+	// ChasmNodeMapsAllFilter represents parameters to selecting all of a workflow's
 	// CHASM nodes.
 	ChasmNodeMapsAllFilter struct {
 		ShardID     int32
