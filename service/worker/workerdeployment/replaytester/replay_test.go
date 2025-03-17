@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workerdeployment
+package replaytester
 
 import (
 	"compress/gzip"
@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/service/worker/workerdeployment"
 )
 
 // TestReplays tests workflow logic backwards compatibility from previous versions.
@@ -49,17 +50,17 @@ func TestReplays(t *testing.T) {
 		visibilityGracePeriodGetter := func() any {
 			return time.Minute
 		}
-		return DrainageWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
+		return workerdeployment.DrainageWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
 	}
 	deploymentWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 		maxVersionsGetter := func() int {
 			return 100
 		}
-		return Workflow(ctx, maxVersionsGetter, args)
+		return workerdeployment.Workflow(ctx, maxVersionsGetter, args)
 	}
-	replayer.RegisterWorkflowWithOptions(VersionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
-	replayer.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
-	replayer.RegisterWorkflowWithOptions(drainageWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentDrainageWorkflowType})
+	replayer.RegisterWorkflowWithOptions(workerdeployment.VersionWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentVersionWorkflowType})
+	replayer.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentWorkflowType})
+	replayer.RegisterWorkflowWithOptions(drainageWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentDrainageWorkflowType})
 
 	files, err := filepath.Glob("testdata/replay_*.json.gz")
 	require.NoError(t, err)

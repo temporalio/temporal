@@ -26,6 +26,7 @@ package workerdeployment
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -130,6 +131,14 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	if err := workflow.SetUpdateHandler(
+		ctx,
+		RegisterWorkerInWorkerDeployment,
+		d.handleRegisterWorker,
+	); err != nil {
+		return err
+	}
+
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		SetCurrentVersion,
@@ -152,6 +161,7 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	// to-be-deprecated
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		AddVersionToWorkerDeployment,
@@ -205,6 +215,79 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflowType, d.WorkerDeploymentWorkflowArgs)
+}
+
+func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
+	if d.State.Versions == nil {
+		return nil
+	}
+
+	for _, v := range d.State.Versions {
+		if v.Version == args.Version {
+			return nil
+		}
+	}
+
+	maxVersions := d.getMaxVersions(ctx)
+
+	if len(d.State.Versions) >= maxVersions {
+		err := d.tryDeleteVersion(ctx)
+		if err != nil {
+			return temporal.NewApplicationError(fmt.Sprintf("cannot add version, already at max versions %d", maxVersions), errTooManyVersions)
+		}
+	}
+
+	d.State.Versions[args.Version] = &deploymentspb.WorkerDeploymentVersionSummary{
+		Version:    args.Version,
+		CreateTime: args.CreateTime,
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) error {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	// Add version to local state of the workflow, if not already present.
+	err = d.addVersionToWorkerDeployment(ctx, &deploymentspb.AddVersionUpdateArgs{
+		Version:    worker_versioning.WorkerDeploymentVersionToString(args.Version),
+		CreateTime: timestamppb.New(workflow.Now(ctx)),
+	})
+	if err != nil {
+		return err
+	}
+
+	// Register task-queue worker in version workflow.
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	err = workflow.ExecuteActivity(activityCtx, d.a.RegisterWorkerInVersion, &deploymentspb.RegisterWorkerInVersionArgs{
+		TaskQueueName: args.TaskQueueName,
+		TaskQueueType: args.TaskQueueType,
+		MaxTaskQueues: args.MaxTaskQueues,
+		Version:       worker_versioning.WorkerDeploymentVersionToString(args.Version),
+	}).Get(ctx, nil)
+	if err != nil {
+		var appError *temporal.ApplicationError
+		if errors.As(err, &appError) {
+			if appError.Type() == errMaxTaskQueuesInVersionType {
+				return temporal.NewApplicationError(
+					fmt.Sprintf("maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
+					errMaxTaskQueuesInVersionType,
+				)
+			}
+		}
+		return err
+	}
+
+	return nil
 }
 
 func (d *WorkflowRunner) validateDeleteDeployment() error {
@@ -406,6 +489,27 @@ func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersion
 	return d.validateStateBeforeAcceptingDeleteVersion(args)
 }
 
+func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
+	// ask version to delete itself
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var res deploymentspb.SyncVersionStateActivityResult
+	err := workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerDeploymentVersion, &deploymentspb.DeleteVersionActivityArgs{
+		Identity:       args.Identity,
+		DeploymentName: d.DeploymentName,
+		Version:        args.Version,
+		RequestId:      uuid.New(),
+		SkipDrainage:   args.SkipDrainage,
+	}).Get(ctx, &res)
+	if err != nil {
+		return err
+	}
+	// update local state
+	delete(d.State.Versions, args.Version)
+	d.State.LastModifierIdentity = args.Identity
+	// update memo
+	return d.updateMemo(ctx)
+}
+
 func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
@@ -429,26 +533,7 @@ func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploym
 		return err
 	}
 
-	// ask version to delete itself
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	var res deploymentspb.SyncVersionStateActivityResult
-	err = workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerDeploymentVersion, &deploymentspb.DeleteVersionActivityArgs{
-		Identity:       args.Identity,
-		DeploymentName: d.DeploymentName,
-		Version:        args.Version,
-		RequestId:      uuid.New(),
-		SkipDrainage:   args.SkipDrainage,
-	}).Get(ctx, &res)
-	if err != nil {
-		return err
-	}
-
-	// update local state
-	delete(d.State.Versions, args.Version)
-	d.State.LastModifierIdentity = args.Identity
-
-	// update memo
-	return d.updateMemo(ctx)
+	return d.deleteVersion(ctx, args)
 }
 
 func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
@@ -584,6 +669,7 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 
 }
 
+// to-be-deprecated
 func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(args *deploymentspb.AddVersionUpdateArgs) error {
 	if d.State.Versions == nil {
 		return nil
@@ -612,6 +698,7 @@ func (d *WorkflowRunner) getMaxVersions(ctx workflow.Context) int {
 	return maxVersions
 }
 
+// to-be-deprecated
 func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
 	d.pendingUpdates++
 	defer func() {
@@ -654,7 +741,7 @@ func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 	})
 	for _, v := range sortedSummaries {
 		// this might hang on the lock
-		err := d.handleDeleteVersion(ctx, &deploymentspb.DeleteVersionArgs{
+		err := d.deleteVersion(ctx, &deploymentspb.DeleteVersionArgs{
 			Identity: "try-delete-for-add-version",
 			Version:  v.Version,
 		})
