@@ -156,7 +156,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	}
 
 	// case 2: verify task has newer VersionedTransition, need to sync state
-	if workflow.CompareVersionedTransition(e.ReplicationTask().VersionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
+	if transitionhistory.Compare(e.ReplicationTask().VersionedTransition, transitionhistory.LastVersionedTransition(transitionHistory)) > 0 {
 		return serviceerrors.NewSyncState(
 			"mutable state not up to date",
 			e.NamespaceID,

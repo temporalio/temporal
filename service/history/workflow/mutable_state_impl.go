@@ -6179,7 +6179,7 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 
 func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 	if len(ms.executionInfo.TransitionHistory) != 0 {
-		if CompareVersionedTransition(
+		if transitionhistory.Compare(
 			ms.versionedTransitionInDB,
 			ms.CurrentVersionedTransition(),
 		) != 0 {
@@ -6453,7 +6453,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					lastVersionHistoryItem = versionhistory.CopyVersionHistoryItem(item)
 				}
 				currentVersionedTransition := ms.CurrentVersionedTransition()
-				if currentVersionedTransition != nil && CompareVersionedTransition(
+				if currentVersionedTransition != nil && transitionhistory.Compare(
 					ms.versionedTransitionInDB,
 					currentVersionedTransition,
 				) != 0 {
@@ -7401,7 +7401,7 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 			children.MachinesById[key.ID] = internalNode
 		} else {
 			internalNode = node.InternalRepr()
-			if CompareVersionedTransition(nodeMutation.LastUpdateVersionedTransition, internalNode.LastUpdateVersionedTransition) == 0 {
+			if transitionhistory.Compare(nodeMutation.LastUpdateVersionedTransition, internalNode.LastUpdateVersionedTransition) == 0 {
 				continue
 			}
 			node.InvalidateCache()
@@ -7415,7 +7415,7 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 }
 
 func (ms *MutableStateImpl) applySignalRequestedIds(signalRequestedIds []string, incomingExecutionInfo *persistencespb.WorkflowExecutionInfo) {
-	if CompareVersionedTransition(
+	if transitionhistory.Compare(
 		incomingExecutionInfo.SignalRequestIdsLastUpdateVersionedTransition,
 		ms.executionInfo.SignalRequestIdsLastUpdateVersionedTransition,
 	) == 0 {
@@ -7472,7 +7472,7 @@ func applyUpdatesToSubStateMachine[K comparable, V lastUpdatedStateTransitionGet
 	for key, updated := range updatedSubStateMachine {
 		var existing V
 		if existing, ok := pendingInfos[key]; ok {
-			if CompareVersionedTransition(existing.GetLastUpdateVersionedTransition(), updated.GetLastUpdateVersionedTransition()) == 0 {
+			if transitionhistory.Compare(existing.GetLastUpdateVersionedTransition(), updated.GetLastUpdateVersionedTransition()) == 0 {
 				continue
 			}
 			ms.approximateSize -= existing.Size() + getSizeOfKey(key)
@@ -7510,7 +7510,7 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 
 	for updateID, ui := range updatedUpdateInfos {
 		if existing, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
-			if CompareVersionedTransition(existing.GetLastUpdateVersionedTransition(), ui.GetLastUpdateVersionedTransition()) == 0 {
+			if transitionhistory.Compare(existing.GetLastUpdateVersionedTransition(), ui.GetLastUpdateVersionedTransition()) == 0 {
 				continue
 			}
 			ms.approximateSize -= existing.Size() + len(updateID)
@@ -7627,7 +7627,7 @@ func (ms *MutableStateImpl) applyTombstones(
 	var err error
 	deletedChasmNodes := make(map[string]struct{})
 	for _, tombstoneBatch := range tombstoneBatches {
-		if CompareVersionedTransition(tombstoneBatch.VersionedTransition, currentVersionedTransition) <= 0 {
+		if transitionhistory.Compare(tombstoneBatch.VersionedTransition, currentVersionedTransition) <= 0 {
 			continue
 		}
 		for _, tombstone := range tombstoneBatch.StateMachineTombstones {

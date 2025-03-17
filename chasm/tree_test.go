@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
 	"go.uber.org/mock/gomock"
 )
 
@@ -89,7 +90,7 @@ func (s *nodeSuite) TestNewTree() {
 		persistenceNodes["child2/grandchild1"],
 	}
 
-	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder)
+	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
 	s.NoError(err)
 	s.NotNil(root)
 
