@@ -174,7 +174,7 @@ func makePollMetadata(rps float64) *pollMetadata {
 	}}
 }
 
-// runOneShotPoller spawns a goroutine to call s.tqMgr.PollTask on the provided s.tqMgr.
+// runOneShotPoller spawns a goroutine to call tqMgr.PollTask on the provided tqMgr.
 // The second return value is a channel of either error or *internalTask.
 func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.Handle, chan interface{}) {
 	out := make(chan interface{}, 1)
