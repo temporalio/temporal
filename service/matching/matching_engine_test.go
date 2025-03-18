@@ -3227,6 +3227,7 @@ func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksNoDBErrors() {
 
 func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.dbConditionalFailedError = true
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(1, 500, 200)
