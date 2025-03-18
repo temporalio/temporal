@@ -86,7 +86,7 @@ func TestPhysicalTaskQueueManagerWithNewMatcherTestSuite(t *testing.T) {
 func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	s.config = defaultTestConfig()
 	if s.newMatcher {
-		s.config = withNewMatcher(s.config)
+		useNewMatcher(s.config)
 	}
 	s.controller = gomock.NewController(s.T())
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)

@@ -205,7 +205,7 @@ func (s *matchingEngineSuite) SetupTest() {
 func (s *matchingEngineSuite) newConfig() *Config {
 	res := defaultTestConfig()
 	if s.newMatcher {
-		res = withNewMatcher(res)
+		useNewMatcher(res)
 	}
 	return res
 }
@@ -3803,9 +3803,8 @@ func (d *dynamicRateBurstWrapper) Burst() int {
 }
 
 // TODO(pri): cleanup; delete this
-func withNewMatcher(config *Config) *Config {
+func useNewMatcher(config *Config) {
 	config.NewMatcher = func(_ string, _ string, _ enumspb.TaskQueueType, callback func(bool)) (v bool, cancel func()) {
 		return true, func() {}
 	}
-	return config
 }

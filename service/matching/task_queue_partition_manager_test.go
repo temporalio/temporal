@@ -89,7 +89,7 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
 	config := NewConfig(dynamicconfig.NewNoopCollection())
 	if s.newMatcher {
-		config = withNewMatcher(config)
+		useNewMatcher(config)
 	}
 
 	matchingClientMock := matchingservicemock.NewMockMatchingServiceClient(s.controller)
