@@ -25,7 +25,9 @@
 package main
 
 import (
+	"context"
 	"log"
+	"time"
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -50,13 +52,48 @@ func main() {
 		},
 	})
 
+	w2 := worker.New(c, "hello-world-2", worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			UseVersioning:             true,
+			Version:                   deploymentName + ".1.0",
+			DefaultVersioningBehavior: workflow.VersioningBehaviorPinned,
+		},
+	})
+
 	w1.RegisterWorkflowWithOptions(replaytester.HelloWorld, workflow.RegisterOptions{
 		Name:               "HelloWorld",
 		VersioningBehavior: workflow.VersioningBehaviorPinned,
 	})
 
-	err = w1.Run(worker.InterruptCh())
+	w2.RegisterWorkflowWithOptions(replaytester.HelloWorld, workflow.RegisterOptions{
+		Name:               "HelloWorld",
+		VersioningBehavior: workflow.VersioningBehaviorPinned,
+	})
+
+	err = w1.Start()
 	if err != nil {
 		log.Fatalln("Unable to start worker", err)
+	}
+	defer w1.Stop()
+
+	err = w2.Start()
+	if err != nil {
+		log.Fatalln("Unable to start worker", err)
+	}
+	defer w2.Stop()
+
+	// Set current version
+	deploymentClient := c.WorkerDeploymentClient()
+	dHandle := deploymentClient.GetHandle(deploymentName)
+
+	// Wait for the worker to register the version.
+	time.Sleep(5 * time.Second)
+
+	// Set current version
+	_, err = dHandle.SetCurrentVersion(context.Background(), client.WorkerDeploymentSetCurrentVersionOptions{
+		Version: deploymentName + ".1.0",
+	})
+	if err != nil {
+		log.Fatalln("Unable to set current version", err)
 	}
 }

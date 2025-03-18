@@ -23,3 +23,5 @@ temporal workflow show -w "temporal-sys-worker-deployment:$deploymentName" --out
 
 # Download the history for the worker deployment version workflow...
 temporal workflow show -w "temporal-sys-worker-deployment-version:$deploymentName.$version" --output json | gzip -9c > "$(dirname "$0")/testdata/replay_worker_deployment_version_wf_$now.json.gz"
+
+
