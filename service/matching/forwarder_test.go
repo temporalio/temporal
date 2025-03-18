@@ -332,6 +332,7 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.Nil(task.pollWorkflowTaskQueueResponse())
 }
 
+// TODO(pri): old matcher cleanup
 func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
 	if t.newFwdr {
 		t.T().Skip("priority forwarder is not compatible with this test")
@@ -390,6 +391,7 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
 	}
 }
 
+// TODO(pri): old matcher cleanup
 func (t *ForwarderTestSuite) TestMaxOutstandingConfigUpdate() {
 	if t.newFwdr {
 		t.T().Skip("priority forwarder is not compatible with this test")

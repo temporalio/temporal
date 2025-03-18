@@ -202,6 +202,7 @@ func defaultTqId() *PhysicalTaskQueueKey {
 	return newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 }
 
+// TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	if s.newMatcher {
 		s.T().Skip("not supported by new matcher")
@@ -253,6 +254,7 @@ func randomTaskInfoWithAgeTaskID(age time.Duration, TaskID int64) *persistencesp
 	}
 }
 
+// TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	if s.newMatcher {
 		s.T().Skip("not supported by new matcher")
@@ -373,6 +375,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 	s.Equal(errShutdown, err) // task writer was stopped above
 }
 
+// TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload() {
 	if s.newMatcher {
 		s.T().Skip("not supported by new matcher")
@@ -389,6 +392,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
+// TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
 	if s.newMatcher {
 		s.T().Skip("not supported by new matcher")
@@ -411,6 +415,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
+// TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMInterruptsPollOnClose() {
 	if s.newMatcher {
 		s.T().Skip("not supported by new matcher")
