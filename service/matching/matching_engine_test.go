@@ -3141,7 +3141,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 	// Overwrite the maxReadLevel since it could have increased if the previous taskWriter was
 	// stopped (which would not result in resetting).
-	pqMgr.backlogMgr.getDB().setMaxReadLevelForTesting(0, maxTaskId)
+	pqMgr.backlogMgr.getDB().setMaxReadLevelForTesting(subqueueZero, maxTaskId)
 
 	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
 	s.EventuallyWithT(func(collect *assert.CollectT) {
