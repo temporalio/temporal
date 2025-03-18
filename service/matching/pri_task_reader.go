@@ -516,10 +516,10 @@ func (tr *priTaskReader) doGC(ackLevel int64) {
 	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
 	defer cancel()
 
+	n, err := tr.backlogMgr.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, tr.subqueue)
+
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
-
-	n, err := tr.backlogMgr.db.CompleteTasksLessThan(ctx, tr.ackLevel+1, batchSize, tr.subqueue)
 
 	tr.inGC = false
 	if err != nil {
@@ -531,6 +531,6 @@ func (tr *priTaskReader) doGC(ackLevel int64) {
 	// if we get UnknownNumRowsAffected or a smaller number than our limit, we know we got
 	// everything <= ackLevel, so we can reset ours. if not, we may have to try again.
 	if n == persistence.UnknownNumRowsAffected || n < batchSize {
-		tr.gcAckLevel = tr.ackLevel
+		tr.gcAckLevel = ackLevel
 	}
 }
