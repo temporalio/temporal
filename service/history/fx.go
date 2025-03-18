@@ -65,6 +65,7 @@ import (
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 )
 
 var Module = fx.Options(
@@ -102,8 +103,24 @@ var Module = fx.Options(
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
 )
 
-func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
-	return grpc.NewServer(grpcServerOptions...)
+func ServerProvider(grpcServerOptions []grpc.ServerOption, config *configs.Config) *grpc.Server {
+	kep := keepalive.EnforcementPolicy{
+		MinTime:             config.KeepAliveMinTime(),
+		PermitWithoutStream: config.KeepAlivePermitWithoutStream(),
+	}
+	kp := keepalive.ServerParameters{
+		MaxConnectionIdle:     config.KeepAliveMaxConnectionIdle(),
+		MaxConnectionAge:      config.KeepAliveMaxConnectionAge(),
+		MaxConnectionAgeGrace: config.KeepAliveMaxConnectionAgeGrace(),
+		Time:                  config.KeepAliveTime(),
+		Timeout:               config.KeepAliveTimeout(),
+	}
+	return grpc.NewServer(append(
+		grpcServerOptions,
+		grpc.KeepaliveParams(kp),
+		grpc.KeepaliveEnforcementPolicy(kep),
+	)...,
+	)
 }
 
 func ServiceResolverProvider(

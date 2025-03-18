@@ -38,10 +38,8 @@ import (
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/keepalive"
 )
 
 type (
@@ -70,7 +68,6 @@ type (
 		RateLimitInterceptor   *interceptor.RateLimitInterceptor
 		TracingStatsHandler    telemetry.ServerStatsHandler
 		AdditionalInterceptors []grpc.UnaryServerInterceptor `optional:"true"`
-		Config                 *configs.Config
 	}
 )
 
@@ -145,17 +142,6 @@ func NewPersistenceRateLimitingParams(
 func GrpcServerOptionsProvider(
 	params GrpcServerOptionsParams,
 ) []grpc.ServerOption {
-	kep := keepalive.EnforcementPolicy{
-		MinTime:             params.Config.KeepAliveMinTime(),
-		PermitWithoutStream: params.Config.KeepAlivePermitWithoutStream(),
-	}
-	kp := keepalive.ServerParameters{
-		MaxConnectionIdle:     params.Config.KeepAliveMaxConnectionIdle(),
-		MaxConnectionAge:      params.Config.KeepAliveMaxConnectionAge(),
-		MaxConnectionAgeGrace: params.Config.KeepAliveMaxConnectionAgeGrace(),
-		Time:                  params.Config.KeepAliveTime(),
-		Timeout:               params.Config.KeepAliveTimeout(),
-	}
 	grpcServerOptions, err := params.RpcFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
 		params.Logger.Fatal("creating gRPC server options failed", tag.Error(err))
@@ -170,8 +156,6 @@ func GrpcServerOptionsProvider(
 		grpc.ChainUnaryInterceptor(getUnaryInterceptors(params)...),
 		grpc.ChainStreamInterceptor(params.TelemetryInterceptor.StreamIntercept),
 		grpc.StreamInterceptor(interceptor.CustomErrorStreamInterceptor),
-		grpc.KeepaliveParams(kp),
-		grpc.KeepaliveEnforcementPolicy(kep),
 	)
 }
 
