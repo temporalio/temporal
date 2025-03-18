@@ -78,10 +78,6 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	s.blm = newBacklogManager(ctx, s.ptqMgr, tlCfg, s.taskMgr, s.logger, s.logger, nil, metrics.NoopMetricsHandler)
 }
 
-func (s *BacklogManagerTestSuite) TearDownTest() {
-	s.controller.Finish()
-}
-
 func (s *BacklogManagerTestSuite) TestReadLevelForAllExpiredTasksInBatch() {
 	s.NoError(s.blm.taskWriter.initReadWriteState())
 	s.Equal(int64(1), s.blm.db.rangeID)
