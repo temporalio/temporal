@@ -112,10 +112,6 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	s.NoError(err)
 }
 
-func (s *PartitionManagerTestSuite) TearDownTest() {
-	s.controller.Finish()
-}
-
 func (s *PartitionManagerTestSuite) TestAddTask_Forwarded() {
 	_, _, err := s.partitionMgr.AddTask(context.Background(), addTaskParams{
 		taskInfo: &persistencespb.TaskInfo{
