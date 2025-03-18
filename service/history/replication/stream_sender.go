@@ -198,7 +198,7 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		switch attr := req.GetAttributes().(type) {
 		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
 			if err := s.recvSyncReplicationState(attr.SyncReplicationState); err != nil {
-				return err
+				return fmt.Errorf("ReplicationServiceError StreamSender unable to handle SyncReplicationState: %w", err)
 			}
 			metrics.ReplicationTasksRecv.With(s.metrics).Record(
 				int64(1),
