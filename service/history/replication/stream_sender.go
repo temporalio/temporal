@@ -27,6 +27,8 @@
 package replication
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -545,7 +547,10 @@ Loop:
 			task.Priority = priority
 			if s.isTieredStackEnabled {
 				if err := s.flowController.Wait(s.server.Context(), priority); err != nil {
-					return err
+					if !errors.Is(err, context.Canceled) {
+						return err
+					}
+					// continue to send task if wait operation times out.
 				}
 			}
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
