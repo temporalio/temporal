@@ -256,9 +256,7 @@ func (db *taskQueueDB) OldUpdateState(
 		PrevRangeID:   db.rangeID,
 	})
 	if err == nil {
-		db.logger.Info("[pri] before OldUpdateState", tag.NewInt("subqueue", subqueueZero), tag.AckLevel(db.subqueues[subqueueZero].AckLevel))
 		db.subqueues[subqueueZero].AckLevel = ackLevel
-		db.logger.Info("[pri] after OldUpdateState", tag.NewInt("subqueue", subqueueZero), tag.AckLevel(db.subqueues[subqueueZero].AckLevel))
 	}
 	db.emitBacklogGauges()
 	return err
