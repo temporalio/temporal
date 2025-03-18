@@ -384,6 +384,22 @@ type Config struct {
 	BreakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// gRPC keep alive options
+	// If a client pings too frequently, terminate the connection.
+	KeepAliveMinTime dynamicconfig.DurationPropertyFn
+	//  Allow pings even when there are no active streams (RPCs)
+	KeepAlivePermitWithoutStream dynamicconfig.BoolPropertyFn
+	// Close the connection if a client is idle.
+	KeepAliveMaxConnectionIdle dynamicconfig.DurationPropertyFn
+	// Close the connection if it is too old.
+	KeepAliveMaxConnectionAge dynamicconfig.DurationPropertyFn
+	// Additive period after MaxConnectionAge after which the connection will be forcibly closed.
+	KeepAliveMaxConnectionAgeGrace dynamicconfig.DurationPropertyFn
+	// Ping the client if it is idle to ensure the connection is still active.
+	KeepAliveTime dynamicconfig.DurationPropertyFn
+	// Wait for the ping ack before assuming the connection is dead.
+	KeepAliveTimeout dynamicconfig.DurationPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -701,6 +717,14 @@ func NewConfig(
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
+
+		KeepAliveMaxConnectionIdle:     dynamicconfig.KeepAliveMaxConnectionIdle.Get(dc),
+		KeepAliveMaxConnectionAge:      dynamicconfig.KeepAliveMaxConnectionAge.Get(dc),
+		KeepAliveMaxConnectionAgeGrace: dynamicconfig.KeepAliveMaxConnectionAgeGrace.Get(dc),
+		KeepAliveTime:                  dynamicconfig.KeepAliveTime.Get(dc),
+		KeepAliveTimeout:               dynamicconfig.KeepAliveTimeout.Get(dc),
+		KeepAliveMinTime:               dynamicconfig.KeepAliveMinTime.Get(dc),
+		KeepAlivePermitWithoutStream:   dynamicconfig.KeepAlivePermitWithoutStream.Get(dc),
 	}
 
 	return cfg
