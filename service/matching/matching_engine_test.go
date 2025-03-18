@@ -3072,7 +3072,9 @@ func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksNoDBErrors() {
 
 func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.dbRandCondFailedErr = true
+
 	s.addConsumeAllWorkflowTasksNonConcurrently(100, 1, 1)
 }
 
@@ -3082,7 +3084,9 @@ func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksNoDBErro
 
 func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksDBErrors() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.dbRandCondFailedErr = true
+
 	s.addConsumeAllWorkflowTasksNonConcurrently(100, 5, 5)
 }
 
@@ -3157,9 +3161,9 @@ func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
 	if s.newMatcher {
 		s.T().Skip("not supported by new matcher")
 	}
-
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.taskManager.dbRandCondFailedErr = true
+
 	s.resetBacklogCounter(2, 2, 2)
 }
 
@@ -3173,6 +3177,7 @@ func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
 	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.taskManager.dbRandCondFailedErr = true
+
 	s.resetBacklogCounter(10, 50, 5)
 }
 
