@@ -264,7 +264,7 @@ func (s *BacklogManagerTestSuite) TestAddTasksValidateBacklogCounter_ServiceErro
 		err := s.blm.SpoolTask(task)
 		s.Error(err)
 	}
-	s.Equal(int64(10), s.blm.TotalApproximateBacklogCount())
+	s.Equal(int64(taskCount), s.blm.TotalApproximateBacklogCount())
 }
 
 func (s *BacklogManagerTestSuite) TestAddMultipleTasksValidateBacklogCounter() {
@@ -280,5 +280,5 @@ func (s *BacklogManagerTestSuite) TestAddMultipleTasksValidateBacklogCounter() {
 		err := s.blm.SpoolTask(task)
 		s.NoError(err)
 	}
-	s.Equal(int64(10), s.blm.TotalApproximateBacklogCount())
+	s.Equal(int64(taskCount), s.blm.TotalApproximateBacklogCount())
 }
