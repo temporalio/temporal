@@ -118,7 +118,7 @@ func (mi *MaskInternalErrorDetailsInterceptor) logError(
 	statusCode codes.Code,
 ) {
 	methodName := api.MethodName(fullMethod)
-	overridedMethodName := TelemetryOverrideOperationTag(fullMethod, methodName)
+	overridedMethodName := telemetryOverrideOperationTag(fullMethod, methodName)
 	nsName := MustGetNamespaceName(mi.namespaceRegistry, req)
 	var logTags []tag.Tag
 	if nsName == "" {
@@ -132,5 +132,5 @@ func (mi *MaskInternalErrorDetailsInterceptor) logError(
 	logTags = append(logTags, tag.NewStringTag("grpc_code", statusCode.String()))
 	logTags = append(logTags, mi.workflowTags.Extract(req, fullMethod)...)
 
-	mi.logger.Error("service failures", append(logTags, tag.Error(err))...)
+	mi.logger.Error("masked service failures", append(logTags, tag.Error(err))...)
 }

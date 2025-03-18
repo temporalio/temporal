@@ -27,6 +27,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/persistence/serialization"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -65,4 +68,18 @@ func TestServiceErrorInterceptorUnknown(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Equal(t, codes.Unknown, status.Code(err))
+}
+
+func TestServiceErrorInterceptorSer(t *testing.T) {
+	serErrors := []error{
+		serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
+		serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
+	}
+	for _, inErr := range serErrors {
+		_, err := ServiceErrorInterceptor(context.Background(), nil, nil,
+			func(_ context.Context, _ any) (any, error) {
+				return nil, inErr
+			})
+		assert.Equal(t, serviceerror.ToStatus(err).Code(), codes.DataLoss)
+	}
 }

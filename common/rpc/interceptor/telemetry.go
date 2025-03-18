@@ -132,9 +132,9 @@ func NewTelemetryInterceptor(
 	}
 }
 
-// TelemetryUnaryOverrideOperationTag is used to override scope used for reporting a metric.
+// telemetryUnaryOverrideOperationTag is used to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func TelemetryUnaryOverrideOperationTag(fullName, operation string, req any) string {
+func telemetryUnaryOverrideOperationTag(fullName, operation string, req any) string {
 	if strings.HasPrefix(fullName, api.WorkflowServicePrefix) {
 		// GetWorkflowExecutionHistory method handles both long poll and regular calls.
 		// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
@@ -159,12 +159,12 @@ func TelemetryUnaryOverrideOperationTag(fullName, operation string, req any) str
 			}
 		}
 	}
-	return TelemetryOverrideOperationTag(fullName, operation)
+	return telemetryOverrideOperationTag(fullName, operation)
 }
 
-// TelemetryOverrideOperationTag is used to override scope used for reporting a metric.
+// telemetryOverrideOperationTag is used to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func TelemetryOverrideOperationTag(fullName, operation string) string {
+func telemetryOverrideOperationTag(fullName, operation string) string {
 	// prepend Operator prefix to Operator APIs
 	if strings.HasPrefix(fullName, api.OperatorServicePrefix) {
 		return "Operator" + operation
@@ -359,7 +359,7 @@ func (ti *TelemetryInterceptor) unaryMetricsHandlerLogTags(req any,
 	fullMethod string,
 	methodName string,
 	nsName namespace.Name) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := TelemetryUnaryOverrideOperationTag(fullMethod, methodName, req)
+	overridedMethodName := telemetryUnaryOverrideOperationTag(fullMethod, methodName, req)
 
 	if nsName == "" {
 		return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
@@ -373,7 +373,7 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 	fullMethod string,
 	methodName string,
 ) (metrics.Handler, []tag.Tag) {
-	overridedMethodName := TelemetryOverrideOperationTag(fullMethod, methodName)
+	overridedMethodName := telemetryOverrideOperationTag(fullMethod, methodName)
 	return ti.metricsHandler.WithTags(
 		metrics.OperationTag(overridedMethodName),
 		metrics.NamespaceUnknownTag(),
@@ -415,13 +415,6 @@ func (ti *TelemetryInterceptor) logError(
 		common.IsContextCanceledErr(err) ||
 		common.IsResourceExhausted(err)) {
 		return
-	}
-
-	// We mask these two error types in MaskInternalErrorDetailsInterceptor, so we need the hash to find the actual
-	// error message.
-	if statusCode == codes.Internal || statusCode == codes.Unknown {
-		errorHash := common.ErrorHash(err)
-		logTags = append(logTags, tag.NewStringTag("hash", errorHash))
 	}
 
 	logTags = append(logTags, tag.NewStringTag("grpc_code", statusCode.String()))
