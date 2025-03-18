@@ -121,10 +121,6 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	prtnMgr.defaultQueue = s.tqMgr
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TearDownTest() {
-	s.controller.Finish()
-}
-
 /*
 TODO(pri): rewrite or delete this test
 func TestReaderSignaling(t *testing.T) {
