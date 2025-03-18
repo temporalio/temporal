@@ -3343,8 +3343,9 @@ type testTaskManager struct {
 	sync.Mutex
 	queues              map[dbTaskQueueKey]*testPhysicalTaskQueueManager
 	logger              log.Logger
-	dbRandCondFailedErr bool
 	dbServiceError      bool
+	dbCondFailedErr     bool
+	dbRandCondFailedErr bool
 }
 
 type dbTaskQueueKey struct {
@@ -3569,7 +3570,7 @@ func (m *testTaskManager) CreateTasks(
 	rangeID := request.TaskQueueInfo.RangeID
 
 	// Randomly returns a ConditionFailedError
-	if m.generateErrorRandomly() {
+	if m.generateErrorRandomly() || m.dbCondFailedErr {
 		return nil, &persistence.ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to create task. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
 				taskQueue, taskType, rangeID, rangeID),

@@ -43,8 +43,9 @@ import (
 type BacklogManagerTestSuite struct {
 	suite.Suite
 
+	newMatcher bool
 	logger     *testlogger.TestLogger
-	blm        *backlogManagerImpl
+	blm        backlogManager
 	controller *gomock.Controller
 	cancelCtx  context.CancelFunc
 	taskMgr    *testTaskManager
@@ -53,7 +54,12 @@ type BacklogManagerTestSuite struct {
 
 func TestBacklogManagerTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &BacklogManagerTestSuite{})
+	suite.Run(t, &BacklogManagerTestSuite{newMatcher: false})
+}
+
+func TestBacklogManagerWithNewMatcherTestSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &BacklogManagerTestSuite{newMatcher: true})
 }
 
 func (s *BacklogManagerTestSuite) SetupTest() {
@@ -75,14 +81,41 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	ctx, s.cancelCtx = context.WithCancel(context.Background())
 	s.T().Cleanup(s.cancelCtx)
 
-	s.blm = newBacklogManager(ctx, s.ptqMgr, tlCfg, s.taskMgr, s.logger, s.logger, nil, metrics.NoopMetricsHandler)
+	if s.newMatcher {
+		s.blm = newPriBacklogManager(
+			s.ptqMgr,
+			tlCfg,
+			ctx,
+			s.taskMgr,
+			s.logger,
+			s.logger,
+			nil,
+			metrics.NoopMetricsHandler,
+		)
+	} else {
+		s.blm = newBacklogManager(
+			ctx,
+			s.ptqMgr,
+			tlCfg,
+			s.taskMgr,
+			s.logger,
+			s.logger,
+			nil,
+			metrics.NoopMetricsHandler,
+		)
+	}
 }
 
 func (s *BacklogManagerTestSuite) TestReadLevelForAllExpiredTasksInBatch() {
-	s.NoError(s.blm.taskWriter.initReadWriteState())
-	s.Equal(int64(1), s.blm.db.rangeID)
-	s.Equal(int64(0), s.blm.taskAckManager.getAckLevel())
-	s.Equal(int64(0), s.blm.taskAckManager.getReadLevel())
+	if s.newMatcher {
+		s.T().Skip("not compatible with new backlog manager")
+	}
+	blm := s.blm.(*backlogManagerImpl)
+
+	s.NoError(blm.taskWriter.initReadWriteState())
+	s.Equal(int64(1), blm.getDB().rangeID)
+	s.Equal(int64(0), blm.taskAckManager.getAckLevel())
+	s.Equal(int64(0), blm.taskAckManager.getReadLevel())
 
 	// Add all expired tasks
 	tasks := []*persistencespb.AllocatedTaskInfo{
@@ -102,12 +135,12 @@ func (s *BacklogManagerTestSuite) TestReadLevelForAllExpiredTasksInBatch() {
 		},
 	}
 
-	s.NoError(s.blm.taskReader.addTasksToBuffer(context.TODO(), tasks))
-	s.Equal(int64(0), s.blm.taskAckManager.getAckLevel())
-	s.Equal(int64(12), s.blm.taskAckManager.getReadLevel())
+	s.NoError(blm.taskReader.addTasksToBuffer(context.TODO(), tasks))
+	s.Equal(int64(0), blm.taskAckManager.getAckLevel())
+	s.Equal(int64(12), blm.taskAckManager.getReadLevel())
 
 	// Now add a mix of valid and expired tasks
-	s.NoError(s.blm.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
+	s.NoError(blm.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
 		{
 			Data: &persistencespb.TaskInfo{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
@@ -123,8 +156,8 @@ func (s *BacklogManagerTestSuite) TestReadLevelForAllExpiredTasksInBatch() {
 			TaskId: 14,
 		},
 	}))
-	s.Equal(int64(0), s.blm.taskAckManager.getAckLevel())
-	s.Equal(int64(14), s.blm.taskAckManager.getReadLevel())
+	s.Equal(int64(0), blm.taskAckManager.getAckLevel())
+	s.Equal(int64(14), blm.taskAckManager.getReadLevel())
 }
 
 func (s *BacklogManagerTestSuite) TestTaskWriterShutdown() {
@@ -132,6 +165,7 @@ func (s *BacklogManagerTestSuite) TestTaskWriterShutdown() {
 	defer s.blm.Stop()
 	s.NoError(s.blm.WaitUntilInitialized(context.Background()))
 
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).MaxTimes(1)
 	err := s.blm.SpoolTask(&persistencespb.TaskInfo{})
 	s.NoError(err)
 
@@ -143,25 +177,30 @@ func (s *BacklogManagerTestSuite) TestTaskWriterShutdown() {
 }
 
 func (s *BacklogManagerTestSuite) TestReadBatchDone() {
+	if s.newMatcher {
+		s.T().Skip("not compatible with new backlog manager")
+	}
+	blm := s.blm.(*backlogManagerImpl)
+
 	const rangeSize = 10
 	const maxReadLevel = int64(120)
-	s.blm.config.RangeSize = rangeSize
+	blm.config.RangeSize = rangeSize
 
-	s.blm.Start()
-	defer s.blm.Stop()
-	s.NoError(s.blm.WaitUntilInitialized(context.Background()))
+	blm.Start()
+	defer blm.Stop()
+	s.NoError(blm.WaitUntilInitialized(context.Background()))
 
-	s.blm.taskAckManager.setReadLevel(0)
-	s.blm.getDB().setMaxReadLevelForTesting(subqueueZero, maxReadLevel)
-	batch, err := s.blm.taskReader.getTaskBatch(context.Background())
+	blm.taskAckManager.setReadLevel(0)
+	blm.getDB().setMaxReadLevelForTesting(subqueueZero, maxReadLevel)
+	batch, err := blm.taskReader.getTaskBatch(context.Background())
 	s.NoError(err)
 	s.Empty(batch.tasks)
 	s.Equal(int64(rangeSize*10), batch.readLevel)
 	s.False(batch.isReadBatchDone)
 	s.NoError(err)
 
-	s.blm.taskAckManager.setReadLevel(batch.readLevel)
-	batch, err = s.blm.taskReader.getTaskBatch(context.Background())
+	blm.taskAckManager.setReadLevel(batch.readLevel)
+	batch, err = blm.taskReader.getTaskBatch(context.Background())
 	s.NoError(err)
 	s.Empty(batch.tasks)
 	s.Equal(maxReadLevel, batch.readLevel)
@@ -169,9 +208,14 @@ func (s *BacklogManagerTestSuite) TestReadBatchDone() {
 	s.NoError(err)
 }
 
-func (s *BacklogManagerTestSuite) TestApproximateBacklogCountIncrement_taskWriterLoop() {
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedByAppendTask() {
+	if s.newMatcher {
+		s.T().Skip("not compatible with new backlog manager")
+	}
+	blm := s.blm.(*backlogManagerImpl)
+
 	// Add tasks on the taskWriters channel
-	s.blm.taskWriter.appendCh <- &writeTaskRequest{
+	blm.taskWriter.appendCh <- &writeTaskRequest{
 		taskInfo: &persistencespb.TaskInfo{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
@@ -179,106 +223,107 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCountIncrement_taskWrite
 		responseCh: make(chan<- error),
 	}
 
-	s.Equal(int64(0), s.blm.TotalApproximateBacklogCount())
+	s.Equal(int64(0), blm.TotalApproximateBacklogCount())
 
-	s.blm.taskWriter.Start()
+	blm.taskWriter.Start()
 	// Adding tasks to the buffer will increase the in-memory counter by 1
 	// and this will be written to persistence
-	s.Eventually(func() bool { return s.blm.TotalApproximateBacklogCount() == int64(1) },
-		time.Second*30, time.Millisecond)
+	s.Eventually(func() bool {
+		return blm.TotalApproximateBacklogCount() == int64(1)
+	}, time.Second*30, time.Millisecond)
 }
 
-func (s *BacklogManagerTestSuite) TestApproximateBacklogCounterDecrement_SingleTask() {
-	_, err := s.blm.db.RenewLease(s.blm.tqCtx)
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_DecrementedByCompleteTask() {
+	if s.newMatcher {
+		s.T().Skip("not compatible with new backlog manager")
+	}
+	blm := s.blm.(*backlogManagerImpl)
+
+	_, err := blm.getDB().RenewLease(blm.tqCtx)
 	s.NoError(err)
 
-	s.blm.taskAckManager.addTask(int64(1))
-	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
-	s.blm.db.updateApproximateBacklogCount(int64(1))
-	s.Equal(int64(1), s.blm.TotalApproximateBacklogCount(), "1 task in the backlog")
-	s.Equal(int64(-1), s.blm.taskAckManager.getAckLevel(), "should only move ack level on completion")
-	s.Equal(int64(1), s.blm.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
-	ackLevel, numAcked := s.blm.taskAckManager.completeTask(1)
-	s.Equal(int64(1), ackLevel, "should move ack level and decrease backlog counter on completion")
-	s.Equal(int64(1), numAcked, "should move ack level and decrease backlog counter on completion")
-
-	s.Equal(int64(1), s.blm.taskAckManager.getAckLevel(), "should only move ack level on completion")
-}
-
-func (s *BacklogManagerTestSuite) TestApproximateBacklogCounterDecrement_MultipleTasks() {
-	_, err := s.blm.db.RenewLease(s.blm.tqCtx)
-	s.NoError(err)
-
-	s.blm.taskAckManager.addTask(int64(1))
-	s.blm.taskAckManager.addTask(int64(2))
-	s.blm.taskAckManager.addTask(int64(3))
+	blm.taskAckManager.addTask(int64(1))
+	blm.taskAckManager.addTask(int64(2))
+	blm.taskAckManager.addTask(int64(3))
 
 	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
-	s.blm.db.updateApproximateBacklogCount(int64(3))
+	blm.getDB().updateApproximateBacklogCount(int64(3))
 
-	s.Equal(int64(3), s.blm.TotalApproximateBacklogCount(), "1 task in the backlog")
-	s.Equal(int64(-1), s.blm.taskAckManager.getAckLevel(), "should only move ack level on completion")
-	s.Equal(int64(3), s.blm.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
+	s.Equal(int64(3), blm.TotalApproximateBacklogCount(), "1 task in the backlog")
+	s.Equal(int64(-1), blm.taskAckManager.getAckLevel(), "should only move ack level on completion")
+	s.Equal(int64(3), blm.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
 
 	// Complete tasks
-	ackLevel, numAcked := s.blm.taskAckManager.completeTask(2)
+	ackLevel, numAcked := blm.taskAckManager.completeTask(2)
 	s.Equal(int64(-1), ackLevel, "should not move the ack level")
 	s.Equal(int64(0), numAcked, "should not decrease the backlog counter as ack level has not gone up")
 
-	ackLevel, numAcked = s.blm.taskAckManager.completeTask(3)
+	ackLevel, numAcked = blm.taskAckManager.completeTask(3)
 	s.Equal(int64(-1), ackLevel, "should not move the ack level")
 	s.Equal(int64(0), numAcked, "should not decrease the backlog counter as ack level has not gone up")
 
-	ackLevel, numAcked = s.blm.taskAckManager.completeTask(1)
+	ackLevel, numAcked = blm.taskAckManager.completeTask(1)
 	s.Equal(int64(3), ackLevel, "should move the ack level")
 	s.Equal(int64(3), numAcked, "should decrease the backlog counter to 0 as no more tasks in the backlog")
-
 }
 
-// TestAddTasksValidateBacklogCounter uses the "backlogManager methods" to add a task to the backlog.
-func (s *BacklogManagerTestSuite) TestAddSingleTaskValidateBacklogCounter() {
-	// only start the taskWriter for now!
-	s.blm.taskWriter.Start()
-	task := &persistencespb.TaskInfo{
-		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
-		CreateTime: timestamp.TimeNowPtrUtc(),
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpoolTask() {
+	s.blm.Start()
+	defer s.blm.Stop()
+
+	taskCount := 10
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).MaxTimes(taskCount)
+	for i := 0; i < taskCount; i++ {
+		s.NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			CreateTime: timestamp.TimeNowPtrUtc(),
+		}))
 	}
-	err := s.blm.SpoolTask(task)
-	s.NoError(err)
-	s.Equal(int64(1), s.blm.TotalApproximateBacklogCount())
+	s.Equal(int64(taskCount), s.blm.TotalApproximateBacklogCount(),
+		"backlog count should match the number of tasks")
 }
 
-func (s *BacklogManagerTestSuite) TestAddTasksValidateBacklogCounter_ServiceError() {
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpoolTask_ServiceError() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.taskMgr.dbServiceError = true
 
-	// only start the taskWriter for now!
-	s.blm.taskWriter.Start()
+	s.blm.Start()
+	defer s.blm.Stop()
+
 	taskCount := 10
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).MaxTimes(taskCount)
 	for i := 0; i < taskCount; i++ {
-		// Create new tasks and spool them
-		task := &persistencespb.TaskInfo{
+		s.Error(s.blm.SpoolTask(&persistencespb.TaskInfo{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
-		}
-		err := s.blm.SpoolTask(task)
-		s.Error(err)
+		}))
 	}
-	s.Equal(int64(taskCount), s.blm.TotalApproximateBacklogCount())
+	s.Equal(int64(taskCount), s.blm.TotalApproximateBacklogCount(),
+		"backlog count should match the number of tasks despite the errors")
 }
 
-func (s *BacklogManagerTestSuite) TestAddMultipleTasksValidateBacklogCounter() {
-	// Only start the taskWriter for now!
-	s.blm.taskWriter.Start()
-	taskCount := 10
-	for i := 0; i < taskCount; i++ {
-		// Create new tasks and spool them
-		task := &persistencespb.TaskInfo{
-			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
-			CreateTime: timestamp.TimeNowPtrUtc(),
-		}
-		err := s.blm.SpoolTask(task)
-		s.NoError(err)
-	}
-	s.Equal(int64(taskCount), s.blm.TotalApproximateBacklogCount())
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySpoolTask_CondFailedError() {
+	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.taskMgr.dbCondFailedErr = true
+
+	s.blm.Start()
+	defer s.blm.Stop()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
+	s.ptqMgr.EXPECT().UnloadFromPartitionManager(unloadCauseConflict).
+		Do(func(_ any) { cancel() }).
+		AnyTimes()
+
+	s.Error(s.blm.SpoolTask(&persistencespb.TaskInfo{
+		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+		CreateTime: timestamp.TimeNowPtrUtc(),
+	}))
+
+	<-ctx.Done()
+
+	s.Equal(int64(0), s.blm.TotalApproximateBacklogCount(),
+		"backlog count should not be incremented")
 }
