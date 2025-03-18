@@ -3072,7 +3072,7 @@ func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksNoDBErrors() {
 
 func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
-	s.taskManager.dbConditionalFailedError = true
+	s.taskManager.dbRandCondFailedErr = true
 	s.addConsumeAllWorkflowTasksNonConcurrently(100, 1, 1)
 }
 
@@ -3082,7 +3082,7 @@ func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksNoDBErro
 
 func (s *matchingEngineSuite) TestMultipleWorkersAddConsumeWorkflowTasksDBErrors() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
-	s.taskManager.dbConditionalFailedError = true
+	s.taskManager.dbRandCondFailedErr = true
 	s.addConsumeAllWorkflowTasksNonConcurrently(100, 5, 5)
 }
 
@@ -3159,7 +3159,7 @@ func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
 	}
 
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
-	s.taskManager.dbConditionalFailedError = true
+	s.taskManager.dbRandCondFailedErr = true
 	s.resetBacklogCounter(2, 2, 2)
 }
 
@@ -3172,7 +3172,7 @@ func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
 		s.T().Skip("not supported by new matcher")
 	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
-	s.taskManager.dbConditionalFailedError = true
+	s.taskManager.dbRandCondFailedErr = true
 	s.resetBacklogCounter(10, 50, 5)
 }
 
@@ -3203,7 +3203,7 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
 		"UpdateState an atomic operation.")
-	s.taskManager.dbConditionalFailedError = true
+	s.taskManager.dbRandCondFailedErr = true
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
 }
@@ -3215,7 +3215,7 @@ func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksDBErrors() {
 	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
 		"UpdateState an atomic operation.")
-	s.taskManager.dbConditionalFailedError = true
+	s.taskManager.dbRandCondFailedErr = true
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
@@ -3227,7 +3227,7 @@ func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksNoDBErrors() {
 func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
-	s.taskManager.dbConditionalFailedError = true
+	s.taskManager.dbRandCondFailedErr = true
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(1, 500, 200)
 }
@@ -3239,7 +3239,7 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksN
 func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksDBErrors() {
 	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
 		"UpdateState an atomic operation.")
-	s.taskManager.dbConditionalFailedError = true
+	s.taskManager.dbRandCondFailedErr = true
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
@@ -3341,10 +3341,10 @@ var _ persistence.TaskManager = (*testTaskManager)(nil) // Asserts that interfac
 
 type testTaskManager struct {
 	sync.Mutex
-	queues                   map[dbTaskQueueKey]*testPhysicalTaskQueueManager
-	logger                   log.Logger
-	dbConditionalFailedError bool
-	dbServiceError           bool
+	queues              map[dbTaskQueueKey]*testPhysicalTaskQueueManager
+	logger              log.Logger
+	dbRandCondFailedErr bool
+	dbServiceError      bool
 }
 
 type dbTaskQueueKey struct {
@@ -3546,7 +3546,7 @@ func (m *testTaskManager) DeleteTaskQueue(
 
 // generateErrorRandomly states if a taskManager's operation should return an error or not
 func (m *testTaskManager) generateErrorRandomly() bool {
-	if m.dbConditionalFailedError {
+	if m.dbRandCondFailedErr {
 		threshold := 10
 
 		// Generate a random number between 0 and 99
