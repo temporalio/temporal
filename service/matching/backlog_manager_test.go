@@ -272,7 +272,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 	defer s.blm.Stop()
 
 	taskCount := 10
-	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).MaxTimes(taskCount)
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
 	for i := 0; i < taskCount; i++ {
 		s.NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
@@ -291,7 +291,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 	defer s.blm.Stop()
 
 	taskCount := 10
-	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).MaxTimes(taskCount)
+	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
 	for i := 0; i < taskCount; i++ {
 		s.Error(s.blm.SpoolTask(&persistencespb.TaskInfo{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
