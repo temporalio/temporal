@@ -71,8 +71,6 @@ const (
 )
 
 type (
-	taskQueueManagerOpt func(*physicalTaskQueueManagerImpl)
-
 	addTaskParams struct {
 		taskInfo    *persistencespb.TaskInfo
 		forwardInfo *taskqueuespb.TaskForwardInfo
