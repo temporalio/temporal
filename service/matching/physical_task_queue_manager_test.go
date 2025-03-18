@@ -371,7 +371,6 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 	s.Equal(errShutdown, err) // task writer was stopped above
 }
 
-// TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload() {
 	if s.newMatcher {
 		s.T().Skip("not supported by new matcher")
@@ -388,12 +387,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-// TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
-
 	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
 	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
 	s.tqMgr.Start()
@@ -411,12 +405,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-// TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMInterruptsPollOnClose() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
-
 	s.tqMgr.Start()
 
 	pollStart := time.Now()
