@@ -27,7 +27,6 @@
 package replication
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"sync"
@@ -468,7 +467,7 @@ func (s *StreamSenderImpl) sendTasks(
 		})
 	}
 
-	ctx := headers.SetCallerInfo(context.Background(), headers.SystemPreemptableCallerInfo)
+	ctx := headers.SetCallerInfo(s.server.Context(), headers.SystemPreemptableCallerInfo)
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,
 		string(s.clientShardKey.ClusterID),
@@ -545,7 +544,9 @@ Loop:
 			}
 			task.Priority = priority
 			if s.isTieredStackEnabled {
-				s.flowController.Wait(priority)
+				if err := s.flowController.Wait(s.server.Context(), priority); err != nil {
+					return err
+				}
 			}
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
