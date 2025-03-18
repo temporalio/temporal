@@ -495,7 +495,7 @@ func (tr *priTaskReader) maybeGCLocked() {
 	tr.inGC = true
 	tr.lastGCTime = time.Now()
 	// gc in new goroutine so poller doesn't have to wait
-	go tr.doGC()
+	go tr.doGC(tr.ackLevel)
 }
 
 func (tr *priTaskReader) shouldGCLocked() bool {
@@ -510,7 +510,7 @@ func (tr *priTaskReader) shouldGCLocked() bool {
 }
 
 // called in new goroutine
-func (tr *priTaskReader) doGC() {
+func (tr *priTaskReader) doGC(ackLevel int64) {
 	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
 
 	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
