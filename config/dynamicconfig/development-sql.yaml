@@ -45,6 +45,8 @@ system.enableDeploymentVersions:
   - value: true
 system.enableDeployments:
   - value: true
+matching.PollerHistoryTTL:
+  - value: 1s
 frontend.enableExecuteMultiOperation:
   - value: true
 system.enableNexus:
