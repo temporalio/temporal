@@ -176,7 +176,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 		Spec: &rulespb.WorkflowRuleSpec{
 			Id: ruleID1,
 			Trigger: &rulespb.WorkflowRuleSpec_ActivityStart{
-				ActivityStart: &rulespb.WorkflowRuleSpec_ActivityStartTrigger{
+				ActivityStart: &rulespb.WorkflowRuleSpec_ActivityStartingTrigger{
 					Predicate: fmt.Sprintf("ActivityType = \"%s\"", activityType),
 				},
 			},
@@ -184,7 +184,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 				{
 					Variant: &rulespb.WorkflowRuleAction_Pause{
 						Pause: &rulespb.WorkflowRuleAction_ActionPause{
-							Scope: enumspb.RULE_ACTION_SCOPE_ACTIVITY,
+							Scope: enumspb.WORKFLOW_RULE_ACTION_SCOPE_ACTIVITY,
 						},
 					},
 				},
@@ -324,7 +324,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_WhileRetrying() {
 		Spec: &rulespb.WorkflowRuleSpec{
 			Id: ruleID,
 			Trigger: &rulespb.WorkflowRuleSpec_ActivityStart{
-				ActivityStart: &rulespb.WorkflowRuleSpec_ActivityStartTrigger{
+				ActivityStart: &rulespb.WorkflowRuleSpec_ActivityStartingTrigger{
 					Predicate: fmt.Sprintf("ActivityType = \"%s\"", activityType),
 				},
 			},
@@ -332,7 +332,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_WhileRetrying() {
 				{
 					Variant: &rulespb.WorkflowRuleAction_Pause{
 						Pause: &rulespb.WorkflowRuleAction_ActionPause{
-							Scope: enumspb.RULE_ACTION_SCOPE_ACTIVITY,
+							Scope: enumspb.WORKFLOW_RULE_ACTION_SCOPE_ACTIVITY,
 						},
 					},
 				},
