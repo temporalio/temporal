@@ -557,8 +557,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// send in the task-queue families in batches of syncBatchSize
 	batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
-	batch := make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
-	maxBatchSize := syncBatchSize
 
 	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
 		byType := state.TaskQueueFamilies[tqName]
@@ -580,15 +578,13 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			Data:  data,
 		})
 
-		batch = append(batch, syncReq.Sync...)
-
-		if len(batch) == maxBatchSize {
-			batches = append(batches, batch)
-			batch = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+		if len(syncReq.Sync) == syncBatchSize {
+			batches = append(batches, syncReq.Sync)
+			syncReq.Sync = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0) // reset the syncReq.Sync slice for the next batch
 		}
 	}
-	if len(batch) > 0 {
-		batches = append(batches, batch)
+	if len(syncReq.Sync) > 0 {
+		batches = append(batches, syncReq.Sync)
 	}
 
 	// calling SyncDeploymentVersionUserData for each batch
