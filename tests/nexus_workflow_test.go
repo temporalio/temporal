@@ -2184,11 +2184,12 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
 				WorkflowId: handlerWorkflowID,
 			},
 		})
-		s.NoError(err)
-		s.Len(resp.Callbacks, 1)
-		s.Equal(resp.Callbacks[0].State, enumspb.CALLBACK_STATE_FAILED)
-		s.Equal(resp.Callbacks[0].LastAttemptFailure.Message, "handler error (NOT_FOUND): workflow execution already completed")
-	}, 2*time.Second, 500*time.Millisecond)
+		require.NoError(ct, err)
+		require.Len(ct, resp.Callbacks, 1)
+		require.Equal(ct, resp.Callbacks[0].State, enumspb.CALLBACK_STATE_FAILED)
+		require.NotNil(ct, resp.Callbacks[0].LastAttemptFailure)
+		require.Equal(ct, resp.Callbacks[0].LastAttemptFailure.Message, "handler error (NOT_FOUND): workflow execution already completed")
+	}, 3*time.Second, 200*time.Millisecond)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
