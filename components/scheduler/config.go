@@ -38,6 +38,7 @@ type (
 		MaxBufferSize                     int           // MaxBufferSize limits the number of buffered actions pending execution in total
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
 		RecentActionCount                 int           // Number of recent actions taken (workflow execution results) recorded in the ScheduleInfo metadata.
+		MaxActionsPerExecution            int           // Limits the number of actions (startWorkflow, terminate/cancel) taken by ExecuteTask in a single iteration
 
 		// TODO - incomplete tweakables list
 	}
@@ -70,7 +71,7 @@ var (
 
 	ServiceCallTimeout = dynamicconfig.NewGlobalDurationSetting(
 		"component.scheduler.serviceCallTimeout",
-		5*time.Second,
+		2*time.Second,
 		`The upper bound on how long a service call can take before being timed out.`,
 	)
 
@@ -80,6 +81,7 @@ var (
 		MaxBufferSize:                     1000,
 		CanceledTerminatedCountAsFailures: false,
 		RecentActionCount:                 10,
+		MaxActionsPerExecution:            10,
 	}
 )
 
