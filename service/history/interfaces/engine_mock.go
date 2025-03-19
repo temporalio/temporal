@@ -940,18 +940,18 @@ func (mr *MockEngineMockRecorder) Stop() *gomock.Call {
 }
 
 // SubscribeReplicationNotification mocks base method.
-func (m *MockEngine) SubscribeReplicationNotification(clusterName string) (<-chan struct{}, string) {
+func (m *MockEngine) SubscribeReplicationNotification(arg0 string) (<-chan struct{}, string) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeReplicationNotification", clusterName)
+	ret := m.ctrl.Call(m, "SubscribeReplicationNotification", arg0)
 	ret0, _ := ret[0].(<-chan struct{})
 	ret1, _ := ret[1].(string)
 	return ret0, ret1
 }
 
 // SubscribeReplicationNotification indicates an expected call of SubscribeReplicationNotification.
-func (mr *MockEngineMockRecorder) SubscribeReplicationNotification(clusterName any) *gomock.Call {
+func (mr *MockEngineMockRecorder) SubscribeReplicationNotification(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeReplicationNotification", reflect.TypeOf((*MockEngine)(nil).SubscribeReplicationNotification), clusterName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeReplicationNotification", reflect.TypeOf((*MockEngine)(nil).SubscribeReplicationNotification), arg0)
 }
 
 // SyncActivities mocks base method.
