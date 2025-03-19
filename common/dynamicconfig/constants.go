@@ -2130,7 +2130,7 @@ the number of children greater than or equal to this threshold`,
 	)
 	NumParentClosePolicySystemWorkflows = NewGlobalIntSetting(
 		"history.numParentClosePolicySystemWorkflows",
-		10,
+		1000,
 		`NumParentClosePolicySystemWorkflows is key for number of parentClosePolicy system workflows running in total`,
 	)
 	HistoryThrottledLogRPS = NewGlobalIntSetting(
