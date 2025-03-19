@@ -32,9 +32,9 @@ import (
 	context "context"
 	reflect "reflect"
 
+	gomock "github.com/golang/mock/gomock"
 	enums "go.temporal.io/server/api/enums/v1"
 	repication "go.temporal.io/server/api/replication/v1"
-	gomock "go.uber.org/mock/gomock"
 )
 
 // MockSenderFlowController is a mock of SenderFlowController interface.
