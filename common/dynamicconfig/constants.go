@@ -2352,7 +2352,7 @@ that task will be sent to DLQ.`,
 	)
 	EnableReplicationTaskTieredProcessing = NewGlobalBoolSetting(
 		"history.EnableReplicationTaskTieredProcessing",
-		true,
+		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
