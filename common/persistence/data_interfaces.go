@@ -723,7 +723,6 @@ type (
 		SignalInfoSize        int
 		SignalRequestIDSize   int
 		BufferedEventsSize    int
-		ChasmTotalSize        int // total size of all CHASM nodes within a record
 		// UpdateInfoSize is included in ExecutionInfoSize
 
 		// Item count for various information captured within mutable state

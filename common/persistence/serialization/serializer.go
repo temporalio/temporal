@@ -118,9 +118,6 @@ type (
 
 		NexusEndpointToBlob(endpoint *persistencespb.NexusEndpoint, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error)
-
-		ChasmNodeToBlob(node *persistencespb.ChasmNode, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		ChasmNodeFromBlob(data *commonpb.DataBlob) (*persistencespb.ChasmNode, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -575,15 +572,6 @@ func (t *serializerImpl) NexusEndpointToBlob(endpoint *persistencespb.NexusEndpo
 
 func (t *serializerImpl) NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error) {
 	result := &persistencespb.NexusEndpoint{}
-	return result, ProtoDecodeBlob(data, result)
-}
-
-func (t *serializerImpl) ChasmNodeToBlob(node *persistencespb.ChasmNode, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return ProtoEncodeBlob(node, encodingType)
-}
-
-func (t *serializerImpl) ChasmNodeFromBlob(data *commonpb.DataBlob) (*persistencespb.ChasmNode, error) {
-	result := &persistencespb.ChasmNode{}
 	return result, ProtoDecodeBlob(data, result)
 }
 

@@ -26,7 +26,6 @@ package tests
 
 import (
 	"math/rand"
-	"strings"
 	"testing"
 	"time"
 
@@ -39,7 +38,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -58,7 +56,6 @@ func RandomShardInfo(
 }
 
 func RandomSnapshot(
-	t *testing.T,
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -69,12 +66,6 @@ func RandomSnapshot(
 	dbRecordVersion int64,
 	branchToken []byte,
 ) (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
-	// TODO - remove this branching when other persistence implementations land for CHASM
-	var chasmNodes map[string]*persistencespb.ChasmNode
-	if strings.HasPrefix(t.Name(), "TestCassandra") {
-		chasmNodes = RandomChasmNodeMap()
-	}
-
 	snapshot := &p.WorkflowSnapshot{
 		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
 		ExecutionState: RandomExecutionState(runID, state, status),
@@ -87,7 +78,6 @@ func RandomSnapshot(
 		RequestCancelInfos:  RandomInt64RequestCancelInfoMap(),
 		SignalInfos:         RandomInt64SignalInfoMap(),
 		SignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
-		ChasmNodes:          chasmNodes,
 
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer:    {},
@@ -122,12 +112,6 @@ func RandomMutation(
 	dbRecordVersion int64,
 	branchToken []byte,
 ) (*p.WorkflowMutation, []*p.WorkflowEvents) {
-	// TODO - remove this branching when other persistence implementations land for CHASM
-	var chasmNodes map[string]*persistencespb.ChasmNode
-	if strings.HasPrefix(t.Name(), "TestCassandra") {
-		chasmNodes = RandomChasmNodeMap()
-	}
-
 	mutation := &p.WorkflowMutation{
 		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
 		ExecutionState: RandomExecutionState(runID, state, status),
@@ -146,8 +130,6 @@ func RandomMutation(
 		DeleteSignalInfos:         map[int64]struct{}{rand.Int63(): {}},
 		UpsertSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
 		DeleteSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
-		UpsertChasmNodes:          chasmNodes,
-		DeleteChasmNodes:          map[string]struct{}{uuid.New().String(): {}},
 		// NewBufferedEvents: see below
 		// ClearBufferedEvents: see below
 
@@ -186,32 +168,6 @@ func RandomMutation(
 	}
 
 	return mutation, []*p.WorkflowEvents{events}
-}
-
-func RandomChasmNodeMap() map[string]*persistencespb.ChasmNode {
-	return map[string]*persistencespb.ChasmNode{
-		uuid.New().String(): RandomChasmNode(),
-	}
-}
-
-func RandomChasmNode() *persistencespb.ChasmNode {
-	// Some arbitrary random data to ensure the chasm node's attributes are preserved.
-	var blobInfo persistencespb.WorkflowExecutionInfo
-	_ = fakedata.FakeStruct(&blobInfo)
-	blob, _ := serialization.ProtoEncodeBlob(&blobInfo, enumspb.ENCODING_TYPE_PROTO3)
-
-	var versionedTransition persistencespb.VersionedTransition
-	_ = fakedata.FakeStruct(&versionedTransition)
-
-	return &persistencespb.ChasmNode{
-		InitialVersionedTransition:    &versionedTransition,
-		LastUpdateVersionedTransition: &versionedTransition,
-		Attributes: &persistencespb.ChasmNode_DataAttributes{
-			DataAttributes: &persistencespb.ChasmDataAttributes{
-				Data: blob,
-			},
-		},
-	}
 }
 
 func RandomExecutionInfo(

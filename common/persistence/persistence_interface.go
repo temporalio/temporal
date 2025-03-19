@@ -410,7 +410,6 @@ type (
 		ChildExecutionInfos map[int64]*commonpb.DataBlob  `json:",omitempty"` // ChildExecutionInfo
 		RequestCancelInfos  map[int64]*commonpb.DataBlob  `json:",omitempty"` // RequestCancelInfo
 		SignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"` // SignalInfo
-		ChasmNodes          map[string]*commonpb.DataBlob `json:",omitempty"` // persistencespb.ChasmNode
 		SignalRequestedIDs  []string                      `json:",omitempty"`
 		ExecutionInfo       *commonpb.DataBlob            // WorkflowExecutionInfo
 		ExecutionState      *commonpb.DataBlob            // WorkflowExecutionState
@@ -462,8 +461,6 @@ type (
 		DeleteRequestCancelInfos  map[int64]struct{}            `json:",omitempty"`
 		UpsertSignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"`
 		DeleteSignalInfos         map[int64]struct{}            `json:",omitempty"`
-		UpsertChasmNodes          map[string]*commonpb.DataBlob `json:",omitempty"`
-		DeleteChasmNodes          map[string]struct{}           `json:",omitempty"`
 		UpsertSignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
 		DeleteSignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
 		NewBufferedEvents         *commonpb.DataBlob
@@ -497,7 +494,6 @@ type (
 		ChildExecutionInfos map[int64]*commonpb.DataBlob  `json:",omitempty"`
 		RequestCancelInfos  map[int64]*commonpb.DataBlob  `json:",omitempty"`
 		SignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"`
-		ChasmNodes          map[string]*commonpb.DataBlob `json:",omitempty"`
 		SignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
 
 		Tasks map[tasks.Category][]InternalHistoryTask `json:",omitempty"`

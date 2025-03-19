@@ -71,8 +71,6 @@ func statusOfInternalWorkflow(
 	totalUpdateCount := state.ExecutionInfo.UpdateCount
 	updateInfoCount := len(state.ExecutionInfo.UpdateInfos)
 
-	chasmTotalSize := sizeOfStringBlobMap(internalState.ChasmNodes)
-
 	totalSize := executionInfoSize
 	totalSize += executionStateSize
 	totalSize += activityInfoSize
@@ -82,7 +80,6 @@ func statusOfInternalWorkflow(
 	totalSize += signalInfoSize
 	totalSize += signalRequestIDSize
 	totalSize += bufferedEventsSize
-	totalSize += chasmTotalSize
 
 	return &MutableStateStatistics{
 		TotalSize:         totalSize,
@@ -120,8 +117,6 @@ func statusOfInternalWorkflow(
 
 		UpdateInfoCount:  updateInfoCount,
 		TotalUpdateCount: totalUpdateCount,
-
-		ChasmTotalSize: chasmTotalSize,
 	}
 }
 
@@ -184,9 +179,6 @@ func statusOfInternalWorkflowMutation(
 
 	taskCountByCategory := taskCountsByCategory(&mutation.Tasks)
 
-	chasmTotalSize := sizeOfStringBlobMap(mutation.UpsertChasmNodes)
-	chasmTotalSize += sizeOfStringSet(mutation.DeleteChasmNodes)
-
 	// TODO what about checksum?
 
 	totalSize := executionInfoSize
@@ -198,7 +190,6 @@ func statusOfInternalWorkflowMutation(
 	totalSize += signalInfoSize
 	totalSize += signalRequestIDSize
 	totalSize += bufferedEventsSize
-	totalSize += chasmTotalSize
 
 	return &MutableStateStatistics{
 		TotalSize:         totalSize,
@@ -238,8 +229,6 @@ func statusOfInternalWorkflowMutation(
 
 		TotalUpdateCount: totalUpdateCount,
 		UpdateInfoCount:  updateInfoCount,
-
-		ChasmTotalSize: chasmTotalSize,
 	}
 }
 
@@ -292,8 +281,6 @@ func statusOfInternalWorkflowSnapshot(
 	bufferedEventsCount := 0
 	bufferedEventsSize := 0
 
-	chasmTotalSize := sizeOfStringBlobMap(snapshot.ChasmNodes)
-
 	totalSize := executionInfoSize
 	totalSize += executionStateSize
 	totalSize += activityInfoSize
@@ -303,7 +290,6 @@ func statusOfInternalWorkflowSnapshot(
 	totalSize += signalInfoSize
 	totalSize += signalRequestIDSize
 	totalSize += bufferedEventsSize
-	totalSize += chasmTotalSize
 
 	taskCountByCategory := taskCountsByCategory(&snapshot.Tasks)
 
@@ -345,7 +331,5 @@ func statusOfInternalWorkflowSnapshot(
 
 		TotalUpdateCount: totalUpdateCount,
 		UpdateInfoCount:  updateInfoCount,
-
-		ChasmTotalSize: chasmTotalSize,
 	}
 }
