@@ -555,47 +555,31 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 
 	// ------------------------------------------------------------
 
-	// send in the task-queue families in batches of syncBatchSize
-	batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+	v := workflow.GetVersion(ctx, "SyncStateWithBatching", workflow.DefaultVersion, 1)
+	if v == workflow.DefaultVersion {
+		for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
+			byType := state.TaskQueueFamilies[tqName]
+			data := &deploymentspb.DeploymentVersionData{
+				Version:           d.VersionState.Version,
+				RoutingUpdateTime: args.RoutingUpdateTime,
+				CurrentSinceTime:  args.CurrentSinceTime,
+				RampingSinceTime:  args.RampingSinceTime,
+				RampPercentage:    args.RampPercentage,
+			}
+			var types []enumspb.TaskQueueType
+			for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
+				types = append(types, enumspb.TaskQueueType(tqType))
+			}
 
-	for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
-		byType := state.TaskQueueFamilies[tqName]
-		data := &deploymentspb.DeploymentVersionData{
-			Version:           d.VersionState.Version,
-			RoutingUpdateTime: args.RoutingUpdateTime,
-			CurrentSinceTime:  args.CurrentSinceTime,
-			RampingSinceTime:  args.RampingSinceTime,
-			RampPercentage:    args.RampPercentage,
+			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+				Name:  tqName,
+				Types: types,
+				Data:  data,
+			})
 		}
-		var types []enumspb.TaskQueueType
-		for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
-			types = append(types, enumspb.TaskQueueType(tqType))
-		}
-
-		syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
-			Name:  tqName,
-			Types: types,
-			Data:  data,
-		})
-
-		if len(syncReq.Sync) == syncBatchSize {
-			batches = append(batches, syncReq.Sync)
-			syncReq.Sync = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0) // reset the syncReq.Sync slice for the next batch
-		}
-	}
-	if len(syncReq.Sync) > 0 {
-		batches = append(batches, syncReq.Sync)
-	}
-
-	// calling SyncDeploymentVersionUserData for each batch
-	for _, batch := range batches {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
-
-		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-			Version: state.GetVersion(),
-			Sync:    batch,
-		}).Get(ctx, &syncRes)
+		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, syncReq).Get(ctx, &syncRes)
 		if err != nil {
 			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 			return nil, err
@@ -611,6 +595,67 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			if err != nil {
 				// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
 				return nil, err
+			}
+		}
+	} else {
+
+		// send in the task-queue families in batches of syncBatchSize
+		batches := make([][]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0)
+
+		for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
+			byType := state.TaskQueueFamilies[tqName]
+			data := &deploymentspb.DeploymentVersionData{
+				Version:           d.VersionState.Version,
+				RoutingUpdateTime: args.RoutingUpdateTime,
+				CurrentSinceTime:  args.CurrentSinceTime,
+				RampingSinceTime:  args.RampingSinceTime,
+				RampPercentage:    args.RampPercentage,
+			}
+			var types []enumspb.TaskQueueType
+			for _, tqType := range workflow.DeterministicKeys(byType.TaskQueues) {
+				types = append(types, enumspb.TaskQueueType(tqType))
+			}
+
+			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
+				Name:  tqName,
+				Types: types,
+				Data:  data,
+			})
+
+			if len(syncReq.Sync) == syncBatchSize {
+				batches = append(batches, syncReq.Sync)
+				syncReq.Sync = make([]*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData, 0) // reset the syncReq.Sync slice for the next batch
+			}
+		}
+		if len(syncReq.Sync) > 0 {
+			batches = append(batches, syncReq.Sync)
+		}
+
+		// calling SyncDeploymentVersionUserData for each batch
+		for _, batch := range batches {
+			activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+			var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
+
+			err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
+				Version: state.GetVersion(),
+				Sync:    batch,
+			}).Get(ctx, &syncRes)
+			if err != nil {
+				// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+				return nil, err
+			}
+			if len(syncRes.TaskQueueMaxVersions) > 0 {
+				// wait for propagation
+				err = workflow.ExecuteActivity(
+					activityCtx,
+					d.a.CheckWorkerDeploymentUserDataPropagation,
+					&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+						TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+					}).Get(ctx, nil)
+				if err != nil {
+					// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
+					return nil, err
+				}
 			}
 		}
 	}
