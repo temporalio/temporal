@@ -322,17 +322,6 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get buffered events. Error: %v", err))
 	}
 
-	state.ChasmNodes, err = getChasmNodeMap(ctx,
-		m.Db,
-		request.ShardID,
-		namespaceID,
-		workflowID,
-		runID,
-	)
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get CHASM nodes. Error: %v", err))
-	}
-
 	state.SignalRequestedIDs, err = getSignalsRequested(ctx,
 		m.Db,
 		request.ShardID,

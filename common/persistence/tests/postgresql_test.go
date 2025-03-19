@@ -524,24 +524,6 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionTimerSuite() {
 	suite.Run(p.T(), s)
 }
 
-func (p *PostgreSQLSuite) TestPostgresHistoryExecutionChasmSuite() {
-	cfg := NewPostgreSQLConfig(p.pluginName)
-	SetupPostgreSQLDatabase(p.T(), cfg)
-	SetupPostgreSQLSchema(p.T(), cfg)
-
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
-	if err != nil {
-		p.T().Fatalf("unable to create Postgres DB: %v", err)
-	}
-	defer func() {
-		_ = store.Close()
-		TearDownPostgreSQLDatabase(p.T(), cfg)
-	}()
-
-	s := sqltests.NewHistoryExecutionChasmSuite(p.T(), store)
-	suite.Run(p.T(), s)
-}
-
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryExecutionRequestCancelSuite() {
 	cfg := NewPostgreSQLConfig(p.pluginName)
 	SetupPostgreSQLDatabase(p.T(), cfg)

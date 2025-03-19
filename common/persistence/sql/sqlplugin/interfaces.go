@@ -86,7 +86,6 @@ type (
 		HistoryExecutionRequestCancel
 		HistoryExecutionSignal
 		HistoryExecutionSignalRequest
-		HistoryExecutionChasm
 
 		HistoryImmediateTask
 		HistoryScheduledTask
