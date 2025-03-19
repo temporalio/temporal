@@ -1,10 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2021 Datadog, Inc.
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,10 +20,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package sqlite
+package interceptor
 
-// Version is the SQLite database release version
-const Version = "0.9"
+import (
+	"context"
+	"errors"
 
-// VisibilityVersion is the SQLite visibility database release version
-const VisibilityVersion = "0.1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/persistence/serialization"
+	"google.golang.org/grpc"
+)
+
+func ServiceErrorInterceptor(
+	ctx context.Context,
+	req interface{},
+	_ *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+
+	resp, err := handler(ctx, req)
+
+	var deserializationError *serialization.DeserializationError
+	var serializationError *serialization.SerializationError
+	// convert serialization errors to be captured as serviceerrors across gRPC calls
+	if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
+		err = serviceerror.NewDataLoss(err.Error())
+	}
+	return resp, serviceerror.ToStatus(err).Err()
+}

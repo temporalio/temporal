@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
+	expmaps "golang.org/x/exp/maps"
 )
 
 func updateActivityInfos(
@@ -485,6 +486,94 @@ func deleteSignalInfoMap(
 		RunID:       runID,
 	}); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to delete signal info map. Error: %v", err))
+	}
+	return nil
+}
+
+func updateChasmNodes(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	chasmNodes map[string]*commonpb.DataBlob,
+	deleteIDs map[string]struct{},
+	shardID int32,
+	namespaceID primitives.UUID,
+	workflowID string,
+	runID primitives.UUID,
+) error {
+	if len(chasmNodes) > 0 {
+		rows := make([]sqlplugin.ChasmNodeMapsRow, 0, len(chasmNodes))
+		for path, blob := range chasmNodes {
+			rows = append(rows, sqlplugin.ChasmNodeMapsRow{
+				ShardID:      shardID,
+				NamespaceID:  namespaceID,
+				WorkflowID:   workflowID,
+				RunID:        runID,
+				ChasmPath:    path,
+				Data:         blob.Data,
+				DataEncoding: blob.EncodingType.String(),
+			})
+		}
+		if _, err := tx.ReplaceIntoChasmNodeMaps(ctx, rows); err != nil {
+			return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update CHASM nodes. Failed to execute update query. Error: %v", err))
+		}
+	}
+
+	if len(deleteIDs) > 0 {
+		if _, err := tx.DeleteFromChasmNodeMaps(ctx, sqlplugin.ChasmNodeMapsFilter{
+			ShardID:     shardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowID,
+			RunID:       runID,
+			ChasmPaths:  expmaps.Keys(deleteIDs),
+		}); err != nil {
+			return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update CHASM nodes. Failed to execute delete query. Error: %v", err))
+		}
+	}
+
+	return nil
+}
+
+func getChasmNodeMap(
+	ctx context.Context,
+	db sqlplugin.DB,
+	shardID int32,
+	namespaceID primitives.UUID,
+	workflowID string,
+	runID primitives.UUID,
+) (map[string]*commonpb.DataBlob, error) {
+	rows, err := db.SelectAllFromChasmNodeMaps(ctx, sqlplugin.ChasmNodeMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	})
+	if err != nil && err != sql.ErrNoRows {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Failed to get CHASM nodes. Error: %v", err))
+	}
+
+	ret := make(map[string]*commonpb.DataBlob)
+	for _, row := range rows {
+		ret[row.ChasmPath] = persistence.NewDataBlob(row.Data, row.DataEncoding)
+	}
+
+	return ret, nil
+}
+
+func deleteChasmNodeMap(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	shardID int32,
+	namespaceID primitives.UUID,
+	workflowID string,
+	runID primitives.UUID,
+) error {
+	if _, err := tx.DeleteAllFromChasmNodeMaps(ctx, sqlplugin.ChasmNodeMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to delete CHASM node map. Error: %v", err))
 	}
 	return nil
 }

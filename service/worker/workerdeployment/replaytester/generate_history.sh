@@ -2,8 +2,13 @@
 #
 # Consider running this script to generate a new history for TestReplays
 # whenever there's some change to the worker-deployment or worker-deployment-version workflow.
-# To use it, run a local server (any backend) with the dynamic config for worker-versioning 3
-# (system.enableDeploymentVersions=true) enabled and run this script.
+# To use it, run a local server (any backend) and ensure the following dynamic configs are enabled 
+# in the dynamic config file (config/dynamicconfig/development-sql.yaml):
+#
+# system.enableDeploymentVersions=true
+# matching.PollerHistoryTTL=1s
+#
+# Then run this script.
 #
 # Note: this requires temporal cli >= 0.12 and sdk >= v1.33.0
 
@@ -15,7 +20,7 @@ temporal operator namespace create default
 
 # Run the worker which shall start the deployment entity workflows....
 echo "Running the Go program..."
-timeout 10s go run "$(dirname "$0")/worker/worker.go"
+go run "$(dirname "$0")/worker/worker.go"
 
 # Download the history for the worker deployment workflow...
 now=$(date +%s)
