@@ -39,6 +39,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -51,6 +52,13 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
+
+type tqmTestOpts struct {
+	config              *Config
+	dbq                 *PhysicalTaskQueueKey
+	matchingClientMock  *matchingservicemock.MockMatchingServiceClient
+	expectUserDataError bool
+}
 
 func createUserDataManager(
 	t *testing.T,
@@ -970,4 +978,12 @@ func TestUserData_CheckPropagation(t *testing.T) {
 			return false
 		}
 	}, 100*time.Millisecond, 5*time.Millisecond, "CheckTaskQueueUserDataPropagation did not return fast enough")
+}
+
+func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
+	return &tqmTestOpts{
+		config:             defaultTestConfig(),
+		dbq:                defaultTqId(),
+		matchingClientMock: matchingservicemock.NewMockMatchingServiceClient(controller),
+	}
 }

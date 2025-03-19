@@ -159,11 +159,11 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	}
 
 	tr.lock.Lock()
+	defer tr.lock.Unlock()
 
 	tr.backlogAge.record(task.event.AllocatedTaskInfo.Data.CreateTime, -1)
 
 	numAcked := tr.ackTaskLocked(task.event.TaskId)
-	newAckLevel := tr.ackLevel
 
 	tr.maybeGCLocked()
 
@@ -173,9 +173,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 		tr.SignalTaskLoading()
 	}
 
-	tr.lock.Unlock()
-
-	tr.backlogMgr.db.updateAckLevelAndCount(tr.subqueue, newAckLevel, -numAcked)
+	tr.backlogMgr.db.updateAckLevelAndCount(tr.subqueue, tr.ackLevel, -numAcked)
 }
 
 // nolint:revive // can simplify later
@@ -497,7 +495,7 @@ func (tr *priTaskReader) maybeGCLocked() {
 	tr.inGC = true
 	tr.lastGCTime = time.Now()
 	// gc in new goroutine so poller doesn't have to wait
-	go tr.doGC()
+	go tr.doGC(tr.ackLevel)
 }
 
 func (tr *priTaskReader) shouldGCLocked() bool {
@@ -512,13 +510,13 @@ func (tr *priTaskReader) shouldGCLocked() bool {
 }
 
 // called in new goroutine
-func (tr *priTaskReader) doGC() {
+func (tr *priTaskReader) doGC(ackLevel int64) {
 	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
 
 	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
 	defer cancel()
 
-	n, err := tr.backlogMgr.db.CompleteTasksLessThan(ctx, tr.ackLevel+1, batchSize, tr.subqueue)
+	n, err := tr.backlogMgr.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, tr.subqueue)
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
@@ -533,6 +531,6 @@ func (tr *priTaskReader) doGC() {
 	// if we get UnknownNumRowsAffected or a smaller number than our limit, we know we got
 	// everything <= ackLevel, so we can reset ours. if not, we may have to try again.
 	if n == persistence.UnknownNumRowsAffected || n < batchSize {
-		tr.gcAckLevel = tr.ackLevel
+		tr.gcAckLevel = ackLevel
 	}
 }

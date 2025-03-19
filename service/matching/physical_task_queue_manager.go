@@ -72,8 +72,6 @@ const (
 )
 
 type (
-	taskQueueManagerOpt func(*physicalTaskQueueManagerImpl)
-
 	addTaskParams struct {
 		taskInfo    *persistencespb.TaskInfo
 		forwardInfo *taskqueuespb.TaskForwardInfo
@@ -145,7 +143,6 @@ var (
 func newPhysicalTaskQueueManager(
 	partitionMgr *taskQueuePartitionManagerImpl,
 	queue *PhysicalTaskQueueKey,
-	opts ...taskQueueManagerOpt,
 ) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
 	config := partitionMgr.config
@@ -254,9 +251,6 @@ func newPhysicalTaskQueueManager(
 		}
 		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, pqMgr.metricsHandler)
 		pqMgr.matcher = pqMgr.oldMatcher
-	}
-	for _, opt := range opts {
-		opt(pqMgr)
 	}
 	return pqMgr, nil
 }
