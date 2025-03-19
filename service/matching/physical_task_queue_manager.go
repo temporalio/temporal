@@ -249,7 +249,7 @@ func newPhysicalTaskQueueManager(
 				return nil, err
 			}
 		}
-		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, pqMgr.metricsHandler)
+		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler)
 		pqMgr.matcher = pqMgr.oldMatcher
 	}
 	return pqMgr, nil
