@@ -689,6 +689,48 @@ func (e *invokerExecutorsSuite) TestExecuteTask_CancelTerminateSucceed() {
 	})
 }
 
+// Tests when the ExecuteTask should yield by completing and committing any
+// completed work.
+func (e *invokerExecutorsSuite) TestExecuteTask_ExceedsMaxActionsPerExecution() {
+	startTime := timestamppb.New(e.env.Now())
+	var bufferedStarts []*schedulespb.BufferedStart
+	maxStarts := scheduler.DefaultTweakables.MaxActionsPerExecution
+	for i := range maxStarts * 2 {
+		bufferedStarts = append(bufferedStarts,
+			&schedulespb.BufferedStart{
+				NominalTime:   startTime,
+				ActualTime:    startTime,
+				DesiredTime:   startTime,
+				Manual:        false,
+				RequestId:     fmt.Sprintf("req-%d", i),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				Attempt:       1,
+			})
+	}
+
+	// Expect both buffered starts to result in workflow executions.
+	e.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		Times(maxStarts).
+		Return(&workflowservice.StartWorkflowExecutionResponse{
+			RunId: "run-id",
+		}, nil)
+
+	e.runTestCase(&testCase{
+		TaskType:                 scheduler.TaskTypeExecute,
+		InitialBufferedStarts:    bufferedStarts,
+		InitialState:             enumsspb.SCHEDULER_INVOKER_STATE_WAITING,
+		ExpectedBufferedStarts:   10,
+		ExpectedRunningWorkflows: 10,
+		ExpectedActionCount:      10,
+		ExpectedState:            enumsspb.SCHEDULER_INVOKER_STATE_PROCESSING,
+		ExpectedTasks: map[string]int{
+			scheduler.TaskTypeProcessBuffer: 1,
+			scheduler.TaskTypeExecute:       1,
+		},
+	})
+}
+
 type testCase struct {
 	TaskType string
 

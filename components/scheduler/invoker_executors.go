@@ -140,9 +140,10 @@ func (e invokerTaskExecutor) executeExecuteTask(
 
 	// Terminate, cancel, and start workflows. The result struct contains the
 	// complete outcome of all requests executed in a single batch.
-	result = result.Append(e.terminateWorkflows(ctx, logger, *scheduler, invoker.GetTerminateWorkflows()))
-	result = result.Append(e.cancelWorkflows(ctx, logger, *scheduler, invoker.GetCancelWorkflows()))
-	sres, startResults := e.startWorkflows(ctx, logger, env, *scheduler, eligibleStarts)
+	actionsTaken := 0
+	result = result.Append(e.terminateWorkflows(ctx, logger, *scheduler, &actionsTaken, invoker.GetTerminateWorkflows()))
+	result = result.Append(e.cancelWorkflows(ctx, logger, *scheduler, &actionsTaken, invoker.GetCancelWorkflows()))
+	sres, startResults := e.startWorkflows(ctx, logger, env, *scheduler, &actionsTaken, eligibleStarts)
 	result = result.Append(sres)
 
 	// Write results.
@@ -169,15 +170,28 @@ func (e invokerTaskExecutor) executeExecuteTask(
 	})
 }
 
+// shouldYield returns true when the immediate task should complete/spawn a new task.
+func (e invokerTaskExecutor) shouldYield(scheduler Scheduler, actionsTaken int) bool {
+	tweakables := e.Config.Tweakables(scheduler.Namespace)
+	maxActions := tweakables.MaxActionsPerExecution
+	return actionsTaken >= maxActions
+}
+
 // cancelWorkflows does a best-effort attempt to cancel all workflow executions provided in targets.
 func (e invokerTaskExecutor) cancelWorkflows(
 	ctx context.Context,
 	logger log.Logger,
 	scheduler Scheduler,
+	actionsTaken *int,
 	targets []*commonpb.WorkflowExecution,
 ) (result executeResult) {
 	for _, wf := range targets {
+		if e.shouldYield(scheduler, *actionsTaken) {
+			break
+		}
+
 		err := e.cancelWorkflow(ctx, scheduler, wf)
+		*actionsTaken++
 		if err != nil {
 			logger.Error("Failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 			e.MetricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
@@ -194,10 +208,16 @@ func (e invokerTaskExecutor) terminateWorkflows(
 	ctx context.Context,
 	logger log.Logger,
 	scheduler Scheduler,
+	actionsTaken *int,
 	targets []*commonpb.WorkflowExecution,
 ) (result executeResult) {
 	for _, wf := range targets {
+		if e.shouldYield(scheduler, *actionsTaken) {
+			break
+		}
+
 		err := e.terminateWorkflow(ctx, scheduler, wf)
+		*actionsTaken++
 		if err != nil {
 			logger.Error("Failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 			e.MetricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
@@ -215,12 +235,22 @@ func (e invokerTaskExecutor) startWorkflows(
 	logger log.Logger,
 	env hsm.Environment,
 	scheduler Scheduler,
+	actionsTaken *int,
 	starts []*schedulespb.BufferedStart,
 ) (result executeResult, startResults []*schedulepb.ScheduleActionResult) {
 	metricsWithTag := e.MetricsHandler.WithTags(
 		metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
+
 	for _, start := range starts {
+		// Starts that haven't been executed yet will remain in `BufferedStarts`,
+		// without change, so another ExecuteTask will be immediately created to continue
+		// processing in a new task.
+		if e.shouldYield(scheduler, *actionsTaken) {
+			break
+		}
+
 		startResult, err := e.startWorkflow(ctx, env, scheduler, start)
+		*actionsTaken++
 		if err != nil {
 			logger.Error("Failed to start workflow", tag.Error(err))
 
