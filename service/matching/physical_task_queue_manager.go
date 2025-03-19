@@ -226,7 +226,7 @@ func newPhysicalTaskQueueManager(
 			fwdr,
 			pqMgr.taskValidator,
 			logger,
-			pqMgr.metricsHandler,
+			newPriMetricsHandler(pqMgr.metricsHandler),
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 	} else {
