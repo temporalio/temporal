@@ -201,9 +201,9 @@ func newPhysicalTaskQueueManager(
 
 	if newMatcher {
 		pqMgr.backlogMgr = newPriBacklogManager(
+			tqCtx,
 			pqMgr,
 			config,
-			tqCtx,
 			e.taskManager,
 			logger,
 			throttledLogger,

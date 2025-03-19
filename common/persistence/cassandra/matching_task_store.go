@@ -170,7 +170,7 @@ const (
 // 00000100: task in subqueue 1
 // nnnnnn00: task in subqueue n, etc.
 func rowTypeTaskInSubqueue(subqueue int) int {
-	return subqueue<<2 | rowTypeTask
+	return subqueue<<2 | rowTypeTask // nolint:staticcheck
 }
 
 type (

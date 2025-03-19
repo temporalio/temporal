@@ -83,9 +83,9 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 
 	if s.newMatcher {
 		s.blm = newPriBacklogManager(
+			ctx,
 			s.ptqMgr,
 			tlCfg,
-			ctx,
 			s.taskMgr,
 			s.logger,
 			s.logger,
