@@ -84,9 +84,21 @@ func main() {
 	time.Sleep(5 * time.Second)
 
 	// Testing various worker-deployment API's
-
 	deploymentClient := c.WorkerDeploymentClient()
 	dHandle := deploymentClient.GetHandle(deploymentName)
+
+	// Update version metadata
+	_, err = dHandle.UpdateVersionMetadata(context.Background(), client.WorkerDeploymentUpdateVersionMetadataOptions{
+		Version: deploymentName + ".1.0",
+		MetadataUpdate: client.WorkerDeploymentMetadataUpdate{
+			UpsertEntries: map[string]interface{}{
+				"key": "value",
+			},
+		},
+	})
+	if err != nil {
+		log.Fatalln("Unable to update version metadata", err)
+	}
 
 	// Set ramping version to 1.0
 	_, err = dHandle.SetRampingVersion(context.Background(), client.WorkerDeploymentSetRampingVersionOptions{
@@ -116,6 +128,17 @@ func main() {
 	}
 	verifyDeployment(dHandle, deploymentName+".1.0", "", client.WorkerDeploymentVersionDrainageStatusUnspecified)
 
+	// Ramp the "__unversioned__" version
+	_, err = dHandle.SetRampingVersion(context.Background(), client.WorkerDeploymentSetRampingVersionOptions{
+		Version:                 "__unversioned__",
+		Percentage:              20,
+		IgnoreMissingTaskQueues: true,
+	})
+	if err != nil {
+		log.Fatalln("Unable to set ramping version", err)
+	}
+	verifyDeployment(dHandle, deploymentName+".1.0", "__unversioned__", client.WorkerDeploymentVersionDrainageStatusUnspecified)
+
 	// Set current version to "__unversioned__"
 	_, err = dHandle.SetCurrentVersion(context.Background(), client.WorkerDeploymentSetCurrentVersionOptions{
 		Version:                 "__unversioned__",
@@ -133,12 +156,21 @@ func main() {
 	// clearing out the poller history to delete the version
 	time.Sleep(2 * time.Second)
 
+	// Delete the deployment version
 	_, err = dHandle.DeleteVersion(context.Background(), client.WorkerDeploymentDeleteVersionOptions{
 		Version:      deploymentName + ".1.0",
 		SkipDrainage: true,
 	})
 	if err != nil {
 		log.Fatalln("Unable to delete version", err)
+	}
+
+	// Delete the deployment
+	_, err = deploymentClient.Delete(context.Background(), client.WorkerDeploymentDeleteOptions{
+		Name: deploymentName,
+	})
+	if err != nil {
+		log.Fatalln("Unable to delete deployment", err)
 	}
 
 }

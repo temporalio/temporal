@@ -300,6 +300,7 @@ func (d *WorkflowRunner) validateDeleteDeployment() error {
 func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 	if len(d.State.Versions) == 0 {
 		d.done = true
+		fmt.Println("DEPLOYMENT DELETED!!!")
 	}
 	return nil
 }
