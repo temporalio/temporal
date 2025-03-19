@@ -92,9 +92,9 @@ type (
 var _ backlogManager = (*priBacklogManagerImpl)(nil)
 
 func newPriBacklogManager(
+	tqCtx context.Context,
 	pqMgr physicalTaskQueueManager,
 	config *taskQueueConfig,
-	tqCtx context.Context,
 	taskManager persistence.TaskManager,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
@@ -177,13 +177,13 @@ func (c *priBacklogManagerImpl) WaitUntilInitialized(ctx context.Context) error 
 func (c *priBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.SubqueueInfo) {
 	// TODO(pri): This assumes that subqueues never shrinks, and priority/fairness index of
 	// existing subqueues never changes. If we change that, this logic will need to change.
-	for i, s := range subqueues {
+	for i := range subqueues {
 		if i >= len(c.subqueues) {
-			r := newPriTaskReader(c, i, s.AckLevel)
+			r := newPriTaskReader(c, i, subqueues[i].AckLevel)
 			r.Start()
 			c.subqueues = append(c.subqueues, r)
 		}
-		c.subqueuesByPriority[s.Key.Priority] = i
+		c.subqueuesByPriority[subqueues[i].Key.Priority] = i
 	}
 }
 

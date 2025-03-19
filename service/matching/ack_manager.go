@@ -118,7 +118,7 @@ func (m *ackManager) setAckLevel(ackLevel int64) {
 	}
 }
 
-func (m *ackManager) completeTask(taskID int64) (int64, int64) {
+func (m *ackManager) completeTask(taskID int64) (newAckLevel, numberOfAckedTasks int64) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -139,7 +139,6 @@ func (m *ackManager) completeTask(taskID int64) (int64, int64) {
 	m.backlogCountHint.Add(-1)
 
 	// Adjust the ack level as far as we can
-	var numberOfAckedTasks int64
 	for {
 		min, acked := m.outstandingTasks.Min()
 		if min == nil || !acked.(bool) {

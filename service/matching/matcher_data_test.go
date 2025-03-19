@@ -448,7 +448,7 @@ func (s *MatcherDataSuite) TestPollForwardFailedTimedOut() {
 		s.NotNil(tres.poller)
 		// there's a new task in the meantime
 		s.md.EnqueueTaskNoWait(t2)
-		time.Sleep(11 * time.Millisecond)
+		time.Sleep(11 * time.Millisecond) // nolint:forbidigo
 		// but we waited too long, poller timed out, so this does nothing (but doesn't crash or assert)
 		s.md.ReenqueuePollerIfNotMatched(tres.poller)
 		done <- struct{}{}
@@ -584,7 +584,6 @@ func FuzzMatcherData(f *testing.F) {
 		ts.UseAsyncTimers(true)
 		logger := testlogger.NewTestLogger(f, testlogger.FailOnAnyUnexpectedError)
 		md := newMatcherData(cfg, logger, ts, true)
-		_ = md
 
 		next := func() int {
 			if len(tape) == 0 {
@@ -601,10 +600,11 @@ func FuzzMatcherData(f *testing.F) {
 		var pollForwarders, taskForwarders atomic.Int64
 		const ops = 20
 
+	loop:
 		for {
 			switch (next() + 1) % ops {
 			case 0:
-				return
+				break loop
 
 			case 1: // add backlog task
 				tid++
@@ -637,7 +637,7 @@ func FuzzMatcherData(f *testing.F) {
 					defer cancel()
 					md.EnqueuePollerAndWait([]context.Context{ctx}, &waitingPoller{
 						startTime:    ts.Now(),
-						forwardCtx:   ctx, // FIXME: not always forwardable?
+						forwardCtx:   ctx, // TODO: not always forwardable?
 						pollMetadata: &pollMetadata{},
 						queryOnly:    queryOnly,
 					})

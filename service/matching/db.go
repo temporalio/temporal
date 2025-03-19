@@ -511,9 +511,11 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 // should be enabled. Additionally, for versioned queues, BreakdownMetricsByBuildID should also be enabled.
 func (db *taskQueueDB) emitBacklogGauges() {
 	// TODO(pri): need to revisit this for subqueues
+	// nolint:staticcheck
 	shouldEmitGauges := db.config.BreakdownMetricsByTaskQueue() &&
 		db.config.BreakdownMetricsByPartition() &&
 		(!db.queue.IsVersioned() || db.config.BreakdownMetricsByBuildID())
+	// nolint:staticcheck
 	if shouldEmitGauges {
 		// approximateBacklogCount := db.getApproximateBacklogCount()
 		// backlogHeadAge := db.backlogMgr.BacklogHeadAge()
