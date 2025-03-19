@@ -30,12 +30,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
@@ -75,9 +73,8 @@ func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
 		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 			Namespace:    s.Namespace().String(),
 			WorkflowId:   fmt.Sprintf("wf%d", wfidx),
-			WorkflowType: &commonpb.WorkflowType{Name: "mywf"},
+			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
-			RequestId:    uuid.NewString(),
 		})
 		s.NoError(err)
 	}
@@ -146,95 +143,92 @@ func (s *PriorityFairnessSuite) TestPriority_Activity_Basic() {
 	s.Less(w, 0.15)
 }
 
-// func (s *PriorityFairnessSuite) TestSubqueue_Migration() {
-// 	actq := testcore.RandomizeStr("actq")
+func (s *PriorityFairnessSuite) TestSubqueue_Migration() {
+	tv := testvars.New(s.T())
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-// 	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 
-// 	// start with old matcher
-// 	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
+	// start with old matcher
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
 
-// 	var activitiesCompleted atomic.Int64
-// 	unblockActivities := make(chan struct{})
-
-// 	act1 := func(ctx context.Context, wfidx int) error {
-// 		if activitiesCompleted.Load() == 100 || activitiesCompleted.Load() == 200 {
-// 			<-unblockActivities
-// 		}
-// 		activitiesCompleted.Add(1)
-// 		return nil
-// 	}
-
-// 	wf1 := func(ctx workflow.Context, wfidx int) error {
-// 		var futures []workflow.Future
-// 		for range 3 {
-// 			actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-// 				TaskQueue:              actq,
-// 				ScheduleToCloseTimeout: 60 * time.Second,
-// 			})
-// 			f := workflow.ExecuteActivity(actCtx, act1, wfidx)
-// 			futures = append(futures, f)
-// 		}
-// 		for _, f := range futures {
-// 			s.NoError(f.Get(ctx, nil))
-// 		}
-// 		return nil
-// 	}
-// 	s.Worker().RegisterWorkflow(wf1)
-
-// 	wfopts := client.StartWorkflowOptions{TaskQueue: s.TaskQueue()}
-// 	for wfidx := range 100 {
-// 		_, err := s.SdkClient().ExecuteWorkflow(ctx, wfopts, wf1, wfidx)
-// 		s.NoError(err)
-// 	}
-
-// 	s.T().Log("waiting for backlog")
-// 	s.waitForBacklog(ctx, actq, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 300)
-
-// 	s.T().Log("starting worker")
-// 	actw := worker.New(s.SdkClient(), actq, worker.Options{
-// 		MaxConcurrentActivityExecutionSize: 1, // serialize activities
-// 	})
-// 	actw.RegisterActivity(act1)
-// 	actw.Start()
-// 	defer actw.Stop()
-
-// 	s.T().Log("waiting for first 100 activities")
-// 	s.Eventually(func() bool { return activitiesCompleted.Load() == 100 }, 10*time.Second, 10*time.Millisecond)
-
-// 	s.T().Log("switching to new matcher")
-// 	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true)
-
-// 	s.T().Log("unblocking activities")
-// 	unblockActivities <- struct{}{}
-
-// 	s.T().Log("waiting for next 100 activities")
-// 	s.Eventually(func() bool { return activitiesCompleted.Load() == 200 }, 10*time.Second, 10*time.Millisecond)
-
-// 	s.T().Log("switching back to old matcher")
-// 	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
-
-// 	s.T().Log("unblocking activities")
-// 	unblockActivities <- struct{}{}
-
-// 	s.T().Log("waiting for last 100 activites")
-// 	s.Eventually(func() bool { return activitiesCompleted.Load() == 300 }, 10*time.Second, 10*time.Millisecond)
-// }
-
-func (s *PriorityFairnessSuite) waitForBacklog(ctx context.Context, tq string, tp enumspb.TaskQueueType, n int) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-			Namespace:      s.Namespace().String(),
-			TaskQueue:      &taskqueuepb.TaskQueue{Name: tq},
-			ApiMode:        enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
-			TaskQueueTypes: []enumspb.TaskQueueType{tp},
-			ReportStats:    true,
+	// start 100 workflows
+	for range 100 {
+		_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.Namespace().String(),
+			WorkflowId:   uuid.NewString(),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
 		})
-		assert.NoError(t, err)
-		stats := resp.GetVersionsInfo()[""].TypesInfo[int32(tp)].Stats
-		assert.GreaterOrEqual(t, stats.ApproximateBacklogCount, int64(n))
-	}, 10*time.Second, 200*time.Millisecond)
+		s.NoError(err)
+	}
+
+	// process workflow tasks and create 300 activities
+	for range 100 {
+		_, err := s.TaskPoller.PollAndHandleWorkflowTask(
+			tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.Equal(3, len(task.History.Events))
+
+				var commands []*commandpb.Command
+
+				for i := range 3 {
+					input, err := payloads.Encode(i)
+					s.NoError(err)
+					commands = append(commands, &commandpb.Command{
+						CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+						Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+							ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+								ActivityId:             fmt.Sprintf("act%d", i),
+								ActivityType:           tv.ActivityType(),
+								TaskQueue:              tv.TaskQueue(),
+								ScheduleToCloseTimeout: durationpb.New(time.Minute),
+								Input:                  input,
+							},
+						},
+					})
+				}
+
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+			},
+			taskpoller.WithContext(ctx),
+		)
+		s.NoError(err)
+	}
+
+	processActivity := func() {
+		_, err := s.TaskPoller.PollAndHandleActivityTask(
+			tv,
+			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+				nothing, err := payloads.Encode()
+				s.NoError(err)
+				return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
+			},
+			taskpoller.WithContext(ctx),
+		)
+		s.NoError(err)
+	}
+
+	s.T().Log("process first 100 activities")
+	for range 100 {
+		processActivity()
+	}
+
+	s.T().Log("switching to new matcher")
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true)
+
+	s.T().Log("processing next 100 activities")
+	for range 100 {
+		processActivity()
+	}
+
+	s.T().Log("switching back to old matcher")
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
+
+	s.T().Log("processing last 100 activities")
+	for range 100 {
+		processActivity()
+	}
 }
 
 func wrongorderness(vs []int) float64 {
