@@ -169,7 +169,7 @@ func (e taskExecutor) loadInvocationArgs(
 			// variant struct is immutable and ok to reference without copying
 			nexusInvokable := nexusInvocation{}
 			nexusInvokable.nexus = variant.Nexus
-			nexusInvokable.completion, err = target.GetNexusCompletion(ctx)
+			nexusInvokable.completion, err = target.GetNexusCompletion(ctx, callback.GetRequestId())
 			nexusInvokable.workflowID = ref.WorkflowKey.WorkflowID
 			nexusInvokable.runID = ref.WorkflowKey.RunID
 			nexusInvokable.attempt = callback.Attempt

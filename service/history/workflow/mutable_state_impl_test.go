@@ -1904,6 +1904,7 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	_, err = coll.Add(
 		"test-callback-carryover",
 		callbacks.NewCallback(
+			"random-request-id",
 			timestamppb.Now(),
 			callbacks.NewWorkflowClosedTrigger(),
 			&persistencespb.Callback{

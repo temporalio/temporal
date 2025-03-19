@@ -76,7 +76,7 @@ type mutableState struct {
 	completionHsm   *persistencespb.HSMCompletionCallbackArg
 }
 
-func (ms mutableState) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
+func (ms mutableState) GetNexusCompletion(ctx context.Context, requestID string) (nexus.OperationCompletion, error) {
 	return ms.completionNexus, nil
 }
 

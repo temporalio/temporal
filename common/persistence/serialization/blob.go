@@ -28,6 +28,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
 	"google.golang.org/protobuf/proto"
 )
@@ -62,6 +63,7 @@ func WorkflowExecutionStateFromBlob(blob []byte, encoding string) (*persistences
 	if result.CreateRequestId != "" && result.RequestIds[result.CreateRequestId] == nil {
 		result.RequestIds[result.CreateRequestId] = &persistencespb.RequestIDInfo{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			EventId:   common.FirstEventID,
 		}
 	}
 	return result, nil

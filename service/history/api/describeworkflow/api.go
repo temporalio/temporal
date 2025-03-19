@@ -160,11 +160,19 @@ func Invoke(
 			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
 			OriginalStartTime:       startEvent.EventTime,
 			CancelRequested:         executionInfo.CancelRequested,
+			RequestIdInfos:          make(map[string]*workflowpb.RequestIdInfo),
 		},
 	}
 
 	if mutableState.IsResetRun() {
 		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
+	}
+
+	for requestID, info := range mutableState.GetExecutionState().GetRequestIds() {
+		result.WorkflowExtendedInfo.RequestIdInfos[requestID] = &workflowpb.RequestIdInfo{
+			EventType: info.EventType,
+			EventId:   info.EventId,
+		}
 	}
 
 	if executionInfo.ParentRunId != "" {
@@ -380,6 +388,7 @@ func buildCallbackInfo(
 		LastAttemptFailure:      callback.LastAttemptFailure,
 		NextAttemptScheduleTime: callback.NextAttemptScheduleTime,
 		BlockedReason:           blockedReason,
+		RequestId:               callback.RequestId,
 	}, nil
 }
 

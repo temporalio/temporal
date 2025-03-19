@@ -1491,12 +1491,15 @@ func makeCurrentWorkflowConditionFailedError(
 		RequestIDs: map[string]*persistencespb.RequestIDInfo{
 			tv.RequestID(): {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				EventId:   common.FirstEventID,
 			},
 			tv1.RequestID(): {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				EventId:   3,
 			},
 			tv2.RequestID(): {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+				EventId:   common.BufferedEventID,
 			},
 		},
 		RunID:            tv.RunID(),
@@ -1705,6 +1708,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 				RequestIDs: map[string]*persistencespb.RequestIDInfo{
 					requestID: {
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+						EventId:   common.FirstEventID,
 					},
 				},
 				RunID:            prevRunID,
@@ -1809,6 +1813,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 						RequestIDs: map[string]*persistencespb.RequestIDInfo{
 							requestID: {
 								EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+								EventId:   common.FirstEventID,
 							},
 						},
 						RunID:            prevRunID,
@@ -2068,6 +2073,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 			// use same requestID
 			requestID: {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				EventId:   common.FirstEventID,
 			},
 		},
 		RunID:            runID,
@@ -2139,6 +2145,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 		RequestIDs: map[string]*persistencespb.RequestIDInfo{
 			"new request ID": {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				EventId:   common.FirstEventID,
 			},
 		},
 		RunID:            runID,

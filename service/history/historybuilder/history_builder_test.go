@@ -1721,6 +1721,7 @@ func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferSingleBatch
 		DBBufferBatch:          nil,
 		MemBufferBatch:         nil,
 		ScheduledIDToStartedID: make(map[int64]int64),
+		RequestIDToEventID:     make(map[string]int64),
 	}, historyMutation)
 }
 
@@ -1800,6 +1801,7 @@ func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferMultiBatch(
 		DBBufferBatch:          nil,
 		MemBufferBatch:         nil,
 		ScheduledIDToStartedID: make(map[int64]int64),
+		RequestIDToEventID:     make(map[string]int64),
 	}, historyMutation)
 }
 
@@ -1832,6 +1834,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuf
 		DBBufferBatch:          []*historypb.HistoryEvent{event1, event2},
 		MemBufferBatch:         []*historypb.HistoryEvent{event1, event2},
 		ScheduledIDToStartedID: make(map[int64]int64),
+		RequestIDToEventID:     make(map[string]int64),
 	}, historyMutation)
 }
 
@@ -1864,6 +1867,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuf
 		DBBufferBatch:          nil,
 		MemBufferBatch:         nil,
 		ScheduledIDToStartedID: make(map[int64]int64),
+		RequestIDToEventID:     make(map[string]int64),
 	}, historyMutation)
 }
 
@@ -1894,6 +1898,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_WithDBBuf
 		DBBufferBatch:          nil,
 		MemBufferBatch:         []*historypb.HistoryEvent{event1, event2},
 		ScheduledIDToStartedID: make(map[int64]int64),
+		RequestIDToEventID:     make(map[string]int64),
 	}, historyMutation)
 }
 
@@ -1924,6 +1929,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_WithDBBuf
 		DBBufferBatch:          nil,
 		MemBufferBatch:         nil,
 		ScheduledIDToStartedID: make(map[int64]int64),
+		RequestIDToEventID:     make(map[string]int64),
 	}, historyMutation)
 }
 
@@ -1961,6 +1967,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer
 		DBBufferBatch:          []*historypb.HistoryEvent{event1, event2},
 		MemBufferBatch:         []*historypb.HistoryEvent{event0, event1, event2},
 		ScheduledIDToStartedID: make(map[int64]int64),
+		RequestIDToEventID:     make(map[string]int64),
 	}, historyMutation)
 }
 
@@ -1998,6 +2005,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer
 		DBBufferBatch:          nil,
 		MemBufferBatch:         nil,
 		ScheduledIDToStartedID: make(map[int64]int64),
+		RequestIDToEventID:     make(map[string]int64),
 	}, historyMutation)
 }
 

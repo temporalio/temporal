@@ -70,6 +70,8 @@ type (
 		MemBufferBatch []*historypb.HistoryEvent
 		// scheduled to started event ID mapping for flushed buffered event
 		ScheduledIDToStartedID map[int64]int64
+		// request id to event ID mapping for flushed buffered event
+		RequestIDToEventID map[string]int64
 	}
 
 	TaskIDGenerator func(number int) ([]int64, error)
@@ -102,6 +104,7 @@ func New(
 			memLatestBatch:         nil,
 			memBufferBatch:         nil,
 			scheduledIDToStartedID: make(map[int64]int64),
+			requestIDToEventID:     make(map[string]int64),
 
 			metricsHandler: metricsHandler,
 		},
@@ -129,6 +132,7 @@ func NewImmutable(histories ...[]*historypb.HistoryEvent) *HistoryBuilder {
 			memLatestBatch:         nil,
 			memBufferBatch:         nil,
 			scheduledIDToStartedID: nil,
+			requestIDToEventID:     nil,
 
 			metricsHandler: nil,
 		},
@@ -154,6 +158,7 @@ func NewImmutableForUpdateNextEventID(lastVersionHistoryItem *historyspb.Version
 			memLatestBatch:         nil,
 			memBufferBatch:         nil,
 			scheduledIDToStartedID: nil,
+			requestIDToEventID:     nil,
 
 			metricsHandler: nil,
 		},

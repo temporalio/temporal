@@ -590,10 +590,22 @@ func (ms *MutableStateImpl) ChasmTree() historyi.ChasmTree {
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
 // Completions may be sent to arbitrary third parties, we intentionally do not include any termination reasons, and
 // expose only failure messages.
-func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.OperationCompletion, error) {
+func (ms *MutableStateImpl) GetNexusCompletion(
+	ctx context.Context,
+	requestID string,
+) (nexus.OperationCompletion, error) {
 	ce, err := ms.GetCompletionEvent(ctx)
 	if err != nil {
 		return nil, err
+	}
+	eventRef := &commonpb.Link_WorkflowEvent_EventRef{
+		EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		},
+	}
+	if requestIDInfo, ok := ms.executionState.RequestIds[requestID]; ok {
+		eventRef.EventRef.EventType = requestIDInfo.EventType
+		eventRef.EventRef.EventId = requestIDInfo.EventId
 	}
 	// Create the link information about the workflow to be attached to fabricated started event if completion is
 	// received before start response.
@@ -601,11 +613,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 		Namespace:  ms.namespaceEntry.Name().String(),
 		WorkflowId: ms.executionInfo.WorkflowId,
 		RunId:      ms.executionState.RunId,
-		Reference: &commonpb.Link_WorkflowEvent_EventRef{
-			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-			},
-		},
+		Reference:  eventRef,
 	})
 	switch ce.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
@@ -2113,13 +2121,18 @@ func (ms *MutableStateImpl) DeleteSignalRequested(
 	ms.approximateSize -= len(requestID)
 }
 
-func (ms *MutableStateImpl) attachRequestID(requestID string, eventType enumspb.EventType) {
+func (ms *MutableStateImpl) attachRequestID(
+	requestID string,
+	eventType enumspb.EventType,
+	eventID int64,
+) {
 	ms.approximateSize -= ms.executionState.Size()
 	if ms.executionState.RequestIds == nil {
 		ms.executionState.RequestIds = make(map[string]*persistencespb.RequestIDInfo, 1)
 	}
 	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
 		EventType: eventType,
+		EventId:   eventID,
 	}
 	ms.approximateSize += ms.executionState.Size()
 	ms.executionStateUpdated = true
@@ -2394,6 +2407,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionState.CreateRequestId = requestID
 	ms.executionState.RequestIds[requestID] = &persistencespb.RequestIDInfo{
 		EventType: startEvent.EventType,
+		EventId:   startEvent.EventId,
 	}
 
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
@@ -2584,7 +2598,7 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 				return err
 			}
 		}
-		machine := callbacks.NewCallback(event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
+		machine := callbacks.NewCallback(requestID, event.EventTime, callbacks.NewWorkflowClosedTrigger(), persistenceCB)
 		id := ""
 		// This is for backwards compatibility: callbacks were initially only attached when the workflow
 		// execution started, but now they can be attached while the workflow is running.
@@ -4702,7 +4716,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		return err
 	}
 	if attributes.GetAttachedRequestId() != "" {
-		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType)
+		ms.attachRequestID(attributes.GetAttachedRequestId(), event.EventType, event.EventId)
 	}
 	if len(attributes.GetAttachedCompletionCallbacks()) > 0 {
 		if err := ms.addCompletionCallbacks(
@@ -6578,7 +6592,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	newBufferBatch := historyMutation.DBBufferBatch
 	clearBuffer := historyMutation.DBClearBuffer
 	newEventsBatches := historyMutation.DBEventsBatches
-	ms.updatePendingEventIDs(historyMutation.ScheduledIDToStartedID)
+	ms.updatePendingEventIDs(historyMutation.ScheduledIDToStartedID, historyMutation.RequestIDToEventID)
 
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
 	historyNodeTxnIDs, err := ms.shard.GenerateTaskIDs(len(newEventsBatches))
@@ -6716,6 +6730,7 @@ func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
 
 func (ms *MutableStateImpl) updatePendingEventIDs(
 	scheduledIDToStartedID map[int64]int64,
+	requestIDToEventID map[string]int64,
 ) {
 	for scheduledEventID, startedEventID := range scheduledIDToStartedID {
 		if activityInfo, ok := ms.GetActivityInfo(scheduledEventID); ok {
@@ -6728,6 +6743,11 @@ func (ms *MutableStateImpl) updatePendingEventIDs(
 			childInfo.StartedEventId = startedEventID
 			ms.updateChildExecutionInfos[childInfo.InitiatedEventId] = childInfo
 			continue
+		}
+	}
+	for requestID, eventID := range requestIDToEventID {
+		if requestIDInfo, ok := ms.executionState.RequestIds[requestID]; ok {
+			requestIDInfo.EventId = eventID
 		}
 	}
 }
