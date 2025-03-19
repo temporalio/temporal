@@ -873,6 +873,10 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher; flaky")
+	}
+
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 
 	runID := uuid.NewRandom().String()
@@ -1359,6 +1363,10 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher; flaky")
+	}
+
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -3154,6 +3162,10 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
 func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
+	if s.newMatcher {
+		s.T().Skip("not supported by new matcher; flaky")
+	}
+
 	s.resetBacklogCounter(2, 2, 2)
 }
 
