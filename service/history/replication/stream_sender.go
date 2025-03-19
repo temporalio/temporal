@@ -547,7 +547,7 @@ Loop:
 			task.Priority = priority
 			if s.isTieredStackEnabled {
 				if err := s.flowController.Wait(s.server.Context(), priority); err != nil {
-					if !errors.Is(err, context.Canceled) {
+					if errors.Is(err, context.Canceled) {
 						return err
 					}
 					// continue to send task if wait operation times out.
