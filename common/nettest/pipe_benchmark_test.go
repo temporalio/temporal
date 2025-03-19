@@ -33,7 +33,7 @@ import (
 	"sync"
 	"testing"
 
-	"go.temporal.io/server/internal/nettest"
+	"go.temporal.io/server/common/nettest"
 )
 
 type (

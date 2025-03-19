@@ -92,7 +92,7 @@ type HandlerOptions struct {
 	HistoryClient                        resource.HistoryClient
 	TelemetryInterceptor                 *interceptor.TelemetryInterceptor
 	NamespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
-	NamespaceRateLimitInterceptor        *interceptor.NamespaceRateLimitInterceptor
+	NamespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	NamespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	RateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	AuthInterceptor                      *authorization.Interceptor
