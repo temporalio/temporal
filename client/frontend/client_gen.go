@@ -53,6 +53,16 @@ func (c *clientImpl) CreateSchedule(
 	return c.client.CreateSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) CreateWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.CreateWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateWorkflowRuleResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CreateWorkflowRule(ctx, request, opts...)
+}
+
 func (c *clientImpl) DeleteSchedule(
 	ctx context.Context,
 	request *workflowservice.DeleteScheduleRequest,
@@ -91,6 +101,16 @@ func (c *clientImpl) DeleteWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.DeleteWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) DeleteWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkflowRuleResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DeleteWorkflowRule(ctx, request, opts...)
 }
 
 func (c *clientImpl) DeprecateNamespace(
@@ -181,6 +201,16 @@ func (c *clientImpl) DescribeWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.DescribeWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) DescribeWorkflowRule(
+	ctx context.Context,
+	request *workflowservice.DescribeWorkflowRuleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeWorkflowRuleResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeWorkflowRule(ctx, request, opts...)
 }
 
 func (c *clientImpl) ExecuteMultiOperation(
@@ -401,6 +431,16 @@ func (c *clientImpl) ListWorkflowExecutions(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.ListWorkflowExecutions(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListWorkflowRules(
+	ctx context.Context,
+	request *workflowservice.ListWorkflowRulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListWorkflowRulesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListWorkflowRules(ctx, request, opts...)
 }
 
 func (c *clientImpl) PatchSchedule(
