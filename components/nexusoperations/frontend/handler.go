@@ -253,7 +253,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		}
 		var notFoundErr *serviceerror.NotFound
 		if errors.As(err, &notFoundErr) {
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, err.Error())
+			return commonnexus.ConvertGRPCError(err, true)
 		}
 		return commonnexus.ConvertGRPCError(err, false)
 	}
