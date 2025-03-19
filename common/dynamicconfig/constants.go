@@ -2021,7 +2021,7 @@ archivalQueueProcessor`,
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(
 		"history.replicatorTaskBatchSize",
-		25,
+		100,
 		`ReplicatorTaskBatchSize is batch size for ReplicatorProcessor`,
 	)
 	ReplicatorMaxSkipTaskCount = NewGlobalIntSetting(

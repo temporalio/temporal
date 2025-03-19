@@ -106,3 +106,10 @@ export TEMPORAL_OTEL_DEBUG=true
 And have an OTEL collector running, such as Grafana Tempo (`make start-dependencies`).
 
 See [tracing.md](../../docs/development/tracing.md) for more details.
+
+## Code coverage
+
+You'll find the code coverage reporting in Codecov: https://app.codecov.io/gh/temporalio/temporal.
+
+Consider installing the [Codecov Browser Extension](https://docs.codecov.com/docs/the-codecov-browser-extension)
+to see code coverage directly in GitHub PRs.

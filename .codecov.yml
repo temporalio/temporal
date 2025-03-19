@@ -1,0 +1,23 @@
+# see https://docs.codecov.com/docs/ignoring-paths
+ignore:
+  - "**/*_gen.go"
+  - "**/*_mock.go"
+  - "**/*.pb.go"
+  - "**/pb.mock.go"
+  - "api"
+  - "cmd"
+  - "common/testing"
+  - "tests"
+  - "tools"
+
+# disable pull request comments
+comment: false
+
+# disable GitHub checks
+github_checks: false
+
+# disable GitHub status
+coverage:
+  status:
+    project: off
+    patch: off

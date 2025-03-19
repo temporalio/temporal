@@ -31,60 +31,99 @@ import (
 func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 	t.Run("Passthrough", func(t *testing.T) {
 		r := newRunner("gotestsum")
-		args, err := r.sanitizeAndParseArgs([]string{"--junitfile", "f", "-foo", "bar"})
+		args, err := r.sanitizeAndParseArgs([]string{
+			"--junitfile=test.xml",
+			"-foo",
+			"bar",
+			"--retries=3",
+			"--",
+			"-coverprofile=test.cover.out",
+			"baz",
+		})
 		require.NoError(t, err)
-		require.Equal(t, []string{"-foo", "bar"}, args)
-		require.Equal(t, "f", r.junitOutputPath)
-	})
-	t.Run("RetriesTwoArgs", func(t *testing.T) {
-		r := newRunner("gotestsum")
-		args, err := r.sanitizeAndParseArgs([]string{"--junitfile", "f", "-foo", "bar", "-retries", "3"})
-		require.NoError(t, err)
-		require.Equal(t, []string{"-foo", "bar"}, args)
-		require.Equal(t, "f", r.junitOutputPath)
+		require.Equal(t, []string{
+			"--junitfile=test.xml",
+			"-foo",
+			"bar",
+			// retries has been stripped
+			"--",
+			"-coverprofile=test.cover.out",
+			"baz",
+		}, args)
+		require.Equal(t, "test.xml", r.junitOutputPath)
 		require.Equal(t, 3, r.retries)
+		require.Equal(t, "test.cover.out", r.coverProfilePath)
 	})
-	t.Run("RetriesOneArg", func(t *testing.T) {
+
+	t.Run("RetriesMissing", func(t *testing.T) {
 		r := newRunner("gotestsum")
-		args, err := r.sanitizeAndParseArgs([]string{"--junitfile", "f", "-foo", "bar", "-retries=3"})
-		require.NoError(t, err)
-		require.Equal(t, []string{"-foo", "bar"}, args)
-		require.Equal(t, "f", r.junitOutputPath)
-		require.Equal(t, 3, r.retries)
+		_, err := r.sanitizeAndParseArgs([]string{
+			"--junitfile=test.xml",
+			"-foo",
+			"bar",
+			// missing:
+			//"--retries=0",
+			"--",
+			"-coverprofile=test.cover.out",
+			"baz",
+		})
+		require.ErrorContains(t, err, `missing required argument "--retries="`)
 	})
-	t.Run("RetriesTwoArgsInvalid", func(t *testing.T) {
+	t.Run("RetriesInvalid1", func(t *testing.T) {
 		r := newRunner("gotestsum")
-		_, err := r.sanitizeAndParseArgs([]string{"-foo", "bar", "-retries", "invalid"})
-		require.ErrorContains(t, err, `strconv.Atoi: parsing "invalid"`)
+		_, err := r.sanitizeAndParseArgs([]string{
+			"--junitfile=test.xml",
+			"-foo",
+			"bar",
+			"--retries=0", // invalid!
+			"--",
+			"-coverprofile=test.cover.out",
+			"baz",
+		})
+		require.ErrorContains(t, err, `invalid argument "--retries=": must be greater than zero`)
 	})
-	t.Run("RetriesIncomplete", func(t *testing.T) {
+	t.Run("RetriesInvalid2", func(t *testing.T) {
 		r := newRunner("gotestsum")
-		_, err := r.sanitizeAndParseArgs([]string{"-foo", "bar", "-retries"})
-		require.ErrorContains(t, err, "incomplete command line arguments: got -retries flag with no value")
+		_, err := r.sanitizeAndParseArgs([]string{
+			"--junitfile=test.xml",
+			"-foo",
+			"bar",
+			"--retries=invalid", // invalid!
+			"--",
+			"-coverprofile=test.cover.out",
+			"baz",
+		})
+		require.ErrorContains(t, err, `invalid argument "--retries=": strconv.Atoi: parsing "invalid"`)
 	})
-	t.Run("RetriesOneArgInvalid", func(t *testing.T) {
+
+	t.Run("JunitfileMissing", func(t *testing.T) {
 		r := newRunner("gotestsum")
-		_, err := r.sanitizeAndParseArgs([]string{"-foo", "bar", "-retries=invalid"})
-		require.ErrorContains(t, err, `strconv.Atoi: parsing "invalid"`)
+		_, err := r.sanitizeAndParseArgs([]string{
+			// missing:
+			//"--junitfile=test.xml"
+			"-foo",
+			"bar",
+			"--retries=3",
+			"--",
+			"-coverprofile=test.cover.out",
+			"baz",
+		})
+		require.ErrorContains(t, err, `missing required argument "--junitfile="`)
 	})
-	t.Run("JuintfileSingleArg", func(t *testing.T) {
+
+	t.Run("CoverprofileMissing", func(t *testing.T) {
 		r := newRunner("gotestsum")
-		args, err := r.sanitizeAndParseArgs([]string{"-foo", "bar", "--junitfile=foo"})
-		require.NoError(t, err)
-		require.Equal(t, []string{"-foo", "bar"}, args)
-		require.Equal(t, "foo", r.junitOutputPath)
-	})
-	t.Run("JunitfileIncomplete", func(t *testing.T) {
-		r := newRunner("gotestsum")
-		_, err := r.sanitizeAndParseArgs([]string{"-foo", "bar", "--junitfile"})
-		require.ErrorContains(t, err, "incomplete command line arguments: got --junitfile flag with no value")
-	})
-	t.Run("DoubleDash", func(t *testing.T) {
-		r := newRunner("gotestsum")
-		args, err := r.sanitizeAndParseArgs([]string{"-foo", "bar", "--junitfile", "foo", "--", "-retries=3"})
-		require.NoError(t, err)
-		require.Equal(t, []string{"-foo", "bar", "--", "-retries=3"}, args)
-		require.Equal(t, 0, r.retries)
+		_, err := r.sanitizeAndParseArgs([]string{
+			"--junitfile=test.xml",
+			"-foo",
+			"bar",
+			"--retries=3",
+			"--",
+			// missing:
+			//"-coverprofile=test.cover.out",
+			"baz",
+		})
+		require.ErrorContains(t, err, `missing required argument "-coverprofile="`)
 	})
 }
 

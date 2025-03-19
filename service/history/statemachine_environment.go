@@ -54,7 +54,7 @@ func getWorkflowExecutionContextForTask(
 	shardContext historyi.ShardContext,
 	workflowCache wcache.Cache,
 	task tasks.Task,
-) (historyi.WorkflowContext, wcache.ReleaseCacheFunc, error) {
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 	return getWorkflowExecutionContext(
 		ctx,
 		shardContext,
@@ -70,7 +70,7 @@ func getWorkflowExecutionContext(
 	workflowCache wcache.Cache,
 	key definition.WorkflowKey,
 	lockPriority locks.Priority,
-) (historyi.WorkflowContext, wcache.ReleaseCacheFunc, error) {
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 	if key.GetRunID() == "" {
 		return getCurrentWorkflowExecutionContext(
 			ctx,
@@ -110,7 +110,7 @@ func getCurrentWorkflowExecutionContext(
 	namespaceID string,
 	workflowID string,
 	lockPriority locks.Priority,
-) (historyi.WorkflowContext, wcache.ReleaseCacheFunc, error) {
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 	currentRunID, err := wcache.GetCurrentRunID(
 		ctx,
 		shardContext,
@@ -329,7 +329,7 @@ func (e *stateMachineEnvironment) getValidatedMutableState(
 	ctx context.Context,
 	key definition.WorkflowKey,
 	validate func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error,
-) (historyi.WorkflowContext, wcache.ReleaseCacheFunc, historyi.MutableState, error) {
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, historyi.MutableState, error) {
 	wfCtx, release, err := getWorkflowExecutionContext(ctx, e.shardContext, e.cache, key, locks.PriorityLow)
 	if err != nil {
 		return nil, nil, nil, err
