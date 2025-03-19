@@ -208,7 +208,7 @@ func newPhysicalTaskQueueManager(
 			logger,
 			throttledLogger,
 			e.matchingRawClient,
-			taggedMetricsHandler,
+			newPriMetricsHandler(taggedMetricsHandler),
 		)
 		var fwdr *priForwarder
 		var err error
@@ -226,7 +226,7 @@ func newPhysicalTaskQueueManager(
 			fwdr,
 			pqMgr.taskValidator,
 			logger,
-			newPriMetricsHandler(pqMgr.metricsHandler),
+			newPriMetricsHandler(taggedMetricsHandler),
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 	} else {
