@@ -30,6 +30,8 @@
 #    constraints: {}
 #system.enableParentClosePolicyWorker:
 #  - value: true
+# matching.PollerHistoryTTL:
+#   - value: 1s
 system.enableEagerWorkflowStart:
   - value: true
 limit.maxIDLength:
@@ -45,8 +47,6 @@ system.enableDeploymentVersions:
   - value: true
 system.enableDeployments:
   - value: true
-matching.PollerHistoryTTL:
-  - value: 1s
 frontend.enableExecuteMultiOperation:
   - value: true
 system.enableNexus:
