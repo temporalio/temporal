@@ -75,6 +75,11 @@ func BackfillerMachineKey(id string) hsm.Key {
 	}
 }
 
+// MachineCollection creates a new typed [statemachines.Collection] for operations.
+func BackfillerCollection(tree *hsm.Node) hsm.Collection[Backfiller] {
+	return hsm.NewCollection[Backfiller](tree, BackfillerMachineType)
+}
+
 func (b Backfiller) State() BackfillerMachineState {
 	return BackfillerMachineStateRunning
 }
@@ -82,7 +87,7 @@ func (b Backfiller) State() BackfillerMachineState {
 func (b Backfiller) SetState(_ BackfillerMachineState) {}
 
 func (b Backfiller) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
-	return nil, nil
+	return b.tasks()
 }
 
 func (backfillerMachineDefinition) Type() string {

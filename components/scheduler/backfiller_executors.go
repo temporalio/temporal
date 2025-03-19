@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/hsm"
 	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -106,7 +105,7 @@ func (e backfillerTaskExecutor) executeBackfillTask(env hsm.Environment, node *h
 
 	// Enqueue new BufferedStarts on the Invoker, if we have any.
 	if len(result.BufferedStarts) > 0 {
-		err = e.enqueue(schedulerNode, result.BufferedStarts)
+		err = scheduler.EnqueueBufferedStarts(schedulerNode, result.BufferedStarts)
 		if err != nil {
 			logger.Error("Failed to enqueue BufferedStarts", tag.Error(err))
 			return err
@@ -204,9 +203,13 @@ func (e backfillerTaskExecutor) processTrigger(env hsm.Environment, scheduler Sc
 	request := backfiller.GetTriggerRequest()
 	overlapPolicy := scheduler.resolveOverlapPolicy(request.GetOverlapPolicy())
 
-	// Add a single manual start and mark the backfiller as complete.
-	now := env.Now()
-	nowpb := timestamppb.New(now)
+	// Add a single manual start and mark the backfiller as complete. For batch
+	// backfill requests, a deterministic start time is trivial as they follow the
+	// schedule. For immediate trigger requests, the `LastProcessedTime` (set to
+	// "now" when the Backfiller is spawned to handle a request) is used for start
+	// time determinism.
+	nowpb := backfiller.GetLastProcessedTime()
+	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
 	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
@@ -238,24 +241,20 @@ func (e backfillerTaskExecutor) allowedBufferedStarts(backfillerNode *hsm.Node, 
 
 	// Count the number of Backfiller nodes.
 	var backfillerCount int
-	err = backfillerNode.Parent.Walk(func(node *hsm.Node) error {
-		if node.Key.Type == BackfillerMachineType {
-			b, err := hsm.MachineData[Backfiller](node)
-			if err != nil {
-				return err
-			}
-
-			// Don't count trigger-immediately requests, as they only fire a single start.
-			if b.RequestType() == RequestTypeBackfill {
-				backfillerCount++
-			}
+	backfillerCollection := BackfillerCollection(backfillerNode.Parent)
+	for _, node := range backfillerCollection.List() {
+		b, err := backfillerCollection.Data(node.Key.ID)
+		if err != nil {
+			return count, err
 		}
-		return nil
-	})
-	if err != nil {
-		return
+
+		// Don't count trigger-immediately requests, as they only fire a single start.
+		if b.RequestType() == RequestTypeBackfill {
+			backfillerCount++
+		}
 	}
 
+	// Prevents a division by 0.
 	backfillerCount = max(1, backfillerCount)
 
 	// Give half the buffer to Backfillers, distributed evenly.

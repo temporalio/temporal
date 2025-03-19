@@ -256,6 +256,25 @@ func (s *Scheduler) updateConflictToken() {
 	s.ConflictToken++
 }
 
+// EnqueueBufferedStarts enqueues the given starts onto a scheduler tree's
+// Invoker for execution.
+func (s *Scheduler) EnqueueBufferedStarts(
+	node *hsm.Node,
+	starts []*schedulespb.BufferedStart,
+) error {
+	invokerNode, err := node.Child([]hsm.Key{InvokerMachineKey})
+	if err != nil {
+		return err
+	}
+	err = hsm.MachineTransition(invokerNode, func(e Invoker) (hsm.TransitionOutput, error) {
+		return TransitionEnqueue.Apply(e, EventEnqueue{
+			Node:           invokerNode,
+			BufferedStarts: starts,
+		})
+	})
+	return err
+}
+
 // RequestImmediate spawns a new Backfiller node to the scheduler tree for a
 // BackfillRequest.
 func (s Scheduler) RequestBackfill(

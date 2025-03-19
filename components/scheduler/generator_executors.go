@@ -104,22 +104,13 @@ func (e generatorTaskExecutor) executeBufferTask(env hsm.Environment, node *hsm.
 	}
 
 	// Transition the invoker sub state machine to execute the new buffered actions.
-	invokerNode, err := schedulerNode.Child([]hsm.Key{InvokerMachineKey})
+	err = scheduler.EnqueueBufferedStarts(schedulerNode, res.BufferedStarts)
 	if err != nil {
 		return fmt.Errorf(
 			"%w: %w",
-			serviceerror.NewInternal("Scheduler is missing its Invoker node"),
+			serviceerror.NewInternal("Scheduler's Generator failed to enqueue BufferedStarts"),
 			err,
 		)
-	}
-	err = hsm.MachineTransition(invokerNode, func(e Invoker) (hsm.TransitionOutput, error) {
-		return TransitionEnqueue.Apply(e, EventEnqueue{
-			Node:           invokerNode,
-			BufferedStarts: res.BufferedStarts,
-		})
-	})
-	if err != nil {
-		return err
 	}
 
 	// Write Generator internal state, flushing the high water mark to persistence.
