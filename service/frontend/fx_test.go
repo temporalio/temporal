@@ -41,10 +41,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/nettest"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	nettest2 "go.temporal.io/server/common/testing/nettest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -256,13 +256,13 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
 
-			pipe := nettest.NewPipe()
+			pipe := nettest2.NewPipe()
 
 			var wg sync.WaitGroup
 			defer wg.Wait()
 			wg.Add(1)
 
-			listener := nettest.NewListener(pipe)
+			listener := nettest2.NewListener(pipe)
 			go func() {
 				defer wg.Done()
 
@@ -612,13 +612,13 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
 
-			pipe := nettest.NewPipe()
+			pipe := nettest2.NewPipe()
 
 			var wg sync.WaitGroup
 			defer wg.Wait()
 			wg.Add(1)
 
-			listener := nettest.NewListener(pipe)
+			listener := nettest2.NewListener(pipe)
 			go func() {
 				defer wg.Done()
 
@@ -799,13 +799,13 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
 
-			pipe := nettest.NewPipe()
+			pipe := nettest2.NewPipe()
 
 			var wg sync.WaitGroup
 			defer wg.Wait()
 			wg.Add(1)
 
-			listener := nettest.NewListener(pipe)
+			listener := nettest2.NewListener(pipe)
 			go func() {
 				defer wg.Done()
 

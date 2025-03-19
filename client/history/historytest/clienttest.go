@@ -43,9 +43,9 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/nettest"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/persistencetest"
+	nettest2 "go.temporal.io/server/common/testing/nettest"
 	historyserver "go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
@@ -71,7 +71,7 @@ var _ trace.TracerProvider = (*fakeTracerProvider)(nil)
 func TestClient(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQueueManager) {
 	ctrl := gomock.NewController(t)
 
-	listener := nettest.NewListener(nettest.NewPipe())
+	listener := nettest2.NewListener(nettest2.NewPipe())
 
 	serveErrs := make(chan error, 1)
 	grpcServer := createServer(historyTaskQueueManager)
@@ -169,14 +169,14 @@ func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *
 	return grpcServer
 }
 
-func createClient(ctrl *gomock.Controller, listener *nettest.PipeListener) historyservice.HistoryServiceClient {
+func createClient(ctrl *gomock.Controller, listener *nettest2.PipeListener) historyservice.HistoryServiceClient {
 	serviceResolver := membership.NewMockServiceResolver(ctrl)
 	address := membership.NewHostInfoFromAddress("127.0.0.1:7104")
 	serviceResolver.EXPECT().Members().Return([]membership.HostInfo{
 		address,
 	}).AnyTimes()
 	serviceResolver.EXPECT().Lookup(gomock.Any()).Return(address, nil).AnyTimes()
-	rpcFactory := nettest.NewRPCFactory(listener)
+	rpcFactory := nettest2.NewRPCFactory(listener)
 	client := history.NewClient(
 		dynamicconfig.NewNoopCollection(),
 		serviceResolver,

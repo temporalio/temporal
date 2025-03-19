@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/nettest"
+	nettest2 "go.temporal.io/server/common/testing/nettest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -46,7 +46,7 @@ type (
 		historyservice.UnimplementedHistoryServiceServer
 	}
 	testRPCFactory struct {
-		base            *nettest.RPCFactory
+		base            *nettest2.RPCFactory
 		dialedAddresses []string
 	}
 )
@@ -130,9 +130,9 @@ func TestShardAgnosticConnectionStrategy(t *testing.T) {
 			serviceResolver.EXPECT().Lookup(gomock.Any()).Return(membership.NewHostInfoFromAddress("localhost"), nil)
 
 			// Create an in-memory gRPC server.
-			listener := nettest.NewListener(nettest.NewPipe())
+			listener := nettest2.NewListener(nettest2.NewPipe())
 			rpcFactory := &testRPCFactory{
-				base: nettest.NewRPCFactory(listener),
+				base: nettest2.NewRPCFactory(listener),
 			}
 			grpcServer := grpc.NewServer()
 			testSvc := &testHistoryService{}
