@@ -29,6 +29,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 )
 
 type (
@@ -39,14 +40,15 @@ type (
 	Node struct {
 		*nodeBase
 
-		parent      *Node
-		children    map[string]*Node
+		parent   *Node
+		children map[string]*Node
+		nodeName string // key of this node in parent's children map.
+
 		persistence *persistencespb.ChasmNode
+		value       any // deserialized component | data | collection
 
 		// TODO: add other necessary fields here, e.g.
 		//
-		// key string   // key of this node in parent's children map.
-		// instance any // deserialized node state
 		// dirty    bool
 	}
 
@@ -90,6 +92,9 @@ type (
 		timeSource  clock.TimeSource
 		backend     NodeBackend
 		pathEncoder NodePathEncoder
+
+		// Mutations accumulated so far in this transaction.
+		mutation NodesMutation
 	}
 )
 
@@ -106,9 +111,14 @@ func NewTree(
 		timeSource:  timeSource,
 		backend:     backend,
 		pathEncoder: pathEncoder,
+
+		mutation: NodesMutation{
+			UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
+			DeletedNodes: make(map[string]struct{}),
+		},
 	}
 
-	root := newNode(base, nil)
+	root := newNode(base, nil, "")
 	for encodedPath, pNode := range persistenceNodes {
 		nodePath, err := pathEncoder.Decode(encodedPath)
 		if err != nil {
@@ -133,7 +143,7 @@ func NewEmptyTree(
 		backend:     backend,
 		pathEncoder: pathEncoder,
 	}
-	root := newNode(base, nil)
+	root := newNode(base, nil, "")
 	return root
 }
 
@@ -175,7 +185,17 @@ func (n *Node) AddTask(
 // CloseTransaction is used by MutableState to close the transaction and
 // track changes made in the current transaction.
 func (n *Node) CloseTransaction() (NodesMutation, error) {
+	defer n.cleanupTransaction()
+
 	panic("not implemented")
+	// return n.mutation, nil
+}
+
+func (n *Node) cleanupTransaction() {
+	n.mutation = NodesMutation{
+		UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
+		DeletedNodes: make(map[string]struct{}),
+	}
 }
 
 // Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
@@ -196,7 +216,11 @@ func (n *Node) Snapshot(
 func (n *Node) ApplyMutation(
 	mutation NodesMutation,
 ) error {
-	panic("not implemented")
+	if err := n.applyDeletions(mutation.DeletedNodes); err != nil {
+		return err
+	}
+
+	return n.applyUpdates(mutation.UpdatedNodes)
 }
 
 // ApplySnapshot is used by replication stack to apply node
@@ -209,9 +233,123 @@ func (n *Node) ApplyMutation(
 // bring the current tree to the be the same as the snapshot,
 // thus allowing us to close the transaction as mutation.
 func (n *Node) ApplySnapshot(
-	snapshot NodesSnapshot,
+	incomingSnapshot NodesSnapshot,
 ) error {
-	panic("not implemented")
+	currentSnapshot := n.Snapshot(nil)
+
+	mutation := NodesMutation{
+		UpdatedNodes: make(map[string]*persistencespb.ChasmNode),
+		DeletedNodes: make(map[string]struct{}),
+	}
+
+	for encodedPath := range currentSnapshot.Nodes {
+		if _, ok := incomingSnapshot.Nodes[encodedPath]; !ok {
+			mutation.DeletedNodes[encodedPath] = struct{}{}
+		}
+	}
+
+	for encodedPath, incomingNode := range incomingSnapshot.Nodes {
+		currentNode, ok := currentSnapshot.Nodes[encodedPath]
+		if !ok {
+			mutation.UpdatedNodes[encodedPath] = incomingNode
+			continue
+		}
+
+		if transitionhistory.Compare(currentNode.LastUpdateVersionedTransition, incomingNode.LastUpdateVersionedTransition) != 0 {
+			mutation.UpdatedNodes[encodedPath] = incomingNode
+		}
+	}
+
+	return n.ApplyMutation(mutation)
+}
+
+func (n *Node) applyDeletions(
+	deletedNodes map[string]struct{},
+) error {
+	for encodedPath := range deletedNodes {
+		path, err := n.pathEncoder.Decode(encodedPath)
+		if err != nil {
+			return err
+		}
+
+		node, ok := n.getNodeByPath(path)
+		if !ok {
+			// Already deleted.
+			// this could happen if the mutations passed in includes changes
+			// older than the current state of the tree.
+			continue
+		}
+
+		return node.delete(path)
+	}
+
+	return nil
+}
+
+func (n *Node) applyUpdates(
+	updatedNodes map[string]*persistencespb.ChasmNode,
+) error {
+	for encodedPath, updatedNode := range updatedNodes {
+		path, err := n.pathEncoder.Decode(encodedPath)
+		if err != nil {
+			return err
+		}
+
+		node, ok := n.getNodeByPath(path)
+		if !ok {
+			// Node doesn't exist, we need to create it.
+			n.insert(path, updatedNode, n.nodeBase)
+			continue
+		}
+
+		if transitionhistory.Compare(node.persistence.LastUpdateVersionedTransition, updatedNode.LastUpdateVersionedTransition) != 0 {
+			n.mutation.UpdatedNodes[encodedPath] = updatedNode
+			node.persistence = updatedNode
+			node.value = nil
+
+			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
+			// Parent node is pointing to the Node struct.
+		}
+	}
+
+	return nil
+}
+
+func (n *Node) getNodeByPath(
+	path []string,
+) (*Node, bool) {
+	if len(path) == 0 {
+		return n, true
+	}
+
+	childName := path[0]
+	childNode, ok := n.children[childName]
+	if !ok {
+		return nil, false
+	}
+	return childNode.getNodeByPath(path[1:])
+}
+
+func (n *Node) delete(
+	nodePath []string,
+) error {
+	for childName, childNode := range n.children {
+		if err := childNode.delete(append(nodePath, childName)); err != nil {
+			return err
+		}
+	}
+
+	if n.parent != nil {
+		delete(n.parent.children, n.nodeName)
+	}
+
+	encodedPath, err := n.pathEncoder.Encode(n, nodePath)
+	if err != nil {
+		return err
+	}
+	n.mutation.DeletedNodes[encodedPath] = struct{}{}
+
+	return nil
 }
 
 func (n *Node) insert(
@@ -227,7 +365,7 @@ func (n *Node) insert(
 	childName := nodePath[0]
 	childNode, ok := n.children[childName]
 	if !ok {
-		childNode = newNode(nodeBase, n)
+		childNode = newNode(nodeBase, n, childName)
 		n.children[childName] = childNode
 	}
 	childNode.insert(nodePath[1:], pNode, nodeBase)
@@ -242,10 +380,12 @@ func (n *Node) IsDirty() bool {
 func newNode(
 	base *nodeBase,
 	parent *Node,
+	nodeName string,
 ) *Node {
 	return &Node{
 		nodeBase: base,
 		parent:   parent,
 		children: make(map[string]*Node),
+		nodeName: nodeName,
 	}
 }
