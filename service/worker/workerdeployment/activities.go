@@ -93,10 +93,13 @@ func (a *Activities) SyncUnversionedRamp(
 	// For each task queue, sync the unversioned ramp data
 	errs := make(chan error)
 	var lock sync.Mutex
+	var logMutex sync.Mutex
 	maxVersionByTQName := make(map[string]int64)
 	for _, e := range taskQueueSyncs {
 		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
+			logMutex.Lock()
 			logger.Info("syncing unversioned ramp to task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types)
+			logMutex.Unlock()
 			var res *matchingservice.SyncDeploymentUserDataResponse
 			var err error
 			res, err = a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
