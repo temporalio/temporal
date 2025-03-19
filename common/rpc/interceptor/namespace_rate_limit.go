@@ -61,7 +61,7 @@ type (
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = NamespaceRateLimitInterceptor(nil).Intercept
 
 func NewNamespaceRateLimitInterceptor(
 	namespaceRegistry namespace.Registry,
