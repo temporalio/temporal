@@ -63,7 +63,7 @@ func (s *VersionWorkflowSuite) TearDownTest() {
 	s.env.AssertExpectations(s.T())
 }
 
-// Test_SyncState_BatchSize verifies if the right number of batches are created during the sync state activity
+// Test_SyncState_BatchSize verifies if the right number of batches are created during the SyncDeploymentVersionUserData activity
 func (s *VersionWorkflowSuite) Test_SyncState_Batch_SingleTaskQueue() {
 	workers := 1
 	s.syncStateInBatches(workers)

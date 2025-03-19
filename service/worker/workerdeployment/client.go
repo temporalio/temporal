@@ -556,7 +556,6 @@ func (d *ClientImpl) SetCurrentVersion(
 	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
-	fmt.Println("Current version set", version)
 
 	return &res, nil
 }
