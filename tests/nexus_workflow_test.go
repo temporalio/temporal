@@ -2117,6 +2117,80 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration() {
 	}
 }
 
+func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+	taskQueue := testcore.RandomizeStr("caller_" + s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	handlerWorkflowID := testcore.RandomizeStr(s.T().Name())
+
+	_, err := s.SdkClient().OperatorService().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_Worker_{
+					Worker: &nexuspb.EndpointTarget_Worker{
+						Namespace: s.Namespace().String(),
+						TaskQueue: taskQueue,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	w := worker.New(
+		s.SdkClient(),
+		taskQueue,
+		worker.Options{},
+	)
+
+	svc := nexus.NewService("test")
+
+	handlerWF := func(ctx workflow.Context, _ nexus.NoValue) (nexus.NoValue, error) {
+		return nil, workflow.Sleep(ctx, 1*time.Second)
+	}
+
+	op := temporalnexus.NewWorkflowRunOperation("op", handlerWF, func(ctx context.Context, _ nexus.NoValue, soo nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+		return client.StartWorkflowOptions{ID: handlerWorkflowID}, nil
+	})
+	s.NoError(svc.Register(op))
+
+	callerWF := func(ctx workflow.Context) error {
+		c := workflow.NewNexusClient(endpointName, svc.Name)
+		fut := c.ExecuteOperation(ctx, op, nil, workflow.NexusOperationOptions{})
+		return fut.Get(ctx, nil)
+	}
+
+	w.RegisterNexusService(svc)
+	w.RegisterWorkflow(callerWF)
+	w.RegisterWorkflow(handlerWF)
+	s.NoError(w.Start())
+	s.T().Cleanup(w.Stop)
+
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue:          taskQueue,
+		WorkflowRunTimeout: 200 * time.Millisecond,
+	}, callerWF)
+	s.NoError(err)
+
+	wfErr := run.Get(ctx, nil)
+	s.Error(wfErr)
+
+	s.EventuallyWithT(func(ct *assert.CollectT) {
+		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: handlerWorkflowID,
+			},
+		})
+		s.NoError(err)
+		s.Len(resp.Callbacks, 1)
+		s.Equal(resp.Callbacks[0].State, enumspb.CALLBACK_STATE_FAILED)
+		s.Equal(resp.Callbacks[0].LastAttemptFailure.Message, "handler error (NOT_FOUND): workflow execution already completed")
+	}, 2*time.Second, 500*time.Millisecond)
+}
+
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	ctx := testcore.NewContext()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
