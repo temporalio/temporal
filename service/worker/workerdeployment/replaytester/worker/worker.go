@@ -175,6 +175,7 @@ func main() {
 
 }
 
+//nolint:revive
 func verifyDeployment(dHandle client.WorkerDeploymentHandle,
 	expectedCurrentVersion string,
 	expectedRampingVersion string,
