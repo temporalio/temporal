@@ -170,7 +170,7 @@ func CompletionHandler(
 	isRetryableNotFoundErr := requestID != ""
 	err := env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
-			return serviceerror.NewNotFound("operation not found")
+			return err
 		}
 		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
 			return err
