@@ -134,7 +134,10 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		// Just in case something unexpected happens while discarding or closing the body,
 		// propagate errors to the machine.
 		if _, err = io.Copy(io.Discard, response.Body); err == nil {
-			err = response.Body.Close()
+			if err = response.Body.Close(); err != nil {
+				e.Logger.Error("Callback request failed with error", tag.Error(err))
+				return invocationResultRetry{err}
+			}
 		}
 		return invocationResultOK{}
 	}
@@ -161,7 +164,7 @@ func readHandlerErrFromResponse(response *http.Response, logger log.Logger) erro
 	body, err := readAndReplaceBody(response)
 	if err != nil {
 		logger.Error("Error reading response body for non-ok callback request", tag.Error(err), tag.NewStringTag("status", response.Status))
-		return handlerErr
+		return err
 	}
 
 	if !isMediaTypeJSON(response.Header.Get("Content-Type")) {
