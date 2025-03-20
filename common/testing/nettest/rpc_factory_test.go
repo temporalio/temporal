@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	nettest2 "go.temporal.io/server/common/testing/nettest"
+	nettest "go.temporal.io/server/common/testing/nettest"
 	"google.golang.org/grpc"
 )
 
@@ -54,7 +54,7 @@ func TestRPCFactory_GetInternodeGRPCServerOptions(t *testing.T) {
 func TestRPCFactory_CreateInternodeGRPCConnection(t *testing.T) {
 	t.Parallel()
 
-	testDialer(t, "localhost", func(rpcFactory *nettest2.RPCFactory) *grpc.ClientConn {
+	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
 		return rpcFactory.CreateInternodeGRPCConnection("localhost")
 	})
 }
@@ -62,7 +62,7 @@ func TestRPCFactory_CreateInternodeGRPCConnection(t *testing.T) {
 func TestRPCFactory_CreateLocalFrontendGRPCConnection(t *testing.T) {
 	t.Parallel()
 
-	testDialer(t, ":0", func(rpcFactory *nettest2.RPCFactory) *grpc.ClientConn {
+	testDialer(t, ":0", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
 		return rpcFactory.CreateLocalFrontendGRPCConnection()
 	})
 }
@@ -70,12 +70,12 @@ func TestRPCFactory_CreateLocalFrontendGRPCConnection(t *testing.T) {
 func TestRPCFactory_CreateRemoteFrontendGRPCConnection(t *testing.T) {
 	t.Parallel()
 
-	testDialer(t, "localhost", func(rpcFactory *nettest2.RPCFactory) *grpc.ClientConn {
+	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
 		return rpcFactory.CreateRemoteFrontendGRPCConnection("localhost")
 	})
 }
 
-func testDialer(t *testing.T, target string, dial func(rpcFactory *nettest2.RPCFactory) *grpc.ClientConn) {
+func testDialer(t *testing.T, target string, dial func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn) {
 	t.Helper()
 
 	t.Run("HappyPath", func(t *testing.T) {
@@ -97,6 +97,6 @@ func testDialer(t *testing.T, target string, dial func(rpcFactory *nettest2.RPCF
 	})
 }
 
-func newRPCFactory(dialOptions ...grpc.DialOption) *nettest2.RPCFactory {
-	return nettest2.NewRPCFactory(nettest2.NewListener(nettest2.NewPipe()), dialOptions...)
+func newRPCFactory(dialOptions ...grpc.DialOption) *nettest.RPCFactory {
+	return nettest.NewRPCFactory(nettest.NewListener(nettest.NewPipe()), dialOptions...)
 }

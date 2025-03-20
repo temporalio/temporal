@@ -31,12 +31,12 @@ import (
 	"net"
 	"net/http"
 
-	nettest2 "go.temporal.io/server/common/testing/nettest"
+	nettest "go.temporal.io/server/common/testing/nettest"
 )
 
 func ExampleListener() {
-	pipe := nettest2.NewPipe()
-	listener := nettest2.NewListener(pipe)
+	pipe := nettest.NewPipe()
+	listener := nettest.NewListener(pipe)
 	server := http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("hello"))
