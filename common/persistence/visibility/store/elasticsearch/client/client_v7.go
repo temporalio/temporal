@@ -80,7 +80,7 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		// Disable healthcheck to prevent blocking client creation (and thus Temporal server startup) if the Elasticsearch is down.
 		elastic.SetHealthcheck(false),
 		elastic.SetSniff(cfg.EnableSniff),
-		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
+		elastic.SetRetrier(elastic.NewStopRetrier()),
 		// Critical to ensure decode of int64 won't lose precision.
 		elastic.SetDecoder(&elastic.NumberDecoder{}),
 		elastic.SetGzip(true),
