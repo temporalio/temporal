@@ -26,6 +26,7 @@ package replaytester
 
 import (
 	"compress/gzip"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -64,6 +65,8 @@ func TestReplays(t *testing.T) {
 
 	files, err := filepath.Glob("testdata/replay_*.json.gz")
 	require.NoError(t, err)
+
+	fmt.Println("Number of files to replay:", len(files))
 
 	logger := log.NewSdkLogger(log.NewTestLogger())
 

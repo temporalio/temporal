@@ -57,10 +57,8 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.uber.org/fx"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -253,8 +251,9 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		if errors.As(err, &namespaceInactiveErr) {
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 		}
-		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation not found")
+		var notFoundErr *serviceerror.NotFound
+		if errors.As(err, &notFoundErr) {
+			return commonnexus.ConvertGRPCError(err, true)
 		}
 		return commonnexus.ConvertGRPCError(err, false)
 	}
@@ -304,6 +303,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
+	// TODO: The following response handling logic is duplicated in the nexus_invocation executor. Eventually it should live in the Nexus SDK.
 	body, err := readAndReplaceBody(resp)
 	if err != nil {
 		h.Logger.Error("unable to read HTTP response for forwarded request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))

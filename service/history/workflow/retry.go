@@ -274,6 +274,7 @@ func SetupNewWorkflowForRetryOrCron(
 		SearchAttributes:         startAttr.SearchAttributes,
 		CompletionCallbacks:      startAttr.CompletionCallbacks,
 		Links:                    startLinks,
+		Priority:                 startAttr.Priority,
 	}
 
 	attempt := int32(1)
