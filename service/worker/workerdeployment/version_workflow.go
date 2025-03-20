@@ -553,8 +553,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		Version: state.GetVersion(),
 	}
 
-	// ------------------------------------------------------------
-
 	v := workflow.GetVersion(ctx, "SyncStateWithBatching", workflow.DefaultVersion, 1)
 	if v == workflow.DefaultVersion {
 		for _, tqName := range workflow.DeterministicKeys(state.TaskQueueFamilies) {
@@ -659,8 +657,6 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 			}
 		}
 	}
-
-	// ------------------------------------------------------------
 
 	wasAcceptingNewWorkflows := state.GetCurrentSinceTime() != nil || state.GetRampingSinceTime() != nil
 
