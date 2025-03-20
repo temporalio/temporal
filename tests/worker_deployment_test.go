@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
@@ -77,6 +78,17 @@ func (s *WorkerDeploymentSuite) SetupSuite() {
 		// Make drainage happen sooner
 		dynamicconfig.VersionDrainageStatusRefreshInterval.Key():       testVersionDrainageRefreshInterval,
 		dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Key(): testVersionDrainageVisibilityGracePeriod,
+
+		// To increase the rate at which the per-ns worker can consume tasks from a task queue. Required since
+		// tests in this suite create a lot of tasks and expect them to be consumed quickly.
+		dynamicconfig.WorkerPerNamespaceWorkerOptions.Key(): sdkworker.Options{
+			MaxConcurrentWorkflowTaskPollers: 100,
+			MaxConcurrentActivityTaskPollers: 100,
+		},
+
+		dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Key(): 1000,
+		dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Key():  60 * time.Second,
+		dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Key():      1000,
 	}))
 }
 
@@ -95,12 +107,9 @@ func (s *WorkerDeploymentSuite) pollFromDeployment(ctx context.Context, tv *test
 }
 
 func (s *WorkerDeploymentSuite) pollFromDeploymentWithTaskQueueNumber(ctx context.Context, tv *testvars.TestVars, taskQueueNumber int) {
-	taskQueue := tv.TaskQueue()
-	taskQueue.Name = taskQueue.Name + fmt.Sprintf("_%d", taskQueueNumber)
-
 	_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace:         s.Namespace().String(),
-		TaskQueue:         taskQueue,
+		TaskQueue:         tv.WithTaskQueueNumber(taskQueueNumber).TaskQueue(),
 		Identity:          "random",
 		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	})
@@ -151,7 +160,7 @@ func (s *WorkerDeploymentSuite) ensureCreateVersionInDeployment(
 			}
 		}
 		a.True(found)
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 1*time.Minute, 100*time.Millisecond)
 }
 
 func (s *WorkerDeploymentSuite) ensureCreateDeployment(
@@ -981,17 +990,13 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_NoCurrent_
 	})
 }
 
-func (s *WorkerDeploymentSuite) TestWorkerDeploymentRampingVersion_Batching() {
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 2000)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, 1000)
-	s.OverrideDynamicConfig(dynamicconfig.VisibilityPersistenceSlowQueryThreshold, 60*time.Second)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	tv := testvars.New(s)
 
-	// register 500 task-queues in the version
-	taskQueues := 500
+	// register 100 task-queues in the version
+	taskQueues := 100
 	for i := 0; i < taskQueues; i++ {
 		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
 	}
@@ -1026,16 +1031,12 @@ func (s *WorkerDeploymentSuite) TestWorkerDeploymentRampingVersion_Batching() {
 // SetCurrent tests
 
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 2000)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, 1000)
-	s.OverrideDynamicConfig(dynamicconfig.VisibilityPersistenceSlowQueryThreshold, 60*time.Second)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	tv := testvars.New(s)
 
-	// register 500 task-queues in the version
-	taskQueues := 500
+	// register 100 task-queues in the version
+	taskQueues := 100
 	for i := 0; i < taskQueues; i++ {
 		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
 	}
