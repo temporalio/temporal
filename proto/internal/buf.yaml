@@ -10,9 +10,8 @@ breaking:
   use:
     - WIRE
   # Uncomment this to temporarily ignore specific files or directories:
-  ignore:
+  # ignore:
     # example: - temporal/server/api/.../message.proto
-    - temporal/server/api/taskqueue/v1/message.proto
 
 lint:
   use:

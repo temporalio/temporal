@@ -112,7 +112,7 @@ func newPriBacklogManager(
 		throttledLogger:     throttledLogger,
 		initializedError:    future.NewFuture[struct{}](),
 	}
-	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger)
+	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler)
 	bmg.taskWriter = newPriTaskWriter(bmg)
 	return bmg
 }
