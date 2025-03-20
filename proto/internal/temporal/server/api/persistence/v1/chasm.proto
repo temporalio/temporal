@@ -31,6 +31,14 @@ import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/api/common/v1/message.proto";
 
 message ChasmNode {
+    // Metadata present for all nodes. 
+    ChasmNodeMetadata metadata = 1;
+
+    // User data for any type of node that stores it.
+    temporal.api.common.v1.DataBlob data = 2;
+}
+
+message ChasmNodeMetadata {
     // Versioned transition when the node was instantiated.
     VersionedTransition initial_versioned_transition = 1;
     // Versioned transition when the node was last updated.
@@ -57,13 +65,10 @@ message ChasmComponentAttributes {
 
     // Fully qualified type name of a registered component.
     string type = 1;
-    temporal.api.common.v1.DataBlob data = 2;
     repeated Task tasks = 3;
 }
 
-message ChasmDataAttributes {
-    temporal.api.common.v1.DataBlob data = 1;
-}
+message ChasmDataAttributes {}
 
 message ChasmCollectionAttributes {}
 
