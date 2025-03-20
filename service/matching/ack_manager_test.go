@@ -28,11 +28,13 @@ import (
 	"context"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 )
@@ -68,7 +70,7 @@ func (s *AckManagerTestSuite) CompleteTaskMovesAckLevelUpToGap() {
 	s.NoError(err)
 
 	ackMgr.addTask(1)
-	ackMgr.db.updateApproximateBacklogCount(1) // increment the backlog so that we don't under-count
+	ackMgr.db.updateBacklogStats(1, time.Time{}) // increment the backlog so that we don't under-count
 	s.Equal(int64(-1), ackMgr.getAckLevel(), "should only move ack level on completion")
 
 	ackLevel, numAcked := ackMgr.completeTask(1)
@@ -78,7 +80,7 @@ func (s *AckManagerTestSuite) CompleteTaskMovesAckLevelUpToGap() {
 	ackMgr.addTask(2)
 	ackMgr.addTask(3)
 	ackMgr.addTask(12)
-	ackMgr.db.updateApproximateBacklogCount(3)
+	ackMgr.db.updateBacklogStats(3, time.Time{})
 
 	ackLevel, numAcked = ackMgr.completeTask(3)
 	s.Equal(int64(1), ackLevel, "task 2 is not complete, we should not move ack level")
@@ -108,12 +110,12 @@ func (s *AckManagerTestSuite) TestAckManager() {
 	ackMgr.addTask(t1)
 	// Increment the backlog so that we don't under-count
 	// this happens since we decrease the counter on completion of a task
-	ackMgr.db.updateApproximateBacklogCount(1)
+	ackMgr.db.updateBacklogStats(1, time.Time{})
 	s.EqualValues(100, ackMgr.getAckLevel())
 	s.EqualValues(t1, ackMgr.getReadLevel())
 
 	ackMgr.addTask(t2)
-	ackMgr.db.updateApproximateBacklogCount(1)
+	ackMgr.db.updateBacklogStats(1, time.Time{})
 	s.EqualValues(100, ackMgr.getAckLevel())
 	s.EqualValues(t2, ackMgr.getReadLevel())
 
@@ -130,12 +132,12 @@ func (s *AckManagerTestSuite) TestAckManager() {
 	s.EqualValues(300, ackMgr.getReadLevel())
 
 	ackMgr.addTask(t3)
-	ackMgr.db.updateApproximateBacklogCount(1)
+	ackMgr.db.updateBacklogStats(1, time.Time{})
 	s.EqualValues(300, ackMgr.getAckLevel())
 	s.EqualValues(t3, ackMgr.getReadLevel())
 
 	ackMgr.addTask(t4)
-	ackMgr.db.updateApproximateBacklogCount(1)
+	ackMgr.db.updateBacklogStats(1, time.Time{})
 	s.EqualValues(300, ackMgr.getAckLevel())
 	s.EqualValues(t4, ackMgr.getReadLevel())
 
@@ -180,7 +182,7 @@ func (s *AckManagerTestSuite) Sort() {
 
 	// Increment the backlog so that we don't under-count
 	// this happens since we decrease the counter on completion of a task
-	ackMgr.db.updateApproximateBacklogCount(5)
+	ackMgr.db.updateBacklogStats(5, time.Time{})
 
 	ackMgr.completeTask(t2)
 	s.EqualValues(t0, ackMgr.getAckLevel())
@@ -233,7 +235,7 @@ func BenchmarkAckManager_CompleteTask(b *testing.B) {
 		for i := 0; i < len(tasks); i++ {
 			tasks[i] = i
 			ackMgr.addTask(int64(i))
-			ackMgr.db.updateApproximateBacklogCount(int64(1)) // Increment the backlog so that we don't under-count
+			ackMgr.db.updateBacklogStats(1, time.Time{}) // Increment the backlog so that we don't under-count
 		}
 		rand.Shuffle(len(tasks), func(i, j int) {
 			tasks[i], tasks[j] = tasks[j], tasks[i]
@@ -252,6 +254,6 @@ func newTestAckMgr(logger log.Logger) *ackManager {
 	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
-	db := newTaskQueueDB(tlCfg, tm, UnversionedQueueKey(prtn), logger)
+	db := newTaskQueueDB(tlCfg, tm, UnversionedQueueKey(prtn), logger, metrics.NoopMetricsHandler)
 	return newAckManager(db, logger)
 }

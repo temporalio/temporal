@@ -269,7 +269,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 
 	// Manually increase the backlog counter since it does not get incremented by taskAckManager.addTask
 	// Only doing this for the purpose of this test
-	blm.db.updateApproximateBacklogCount(taskCount)
+	blm.db.updateBacklogStats(taskCount, time.Time{})
 
 	includeTaskStatus := false
 	descResp := s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
@@ -291,7 +291,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	s.tqMgr.pollerHistory.updatePollerInfo(pollerIdent, &pollMetadata{})
 	for i := int64(0); i < taskCount; i++ {
 		_, numAcked := blm.taskAckManager.completeTask(startTaskID + i)
-		blm.db.updateApproximateBacklogCount(-numAcked)
+		blm.db.updateBacklogStats(-numAcked, time.Time{})
 	}
 
 	descResp = s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
