@@ -29,8 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -39,6 +37,7 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type VersionWorkflowSuite struct {
