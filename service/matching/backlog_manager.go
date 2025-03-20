@@ -114,7 +114,7 @@ func newBacklogManager(
 		config:           config,
 		initializedError: future.NewFuture[struct{}](),
 	}
-	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger)
+	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
 	bmg.taskAckManager = newAckManager(bmg.db, logger)
@@ -279,7 +279,11 @@ func (c *backlogManagerImpl) completeTask(itask *internalTask, err error) {
 
 	ackLevel, numAcked := c.taskAckManager.completeTask(task.GetTaskId())
 	if numAcked > 0 {
-		c.db.updateApproximateBacklogCount(-numAcked)
+		var backlogHead time.Time
+		if nanos := c.taskReader.backlogHeadCreateTime.Load(); nanos > 0 {
+			backlogHead = time.Unix(0, nanos)
+		}
+		c.db.updateBacklogStats(-numAcked, backlogHead)
 	}
 	c.taskGC.Run(ackLevel)
 }

@@ -269,7 +269,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 
 	// Manually increase the backlog counter since it does not get incremented by taskAckManager.addTask
 	// Only doing this for the purpose of this test
-	blm.db.updateApproximateBacklogCount(taskCount)
+	blm.db.updateBacklogStats(taskCount, time.Time{})
 
 	includeTaskStatus := false
 	descResp := s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
@@ -291,7 +291,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	s.tqMgr.pollerHistory.updatePollerInfo(pollerIdent, &pollMetadata{})
 	for i := int64(0); i < taskCount; i++ {
 		_, numAcked := blm.taskAckManager.completeTask(startTaskID + i)
-		blm.db.updateApproximateBacklogCount(-numAcked)
+		blm.db.updateBacklogStats(-numAcked, time.Time{})
 	}
 
 	descResp = s.tqMgr.LegacyDescribeTaskQueue(includeTaskStatus)
@@ -388,25 +388,32 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher; flaky")
-	}
-
 	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
-	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
+	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(200 * time.Millisecond)
 	s.tqMgr.Start()
-	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 
-	// simulate ownership lost
+	// wait for goroutines to start and to acquire rangeid lock
+	time.Sleep(10 * time.Millisecond) // nolint:forbidigo
+
 	tm, _ := s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+	s.Equal(0, tm.getUpdateCount(s.physicalTaskQueueKey))
+
+	// simulate stolen lock
 	ptm := tm.getQueueManagerByKey(s.physicalTaskQueueKey)
 	ptm.Lock()
 	ptm.rangeID++
 	ptm.Unlock()
 
-	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.Equal(collect, 1, tm.getUpdateCount(s.physicalTaskQueueKey))
+	// change something to ensure it does the periodic write
+	s.tqMgr.backlogMgr.getDB().updateAckLevelAndBacklogStats(0, 123456, 10, time.Time{})
+
+	// on the next periodic write, it'll fail due to conflict and unload the task queue
+	s.Eventually(func() bool {
+		return s.tqMgr.tqCtx.Err() != nil
 	}, 5*time.Second, 100*time.Millisecond)
+
+	// no additional updates (the failed periodic update counts as "1")
+	s.Equal(1, tm.getUpdateCount(s.physicalTaskQueueKey))
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMInterruptsPollOnClose() {

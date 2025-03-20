@@ -36,6 +36,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/softassert"
@@ -55,12 +56,13 @@ const (
 type (
 	taskQueueDB struct {
 		sync.Mutex
-		config    *taskQueueConfig
-		queue     *PhysicalTaskQueueKey
-		rangeID   int64
-		store     persistence.TaskManager
-		logger    log.Logger
-		subqueues []*dbSubqueue
+		config         *taskQueueConfig
+		queue          *PhysicalTaskQueueKey
+		rangeID        int64
+		store          persistence.TaskManager
+		logger         log.Logger
+		metricsHandler metrics.Handler
+		subqueues      []*dbSubqueue
 
 		// used to avoid unnecessary metadata writes:
 		lastChange time.Time // updated when metadata is changed in memory
@@ -70,6 +72,7 @@ type (
 	dbSubqueue struct {
 		persistencespb.SubqueueInfo
 		maxReadLevel int64
+		oldestTime   time.Time // time of oldest task if backlog, otherwise zero time
 	}
 
 	taskQueueState struct {
@@ -104,12 +107,14 @@ func newTaskQueueDB(
 	store persistence.TaskManager,
 	queue *PhysicalTaskQueueKey,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) *taskQueueDB {
 	return &taskQueueDB{
-		config: config,
-		queue:  queue,
-		store:  store,
-		logger: logger,
+		config:         config,
+		queue:          queue,
+		store:          store,
+		logger:         logger,
+		metricsHandler: metricsHandler,
 	}
 }
 
@@ -258,14 +263,14 @@ func (db *taskQueueDB) OldUpdateState(
 	if err == nil {
 		db.subqueues[subqueueZero].AckLevel = ackLevel
 	}
-	db.emitBacklogGauges()
+	db.emitBacklogGaugesLocked()
 	return err
 }
 
 func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	db.Lock()
 	defer db.Unlock()
-	defer db.emitBacklogGauges()
+	defer db.emitBacklogGaugesLocked()
 
 	// We only need to write if something changed, or if we're past half of the sticky queue TTL.
 	// Note that we use the same threshold for non-sticky queues even though they don't have a
@@ -278,7 +283,7 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	return db.updateTaskQueueLocked(ctx, false)
 }
 
-func (db *taskQueueDB) updateAckLevelAndCount(subqueue int, newAckLevel int64, delta int64) {
+func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue int, newAckLevel int64, countDelta int64, oldestTime time.Time) {
 	db.Lock()
 	defer db.Unlock()
 
@@ -294,31 +299,33 @@ func (db *taskQueueDB) updateAckLevelAndCount(subqueue int, newAckLevel int64, d
 	if newAckLevel == db.getMaxReadLevelLocked(subqueue) {
 		// Reset approximateBacklogCount to fix the count divergence issue
 		dbQueue.ApproximateBacklogCount = 0
-	} else if delta != 0 {
-		db.updateApproximateBacklogCountLocked(subqueue, delta)
+		dbQueue.oldestTime = oldestTime
+	} else if countDelta != 0 {
+		db.updateBacklogStatsLocked(subqueue, countDelta, oldestTime)
 	}
 }
 
 // updateApproximateBacklogCount updates the in-memory DB state with the given delta value
 // TODO(pri): old matcher cleanup
-func (db *taskQueueDB) updateApproximateBacklogCount(delta int64) {
+func (db *taskQueueDB) updateBacklogStats(countDelta int64, oldestTime time.Time) {
 	db.Lock()
 	defer db.Unlock()
 	db.lastChange = time.Now()
-	db.updateApproximateBacklogCountLocked(0, delta)
+	db.updateBacklogStatsLocked(0, countDelta, oldestTime)
 }
 
-func (db *taskQueueDB) updateApproximateBacklogCountLocked(subqueue int, delta int64) {
+func (db *taskQueueDB) updateBacklogStatsLocked(subqueue int, countDelta int64, oldestTime time.Time) {
 	// Prevent under-counting
 	count := &db.subqueues[subqueue].ApproximateBacklogCount
-	if *count+delta < 0 {
+	if *count+countDelta < 0 {
 		db.logger.Info("ApproximateBacklogCount could have under-counted.",
 			tag.WorkerBuildId(db.queue.Version().MetricsTagValue()),
 			tag.WorkflowNamespaceID(db.queue.Partition().NamespaceId()))
 		*count = 0
 	} else {
-		*count += delta
+		*count += countDelta
 	}
+	db.subqueues[subqueue].oldestTime = oldestTime
 }
 
 func (db *taskQueueDB) getApproximateBacklogCount(subqueue int) int64 {
@@ -506,27 +513,33 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	}
 }
 
-// emitBacklogGauges emits the approximate_backlog_count, approximate_backlog_age_seconds, and the legacy
+// emitBacklogGaugesLocked emits the approximate_backlog_count, approximate_backlog_age_seconds, and the legacy
 // task_lag_per_tl gauges. For these gauges to be emitted, BreakdownMetricsByTaskQueue and BreakdownMetricsByPartition
 // should be enabled. Additionally, for versioned queues, BreakdownMetricsByBuildID should also be enabled.
-func (db *taskQueueDB) emitBacklogGauges() {
-	// TODO(pri): need to revisit this for subqueues
-	// nolint:staticcheck
-	shouldEmitGauges := db.config.BreakdownMetricsByTaskQueue() &&
-		db.config.BreakdownMetricsByPartition() &&
-		(!db.queue.IsVersioned() || db.config.BreakdownMetricsByBuildID())
-	// nolint:staticcheck
-	if shouldEmitGauges {
-		// approximateBacklogCount := db.getApproximateBacklogCount()
-		// backlogHeadAge := db.backlogMgr.BacklogHeadAge()
-		// metrics.ApproximateBacklogCount.With(db.backlogMgr.metricsHandler).Record(float64(approximateBacklogCount))
-		// metrics.ApproximateBacklogAgeSeconds.With(db.backlogMgr.metricsHandler).Record(backlogHeadAge.Seconds())
+func (db *taskQueueDB) emitBacklogGaugesLocked() {
+	if !db.config.BreakdownMetricsByTaskQueue() ||
+		!db.config.BreakdownMetricsByPartition() ||
+		(db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID()) {
+		return
+	}
 
+	var approximateBacklogCount, totalLag int64
+	var oldestTime time.Time
+	for _, s := range db.subqueues {
+		approximateBacklogCount += s.ApproximateBacklogCount
+		oldestTime = minNonZeroTime(oldestTime, s.oldestTime)
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
-		// maxReadLevel := db.GetMaxReadLevel(subqueueZero)
-		// metrics.TaskLagPerTaskQueueGauge.With(db.backlogMgr.metricsHandler).Record(float64(maxReadLevel - db.subqueues[0].AckLevel))
+		totalLag += s.maxReadLevel - s.AckLevel
 	}
+
+	metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(approximateBacklogCount))
+	if oldestTime.IsZero() {
+		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+	} else {
+		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
+	}
+	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(float64(totalLag))
 }
 
 func (db *taskQueueDB) ensureDefaultSubqueuesLocked(

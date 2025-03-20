@@ -27,6 +27,7 @@ import (
 
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -67,4 +68,15 @@ func (b backlogAgeTracker) oldestTime() time.Time {
 	}
 	k, _ := b.tree.Min()
 	return time.Unix(0, k.(int64)) // nolint:revive
+}
+
+// minNonZeroTime returns the minimum time of a and b, ignoring zero times.
+// If both a and b are zero, it returns zero.
+func minNonZeroTime(a, b time.Time) time.Time {
+	if a.IsZero() {
+		return b
+	} else if b.IsZero() {
+		return a
+	}
+	return util.MinTime(a, b)
 }
