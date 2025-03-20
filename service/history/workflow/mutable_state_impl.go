@@ -1736,11 +1736,12 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.Stamp = incomingActivityInfo.GetStamp()
 
 	ai.Paused = incomingActivityInfo.GetPaused()
-
-	ai.RetryInitialInterval = incomingActivityInfo.GetRetryInitialInterval()
-	ai.RetryMaximumInterval = incomingActivityInfo.GetRetryMaximumInterval()
-	ai.RetryMaximumAttempts = incomingActivityInfo.GetRetryMaximumAttempts()
-	ai.RetryBackoffCoefficient = incomingActivityInfo.GetRetryBackoffCoefficient()
+	if incomingActivityInfo.RetryInitialInterval != nil {
+		ai.RetryInitialInterval = incomingActivityInfo.GetRetryInitialInterval()
+		ai.RetryMaximumInterval = incomingActivityInfo.GetRetryMaximumInterval()
+		ai.RetryMaximumAttempts = incomingActivityInfo.GetRetryMaximumAttempts()
+		ai.RetryBackoffCoefficient = incomingActivityInfo.GetRetryBackoffCoefficient()
+	}
 
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}

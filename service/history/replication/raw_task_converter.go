@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -170,6 +171,13 @@ func convertActivityStateReplicationTask(
 			if lastStartedBuildId == "" {
 				lastStartedBuildId = activityInfo.GetUseWorkflowBuildIdInfo().GetLastUsedBuildId()
 			}
+			// We will use field to distinguish between nil and zero value for backward compatibility
+			retryInitialInterval := activityInfo.RetryInitialInterval
+			if retryInitialInterval == nil {
+				retryInitialInterval = &durationpb.Duration{
+					Nanos: 0,
+				}
+			}
 
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
@@ -197,7 +205,7 @@ func convertActivityStateReplicationTask(
 						LastAttemptCompleteTime:    activityInfo.LastAttemptCompleteTime,
 						Stamp:                      activityInfo.Stamp,
 						Paused:                     activityInfo.Paused,
-						RetryInitialInterval:       activityInfo.RetryInitialInterval,
+						RetryInitialInterval:       retryInitialInterval,
 						RetryMaximumInterval:       activityInfo.RetryMaximumInterval,
 						RetryMaximumAttempts:       activityInfo.RetryMaximumAttempts,
 						RetryBackoffCoefficient:    activityInfo.RetryBackoffCoefficient,
