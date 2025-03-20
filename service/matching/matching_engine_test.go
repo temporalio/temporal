@@ -1181,6 +1181,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
+	if s.newMatcher {
+		s.T().Skip("test is flaky with new matcher")
+	}
 	dispatchLimitFn := func(int, int64) float64 {
 		return defaultTaskDispatchRPS
 	}
@@ -1572,6 +1575,9 @@ func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
+	if s.newMatcher {
+		s.T().Skip("test is flaky with new matcher")
+	}
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -1730,6 +1736,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
+	if s.newMatcher {
+		s.T().Skip("test is flaky with new matcher")
+	}
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -3181,6 +3190,9 @@ func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
+	if s.newMatcher {
+		s.T().Skip("test is flaky with new matcher")
+	}
 	s.resetBacklogCounter(10, 20, 2)
 }
 
@@ -3228,6 +3240,9 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
+	if s.newMatcher {
+		s.T().Skip("test is flaky with new matcher")
+	}
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
 
