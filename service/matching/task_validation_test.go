@@ -96,10 +96,6 @@ func (s *taskValidatorSuite) SetupTest() {
 	s.taskValidator = newTaskValidator(context.Background(), s.clusterMetadata, s.namespaceCache, s.historyClient)
 }
 
-func (s *taskValidatorSuite) TeardownTest() {
-	s.controller.Finish()
-}
-
 func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithCreationTime() {
 	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         s.task.TaskId - 1,

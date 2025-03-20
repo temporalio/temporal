@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/priorities"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
@@ -145,6 +146,7 @@ func recordActivityTaskStarted(
 	response := &historyservice.RecordActivityTaskStartedResponse{
 		ScheduledEvent:              scheduledEvent,
 		CurrentAttemptScheduledTime: ai.ScheduledTime,
+		Priority:                    priorities.Merge(mutableState.GetExecutionInfo().Priority, ai.Priority),
 	}
 
 	if ai.StartedEventId != common.EmptyEventID {

@@ -46,3 +46,9 @@ func That(logger log.Logger, condition bool, msg string) bool {
 	}
 	return condition
 }
+
+// Fail logs an error message indicating a failed assertion.
+// It works the same as That, but does not require a condition.
+func Fail(logger log.Logger, msg string) {
+	logger.Error("failed assertion: "+msg, tag.FailedAssertion)
+}

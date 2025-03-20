@@ -33,7 +33,7 @@ import (
 
 type (
 	ReplicationStream interface {
-		SubscribeReplicationNotification() (<-chan struct{}, string)
+		SubscribeReplicationNotification(string) (<-chan struct{}, string)
 		UnsubscribeReplicationNotification(string)
 		ConvertReplicationTask(
 			ctx context.Context,
