@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -360,26 +361,30 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
 	s.NotNil(result)
+	retryInitialInterval := &durationpb.Duration{
+		Nanos: 0,
+	}
 	s.ProtoEqual(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        s.namespaceID,
-				WorkflowId:         s.workflowID,
-				RunId:              s.runID,
-				Version:            activityVersion,
-				ScheduledEventId:   activityScheduledEventID,
-				ScheduledTime:      timestamppb.New(activityScheduledTime),
-				StartedEventId:     activityStartedEventID,
-				StartedTime:        nil,
-				LastHeartbeatTime:  nil,
-				Details:            activityDetails,
-				Attempt:            activityAttempt,
-				LastFailure:        activityLastFailure,
-				LastWorkerIdentity: activityLastWorkerIdentity,
-				BaseExecutionInfo:  baseWorkflowInfo,
-				VersionHistory:     versionHistory,
+				NamespaceId:          s.namespaceID,
+				WorkflowId:           s.workflowID,
+				RunId:                s.runID,
+				Version:              activityVersion,
+				ScheduledEventId:     activityScheduledEventID,
+				ScheduledTime:        timestamppb.New(activityScheduledTime),
+				StartedEventId:       activityStartedEventID,
+				StartedTime:          nil,
+				LastHeartbeatTime:    nil,
+				Details:              activityDetails,
+				Attempt:              activityAttempt,
+				LastFailure:          activityLastFailure,
+				LastWorkerIdentity:   activityLastWorkerIdentity,
+				BaseExecutionInfo:    baseWorkflowInfo,
+				VersionHistory:       versionHistory,
+				RetryInitialInterval: retryInitialInterval,
 			},
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
@@ -466,26 +471,30 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 
 	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
 	s.NoError(err)
+	retryInitialInterval := &durationpb.Duration{
+		Nanos: 0,
+	}
 	s.ProtoEqual(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        s.namespaceID,
-				WorkflowId:         s.workflowID,
-				RunId:              s.runID,
-				Version:            activityVersion,
-				ScheduledEventId:   activityScheduledEventID,
-				ScheduledTime:      timestamppb.New(activityScheduledTime),
-				StartedEventId:     activityStartedEventID,
-				StartedTime:        timestamppb.New(activityStartedTime),
-				LastHeartbeatTime:  timestamppb.New(activityHeartbeatTime),
-				Details:            activityDetails,
-				Attempt:            activityAttempt,
-				LastFailure:        activityLastFailure,
-				LastWorkerIdentity: activityLastWorkerIdentity,
-				BaseExecutionInfo:  baseWorkflowInfo,
-				VersionHistory:     versionHistory,
+				NamespaceId:          s.namespaceID,
+				WorkflowId:           s.workflowID,
+				RunId:                s.runID,
+				Version:              activityVersion,
+				ScheduledEventId:     activityScheduledEventID,
+				ScheduledTime:        timestamppb.New(activityScheduledTime),
+				StartedEventId:       activityStartedEventID,
+				StartedTime:          timestamppb.New(activityStartedTime),
+				LastHeartbeatTime:    timestamppb.New(activityHeartbeatTime),
+				Details:              activityDetails,
+				Attempt:              activityAttempt,
+				LastFailure:          activityLastFailure,
+				LastWorkerIdentity:   activityLastWorkerIdentity,
+				BaseExecutionInfo:    baseWorkflowInfo,
+				VersionHistory:       versionHistory,
+				RetryInitialInterval: retryInitialInterval,
 			},
 		},
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
