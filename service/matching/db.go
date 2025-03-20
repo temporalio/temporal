@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/softassert"
-	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -526,13 +525,9 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 
 	var approximateBacklogCount, totalLag int64
 	var oldestTime time.Time
-	for i, s := range db.subqueues {
+	for _, s := range db.subqueues {
 		approximateBacklogCount += s.ApproximateBacklogCount
-		if i == 0 {
-			oldestTime = s.oldestTime
-		} else {
-			oldestTime = util.MinTime(oldestTime, s.oldestTime)
-		}
+		oldestTime = minNonZeroTime(oldestTime, s.oldestTime)
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
 		totalLag += s.maxReadLevel - s.AckLevel
