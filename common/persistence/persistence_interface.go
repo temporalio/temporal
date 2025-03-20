@@ -326,6 +326,7 @@ type (
 		TaskId     int64
 		ExpiryTime *timestamppb.Timestamp
 		Task       *commonpb.DataBlob
+		Subqueue   int
 	}
 
 	InternalGetTasksResponse struct {

@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/rpc/interceptor"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
@@ -145,24 +144,6 @@ func headersInterceptor(
 ) error {
 	ctx = headers.Propagate(ctx)
 	return invoker(ctx, method, req, reply, cc, opts...)
-}
-
-func ServiceErrorInterceptor(
-	ctx context.Context,
-	req interface{},
-	_ *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-
-	resp, err := handler(ctx, req)
-
-	var deserializationError *serialization.DeserializationError
-	var serializationError *serialization.SerializationError
-	// convert serialization errors to be captured as serviceerrors across gRPC calls
-	if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
-		err = serviceerror.NewDataLoss(err.Error())
-	}
-	return resp, serviceerror.ToStatus(err).Err()
 }
 
 func NewFrontendServiceErrorInterceptor(

@@ -262,7 +262,7 @@ func GrpcServerOptionsProvider(
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
 		maskInternalErrorDetailsInterceptor.Intercept,
-		rpc.ServiceErrorInterceptor,
+		interceptor.ServiceErrorInterceptor,
 		rpc.NewFrontendServiceErrorInterceptor(logger),
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
@@ -430,11 +430,12 @@ func RateLimitInterceptorProvider(
 }
 
 func MaskInternalErrorDetailsInterceptorProvider(
+	logger log.Logger,
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 ) *interceptor.MaskInternalErrorDetailsInterceptor {
 	return interceptor.NewMaskInternalErrorDetailsInterceptor(
-		serviceConfig.MaskInternalErrorDetails, namespaceRegistry,
+		serviceConfig.MaskInternalErrorDetails, namespaceRegistry, logger,
 	)
 }
 

@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/internal/nettest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -249,7 +250,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				rpc.ServiceErrorInterceptor,
+				interceptor.ServiceErrorInterceptor,
 				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))
@@ -605,7 +606,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				rpc.ServiceErrorInterceptor,
+				interceptor.ServiceErrorInterceptor,
 				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))
@@ -792,7 +793,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-				rpc.ServiceErrorInterceptor,
+				interceptor.ServiceErrorInterceptor,
 				rpc.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
 				rateLimitInterceptor.Intercept,
 			))

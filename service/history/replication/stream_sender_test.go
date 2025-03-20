@@ -1033,7 +1033,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 }
 
 func (s *streamSenderSuite) TestSendEventLoop_Panic_ShouldCaptureAsError() {
-	s.historyEngine.EXPECT().SubscribeReplicationNotification().Do(func() {
+	s.historyEngine.EXPECT().SubscribeReplicationNotification("target_cluster").Do(func(_ string) {
 		panic("panic")
 	})
 	err := s.streamSender.sendEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED)
