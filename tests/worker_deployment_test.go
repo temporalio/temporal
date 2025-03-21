@@ -1028,6 +1028,36 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 
 }
 
+// TestSetWorkerDeploymentRampingVersion_UnversionedRamp_Batching verifies that the batching functionality works
+// when ramping unversioned.
+func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_UnversionedRamp_Batching() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// Registering 50 task-queues in the
+	taskQueues := 50
+	for i := 0; i < taskQueues; i++ {
+		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
+	}
+
+	// ensure the version has been created in the deployment with the right number of task-queues
+	s.ensureCreateVersionInDeployment(tv)
+	s.ensureCreateVersionWithExpectedTaskQueues(ctx, tv, taskQueues)
+
+	// make the current version versioned, so that we can set ramp to unversioned later
+	s.setCurrentVersion(ctx, tv, worker_versioning.UnversionedVersionId, true, "")
+
+	// set ramp to unversioned which should trigger a batch of SyncDeploymentVersionUserData requests.
+	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, "", nil)
+
+	// check that the current version's task queues have ramping version == __unversioned__
+	for i := 0; i < taskQueues; i++ {
+		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
+	}
+
+}
+
 // SetCurrent tests
 
 func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
