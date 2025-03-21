@@ -1,5 +1,5 @@
-![GitHub Release](https://img.shields.io/github/v/release/temporalio/temporal)
-![Code Coverage](https://img.shields.io/badge/codecov-report-blue)
+[![GitHub Release](https://img.shields.io/github/v/release/temporalio/temporal)](https://github.com/temporalio/temporal/releases/latest)
+[![Code Coverage](https://img.shields.io/badge/codecov-report-blue)](https://app.codecov.io/gh/temporalio/temporal)
 [![Community](https://img.shields.io/static/v1?label=community&message=get%20help&color=informational)](https://community.temporal.io)
 [![Go Report Card][go-report-image]][go-report-url]
 
