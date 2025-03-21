@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -71,6 +72,7 @@ func ClusterIDToClusterNameShardCount(
 }
 
 func WrapEventLoop(
+	ctx context.Context,
 	originalEventLoop func() error,
 	streamStopper func(),
 	logger log.Logger,
@@ -82,6 +84,9 @@ func WrapEventLoop(
 	defer streamStopper()
 
 	ops := func() error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		err := originalEventLoop()
 
 		if err != nil {
@@ -121,6 +126,8 @@ func isRetryableError(err error) bool {
 	case errors.As(err, &shardOwnershipLost):
 		return false
 	case errors.As(err, &streamError):
+		return false
+	case errors.Is(err, context.Canceled):
 		return false
 	default:
 		return true
