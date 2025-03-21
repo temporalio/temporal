@@ -32,7 +32,6 @@ import (
 	"testing"
 	"time"
 
-	gogogomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -62,7 +61,6 @@ type (
 		*require.Assertions
 
 		controller    *gomock.Controller
-		goController  *gogogomock.Controller
 		server        *historyservicemock.MockHistoryService_StreamWorkflowReplicationMessagesServer
 		shardContext  *historyi.MockShardContext
 		historyEngine *historyi.MockEngine
@@ -92,7 +90,6 @@ func (s *streamSenderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.goController = gogogomock.NewController(s.T())
 	s.server = historyservicemock.NewMockHistoryService_StreamWorkflowReplicationMessagesServer(s.controller)
 	s.server.EXPECT().Context().Return(context.Background()).AnyTimes()
 	s.shardContext = historyi.NewMockShardContext(s.controller)
@@ -117,13 +114,12 @@ func (s *streamSenderSuite) SetupTest() {
 		s.serverShardKey,
 		s.config,
 	)
-	s.senderFlowController = NewMockSenderFlowController(s.goController)
+	s.senderFlowController = NewMockSenderFlowController(s.controller)
 	s.streamSender.flowController = s.senderFlowController
 }
 
 func (s *streamSenderSuite) TearDownTest() {
 	s.controller.Finish()
-	s.goController.Finish()
 }
 
 func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Success() {
