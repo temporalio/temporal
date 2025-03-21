@@ -247,7 +247,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_DecrementedByCompl
 	blm.taskAckManager.addTask(int64(3))
 
 	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
-	blm.getDB().updateApproximateBacklogCount(int64(3))
+	blm.getDB().updateBacklogStats(3, time.Time{})
 
 	s.Equal(int64(3), blm.TotalApproximateBacklogCount(), "1 task in the backlog")
 	s.Equal(int64(-1), blm.taskAckManager.getAckLevel(), "should only move ack level on completion")

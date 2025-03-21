@@ -41,6 +41,10 @@ type (
 		name    string
 		handler metrics.Handler
 	}
+	priMetricsGauge struct {
+		name    string
+		handler metrics.Handler
+	}
 )
 
 // TODO(pri): cleanup; delete this
@@ -55,14 +59,14 @@ func (p priMetricHandler) Stop(logger log.Logger) {
 }
 
 func (p priMetricHandler) Counter(name string) metrics.CounterIface {
-	return &priMetricsCounter{name: name, handler: p.handler}
+	return priMetricsCounter{name: name, handler: p.handler}
 }
 func (p priMetricHandler) Timer(name string) metrics.TimerIface {
-	return &priMetricsTimer{name: name, handler: p.handler}
+	return priMetricsTimer{name: name, handler: p.handler}
 }
 
 func (p priMetricHandler) Gauge(name string) metrics.GaugeIface {
-	panic("not implemented")
+	return priMetricsGauge{name: name, handler: p.handler}
 }
 
 func (p priMetricHandler) WithTags(...metrics.Tag) metrics.Handler {
@@ -85,6 +89,11 @@ func (c priMetricsCounter) Record(i int64, tag ...metrics.Tag) {
 func (t priMetricsTimer) Record(duration time.Duration, tag ...metrics.Tag) {
 	t.handler.Timer(t.name).Record(duration, tag...)
 	t.handler.Timer(withPriPrefix(t.name)).Record(duration, tag...)
+}
+
+func (t priMetricsGauge) Record(v float64, tag ...metrics.Tag) {
+	t.handler.Gauge(t.name).Record(v, tag...)
+	t.handler.Gauge(withPriPrefix(t.name)).Record(v, tag...)
 }
 
 func withPriPrefix(name string) string {

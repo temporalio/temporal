@@ -364,7 +364,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 					assert.Greater(col, callbackInfo.LastAttemptCompleteTime.AsTime(), time.Now().Add(-time.Hour))
 					if attempt < numAttempts {
 						assert.Equal(col, enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
-						assert.Equal(col, "request failed with: 500 Internal Server Error", callbackInfo.LastAttemptFailure.Message)
+						assert.Equal(col, "handler error (INTERNAL): intentional error", callbackInfo.LastAttemptFailure.Message)
 					} else {
 						assert.Equal(col, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
 						assert.Nil(col, callbackInfo.LastAttemptFailure)

@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/util"
 )
 
 // this retry policy is currently only used for matching persistence operations
@@ -112,7 +111,7 @@ func newPriBacklogManager(
 		throttledLogger:     throttledLogger,
 		initializedError:    future.NewFuture[struct{}](),
 	}
-	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger)
+	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler)
 	bmg.taskWriter = newPriTaskWriter(bmg)
 	return bmg
 }
@@ -280,12 +279,8 @@ func (c *priBacklogManagerImpl) BacklogHeadAge() time.Duration {
 	defer c.subqueueLock.Unlock()
 
 	var oldestTime time.Time
-	for i, r := range c.subqueues {
-		if i == 0 {
-			oldestTime = r.getOldestBacklogTime()
-		} else {
-			oldestTime = util.MinTime(oldestTime, r.getOldestBacklogTime())
-		}
+	for _, r := range c.subqueues {
+		oldestTime = minNonZeroTime(oldestTime, r.getOldestBacklogTime())
 	}
 	if oldestTime.IsZero() {
 		// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would

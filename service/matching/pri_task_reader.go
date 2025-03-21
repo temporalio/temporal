@@ -173,7 +173,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 		tr.SignalTaskLoading()
 	}
 
-	tr.backlogMgr.db.updateAckLevelAndCount(tr.subqueue, tr.ackLevel, -numAcked)
+	tr.backlogMgr.db.updateAckLevelAndBacklogStats(tr.subqueue, tr.ackLevel, -numAcked, tr.backlogAge.oldestTime())
 }
 
 // nolint:revive // can simplify later
