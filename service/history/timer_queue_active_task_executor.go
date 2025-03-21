@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -555,6 +556,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
 	useWfBuildId := activityInfo.GetUseWorkflowBuildIdInfo() != nil
+	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, activityInfo.Priority)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore
@@ -571,6 +573,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
 		Stamp:                  task.Stamp,
+		Priority:               priority,
 	})
 	if err != nil {
 		return err

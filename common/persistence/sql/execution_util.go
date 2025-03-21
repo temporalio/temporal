@@ -196,6 +196,19 @@ func applyWorkflowMutationTx(
 	); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
 	}
+
+	if err := updateChasmNodes(ctx,
+		tx,
+		workflowMutation.UpsertChasmNodes,
+		workflowMutation.DeleteChasmNodes,
+		shardID,
+		namespaceIDBytes,
+		workflowID,
+		runIDBytes,
+	); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowMutationTx failed. Error: %v", err))
+	}
+
 	return nil
 }
 
@@ -399,6 +412,29 @@ func applyWorkflowSnapshotTxAsReset(
 	); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear buffered events. Error: %v", err))
 	}
+
+	if err := deleteChasmNodeMap(ctx,
+		tx,
+		shardID,
+		namespaceIDBytes,
+		workflowID,
+		runIDBytes,
+	); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to clear CHASM nodes. Error: %v", err))
+	}
+
+	if err := updateChasmNodes(ctx,
+		tx,
+		workflowSnapshot.ChasmNodes,
+		nil,
+		shardID,
+		namespaceIDBytes,
+		workflowID,
+		runIDBytes,
+	); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to update CHASM nodes. Error: %v", err))
+	}
+
 	return nil
 }
 
@@ -514,6 +550,18 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsNew(
 		runIDBytes,
 	); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to insert into signals requested set after clearing. Error: %v", err))
+	}
+
+	if err := updateChasmNodes(ctx,
+		tx,
+		workflowSnapshot.ChasmNodes,
+		nil,
+		shardID,
+		namespaceIDBytes,
+		workflowID,
+		runIDBytes,
+	); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsNew failed. Failed to update CHASM nodes. Error: %v", err))
 	}
 
 	return nil
