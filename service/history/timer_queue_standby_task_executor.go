@@ -536,6 +536,11 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 			return nil, nil
 		}
 
+		if t.config.EnableUpdateClosedWorkflowByMutation() {
+			return nil, wfContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
+		}
+
+		// TODO: remove following code once EnableUpdateClosedWorkflowByMutation config is deprecated.
 		if mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 			// Can't use UpdateWorkflowExecutionAsPassive since it updates the current run,
 			// and we are operating on a closed workflow.

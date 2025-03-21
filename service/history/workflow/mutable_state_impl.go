@@ -1020,6 +1020,25 @@ func (ms *MutableStateImpl) IsCurrentWorkflowGuaranteed() bool {
 	}
 }
 
+func (ms *MutableStateImpl) IsNonCurrentWorkflowGuaranteed() bool {
+	switch ms.stateInDB {
+	case enumsspb.WORKFLOW_EXECUTION_STATE_VOID:
+		return true
+	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
+		return false
+	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
+		return false
+	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
+		return false
+	case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
+		return true
+	case enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
+		return false
+	default:
+		panic(fmt.Sprintf("unknown workflow state: %v", ms.executionState.State))
+	}
+}
+
 func (ms *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 	return ms.namespaceEntry
 }
