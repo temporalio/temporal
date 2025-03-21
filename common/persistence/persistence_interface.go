@@ -514,7 +514,7 @@ type (
 
 		// Only set when Cassandra is used as the persistence layer. When set, Metadata
 		// and Data will be unset. *No* code outside of the ExecutionManager or Cassandra
-		// plugin should reference this field.
+		// store should reference this field.
 		//
 		// As an optimization to avoid an extra encode/deocde step, the Cassandra version
 		// is encoded in a single blob up-front.
