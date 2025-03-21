@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/persistencetest"
-	nettest "go.temporal.io/server/common/testing/nettest"
+	"go.temporal.io/server/common/testing/nettest"
 	historyserver "go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"

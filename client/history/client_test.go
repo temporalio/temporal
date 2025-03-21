@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
-	nettest "go.temporal.io/server/common/testing/nettest"
+	"go.temporal.io/server/common/testing/nettest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )

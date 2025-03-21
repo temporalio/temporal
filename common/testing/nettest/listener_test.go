@@ -31,7 +31,7 @@ import (
 	"net"
 	"net/http"
 
-	nettest "go.temporal.io/server/common/testing/nettest"
+	"go.temporal.io/server/common/testing/nettest"
 )
 
 func ExampleListener() {
