@@ -1,8 +1,0 @@
-{
-  "CurrVersion": "1.18",
-  "MinCompatibleVersion": "1.0",
-  "Description": "Add metadata fields to chasm_node_maps",
-  "SchemaUpdateCqlFiles": [
-    "add_metadata_to_chasm_node_maps.sql"
-  ]
-}
