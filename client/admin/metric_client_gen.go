@@ -33,20 +33,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-func (c *metricClient) AddOrUpdateRemoteCluster(
-	ctx context.Context,
-	request *adminservice.AddOrUpdateRemoteClusterRequest,
-	opts ...grpc.CallOption,
-) (_ *adminservice.AddOrUpdateRemoteClusterResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientAddOrUpdateRemoteCluster")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
-}
-
 func (c *metricClient) AddSearchAttributes(
 	ctx context.Context,
 	request *adminservice.AddSearchAttributesRequest,
@@ -411,20 +397,6 @@ func (c *metricClient) ListClusterMembers(
 	return c.client.ListClusterMembers(ctx, request, opts...)
 }
 
-func (c *metricClient) ListClusters(
-	ctx context.Context,
-	request *adminservice.ListClustersRequest,
-	opts ...grpc.CallOption,
-) (_ *adminservice.ListClustersResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientListClusters")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.ListClusters(ctx, request, opts...)
-}
-
 func (c *metricClient) ListHistoryTasks(
 	ctx context.Context,
 	request *adminservice.ListHistoryTasksRequest,
@@ -549,20 +521,6 @@ func (c *metricClient) RefreshWorkflowTasks(
 	}()
 
 	return c.client.RefreshWorkflowTasks(ctx, request, opts...)
-}
-
-func (c *metricClient) RemoveRemoteCluster(
-	ctx context.Context,
-	request *adminservice.RemoveRemoteClusterRequest,
-	opts ...grpc.CallOption,
-) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientRemoveRemoteCluster")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.RemoveRemoteCluster(ctx, request, opts...)
 }
 
 func (c *metricClient) RemoveSearchAttributes(
