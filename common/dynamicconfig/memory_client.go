@@ -71,11 +71,14 @@ func (d *MemoryClient) getValueLocked(key Key) []ConstrainedValue {
 
 func (d *MemoryClient) Subscribe(f ClientUpdateFunc) (cancel func()) {
 	d.lock.Lock()
-	defer d.lock.Unlock()
-
 	d.subscriptionIdx++
 	id := d.subscriptionIdx
 	d.subscriptions[id] = f
+	d.lock.Unlock()
+
+	// We do NOT call f() inside the lock here.
+	// If your Collection or calling code needs an immediate callback,
+	// it can call f(...) or getValue outside of the MemoryClient’s lock.
 
 	return func() {
 		d.lock.Lock()
@@ -90,22 +93,32 @@ func (d *MemoryClient) OverrideSetting(setting GenericSetting, value any) (clean
 
 func (d *MemoryClient) OverrideValue(key Key, value any) (cleanup func()) {
 	d.lock.Lock()
-	defer d.lock.Unlock()
 
 	var idx atomic.Int64
 	idx.Store(int64(len(d.overrides)))
 
 	d.overrides = append(d.overrides, kvpair{valid: true, key: key, value: value})
-
 	newValue := d.getValueLocked(key)
 	changed := map[Key][]ConstrainedValue{key: newValue}
-	for _, update := range d.subscriptions {
-		update(changed)
+
+	// Copy out subscriptions to call after we release the lock
+	subscribers := make([]ClientUpdateFunc, 0, len(d.subscriptions))
+	for _, sub := range d.subscriptions {
+		subscribers = append(subscribers, sub)
+	}
+
+	d.lock.Unlock()
+
+	// Notify subscribers *outside* the lock to avoid deadlock
+	for _, updateFunc := range subscribers {
+		updateFunc(changed)
 	}
 
 	return func() {
-		// only do this once
+		// Cleanup only once
 		if removeIdx := int(idx.Swap(-1)); removeIdx >= 0 {
+			// We still need to remove the override, but again
+			// release the lock before notifying subscribers.
 			d.remove(removeIdx)
 		}
 	}
@@ -113,20 +126,32 @@ func (d *MemoryClient) OverrideValue(key Key, value any) (cleanup func()) {
 
 func (d *MemoryClient) remove(idx int) {
 	d.lock.Lock()
-	defer d.lock.Unlock()
+
+	if idx < 0 || idx >= len(d.overrides) || !d.overrides[idx].valid {
+		d.lock.Unlock()
+		return
+	}
 
 	key := d.overrides[idx].key
-	// mark this pair deleted
-	d.overrides[idx] = kvpair{}
+	d.overrides[idx].valid = false
 
-	// pop all deleted pairs
+	// pop all trailing deleted pairs
 	for l := len(d.overrides); l > 0 && !d.overrides[l-1].valid; l = len(d.overrides) {
 		d.overrides = d.overrides[:l-1]
 	}
 
 	newValue := d.getValueLocked(key)
 	changed := map[Key][]ConstrainedValue{key: newValue}
-	for _, update := range d.subscriptions {
-		update(changed)
+
+	subscribers := make([]ClientUpdateFunc, 0, len(d.subscriptions))
+	for _, sub := range d.subscriptions {
+		subscribers = append(subscribers, sub)
+	}
+
+	d.lock.Unlock()
+
+	// Notify subscribers *outside* the lock
+	for _, updateFunc := range subscribers {
+		updateFunc(changed)
 	}
 }
