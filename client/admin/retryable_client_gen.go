@@ -50,21 +50,6 @@ func (c *retryableClient) AddOrUpdateRemoteCluster(
 	return resp, err
 }
 
-func (c *retryableClient) AddSearchAttributes(
-	ctx context.Context,
-	request *adminservice.AddSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.AddSearchAttributesResponse, error) {
-	var resp *adminservice.AddSearchAttributesResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.AddSearchAttributes(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) AddTasks(
 	ctx context.Context,
 	request *adminservice.AddTasksRequest,
@@ -335,21 +320,6 @@ func (c *retryableClient) GetReplicationMessages(
 	return resp, err
 }
 
-func (c *retryableClient) GetSearchAttributes(
-	ctx context.Context,
-	request *adminservice.GetSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetSearchAttributesResponse, error) {
-	var resp *adminservice.GetSearchAttributesResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.GetSearchAttributes(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
 func (c *retryableClient) GetShard(
 	ctx context.Context,
 	request *adminservice.GetShardRequest,
@@ -599,21 +569,6 @@ func (c *retryableClient) RemoveRemoteCluster(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.RemoveRemoteCluster(ctx, request, opts...)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) RemoveSearchAttributes(
-	ctx context.Context,
-	request *adminservice.RemoveSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveSearchAttributesResponse, error) {
-	var resp *adminservice.RemoveSearchAttributesResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = c.client.RemoveSearchAttributes(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
