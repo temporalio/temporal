@@ -275,12 +275,16 @@ func (n *Node) applyDeletions(
 		node, ok := n.getNodeByPath(path)
 		if !ok {
 			// Already deleted.
-			// this could happen if the mutations passed in includes changes
+			// This could happen when:
+			// - If the mutations passed in include changes
 			// older than the current state of the tree.
+			// - We are already applied the deletion on a parent node.
 			continue
 		}
 
-		return node.delete(path)
+		if err := node.delete(path, &encodedPath); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -299,6 +303,7 @@ func (n *Node) applyUpdates(
 		if !ok {
 			// Node doesn't exist, we need to create it.
 			n.insert(path, updatedNode, n.nodeBase)
+			n.mutation.UpdatedNodes[encodedPath] = updatedNode
 			continue
 		}
 
@@ -331,10 +336,11 @@ func (n *Node) getNodeByPath(
 }
 
 func (n *Node) delete(
-	nodePath []string,
+	currentNodePath []string,
+	currentEncodedPathPtr *string,
 ) error {
 	for childName, childNode := range n.children {
-		if err := childNode.delete(append(nodePath, childName)); err != nil {
+		if err := childNode.delete(append(currentNodePath, childName), nil); err != nil {
 			return err
 		}
 	}
@@ -343,10 +349,17 @@ func (n *Node) delete(
 		delete(n.parent.children, n.nodeName)
 	}
 
-	encodedPath, err := n.pathEncoder.Encode(n, nodePath)
-	if err != nil {
-		return err
+	var encodedPath string
+	if currentEncodedPathPtr == nil {
+		var err error
+		encodedPath, err = n.pathEncoder.Encode(n, currentNodePath)
+		if err != nil {
+			return err
+		}
+	} else {
+		encodedPath = *currentEncodedPathPtr
 	}
+
 	n.mutation.DeletedNodes[encodedPath] = struct{}{}
 
 	return nil
