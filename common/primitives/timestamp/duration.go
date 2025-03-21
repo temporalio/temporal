@@ -31,8 +31,9 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// 250 years. Maximum representable golang time.Duration is approximately 290 years (INT64_MAX * time.Nanosecond)
-const maxAllowedDuration = 250 * 365 * 24 * time.Hour
+// 100 years. Maximum representable golang time.Duration is approximately 290 years (INT64_MAX * time.Nanosecond)
+// ElasticSearch only supports datetimes up to 2262, so cap at 100 years to be safe.
+const maxAllowedDuration = 100 * 365 * 24 * time.Hour
 
 var (
 	errNegativeDuration = fmt.Errorf("negative duration")
