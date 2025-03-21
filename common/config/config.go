@@ -110,8 +110,10 @@ type (
 		HTTPAdditionalForwardedHeaders []string `yaml:"httpAdditionalForwardedHeaders"`
 		// KeepAliveServerConfig parameters for the server
 		KeepAliveServerConfig      *KeepAliveServerParameters        `yaml:"keepAlive"`
-		KeepAliveClientConfig      *KeepAliveClientParameters        `yaml:"keepAliveClient"`
 		KeepAliveEnforcementPolicy *KeepAliveServerEnforcementPolicy `yaml:"keepAliveEnforcementPolicy"`
+		// KeepAliveClientConfig defines the keepalive parameters used by other services
+		// when they create a gRPC client connection to this service.
+		KeepAliveClientConfig *KeepAliveClientParameters `yaml:"keepAliveClient"`
 	}
 
 	// Global contains config items that apply process-wide to all services
@@ -680,7 +682,7 @@ func (p *JWTKeyProvider) HasSourceURIsConfigured() bool {
 func (rpc *RPC) GetKeepAliveServerParameters() keepalive.ServerParameters {
 	// 0 are treated as default values in grpc: https://github.com/grpc/grpc-go/blob/43a4a84abcd406230e7471062dd2ee5c7ba2485d/internal/transport/http2_server.go#L215-L225
 	// the default config is same as grpc default config, same for the below client config and enforcement policy
-	defaultConfig := &keepalive.ServerParameters{
+	defaultConfig := keepalive.ServerParameters{
 		MaxConnectionIdle:     0 * time.Minute,
 		MaxConnectionAge:      0,
 		MaxConnectionAgeGrace: 0 * time.Second,
@@ -688,7 +690,7 @@ func (rpc *RPC) GetKeepAliveServerParameters() keepalive.ServerParameters {
 		Timeout:               20 * time.Second,
 	}
 	if rpc.KeepAliveServerConfig == nil {
-		return *defaultConfig
+		return defaultConfig
 	}
 	if rpc.KeepAliveServerConfig.MaxConnectionIdle != nil {
 		defaultConfig.MaxConnectionIdle = *rpc.KeepAliveServerConfig.MaxConnectionIdle
@@ -705,18 +707,18 @@ func (rpc *RPC) GetKeepAliveServerParameters() keepalive.ServerParameters {
 	if rpc.KeepAliveServerConfig.Timeout != nil {
 		defaultConfig.Timeout = *rpc.KeepAliveServerConfig.Timeout
 	}
-	return *defaultConfig
+	return defaultConfig
 }
 
 func (rpc *RPC) GetKeepAliveClientParameters() keepalive.ClientParameters {
-	defaultConfig := &keepalive.ClientParameters{
+	defaultConfig := keepalive.ClientParameters{
 		Time:                0,
 		Timeout:             20 * time.Second,
 		PermitWithoutStream: true,
 	}
 
 	if rpc.KeepAliveClientConfig == nil {
-		return *defaultConfig
+		return defaultConfig
 	}
 
 	if rpc.KeepAliveClientConfig.Time != nil {
@@ -729,17 +731,17 @@ func (rpc *RPC) GetKeepAliveClientParameters() keepalive.ClientParameters {
 		defaultConfig.PermitWithoutStream = *rpc.KeepAliveClientConfig.PermitWithoutStream
 	}
 
-	return *defaultConfig
+	return defaultConfig
 }
 
 func (rpc *RPC) GetKeepAliveEnforcementPolicy() keepalive.EnforcementPolicy {
-	defaultConfig := &keepalive.EnforcementPolicy{
+	defaultConfig := keepalive.EnforcementPolicy{
 		MinTime:             5 * time.Minute,
 		PermitWithoutStream: false,
 	}
 
 	if rpc.KeepAliveEnforcementPolicy == nil {
-		return *defaultConfig
+		return defaultConfig
 	}
 
 	if rpc.KeepAliveEnforcementPolicy.MinTime != nil {
@@ -749,5 +751,5 @@ func (rpc *RPC) GetKeepAliveEnforcementPolicy() keepalive.EnforcementPolicy {
 		defaultConfig.PermitWithoutStream = *rpc.KeepAliveEnforcementPolicy.PermitWithoutStream
 	}
 
-	return *defaultConfig
+	return defaultConfig
 }
