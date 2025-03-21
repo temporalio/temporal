@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/history/consts"
@@ -99,6 +100,8 @@ func loadScheduler(node *hsm.Node) (Scheduler, error) {
 	}
 
 	return Scheduler{
-		SchedulerInternal: prevScheduler.SchedulerInternal,
+		SchedulerInternal:  common.CloneProto(prevScheduler.SchedulerInternal),
+		cacheConflictToken: prevScheduler.cacheConflictToken,
+		compiledSpec:       prevScheduler.compiledSpec,
 	}, nil
 }
