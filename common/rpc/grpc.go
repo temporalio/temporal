@@ -41,7 +41,6 @@ import (
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -102,12 +101,6 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, opts ...grp
 	}
 	cp.Backoff.MaxDelay = MaxBackoffDelay
 
-	kp := keepalive.ClientParameters{
-		Time:                time.Minute,
-		Timeout:             10 * time.Second,
-		PermitWithoutStream: true,
-	}
-
 	dialOptions := []grpc.DialOption{
 		grpcSecureOpt,
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxInternodeRecvPayloadSize)),
@@ -122,7 +115,6 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, opts ...grp
 		grpc.WithDefaultServiceConfig(DefaultServiceConfig),
 		grpc.WithDisableServiceConfig(),
 		grpc.WithConnectParams(cp),
-		grpc.WithKeepaliveParams(kp),
 	}
 	dialOptions = append(dialOptions, opts...)
 

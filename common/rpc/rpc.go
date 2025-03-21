@@ -149,6 +149,9 @@ func (d *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(serverConfig)))
 	}
+	kep := d.config.GetKeepAliveEnforcementPolicy()
+	kp := d.config.GetKeepAliveServerParameters()
+	opts = append(opts, grpc.KeepaliveEnforcementPolicy(kep), grpc.KeepaliveParams(kp))
 
 	return opts, nil
 }

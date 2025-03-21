@@ -405,6 +405,7 @@ func RPCFactoryProvider(
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
+	options = append(options, grpc.WithKeepaliveParams(svcCfg.RPC.GetKeepAliveClientParameters()))
 
 	return rpc.NewFactory(
 		&svcCfg.RPC,
