@@ -69,7 +69,7 @@ func (s *VersionWorkflowSuite) Test_SyncState_Batch_SingleTaskQueue() {
 }
 
 func (s *VersionWorkflowSuite) Test_SyncState_Batch_MultipleTaskQueues() {
-	workers := 80
+	workers := 500
 	s.syncStateInBatches(workers)
 }
 
