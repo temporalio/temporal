@@ -34,6 +34,7 @@
 package replication
 
 import (
+	context "context"
 	reflect "reflect"
 
 	enums "go.temporal.io/server/api/enums/v1"
@@ -77,13 +78,15 @@ func (mr *MockSenderFlowControllerMockRecorder) RefreshReceiverFlowControlInfo(s
 }
 
 // Wait mocks base method.
-func (m *MockSenderFlowController) Wait(priority enums.TaskPriority) {
+func (m *MockSenderFlowController) Wait(ctx context.Context, priority enums.TaskPriority) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Wait", priority)
+	ret := m.ctrl.Call(m, "Wait", ctx, priority)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Wait indicates an expected call of Wait.
-func (mr *MockSenderFlowControllerMockRecorder) Wait(priority any) *gomock.Call {
+func (mr *MockSenderFlowControllerMockRecorder) Wait(ctx, priority any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Wait", reflect.TypeOf((*MockSenderFlowController)(nil).Wait), priority)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Wait", reflect.TypeOf((*MockSenderFlowController)(nil).Wait), ctx, priority)
 }
