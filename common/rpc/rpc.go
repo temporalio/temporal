@@ -208,7 +208,7 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 }
 
 // CreateRemoteFrontendGRPCConnection creates connection for gRPC calls
-func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string, dialOptions ...grpc.DialOption) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -224,7 +224,7 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 		}
 	}
 
-	return d.dial(rpcAddress, tlsClientConfig)
+	return d.dial(rpcAddress, tlsClientConfig, dialOptions...)
 }
 
 // CreateLocalFrontendGRPCConnection creates connection for internal frontend calls
@@ -233,7 +233,7 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 }
 
 // CreateInternodeGRPCConnection creates connection for gRPC calls
-func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
+func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string, dialOptions ...grpc.DialOption) *grpc.ClientConn {
 	if c, ok := d.interNodeGrpcConnections.Get(hostName).(*grpc.ClientConn); ok {
 		return c
 	}
@@ -246,13 +246,14 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 			return nil
 		}
 	}
-	c := d.dial(hostName, tlsClientConfig)
+	c := d.dial(hostName, tlsClientConfig, dialOptions...)
 	d.interNodeGrpcConnections.Put(hostName, c)
 	return c
 }
 
-func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.ClientConn {
-	connection, err := Dial(hostName, tlsClientConfig, d.logger, d.dialOptions...)
+func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOptions ...grpc.DialOption) *grpc.ClientConn {
+	dialOptions = append(d.dialOptions, dialOptions...)
+	connection, err := Dial(hostName, tlsClientConfig, d.logger, dialOptions...)
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 		return nil

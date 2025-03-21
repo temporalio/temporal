@@ -62,7 +62,7 @@ func (f *RPCFactory) GetGRPCListener() net.Listener {
 	return f.listener
 }
 
-func (f *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (f *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string, dialOptions ...grpc.DialOption) *grpc.ClientConn {
 	return f.dial(rpcAddress)
 }
 
@@ -74,7 +74,7 @@ func (f *RPCFactory) CreateLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 	panic("unimplemented in the nettest package")
 }
 
-func (f *RPCFactory) CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (f *RPCFactory) CreateInternodeGRPCConnection(rpcAddress string, dialOptions ...grpc.DialOption) *grpc.ClientConn {
 	return f.dial(rpcAddress)
 }
 

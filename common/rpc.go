@@ -38,9 +38,9 @@ type RPCFactory interface {
 	GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error)
 	GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error)
 	GetGRPCListener() net.Listener
-	CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn
+	CreateRemoteFrontendGRPCConnection(rpcAddress string, dialOptions ...grpc.DialOption) *grpc.ClientConn
 	CreateLocalFrontendGRPCConnection() *grpc.ClientConn
-	CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn
+	CreateInternodeGRPCConnection(rpcAddress string, dialOptions ...grpc.DialOption) *grpc.ClientConn
 	CreateLocalFrontendHTTPClient() (*FrontendHTTPClient, error)
 }
 
