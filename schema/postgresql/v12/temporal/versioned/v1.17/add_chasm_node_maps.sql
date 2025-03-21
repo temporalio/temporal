@@ -7,7 +7,7 @@ CREATE TABLE chasm_node_maps (
 --
   metadata BYTEA NOT NULL,
   metadata_encoding VARCHAR(16),
-  data BYTEA NOT NULL,
+  data BYTEA,
   data_encoding VARCHAR(16),
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, chasm_path)
 );
