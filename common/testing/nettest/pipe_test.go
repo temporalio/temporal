@@ -25,44 +25,57 @@
 package nettest_test
 
 import (
-	"context"
-	"fmt"
-	"io"
-	"net"
-	"net/http"
+	"sync"
+	"testing"
 
-	"go.temporal.io/server/internal/nettest"
+	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/testing/nettest"
 )
 
-func ExampleListener() {
+func TestPipe_Accept(t *testing.T) {
+	t.Parallel()
+
 	pipe := nettest.NewPipe()
-	listener := nettest.NewListener(pipe)
-	server := http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte("hello"))
-		}),
-	}
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	wg.Add(1)
 
 	go func() {
-		_ = server.Serve(listener)
+		defer wg.Done()
+
+		c, err := pipe.Accept(nil)
+		assert.NoError(t, err)
+
+		defer func() {
+			assert.NoError(t, c.Close())
+		}()
 	}()
 
-	client := http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				return pipe.Connect(ctx.Done())
-			},
-		},
-	}
-	resp, _ := client.Get("http://fake")
+	c, err := pipe.Connect(nil)
+	assert.NoError(t, err)
 
 	defer func() {
-		_ = resp.Body.Close()
+		assert.NoError(t, c.Close())
 	}()
+}
 
-	buf, _ := io.ReadAll(resp.Body)
-	_ = server.Close()
+func TestPipe_ClientCanceled(t *testing.T) {
+	t.Parallel()
 
-	fmt.Println(string(buf[:]))
-	// Output: hello
+	pipe := nettest.NewPipe()
+	done := make(chan struct{})
+	close(done) // hi efe
+	_, err := pipe.Connect(done)
+	assert.ErrorIs(t, err, nettest.ErrCanceled)
+}
+
+func TestPipe_ServerCanceled(t *testing.T) {
+	t.Parallel()
+
+	pipe := nettest.NewPipe()
+	done := make(chan struct{})
+	close(done)
+	_, err := pipe.Accept(done)
+	assert.ErrorIs(t, err, nettest.ErrCanceled)
 }
