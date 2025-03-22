@@ -43,6 +43,8 @@ const (
 	ClientNamePHPSDK        = "temporal-php"
 	ClientNameTypeScriptSDK = "temporal-typescript"
 	ClientNamePythonSDK     = "temporal-python"
+	ClientNameDotNet        = "temporal-dotnet"
+	ClientNameRuby          = "temporal-ruby"
 	ClientNameCLI           = "temporal-cli"
 	ClientNameUI            = "temporal-ui"
 	ClientNameNexusGoSDK    = "Nexus-go-sdk"
@@ -72,6 +74,9 @@ var (
 		ClientNameJavaSDK:       "<2.0.0",
 		ClientNamePHPSDK:        "<2.0.0",
 		ClientNameTypeScriptSDK: "<2.0.0",
+		ClientNamePythonSDK:     "<2.0.0",
+		ClientNameDotNet:        "<2.0.0",
+		ClientNameRuby:          "<2.0.0",
 		ClientNameCLI:           "<2.0.0",
 		ClientNameServer:        "<2.0.0",
 		ClientNameUI:            "<3.0.0",
