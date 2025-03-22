@@ -245,7 +245,6 @@ func (c *TemporalImpl) Start() error {
 	if err := c.createSystemNamespace(); err != nil {
 		return err
 	}
-
 	c.startMatching()
 	c.startHistory()
 	c.startFrontend()
@@ -427,6 +426,7 @@ func (c *TemporalImpl) startHistory() {
 				serviceName,
 				c.mockAdminClient,
 			),
+			fx.Provide(c.configProvider(primitives.HistoryService)),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
@@ -488,6 +488,7 @@ func (c *TemporalImpl) startMatching() {
 				serviceName,
 				c.mockAdminClient,
 			),
+			fx.Provide(c.configProvider(primitives.MatchingService)),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
@@ -545,11 +546,13 @@ func (c *TemporalImpl) startWorker() {
 		var namespaceRegistry namespace.Registry
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
+
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
 				c.mockAdminClient,
 			),
+			fx.Provide(c.configProvider(primitives.WorkerService)),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
 			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
@@ -656,6 +659,20 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 	}
 }
 
+func (c *TemporalImpl) configProvider(serviceName primitives.ServiceName) func() *config.Config {
+	return func() *config.Config {
+		return &config.Config{
+			Services: map[string]config.Service{
+				string(serviceName): {
+					RPC: config.RPC{
+						HTTPPort: int(mustPortFromAddress(c.FrontendHTTPAddress())),
+					},
+				},
+			},
+		}
+	}
+}
+
 func (c *TemporalImpl) newRPCFactory(
 	sn primitives.ServiceName,
 	grpcHostPort listenHostPort,
@@ -725,7 +742,7 @@ func (p *clientFactoryProvider) NewFactory(
 	throttledLogger log.Logger,
 ) client.Factory {
 	f := client.NewFactoryProvider().NewFactory(
-		nil,
+		cfg,
 		rpcFactory,
 		monitor,
 		metricsHandler,
