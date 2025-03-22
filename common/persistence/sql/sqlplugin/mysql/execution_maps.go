@@ -648,6 +648,8 @@ func (mdb *db) DeleteAllFromSignalsRequestedSets(
 
 var (
 	chasmNodeColumns = []string{
+		"metadata",
+		"metadata_encoding",
 		"data",
 		"data_encoding",
 	}

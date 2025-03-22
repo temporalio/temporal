@@ -411,7 +411,7 @@ type (
 		ChildExecutionInfos map[int64]*commonpb.DataBlob  `json:",omitempty"` // ChildExecutionInfo
 		RequestCancelInfos  map[int64]*commonpb.DataBlob  `json:",omitempty"` // RequestCancelInfo
 		SignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"` // SignalInfo
-		ChasmNodes          map[string]*commonpb.DataBlob `json:",omitempty"` // persistencespb.ChasmNode
+		ChasmNodes          map[string]InternalChasmNode  `json:",omitempty"` // persistencespb.ChasmNode
 		SignalRequestedIDs  []string                      `json:",omitempty"`
 		ExecutionInfo       *commonpb.DataBlob            // WorkflowExecutionInfo
 		ExecutionState      *commonpb.DataBlob            // WorkflowExecutionState
@@ -463,7 +463,7 @@ type (
 		DeleteRequestCancelInfos  map[int64]struct{}            `json:",omitempty"`
 		UpsertSignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"`
 		DeleteSignalInfos         map[int64]struct{}            `json:",omitempty"`
-		UpsertChasmNodes          map[string]*commonpb.DataBlob `json:",omitempty"`
+		UpsertChasmNodes          map[string]InternalChasmNode  `json:",omitempty"`
 		DeleteChasmNodes          map[string]struct{}           `json:",omitempty"`
 		UpsertSignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
 		DeleteSignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
@@ -498,7 +498,7 @@ type (
 		ChildExecutionInfos map[int64]*commonpb.DataBlob  `json:",omitempty"`
 		RequestCancelInfos  map[int64]*commonpb.DataBlob  `json:",omitempty"`
 		SignalInfos         map[int64]*commonpb.DataBlob  `json:",omitempty"`
-		ChasmNodes          map[string]*commonpb.DataBlob `json:",omitempty"`
+		ChasmNodes          map[string]InternalChasmNode  `json:",omitempty"`
 		SignalRequestedIDs  map[string]struct{}           `json:",omitempty"`
 
 		Tasks map[tasks.Category][]InternalHistoryTask `json:",omitempty"`
@@ -506,6 +506,19 @@ type (
 		Condition int64
 
 		Checksum *commonpb.DataBlob
+	}
+
+	InternalChasmNode struct {
+		Metadata *commonpb.DataBlob
+		Data     *commonpb.DataBlob
+
+		// Only set when Cassandra is used as the persistence layer. When set, Metadata
+		// and Data will be unset. *No* code outside of the ExecutionManager or Cassandra
+		// store should reference this field.
+		//
+		// As an optimization to avoid an extra encode/deocde step, the Cassandra version
+		// is encoded in a single blob up-front.
+		CassandraBlob *commonpb.DataBlob
 	}
 
 	InternalGetCurrentExecutionResponse struct {

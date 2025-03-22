@@ -572,7 +572,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 	state.SignalInfos = signalInfos
 	state.SignalRequestedIDs = gocql.UUIDsToStringSlice(result["signal_requested"])
 
-	chasmNodeBlobs := make(map[string]*commonpb.DataBlob)
+	chasmNodeBlobs := make(map[string]p.InternalChasmNode)
 	chasmNodeEncoding, ok := result["chasm_node_map_encoding"].(string)
 	if !ok {
 		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map_encoding type")
@@ -582,7 +582,9 @@ func (d *MutableStateStore) GetWorkflowExecution(
 		return nil, serviceerror.NewInternal("GetWorkflowExecution failed: unknown chasm_node_map type")
 	}
 	for key, value := range chasmNodeBytes {
-		chasmNodeBlobs[key] = p.NewDataBlob(value, chasmNodeEncoding)
+		chasmNodeBlobs[key] = p.InternalChasmNode{
+			CassandraBlob: p.NewDataBlob(value, chasmNodeEncoding),
+		}
 	}
 	state.ChasmNodes = chasmNodeBlobs
 

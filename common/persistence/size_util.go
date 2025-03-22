@@ -62,6 +62,18 @@ func sizeOfInt64BlobMap(
 	return size
 }
 
+// sizeOfChasmNodeMap is a special case since the persistence interface separates
+// a node's metadata and data fields.
+func sizeOfChasmNodeMap(
+	nodeMap map[string]InternalChasmNode,
+) int {
+	size := 0
+	for path, node := range nodeMap {
+		size += len(path) + node.Metadata.Size() + node.Data.Size()
+	}
+	return size
+}
+
 func sizeOfStringBlobMap(
 	kvBlob map[string]*commonpb.DataBlob,
 ) int {

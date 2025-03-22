@@ -66,19 +66,29 @@ func (s *nodeSuite) SetupTest() {
 func (s *nodeSuite) TestNewTree() {
 	persistenceNodes := map[string]*persistencespb.ChasmNode{
 		"": {
-			InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+			},
 		},
 		"child1": {
-			InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+			},
 		},
 		"child2": {
-			InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
+			},
 		},
 		"child1/grandchild1": {
-			InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 4},
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 4},
+			},
 		},
 		"child2/grandchild1": {
-			InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 5},
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 5},
+			},
 		},
 	}
 	expectedPreorderNodes := []*persistencespb.ChasmNode{

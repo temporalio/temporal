@@ -128,13 +128,15 @@ func newChasmNodeMapsAllFilter() sqlplugin.ChasmNodeMapsAllFilter {
 
 func newChasmRowFromFilter(filter sqlplugin.ChasmNodeMapsAllFilter) sqlplugin.ChasmNodeMapsRow {
 	return sqlplugin.ChasmNodeMapsRow{
-		ShardID:      filter.ShardID,
-		NamespaceID:  filter.NamespaceID,
-		WorkflowID:   filter.WorkflowID,
-		RunID:        filter.RunID,
-		ChasmPath:    primitives.NewUUID().String(),
-		Data:         []byte(primitives.NewUUID().String()),
-		DataEncoding: "utf8",
+		ShardID:          filter.ShardID,
+		NamespaceID:      filter.NamespaceID,
+		WorkflowID:       filter.WorkflowID,
+		RunID:            filter.RunID,
+		ChasmPath:        primitives.NewUUID().String(),
+		Metadata:         []byte(primitives.NewUUID().String()),
+		MetadataEncoding: "utf8",
+		Data:             []byte(primitives.NewUUID().String()),
+		DataEncoding:     "utf8",
 	}
 }
 

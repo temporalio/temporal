@@ -119,8 +119,13 @@ type (
 		NexusEndpointToBlob(endpoint *persistencespb.NexusEndpoint, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error)
 
+		// ChasmNodeToBlob returns a single encoded blob for the node.
 		ChasmNodeToBlob(node *persistencespb.ChasmNode, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		ChasmNodeFromBlob(data *commonpb.DataBlob) (*persistencespb.ChasmNode, error)
+		ChasmNodeFromBlob(blob *commonpb.DataBlob) (*persistencespb.ChasmNode, error)
+
+		// ChasmNodeToBlobs returns the metadata blob first, followed by the data blob.
+		ChasmNodeToBlobs(node *persistencespb.ChasmNode, encodingType enumspb.EncodingType) (*commonpb.DataBlob, *commonpb.DataBlob, error)
+		ChasmNodeFromBlobs(metadata *commonpb.DataBlob, data *commonpb.DataBlob) (*persistencespb.ChasmNode, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -578,13 +583,31 @@ func (t *serializerImpl) NexusEndpointFromBlob(data *commonpb.DataBlob) (*persis
 	return result, ProtoDecodeBlob(data, result)
 }
 
+func (t *serializerImpl) ChasmNodeToBlobs(node *persistencespb.ChasmNode, encodingType enumspb.EncodingType) (*commonpb.DataBlob, *commonpb.DataBlob, error) {
+	metadata, err := ProtoEncodeBlob(node.Metadata, encodingType)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return metadata, node.Data, nil
+}
+
+func (t *serializerImpl) ChasmNodeFromBlobs(metadata *commonpb.DataBlob, data *commonpb.DataBlob) (*persistencespb.ChasmNode, error) {
+	result := &persistencespb.ChasmNode{
+		Metadata: &persistencespb.ChasmNodeMetadata{},
+		Data:     data,
+	}
+
+	return result, ProtoDecodeBlob(metadata, result.Metadata)
+}
+
 func (t *serializerImpl) ChasmNodeToBlob(node *persistencespb.ChasmNode, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return ProtoEncodeBlob(node, encodingType)
 }
 
-func (t *serializerImpl) ChasmNodeFromBlob(data *commonpb.DataBlob) (*persistencespb.ChasmNode, error) {
+func (t *serializerImpl) ChasmNodeFromBlob(blob *commonpb.DataBlob) (*persistencespb.ChasmNode, error) {
 	result := &persistencespb.ChasmNode{}
-	return result, ProtoDecodeBlob(data, result)
+	return result, ProtoDecodeBlob(blob, result)
 }
 
 func ProtoDecodeBlob(data *commonpb.DataBlob, result proto.Message) error {

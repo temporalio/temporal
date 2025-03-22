@@ -1706,13 +1706,14 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 
 	chasmNodes := map[string]*persistencespb.ChasmNode{
 		"component-path": {
-			InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
-			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 90},
-			Attributes: &persistencespb.ChasmNode_ComponentAttributes{
-				ComponentAttributes: &persistencespb.ChasmComponentAttributes{
-					Data: &commonpb.DataBlob{Data: []byte("test-data")},
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 90},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
 				},
 			},
+			Data: &commonpb.DataBlob{Data: []byte("test-data")},
 		},
 	}
 
@@ -2492,11 +2493,12 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
 						UpdatedNodes: map[string]*persistencespb.ChasmNode{
 							"node-path": {
-								Attributes: &persistencespb.ChasmNode_DataAttributes{
-									DataAttributes: &persistencespb.ChasmDataAttributes{
-										Data: &commonpb.DataBlob{Data: []byte("test-data")},
+								Metadata: &persistencespb.ChasmNodeMetadata{
+									Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
+										DataAttributes: &persistencespb.ChasmDataAttributes{},
 									},
 								},
+								Data: &commonpb.DataBlob{Data: []byte("test-data")},
 							},
 						},
 					}, nil),
@@ -4520,13 +4522,12 @@ func (s *mutableStateSuite) TestApplyMutation() {
 	targetMockChasmTree := historyi.NewMockChasmTree(s.controller)
 	updateChasmNodes := map[string]*persistencespb.ChasmNode{
 		"node-path": {
-			InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
-			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
-			Attributes: &persistencespb.ChasmNode_DataAttributes{
-				DataAttributes: &persistencespb.ChasmDataAttributes{
-					Data: &commonpb.DataBlob{Data: []byte("test-data")},
-				},
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+				Attributes:                    &persistencespb.ChasmNodeMetadata_DataAttributes{},
 			},
+			Data: &commonpb.DataBlob{Data: []byte("test-data")},
 		},
 	}
 	targetMockChasmTree.EXPECT().Snapshot(nil).Return(chasm.NodesSnapshot{

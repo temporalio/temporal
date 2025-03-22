@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -577,7 +578,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		UpsertSignalInfos: make(map[int64]*commonpb.DataBlob, len(input.UpsertSignalInfos)),
 		DeleteSignalInfos: input.DeleteSignalInfos,
 
-		UpsertChasmNodes: make(map[string]*commonpb.DataBlob, len(input.UpsertChasmNodes)),
+		UpsertChasmNodes: make(map[string]InternalChasmNode, len(input.UpsertChasmNodes)),
 		DeleteChasmNodes: input.DeleteChasmNodes,
 
 		UpsertSignalRequestedIDs: input.UpsertSignalRequestedIDs,
@@ -645,13 +646,11 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		result.UpsertSignalInfos[key] = blob
 	}
 
-	for key, node := range input.UpsertChasmNodes {
-		blob, err := m.serializer.ChasmNodeToBlob(node, enumspb.ENCODING_TYPE_PROTO3)
-		if err != nil {
-			return nil, err
-		}
-		result.UpsertChasmNodes[key] = blob
+	nodeMap, err := m.makeInternalChasmNodeMap(input.UpsertChasmNodes)
+	if err != nil {
+		return nil, err
 	}
+	result.UpsertChasmNodes = nodeMap
 
 	if len(input.NewBufferedEvents) > 0 {
 		result.NewBufferedEvents, err = m.serializer.SerializeEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
@@ -691,7 +690,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		ChildExecutionInfos: make(map[int64]*commonpb.DataBlob, len(input.ChildExecutionInfos)),
 		RequestCancelInfos:  make(map[int64]*commonpb.DataBlob, len(input.RequestCancelInfos)),
 		SignalInfos:         make(map[int64]*commonpb.DataBlob, len(input.SignalInfos)),
-		ChasmNodes:          make(map[string]*commonpb.DataBlob, len(input.ChasmNodes)),
+		ChasmNodes:          make(map[string]InternalChasmNode, len(input.ChasmNodes)),
 
 		ExecutionInfo:      input.ExecutionInfo,
 		ExecutionState:     input.ExecutionState,
@@ -755,13 +754,11 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 	for key := range input.SignalRequestedIDs {
 		result.SignalRequestedIDs[key] = struct{}{}
 	}
-	for key, node := range input.ChasmNodes {
-		blob, err := m.serializer.ChasmNodeToBlob(node, enumspb.ENCODING_TYPE_PROTO3)
-		if err != nil {
-			return nil, err
-		}
-		result.ChasmNodes[key] = blob
+	nodeMap, err := m.makeInternalChasmNodeMap(input.ChasmNodes)
+	if err != nil {
+		return nil, err
 	}
+	result.ChasmNodes = nodeMap
 
 	result.Checksum, err = m.serializer.ChecksumToBlob(input.Checksum, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
@@ -1069,11 +1066,19 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 		}
 		state.SignalInfos[key] = info
 	}
-	for key, blob := range internState.ChasmNodes {
-		node, err := m.serializer.ChasmNodeFromBlob(blob)
+	for key, internal := range internState.ChasmNodes {
+		var node *persistencespb.ChasmNode
+		var err error
+
+		if internal.CassandraBlob != nil {
+			node, err = m.serializer.ChasmNodeFromBlob(internal.CassandraBlob)
+		} else {
+			node, err = m.serializer.ChasmNodeFromBlobs(internal.Metadata, internal.Data)
+		}
 		if err != nil {
 			return nil, err
 		}
+
 		state.ChasmNodes[key] = node
 	}
 	var err error
@@ -1187,4 +1192,40 @@ func validateTaskRange(
 	}
 
 	return nil
+}
+
+func (m *executionManagerImpl) makeInternalChasmNodeMap(
+	nodes map[string]*persistencespb.ChasmNode,
+) (map[string]InternalChasmNode, error) {
+	res := make(map[string]InternalChasmNode, len(nodes))
+	isCassandra := strings.Contains(m.GetName(), "cassandra")
+
+	for path, node := range nodes {
+		var internal InternalChasmNode
+
+		// If we're running on Cassandra, set a single blob since that's how we store it.
+		if isCassandra {
+			blob, err := m.serializer.ChasmNodeToBlob(node, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return nil, err
+			}
+			internal = InternalChasmNode{
+				CassandraBlob: blob,
+			}
+		} else {
+			// Otherwise, split the node into separate blobs.
+			metadata, data, err := m.serializer.ChasmNodeToBlobs(node, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return nil, err
+			}
+			internal = InternalChasmNode{
+				Metadata: metadata,
+				Data:     data,
+			}
+		}
+
+		res[path] = internal
+	}
+
+	return res, nil
 }

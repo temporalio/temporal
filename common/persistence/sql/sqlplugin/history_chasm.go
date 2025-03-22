@@ -34,13 +34,15 @@ import (
 type (
 	// ChasmNodeMapsRow represents a row in the chasm_node_maps table.
 	ChasmNodeMapsRow struct {
-		ShardID      int32
-		NamespaceID  primitives.UUID
-		WorkflowID   string
-		RunID        primitives.UUID
-		ChasmPath    string
-		Data         []byte
-		DataEncoding string
+		ShardID          int32
+		NamespaceID      primitives.UUID
+		WorkflowID       string
+		RunID            primitives.UUID
+		ChasmPath        string
+		Metadata         []byte
+		MetadataEncoding string
+		Data             []byte
+		DataEncoding     string
 	}
 
 	// ChasmNodeMapsFilter represents parameters to selecting a particular subset of
