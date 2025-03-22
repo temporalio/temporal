@@ -461,6 +461,12 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 	executionInfo.Memo = nil
 	executionInfo.SearchAttributes = nil
 	executionInfo.RelocatableAttributesRemoved = true
+
+	if t.shardContext.GetConfig().EnableUpdateClosedWorkflowByMutation() {
+		return weContext.UpdateWorkflowExecutionAsPassive(ctx, t.shardContext)
+	}
+
+	// TODO: remove following code once EnableUpdateClosedWorkflowByMutation config is deprecated.
 	return weContext.SetWorkflowExecution(ctx, t.shardContext)
 }
 
