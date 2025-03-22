@@ -26,9 +26,16 @@ package chasm
 
 import (
 	"reflect"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 )
+
+// Used by reflection.
+// TODO: add test to check this
+const chasmFieldTypePrefix = "chasm.Field["
+
+const fieldNameTag = "name"
 
 // This struct needs to be create via reflection
 // but reflection can't set prviate fields...
@@ -36,11 +43,22 @@ type Field[T any] struct {
 	Internal fieldInternal
 }
 
-type fieldInternal struct {
-	fieldType int // data, component, componentPointer
-	component reflect.Value
+// TODO: add unit test to check this.
+const internalFieldName = "Internal"
 
-	// backingNode *nodeInfo
+type fieldType int
+
+const (
+	fieldTypeComponent fieldType = iota + 1
+	fieldTypeComponentPointer
+	fieldTypeData
+)
+
+type fieldInternal struct {
+	fieldType fieldType
+	value     any // Component | Data | Collection
+
+	node *Node
 }
 
 func (d *Field[T]) Get(Context) (T, error) {
@@ -61,7 +79,12 @@ func NewDataField[D proto.Message](
 	ctx MutableContext,
 	d D,
 ) *Field[D] {
-	return &Field[D]{}
+	return &Field[D]{
+		Internal: fieldInternal{
+			fieldType: fieldTypeData,
+			value:     d,
+		},
+	}
 }
 
 type componentFieldOptions struct {
@@ -83,7 +106,8 @@ func NewComponentField[C Component](
 ) *Field[C] {
 	return &Field[C]{
 		Internal: fieldInternal{
-			component: reflect.ValueOf(c),
+			fieldType: fieldTypeComponent,
+			value:     c,
 		},
 	}
 }
@@ -102,4 +126,17 @@ func NewDataPointerField[D proto.Message](
 	panic("not implemented")
 }
 
+// Used by reflection.
+// TODO: add test to check this.
+const chasmCollectionTypePrefix = "chasm.Collection["
+
 type Collection[T any] map[string]*Field[T]
+
+func genericTypePrefix(t reflect.Type) string {
+	tn := t.String()
+	bracketPos := strings.Index(tn, "[")
+	if bracketPos == -1 {
+		return ""
+	}
+	return tn[:bracketPos+1]
+}
