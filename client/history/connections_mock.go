@@ -64,17 +64,22 @@ func (m *MockRPCFactory) EXPECT() *MockRPCFactoryMockRecorder {
 }
 
 // CreateInternodeGRPCConnection mocks base method.
-func (m *MockRPCFactory) CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (m *MockRPCFactory) CreateInternodeGRPCConnection(rpcAddress string, dialOptions ...grpc.DialOption) *grpc.ClientConn {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateInternodeGRPCConnection", rpcAddress)
+	varargs := []any{rpcAddress}
+	for _, a := range dialOptions {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CreateInternodeGRPCConnection", varargs...)
 	ret0, _ := ret[0].(*grpc.ClientConn)
 	return ret0
 }
 
 // CreateInternodeGRPCConnection indicates an expected call of CreateInternodeGRPCConnection.
-func (mr *MockRPCFactoryMockRecorder) CreateInternodeGRPCConnection(rpcAddress any) *gomock.Call {
+func (mr *MockRPCFactoryMockRecorder) CreateInternodeGRPCConnection(rpcAddress any, dialOptions ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateInternodeGRPCConnection", reflect.TypeOf((*MockRPCFactory)(nil).CreateInternodeGRPCConnection), rpcAddress)
+	varargs := append([]any{rpcAddress}, dialOptions...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateInternodeGRPCConnection", reflect.TypeOf((*MockRPCFactory)(nil).CreateInternodeGRPCConnection), varargs...)
 }
 
 // MockconnectionPool is a mock of connectionPool interface.
