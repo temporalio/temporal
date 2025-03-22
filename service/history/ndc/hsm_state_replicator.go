@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
@@ -220,7 +221,7 @@ func (r *HSMStateReplicatorImpl) shouldSyncNode(
 	incomingLastUpdated := incomingNode.InternalRepr().LastUpdateVersionedTransition
 
 	if currentLastUpdated.TransitionCount != 0 && incomingLastUpdated.TransitionCount != 0 {
-		return workflow.CompareVersionedTransition(currentLastUpdated, incomingLastUpdated) < 0, nil
+		return transitionhistory.Compare(currentLastUpdated, incomingLastUpdated) < 0, nil
 	}
 
 	if currentLastUpdated.NamespaceFailoverVersion == incomingLastUpdated.NamespaceFailoverVersion {
