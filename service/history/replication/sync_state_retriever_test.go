@@ -239,7 +239,9 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		Return(chasm.NodesSnapshot{
 			Nodes: map[string]*persistencespb.ChasmNode{
 				"node-path": {
-					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
+					Metadata: &persistencespb.ChasmNodeMetadata{
+						LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 2, TransitionCount: 13},
+					},
 				},
 			},
 		})
