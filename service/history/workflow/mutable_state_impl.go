@@ -1747,11 +1747,12 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.Stamp = incomingActivityInfo.GetStamp()
 
 	ai.Paused = incomingActivityInfo.GetPaused()
-
-	ai.RetryInitialInterval = incomingActivityInfo.GetRetryInitialInterval()
-	ai.RetryMaximumInterval = incomingActivityInfo.GetRetryMaximumInterval()
-	ai.RetryMaximumAttempts = incomingActivityInfo.GetRetryMaximumAttempts()
-	ai.RetryBackoffCoefficient = incomingActivityInfo.GetRetryBackoffCoefficient()
+	if incomingActivityInfo.RetryInitialInterval != nil {
+		ai.RetryInitialInterval = incomingActivityInfo.GetRetryInitialInterval()
+		ai.RetryMaximumInterval = incomingActivityInfo.GetRetryMaximumInterval()
+		ai.RetryMaximumAttempts = incomingActivityInfo.GetRetryMaximumAttempts()
+		ai.RetryBackoffCoefficient = incomingActivityInfo.GetRetryBackoffCoefficient()
+	}
 
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
@@ -2132,6 +2133,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	firstRunID string,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
 	taskQueue := previousExecutionInfo.TaskQueue
@@ -2215,6 +2217,8 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		// No need to request eager execution here (for now)
 		RequestEagerExecution: false,
 		CompletionCallbacks:   completionCallbacks,
+		Links:                 links,
+		Priority:              previousExecutionInfo.Priority,
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -2544,6 +2548,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	}
 
 	ms.executionInfo.MostRecentWorkerVersionStamp = event.SourceVersionStamp
+	ms.executionInfo.Priority = event.Priority
 
 	ms.approximateSize += ms.executionInfo.Size()
 	ms.approximateSize += ms.executionState.Size()
@@ -3288,6 +3293,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
 		Attempt:                 1,
 		ActivityType:            attributes.GetActivityType(),
+		Priority:                attributes.Priority,
 	}
 
 	if attributes.UseWorkflowBuildId {
@@ -4934,6 +4940,11 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		return nil, nil, err
 	}
 
+	startEvent, err := ms.GetStartEvent(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	if _, err = newMutableState.addWorkflowExecutionStartedEventForContinueAsNew(
 		parentInfo,
 		&newExecution,
@@ -4941,6 +4952,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		command,
 		firstRunID,
 		rootInfo,
+		startEvent.Links,
 	); err != nil {
 		return nil, nil, err
 	}
@@ -5056,6 +5068,7 @@ func (ms *MutableStateImpl) ApplyStartChildWorkflowExecutionInitiatedEvent(
 		NamespaceId:           attributes.GetNamespaceId(),
 		WorkflowTypeName:      attributes.GetWorkflowType().GetName(),
 		ParentClosePolicy:     attributes.GetParentClosePolicy(),
+		Priority:              attributes.Priority,
 	}
 
 	ms.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci

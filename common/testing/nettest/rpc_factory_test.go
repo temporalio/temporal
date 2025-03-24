@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/internal/nettest"
+	"go.temporal.io/server/common/testing/nettest"
 	"google.golang.org/grpc"
 )
 

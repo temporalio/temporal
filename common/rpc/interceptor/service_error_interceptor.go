@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2025 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,47 +20,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest_test
+package interceptor
 
 import (
 	"context"
-	"fmt"
-	"io"
-	"net"
-	"net/http"
+	"errors"
 
-	"go.temporal.io/server/internal/nettest"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/persistence/serialization"
+	"google.golang.org/grpc"
 )
 
-func ExampleListener() {
-	pipe := nettest.NewPipe()
-	listener := nettest.NewListener(pipe)
-	server := http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte("hello"))
-		}),
+func ServiceErrorInterceptor(
+	ctx context.Context,
+	req interface{},
+	_ *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+
+	resp, err := handler(ctx, req)
+
+	var deserializationError *serialization.DeserializationError
+	var serializationError *serialization.SerializationError
+	// convert serialization errors to be captured as serviceerrors across gRPC calls
+	if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
+		err = serviceerror.NewDataLoss(err.Error())
 	}
-
-	go func() {
-		_ = server.Serve(listener)
-	}()
-
-	client := http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				return pipe.Connect(ctx.Done())
-			},
-		},
-	}
-	resp, _ := client.Get("http://fake")
-
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	buf, _ := io.ReadAll(resp.Body)
-	_ = server.Close()
-
-	fmt.Println(string(buf[:]))
-	// Output: hello
+	return resp, serviceerror.ToStatus(err).Err()
 }

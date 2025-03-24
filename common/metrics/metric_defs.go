@@ -601,10 +601,16 @@ var (
 		"service_requests",
 		WithDescription("The number of RPC requests received by the service."),
 	)
-	ServicePendingRequests                   = NewGaugeDef("service_pending_requests")
-	ServiceFailures                          = NewCounterDef("service_errors")
-	ServicePanic                             = NewCounterDef("service_panics")
-	ServiceErrorWithType                     = NewCounterDef("service_error_with_type")
+	ServicePendingRequests = NewGaugeDef("service_pending_requests")
+	ServiceFailures        = NewCounterDef(
+		"service_errors",
+		WithDescription("The number of unexpected service request errors."),
+	)
+	ServicePanic         = NewCounterDef("service_panics")
+	ServiceErrorWithType = NewCounterDef(
+		"service_error_with_type",
+		WithDescription("The number of all service request errors by error type."),
+	)
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
 	ServiceLatencyUserLatency                = NewTimerDef("service_latency_userlatency")
@@ -893,6 +899,7 @@ var (
 	SignalInfoSize                        = NewBytesHistogramDef("signal_info_size")
 	SignalRequestIDSize                   = NewBytesHistogramDef("signal_request_id_size")
 	BufferedEventsSize                    = NewBytesHistogramDef("buffered_events_size")
+	ChasmTotalSize                        = NewBytesHistogramDef("chasm_total_size")
 	ActivityInfoCount                     = NewDimensionlessHistogramDef("activity_info_count")
 	TimerInfoCount                        = NewDimensionlessHistogramDef("timer_info_count")
 	ChildInfoCount                        = NewDimensionlessHistogramDef("child_info_count")
@@ -927,7 +934,9 @@ var (
 	ReplicationTaskSendError              = NewCounterDef("replication_task_send_error")
 	ReplicationTaskGenerationLatency      = NewTimerDef("replication_task_generation_latency")
 	ReplicationTaskLoadLatency            = NewTimerDef("replication_task_load_latency")
+	ReplicationTaskLoadSize               = NewDimensionlessHistogramDef("replication_task_load_size")
 	ReplicationTaskSendLatency            = NewTimerDef("replication_task_send_latency")
+	ReplicationTaskSendBacklog            = NewDimensionlessHistogramDef("replication_task_send_backlog")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
 	ReplicationTasksSkipped               = NewCounterDef("replication_tasks_skipped")

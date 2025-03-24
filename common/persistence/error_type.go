@@ -22,60 +22,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest_test
+package persistence
 
-import (
-	"sync"
-	"testing"
+import "go.temporal.io/api/serviceerror"
 
-	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/internal/nettest"
-)
-
-func TestPipe_Accept(t *testing.T) {
-	t.Parallel()
-
-	pipe := nettest.NewPipe()
-
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		c, err := pipe.Accept(nil)
-		assert.NoError(t, err)
-
-		defer func() {
-			assert.NoError(t, c.Close())
-		}()
-	}()
-
-	c, err := pipe.Connect(nil)
-	assert.NoError(t, err)
-
-	defer func() {
-		assert.NoError(t, c.Close())
-	}()
-}
-
-func TestPipe_ClientCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := nettest.NewPipe()
-	done := make(chan struct{})
-	close(done) // hi efe
-	_, err := pipe.Connect(done)
-	assert.ErrorIs(t, err, nettest.ErrCanceled)
-}
-
-func TestPipe_ServerCanceled(t *testing.T) {
-	t.Parallel()
-
-	pipe := nettest.NewPipe()
-	done := make(chan struct{})
-	close(done)
-	_, err := pipe.Accept(done)
-	assert.ErrorIs(t, err, nettest.ErrCanceled)
+func OperationPossiblySucceeded(err error) bool {
+	switch err.(type) {
+	case *CurrentWorkflowConditionFailedError,
+		*WorkflowConditionFailedError,
+		*ConditionFailedError,
+		*ShardOwnershipLostError,
+		*InvalidPersistenceRequestError,
+		*TransactionSizeLimitError,
+		*AppendHistoryTimeoutError, // this means task operations is not started
+		*serviceerror.ResourceExhausted,
+		*serviceerror.NotFound,
+		*serviceerror.NamespaceNotFound:
+		// Persistence failure that means that write was definitely not committed.
+		return false
+	default:
+		return true
+	}
 }

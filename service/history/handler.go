@@ -2141,8 +2141,8 @@ func (h *Handler) StreamWorkflowReplicationMessages(
 		replication.NewClusterShardKey(serverClusterShardID.ClusterID, serverClusterShardID.ShardID),
 		h.config,
 	)
-	h.streamReceiverMonitor.RegisterInboundStream(streamSender)
 	streamSender.Start()
+	h.streamReceiverMonitor.RegisterInboundStream(streamSender)
 	defer streamSender.Stop()
 	streamSender.Wait()
 	return nil

@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/util"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 )
@@ -107,13 +106,13 @@ func (s *transactionSuite) TestOperationMayApplied() {
 	}
 
 	for _, tc := range testCases {
-		s.Equal(tc.mayApplied, shard.OperationPossiblySucceeded(tc.err))
+		s.Equal(tc.mayApplied, persistence.OperationPossiblySucceeded(tc.err))
 	}
 }
 
 func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 	timeoutErr := &persistence.TimeoutError{}
-	s.True(shard.OperationPossiblySucceeded(timeoutErr))
+	s.True(persistence.OperationPossiblySucceeded(timeoutErr))
 
 	s.mockShard.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification()
@@ -138,7 +137,7 @@ func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 
 func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 	timeoutErr := &persistence.TimeoutError{}
-	s.True(shard.OperationPossiblySucceeded(timeoutErr))
+	s.True(persistence.OperationPossiblySucceeded(timeoutErr))
 
 	s.mockShard.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification() // for current workflow mutation
@@ -167,7 +166,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 
 func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFailed() {
 	timeoutErr := &persistence.TimeoutError{}
-	s.True(shard.OperationPossiblySucceeded(timeoutErr))
+	s.True(persistence.OperationPossiblySucceeded(timeoutErr))
 
 	s.mockShard.EXPECT().ConflictResolveWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification() // for reset workflow snapshot

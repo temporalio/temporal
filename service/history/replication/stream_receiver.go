@@ -143,8 +143,8 @@ func (r *StreamReceiverImpl) Start() {
 		return
 	}
 
-	go WrapEventLoop(r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamReceiverMonitorInterval)
-	go WrapEventLoop(r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamReceiverMonitorInterval)
+	go WrapEventLoop(context.Background(), r.sendEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamRetryPolicy)
+	go WrapEventLoop(context.Background(), r.recvEventLoop, r.Stop, r.logger, r.MetricsHandler, r.clientShardKey, r.serverShardKey, streamRetryPolicy)
 
 	r.logger.Info("StreamReceiver started.")
 }

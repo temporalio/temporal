@@ -25,17 +25,26 @@
 package replication
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/common/persistence"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
+)
+
+var (
+	streamRetryPolicy = backoff.NewExponentialRetryPolicy(500 * time.Millisecond).
+		WithMaximumAttempts(100).
+		WithMaximumInterval(time.Second * 2)
 )
 
 type (
@@ -63,60 +72,62 @@ func ClusterIDToClusterNameShardCount(
 }
 
 func WrapEventLoop(
+	ctx context.Context,
 	originalEventLoop func() error,
 	streamStopper func(),
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	fromClusterKey ClusterShardKey,
 	toClusterKey ClusterShardKey,
-	retryInterval time.Duration,
+	retryPolicy backoff.RetryPolicy,
 ) {
 	defer streamStopper()
 
-	for i := 0; i < 50; i++ {
+	ops := func() error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		err := originalEventLoop()
 
-		if err == nil { // shutdown case
-			return
+		if err != nil {
+			var streamError *StreamError
+			if errors.As(err, &streamError) {
+				metrics.ReplicationStreamError.With(metricsHandler).Record(
+					int64(1),
+					metrics.ServiceErrorTypeTag(streamError.cause),
+					metrics.FromClusterIDTag(fromClusterKey.ClusterID),
+					metrics.ToClusterIDTag(toClusterKey.ClusterID),
+				)
+				logger.Warn("ReplicationStreamError", tag.Error(err))
+			} else {
+				metrics.ReplicationServiceError.With(metricsHandler).Record(
+					int64(1),
+					metrics.ServiceErrorTypeTag(err),
+					metrics.FromClusterIDTag(fromClusterKey.ClusterID),
+					metrics.ToClusterIDTag(toClusterKey.ClusterID),
+				)
+				logger.Error("ReplicationServiceError", tag.Error(err))
+			}
+			return err
 		}
-		var streamError *StreamError
-		if errors.As(err, &streamError) {
-			metrics.ReplicationStreamError.With(metricsHandler).Record(
-				int64(1),
-				metrics.ServiceErrorTypeTag(streamError.cause),
-				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
-				metrics.ToClusterIDTag(toClusterKey.ClusterID),
-			)
-			logger.Warn("ReplicationStreamError", tag.Error(err))
-		} else {
-			metrics.ReplicationServiceError.With(metricsHandler).Record(
-				int64(1),
-				metrics.ServiceErrorTypeTag(err),
-				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
-				metrics.ToClusterIDTag(toClusterKey.ClusterID),
-			)
-			logger.Error("ReplicationServiceError", tag.Error(err))
-		}
-		// if it is not a retryable error, we will not retry and terminate the stream, then let the stream_receiver_monitor to restart it
-		if !IsRetryableError(err) {
-			return
-		}
-
-		time.Sleep(retryInterval)
+		// shutdown case
+		return nil
 	}
+	_ = backoff.ThrottleRetry(ops, retryPolicy, isRetryableError)
 }
 
-func IsStreamError(err error) bool {
+func isRetryableError(err error) bool {
 	var streamError *StreamError
-	return errors.As(err, &streamError)
-}
-
-func IsRetryableError(err error) bool {
-	if shard.IsShardOwnershipLostError(err) {
+	var shardOwnershipLostError *persistence.ShardOwnershipLostError
+	var shardOwnershipLost *serviceerrors.ShardOwnershipLost
+	switch {
+	case errors.As(err, &shardOwnershipLostError):
 		return false
-	}
-	switch err.(type) {
-	case *StreamError:
+	case errors.As(err, &shardOwnershipLost):
+		return false
+	case errors.As(err, &streamError):
+		return false
+	case errors.Is(err, context.Canceled):
 		return false
 	default:
 		return true

@@ -28,6 +28,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -137,13 +138,13 @@ func (s *StreamSenderImpl) Start() {
 	if s.isTieredStackEnabled {
 		// High Priority sender is used for live traffic
 		// Low Priority sender is used for force replication closed workflow
-		go WrapEventLoop(getSenderEventLoop(enumsspb.TASK_PRIORITY_HIGH), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
-		go WrapEventLoop(getSenderEventLoop(enumsspb.TASK_PRIORITY_LOW), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
+		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_HIGH), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamRetryPolicy)
+		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_LOW), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamRetryPolicy)
 	} else {
-		go WrapEventLoop(getSenderEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
+		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamRetryPolicy)
 	}
 
-	go WrapEventLoop(s.recvEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamReceiverMonitorInterval)
+	go WrapEventLoop(s.server.Context(), s.recvEventLoop, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, streamRetryPolicy)
 
 	s.logger.Info("StreamSender started.")
 }
@@ -224,7 +225,7 @@ func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 
 	defer log.CapturePanic(s.logger, &panicErr)
 
-	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification()
+	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
 	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
 
 	catchupEndExclusiveWatermark, err := s.sendCatchUp(priority)
@@ -468,7 +469,7 @@ func (s *StreamSenderImpl) sendTasks(
 		})
 	}
 
-	ctx := headers.SetCallerInfo(context.Background(), headers.SystemPreemptableCallerInfo)
+	ctx := headers.SetCallerInfo(s.server.Context(), headers.SystemPreemptableCallerInfo)
 	iter, err := s.historyEngine.GetReplicationTasksIter(
 		ctx,
 		string(s.clientShardKey.ClusterID),
@@ -545,7 +546,12 @@ Loop:
 			}
 			task.Priority = priority
 			if s.isTieredStackEnabled {
-				s.flowController.Wait(priority)
+				if err := s.flowController.Wait(s.server.Context(), priority); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return err
+					}
+					// continue to send task if wait operation times out.
+				}
 			}
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -575,7 +581,7 @@ Loop:
 			WithMaximumAttempts(80).
 			WithExpirationInterval(3 * time.Minute)
 
-		err = backoff.ThrottleRetry(operation, retryPolicy, IsRetryableError)
+		err = backoff.ThrottleRetry(operation, retryPolicy, isRetryableError)
 		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
 			attempt,
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),

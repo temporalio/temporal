@@ -105,6 +105,11 @@ func (s *Versioning3Suite) SetupSuite() {
 		// Overriding the number of deployments that can be registered in a single namespace. Done only for this test suite
 		// since it creates a large number of unique deployments in the test suite's namespace.
 		dynamicconfig.MatchingMaxDeployments.Key(): 1000,
+
+		// Use new matcher for versioning tests. Ideally we would run everything with old and new,
+		// but for now we pick a subset of tests. Versioning tests exercise the most features of
+		// matching so they're a good condidate.
+		dynamicconfig.MatchingUseNewMatcher.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithDefaultCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -1327,6 +1332,7 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 	s.ProtoEqual(&taskqueuepb.TaskQueueVersioningInfo{CurrentVersion: "__unversioned__", RampingVersion: tv.DeploymentVersionString(), RampingVersionPercentage: 20, UpdateTime: timestamp.TimePtr(t1)}, wfInfo.GetVersioningInfo())
 
 	s.syncTaskQueueDeploymentData(tv, true, 0, false, t1, tqTypeAct)
+
 	actInfo, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tv.TaskQueue(),
@@ -1337,6 +1343,8 @@ func (s *Versioning3Suite) TestDescribeTaskQueueVersioningInfo() {
 
 	// Now ramp to unversioned
 	s.syncTaskQueueDeploymentData(tv, false, 10, true, t2, tqTypeAct)
+	s.waitForDeploymentDataPropagation(tv, true, tqTypeAct)
+
 	actInfo, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace().String(),
 		TaskQueue:     tv.TaskQueue(),
@@ -2060,14 +2068,17 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 						delete(remaining, pt)
 					}
 				}
+				if unversionedRamp {
+					if perTypes[int32(pt.tp)].GetDeploymentData().GetUnversionedRampData() != nil {
+						delete(remaining, pt)
+					}
+					continue
+				}
 				versions := perTypes[int32(pt.tp)].GetDeploymentData().GetVersions()
 				for _, d := range versions {
 					if d.GetVersion().Equal(tv.DeploymentVersion()) {
 						delete(remaining, pt)
 					}
-				}
-				if unversionedRamp && perTypes[int32(pt.tp)].GetDeploymentData().GetUnversionedRampData() != nil {
-					delete(remaining, pt)
 				}
 			}
 		}

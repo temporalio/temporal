@@ -599,10 +599,14 @@ type (
 	CreateTasksRequest struct {
 		TaskQueueInfo *PersistedTaskQueueInfo
 		Tasks         []*persistencespb.AllocatedTaskInfo
+		// If Subqueues is present, it should be the same size as Tasks and hold the subqueue
+		// indexes that each task should be added to.
+		Subqueues []int
 	}
 
 	// CreateTasksResponse is the response to CreateTasksRequest
 	CreateTasksResponse struct {
+		UpdatedMetadata bool
 	}
 
 	PersistedTaskQueueInfo struct {
@@ -617,6 +621,7 @@ type (
 		TaskType           enumspb.TaskQueueType
 		InclusiveMinTaskID int64
 		ExclusiveMaxTaskID int64
+		Subqueue           int
 		PageSize           int
 		NextPageToken      []byte
 	}
@@ -639,7 +644,8 @@ type (
 		TaskQueueName      string
 		TaskType           enumspb.TaskQueueType
 		ExclusiveMaxTaskID int64 // Tasks less than this ID will be completed
-		Limit              int   // Limit on the max number of tasks that can be completed. Required param
+		Subqueue           int
+		Limit              int // Limit on the max number of tasks that can be completed. Required param
 	}
 
 	// CreateNamespaceRequest is used to create the namespace
@@ -723,6 +729,7 @@ type (
 		SignalInfoSize        int
 		SignalRequestIDSize   int
 		BufferedEventsSize    int
+		ChasmTotalSize        int // total size of all CHASM nodes within a record
 		// UpdateInfoSize is included in ExecutionInfoSize
 
 		// Item count for various information captured within mutable state

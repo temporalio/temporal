@@ -1061,13 +1061,19 @@ See DynamicRateLimitingParams comments for more details.`,
 	MatchingGetTasksBatchSize = NewTaskQueueIntSetting(
 		"matching.getTasksBatchSize",
 		1000,
-		`MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer`,
+		`How many backlog tasks to read from persistence at once`,
+	)
+	MatchingGetTasksReloadAt = NewTaskQueueIntSetting(
+		"matching.getTasksReloadAt",
+		100,
+		`Reload a batch of tasks when there are this many remaining. Must be less than MatchingGetTasksBatchSize. (Requires new matcher.)`,
 	)
 	MatchingLongPollExpirationInterval = NewTaskQueueDurationSetting(
 		"matching.longPollExpirationInterval",
 		time.Minute,
 		`MatchingLongPollExpirationInterval is the long poll expiration interval in the matching service`,
 	)
+	// TODO(pri): old matcher cleanup
 	MatchingSyncMatchWaitDuration = NewTaskQueueDurationSetting(
 		"matching.syncMatchWaitDuration",
 		200*time.Millisecond,
@@ -1115,6 +1121,11 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		"matching.maxTaskDeleteBatchSize",
 		100,
 		`MatchingMaxTaskDeleteBatchSize is the max batch size for range deletion of tasks`,
+	)
+	MatchingTaskDeleteInterval = NewTaskQueueDurationSetting(
+		"matching.taskDeleteInterval",
+		15*time.Second,
+		`MatchingTaskDeleteInterval is the minimum interval between task range deletions`,
 	)
 	MatchingThrottledLogRPS = NewGlobalIntSetting(
 		"matching.throttledLogRPS",
@@ -1165,7 +1176,7 @@ for VERSIONED queues.`,
 		1,
 		`MatchingForwarderMaxOutstandingTasks is the max number of inflight addTask/queryTask from the forwarder`,
 	)
-	MatchingForwarderMaxRatePerSecond = NewTaskQueueIntSetting(
+	MatchingForwarderMaxRatePerSecond = NewTaskQueueFloatSetting(
 		"matching.forwarderMaxRatePerSecond",
 		10,
 		`MatchingForwarderMaxRatePerSecond is the max rate at which add/query can be forwarded`,
@@ -1283,6 +1294,21 @@ a decision to scale down the number of pollers will be issued`,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
 second per poller by one physical queue manager`,
 	)
+	MatchingUseNewMatcher = NewTaskQueueBoolSetting(
+		"matching.useNewMatcher",
+		false,
+		`Use priority-enabled TaskMatcher`,
+	)
+	MatchingPriorityLevels = NewTaskQueueIntSetting(
+		"matching.priorityLevels",
+		5,
+		`Number of simple priority levels (requires new matcher)`,
+	)
+	MatchingBacklogTaskForwardTimeout = NewTaskQueueDurationSetting(
+		"matching.backlogTaskForwardTimeout",
+		60*time.Second,
+		`Timeout for forwarded backlog task (requires new matcher)`,
+	)
 
 	// keys for history
 
@@ -1394,11 +1420,9 @@ HistoryCacheSizeBasedLimit is set to true.`,
 	)
 	EnableWorkflowExecutionTimeoutTimer = NewGlobalBoolSetting(
 		"history.enableWorkflowExecutionTimeoutTimer",
-		false,
+		true,
 		`EnableWorkflowExecutionTimeoutTimer controls whether to enable the new logic for generating a workflow execution
-timeout timer when execution timeout is specified when starting a workflow.
-For backward compatibility, this feature is disabled by default and should only be enabled after server version
-containing this flag is deployed to all history service nodes in the cluster.`,
+timeout timer when execution timeout is specified when starting a workflow.`,
 	)
 	EnableTransitionHistory = NewGlobalBoolSetting(
 		"history.enableTransitionHistory",
@@ -2021,7 +2045,7 @@ archivalQueueProcessor`,
 
 	ReplicatorTaskBatchSize = NewGlobalIntSetting(
 		"history.replicatorTaskBatchSize",
-		25,
+		100,
 		`ReplicatorTaskBatchSize is batch size for ReplicatorProcessor`,
 	)
 	ReplicatorMaxSkipTaskCount = NewGlobalIntSetting(
@@ -2130,7 +2154,7 @@ the number of children greater than or equal to this threshold`,
 	)
 	NumParentClosePolicySystemWorkflows = NewGlobalIntSetting(
 		"history.numParentClosePolicySystemWorkflows",
-		10,
+		1000,
 		`NumParentClosePolicySystemWorkflows is key for number of parentClosePolicy system workflows running in total`,
 	)
 	HistoryThrottledLogRPS = NewGlobalIntSetting(

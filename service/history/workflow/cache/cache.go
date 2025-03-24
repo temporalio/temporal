@@ -52,12 +52,6 @@ import (
 )
 
 type (
-	// ReleaseCacheFunc must be called to release the workflow context from the cache.
-	// Make sure not to access the mutable state or workflow context after releasing back to the cache.
-	// If there is any error when using the mutable state (e.g. mutable state is mutated and dirty), call release with
-	// the error so the in-memory copy will be thrown away.
-	ReleaseCacheFunc func(err error)
-
 	Cache interface {
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
@@ -65,7 +59,7 @@ type (
 			namespaceID namespace.ID,
 			workflowID string,
 			lockPriority locks.Priority,
-		) (ReleaseCacheFunc, error)
+		) (historyi.ReleaseWorkflowContextFunc, error)
 
 		GetOrCreateWorkflowExecution(
 			ctx context.Context,
@@ -73,7 +67,7 @@ type (
 			namespaceID namespace.ID,
 			execution *commonpb.WorkflowExecution,
 			lockPriority locks.Priority,
-		) (historyi.WorkflowContext, ReleaseCacheFunc, error)
+		) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error)
 	}
 
 	cacheImpl struct {
@@ -99,7 +93,7 @@ type (
 	}
 )
 
-var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
+var NoopReleaseFn historyi.ReleaseWorkflowContextFunc = func(err error) {}
 
 const (
 	cacheNotReleased int32 = 0
@@ -207,7 +201,7 @@ func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	namespaceID namespace.ID,
 	workflowID string,
 	lockPriority locks.Priority,
-) (ReleaseCacheFunc, error) {
+) (historyi.ReleaseWorkflowContextFunc, error) {
 
 	if err := c.validateWorkflowID(workflowID); err != nil {
 		return nil, err
@@ -250,7 +244,7 @@ func (c *cacheImpl) GetOrCreateWorkflowExecution(
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	lockPriority locks.Priority,
-) (historyi.WorkflowContext, ReleaseCacheFunc, error) {
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 
 	if err := c.validateWorkflowExecutionInfo(ctx, shardContext, namespaceID, execution, lockPriority); err != nil {
 		return nil, nil, err
@@ -289,7 +283,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	handler metrics.Handler,
 	forceClearContext bool,
 	lockPriority locks.Priority,
-) (historyi.WorkflowContext, ReleaseCacheFunc, error) {
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
 	cacheKey := Key{
 		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
 		ShardUUID:   shardContext.GetOwner(),

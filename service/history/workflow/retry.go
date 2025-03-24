@@ -188,6 +188,7 @@ func SetupNewWorkflowForRetryOrCron(
 	newMutableState historyi.MutableState,
 	newRunID string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
+	startLinks []*commonpb.Link,
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
 	backoffInterval time.Duration,
@@ -272,6 +273,8 @@ func SetupNewWorkflowForRetryOrCron(
 		Memo:                     startAttr.Memo,
 		SearchAttributes:         startAttr.SearchAttributes,
 		CompletionCallbacks:      startAttr.CompletionCallbacks,
+		Links:                    startLinks,
+		Priority:                 startAttr.Priority,
 	}
 
 	attempt := int32(1)

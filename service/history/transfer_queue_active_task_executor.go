@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/sdk"
@@ -216,13 +217,14 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, ai)
+	priority := priorities.Merge(mutableState.GetExecutionInfo().Priority, ai.Priority)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	return t.pushActivity(ctx, task, timeout, directive, historyi.TransactionPolicyActive)
+	return t.pushActivity(ctx, task, timeout, directive, priority, historyi.TransactionPolicyActive)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -264,6 +266,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	normalTaskQueueName := mutableState.GetExecutionInfo().TaskQueue
 
 	directive := MakeDirectiveForWorkflowTask(mutableState)
+	priority := mutableState.GetExecutionInfo().Priority
 
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
@@ -276,6 +279,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		taskQueue,
 		scheduleToStartTimeout.AsDuration(),
 		directive,
+		priority,
 		historyi.TransactionPolicyActive,
 	)
 
@@ -298,6 +302,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 			taskQueue,
 			scheduleToStartTimeout.AsDuration(),
 			directive,
+			priority,
 			historyi.TransactionPolicyActive,
 		)
 	}
@@ -936,6 +941,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		shouldTerminateAndStartChild,
 		parentPinnedVersion,
 		parentPinnedOverride,
+		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -1149,7 +1155,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 
 	var baseContext historyi.WorkflowContext
 	var baseMutableState historyi.MutableState
-	var baseRelease wcache.ReleaseCacheFunc
+	var baseRelease historyi.ReleaseWorkflowContextFunc
 	if resetPoint.GetRunId() == executionState.RunId {
 		baseContext = currentContext
 		baseMutableState = currentMutableState
@@ -1508,6 +1514,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	shouldTerminateAndStartChild bool,
 	parentPinnedVersion string,
 	parentPinnedOverride *workflowpb.VersioningOverride,
+	priority *commonpb.Priority,
 ) (string, *clockspb.VectorClock, error) {
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                targetNamespace.String(),
@@ -1529,6 +1536,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		SearchAttributes:      attributes.SearchAttributes,
 		UserMetadata:          userMetadata,
 		VersioningOverride:    parentPinnedOverride,
+		Priority:              priority,
 	}
 
 	request := common.CreateHistoryStartWorkflowRequest(
