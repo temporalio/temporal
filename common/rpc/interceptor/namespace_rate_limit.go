@@ -49,28 +49,34 @@ var (
 )
 
 type (
-	NamespaceRateLimitInterceptor struct {
+	NamespaceRateLimitInterceptor interface {
+		Intercept(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error)
+		Allow(namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error
+	}
+
+	NamespaceRateLimitInterceptorImpl struct {
 		namespaceRegistry namespace.Registry
 		rateLimiter       quotas.RequestRateLimiter
 		tokens            map[string]int
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*NamespaceRateLimitInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil).Intercept
+var _ NamespaceRateLimitInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil)
 
 func NewNamespaceRateLimitInterceptor(
 	namespaceRegistry namespace.Registry,
 	rateLimiter quotas.RequestRateLimiter,
 	tokens map[string]int,
-) *NamespaceRateLimitInterceptor {
-	return &NamespaceRateLimitInterceptor{
+) NamespaceRateLimitInterceptor {
+	return &NamespaceRateLimitInterceptorImpl{
 		namespaceRegistry: namespaceRegistry,
 		rateLimiter:       rateLimiter,
 		tokens:            tokens,
 	}
 }
 
-func (ni *NamespaceRateLimitInterceptor) Intercept(
+func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -85,7 +91,7 @@ func (ni *NamespaceRateLimitInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
-func (ni *NamespaceRateLimitInterceptor) Allow(namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error {
+func (ni *NamespaceRateLimitInterceptorImpl) Allow(namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error {
 	token, ok := ni.tokens[methodName]
 	if !ok {
 		token = NamespaceRateLimitDefaultToken
