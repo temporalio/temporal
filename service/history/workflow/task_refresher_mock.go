@@ -46,6 +46,7 @@ import (
 type MockTaskRefresher struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskRefresherMockRecorder
+	isgomock struct{}
 }
 
 // MockTaskRefresherMockRecorder is the mock recorder for MockTaskRefresher.
