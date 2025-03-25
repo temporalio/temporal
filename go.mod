@@ -80,6 +80,10 @@ require (
 	modernc.org/sqlite v1.34.1
 )
 
+// Pinning as upgrade leads to error:
+// go: google.golang.org/grpc/gcp/observability@v0.0.0-00010101000000-000000000000: invalid version: unknown revision 000000000000
+replace google.golang.org/grpc/examples => google.golang.org/grpc/examples v0.0.0-20250219164421-42fc25a9b496
+
 require (
 	cel.dev/expr v0.22.0 // indirect
 	cloud.google.com/go v0.120.0 // indirect
