@@ -117,9 +117,11 @@ UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_RO
 endif
 
 # Pinning modernc.org/sqlite to this version until https://gitlab.com/cznic/sqlite/-/issues/196 is resolved.
+# Pinning google.golang.org/grpc/examples to prevent IDE errors.
 PINNED_DEPENDENCIES := \
 	modernc.org/sqlite@v1.34.1 \
-	modernc.org/libc@v1.55.3
+	modernc.org/libc@v1.55.3 \
+	google.golang.org/grpc/examples@v0.0.0-20250219164421-42fc25a9b496
 
 # Code coverage & test report output files.
 TEST_OUTPUT_ROOT        := ./.testoutput
