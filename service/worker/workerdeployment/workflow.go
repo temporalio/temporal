@@ -788,6 +788,9 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
 				TaskQueueMaxVersions: res.TaskQueueMaxVersions,
 			}).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
 	} else {
 
 		// DescribeVersion activity to get all the task queues in the current version
@@ -834,8 +837,6 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 		if len(syncReqs) > 0 {
 			batches = append(batches, syncReqs)
 		}
-
-		fmt.Println("batches", len(batches))
 
 		// calling SyncDeploymentVersionUserData for each batch
 		for _, batch := range batches {
