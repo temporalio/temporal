@@ -143,7 +143,7 @@ func NewServiceProvider(
 	httpAPIServer *HTTPAPIServer,
 	handler Handler,
 	adminHandler *AdminHandler,
-	operatorHandler *OperatorHandlerImpl,
+	operatorHandler OperatorHandler,
 	versionChecker *VersionChecker,
 	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
@@ -684,7 +684,7 @@ func OperatorHandlerProvider(
 	clientFactory client.Factory,
 	namespaceRegistry namespace.Registry,
 	nexusEndpointClient *NexusEndpointClient,
-) *OperatorHandlerImpl {
+) OperatorHandler {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
 		esClient,
@@ -843,7 +843,7 @@ func HTTPAPIServerProvider(
 	grpcListener net.Listener,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	handler Handler,
-	operatorHandler *OperatorHandlerImpl,
+	operatorHandler OperatorHandler,
 	grpcServerOptions GrpcServerOptions,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
