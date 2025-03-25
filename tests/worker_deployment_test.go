@@ -1021,8 +1021,8 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_PromoteUnversi
 	s.verifyTaskQueueVersioningInfo(ctx, currentVars.TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
 }
 
-func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_DifferentVersions() {
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 100)
+func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_DifferentVersions_NoUnexpectedErrors() {
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 10)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1051,7 +1051,16 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_DifferentVersio
 
 	for i := 0; i < versions; i++ {
 		err := <-errChan
-		s.NoError(err)
+		if err != nil {
+			switch err.(type) {
+			// DeadlineExceeded and ResourceExhausted are expected errors since there could be more
+			// in-flight updates than WorkflowExecutionMaxInFlightUpdates or we could get a timeout error.
+			case *serviceerror.DeadlineExceeded, *serviceerror.ResourceExhausted:
+				continue
+			default:
+				s.FailNow("Unexpected error: ", err)
+			}
+		}
 	}
 
 	// Verify that the current version is set.
@@ -1063,8 +1072,8 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_DifferentVersio
 	s.NotEqual(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
 }
 
-func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_SameVersion() {
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 100)
+func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_SameVersion_NoUnexpectedErrors() {
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 10)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1090,7 +1099,16 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_SameVersion() {
 
 	for i := 0; i < 10; i++ {
 		err := <-errChan
-		s.NoError(err)
+		if err != nil {
+			switch err.(type) {
+			// DeadlineExceeded and ResourceExhausted are expected errors since there could be more
+			// in-flight updates than WorkflowExecutionMaxInFlightUpdates or we could get a timeout error.
+			case *serviceerror.DeadlineExceeded, *serviceerror.ResourceExhausted:
+				continue
+			default:
+				s.FailNow("Unexpected error: ", err)
+			}
+		}
 	}
 
 	// Verify that the current version is set.
@@ -1102,8 +1120,8 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_SameVersion() {
 	s.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
 }
 
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_DifferentVersions() {
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 100)
+func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_DifferentVersions_NoUnexpectedErrors() {
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 10)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1133,7 +1151,16 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_DifferentVersio
 
 	for i := 0; i < versions; i++ {
 		err := <-errChan
-		s.NoError(err)
+		if err != nil {
+			switch err.(type) {
+			// DeadlineExceeded and ResourceExhausted are expected errors since there could be more
+			// in-flight updates than WorkflowExecutionMaxInFlightUpdates or we could get a timeout error.
+			case *serviceerror.DeadlineExceeded, *serviceerror.ResourceExhausted:
+				continue
+			default:
+				s.FailNow("Unexpected error: ", err)
+			}
+		}
 	}
 
 	// Verify that the ramping version is set.
@@ -1145,8 +1172,8 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_DifferentVersio
 	s.NotNil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 }
 
-func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_SameVersion() {
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 100)
+func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_SameVersion_NoUnexpectedErrors() {
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, 10)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1173,7 +1200,16 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_SameVersion() {
 
 	for i := 0; i < 10; i++ {
 		err := <-errChan
-		s.NoError(err)
+		if err != nil {
+			switch err.(type) {
+			// DeadlineExceeded and ResourceExhausted are expected errors since there could be more
+			// in-flight updates than WorkflowExecutionMaxInFlightUpdates or we could get a timeout error.
+			case *serviceerror.DeadlineExceeded, *serviceerror.ResourceExhausted:
+				continue
+			default:
+				s.FailNow("Unexpected error: ", err)
+			}
+		}
 	}
 
 	// Verify that the ramping version is set.
