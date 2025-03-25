@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -184,7 +183,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 				{
 					Variant: &rulespb.WorkflowRuleAction_Pause{
 						Pause: &rulespb.WorkflowRuleAction_ActionPause{
-							Scope: enumspb.WORKFLOW_RULE_ACTION_SCOPE_ACTIVITY,
+							Scope: &rulespb.WorkflowRuleAction_ActionPause_Activity{},
 						},
 					},
 				},
@@ -332,7 +331,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_WhileRetrying() {
 				{
 					Variant: &rulespb.WorkflowRuleAction_Pause{
 						Pause: &rulespb.WorkflowRuleAction_ActionPause{
-							Scope: enumspb.WORKFLOW_RULE_ACTION_SCOPE_ACTIVITY,
+							Scope: &rulespb.WorkflowRuleAction_ActionPause_Activity{},
 						},
 					},
 				},
