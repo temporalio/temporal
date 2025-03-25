@@ -1721,7 +1721,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO() {
 		var opExec workflow.NexusOperationExecution
 		err := fut.GetNexusOperationExecution().Get(ctx, &opExec)
 		s.NoError(err)
-		s.Equal(handlerWorkflowID, opExec.OperationID)
+		s.NotEmpty(opExec.OperationToken)
 		return nil, fut.Get(ctx, nil)
 	}
 
@@ -1891,7 +1891,7 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 		},
 		{
 			outcome:        "fail-operation-app-error",
-			metricsOutcome: "operation-unsuccessful:failed",
+			metricsOutcome: "handler-error:INTERNAL",
 			checkWorkflowError: func(t *testing.T, wfErr error) {
 				var opErr *temporal.NexusOperationError
 				require.ErrorAs(t, wfErr, &opErr)
@@ -1941,7 +1941,16 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 
 			snap := capture.Snapshot()
 			require.Len(t, snap["nexus_outbound_requests"], 1)
-			require.Subset(t, snap["nexus_outbound_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartOperation", "failure_source": "worker", "outcome": tc.metricsOutcome})
+			require.Subset(
+				t,
+				snap["nexus_outbound_requests"][0].Tags,
+				map[string]string{
+					"namespace":      s.Namespace().String(),
+					"method":         "StartOperation",
+					"failure_source": "worker",
+					"outcome":        tc.metricsOutcome,
+				},
+			)
 		})
 
 	}
@@ -1953,6 +1962,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration() {
 	testCtx := ctx
 	taskQueue := testcore.RandomizeStr("caller_" + s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	handlerWorkflowID := testcore.RandomizeStr(s.T().Name())
 
 	_, err := s.SdkClient().OperatorService().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
@@ -1993,7 +2003,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration() {
 		if outcome == "timeout" {
 			workflowExecutionTimeout = time.Second
 		}
-		return client.StartWorkflowOptions{ID: soo.RequestID, WorkflowExecutionTimeout: workflowExecutionTimeout}, nil
+		return client.StartWorkflowOptions{ID: handlerWorkflowID, WorkflowExecutionTimeout: workflowExecutionTimeout}, nil
 	})
 	s.NoError(svc.Register(op))
 
@@ -2010,7 +2020,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration() {
 		case "terminate":
 			// Lazy man's version of a local activity, don't try this at home.
 			workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-				err := s.SdkClient().TerminateWorkflow(testCtx, exec.OperationID, "", "")
+				err := s.SdkClient().TerminateWorkflow(testCtx, handlerWorkflowID, "", "")
 				if err != nil {
 					panic(err)
 				}
