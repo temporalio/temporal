@@ -97,7 +97,7 @@ will ultimately fail the test.
 To debug your test by analysing observability traces, set the following environment variables:
 
 ```bash
-export OTEL_BSP_SCHEDULE_DELAY=0
+export OTEL_BSP_SCHEDULE_DELAY=100
 export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
 export OTEL_TRACES_EXPORTER=otlp
 export TEMPORAL_OTEL_DEBUG=true

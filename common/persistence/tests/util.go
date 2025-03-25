@@ -204,13 +204,12 @@ func RandomChasmNode() *persistencespb.ChasmNode {
 	_ = fakedata.FakeStruct(&versionedTransition)
 
 	return &persistencespb.ChasmNode{
-		InitialVersionedTransition:    &versionedTransition,
-		LastUpdateVersionedTransition: &versionedTransition,
-		Attributes: &persistencespb.ChasmNode_DataAttributes{
-			DataAttributes: &persistencespb.ChasmDataAttributes{
-				Data: blob,
-			},
+		Metadata: &persistencespb.ChasmNodeMetadata{
+			InitialVersionedTransition:    &versionedTransition,
+			LastUpdateVersionedTransition: &versionedTransition,
+			Attributes:                    &persistencespb.ChasmNodeMetadata_DataAttributes{},
 		},
+		Data: blob,
 	}
 }
 

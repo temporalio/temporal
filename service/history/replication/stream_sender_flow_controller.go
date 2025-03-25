@@ -50,7 +50,7 @@ type (
 	}
 	SenderFlowController interface {
 		// Wait will block go routine until the sender is allowed to send a task
-		Wait(priority enumsspb.TaskPriority)
+		Wait(ctx context.Context, priority enumsspb.TaskPriority) error
 		RefreshReceiverFlowControlInfo(syncState *replicationspb.SyncReplicationState)
 	}
 	SenderFlowControllerImpl struct {
@@ -111,20 +111,20 @@ func (s *SenderFlowControllerImpl) setState(state *flowControlState, flowControl
 	}
 }
 
-func (s *SenderFlowControllerImpl) Wait(priority enumsspb.TaskPriority) {
+func (s *SenderFlowControllerImpl) Wait(ctx context.Context, priority enumsspb.TaskPriority) error {
 	state, ok := s.flowControlStates[priority]
-	waitForRateLimiter := func(rateLimiter quotas.RateLimiter) {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // to avoid infinite wait
+	waitForRateLimiter := func(rateLimiter quotas.RateLimiter) error {
+		childCtx, cancel := context.WithTimeout(ctx, 2*time.Minute) // to avoid infinite wait
 		defer cancel()
-		err := rateLimiter.Wait(ctx)
+		err := rateLimiter.Wait(childCtx)
 		if err != nil {
 			s.logger.Error("error waiting for rate limiter", tag.Error(err))
+			return err
 		}
-		return
+		return nil
 	}
 	if !ok {
-		waitForRateLimiter(s.defaultRateLimiter)
-		return
+		return waitForRateLimiter(s.defaultRateLimiter)
 	}
 
 	state.mu.Lock()
@@ -136,5 +136,5 @@ func (s *SenderFlowControllerImpl) Wait(priority enumsspb.TaskPriority) {
 		state.waiters--
 	}
 	state.mu.Unlock()
-	waitForRateLimiter(state.rateLimiter)
+	return waitForRateLimiter(state.rateLimiter)
 }
