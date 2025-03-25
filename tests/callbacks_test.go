@@ -46,9 +46,9 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/freeport"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/internal/freeport"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )

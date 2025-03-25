@@ -22,47 +22,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package goro_test
+package effect_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/internal/goro"
+	"go.temporal.io/server/common/effect"
 )
 
-func TestMultiCancelAndWait(t *testing.T) {
-	var g goro.Group
-	g.Go(blockOnCtxReturnNil)
-	g.Go(blockOnCtxReturnNil)
-	g.Go(blockOnCtxReturnNil)
-	g.Cancel()
-	g.Wait()
-}
+func TestImmediate(t *testing.T) {
+	var i int
+	immediate := effect.Immediate(context.TODO())
+	immediate.OnAfterCommit(func(context.Context) { i = 1 })
+	require.Equal(t, i, 1, "commit func should have run")
 
-func TestCancelBeforeGo(t *testing.T) {
-	var g goro.Group
-	g.Cancel()
-	g.Go(func(ctx context.Context) error {
-		require.ErrorIs(t, context.Canceled, ctx.Err())
-		return nil
-	})
-	g.Wait()
-}
-
-func TestWaitOnNothing(t *testing.T) {
-	var g goro.Group
-	g.Wait() // nothing running, should return immediately
-}
-
-func TestWaitOnDifferentThread(t *testing.T) {
-	var g goro.Group
-	g.Go(blockOnCtxReturnNil)
-	h := goro.NewHandle(context.TODO()).Go(func(context.Context) error {
-		g.Wait()
-		return nil
-	})
-	g.Cancel()
-	<-h.Done()
+	immediate.OnAfterRollback(func(context.Context) { i = 2 })
+	require.Equal(t, i, 1, "rollback func should not run")
 }
