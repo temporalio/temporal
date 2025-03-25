@@ -28,6 +28,7 @@ import (
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -96,7 +97,7 @@ func TrimStateMachineTimers(
 	mutableState historyi.MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
 ) error {
-	if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) == 0 {
+	if transitionhistory.Compare(minVersionedTransition, EmptyVersionedTransition) == 0 {
 		// Reset all the state machine timers, we'll recreate them all.
 		mutableState.GetExecutionInfo().StateMachineTimers = nil
 		return nil
@@ -119,7 +120,7 @@ func TrimStateMachineTimers(
 				return err
 			}
 
-			if CompareVersionedTransition(
+			if transitionhistory.Compare(
 				node.InternalRepr().LastUpdateVersionedTransition,
 				minVersionedTransition,
 			) >= 0 {

@@ -25,10 +25,14 @@
 package chasm
 
 import (
+	"fmt"
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/transitionhistory"
+	"go.temporal.io/server/common/softassert"
 )
 
 type (
@@ -90,6 +94,7 @@ type (
 		timeSource  clock.TimeSource
 		backend     NodeBackend
 		pathEncoder NodePathEncoder
+		logger      log.Logger
 	}
 )
 
@@ -100,12 +105,14 @@ func NewTree(
 	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
+	logger log.Logger,
 ) (*Node, error) {
 	base := &nodeBase{
 		registry:    registry,
 		timeSource:  timeSource,
 		backend:     backend,
 		pathEncoder: pathEncoder,
+		logger:      logger,
 	}
 
 	root := newNode(base, nil)
@@ -179,12 +186,49 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 }
 
 // Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
-// A nil minVT will be treated as the same as the zero versioned transition and returns all nodes in the tree.
-// This method should only be invoked when IsDirty() is false.
+// A nil exclusiveMinVT will be treated as the same as the zero versioned transition and returns all nodes in the tree.
+// This method should only be invoked on root CHASM node when IsDirty() is false.
 func (n *Node) Snapshot(
-	minVT *persistencespb.VersionedTransition,
+	exclusiveMinVT *persistencespb.VersionedTransition,
 ) NodesSnapshot {
-	panic("not implemented")
+	if !softassert.That(n.logger, n.parent == nil, "chasm.Snapshot() should only be called on the root node") {
+		panic(fmt.Sprintf("chasm.Snapshot() called on child node: %+v", n))
+	}
+
+	// TODO: add assertion on IsDirty() once implemented
+
+	nodes := make(map[string]*persistencespb.ChasmNode)
+	n.snapshotInternal(exclusiveMinVT, []string{}, nodes)
+
+	return NodesSnapshot{
+		Nodes: nodes,
+	}
+}
+
+func (n *Node) snapshotInternal(
+	exclusiveMinVT *persistencespb.VersionedTransition,
+	currentPath []string,
+	nodes map[string]*persistencespb.ChasmNode,
+) {
+	if n == nil {
+		return
+	}
+
+	if transitionhistory.Compare(n.persistence.Metadata.LastUpdateVersionedTransition, exclusiveMinVT) > 0 {
+		encodedPath, err := n.pathEncoder.Encode(n, currentPath)
+		if !softassert.That(n.logger, err == nil, "chasm path encoding should always succeed on clean tree") {
+			panic(fmt.Sprintf("failed to encode chasm path on clean tree: %v", err))
+		}
+		nodes[encodedPath] = n.persistence
+	}
+
+	for childName, childNode := range n.children {
+		childNode.snapshotInternal(
+			exclusiveMinVT,
+			append(currentPath, childName),
+			nodes,
+		)
+	}
 }
 
 // ApplyMutation is used by replication stack to apply node

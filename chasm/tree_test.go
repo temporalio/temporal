@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
 	"go.uber.org/mock/gomock"
 )
 
@@ -99,13 +100,66 @@ func (s *nodeSuite) TestNewTree() {
 		persistenceNodes["child2/grandchild1"],
 	}
 
-	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder)
+	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
 	s.NoError(err)
 	s.NotNil(root)
 
 	preorderNodes := s.preorderAndAssertParent(root, nil)
 	s.Len(preorderNodes, 5)
 	s.Equal(expectedPreorderNodes, preorderNodes)
+}
+
+func (s *nodeSuite) TestNodeSnapshot() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+			},
+		},
+		"child1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 4},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 4},
+			},
+		},
+		"child2": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 3},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 3},
+			},
+		},
+		"child1/grandchild1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
+			},
+		},
+		"child2/grandchild1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 5},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 5},
+			},
+		},
+	}
+
+	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
+	s.NoError(err)
+	s.NotNil(root)
+
+	// Test snapshot with nil exclusiveMinVT, which should return all nodes
+	snapshot := root.Snapshot(nil)
+	s.Equal(persistenceNodes, snapshot.Nodes)
+
+	// Test snapshot with non-nil exclusiveMinVT, which should return only nodes with higher
+	// LastUpdateVersionedTransition than the exclusiveMinVT
+	expectedNodePaths := []string{"child1", "child2/grandchild1"}
+	expectedNodes := make(map[string]*persistencespb.ChasmNode)
+	for _, path := range expectedNodePaths {
+		expectedNodes[path] = persistenceNodes[path]
+	}
+	snapshot = root.Snapshot(&persistencespb.VersionedTransition{TransitionCount: 3})
+	s.Equal(expectedNodes, snapshot.Nodes)
 }
 
 func (s *nodeSuite) preorderAndAssertParent(
