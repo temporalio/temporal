@@ -493,7 +493,7 @@ func deleteSignalInfoMap(
 func updateChasmNodes(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	chasmNodes map[string]*commonpb.DataBlob,
+	chasmNodes map[string]persistence.InternalChasmNode,
 	deleteIDs map[string]struct{},
 	shardID int32,
 	namespaceID primitives.UUID,
@@ -502,15 +502,17 @@ func updateChasmNodes(
 ) error {
 	if len(chasmNodes) > 0 {
 		rows := make([]sqlplugin.ChasmNodeMapsRow, 0, len(chasmNodes))
-		for path, blob := range chasmNodes {
+		for path, node := range chasmNodes {
 			rows = append(rows, sqlplugin.ChasmNodeMapsRow{
-				ShardID:      shardID,
-				NamespaceID:  namespaceID,
-				WorkflowID:   workflowID,
-				RunID:        runID,
-				ChasmPath:    path,
-				Data:         blob.Data,
-				DataEncoding: blob.EncodingType.String(),
+				ShardID:          shardID,
+				NamespaceID:      namespaceID,
+				WorkflowID:       workflowID,
+				RunID:            runID,
+				ChasmPath:        path,
+				Metadata:         node.Metadata.Data,
+				MetadataEncoding: node.Metadata.EncodingType.String(),
+				Data:             node.Data.Data,
+				DataEncoding:     node.Data.EncodingType.String(),
 			})
 		}
 		if _, err := tx.ReplaceIntoChasmNodeMaps(ctx, rows); err != nil {
@@ -540,7 +542,7 @@ func getChasmNodeMap(
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (map[string]*commonpb.DataBlob, error) {
+) (map[string]persistence.InternalChasmNode, error) {
 	rows, err := db.SelectAllFromChasmNodeMaps(ctx, sqlplugin.ChasmNodeMapsAllFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
@@ -551,9 +553,12 @@ func getChasmNodeMap(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Failed to get CHASM nodes. Error: %v", err))
 	}
 
-	ret := make(map[string]*commonpb.DataBlob)
+	ret := make(map[string]persistence.InternalChasmNode)
 	for _, row := range rows {
-		ret[row.ChasmPath] = persistence.NewDataBlob(row.Data, row.DataEncoding)
+		ret[row.ChasmPath] = persistence.InternalChasmNode{
+			Metadata: persistence.NewDataBlob(row.Metadata, row.MetadataEncoding),
+			Data:     persistence.NewDataBlob(row.Data, row.DataEncoding),
+		}
 	}
 
 	return ret, nil
