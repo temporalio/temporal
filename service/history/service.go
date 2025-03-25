@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"net"
 	"time"
 
@@ -92,7 +93,15 @@ func (s *Service) Start() {
 
 	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
-	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+
+	// start as NOT_SERVING, update to SERVING after initial shards acquired
+	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
+	go func() {
+		if s.handler.controller.InitialShardsAcquired(context.Background()) == nil {
+			time.Sleep(5 * time.Second) // add some time for stabilization
+			s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+		}
+	}()
 
 	reflection.Register(s.server)
 
