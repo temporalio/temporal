@@ -376,7 +376,7 @@ type Service struct {
 	healthServer      *health.Server
 	handler           Handler
 	adminHandler      *AdminHandler
-	operatorHandler   *OperatorHandlerImpl
+	operatorHandler   OperatorHandler
 	versionChecker    *VersionChecker
 	visibilityManager manager.VisibilityManager
 	server            *grpc.Server
@@ -395,7 +395,7 @@ func NewService(
 	httpAPIServer *HTTPAPIServer,
 	handler Handler,
 	adminHandler *AdminHandler,
-	operatorHandler *OperatorHandlerImpl,
+	operatorHandler OperatorHandler,
 	versionChecker *VersionChecker,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
