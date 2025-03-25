@@ -186,7 +186,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 }
 
 // Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
-// A nil minVT will be treated as the same as the zero versioned transition and returns all nodes in the tree.
+// A nil exclusiveMinVT will be treated as the same as the zero versioned transition and returns all nodes in the tree.
 // This method should only be invoked on root CHASM node when IsDirty() is false.
 func (n *Node) Snapshot(
 	exclusiveMinVT *persistencespb.VersionedTransition,
@@ -194,6 +194,8 @@ func (n *Node) Snapshot(
 	if !softassert.That(n.logger, n.parent == nil, "chasm.Snapshot() should only be called on the root node") {
 		panic(fmt.Sprintf("chasm.Snapshot() called on child node: %+v", n))
 	}
+
+	// TODO: add assertion on IsDirty() once implemented
 
 	nodes := make(map[string]*persistencespb.ChasmNode)
 	n.snapshotInternal(exclusiveMinVT, []string{}, nodes)
