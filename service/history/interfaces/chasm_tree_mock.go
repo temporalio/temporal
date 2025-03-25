@@ -45,6 +45,7 @@ import (
 type MockChasmTree struct {
 	ctrl     *gomock.Controller
 	recorder *MockChasmTreeMockRecorder
+	isgomock struct{}
 }
 
 // MockChasmTreeMockRecorder is the mock recorder for MockChasmTree.

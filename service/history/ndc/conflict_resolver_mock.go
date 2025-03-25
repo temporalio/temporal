@@ -45,6 +45,7 @@ import (
 type MockConflictResolver struct {
 	ctrl     *gomock.Controller
 	recorder *MockConflictResolverMockRecorder
+	isgomock struct{}
 }
 
 // MockConflictResolverMockRecorder is the mock recorder for MockConflictResolver.

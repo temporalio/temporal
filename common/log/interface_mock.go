@@ -44,6 +44,7 @@ import (
 type MockLogger struct {
 	ctrl     *gomock.Controller
 	recorder *MockLoggerMockRecorder
+	isgomock struct{}
 }
 
 // MockLoggerMockRecorder is the mock recorder for MockLogger.
@@ -186,6 +187,7 @@ func (mr *MockLoggerMockRecorder) Warn(msg any, tags ...any) *gomock.Call {
 type MockWithLogger struct {
 	ctrl     *gomock.Controller
 	recorder *MockWithLoggerMockRecorder
+	isgomock struct{}
 }
 
 // MockWithLoggerMockRecorder is the mock recorder for MockWithLogger.
@@ -227,6 +229,7 @@ func (mr *MockWithLoggerMockRecorder) With(tags ...any) *gomock.Call {
 type MockSkipLogger struct {
 	ctrl     *gomock.Controller
 	recorder *MockSkipLoggerMockRecorder
+	isgomock struct{}
 }
 
 // MockSkipLoggerMockRecorder is the mock recorder for MockSkipLogger.
