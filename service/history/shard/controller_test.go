@@ -38,6 +38,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -874,6 +875,169 @@ func (s *controllerSuite) TestShardCounter() {
 	sub1.Unsubscribe() // should not panic if called twice
 	s.Equal(4, <-sub2.ShardCount(), "Should receive shard count updates on sub2 even if sub1 is canceled")
 	sub2.Unsubscribe()
+}
+
+type readinessMockState struct {
+	ownership   map[int32]bool
+	assertError map[int32]error
+	assertDelay map[int32]time.Duration
+}
+
+func (s *controllerSuite) setupMocksForReadiness() *readinessMockState {
+	state := &readinessMockState{
+		ownership:   map[int32]bool{1: true, 3: true, 5: true},
+		assertError: map[int32]error{},
+		assertDelay: map[int32]time.Duration{},
+	}
+
+	s.config.NumberOfShards = 5
+
+	other := membership.NewHostInfoFromAddress("other")
+	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).DoAndReturn(func(key string) (membership.HostInfo, error) {
+		if i, err := strconv.Atoi(key); err != nil {
+			return nil, err
+		} else if state.ownership[int32(i)] {
+			return s.hostInfo, nil
+		}
+		return other, nil
+	}).AnyTimes()
+
+	for shardID, owned := range state.ownership {
+		if owned {
+			s.setupMockForReadiness(shardID, state)
+		}
+	}
+
+	return state
+}
+
+func (s *controllerSuite) setupMockForReadiness(shardID int32, state *readinessMockState) {
+	mockEngine := historyi.NewMockEngine(s.controller)
+	mockEngine.EXPECT().Start()
+	mockEngine.EXPECT().Stop().AnyTimes()
+	mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine)
+	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
+		&persistence.GetOrCreateShardResponse{
+			ShardInfo: &persistencespb.ShardInfo{
+				ShardId:                shardID,
+				Owner:                  s.hostInfo.Identity(),
+				RangeId:                5,
+				ReplicationDlqAckLevel: map[string]int64{},
+				QueueStates:            s.queueStates(),
+			},
+		}, nil)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), updateShardRequestMatcher(persistence.UpdateShardRequest{
+		ShardInfo: &persistencespb.ShardInfo{
+			ShardId:                shardID,
+			Owner:                  s.hostInfo.Identity(),
+			RangeId:                6,
+			StolenSinceRenew:       1,
+			ReplicationDlqAckLevel: map[string]int64{},
+			QueueStates:            s.queueStates(),
+		},
+		PreviousRangeID: 5,
+	})).Return(nil)
+
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+		ShardID: shardID,
+		RangeID: 6,
+	}).DoAndReturn(func(context.Context, *persistence.AssertShardOwnershipRequest) error {
+		time.Sleep(state.assertDelay[shardID])
+		return state.assertError[shardID]
+	}).MinTimes(1)
+}
+
+func (s *controllerSuite) TestReadiness_Ready() {
+	_ = s.setupMocksForReadiness()
+
+	// not ready yet
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	s.ErrorIs(s.shardController.InitialShardsAcquired(ctx), context.DeadlineExceeded)
+
+	// acquire
+	s.shardController.acquireShards(context.Background())
+
+	// now should be ready
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.NoError(s.shardController.InitialShardsAcquired(ctx))
+}
+
+func (s *controllerSuite) TestReadiness_Error() {
+	state := s.setupMocksForReadiness()
+
+	// use an error that will not cause controller to re-acquire
+	state.assertError[3] = serviceerror.NewResourceExhausted(0, "")
+
+	// acquire
+	s.shardController.acquireShards(context.Background())
+
+	// shard 3 failed in AssertShardOwnership even though it passed UpdateShard, should be not ready yet
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	s.ErrorIs(s.shardController.InitialShardsAcquired(ctx), context.DeadlineExceeded)
+
+	// fix error and try again
+	state.assertError[3] = nil
+	s.shardController.acquireShards(context.Background())
+
+	// now should be ready
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.NoError(s.shardController.InitialShardsAcquired(ctx))
+}
+
+func (s *controllerSuite) TestReadiness_Blocked() {
+	s.config.ShardIOConcurrency = dynamicconfig.GetIntPropertyFn(10) // allow second assert to run while first is blocked
+	state := s.setupMocksForReadiness()
+
+	state.assertDelay[3] = time.Hour
+
+	// acquire
+	s.shardController.acquireShards(context.Background())
+
+	// shard 3 is blocked in AssertShardOwnership
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	s.ErrorIs(s.shardController.InitialShardsAcquired(ctx), context.DeadlineExceeded)
+
+	// acquire again (e.g. membership changed)
+	state.assertDelay[3] = time.Microsecond
+	s.shardController.acquireShards(context.Background())
+
+	// now should be ready
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.NoError(s.shardController.InitialShardsAcquired(ctx))
+}
+
+func (s *controllerSuite) TestReadiness_MembershipChanged() {
+	state := s.setupMocksForReadiness()
+
+	state.assertDelay[3] = time.Hour
+
+	// acquire
+	s.shardController.acquireShards(context.Background())
+
+	// shard 3 is blocked in AssertShardOwnership
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	s.ErrorIs(s.shardController.InitialShardsAcquired(ctx), context.DeadlineExceeded)
+
+	// change membership, now we own 2, 4, and 5, we don't care about 3 anymore
+	state.ownership = map[int32]bool{2: true, 4: true, 5: true}
+	s.setupMockForReadiness(2, state)
+	s.setupMockForReadiness(4, state)
+
+	// acquire again
+	s.shardController.acquireShards(context.Background())
+
+	// now should be ready
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	s.NoError(s.shardController.InitialShardsAcquired(ctx))
 }
 
 // setupAndAcquireShards sets up the mocks for acquiring the given number of shards and then calls acquireShards. It is

@@ -497,6 +497,9 @@ func (c *ControllerImpl) checkShardReadiness(
 		}
 		go func() {
 			defer sem.Release(1)
+			// Note that AssertOwnership uses a detached context for the actual persistence op
+			// so we can't cancel it. If context is canceled, the final Acquire will fail and
+			// we won't do anything.
 			if _, err := shard.GetEngine(ctx); err != nil {
 				return
 			} else if shard.AssertOwnership(ctx) != nil {
