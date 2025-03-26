@@ -735,7 +735,6 @@ type clientFactoryProvider struct {
 }
 
 func (p *clientFactoryProvider) NewFactory(
-	cfg *config.Config,
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
 	metricsHandler metrics.Handler,
@@ -746,7 +745,6 @@ func (p *clientFactoryProvider) NewFactory(
 	throttledLogger log.Logger,
 ) client.Factory {
 	f := client.NewFactoryProvider().NewFactory(
-		cfg,
 		rpcFactory,
 		monitor,
 		metricsHandler,
