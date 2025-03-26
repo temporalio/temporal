@@ -689,7 +689,7 @@ func (rpc *RPC) GetKeepAliveServerParameters() keepalive.ServerParameters {
 		Time:                  2 * time.Hour,
 		Timeout:               20 * time.Second,
 	}
-	if rpc.KeepAliveServerConfig == nil {
+	if rpc == nil || rpc.KeepAliveServerConfig == nil {
 		return defaultConfig
 	}
 	if rpc.KeepAliveServerConfig.MaxConnectionIdle != nil {
@@ -717,7 +717,7 @@ func (rpc *RPC) GetKeepAliveClientParameters() keepalive.ClientParameters {
 		PermitWithoutStream: true,
 	}
 
-	if rpc.KeepAliveClientConfig == nil {
+	if rpc == nil || rpc.KeepAliveClientConfig == nil {
 		return defaultConfig
 	}
 
@@ -740,7 +740,7 @@ func (rpc *RPC) GetKeepAliveEnforcementPolicy() keepalive.EnforcementPolicy {
 		PermitWithoutStream: false,
 	}
 
-	if rpc.KeepAliveEnforcementPolicy == nil {
+	if rpc == nil || rpc.KeepAliveEnforcementPolicy == nil {
 		return defaultConfig
 	}
 

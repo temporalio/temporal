@@ -55,7 +55,7 @@ type (
 
 	// RPCFactory is a subset of the [go.temporal.io/server/common/rpc.RPCFactory] interface to make testing easier.
 	RPCFactory interface {
-		CreateInternodeGRPCConnection(rpcAddress string, dialOptions ...grpc.DialOption) *grpc.ClientConn
+		CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn
 	}
 
 	connectionPool interface {
@@ -93,7 +93,7 @@ func (c *connectionPoolImpl) getOrCreateClientConn(addr rpcAddress) clientConnec
 	if cc, ok = c.mu.conns[addr]; ok {
 		return cc
 	}
-	grpcConn := c.rpcFactory.CreateInternodeGRPCConnection(string(addr), c.dialOptions...)
+	grpcConn := c.rpcFactory.CreateHistoryGRPCConnection(string(addr))
 	cc = clientConnection{
 		historyClient: historyservice.NewHistoryServiceClient(grpcConn),
 		grpcConn:      grpcConn,

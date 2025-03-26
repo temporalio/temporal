@@ -397,7 +397,6 @@ func RPCFactoryProvider(
 	tracingStatsHandler telemetry.ClientStatsHandler,
 	monitor membership.Monitor,
 ) (common.RPCFactory, error) {
-	svcCfg := cfg.Services[string(svcName)]
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
@@ -408,7 +407,7 @@ func RPCFactoryProvider(
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
 	return rpc.NewFactory(
-		&svcCfg.RPC,
+		cfg,
 		svcName,
 		logger,
 		tlsConfigProvider,

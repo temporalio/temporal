@@ -160,7 +160,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 
 	keyResolver := newServiceKeyResolver(resolver)
 	clientProvider := func(clientKey string) (interface{}, error) {
-		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey, cf.getClientDailOption(primitives.MatchingService))
+		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), nil
 	}
 	client := matching.NewClient(
@@ -184,7 +184,7 @@ func (cf *rpcClientFactory) NewRemoteFrontendClientWithTimeout(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient) {
-	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress, cf.getClientDailOption(primitives.FrontendService))
+	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress)
 	client := workflowservice.NewWorkflowServiceClient(connection)
 	return connection, cf.newFrontendClient(client, timeout, longPollTimeout)
 }
@@ -203,7 +203,7 @@ func (cf *rpcClientFactory) NewRemoteAdminClientWithTimeout(
 	timeout time.Duration,
 	largeTimeout time.Duration,
 ) adminservice.AdminServiceClient {
-	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress, cf.getClientDailOption(primitives.FrontendService))
+	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress)
 	client := adminservice.NewAdminServiceClient(connection)
 	return cf.newAdminClient(client, timeout, largeTimeout)
 }
