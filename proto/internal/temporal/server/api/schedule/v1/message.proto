@@ -119,6 +119,7 @@ message StartWorkflowRequest {
 message StartWorkflowResponse {
     string run_id = 1;
     google.protobuf.Timestamp real_start_time = 2;
+    bool did_local_rate_limit_sleep = 3;
 }
 
 message CancelWorkflowRequest {
