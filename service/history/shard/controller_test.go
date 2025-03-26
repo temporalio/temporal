@@ -643,6 +643,10 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 				}, nil
 			}).AnyTimes()
 		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+			ShardID: shardID,
+			RangeID: 6,
+		}).Return(nil).AnyTimes()
 	}
 
 	randomLoadedShard := func() (int32, historyi.ShardContext) {
@@ -737,10 +741,6 @@ func (s *controllerSuite) TestShardLingerTimeout() {
 	mockEngine := historyi.NewMockEngine(s.controller)
 	historyEngines[shardID] = mockEngine
 	s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
-	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
-		ShardID: shardID,
-		RangeID: 6,
-	}).Return(nil).MinTimes(1)
 
 	s.shardController.acquireShards(context.Background())
 
@@ -928,6 +928,10 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 		},
 		PreviousRangeID: currentRangeID,
 	})).Return(nil).MinTimes(minTimes)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+		ShardID: shardID,
+		RangeID: newRangeID,
+	}).Return(nil).AnyTimes()
 }
 
 func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
