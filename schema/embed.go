@@ -52,7 +52,7 @@ func PathsByDir(dbSubDir string) []string {
 		}
 		if d.IsDir() {
 			if d.Name() == "versioned" {
-				dirs = append(dirs, filepath.Dir(path))
+				dirs = append(dirs, filepath.ToSlash(filepath.Dir(path)))
 				return fs.SkipDir
 			}
 		}
