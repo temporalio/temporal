@@ -56,7 +56,6 @@ import (
 type MockFactory struct {
 	ctrl     *gomock.Controller
 	recorder *MockFactoryMockRecorder
-	isgomock struct{}
 }
 
 // MockFactoryMockRecorder is the mock recorder for MockFactory.
@@ -170,7 +169,6 @@ func (mr *MockFactoryMockRecorder) NewRemoteFrontendClientWithTimeout(rpcAddress
 type MockFactoryProvider struct {
 	ctrl     *gomock.Controller
 	recorder *MockFactoryProviderMockRecorder
-	isgomock struct{}
 }
 
 // MockFactoryProviderMockRecorder is the mock recorder for MockFactoryProvider.
