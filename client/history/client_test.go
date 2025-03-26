@@ -187,5 +187,5 @@ func (s *testHistoryService) DeleteDLQTasks(
 
 func (t *testRPCFactory) CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn {
 	t.dialedAddresses = append(t.dialedAddresses, rpcAddress)
-	return t.base.CreateInternodeGRPCConnection(rpcAddress)
+	return t.base.CreateHistoryGRPCConnection(rpcAddress)
 }

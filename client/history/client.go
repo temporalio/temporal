@@ -75,9 +75,8 @@ func NewClient(
 	numberOfShards int32,
 	rpcFactory RPCFactory,
 	timeout time.Duration,
-	dialOptions ...grpc.DialOption,
 ) historyservice.HistoryServiceClient {
-	connections := newConnectionPool(historyServiceResolver, rpcFactory, dialOptions...)
+	connections := newConnectionPool(historyServiceResolver, rpcFactory)
 
 	var redirector redirector
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {

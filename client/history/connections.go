@@ -68,12 +68,10 @@ type (
 func newConnectionPool(
 	historyServiceResolver membership.ServiceResolver,
 	rpcFactory RPCFactory,
-	dialOptions ...grpc.DialOption,
 ) *connectionPoolImpl {
 	c := &connectionPoolImpl{
 		historyServiceResolver: historyServiceResolver,
 		rpcFactory:             rpcFactory,
-		dialOptions:            dialOptions,
 	}
 	c.mu.conns = make(map[rpcAddress]clientConnection)
 	return c

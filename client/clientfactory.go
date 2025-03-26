@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
@@ -63,7 +62,6 @@ type (
 	// FactoryProvider can be used to provide a customized client Factory implementation.
 	FactoryProvider interface {
 		NewFactory(
-			cfg *config.Config,
 			rpcFactory common.RPCFactory,
 			monitor membership.Monitor,
 			metricsHandler metrics.Handler,
@@ -79,7 +77,6 @@ type (
 	NamespaceIDToNameFunc func(id namespace.ID) (namespace.Name, error)
 
 	rpcClientFactory struct {
-		config                *config.Config
 		rpcFactory            common.RPCFactory
 		monitor               membership.Monitor
 		metricsHandler        metrics.Handler
@@ -105,7 +102,6 @@ func NewFactoryProvider() FactoryProvider {
 
 // NewFactory creates an instance of client factory that knows how to dispatch RPC calls.
 func (p *factoryProviderImpl) NewFactory(
-	cfg *config.Config,
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
 	metricsHandler metrics.Handler,
@@ -116,7 +112,6 @@ func (p *factoryProviderImpl) NewFactory(
 	throttledLogger log.Logger,
 ) Factory {
 	return &rpcClientFactory{
-		config:                cfg,
 		rpcFactory:            rpcFactory,
 		monitor:               monitor,
 		metricsHandler:        metricsHandler,
@@ -140,7 +135,6 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 		cf.numberOfHistoryShards,
 		cf.rpcFactory,
 		timeout,
-		cf.getClientDailOption(primitives.HistoryService),
 	)
 	if cf.metricsHandler != nil {
 		client = history.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
@@ -239,11 +233,6 @@ func (cf *rpcClientFactory) newFrontendClient(
 		client = frontend.NewMetricClient(client, cf.metricsHandler, cf.throttledLogger)
 	}
 	return client
-}
-
-func (cf *rpcClientFactory) getClientDailOption(serviceName primitives.ServiceName) grpc.DialOption {
-	matchingConfig := cf.config.Services[string(serviceName)]
-	return grpc.WithKeepaliveParams(matchingConfig.RPC.GetKeepAliveClientParameters())
 }
 
 func newServiceKeyResolver(resolver membership.ServiceResolver) *serviceKeyResolverImpl {
