@@ -26,8 +26,18 @@ package chasm
 
 import (
 	"reflect"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
+)
+
+const (
+	// Used by reflection.
+	chasmFieldTypePrefix      = "chasm.Field["
+	chasmCollectionTypePrefix = "chasm.Collection["
+	internalFieldName         = "Internal"
+
+	fieldNameTag = "name"
 )
 
 // This struct needs to be create via reflection
@@ -37,16 +47,25 @@ type Field[T any] struct {
 }
 
 type fieldInternal struct {
-	fieldType int // data, component, componentPointer
-	component reflect.Value
+	fieldType fieldType
+	value     any // Component | Data | Collection
 
-	// backingNode *nodeInfo
+	// Pointer to corresponding tree node. Can be nil for the jsut assigned fields.
+	node *Node
 }
 
-func (d *Field[T]) Get(Context) (T, error) {
+func (fi fieldInternal) IsEmpty() bool {
+	return fi.value == nil
+}
+
+func (f Field[T]) Get(Context) (T, error) {
 	// remember to handle d == nil case
 
 	panic("not implemented")
+}
+
+func NewEmptyField[T any]() Field[T] {
+	return Field[T]{}
 }
 
 // re. Data v.s. Component.
@@ -60,8 +79,13 @@ func (d *Field[T]) Get(Context) (T, error) {
 func NewDataField[D proto.Message](
 	ctx MutableContext,
 	d D,
-) *Field[D] {
-	return &Field[D]{}
+) Field[D] {
+	return Field[D]{
+		Internal: fieldInternal{
+			fieldType: fieldTypeData,
+			value:     d,
+		},
+	}
 }
 
 type componentFieldOptions struct {
@@ -80,10 +104,11 @@ func NewComponentField[C Component](
 	ctx MutableContext,
 	c C,
 	options ...ComponentFieldOption,
-) *Field[C] {
-	return &Field[C]{
+) Field[C] {
+	return Field[C]{
 		Internal: fieldInternal{
-			component: reflect.ValueOf(c),
+			fieldType: fieldTypeComponent,
+			value:     c,
 		},
 	}
 }
@@ -91,15 +116,24 @@ func NewComponentField[C Component](
 func NewComponentPointerField[C Component](
 	ctx MutableContext,
 	c C,
-) *Field[C] {
+) Field[C] {
 	panic("not implemented")
 }
 
 func NewDataPointerField[D proto.Message](
 	ctx MutableContext,
 	d D,
-) *Field[D] {
+) Field[D] {
 	panic("not implemented")
 }
 
-type Collection[T any] map[string]*Field[T]
+type Collection[T any] map[string]Field[T]
+
+func genericTypePrefix(t reflect.Type) string {
+	tn := t.String()
+	bracketPos := strings.Index(tn, "[")
+	if bracketPos == -1 {
+		return ""
+	}
+	return tn[:bracketPos+1]
+}
