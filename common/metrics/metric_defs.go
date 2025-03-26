@@ -942,6 +942,8 @@ var (
 	ReplicationTasksSkipped               = NewCounterDef("replication_tasks_skipped")
 	ReplicationTasksApplied               = NewCounterDef("replication_tasks_applied")
 	ReplicationTasksFailed                = NewCounterDef("replication_tasks_failed")
+	ReplicationTasksBackFill              = NewCounterDef("replication_tasks_back_fill")
+	ReplicationTasksBackFillLatency       = NewTimerDef("replication_tasks_back_fill_latency")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
 	ReplicationTasksLag = NewDimensionlessHistogramDef("replication_tasks_lag")
