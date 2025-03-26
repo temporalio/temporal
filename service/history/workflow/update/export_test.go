@@ -25,7 +25,7 @@
 package update
 
 import (
-	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/common/effect"
 )
 
 var (

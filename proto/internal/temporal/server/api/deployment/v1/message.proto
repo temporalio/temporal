@@ -175,6 +175,17 @@ message RegisterWorkerInWorkerDeploymentArgs {
     WorkerDeploymentVersion version = 4;
 }
 
+// used as Worker Deployment workflow activity input:
+message DescribeVersionFromWorkerDeploymentActivityArgs {
+    string version = 1;
+}
+
+message DescribeVersionFromWorkerDeploymentActivityResult {
+    // All the Task Queues that have ever polled from this Deployment version.
+    repeated temporal.api.deployment.v1.WorkerDeploymentVersionInfo.VersionTaskQueueInfo task_queue_infos = 1;
+}
+
+
 // used as Worker Deployment workflow update input (sent from Worker Deployment workflow):
 message SyncVersionStateUpdateArgs {
     // Last time `current_since_time`, `ramping_since_time, or `ramp_percentage` of this version changed.

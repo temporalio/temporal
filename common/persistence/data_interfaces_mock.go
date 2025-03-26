@@ -45,6 +45,7 @@ import (
 type MockCloseable struct {
 	ctrl     *gomock.Controller
 	recorder *MockCloseableMockRecorder
+	isgomock struct{}
 }
 
 // MockCloseableMockRecorder is the mock recorder for MockCloseable.
@@ -80,6 +81,7 @@ func (mr *MockCloseableMockRecorder) Close() *gomock.Call {
 type MockShardManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockShardManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockShardManagerMockRecorder is the mock recorder for MockShardManager.
@@ -172,6 +174,7 @@ func (mr *MockShardManagerMockRecorder) UpdateShard(ctx, request any) *gomock.Ca
 type MockExecutionManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecutionManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockExecutionManagerMockRecorder is the mock recorder for MockExecutionManager.
@@ -646,6 +649,7 @@ func (mr *MockExecutionManagerMockRecorder) UpdateWorkflowExecution(ctx, request
 type MockTaskManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockTaskManagerMockRecorder is the mock recorder for MockTaskManager.
@@ -888,6 +892,7 @@ func (mr *MockTaskManagerMockRecorder) UpdateTaskQueueUserData(ctx, request any)
 type MockMetadataManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockMetadataManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockMetadataManagerMockRecorder is the mock recorder for MockMetadataManager.
@@ -1067,6 +1072,7 @@ func (mr *MockMetadataManagerMockRecorder) UpdateNamespace(ctx, request any) *go
 type MockClusterMetadataManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockClusterMetadataManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockClusterMetadataManagerMockRecorder is the mock recorder for MockClusterMetadataManager.
@@ -1233,6 +1239,7 @@ func (mr *MockClusterMetadataManagerMockRecorder) UpsertClusterMembership(ctx, r
 type MockNexusEndpointManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockNexusEndpointManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockNexusEndpointManagerMockRecorder is the mock recorder for MockNexusEndpointManager.
@@ -1341,6 +1348,7 @@ func (mr *MockNexusEndpointManagerMockRecorder) ListNexusEndpoints(ctx, request 
 type MockHistoryTaskQueueManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockHistoryTaskQueueManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockHistoryTaskQueueManagerMockRecorder is the mock recorder for MockHistoryTaskQueueManager.

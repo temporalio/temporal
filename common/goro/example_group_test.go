@@ -29,7 +29,7 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/server/internal/goro"
+	"go.temporal.io/server/common/goro"
 )
 
 type ExampleService struct {
