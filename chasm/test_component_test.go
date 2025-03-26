@@ -270,7 +270,7 @@ func renderProtoPointer(v reflect.Value) string {
 				}
 				oneofFieldValue := oneofVal.Field(j)
 
-				// ✅ RECURSION: Handle nested proto inside oneof
+				// Handle nested proto inside oneof
 				if oneofFieldValue.Kind() == reflect.Ptr && oneofFieldValue.Elem().Kind() == reflect.Struct {
 					result += fmt.Sprintf("\t\t\t%s: %s,\n", oneofField.Name, renderProtoPointer(oneofFieldValue))
 				} else {
@@ -281,7 +281,7 @@ func renderProtoPointer(v reflect.Value) string {
 			continue
 		}
 
-		// ✅ Recursively handle nested proto messages (pointer to struct)
+		// Recursively handle nested proto messages (pointer to struct)
 		if field.Type.Kind() == reflect.Ptr && fieldValue.Kind() == reflect.Ptr && fieldValue.Elem().Kind() == reflect.Struct {
 			result += fmt.Sprintf("\t\t%s: %s,\n", field.Name, renderProtoPointer(fieldValue))
 			continue
