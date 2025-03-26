@@ -274,8 +274,8 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 }
 
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {
-	matchingConfig := d.config.Services[string(serviceName)]
-	return grpc.WithKeepaliveParams(matchingConfig.RPC.GetKeepAliveClientParameters())
+	serviceConfig := d.config.Services[string(serviceName)]
+	return grpc.WithKeepaliveParams(serviceConfig.RPC.GetKeepAliveClientParameters())
 }
 
 func (d *RPCFactory) GetTLSConfigProvider() encryption.TLSConfigProvider {
