@@ -50,7 +50,6 @@ type (
 
 		historyServiceResolver membership.ServiceResolver
 		rpcFactory             RPCFactory
-		dialOptions            []grpc.DialOption
 	}
 
 	// RPCFactory is a subset of the [go.temporal.io/server/common/rpc.RPCFactory] interface to make testing easier.
