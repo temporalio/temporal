@@ -43,7 +43,6 @@ import (
 type MockNodeBackend struct {
 	ctrl     *gomock.Controller
 	recorder *MockNodeBackendMockRecorder
-	isgomock struct{}
 }
 
 // MockNodeBackendMockRecorder is the mock recorder for MockNodeBackend.
@@ -95,7 +94,6 @@ func (mr *MockNodeBackendMockRecorder) NextTransitionCount() *gomock.Call {
 type MockNodePathEncoder struct {
 	ctrl     *gomock.Controller
 	recorder *MockNodePathEncoderMockRecorder
-	isgomock struct{}
 }
 
 // MockNodePathEncoderMockRecorder is the mock recorder for MockNodePathEncoder.
