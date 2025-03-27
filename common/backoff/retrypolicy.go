@@ -27,6 +27,7 @@ package backoff
 import (
 	"math"
 	"math/rand"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -296,8 +297,7 @@ func getJitterRand() *rand.Rand {
 	if r := jitterRand.Load(); r != nil {
 		return r
 	}
-
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r := rand.New(NewRetryLockedSource())
 
 	if !jitterRand.CompareAndSwap(nil, r) {
 		// Two different goroutines called some top-level
@@ -310,4 +310,35 @@ func getJitterRand() *rand.Rand {
 	}
 
 	return r
+}
+
+// We want to wrap our rng source with mutex, because the one in math/rand is used by other clients,
+// so all of them are contending for the same mutex.
+// Proper solution will be to use standard thread safe Rng source, but until Go 2 it seems it will not happen.
+// See the following discussions for details
+// https://github.com/golang/go/issues/24121 <- main
+// https://github.com/stripe/veneur/pull/466 -< make rng source faster
+// https://github.com/golang/go/issues/25057
+// https://github.com/golang/go/issues/21393
+
+type RetryLockedSource struct {
+	lk sync.Mutex
+	s  rand.Source
+}
+
+func (r *RetryLockedSource) Int63() int64 {
+	r.lk.Lock()
+	defer r.lk.Unlock()
+	return r.s.Int63()
+}
+
+func (r *RetryLockedSource) Seed(seed int64) {
+	panic("internal error: call to RetryLockedSource.Seed")
+}
+
+func NewRetryLockedSource() *RetryLockedSource {
+	return &RetryLockedSource{
+		lk: sync.Mutex{},
+		s:  rand.NewSource(time.Now().UnixNano()),
+	}
 }
