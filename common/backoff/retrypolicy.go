@@ -27,6 +27,7 @@ package backoff
 import (
 	"math"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common/clock"
@@ -50,7 +51,8 @@ var (
 	DisabledRetryPolicy RetryPolicy = &disabledRetryPolicyImpl{}
 
 	// common 'globalToFile' rand instance, used in adding jitter to next interval in retry policy
-	jitterRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+	//jitterRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+	jitterRand atomic.Pointer[rand.Rand]
 )
 
 type (
@@ -204,7 +206,7 @@ func (p *ExponentialRetryPolicy) addJitter(nextInterval float64) float64 {
 	if jitterPortion < 1 {
 		jitterPortion = 1
 	}
-	nextInterval = nextInterval*0.8 + float64(jitterRand.Intn(jitterPortion))
+	nextInterval = nextInterval*0.8 + float64(getJitterRand().Intn(jitterPortion))
 	return nextInterval
 }
 
@@ -289,4 +291,24 @@ func (p *ConstantDelayRetryPolicy) ComputeNextDelay(_ time.Duration, attempt int
 
 func addJitter(duration time.Duration, jitterPct float64) time.Duration {
 	return duration * time.Duration(1+jitterPct*rand.Float64())
+}
+
+func getJitterRand() *rand.Rand {
+	if r := jitterRand.Load(); r != nil {
+		return r
+	}
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	if !jitterRand.CompareAndSwap(nil, r) {
+		// Two different goroutines called some top-level
+		// function at the same time. While the results in
+		// that case are unpredictable, if we just use r here,
+		// and we are using a seed, we will most likely return
+		// the same value for both calls. That doesn't seem ideal.
+		// Just use the first one to get in.
+		return jitterRand.Load()
+	}
+
+	return r
 }
