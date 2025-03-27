@@ -204,9 +204,9 @@ func testComponentSerializedNodes() map[string]*persistencespb.ChasmNode {
 	return serializedNodes
 }
 
-// Helper functions to regenerate testComponentMap body.
+// Helper functions to regenerate testComponentSerializedNodes() function body.
 // Use: generateMapInit(serializedNodes, "serializedNodes")
-func generateMapInit(m interface{}, mapName string) {
+func generateMapInit(m any, mapName string) {
 	val := reflect.ValueOf(m)
 	if val.Kind() != reflect.Map {
 		fmt.Println("Provided value is not a map")
