@@ -51,7 +51,6 @@ var (
 	DisabledRetryPolicy RetryPolicy = &disabledRetryPolicyImpl{}
 
 	// common 'globalToFile' rand instance, used in adding jitter to next interval in retry policy
-	//jitterRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	jitterRand atomic.Pointer[rand.Rand]
 )
 
