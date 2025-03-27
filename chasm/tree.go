@@ -26,13 +26,22 @@ package chasm
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/softassert"
+	"google.golang.org/protobuf/proto"
+)
+
+var (
+	protoMessageT = reflect.TypeFor[proto.Message]()
 )
 
 type (
@@ -44,51 +53,18 @@ type (
 		*nodeBase
 
 		parent   *Node
-		children map[string]*Node
-		nodeName string // key of this node in parent's children map.
+		children map[string]*Node // child name (path segment) -> child node
+		nodeName string           // key of this node in parent's children map.
 
-		persistence *persistencespb.ChasmNode
-		value       any // deserialized component | data | collection
+		// Type of attributes controls the type of the node.
+		serializedValue *persistencespb.ChasmNode // serialized component | data | collection
+		value           any                       // deserialized component | data | collection
 
 		// TODO: add other necessary fields here, e.g.
 		//
 		// dirty    bool
 	}
 
-	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
-	// including the node n itself.
-	//
-	// TODO: Return tree size changes in NodesMutation as well. MutateState needs to
-	// track the overall size of itself and terminate workflow if it exceeds the limit.
-	NodesMutation struct {
-		UpdatedNodes map[string]*persistencespb.ChasmNode // flattened node path -> chasm node
-		DeletedNodes map[string]struct{}
-	}
-
-	// NodesSnapshot is a snapshot for all nodes rooted at a given node n,
-	// including the node n itself.
-	NodesSnapshot struct {
-		Nodes map[string]*persistencespb.ChasmNode // flattened node path -> chasm node
-	}
-
-	// NodeBackend is a set of methods needed from MutableState
-	//
-	// This is for breaking cycle dependency between
-	// this package and service/history/workflow package
-	// where MutableState is defined.
-	NodeBackend interface {
-		// TODO: Add methods needed from MutateState here.
-	}
-
-	// NodePathEncoder is an interface for encoding and decoding node paths.
-	// Logic outside the chasm package should only work with encoded paths.
-	NodePathEncoder interface {
-		Encode(node *Node, path []string) (string, error)
-		Decode(encodedPath string) ([]string, error)
-	}
-)
-
-type (
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
 	nodeBase struct {
 		registry    *Registry
@@ -100,12 +76,47 @@ type (
 		// Mutations accumulated so far in this transaction.
 		mutation NodesMutation
 	}
+
+	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
+	// including the node n itself.
+	//
+	// TODO: Return tree size changes in NodesMutation as well. MutateState needs to
+	// track the overall size of itself and terminate workflow if it exceeds the limit.
+	NodesMutation struct {
+		UpdatedNodes map[string]*persistencespb.ChasmNode // encoded node path -> chasm node
+		DeletedNodes map[string]struct{}
+	}
+
+	// NodesSnapshot is a snapshot for all nodes rooted at a given node n,
+	// including the node n itself.
+	NodesSnapshot struct {
+		Nodes map[string]*persistencespb.ChasmNode // encoded node path -> chasm node
+	}
+
+	// NodeBackend is a set of methods needed from MutableState
+	//
+	// This is for breaking cycle dependency between
+	// this package and service/history/workflow package
+	// where MutableState is defined.
+	NodeBackend interface {
+		// TODO: Add methods needed from MutateState here.
+		GetCurrentVersion() int64
+		NextTransitionCount() int64
+	}
+
+	// NodePathEncoder is an interface for encoding and decoding node paths.
+	// Logic outside the chasm package should only work with encoded paths.
+	NodePathEncoder interface {
+		Encode(node *Node, path []string) (string, error)
+		Decode(encodedPath string) ([]string, error)
+	}
 )
 
 // NewTree creates a new in-memory CHASM tree from a collection of flattened persistence CHASM nodes.
 func NewTree(
+	serializedNodes map[string]*persistencespb.ChasmNode, // This is coming from MS map[nodePath]ChasmNode.
+
 	registry *Registry,
-	persistenceNodes map[string]*persistencespb.ChasmNode,
 	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
@@ -125,12 +136,12 @@ func NewTree(
 	}
 
 	root := newNode(base, nil, "")
-	for encodedPath, pNode := range persistenceNodes {
+	for encodedPath, serializedNode := range serializedNodes {
 		nodePath, err := pathEncoder.Decode(encodedPath)
 		if err != nil {
 			return nil, err
 		}
-		root.insert(nodePath, pNode, base)
+		root.setSerializedValue(nodePath, serializedNode)
 	}
 
 	return root, nil
@@ -151,6 +162,210 @@ func NewEmptyTree(
 	}
 	root := newNode(base, nil, "")
 	return root
+}
+
+// setValue sets node value field and initialize serializedValue field with empty attributes based on fieldType.
+func (n *Node) setValue(v any, ft fieldType) error {
+	if err := validateValueType(v); err != nil {
+		return err
+	}
+
+	n.value = v
+
+	switch ft {
+	case fieldTypeData:
+		n.serializedValue = &persistencespb.ChasmNode{
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          n.backend.NextTransitionCount(),
+					NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+				},
+				Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
+					DataAttributes: &persistencespb.ChasmDataAttributes{},
+				},
+			},
+		}
+	case fieldTypeComponent:
+		n.serializedValue = &persistencespb.ChasmNode{
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          n.backend.NextTransitionCount(),
+					NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+				},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
+				},
+			},
+		}
+	case fieldTypeComponentPointer:
+		panic("not implemented")
+	}
+	return nil
+}
+
+func validateValueType(v any) error {
+	return validateType(reflect.TypeOf(v))
+}
+
+func validateType(t reflect.Type) error {
+	// TODO: for component, interface should also be supported.
+	if t.Kind() != reflect.Ptr && t.Elem().Kind() != reflect.Struct {
+		return serviceerror.NewInternal("only pointer to struct is supported for tree node value")
+	}
+	return nil
+}
+
+func fieldName(f reflect.StructField) string {
+	if tagName := f.Tag.Get(fieldNameTag); tagName != "" {
+		return tagName
+	}
+	return f.Name
+}
+
+func (n *Node) setSerializedValue(
+	nodePath []string,
+	serializedNode *persistencespb.ChasmNode,
+) {
+	if len(nodePath) == 0 {
+		n.serializedValue = serializedNode
+		return
+	}
+
+	childName := nodePath[0]
+	childNode, ok := n.children[childName]
+	if !ok {
+		childNode = newNode(n.nodeBase, n, childName)
+		n.children[childName] = childNode
+	}
+	childNode.setSerializedValue(nodePath[1:], serializedNode)
+}
+
+// deserialize initializes the node's value from its serializedValue.
+// If value is of component type, it initializes every chasm.Field of it and sets node field but not value field
+// i.e. it doesn't deserialize recursively and must be called on every node separately.
+func (n *Node) deserialize(
+	valueT reflect.Type,
+) error {
+	if err := validateType(valueT); err != nil {
+		return err
+	}
+
+	if n.parent == nil {
+		// Top level node is always component.
+		return n.deserializeComponentNode(valueT)
+	}
+
+	switch n.serializedValue.GetMetadata().GetAttributes().(type) {
+	case *persistencespb.ChasmNodeMetadata_ComponentAttributes:
+		return n.deserializeComponentNode(valueT)
+	case *persistencespb.ChasmNodeMetadata_DataAttributes:
+		return n.deserializeDataNode(valueT)
+	case *persistencespb.ChasmNodeMetadata_CollectionAttributes:
+		panic("not implemented")
+	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
+		// TODO: return serviceerror.NewInternal(...) instead.
+	}
+	return nil
+}
+
+func (n *Node) deserializeComponentNode(
+	valueT reflect.Type,
+) error {
+	// TODO: use n.serializedValue.GetComponentAttributes().GetType() instead to support deserialization to interface.
+	valueV := reflect.New(valueT.Elem())
+	if n.serializedValue == nil {
+		// Nothing to deserialize. Create an empty value and return.
+		return n.setValue(valueV.Interface(), fieldTypeComponent)
+	}
+
+	protoMessageFound := false
+	for i := 0; i < valueT.Elem().NumField(); i++ {
+		fieldV := valueV.Elem().Field(i)
+		fieldT := fieldV.Type()
+
+		if fieldT == UnimplementedComponentT {
+			continue
+		}
+
+		if fieldT.AssignableTo(protoMessageT) {
+			if protoMessageFound {
+				return serviceerror.NewInternal("only one proto field allowed in component")
+			}
+			protoMessageFound = true
+
+			value, err := n.unmarshalProto(n.serializedValue.GetData(), fieldT)
+			if err != nil {
+				return err
+			}
+			fieldV.Set(value)
+			continue
+		}
+
+		// chasm.Field field must NOT be a pointer, i.e. chasm.Field[T] not *chasm.Field[T].
+		if fieldT.Kind() == reflect.Ptr {
+			continue
+		}
+
+		fieldN := fieldName(valueT.Elem().Field(i))
+
+		switch genericTypePrefix(fieldT) {
+		case chasmFieldTypePrefix:
+			if childNode, found := n.children[fieldN]; found {
+				// TODO: support chasm.Field[interface], type should go from registry
+				//  using childNode.serializedValue.GetComponentAttributes().GetType()
+				chasmFieldV := reflect.New(fieldT).Elem()
+				internalValue := reflect.ValueOf(fieldInternal{
+					node: childNode,
+				})
+				chasmFieldV.FieldByName(internalFieldName).Set(internalValue)
+				fieldV.Set(chasmFieldV)
+			}
+			continue
+		case chasmCollectionTypePrefix:
+			// TODO: support collection
+			// init the map and populate
+			panic("not implemented")
+			// continue
+		}
+
+		return serviceerror.NewInternal(fmt.Sprintf("unsupported field type %s in component %s", fieldT.String(), valueT.String()))
+	}
+
+	if !protoMessageFound {
+		return serviceerror.NewInternal("no proto field found in component")
+	}
+
+	n.value = valueV.Interface()
+	return nil
+}
+
+func (n *Node) deserializeDataNode(
+	valueT reflect.Type,
+) error {
+	value, err := n.unmarshalProto(n.serializedValue.GetData(), valueT)
+	if err != nil {
+		return err
+	}
+
+	n.value = value.Interface()
+	return nil
+}
+
+func (n *Node) unmarshalProto(
+	dataBlob *commonpb.DataBlob,
+	valueT reflect.Type,
+) (reflect.Value, error) {
+	if !valueT.AssignableTo(protoMessageT) {
+		return reflect.Value{}, serviceerror.NewInternal("only support proto.Message as chasm data")
+	}
+
+	value := reflect.New(valueT.Elem())
+
+	if err := serialization.ProtoDecodeBlob(dataBlob, value.Interface().(proto.Message)); err != nil {
+		return reflect.Value{}, err
+	}
+
+	return value, nil
 }
 
 // Component retrieves a component from the tree rooted at node n
@@ -233,12 +448,12 @@ func (n *Node) snapshotInternal(
 		return
 	}
 
-	if transitionhistory.Compare(n.persistence.Metadata.LastUpdateVersionedTransition, exclusiveMinVT) > 0 {
+	if transitionhistory.Compare(n.serializedValue.Metadata.LastUpdateVersionedTransition, exclusiveMinVT) > 0 {
 		encodedPath, err := n.pathEncoder.Encode(n, currentPath)
 		if !softassert.That(n.logger, err == nil, "chasm path encoding should always succeed on clean tree") {
 			panic(fmt.Sprintf("failed to encode chasm path on clean tree: %v", err))
 		}
-		nodes[encodedPath] = n.persistence
+		nodes[encodedPath] = n.serializedValue
 	}
 
 	for childName, childNode := range n.children {
@@ -348,17 +563,17 @@ func (n *Node) applyUpdates(
 		node, ok := n.getNodeByPath(path)
 		if !ok {
 			// Node doesn't exist, we need to create it.
-			n.insert(path, updatedNode, n.nodeBase)
+			n.setSerializedValue(path, updatedNode)
 			n.mutation.UpdatedNodes[encodedPath] = updatedNode
 			continue
 		}
 
 		if transitionhistory.Compare(
-			node.persistence.Metadata.LastUpdateVersionedTransition,
+			node.serializedValue.Metadata.LastUpdateVersionedTransition,
 			updatedNode.Metadata.LastUpdateVersionedTransition,
 		) != 0 {
 			n.mutation.UpdatedNodes[encodedPath] = updatedNode
-			node.persistence = updatedNode
+			node.serializedValue = updatedNode
 			node.value = nil
 
 			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
@@ -412,25 +627,6 @@ func (n *Node) delete(
 	n.mutation.DeletedNodes[encodedPath] = struct{}{}
 
 	return nil
-}
-
-func (n *Node) insert(
-	nodePath []string,
-	pNode *persistencespb.ChasmNode,
-	nodeBase *nodeBase,
-) {
-	if len(nodePath) == 0 {
-		n.persistence = pNode
-		return
-	}
-
-	childName := nodePath[0]
-	childNode, ok := n.children[childName]
-	if !ok {
-		childNode = newNode(nodeBase, n, childName)
-		n.children[childName] = childNode
-	}
-	childNode.insert(nodePath[1:], pNode, nodeBase)
 }
 
 // IsDirty returns true if any node rooted at Node n has been modified.

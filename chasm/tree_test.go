@@ -23,6 +23,7 @@
 package chasm
 
 import (
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -32,6 +33,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
 
@@ -39,6 +42,7 @@ type (
 	nodeSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller  *gomock.Controller
 		nodeBackend *MockNodeBackend
@@ -46,6 +50,7 @@ type (
 		registry        *Registry
 		timeSource      *clock.EventTimeSource
 		nodePathEncoder NodePathEncoder
+		logger          log.Logger
 	}
 )
 
@@ -55,13 +60,18 @@ func TestNodeSuite(t *testing.T) {
 
 func (s *nodeSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.nodeBackend = NewMockNodeBackend(s.controller)
 
 	s.registry = NewRegistry()
+	err := s.registry.Register(newTestLibrary())
+	s.NoError(err)
+
 	s.timeSource = clock.NewEventTimeSource()
 	s.nodePathEncoder = &testNodePathEncoder{}
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 }
 
 func (s *nodeSuite) TestNewTree() {
@@ -100,13 +110,94 @@ func (s *nodeSuite) TestNewTree() {
 		persistenceNodes["child2/grandchild1"],
 	}
 
-	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
 	s.NoError(err)
 	s.NotNil(root)
 
 	preorderNodes := s.preorderAndAssertParent(root, nil)
 	s.Len(preorderNodes, 5)
 	s.Equal(expectedPreorderNodes, preorderNodes)
+}
+
+func (s *nodeSuite) TestSetValue_TypeComponent() {
+	component := &TestComponent{}
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1)
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	node := newNode(s.nodeBase(), nil, "")
+	err := node.setValue(component, fieldTypeComponent)
+	s.NoError(err)
+
+	// Assert that tree is constructed.
+	s.Equal(component, node.value)
+	s.NotNil(node.serializedValue.GetMetadata().GetComponentAttributes(), "node serialized value must have attributes created")
+	s.Nil(node.serializedValue.GetData(), "node serialized value must not have data before serialize is called")
+}
+
+func (s *nodeSuite) TestSetValue_TypeData() {
+	component := &protoMessageType{
+		ActivityId: "22",
+	}
+
+	s.nodeBackend.EXPECT().NextTransitionCount().Return(int64(1)).Times(1) // for InitialVersionedTransition
+	s.nodeBackend.EXPECT().GetCurrentVersion().Return(int64(1)).Times(1)
+
+	node := newNode(s.nodeBase(), nil, "")
+	err := node.setValue(component, fieldTypeData)
+	s.NoError(err)
+	s.NotNil(node)
+	s.Equal(component, node.value)
+	s.NotNil(node.serializedValue.GetMetadata().GetDataAttributes(), "node serialized value must have attributes created")
+	s.Nil(node.serializedValue.GetData(), "node serialized value must not have data before serialize is called")
+}
+
+func (s *nodeSuite) TestDeserializeNode_ComponentAttributes() {
+	serializedNodes := testComponentSerializedNodes()
+
+	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.Nil(node.value)
+	s.NotNil(node.serializedValue)
+
+	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	s.NoError(err)
+	s.NotNil(node.value)
+	s.IsType(&TestComponent{}, node.value)
+	tc := node.value.(*TestComponent)
+	s.Equal(tc.SubComponent1.Internal.node, node.children["SubComponent1"])
+	s.Equal(tc.ComponentData.ActivityId, "component-data")
+
+	s.Nil(tc.SubComponent1.Internal.value)
+	err = tc.SubComponent1.Internal.node.deserialize(reflect.TypeOf(&TestSubComponent1{}))
+	s.NoError(err)
+	s.NotNil(tc.SubComponent1.Internal.node.value)
+	s.IsType(&TestSubComponent1{}, tc.SubComponent1.Internal.node.value)
+	s.Equal("sub-component1-data", tc.SubComponent1.Internal.node.value.(*TestSubComponent1).SubComponent1Data.ActivityId)
+}
+
+func (s *nodeSuite) TestDeserializeNode_DataAttributes() {
+	serializedNodes := testComponentSerializedNodes()
+
+	node, err := NewTree(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	s.NoError(err)
+	s.Nil(node.value)
+	s.NotNil(node.serializedValue)
+
+	err = node.deserialize(reflect.TypeOf(&TestComponent{}))
+	s.NoError(err)
+	s.NotNil(node.value)
+	s.IsType(&TestComponent{}, node.value)
+	tc := node.value.(*TestComponent)
+
+	s.Equal(tc.SubData1.Internal.node, node.children["SubData1"])
+
+	s.Nil(tc.SubData1.Internal.value)
+	err = tc.SubData1.Internal.node.deserialize(reflect.TypeOf(&protoMessageType{}))
+	s.NoError(err)
+	s.NotNil(tc.SubData1.Internal.node.value)
+	s.IsType(&protoMessageType{}, tc.SubData1.Internal.node.value)
+	s.Equal("sub-data1", tc.SubData1.Internal.node.value.(*protoMessageType).ActivityId)
 }
 
 func (s *nodeSuite) TestNodeSnapshot() {
@@ -143,7 +234,7 @@ func (s *nodeSuite) TestNodeSnapshot() {
 		},
 	}
 
-	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 	s.NotNil(root)
 
@@ -190,7 +281,7 @@ func (s *nodeSuite) TestApplyMutation() {
 			},
 		},
 	}
-	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 
 	// This decoded value should be reset after applying the mutation
@@ -225,13 +316,13 @@ func (s *nodeSuite) TestApplyMutation() {
 	// Validate the "child" node got updated.
 	childNode, ok := root.children["child"]
 	s.True(ok)
-	s.Equal(updatedChild, childNode.persistence)
+	s.Equal(updatedChild, childNode.serializedValue)
 	s.Nil(childNode.value) // value should be reset after mutation
 
 	// Validate the "newchild" node is added.
 	newChildNode, ok := root.children["newchild"]
 	s.True(ok)
-	s.Equal(newChild, newChildNode.persistence)
+	s.Equal(newChild, newChildNode.serializedValue)
 
 	// Validate the "grandchild" node is deleted.
 	s.Empty(childNode.children)
@@ -279,7 +370,7 @@ func (s *nodeSuite) TestApplySnapshot() {
 			},
 		},
 	}
-	root, err := NewTree(s.registry, persistenceNodes, s.timeSource, s.nodeBackend, s.nodePathEncoder, log.NewTestLogger())
+	root, err := NewTree(persistenceNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
 	s.NoError(err)
 
 	// Set a decoded value that should be reset after applying the snapshot.
@@ -338,7 +429,7 @@ func (s *nodeSuite) preorderAndAssertParent(
 	s.Equal(parent, n.parent)
 
 	var nodes []*persistencespb.ChasmNode
-	nodes = append(nodes, n.persistence)
+	nodes = append(nodes, n.serializedValue)
 
 	childNames := make([]string, 0, len(n.children))
 	for childName := range n.children {
@@ -371,4 +462,13 @@ func (e *testNodePathEncoder) Decode(
 		return []string{}, nil
 	}
 	return strings.Split(encodedPath, "/"), nil
+}
+
+func (s *nodeSuite) nodeBase() *nodeBase {
+	return &nodeBase{
+		registry:    s.registry,
+		timeSource:  s.timeSource,
+		backend:     s.nodeBackend,
+		pathEncoder: s.nodePathEncoder,
+	}
 }
