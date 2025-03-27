@@ -31,6 +31,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
+
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
@@ -1509,6 +1510,11 @@ to cleanup any of its associated data, such as workflow contexts. If set to zero
 shard ownership information, instead of checking membership for each request.
 Only inspected when an instance first creates a history client, so changes
 to this require a restart to take effect.`,
+	)
+	HistoryClientOwnershipCachingUnusedTTL = NewGlobalDurationSetting(
+		"history.clientOwnershipCachingUnusedTTL",
+		0,
+		`HistoryClientOwnershipCachingUnusedTTL XXX `,
 	)
 	ShardIOConcurrency = NewGlobalIntSetting(
 		"history.shardIOConcurrency",

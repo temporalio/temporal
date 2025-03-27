@@ -33,13 +33,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
+	"go.uber.org/mock/gomock"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -73,7 +74,7 @@ func (s *cachingRedirectorSuite) TearDownTest() {
 }
 
 func (s *cachingRedirectorSuite) TestShardCheck() {
-	r := newCachingRedirector(s.connections, s.resolver, s.logger)
+	r := newCachingRedirector(s.connections, s.resolver, s.logger, 0)
 
 	invalErr := &serviceerror.InvalidArgument{}
 	err := r.execute(
@@ -113,7 +114,7 @@ func cacheRetainingTest(s *cachingRedirectorSuite, opErr error, verify func(erro
 		}
 		return opErr
 	}
-	r := newCachingRedirector(s.connections, s.resolver, s.logger)
+	r := newCachingRedirector(s.connections, s.resolver, s.logger, 0)
 
 	for i := 0; i < 3; i++ {
 		err := r.execute(
@@ -160,7 +161,7 @@ func hostDownErrorTest(s *cachingRedirectorSuite, clientOp clientOperation, veri
 		resetConnectBackoff(clientConn).
 		Times(1)
 
-	r := newCachingRedirector(s.connections, s.resolver, s.logger)
+	r := newCachingRedirector(s.connections, s.resolver, s.logger, 0)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -203,7 +204,7 @@ func (s *cachingRedirectorSuite) TestShardOwnershipLostErrors() {
 	mockClient1 := historyservicemock.NewMockHistoryServiceClient(s.controller)
 	mockClient2 := historyservicemock.NewMockHistoryServiceClient(s.controller)
 
-	r := newCachingRedirector(s.connections, s.resolver, s.logger)
+	r := newCachingRedirector(s.connections, s.resolver, s.logger, 0)
 	opCalls := 1
 	doExecute := func() error {
 		return r.execute(
@@ -345,12 +346,64 @@ func (s *cachingRedirectorSuite) TestClientForTargetByShard() {
 		resetConnectBackoff(clientConn).
 		Times(1)
 
-	r := newCachingRedirector(s.connections, s.resolver, s.logger)
+	r := newCachingRedirector(s.connections, s.resolver, s.logger, 0)
 	cli, err := r.clientForShardID(shardID)
 	s.NoError(err)
 	s.Equal(mockClient, cli)
 
 	// No additional mocks; lookup should have been cached
+	cli, err = r.clientForShardID(shardID)
+	s.NoError(err)
+	s.Equal(mockClient, cli)
+}
+
+func (s *cachingRedirectorSuite) TestUnusedTTL() {
+	testAddr := rpcAddress("testaddr")
+	shardID := int32(1)
+	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+
+	clientConn := clientConnection{
+		historyClient: mockClient,
+	}
+
+	// First lookup, should create a new connection
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).
+		Times(1)
+
+	s.connections.EXPECT().
+		getOrCreateClientConn(testAddr).
+		Return(clientConn).
+		Times(1)
+	s.connections.EXPECT().
+		resetConnectBackoff(clientConn).
+		Times(1)
+
+	unusedTTL := 500 * time.Millisecond // Define a small unused TTL
+	r := newCachingRedirector(s.connections, s.resolver, s.logger, unusedTTL)
+
+	cli, err := r.clientForShardID(shardID)
+	s.NoError(err)
+	s.Equal(mockClient, cli)
+
+	// Sleep for a duration longer than unusedTTL to trigger expiration
+	time.Sleep(unusedTTL + 100*time.Millisecond)
+
+	// Second lookup, should trigger a new shard ownership request
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).
+		Times(1)
+
+	s.connections.EXPECT().
+		getOrCreateClientConn(testAddr).
+		Return(clientConn).
+		Times(1)
+	s.connections.EXPECT().
+		resetConnectBackoff(clientConn).
+		Times(1)
+
 	cli, err = r.clientForShardID(shardID)
 	s.NoError(err)
 	s.Equal(mockClient, cli)

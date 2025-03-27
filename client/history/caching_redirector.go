@@ -28,8 +28,11 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -43,6 +46,7 @@ type (
 		shardID    int32
 		address    rpcAddress
 		connection clientConnection
+		lastUsage  atomic.Int64 // time.UnixNano() of last usage
 	}
 
 	// A cachingRedirector is a redirector that maintains a cache of shard
@@ -53,12 +57,13 @@ type (
 	cachingRedirector struct {
 		mu struct {
 			sync.RWMutex
-			cache map[int32]cacheEntry
+			cache map[int32]*cacheEntry
 		}
 
 		connections            connectionPool
 		historyServiceResolver membership.ServiceResolver
 		logger                 log.Logger
+		unusedTTL              time.Duration
 	}
 )
 
@@ -66,13 +71,15 @@ func newCachingRedirector(
 	connections connectionPool,
 	historyServiceResolver membership.ServiceResolver,
 	logger log.Logger,
+	unusedTTL time.Duration,
 ) *cachingRedirector {
 	r := &cachingRedirector{
 		connections:            connections,
 		historyServiceResolver: historyServiceResolver,
 		logger:                 logger,
+		unusedTTL:              unusedTTL,
 	}
-	r.mu.cache = make(map[int32]cacheEntry)
+	r.mu.cache = make(map[int32]*cacheEntry)
 	return r
 }
 
@@ -98,7 +105,7 @@ func (r *cachingRedirector) execute(ctx context.Context, shardID int32, op clien
 	return r.redirectLoop(ctx, opEntry, op)
 }
 
-func (r *cachingRedirector) redirectLoop(ctx context.Context, opEntry cacheEntry, op clientOperation) error {
+func (r *cachingRedirector) redirectLoop(ctx context.Context, opEntry *cacheEntry, op clientOperation) error {
 	for {
 		if err := common.IsValidContext(ctx); err != nil {
 			return err
@@ -123,12 +130,22 @@ func (r *cachingRedirector) redirectLoop(ctx context.Context, opEntry cacheEntry
 	}
 }
 
-func (r *cachingRedirector) getOrCreateEntry(shardID int32) (cacheEntry, error) {
+func (r *cachingRedirector) getOrCreateEntry(shardID int32) (*cacheEntry, error) {
 	r.mu.RLock()
 	entry, ok := r.mu.cache[shardID]
 	r.mu.RUnlock()
 	if ok {
-		return entry, nil
+		if r.unusedTTL == 0 {
+			return entry, nil
+		}
+		r.connections.getOrCreateClientConn(entry.address).grpcConn.GetState()
+		now := time.Now()
+		lastUsage := time.Unix(0, entry.lastUsage.Load())
+		if now.Sub(lastUsage) < r.unusedTTL {
+			entry.lastUsage.Store(now.UnixNano())
+			return entry, nil
+		}
+		// Otherwise, fall through below for write lock & ttl removal.
 	}
 
 	r.mu.Lock()
@@ -137,18 +154,28 @@ func (r *cachingRedirector) getOrCreateEntry(shardID int32) (cacheEntry, error) 
 	// Recheck under write lock.
 	entry, ok = r.mu.cache[shardID]
 	if ok {
-		return entry, nil
+		if r.unusedTTL == 0 {
+			return entry, nil
+		}
+		now := time.Now()
+		lastUsage := time.Unix(0, entry.lastUsage.Load())
+		if now.Sub(lastUsage) < r.unusedTTL {
+			entry.lastUsage.Store(now.UnixNano())
+			return entry, nil
+		}
+		// Age out unused entry, and fallthrough below to lookup ownership.
+		delete(r.mu.cache, shardID)
 	}
 
 	address, err := shardLookup(r.historyServiceResolver, shardID)
 	if err != nil {
-		return cacheEntry{}, err
+		return nil, err
 	}
 
 	return r.cacheAddLocked(shardID, address), nil
 }
 
-func (r *cachingRedirector) cacheAddLocked(shardID int32, addr rpcAddress) cacheEntry {
+func (r *cachingRedirector) cacheAddLocked(shardID int32, addr rpcAddress) *cacheEntry {
 	// New history instances might reuse the address of a previously live history
 	// instance. Since we don't currently close GRPC connections when they become
 	// unused or idle, we might have a GRPC connection that has gone into its
@@ -162,10 +189,13 @@ func (r *cachingRedirector) cacheAddLocked(shardID int32, addr rpcAddress) cache
 	connection := r.connections.getOrCreateClientConn(addr)
 	r.connections.resetConnectBackoff(connection)
 
-	entry := cacheEntry{
+	entry := &cacheEntry{
 		shardID:    shardID,
 		address:    addr,
 		connection: connection,
+	}
+	if r.unusedTTL != 0 {
+		entry.lastUsage.Store(time.Now().UnixNano())
 	}
 	r.mu.cache[shardID] = entry
 
@@ -183,7 +213,7 @@ func (r *cachingRedirector) cacheDeleteByAddress(address rpcAddress) {
 	}
 }
 
-func (r *cachingRedirector) handleSolError(opEntry cacheEntry, solErr *serviceerrors.ShardOwnershipLost) (cacheEntry, bool) {
+func (r *cachingRedirector) handleSolError(opEntry *cacheEntry, solErr *serviceerrors.ShardOwnershipLost) (*cacheEntry, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -202,7 +232,7 @@ func (r *cachingRedirector) handleSolError(opEntry cacheEntry, solErr *serviceer
 		return r.cacheAddLocked(opEntry.shardID, solErrNewOwner), true
 	}
 
-	return cacheEntry{}, false
+	return nil, false
 }
 
 func maybeHostDownError(opErr error) bool {

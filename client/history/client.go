@@ -35,6 +35,9 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -45,8 +48,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/tasktoken"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
 
 var (
@@ -81,7 +82,8 @@ func NewClient(
 	var redirector redirector
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		logger.Info("historyClient: ownership caching enabled")
-		redirector = newCachingRedirector(connections, historyServiceResolver, logger)
+		unusedTTL := dynamicconfig.HistoryClientOwnershipCachingUnusedTTL.Get(dc)()
+		redirector = newCachingRedirector(connections, historyServiceResolver, logger, unusedTTL)
 	} else {
 		logger.Info("historyClient: ownership caching disabled")
 		redirector = newBasicRedirector(connections, historyServiceResolver)
