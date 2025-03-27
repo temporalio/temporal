@@ -56,6 +56,7 @@ type (
 		membershipMonitor membership.Monitor
 		metricsHandler    metrics.Handler
 		healthServer      *health.Server
+		readinessCancel   context.CancelFunc
 	}
 )
 
@@ -96,10 +97,14 @@ func (s *Service) Start() {
 
 	// start as NOT_SERVING, update to SERVING after initial shards acquired
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
+	readinessCtx, readinessCancel := context.WithCancel(context.Background())
+	s.readinessCancel = readinessCancel
 	go func() {
-		if s.handler.controller.InitialShardsAcquired(context.Background()) == nil {
-			time.Sleep(5 * time.Second) // add some time for stabilization
-			s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+		if s.handler.controller.InitialShardsAcquired(readinessCtx) == nil {
+			// add a few seconds for stabilization
+			if util.InterruptibleSleep(readinessCtx, 5*time.Second) == nil {
+				s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+			}
 		}
 	}()
 
@@ -129,6 +134,8 @@ func (s *Service) Start() {
 
 // Stop stops the service
 func (s *Service) Stop() {
+	s.readinessCancel()
+
 	// remove self from membership ring and wait for traffic to drain
 	var err error
 	var waitTime time.Duration
