@@ -45,11 +45,12 @@ type TLSFunctionalSuite struct {
 }
 
 func TestTLSFunctionalSuite(t *testing.T) {
-	t.Parallel()
+	// can't use Parallel with Setenv
 	suite.Run(t, new(TLSFunctionalSuite))
 }
 
 func (s *TLSFunctionalSuite) SetupSuite() {
+	s.T().Setenv("GODEBUG", "rsa1024min=0")
 	s.FunctionalTestBase.SetupSuiteWithCluster("testdata/tls_cluster.yaml")
 }
 
