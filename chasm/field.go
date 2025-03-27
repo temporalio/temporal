@@ -48,9 +48,9 @@ type Field[T any] struct {
 
 type fieldInternal struct {
 	fieldType fieldType
-	value     any // Component | Data | Collection
+	value     any // Component | Data | Pointer
 
-	// Pointer to corresponding tree node. Can be nil for the jsut assigned fields.
+	// Pointer to the corresponding tree node. Can be nil for the just assigned fields.
 	node *Node
 }
 
