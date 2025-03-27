@@ -48,6 +48,9 @@ const (
 var (
 	// DisabledRetryPolicy is a retry policy that never retries
 	DisabledRetryPolicy RetryPolicy = &disabledRetryPolicyImpl{}
+
+	// common 'globalToFile' rand instance, used in adding jitter to next interval in retry policy
+	jitterRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
 type (
@@ -189,15 +192,20 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 		return done
 	}
 
+	nextInterval = p.addJitter(nextInterval)
+
+	return time.Duration(nextInterval)
+}
+
+func (p *ExponentialRetryPolicy) addJitter(nextInterval float64) float64 {
 	// add jitter to avoid global synchronization
 	jitterPortion := int(0.2 * nextInterval)
 	// Prevent overflow
 	if jitterPortion < 1 {
 		jitterPortion = 1
 	}
-	nextInterval = nextInterval*0.8 + float64(rand.Intn(jitterPortion))
-
-	return time.Duration(nextInterval)
+	nextInterval = nextInterval*0.8 + float64(jitterRand.Intn(jitterPortion))
+	return nextInterval
 }
 
 func (r *disabledRetryPolicyImpl) ComputeNextDelay(_ time.Duration, _ int, _ error) time.Duration {
