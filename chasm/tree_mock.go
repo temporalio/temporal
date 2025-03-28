@@ -43,7 +43,6 @@ import (
 type MockNodeBackend struct {
 	ctrl     *gomock.Controller
 	recorder *MockNodeBackendMockRecorder
-	isgomock struct{}
 }
 
 // MockNodeBackendMockRecorder is the mock recorder for MockNodeBackend.
@@ -67,7 +66,6 @@ func (m *MockNodeBackend) EXPECT() *MockNodeBackendMockRecorder {
 type MockNodePathEncoder struct {
 	ctrl     *gomock.Controller
 	recorder *MockNodePathEncoderMockRecorder
-	isgomock struct{}
 }
 
 // MockNodePathEncoderMockRecorder is the mock recorder for MockNodePathEncoder.

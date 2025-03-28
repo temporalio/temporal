@@ -49,7 +49,6 @@ import (
 type MockTaskGenerator struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskGeneratorMockRecorder
-	isgomock struct{}
 }
 
 // MockTaskGeneratorMockRecorder is the mock recorder for MockTaskGenerator.

@@ -45,7 +45,6 @@ import (
 type MockRunnable struct {
 	ctrl     *gomock.Controller
 	recorder *MockRunnableMockRecorder
-	isgomock struct{}
 }
 
 // MockRunnableMockRecorder is the mock recorder for MockRunnable.
@@ -93,7 +92,6 @@ func (mr *MockRunnableMockRecorder) Run(arg0 any) *gomock.Call {
 type MockTask struct {
 	ctrl     *gomock.Controller
 	recorder *MockTaskMockRecorder
-	isgomock struct{}
 }
 
 // MockTaskMockRecorder is the mock recorder for MockTask.

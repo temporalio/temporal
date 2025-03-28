@@ -48,7 +48,6 @@ import (
 type MockWorkflowConsistencyChecker struct {
 	ctrl     *gomock.Controller
 	recorder *MockWorkflowConsistencyCheckerMockRecorder
-	isgomock struct{}
 }
 
 // MockWorkflowConsistencyCheckerMockRecorder is the mock recorder for MockWorkflowConsistencyChecker.

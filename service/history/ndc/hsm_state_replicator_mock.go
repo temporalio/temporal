@@ -45,7 +45,6 @@ import (
 type MockHSMStateReplicator struct {
 	ctrl     *gomock.Controller
 	recorder *MockHSMStateReplicatorMockRecorder
-	isgomock struct{}
 }
 
 // MockHSMStateReplicatorMockRecorder is the mock recorder for MockHSMStateReplicator.

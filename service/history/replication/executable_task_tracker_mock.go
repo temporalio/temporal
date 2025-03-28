@@ -46,7 +46,6 @@ import (
 type MockTrackableExecutableTask struct {
 	ctrl     *gomock.Controller
 	recorder *MockTrackableExecutableTaskMockRecorder
-	isgomock struct{}
 }
 
 // MockTrackableExecutableTaskMockRecorder is the mock recorder for MockTrackableExecutableTask.
@@ -270,7 +269,6 @@ func (mr *MockTrackableExecutableTaskMockRecorder) TaskID() *gomock.Call {
 type MockExecutableTaskTracker struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecutableTaskTrackerMockRecorder
-	isgomock struct{}
 }
 
 // MockExecutableTaskTrackerMockRecorder is the mock recorder for MockExecutableTaskTracker.

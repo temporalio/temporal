@@ -49,7 +49,6 @@ import (
 type MockphysicalTaskQueueManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockphysicalTaskQueueManagerMockRecorder
-	isgomock struct{}
 }
 
 // MockphysicalTaskQueueManagerMockRecorder is the mock recorder for MockphysicalTaskQueueManager.

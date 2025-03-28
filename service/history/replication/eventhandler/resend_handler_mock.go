@@ -45,7 +45,6 @@ import (
 type MockResendHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockResendHandlerMockRecorder
-	isgomock struct{}
 }
 
 // MockResendHandlerMockRecorder is the mock recorder for MockResendHandler.

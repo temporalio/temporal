@@ -47,7 +47,6 @@ import (
 type MockEventsReapplier struct {
 	ctrl     *gomock.Controller
 	recorder *MockEventsReapplierMockRecorder
-	isgomock struct{}
 }
 
 // MockEventsReapplierMockRecorder is the mock recorder for MockEventsReapplier.

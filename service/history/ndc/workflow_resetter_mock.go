@@ -47,7 +47,6 @@ import (
 type MockWorkflowResetter struct {
 	ctrl     *gomock.Controller
 	recorder *MockWorkflowResetterMockRecorder
-	isgomock struct{}
 }
 
 // MockWorkflowResetterMockRecorder is the mock recorder for MockWorkflowResetter.

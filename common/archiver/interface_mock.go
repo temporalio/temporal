@@ -46,7 +46,6 @@ import (
 type MockHistoryArchiver struct {
 	ctrl     *gomock.Controller
 	recorder *MockHistoryArchiverMockRecorder
-	isgomock struct{}
 }
 
 // MockHistoryArchiverMockRecorder is the mock recorder for MockHistoryArchiver.
@@ -118,7 +117,6 @@ func (mr *MockHistoryArchiverMockRecorder) ValidateURI(uri any) *gomock.Call {
 type MockVisibilityArchiver struct {
 	ctrl     *gomock.Controller
 	recorder *MockVisibilityArchiverMockRecorder
-	isgomock struct{}
 }
 
 // MockVisibilityArchiverMockRecorder is the mock recorder for MockVisibilityArchiver.

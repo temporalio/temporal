@@ -45,7 +45,6 @@ import (
 type MockBranchMgr struct {
 	ctrl     *gomock.Controller
 	recorder *MockBranchMgrMockRecorder
-	isgomock struct{}
 }
 
 // MockBranchMgrMockRecorder is the mock recorder for MockBranchMgr.

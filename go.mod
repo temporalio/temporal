@@ -73,7 +73,6 @@ require (
 	golang.org/x/time v0.11.0
 	google.golang.org/api v0.228.0
 	google.golang.org/grpc v1.71.0
-	google.golang.org/grpc/examples v0.0.0-20250219164421-42fc25a9b496
 	google.golang.org/protobuf v1.36.6
 	gopkg.in/validator.v2 v2.0.1
 	gopkg.in/yaml.v3 v3.0.1

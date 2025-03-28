@@ -51,7 +51,6 @@ import (
 type MocktaskQueuePartitionManager struct {
 	ctrl     *gomock.Controller
 	recorder *MocktaskQueuePartitionManagerMockRecorder
-	isgomock struct{}
 }
 
 // MocktaskQueuePartitionManagerMockRecorder is the mock recorder for MocktaskQueuePartitionManager.

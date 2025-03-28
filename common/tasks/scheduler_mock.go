@@ -43,7 +43,6 @@ import (
 type MockScheduler[T Task] struct {
 	ctrl     *gomock.Controller
 	recorder *MockSchedulerMockRecorder[T]
-	isgomock struct{}
 }
 
 // MockSchedulerMockRecorder is the mock recorder for MockScheduler.

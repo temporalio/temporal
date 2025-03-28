@@ -46,7 +46,6 @@ import (
 type MockHistoryPaginatedFetcher struct {
 	ctrl     *gomock.Controller
 	recorder *MockHistoryPaginatedFetcherMockRecorder
-	isgomock struct{}
 }
 
 // MockHistoryPaginatedFetcherMockRecorder is the mock recorder for MockHistoryPaginatedFetcher.

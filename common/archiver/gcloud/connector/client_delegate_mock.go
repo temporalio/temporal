@@ -45,7 +45,6 @@ import (
 type MockGcloudStorageClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockGcloudStorageClientMockRecorder
-	isgomock struct{}
 }
 
 // MockGcloudStorageClientMockRecorder is the mock recorder for MockGcloudStorageClient.
@@ -83,7 +82,6 @@ func (mr *MockGcloudStorageClientMockRecorder) Bucket(URI any) *gomock.Call {
 type MockBucketHandleWrapper struct {
 	ctrl     *gomock.Controller
 	recorder *MockBucketHandleWrapperMockRecorder
-	isgomock struct{}
 }
 
 // MockBucketHandleWrapperMockRecorder is the mock recorder for MockBucketHandleWrapper.
@@ -150,7 +148,6 @@ func (mr *MockBucketHandleWrapperMockRecorder) Objects(ctx, q any) *gomock.Call 
 type MockObjectHandleWrapper struct {
 	ctrl     *gomock.Controller
 	recorder *MockObjectHandleWrapperMockRecorder
-	isgomock struct{}
 }
 
 // MockObjectHandleWrapperMockRecorder is the mock recorder for MockObjectHandleWrapper.
@@ -218,7 +215,6 @@ func (mr *MockObjectHandleWrapperMockRecorder) NewWriter(ctx any) *gomock.Call {
 type MockWriterWrapper struct {
 	ctrl     *gomock.Controller
 	recorder *MockWriterWrapperMockRecorder
-	isgomock struct{}
 }
 
 // MockWriterWrapperMockRecorder is the mock recorder for MockWriterWrapper.
@@ -285,7 +281,6 @@ func (mr *MockWriterWrapperMockRecorder) Write(p any) *gomock.Call {
 type MockReaderWrapper struct {
 	ctrl     *gomock.Controller
 	recorder *MockReaderWrapperMockRecorder
-	isgomock struct{}
 }
 
 // MockReaderWrapperMockRecorder is the mock recorder for MockReaderWrapper.
@@ -338,7 +333,6 @@ func (mr *MockReaderWrapperMockRecorder) Read(p any) *gomock.Call {
 type MockObjectIteratorWrapper struct {
 	ctrl     *gomock.Controller
 	recorder *MockObjectIteratorWrapperMockRecorder
-	isgomock struct{}
 }
 
 // MockObjectIteratorWrapperMockRecorder is the mock recorder for MockObjectIteratorWrapper.

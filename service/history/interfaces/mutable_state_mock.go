@@ -71,7 +71,6 @@ import (
 type MockMutableState struct {
 	ctrl     *gomock.Controller
 	recorder *MockMutableStateMockRecorder
-	isgomock struct{}
 }
 
 // MockMutableStateMockRecorder is the mock recorder for MockMutableState.

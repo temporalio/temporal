@@ -45,7 +45,6 @@ import (
 type MockHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockHandlerMockRecorder
-	isgomock struct{}
 }
 
 // MockHandlerMockRecorder is the mock recorder for MockHandler.
@@ -169,7 +168,6 @@ func (mr *MockHandlerMockRecorder) WithTags(arg0 ...any) *gomock.Call {
 type MockBatchHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockBatchHandlerMockRecorder
-	isgomock struct{}
 }
 
 // MockBatchHandlerMockRecorder is the mock recorder for MockBatchHandler.
@@ -307,7 +305,6 @@ func (mr *MockBatchHandlerMockRecorder) WithTags(arg0 ...any) *gomock.Call {
 type MockCounterIface struct {
 	ctrl     *gomock.Controller
 	recorder *MockCounterIfaceMockRecorder
-	isgomock struct{}
 }
 
 // MockCounterIfaceMockRecorder is the mock recorder for MockCounterIface.
@@ -348,7 +345,6 @@ func (mr *MockCounterIfaceMockRecorder) Record(arg0 any, arg1 ...any) *gomock.Ca
 type MockGaugeIface struct {
 	ctrl     *gomock.Controller
 	recorder *MockGaugeIfaceMockRecorder
-	isgomock struct{}
 }
 
 // MockGaugeIfaceMockRecorder is the mock recorder for MockGaugeIface.
@@ -389,7 +385,6 @@ func (mr *MockGaugeIfaceMockRecorder) Record(arg0 any, arg1 ...any) *gomock.Call
 type MockTimerIface struct {
 	ctrl     *gomock.Controller
 	recorder *MockTimerIfaceMockRecorder
-	isgomock struct{}
 }
 
 // MockTimerIfaceMockRecorder is the mock recorder for MockTimerIface.
@@ -430,7 +425,6 @@ func (mr *MockTimerIfaceMockRecorder) Record(arg0 any, arg1 ...any) *gomock.Call
 type MockHistogramIface struct {
 	ctrl     *gomock.Controller
 	recorder *MockHistogramIfaceMockRecorder
-	isgomock struct{}
 }
 
 // MockHistogramIfaceMockRecorder is the mock recorder for MockHistogramIface.

@@ -45,7 +45,6 @@ import (
 type MockVisibilityStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockVisibilityStoreMockRecorder
-	isgomock struct{}
 }
 
 // MockVisibilityStoreMockRecorder is the mock recorder for MockVisibilityStore.

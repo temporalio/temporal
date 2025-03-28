@@ -44,7 +44,6 @@ import (
 type MockMapper struct {
 	ctrl     *gomock.Controller
 	recorder *MockMapperMockRecorder
-	isgomock struct{}
 }
 
 // MockMapperMockRecorder is the mock recorder for MockMapper.
@@ -98,7 +97,6 @@ func (mr *MockMapperMockRecorder) GetFieldName(alias, namespace any) *gomock.Cal
 type MockMapperProvider struct {
 	ctrl     *gomock.Controller
 	recorder *MockMapperProviderMockRecorder
-	isgomock struct{}
 }
 
 // MockMapperProviderMockRecorder is the mock recorder for MockMapperProvider.

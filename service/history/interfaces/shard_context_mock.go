@@ -68,7 +68,6 @@ import (
 type MockShardContext struct {
 	ctrl     *gomock.Controller
 	recorder *MockShardContextMockRecorder
-	isgomock struct{}
 }
 
 // MockShardContextMockRecorder is the mock recorder for MockShardContext.
@@ -845,7 +844,6 @@ func (mr *MockShardContextMockRecorder) UpdateWorkflowExecution(ctx, request any
 type MockControllableContext struct {
 	ctrl     *gomock.Controller
 	recorder *MockControllableContextMockRecorder
-	isgomock struct{}
 }
 
 // MockControllableContextMockRecorder is the mock recorder for MockControllableContext.

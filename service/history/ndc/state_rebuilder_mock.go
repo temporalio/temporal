@@ -47,7 +47,6 @@ import (
 type MockStateRebuilder struct {
 	ctrl     *gomock.Controller
 	recorder *MockStateRebuilderMockRecorder
-	isgomock struct{}
 }
 
 // MockStateRebuilderMockRecorder is the mock recorder for MockStateRebuilder.
