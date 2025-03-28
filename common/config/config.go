@@ -743,21 +743,21 @@ func (c *ClientConnectionConfig) GetKeepAliveClientParameters() keepalive.Client
 	return defaultConfig
 }
 
-func (ks *KeepAliveServerConfig) GetKeepAliveEnforcementPolicy() keepalive.EnforcementPolicy {
+func (k *KeepAliveServerConfig) GetKeepAliveEnforcementPolicy() keepalive.EnforcementPolicy {
 	defaultConfig := keepalive.EnforcementPolicy{
 		MinTime:             5 * time.Minute,
 		PermitWithoutStream: false,
 	}
 
-	if ks == nil || ks.KeepAliveEnforcementPolicy == nil {
+	if k == nil || k.KeepAliveEnforcementPolicy == nil {
 		return defaultConfig
 	}
 
-	if ks.KeepAliveEnforcementPolicy.MinTime != nil {
-		defaultConfig.MinTime = *ks.KeepAliveEnforcementPolicy.MinTime
+	if k.KeepAliveEnforcementPolicy.MinTime != nil {
+		defaultConfig.MinTime = *k.KeepAliveEnforcementPolicy.MinTime
 	}
-	if ks.KeepAliveEnforcementPolicy.PermitWithoutStream != nil {
-		defaultConfig.PermitWithoutStream = *ks.KeepAliveEnforcementPolicy.PermitWithoutStream
+	if k.KeepAliveEnforcementPolicy.PermitWithoutStream != nil {
+		defaultConfig.PermitWithoutStream = *k.KeepAliveEnforcementPolicy.PermitWithoutStream
 	}
 
 	return defaultConfig
