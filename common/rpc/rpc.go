@@ -149,9 +149,10 @@ func (d *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(serverConfig)))
 	}
+
 	rpcConfig := d.config.Services[string(d.serviceName)].RPC
-	kep := rpcConfig.GetKeepAliveEnforcementPolicy()
-	kp := rpcConfig.GetKeepAliveServerParameters()
+	kep := rpcConfig.KeepAliveServerConfig.GetKeepAliveEnforcementPolicy()
+	kp := rpcConfig.KeepAliveServerConfig.GetKeepAliveServerParameters()
 	opts = append(opts, grpc.KeepaliveEnforcementPolicy(kep), grpc.KeepaliveParams(kp))
 
 	return opts, nil
@@ -275,7 +276,7 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpti
 
 func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName) grpc.DialOption {
 	serviceConfig := d.config.Services[string(serviceName)]
-	return grpc.WithKeepaliveParams(serviceConfig.RPC.GetKeepAliveClientParameters())
+	return grpc.WithKeepaliveParams(serviceConfig.RPC.ClientConnectionConfig.GetKeepAliveClientParameters())
 }
 
 func (d *RPCFactory) GetTLSConfigProvider() encryption.TLSConfigProvider {

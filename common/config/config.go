@@ -108,12 +108,39 @@ type (
 		// forwarded from HTTP to gRPC. Any value with a trailing * will match the prefix before
 		// the asterisk (eg. `x-internal-*`)
 		HTTPAdditionalForwardedHeaders []string `yaml:"httpAdditionalForwardedHeaders"`
-		// KeepAliveServerConfig parameters for the server
-		KeepAliveServerConfig      *KeepAliveServerParameters        `yaml:"keepAlive"`
-		KeepAliveEnforcementPolicy *KeepAliveServerEnforcementPolicy `yaml:"keepAliveEnforcementPolicy"`
-		// KeepAliveClientConfig defines the keepalive parameters used by other services
+		// KeepAliveServerConfig keep alive configuration for the server
+		KeepAliveServerConfig KeepAliveServerConfig `yaml:"keepAliveServerConfig"`
+		// ClientConnectionConfig defines the connection config used by other services
 		// when they create a gRPC client connection to this service.
-		KeepAliveClientConfig *KeepAliveClientParameters `yaml:"keepAliveClient"`
+		ClientConnectionConfig ClientConnectionConfig `yaml:"clientConnectionConfig"`
+	}
+
+	KeepAliveServerParameters struct {
+		MaxConnectionIdle     *time.Duration `yaml:"maxConnectionIdle"`
+		MaxConnectionAge      *time.Duration `yaml:"maxConnectionAge"`
+		MaxConnectionAgeGrace *time.Duration `yaml:"maxConnectionAgeGrace"`
+		Time                  *time.Duration `yaml:"keepAliveTime"`
+		Timeout               *time.Duration `yaml:"keepAliveTimeout"`
+	}
+
+	KeepAliveClientParameters struct {
+		Time                *time.Duration `yaml:"keepAliveTime"`
+		Timeout             *time.Duration `yaml:"keepAliveTimeout"`
+		PermitWithoutStream *bool          `yaml:"keepAlivePermitWithoutStream"`
+	}
+
+	ClientConnectionConfig struct {
+		KeepAliveClientConfig *KeepAliveClientParameters `yaml:"keepAliveClientParameters"`
+	}
+
+	KeepAliveServerEnforcementPolicy struct {
+		MinTime             *time.Duration `yaml:"minTime"`
+		PermitWithoutStream *bool          `yaml:"permitWithoutStream"`
+	}
+
+	KeepAliveServerConfig struct {
+		KeepAliveServerParameters  *KeepAliveServerParameters        `yaml:"keepAliveServerParameters"`
+		KeepAliveEnforcementPolicy *KeepAliveServerEnforcementPolicy `yaml:"keepAliveEnforcementPolicy"`
 	}
 
 	// Global contains config items that apply process-wide to all services
@@ -241,25 +268,6 @@ type (
 		// This is generally used when BindOnIP would be the same across several nodes (ie: `0.0.0.0` or `::`)
 		// and for nat traversal scenarios. Check net.ParseIP for supported syntax
 		BroadcastAddress string `yaml:"broadcastAddress"`
-	}
-
-	KeepAliveServerParameters struct {
-		MaxConnectionIdle     *time.Duration `yaml:"maxConnectionIdle"`
-		MaxConnectionAge      *time.Duration `yaml:"maxConnectionAge"`
-		MaxConnectionAgeGrace *time.Duration `yaml:"maxConnectionAgeGrace"`
-		Time                  *time.Duration `yaml:"keepAliveTime"`
-		Timeout               *time.Duration `yaml:"keepAliveTimeout"`
-	}
-
-	KeepAliveClientParameters struct {
-		Time                *time.Duration `yaml:"keepAliveTime"`
-		Timeout             *time.Duration `yaml:"keepAliveTimeout"`
-		PermitWithoutStream *bool          `yaml:"keepAlivePermitWithoutStream"`
-	}
-
-	KeepAliveServerEnforcementPolicy struct {
-		MinTime             *time.Duration `yaml:"minTime"`
-		PermitWithoutStream *bool          `yaml:"permitWithoutStream"`
 	}
 
 	// Persistence contains the configuration for data store / persistence layer
@@ -679,7 +687,7 @@ func (p *JWTKeyProvider) HasSourceURIsConfigured() bool {
 	return false
 }
 
-func (rpc *RPC) GetKeepAliveServerParameters() keepalive.ServerParameters {
+func (k *KeepAliveServerConfig) GetKeepAliveServerParameters() keepalive.ServerParameters {
 	// 0 are treated as default values in grpc: https://github.com/grpc/grpc-go/blob/43a4a84abcd406230e7471062dd2ee5c7ba2485d/internal/transport/http2_server.go#L215-L225
 	// the default config is same as grpc default config, same for the below client config and enforcement policy
 	defaultConfig := keepalive.ServerParameters{
@@ -689,66 +697,67 @@ func (rpc *RPC) GetKeepAliveServerParameters() keepalive.ServerParameters {
 		Time:                  2 * time.Hour,
 		Timeout:               20 * time.Second,
 	}
-	if rpc == nil || rpc.KeepAliveServerConfig == nil {
+	if k == nil || k.KeepAliveServerParameters == nil {
 		return defaultConfig
 	}
-	if rpc.KeepAliveServerConfig.MaxConnectionIdle != nil {
-		defaultConfig.MaxConnectionIdle = *rpc.KeepAliveServerConfig.MaxConnectionIdle
+	kp := k.KeepAliveServerParameters
+	if kp.MaxConnectionIdle != nil {
+		defaultConfig.MaxConnectionIdle = *kp.MaxConnectionIdle
 	}
-	if rpc.KeepAliveServerConfig.MaxConnectionAge != nil {
-		defaultConfig.MaxConnectionAge = *rpc.KeepAliveServerConfig.MaxConnectionAge
+	if kp.MaxConnectionAge != nil {
+		defaultConfig.MaxConnectionAge = *kp.MaxConnectionAge
 	}
-	if rpc.KeepAliveServerConfig.MaxConnectionAgeGrace != nil {
-		defaultConfig.MaxConnectionAgeGrace = *rpc.KeepAliveServerConfig.MaxConnectionAgeGrace
+	if kp.MaxConnectionAgeGrace != nil {
+		defaultConfig.MaxConnectionAgeGrace = *kp.MaxConnectionAgeGrace
 	}
-	if rpc.KeepAliveServerConfig.Time != nil {
-		defaultConfig.Time = *rpc.KeepAliveServerConfig.Time
+	if kp.Time != nil {
+		defaultConfig.Time = *kp.Time
 	}
-	if rpc.KeepAliveServerConfig.Timeout != nil {
-		defaultConfig.Timeout = *rpc.KeepAliveServerConfig.Timeout
+	if kp.Timeout != nil {
+		defaultConfig.Timeout = *kp.Timeout
 	}
 	return defaultConfig
 }
 
-func (rpc *RPC) GetKeepAliveClientParameters() keepalive.ClientParameters {
+func (c *ClientConnectionConfig) GetKeepAliveClientParameters() keepalive.ClientParameters {
 	defaultConfig := keepalive.ClientParameters{
 		Time:                0,
 		Timeout:             20 * time.Second,
 		PermitWithoutStream: true,
 	}
 
-	if rpc == nil || rpc.KeepAliveClientConfig == nil {
+	if c == nil || c.KeepAliveClientConfig == nil {
 		return defaultConfig
 	}
 
-	if rpc.KeepAliveClientConfig.Time != nil {
-		defaultConfig.Time = *rpc.KeepAliveClientConfig.Time
+	if c.KeepAliveClientConfig.Time != nil {
+		defaultConfig.Time = *c.KeepAliveClientConfig.Time
 	}
-	if rpc.KeepAliveClientConfig.Timeout != nil {
-		defaultConfig.Timeout = *rpc.KeepAliveClientConfig.Timeout
+	if c.KeepAliveClientConfig.Timeout != nil {
+		defaultConfig.Timeout = *c.KeepAliveClientConfig.Timeout
 	}
-	if rpc.KeepAliveClientConfig.PermitWithoutStream != nil {
-		defaultConfig.PermitWithoutStream = *rpc.KeepAliveClientConfig.PermitWithoutStream
+	if c.KeepAliveClientConfig.PermitWithoutStream != nil {
+		defaultConfig.PermitWithoutStream = *c.KeepAliveClientConfig.PermitWithoutStream
 	}
 
 	return defaultConfig
 }
 
-func (rpc *RPC) GetKeepAliveEnforcementPolicy() keepalive.EnforcementPolicy {
+func (ks *KeepAliveServerConfig) GetKeepAliveEnforcementPolicy() keepalive.EnforcementPolicy {
 	defaultConfig := keepalive.EnforcementPolicy{
 		MinTime:             5 * time.Minute,
 		PermitWithoutStream: false,
 	}
 
-	if rpc == nil || rpc.KeepAliveEnforcementPolicy == nil {
+	if ks == nil || ks.KeepAliveEnforcementPolicy == nil {
 		return defaultConfig
 	}
 
-	if rpc.KeepAliveEnforcementPolicy.MinTime != nil {
-		defaultConfig.MinTime = *rpc.KeepAliveEnforcementPolicy.MinTime
+	if ks.KeepAliveEnforcementPolicy.MinTime != nil {
+		defaultConfig.MinTime = *ks.KeepAliveEnforcementPolicy.MinTime
 	}
-	if rpc.KeepAliveEnforcementPolicy.PermitWithoutStream != nil {
-		defaultConfig.PermitWithoutStream = *rpc.KeepAliveEnforcementPolicy.PermitWithoutStream
+	if ks.KeepAliveEnforcementPolicy.PermitWithoutStream != nil {
+		defaultConfig.PermitWithoutStream = *ks.KeepAliveEnforcementPolicy.PermitWithoutStream
 	}
 
 	return defaultConfig
