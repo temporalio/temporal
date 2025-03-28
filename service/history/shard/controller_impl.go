@@ -471,7 +471,10 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	// 2. We should own at least one shard (i.e. not before we join membership).
 	// 3. We have ownership of all the shards we're supposed to own.
 	if !c.initialShardsAcquired.Ready() && numOfOwnedShards > 0 {
-		go c.checkShardReadiness(readinessCtx, readinessCancel, expmaps.Values(c.historyShards))
+		go func() {
+			defer readinessCancel()
+			c.checkShardReadiness(readinessCtx, expmaps.Values(c.historyShards))
+		}()
 	} else {
 		readinessCancel()
 	}
@@ -483,11 +486,8 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 
 func (c *ControllerImpl) checkShardReadiness(
 	ctx context.Context,
-	cancel context.CancelFunc,
 	shards []historyi.ControllableContext,
 ) {
-	defer cancel()
-
 	concurrency := int64(max(c.config.AcquireShardConcurrency(), 1))
 	sem := semaphore.NewWeighted(concurrency)
 	var ready atomic.Int32
