@@ -202,7 +202,10 @@ message InvokerInternal {
     repeated temporal.api.common.v1.WorkflowExecution terminate_workflows = 4;
 
     // High water mark, used for evaluating when to fire tasks that are backing
-    // off from a retry.
+    // off from a retry. LastProcessedTime is stored as state so that task
+    // generation will be consistent, regardless of when generation occurs, such
+    // as after applying a replicated state (as opposed to evaluating based on
+    // present time).
     google.protobuf.Timestamp last_processed_time = 5;
 }
 

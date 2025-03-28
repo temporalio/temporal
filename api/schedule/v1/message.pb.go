@@ -1162,7 +1162,10 @@ type InvokerInternal struct {
 	// Workflow executions that will be terminated due to overlap policy.
 	TerminateWorkflows []*v12.WorkflowExecution `protobuf:"bytes,4,rep,name=terminate_workflows,json=terminateWorkflows,proto3" json:"terminate_workflows,omitempty"`
 	// High water mark, used for evaluating when to fire tasks that are backing
-	// off from a retry.
+	// off from a retry. LastProcessedTime is stored as state so that task
+	// generation will be consistent, regardless of when generation occurs, such
+	// as after applying a replicated state (as opposed to evaluating based on
+	// present time).
 	LastProcessedTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_processed_time,json=lastProcessedTime,proto3" json:"last_processed_time,omitempty"`
 }
 
